@@ -156,7 +156,7 @@ class Subscription:
             'displayname': ':;"\'?/<>{}[]*&^%$#@\\|',
         }
         self.panels = panels.copy()
-        self.SALT = 'Súp3rPöœmiiVpnS)alt151⁵'
+        self.SALT = self.cfg['salt']
         with open('/var/www/sub/index.html', 'r') as f:
             self.browser_html = f.read()
         if self.whitelist_panel: self.panels.append(self.whitelist_panel)

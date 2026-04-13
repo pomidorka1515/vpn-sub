@@ -3,7 +3,7 @@
     "title": "VPN Config",
     "type": "object",
     "required": [
-        "uri", "api_token", "fingerprints", "nodes", "bot", "routing",
+        "uri", "api_token", "salt", "fingerprints", "nodes", "bot", "routing",
         "publicbot", "codes", "3xui", "sub_name", "description", "flags",
         "users", "tokens", "displaynames", "tgids",
         "bw", "wl_bw", "profiles", "profileDescriptions", "whitelistProfiles",
@@ -16,6 +16,7 @@
         "$schema": { "type": "string" },
         "uri": { "type": "string" },
         "api_token": { "type": "string" },
+        "salt": { "type": "string" },
         "sub_name": { "type": "string" },
 
         "fingerprints": {
