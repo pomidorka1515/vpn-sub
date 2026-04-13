@@ -1,0 +1,11 @@
+config.json
+*.lock
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.log
+.vscode/
+.idea/
+*.swp

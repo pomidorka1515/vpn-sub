@@ -1,0 +1,278 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "VPN Config",
+    "type": "object",
+    "required": [
+        "uri", "api_token", "fingerprints", "nodes", "bot", "routing",
+        "publicbot", "codes", "3xui", "sub_name", "description", "flags",
+        "users", "tokens", "displaynames", "tgids",
+        "bw", "wl_bw", "profiles", "profileDescriptions", "whitelistProfiles",
+        "masterLinks", "profileNodes", "userFingerprints",
+        "time", "status", "statusTime", "statusWl",
+        "_notified", "_wl_notified"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": { "type": "string" },
+        "uri": { "type": "string" },
+        "api_token": { "type": "string" },
+        "sub_name": { "type": "string" },
+
+        "fingerprints": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+        },
+
+        "nodes": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "bot": {
+            "type": "object",
+            "required": ["token", "whitelist"],
+            "additionalProperties": false,
+            "properties": {
+                "token": { "type": "string" },
+                "whitelist": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                }
+            }
+        },
+
+        "routing": {
+            "type": "object",
+            "required": ["Name", "GlobalProxy", "DomainStrategy", "DirectSites", "DirectPackages", "DirectIp"],
+            "properties": {
+                "Name": { "type": "string" },
+                "GlobalProxy": { "type": "boolean" },
+                "DomainStrategy": { "type": "string" },
+                "DirectSites": { "type": "array", "items": { "type": "string" } },
+                "DirectPackages": { "type": "array", "items": { "type": "string" } },
+                "DirectIp": { "type": "array", "items": { "type": "string" } }
+            }
+        },
+
+        "webui_passwords": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+        "webui_users": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "funny_strings": {
+            "type": "array",
+            "items": { "type": "string" }
+        },
+
+        "publicbot": {
+            "type": "object",
+            "required": ["token", "tg_lang", "lang"],
+            "additionalProperties": false,
+            "properties": {
+                "token": { "type": "string" },
+                "tg_lang": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string", "enum": ["ru", "en"] }
+                },
+                "lang": {
+                    "type": "object",
+                    "required": ["ru", "en"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "ru": { "$ref": "#/$defs/langStrings" },
+                        "en": { "$ref": "#/$defs/langStrings" }
+                    }
+                }
+            }
+        },
+
+        "codes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["code", "action", "perma", "days", "gb"],
+                "additionalProperties": false,
+                "properties": {
+                    "code": { "type": "string" },
+                    "action": { "type": "string", "enum": ["register", "bonus"] },
+                    "perma": { "type": "boolean" },
+                    "days": { "type": "integer", "minimum": 0 },
+                    "gb": { "type": "integer", "minimum": 0 },
+                    "wl_gb": { "type": "integer", "minimum": 0 }
+                }
+            }
+        },
+
+        "3xui": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "required": ["name", "address", "port", "uri", "username", "password", "https", "whitelist", "ignore_inbounds"],
+                "additionalProperties": false,
+                "properties": {
+                    "name": { "type": "string" },
+                    "address": { "type": "string" },
+                    "port": { "type": ["string", "integer"] },
+                    "uri": { "type": "string" },
+                    "username": { "type": "string" },
+                    "password": { "type": "string" },
+                    "https": { "type": "boolean" },
+                    "whitelist": { "type": "boolean" },
+                    "nginx_auth": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "minItems": 2,
+                        "maxItems": 2
+                    },
+                    "ignore_inbounds": {
+                        "type": "array",
+                        "items": { "type": "integer" }
+                    }
+                }
+            }
+        },
+
+        "description": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 14,
+            "maxItems": 14
+        },
+
+        "flags": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "users": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+        },
+
+        "tokens": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "displaynames": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "tgids": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "bw": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/bwEntry" }
+        },
+
+        "wl_bw": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/bwEntry" }
+        },
+
+        "profiles": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
+        },
+
+        "profileDescriptions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
+        },
+
+        "whitelistProfiles": {
+            "type": "array",
+            "items": { "type": "string" }
+        },
+
+        "xhttpExtra": {
+            "type": "object",
+            "additionalProperties": { "type": "object" }
+        },
+
+        "masterLinks": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "profileNodes": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "userFingerprints": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        },
+
+        "time": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+
+        "status": {
+            "type": "object",
+            "additionalProperties": { "type": "boolean" }
+        },
+
+        "statusTime": {
+            "type": "object",
+            "additionalProperties": { "type": "boolean" }
+        },
+
+        "statusWl": {
+            "type": "object",
+            "additionalProperties": { "type": "boolean" }
+        },
+
+        "_notified": {
+            "type": "array",
+            "items": { "type": ["integer", "null"] }
+        },
+
+        "_wl_notified": {
+            "type": "array",
+            "items": { "type": ["integer", "null"] }
+        },
+
+        "_last_reset": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+    },
+
+    "$defs": {
+        "bwEntry": {
+            "type": "array",
+            "prefixItems": [
+                { "type": "integer", "minimum": 0, "description": "limit in GB, 0 = unlimited" },
+                { "type": "integer", "minimum": 0, "description": "used bytes this month" }
+            ],
+            "items": false,
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "bilingualPair": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "langStrings": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+        }
+    }
+}

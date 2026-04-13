@@ -1,0 +1,974 @@
+from __future__ import annotations
+
+from config import Config
+from loggers import Logger
+from core import Subscription, BWatch
+
+import telebot
+import time
+import threading
+import urllib.parse
+
+from typing import cast
+from datetime import timedelta, timezone, datetime
+from telebot import types
+
+
+
+class AdminBot:
+    """Administrator bot for management purposes.
+    Dependencies: Subscription
+    Classes depending on this: none"""
+
+    def __init__(self, sub: Subscription, cfg: Config):
+        self.log = Logger(type(self).__name__)
+        self.log.debug("starting Telegram bot")
+        
+        self.cfg = cfg
+        self.sub = sub
+ 
+        self.bot = telebot.TeleBot(self.cfg['bot']['token'])
+        self.admin_uids = self.cfg['bot']['whitelist']
+        
+        self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start)
+        self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks)
+        self._pending_codes = {}
+    def is_admin(self, user_id: int) -> bool:
+        return user_id in self.admin_uids
+ 
+    def msg(self, text: str, parse_mode: str = "HTML"):
+        for uid in self.admin_uids:
+            try:
+                self.bot.send_message(uid, text, parse_mode=parse_mode)
+            except Exception as e:
+                self.log.error(f"Не удалось отправить сообщение админу {uid}: {e}")
+    
+    def get_main_menu(self):
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("👥 Список юзеров", callback_data="list_users"),
+            types.InlineKeyboardButton("ℹ️ Инфо о юзере", callback_data="action_info"),
+            types.InlineKeyboardButton("➕ Добавить", callback_data="add_user"),
+            types.InlineKeyboardButton("❌ Удалить", callback_data="action_del"),
+            types.InlineKeyboardButton("🔄 Refresh всех", callback_data="refresh_all"),
+            types.InlineKeyboardButton("🎟 Коды", callback_data="codes_menu"),
+            types.InlineKeyboardButton("🟢Пользователи онлайн", callback_data="online_users"),
+            types.InlineKeyboardButton("⚠ Сбросить пользователя", callback_data="reset_user"),
+            types.InlineKeyboardButton("ℹ️ Статус панелей", callback_data="status_panels")
+        )
+        return markup
+ 
+    def get_codes_menu(self):
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("➕ Добавить код", callback_data="add_code"),
+            types.InlineKeyboardButton("❌ Удалить код", callback_data="del_code"),
+            types.InlineKeyboardButton("📋 Список кодов", callback_data="list_codes"),
+            types.InlineKeyboardButton("ℹ️ Инфо о коде", callback_data="info_code"),
+            types.InlineKeyboardButton("🔙 В меню", callback_data="cancel")
+        )
+        return markup
+ 
+    def get_users_menu(self, prefix: str):
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        buttons = []
+        for user in self.cfg['users'].keys():
+            buttons.append(types.InlineKeyboardButton(user, callback_data=f"{prefix}_{user}"))
+        markup.add(*buttons)
+        markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))
+        return markup
+ 
+ 
+    def cmd_start(self, message):
+        if not self.is_admin(message.from_user.id):
+            return
+        self.bot.send_message(
+            message.chat.id, 
+            "👋 Привет! Панель управления VPN запущена.", 
+            reply_markup=self.get_main_menu()
+        )
+ 
+    def handle_callbacks(self, call):
+        if not self.is_admin(call.from_user.id):
+            return
+ 
+        chat_id = call.message.chat.id
+        self.bot.answer_callback_query(call.id)
+        
+        try:
+            if call.data == "cancel":
+                self.bot.edit_message_text("Действие отменено. Главное меню:", chat_id, call.message.message_id, reply_markup=self.get_main_menu())
+                self.bot.clear_step_handler_by_chat_id(chat_id) 
+
+            elif call.data == "online_users":
+                self._cb_online_users(chat_id)  
+            
+            elif call.data == "list_users":
+                self._cb_list_users(chat_id)
+                
+            elif call.data == "refresh_all":
+                self._cb_refresh(chat_id)
+
+            elif call.data == "reset_user":
+                msg = self.bot.send_message(chat_id, "Введите username пользователя:")
+                self.bot.register_next_step_handler(msg, self._step_reset_user)
+
+            elif call.data == "add_user":
+                msg = self.bot.send_message(chat_id, "Введите username нового пользователя (или /start для отмены):")
+                self.bot.register_next_step_handler(msg, self._step_add_user_name)
+ 
+            elif call.data == "action_info":
+                msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
+                self.bot.register_next_step_handler(msg, self._step_info_user)
+ 
+            elif call.data == "action_del":
+                if not self.cfg['users']:
+                    self.bot.send_message(chat_id, "Список пуст.", reply_markup=self.get_main_menu())
+                    return
+                self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, call.message.message_id, reply_markup=self.get_users_menu("dodel"))
+ 
+            elif call.data.startswith("dodel_"):
+                username = call.data.split("dodel_", 1)[1]
+                self._cb_del_user(chat_id, username)
+ 
+            elif call.data == "codes_menu":
+                self.bot.edit_message_text("🎟 Управление кодами:", chat_id, call.message.message_id, reply_markup=self.get_codes_menu())
+ 
+            elif call.data == "list_codes":
+                self._cb_list_codes(chat_id)
+ 
+            elif call.data == "info_code":
+                msg = self.bot.send_message(chat_id, "Введите код (или /start для отмены):")
+                self.bot.register_next_step_handler(msg, self._step_info_code)
+ 
+            elif call.data == "del_code":
+                msg = self.bot.send_message(chat_id, "Введите код для удаления (или /start для отмены):")
+                self.bot.register_next_step_handler(msg, self._step_del_code)
+ 
+            elif call.data == "add_code":
+                msg = self.bot.send_message(chat_id, "Введите название кода (или /start для отмены):")
+                self.bot.register_next_step_handler(msg, self._step_add_code_name)
+
+            elif call.data == "status_panels":
+                self._cb_all_panels_status(chat_id)
+            elif call.data.startswith("codetype_"):
+                 code_type = call.data.split("codetype_", 1)[1]
+                 code_name = self._pending_codes.pop(chat_id, None)
+                 if not code_name:
+                     self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
+                     return
+                 msg = self.bot.send_message(chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML")
+                 self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name) 
+        except Exception as e:
+            self.log.error(f"Ошибка в боте: {e}", exc_info=True)
+            self.bot.send_message(chat_id, f"⚠️ Произошла ошибка: {e}")
+
+    def _cb_panel_info(self, chat_id, panel, last):
+        info = self.sub.getstatus(panel)
+
+        sys_up = self.sub.fmt_time(info.get('uptime', 0))
+        app_up = self.sub.fmt_time(info.get('appStats', {}).get('uptime', 0))
+        xr = info.get('xray', {})
+        xr_state = xr.get('state', 'unknown')
+        xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xr.get('errorMsg', 'unknown error')}"        
+        GB = 1024 ** 3
+        MB = 1024 ** 2
+        text = f"""📊 <b>Статус сервера {panel.name}</b>
+
+🖥 <b>Система</b>
+├ <b>CPU:</b> <code>{int(round(info['cpu']))}%</code> (<code>{info['cpuCores']}</code>/<code>{info['logicalPro']}</code> ядер, <code>{int(round(info['cpuSpeedMhz']))} MHz</code>)
+├ <b>Load:</b> <code>{info['loads'][0]}</code> | <code>{info['loads'][1]}</code> | <code>{info['loads'][2]}</code>
+├ <b>RAM:</b> <code>{info['mem']['current'] / GB:.2f} GB</code> / <code>{info['mem']['total'] / GB:.2f} GB</code>
+└ <b>Uptime:</b> <code>{sys_up}</code>
+
+💾 <b>Накопители</b>
+├ <b>Диск:</b> <code>{info['disk']['current'] / GB:.2f} GB</code> / <code>{info['disk']['total'] / GB:.2f} GB</code>
+└ <b>Swap:</b> <code>{info['swap']['current'] / GB:.2f} GB</code> / <code>{info['swap']['total'] / GB:.2f} GB</code>
+
+🌐 <b>Сеть & IP</b>
+├ <b>IPv4:</b> <code>{info['publicIP']['ipv4']}</code>
+├ <b>IPv6:</b> <code>{info['publicIP']['ipv6'] or 'Отключен'}</code>
+├ <b>Соединения:</b> <code>{info['tcpCount']}</code> TCP / <code>{info['udpCount']}</code> UDP
+├ <b>Скорость:</b> ⬇️ <code>{info['netIO']['down'] / MB:.2f} MB/s</code> | ⬆️ <code>{info['netIO']['up'] / MB:.2f} MB/s</code>
+└ <b>Трафик:</b> ⬇️ <code>{info['netTraffic']['recv'] / GB:.2f} GB</code> | ⬆️ <code>{info['netTraffic']['sent'] / GB:.2f} GB</code>
+
+⚡️ <b>Xray Core v{info['xray']['version']}</b>
+└ <b>Статус:</b> {xr_status}
+
+🤖 <b>Other</b>
+├ <b>Потоков:</b> <code>{info['appStats']['threads']}</code>
+├ <b>RAM:</b> <code>{info['appStats']['mem'] / MB:.2f} MB</code>
+└ <b>Uptime:</b> <code>{app_up}</code>"""
+        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None)
+    def _cb_all_panels_status(self, chat_id):
+        msg = self.bot.send_message(chat_id, "⏳ Получение статуса панелей...")
+        panels = list(self.sub.panels)
+        for i, panel in enumerate(panels):
+            last = i == len(panels) - 1
+            try:
+                self._cb_panel_info(chat_id, panel, last)
+            except Exception as e:
+                self.bot.send_message(chat_id, f"❌ <code>{panel.address}:{panel.port} ({panel.name})</code>: {e}", parse_mode="HTML")
+        try:
+            self.bot.delete_message(chat_id, msg.message_id)
+        except Exception:
+            pass
+    def _cb_list_users(self, chat_id):
+        users = list(self.cfg['users'].keys())
+        if not users:
+            self.bot.send_message(chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu())
+            return
+        
+        text = "👥 <b>Список пользователей:</b>\n\n" + "\n".join([f"- <code>{u}</code>" for u in users])
+        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
+    def _cb_online_users(self, chat_id):
+        online_users = self.sub.get_online_users(new = True)
+        if not online_users:
+            self.bot.send_message(chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu())
+            return
+        text = "👥 <b>Список пользователей онлайн:</b>\n\n" + "\n".join([f"- <code>{u}</code>{", логин: "+v if v else ""}" for u, v in online_users.items()])
+        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
+    def _cb_refresh(self, chat_id):
+        try:
+            for cc in self.cfg['users'].keys():
+                self.sub.add_users(cc)
+            self.bot.send_message(chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu())
+        except Exception as e:
+            self.bot.send_message(chat_id, f"❌ Ошибка: {e}")
+ 
+    def _cb_info_user(self, chat_id, username):
+        if username not in self.cfg['users']:
+            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+        
+        try:
+            bandwidths = self.sub.bandwidth(username=username)
+            wl_bandwidths = self.sub.bandwidth(username=username, whitelist=True)
+            up = round(bandwidths[0] / 10**6, 2)
+            down = round(bandwidths[1] / 10**6, 2)
+            wl_up = round(wl_bandwidths[0] / 10**6, 2)
+            wl_down = round(wl_bandwidths[1] / 10**6, 2)
+            monthly = round(self.cfg['bw'][username][1] / 10**6, 2)
+            wl_monthly = round(self.cfg['wl_bw'][username][1] / 10**6, 2)
+            limit = self.cfg['bw'][username][0]
+            wl_limit = self.cfg['wl_bw'][username][0]
+            times = self.cfg['time'].get(username, 0)
+            token = self.cfg['tokens'].get(username)
+            displayname = self.cfg['displaynames'].get(username, "N/A")
+            status = "🟢 Включен" if self.cfg['status'].get(username) else "🔴 Отключен"
+            online = "🟢 Да" if self.sub.is_online(username) else "🔴 Нет"
+            fingerprint = self.cfg['userFingerprints'].get(username)
+            if times:
+                days_left = str((times - int(time.time())) // 86400)
+                date = datetime.fromtimestamp(times, tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
+            else:
+                days_left = "N/A"
+                date = "N/A"
+            text = (
+                f"ℹ️ <b>Информация о <code>{username}</code></b>\n\n"
+                f"Имя: <code>{displayname}</code>\n"
+                f"Статус: {status}\n"
+                f"В сети: {online}\n"
+                f"Трафик в этом месяце: {monthly if monthly else "0"} MB / {limit} GB\n"
+                f"Трафик WL в этом месяце: {wl_monthly if wl_monthly else "0"} MB / {wl_limit} GB\n"
+                f"Дата окончания: {date}\n"
+                f"Дней осталось: {days_left}\n"
+                f"Upload: {up} MB | Download: {down} MB\n"
+                f"WL Upload: {wl_up} MB | Download: {wl_down} MB\n"
+                f"Отпечаток: <code>{fingerprint}</code>\n"
+                f"Ссылка: <code>https://pomi.lol/sub?token={token}&lang=ru</code>\n"
+            )
+            self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
+        except Exception as e:
+            self.bot.send_message(chat_id, f"❌ Ошибка: {e}", reply_markup=self.get_main_menu())
+ 
+    def _cb_del_user(self, chat_id, username):
+        if username not in self.cfg['users']:
+            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+        try:
+            self.sub.delete_user(username=username, perma=True)
+            self.bot.send_message(chat_id, f"✅ Пользователь <b>{username}</b> удален.", parse_mode="HTML", reply_markup=self.get_main_menu())
+        except Exception as e:
+            self.bot.send_message(chat_id, f"❌ Ошибка: {e}")
+ 
+    def _step_reset_user(self, message):
+        if message.text.startswith('/'): return 
+        username = message.text.strip()
+        if not self.sub.isuser(username):
+            self.bot.send_message(message.chat.id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+    
+        try:
+            obj = self.sub.reset_user(username)
+        except Exception as e:
+            self.log.critical(f"exception in reset_user: {e}")
+            return
+        self.bot.send_message(message.chat.id, f"✅ Пользователь был сброшен.\n\nToken: <code>{obj['token']}</code>\nUUID: <code>{obj['uuid']}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
+    def _step_add_user_name(self, message):
+        if message.text.startswith('/'): return 
+        username = message.text.strip()
+        if username in self.cfg['users']:
+            self.bot.send_message(message.chat.id, "❌ Этот username уже существует.", reply_markup=self.get_main_menu())
+            return
+        
+        msg = self.bot.send_message(message.chat.id, "Введите DisplayName (Отображаемое имя):")
+        self.bot.register_next_step_handler(msg, self._step_add_user_display, username)
+ 
+    def _step_add_user_display(self, message, username):
+        if message.text.startswith('/'): return
+        displayname = message.text.strip()
+        
+        msg = self.bot.send_message(message.chat.id, "Введите лимит в гигабайтах (или 0 для безлимита):")
+        self.bot.register_next_step_handler(msg, self._step_add_user_limit, username, displayname)
+    def _step_add_user_limit(self, message, username, displayname):
+        if message.text.startswith('/'): return
+        try:
+            limit = int(message.text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Ошибка: Лимит должен быть числом.", reply_markup=self.get_main_menu())
+            return
+        msg = self.bot.send_message(message.chat.id, "Введите кол-во дней подписки (0 для безлимита):")
+        self.bot.register_next_step_handler(msg, self._step_add_user_time, username, displayname, limit)
+    def _step_add_user_time(self, message, username, displayname, limit):
+        if message.text.startswith('/'): return
+ 
+        try:
+            timee = int(message.text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Ошибка: Лимит времени должен быть числом.", reply_markup=self.get_main_menu())
+            return
+
+        timee = int(time.time() + (timee * 86400)) if timee else 0
+        try:
+            self.sub.add_new_user(username=username, displayname=displayname, limit=limit, timee=timee)
+            self.bot.send_message(message.chat.id, f"✅ Пользователь <b>{username}</b> успешно добавлен!", parse_mode="HTML", reply_markup=self.get_main_menu())
+        except Exception as e:
+            self.bot.send_message(message.chat.id, f"❌ Ошибка при добавлении: {e}", reply_markup=self.get_main_menu())
+    def _step_info_user(self, message):
+        if message.text.startswith('/'): return
+        username = message.text.strip()
+        self._cb_info_user(message.chat.id, username)
+ 
+    def _cb_list_codes(self, chat_id):
+        try:
+            codes = self.sub.list_code()
+            if not codes:
+                self.bot.send_message(chat_id, "Список кодов пуст.", reply_markup=self.get_codes_menu())
+                return
+            text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{c}</code>" for c in codes])
+            self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
+        except Exception as e:
+            self.bot.send_message(chat_id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
+ 
+    def _step_info_code(self, message):
+        if message.text.startswith('/'): return
+        code = message.text.strip()
+        try:
+            info = cast(dict, self.sub.get_code(code))
+            if not info:
+                self.bot.send_message(message.chat.id, "❌ Код не найден.", reply_markup=self.get_codes_menu())
+                return
+            text = (
+                f"ℹ️ <b>Код: <code>{code}</code></b>\n\n"
+                f"Тип: <code>{info.get('action', 'N/A')}</code>\n"
+                f"Перманентный: <b>{"Да" if info.get('perma', False) else "Нет"}</b>\n"
+                f"Дней: <code>{info.get('days', 'N/A')}</code>\n"
+                f"Гигабайт: <code>{info.get('gb', 'N/A')}</code>\n"
+                f"ВЛ Гигабайт: <code>{info.get('wl_gb', 'N/A')}</code>\n"
+            )
+            self.bot.send_message(message.chat.id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
+        except Exception as e:
+            self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
+ 
+    def _step_del_code(self, message):
+        if message.text.startswith('/'): return
+        code = message.text.strip()
+        try:
+            x = self.sub.delete_code(code)
+            if x is False:
+                self.bot.send_message(message.chat.id, f"❌ Код <code>{code}</code> не существует.", parse_mode="HTML", reply_markup=self.get_codes_menu())
+            else:
+                self.bot.send_message(message.chat.id, f"✅ Код <code>{code}</code> удалён.", parse_mode="HTML", reply_markup=self.get_codes_menu())
+        except Exception as e:
+            self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
+ 
+    def _step_add_code_name(self, message):
+        if message.text.startswith('/'): return
+        code_name = message.text.strip()
+        self._pending_codes[message.chat.id] = code_name  
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("📝 register", callback_data="codetype_register"),
+            types.InlineKeyboardButton("🎁 bonus", callback_data="codetype_bonus"),
+            types.InlineKeyboardButton("🔙 Отмена", callback_data="codes_menu")
+        )
+        self.bot.send_message(message.chat.id, f"Код: <b>{code_name}</b>\nВыберите тип:", parse_mode="HTML", reply_markup=markup)
+    
+
+    def _step_add_code_days(self, message, code_type, code_name):
+        if message.text.startswith('/'): return
+        try:
+            days = int(message.text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
+            return
+        msg = self.bot.send_message(message.chat.id, "Введите количество гигабайтов (в гб, или 0 для безлимита):")
+        self.bot.register_next_step_handler(msg, self._step_add_code_time, code_type, code_name, days)
+ 
+    def _step_add_code_time(self, message, code_type, code_name, days):
+        if message.text.startswith('/'): return
+        try:
+            gb = int(message.text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
+            return
+        msg = self.bot.send_message(message.chat.id, "Введите количество гигабайтов для ВЛ локаций (в гб, или 0 для безлимита)")
+        self.bot.register_next_step_handler(msg, self._step_add_code_wl_time, code_type, code_name, days, gb)
+    
+    def _step_add_code_wl_time(self, message, code_type, code_name, days, gb):
+        if message.text.startswith('/'): return
+        try:
+            wl_gb = int(message.text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
+            return
+        msg = self.bot.send_message(message.chat.id, "Перманентный код? Да/Нет:")
+        self.bot.register_next_step_handler(msg, self._step_add_code_perma, code_type, code_name, days, gb, wl_gb)
+    def _step_add_code_perma(self, message, code_type, code_name, days, gb, wl_gb):
+        if message.text.startswith('/'): return
+        content = message.text.strip().lower()
+        perma = False
+        if content == "да":
+            perma = True
+        elif content == "нет":
+            pass
+        else:
+            self.bot.send_message(message.chat.id, "❌ Неизвестное значение (только да/нет)", reply_markup=self.get_codes_menu())
+            return
+        try:
+            self.sub.add_code(code=code_name, action=code_type, permanent=perma, days=days, gb=gb, wl_gb=wl_gb)
+            self.bot.send_message(
+                message.chat.id,
+                f"""✅ Код создан!
+
+Код: <code>{code_name}</code>
+Тип: <code>{code_type}</code>
+Перманентный: <b>{"Да" if perma else "Нет"}</b>
+Дней: <code>{days}</code>
+Гб: <code>{gb}</code>
+ВЛ Гб: <code>{wl_gb}</code>""",
+                parse_mode="HTML",
+                reply_markup=self.get_codes_menu()
+            )
+        except Exception as e:
+            self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
+    def start(self):
+        bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
+        bot_thread.start()
+        self.log.info("loaded telegram bot")
+
+class PublicBot:
+    """Public telegram bot for end users.
+    Dependencies: Subscription
+    Classes depending on this: none"""
+    def __init__(self, sub: Subscription, cfg: Config):
+        self.log = Logger(type(self).__name__)
+        self.log.debug("starting Public Telegram bot")
+        
+        self.cfg = cfg
+        self.sub = sub
+
+        if 'tg_lang' not in self.cfg['publicbot']:
+            def _init_lang(data):
+                data['publicbot']['tg_lang'] = {}
+            self.cfg.update(_init_lang)
+
+        token = self.cfg['publicbot'].get('token')
+        if not token:
+            self.log.critical("public_bot_token not found in config.json! Public bot will not start.")
+            return
+
+        self.bot = telebot.TeleBot(token)
+
+        self.TEXTS = self.cfg['publicbot']['lang']
+
+        self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start)
+        self.bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))(self.set_lang_callback)
+        self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback)
+        self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback)
+        self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback)
+        self.bot.message_handler(func=lambda m: True)(self.handle_text)
+
+
+    def get_lang(self, uid: int) -> str:
+        return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
+
+    def set_lang(self, uid: int, lang: str):
+        def _u(data):
+            data['publicbot']['tg_lang'][str(uid)] = lang
+        self.cfg.update(_u)
+    def msg(self, tgid: int | str | None, key: str, **kwargs):
+        if tgid is None or isinstance(tgid, str): # evil pylance haha
+            return
+        lang = self.get_lang(tgid)
+        t = self.TEXTS[lang]
+        text = t.get(key, None)
+        if not text:
+            return
+        if kwargs:
+            text = text.format(**kwargs)
+        try: self.bot.send_message(tgid, text, parse_mode="HTML")
+        except: pass
+    def get_menu(self, uid: int):
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        is_reg = self.sub.is_registered(uid)
+        
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        if not is_reg:
+            markup.add(
+                types.KeyboardButton(t['btn_login'])
+            )
+        else:
+            markup.add(
+                types.KeyboardButton(t['btn_info']),
+                types.KeyboardButton(t['btn_bonus']),
+                types.KeyboardButton(t['btn_settings']),
+                types.KeyboardButton(t['btn_reset']),
+                types.KeyboardButton(t['btn_logout']),
+                types.KeyboardButton(t['btn_help']),
+                types.KeyboardButton(t['btn_delete'])
+            )
+        markup.add(
+                types.KeyboardButton(t['btn_lang']), 
+                types.KeyboardButton(t['btn_support'])
+        )
+        return markup
+
+    def send_info(self, chat_id: int, uid: int, lang: str):
+        t = self.TEXTS[lang]
+        info = self.sub.get_info_telegram(uid)
+        if not info:
+            return
+        daystext = "дней" if lang == 'ru' else "days"  
+        limit_str = f"{info['limit']} GB" if info['limit'] else t['unlimited']
+        wl_limit_str = f"{info['wl_limit']} GB" if info['wl_limit'] else t['unlimited']
+        if info['time']:
+            days_left = str((info['time'] - int(time.time())) // 86400)
+            date_end = datetime.fromtimestamp(info['time'], tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
+            time_str = f"{days_left} {daystext} ({date_end})"
+        else:
+            time_str = t['lifetime']
+            
+        status = "🟢" if info['status'] else "🔴"
+        online = "🟢" if self.sub.is_online(info['username']) else "🔴"
+        domain = "pomi.lol" 
+        uri = self.cfg['uri']
+        link = f"https://{domain}/{uri}?token={info['token']}&lang={lang}"
+        fingerprint = self.cfg['userFingerprints'].get(info['username'])
+        text = t['info_text'].format(
+            status=status,
+            online=online,
+            username=info['displayname'],
+            total=info['total'],
+            wl_total=info['wl_total'],
+            monthly=info['monthly'],
+            wl_monthly=info['wl_monthly'],
+            limit=limit_str,
+            wl_limit=wl_limit_str,
+            up=info['up'],
+            wl_up=info['wl_up'],
+            down=info['down'],
+            wl_down=info['wl_down'],
+            days=time_str,
+            fingerprint=fingerprint,
+            link=link
+        )
+        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_menu(uid))
+
+
+    def cmd_start(self, message):
+        uid = message.from_user.id
+        self.bot.clear_step_handler_by_chat_id(message.chat.id)
+        
+        if str(uid) not in self.cfg['publicbot']['tg_lang']:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(
+                types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
+                types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
+            )
+            self.bot.send_message(message.chat.id, "Welcome! Please choose your language:\nДобро пожаловать! Выберите язык:", reply_markup=markup)
+        else:
+            lang = self.get_lang(uid)
+            t = self.TEXTS[lang]
+            msg_text = t['welcome_reg'] if self.sub.is_registered(uid) else t['welcome_new']
+            self.bot.send_message(message.chat.id, msg_text, reply_markup=self.get_menu(uid))
+
+    def set_lang_callback(self, call):
+        uid = call.from_user.id
+        new_lang = call.data.split('_', 1)[1]
+        self.set_lang(uid, new_lang)
+        
+        self.bot.answer_callback_query(call.id)
+        t = self.TEXTS[new_lang]
+        self.bot.send_message(call.message.chat.id, t['lang_set'], reply_markup=self.get_menu(uid))
+
+        self.bot.delete_message(call.message.chat.id, call.message.message_id)
+
+    def handle_text(self, message):
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        text = message.text
+
+        
+        if text in [self.TEXTS['ru']['btn_info'], self.TEXTS['en']['btn_info']]:
+            if not self.sub.is_registered(uid): return
+            self.send_info(message.chat.id, uid, lang)
+            
+        elif text in [self.TEXTS['ru']['btn_bonus'], self.TEXTS['en']['btn_bonus']]:
+            if not self.sub.is_registered(uid): return
+            msg = self.bot.send_message(message.chat.id, t['enter_bonus'], reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_bonus)
+            
+        elif text in [self.TEXTS['ru']['btn_lang'], self.TEXTS['en']['btn_lang']]:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(
+                types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
+                types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
+            )
+            self.bot.send_message(message.chat.id, t['choose_lang'], reply_markup=markup)
+        elif text in [self.TEXTS['ru']['btn_login'], self.TEXTS['en']['btn_login']]:
+            if self.sub.is_registered(uid): return
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            markup.add(
+                types.InlineKeyboardButton(t['btn_login_credentials'], callback_data="login_credentials"),
+                types.InlineKeyboardButton(t['btn_login_token'], callback_data="login_token")
+            )
+            self.bot.send_message(message.chat.id, t['choose_login'], reply_markup=markup)
+            # msg = self.bot.send_message(message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())
+            # self.bot.register_next_step_handler(msg, self.step_login_email)
+        elif text in [self.TEXTS['ru']['btn_reset'], self.TEXTS['en']['btn_reset']]:
+            if not self.sub.is_registered(uid): return
+            msg = self.bot.send_message(message.chat.id, t['confirm_reset'], reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_reset)
+        
+        elif text in [self.TEXTS['ru']['btn_support'], self.TEXTS['en']['btn_support']]:
+            self.bot.send_message(message.chat.id, t['support_text'], parse_mode="HTML")
+        
+        elif text in [self.TEXTS['ru']['btn_logout'], self.TEXTS['en']['btn_logout']]:
+            if not self.sub.is_registered(uid): return
+            def _u(d):
+                d['tgids'].pop(str(uid), None)
+            self.cfg.update(_u)
+            self.bot.send_message(message.chat.id, t['logout_success'], reply_markup=self.get_menu(uid))
+
+        elif text in [self.TEXTS['ru']['btn_help'], self.TEXTS['en']['btn_help']]:
+            if not self.sub.is_registered(uid): return
+            t = self.TEXTS[lang]
+            text = ""
+            for profile, desc in self.cfg['profileDescriptions'].items():
+                profile_name = self.cfg['profiles'][profile][0 if lang == "en" else 1]
+                profile_desc = desc[0 if lang == "en" else 1]
+                text = text + f"<code>{profile_name}</code> — {profile_desc}\n"
+            final_text = t['help_text'].format(
+                text=text
+            )
+            self.bot.send_message(message.chat.id, final_text, parse_mode="HTML")
+
+        elif text in [self.TEXTS['ru']['btn_settings'], self.TEXTS['en']['btn_settings']]:
+            if not self.sub.is_registered(uid): return
+            t = self.TEXTS[lang]
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            name_label = t['name_label']
+            fp_label = t['fp_label']
+            pass_label = t['pass_label']
+            login_label = t['login_label']
+            markup.add(
+                types.InlineKeyboardButton(name_label, callback_data="set_name"),
+                types.InlineKeyboardButton(fp_label, callback_data="set_fp"),
+                types.InlineKeyboardButton(login_label, callback_data="set_login"),
+                types.InlineKeyboardButton(pass_label, callback_data="set_pass")
+            )
+            self.bot.send_message(message.chat.id, t['settings_menu'], parse_mode="HTML", reply_markup=markup)
+
+        elif text in [self.TEXTS['ru']['btn_delete'], self.TEXTS['en']['btn_delete']]:
+            if not self.sub.is_registered(uid): return
+            msg = self.bot.send_message(message.chat.id, t['confirm_delete'], parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_delete)
+
+    def login_callback(self, call):
+        uid = call.from_user.id
+        if self.sub.is_registered(uid): return
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        action = call.data
+
+        self.bot.answer_callback_query(call.id)
+
+        if action == "login_credentials":
+            msg = self.bot.send_message(call.message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_login_email)
+        elif action == "login_token":
+            msg = self.bot.send_message(call.message.chat.id, t['enter_token'], reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_login_token)
+
+    def settings_callback(self, call):
+        uid = call.from_user.id
+        if not self.sub.is_registered(uid): return
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        action = call.data  # set_name, set_fp, set_pass, set_login
+
+        self.bot.answer_callback_query(call.id)
+        try: self.bot.delete_message(call.message.chat.id, call.message.message_id)
+        except: pass
+
+        if action == "set_name":
+            msg = self.bot.send_message(call.message.chat.id, t['settings_name_prompt'], reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_settings_name)
+        elif action == "set_fp":
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            username = self.sub.get_username_telegram(uid)
+            current_fp = self.cfg['userFingerprints'].get(username, '')
+            for fp in self.cfg['fingerprints']:
+                label = f"✅ {fp}" if fp == current_fp else fp
+                markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}"))
+            self.bot.send_message(call.message.chat.id, t['settings_fp_prompt'], reply_markup=markup)
+        elif action == "set_login":
+            msg = self.bot.send_message(call.message.chat.id, t['settings_login_prompt'], reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_settings_login)
+        elif action == "set_pass":
+            msg = self.bot.send_message(call.message.chat.id, t['settings_pass_prompt'], reply_markup=types.ReplyKeyboardRemove())
+            self.bot.register_next_step_handler(msg, self.step_settings_pass)
+
+    def fp_callback(self, call):
+        uid = call.from_user.id
+        if not self.sub.is_registered(uid): return
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        fp = call.data[3:]  # strip "fp_"
+
+        username = self.sub.get_username_telegram(uid)
+        if not isinstance(username, str): return
+
+        self.bot.answer_callback_query(call.id)
+        result = self.sub.update_params(username=username, fingerprint=fp)
+        if isinstance(result, str):
+            self.bot.send_message(call.message.chat.id, f"❌ {result}", reply_markup=self.get_menu(uid))
+        else:
+            self.bot.send_message(call.message.chat.id, t['settings_fp_success'], reply_markup=self.get_menu(uid))
+        try: self.bot.delete_message(call.message.chat.id, call.message.message_id)
+        except: pass
+
+    def step_settings_name(self, message):
+        if message.text.startswith('/'):
+            return self.cmd_start(message)
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        username = self.sub.get_username_telegram(uid)
+        if not isinstance(username, str): return
+        
+        new_name = message.text.strip()
+        if len(new_name) > 16:
+            self.bot.send_message(message.chat.id, t['length_displayname'].format(ln=16), reply_markup=self.get_menu(uid))
+            return
+
+        result = self.sub.update_params(username=username, displayname=new_name)
+        if isinstance(result, str):
+            self.bot.send_message(message.chat.id, f"❌ {result}", reply_markup=self.get_menu(uid))
+        else:
+            self.bot.send_message(message.chat.id, t['settings_name_success'], reply_markup=self.get_menu(uid))
+
+    def step_settings_login(self, message):
+        if message.text.startswith('/'):
+            return self.cmd_start(message)
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        username = self.sub.get_username_telegram(uid)
+        if not isinstance(username, str): return
+
+        new_login = message.text.strip()
+        if len(new_login) > 32:
+            self.bot.send_message(message.chat.id, t['length_username'].format(ln=16), reply_markup=self.get_menu(uid))
+            return
+
+        result = self.sub.update_params(username=username, ext_username=new_login)
+        if isinstance(result, str):
+            self.bot.send_message(message.chat.id, f"❌ {result}", reply_markup=self.get_menu(uid))
+        else:
+            self.bot.send_message(message.chat.id, t['settings_login_success'], reply_markup=self.get_menu(uid))
+
+    def step_settings_pass(self, message):
+        if message.text.startswith('/'):
+            return self.cmd_start(message)
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        username = self.sub.get_username_telegram(uid)
+        if not isinstance(username, str): return
+        if not self.cfg['webui_users'].get(username, None):
+            self.bot.send_message(message.chat.id, t['no_account'], reply_markup=self.get_menu(uid))
+            return
+        new_pass = message.text.strip()
+        try: self.bot.delete_message(message.chat.id, message.message_id)
+        except: pass
+
+        # Need current ext_username to update password (update_params requires both)
+        ext_username = None
+        for email, uname in cast(dict, self.cfg.get('webui_users', {})).items():
+            if uname == username:
+                ext_username = email
+                break
+        if not ext_username:
+            self.bot.send_message(message.chat.id, "❌ No login found", reply_markup=self.get_menu(uid))
+            return
+
+        result = self.sub.update_params(username=username, ext_username=ext_username, ext_password=new_pass)
+        if isinstance(result, str):
+            self.bot.send_message(message.chat.id, f"❌ {result}", reply_markup=self.get_menu(uid))
+        else:
+            self.bot.send_message(message.chat.id, t['settings_pass_success'], reply_markup=self.get_menu(uid))
+
+    def step_delete(self, message):
+        if message.text.startswith('/'):
+            return self.cmd_start(message)
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+
+        confirm = t['delete_confirm_input']
+        if message.text.strip().lower() != confirm.lower():
+            self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
+            return
+
+        username = self.sub.get_username_telegram(uid)
+        if not isinstance(username, str):
+            self.bot.send_message(message.chat.id, "❌ Error", reply_markup=self.get_menu(uid))
+            return
+        try:
+            self.sub.delete_user(username=username, perma=True)
+            self.bot.send_message(message.chat.id, t['delete_success'], reply_markup=self.get_menu(uid))
+        except Exception as e:
+            self.log.error(f"Delete error for uid {uid}: {e}")
+            self.bot.send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
+
+    def step_login_token(self, message):
+        if message.text.startswith('/'): return self.cmd_start(message)
+
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        raw = message.text.strip()
+
+        if '?' in raw:
+            qs = urllib.parse.urlparse(raw).query
+            token = urllib.parse.parse_qs(qs).get('token', [None])[0]
+        else:
+            token = raw
+
+        if not token:
+            self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
+            return
+
+        internal_username = self.sub.usertotoken(token)
+        if not internal_username:
+            self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
+            return
+
+        def _link_tg(data):
+            data.setdefault('tgids', {})[str(uid)] = internal_username
+        self.cfg.update(_link_tg)
+
+        self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
+        self.send_info(message.chat.id, uid, lang)
+    def step_login_email(self, message):
+        if message.text.startswith('/'): return self.cmd_start(message)
+            
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        email = message.text.strip()
+            
+        msg = self.bot.send_message(message.chat.id, t['enter_pass'])
+        self.bot.register_next_step_handler(msg, self.step_login_pass, email)
+    def step_login_pass(self, message, email):
+        if message.text.startswith('/'): return self.cmd_start(message)
+        
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        password = message.text.strip()
+            
+        try: self.bot.delete_message(message.chat.id, message.message_id)
+        except: pass    
+        users_pw = cast(dict, self.cfg.get('webui_passwords', {}))
+        webui_users = cast(dict, self.cfg.get('webui_users', {}))
+        
+        if email in users_pw and users_pw[email] == self.sub.hash(password):
+            internal_username = webui_users.get(email)
+            if internal_username and internal_username in self.cfg['users']:
+                def _link_tg(data):
+                    data.setdefault('tgids', {})[str(uid)] = internal_username
+                self.cfg.update(_link_tg)
+                
+                self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
+                self.send_info(message.chat.id, uid, lang)
+                return
+                    
+        self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
+
+    def step_reset(self, message):
+        if message.text.startswith('/'): return self.cmd_start(message)
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+
+        confirm = t['reset_confirm_input'] # string they need to say
+        userinput = message.text.strip().lower()
+        if userinput == confirm.lower():
+            try:
+                username = self.sub.get_username_telegram(uid)
+                if not isinstance(username, str):
+                    return
+                obj = self.sub.reset_user(username)
+                if not isinstance(obj, dict):
+                    self.bot.send_message(message.chat.id, "Unknown error", reply_markup=self.get_menu(uid))
+                    return
+                self.bot.send_message(message.chat.id, t['reset_success'], reply_markup=self.get_menu(uid))
+            except Exception as e:
+                self.log.critical(f"error in reset_user, {e}")
+        else:
+            self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
+            return
+
+    def step_bonus(self, message):
+        uid = message.from_user.id
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        
+        if message.text.startswith('/'): 
+            self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
+            return
+            
+        code = message.text.strip()
+        try:
+            res = self.sub.bonus_code(value=uid, code=code)
+            if res is False:
+                self.bot.send_message(message.chat.id, t['invalid_code'], reply_markup=self.get_menu(uid))
+            else:
+                self.bot.send_message(message.chat.id, t['bonus_success'], reply_markup=self.get_menu(uid))
+                self.send_info(message.chat.id, uid, lang)
+        except Exception as e:
+             self.log.error(f"Bonus error for uid {uid}: {e}")
+             self.bot.send_message(message.chat.id, "⚠️ Error occurred", reply_markup=self.get_menu(uid))
+
+    def start(self):
+        if hasattr(self, 'bot'):
+            bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
+            bot_thread.start()
+            self.log.info("loaded Public Telegram bot")
+

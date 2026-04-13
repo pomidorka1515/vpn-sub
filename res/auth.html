@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a0a0b; --surface: #131316; --surface2: #1a1a1f;
+  --border: #252529; --text: #e4e4e7; --text2: #8e8e96;
+  --accent: #6366f1; --accent-dim: #4f46e5;
+  --green: #22c55e; --red: #ef4444;
+}
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; display: flex;
+  align-items: center; justify-content: center;
+  padding: 20px; -webkit-font-smoothing: antialiased;
+}
+.auth-box {
+  width: 100%; max-width: 380px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 36px 32px;
+  animation: fadeUp .4s ease; position: relative;
+}
+.auth-box h1 {
+  font-size: 18px; font-weight: 500; margin-bottom: 28px;
+  text-align: center; color: var(--text2); letter-spacing: .5px;
+}
+.lang-toggle {
+  position: absolute; top: 16px; right: 16px;
+  display: flex; gap: 2px; background: var(--bg);
+  border-radius: 6px; padding: 2px;
+}
+.lang-btn {
+  padding: 4px 10px; border: none; background: none;
+  color: var(--text2); font-family: inherit; font-size: 11px;
+  font-weight: 600; border-radius: 4px; cursor: pointer;
+  transition: all .2s; letter-spacing: .5px;
+}
+.lang-btn.active { background: var(--surface2); color: var(--text); }
+.auth-tabs {
+  display: flex; gap: 4px; background: var(--bg);
+  border-radius: 8px; padding: 3px; margin-bottom: 24px;
+}
+.auth-tab {
+  flex: 1; padding: 8px; border: none; background: none;
+  color: var(--text2); font-family: inherit; font-size: 13px;
+  font-weight: 500; border-radius: 6px; cursor: pointer; transition: all .2s;
+}
+.auth-tab.active { background: var(--surface2); color: var(--text); }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+.form-group input {
+  width: 100%; padding: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: inherit; font-size: 14px;
+  outline: none; transition: border-color .2s;
+}
+.form-group input:focus { border-color: var(--accent); }
+.btn {
+  width: 100%; padding: 11px; border: none; border-radius: 8px;
+  font-family: inherit; font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all .2s; margin-top: 6px;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-dim); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.auth-error {
+  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2);
+  color: var(--red); padding: 8px 12px; border-radius: 8px;
+  font-size: 13px; margin-bottom: 14px; display: none;
+}
+.auth-error.show { display: block; }
+.username-hint { font-size: 11px; color: var(--text2); margin-top: 4px; min-height: 16px; }
+.username-hint.ok { color: var(--green); }
+.username-hint.bad { color: var(--red); }
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@media (max-width: 500px) { .auth-box { padding: 28px 20px; } }
+</style>
+</head>
+<body>
+<div class="auth-box">
+  <div class="lang-toggle">
+    <button class="lang-btn" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" onclick="setLang('ru')">RU</button>
+  </div>
+  <h1 id="authTitle"></h1>
+  <div class="auth-tabs">
+    <button class="auth-tab active" onclick="switchTab('login')" id="tabLogin"></button>
+    <button class="auth-tab" onclick="switchTab('register')" id="tabRegister"></button>
+  </div>
+  <div class="auth-error" id="authError"></div>
+
+  <div id="loginForm">
+    <div class="form-group">
+      <label data-t="username"></label>
+      <input type="text" id="loginUser" autocomplete="username" spellcheck="false" maxlength="32" pattern="[A-Za-z0-9_\-]+">
+    </div>
+    <div class="form-group">
+      <label data-t="password"></label>
+      <input type="password" id="loginPass" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" id="loginBtn" onclick="doLogin()"></button>
+  </div>
+
+  <div id="registerForm" style="display:none">
+    <div class="form-group">
+      <label data-t="invite_code"></label>
+      <input type="text" id="regCode" spellcheck="false" maxlength="64">
+    </div>
+    <div class="form-group">
+      <label data-t="username"></label>
+      <input type="text" id="regUser" autocomplete="off" spellcheck="false" oninput="validateUsername()" maxlength="32" pattern="[A-Za-z0-9_\-]+">
+      <div class="username-hint" id="usernameHint"></div>
+    </div>
+    <div class="form-group">
+      <label data-t="display_name"></label>
+      <input type="text" id="regName" autocomplete="off" maxlength="16">
+    </div>
+    <div class="form-group">
+      <label data-t="password"></label>
+      <input type="password" id="regPass" autocomplete="new-password">
+    </div>
+    <button class="btn btn-primary" id="regBtn" onclick="doRegister()"></button>
+  </div>
+</div>
+
+<script>
+const API = '/sub/webapi';
+const DASHBOARD = '/sub/panel';
+
+const L = {
+  en: {
+    sign_in: 'Sign in', create_account: 'Create account',
+    login: 'Login', register: 'Register',
+    username: 'Username', password: 'Password',
+    invite_code: 'Invite code', display_name: 'Display name',
+    network_err: 'Network error',
+    hint_invalid: 'Invalid characters. Try: ', hint_taken: 'Username taken', hint_ok: 'Available',
+  },
+  ru: {
+    sign_in: 'Вход', create_account: 'Регистрация',
+    login: 'Вход', register: 'Регистрация',
+    username: 'Логин', password: 'Пароль',
+    invite_code: 'Код приглашения', display_name: 'Отображаемое имя',
+    network_err: 'Ошибка сети',
+    hint_invalid: 'Недопустимые символы. Попробуйте: ', hint_taken: 'Логин занят', hint_ok: 'Свободен',
+  }
+};
+
+let lang = localStorage.getItem('panel_lang') || 'en';
+let curTab = 'login';
+
+function t(k) { return L[lang]?.[k] || L.en[k] || k; }
+
+function render() {
+  document.querySelectorAll('.lang-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent.toLowerCase() === lang));
+  document.querySelectorAll('[data-t]').forEach(el =>
+    el.textContent = t(el.getAttribute('data-t')));
+  document.getElementById('authTitle').textContent = t(curTab === 'login' ? 'sign_in' : 'create_account');
+  document.getElementById('tabLogin').textContent = t('login');
+  document.getElementById('tabRegister').textContent = t('register');
+  document.getElementById('loginBtn').textContent = t('sign_in');
+  document.getElementById('regBtn').textContent = t('create_account');
+}
+
+function setLang(l) { lang = l; localStorage.setItem('panel_lang', l); render(); }
+
+async function api(method, path, body) {
+  const opts = { method, credentials: 'same-origin', headers: {} };
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const r = await fetch(API + path, opts);
+  return { status: r.status, ...(await r.json()) };
+}
+
+function switchTab(tab) {
+  curTab = tab;
+  document.querySelectorAll('.auth-tab').forEach((t, i) =>
+    t.classList.toggle('active', tab === 'login' ? i === 0 : i === 1));
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+  document.getElementById('authError').classList.remove('show');
+  render();
+}
+
+function showError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg; el.classList.add('show');
+}
+
+async function doLogin() {
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('POST', '/login', {
+      username: document.getElementById('loginUser').value,
+      password: document.getElementById('loginPass').value
+    });
+    if (res.success) window.location.href = DASHBOARD;
+    else showError(res.msg || t('sign_in'));
+  } catch { showError(t('network_err')); }
+  btn.disabled = false;
+}
+
+let vt;
+function validateUsername() {
+  clearTimeout(vt);
+  const v = document.getElementById('regUser').value;
+  const h = document.getElementById('usernameHint');
+  if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
+  vt = setTimeout(async () => {
+    try {
+      const res = await api('POST', '/validate', { username: v });
+      if (res.success && res.obj) {
+        if (!res.obj.valid) { h.textContent = t('hint_invalid') + res.obj.sanitized; h.className = 'username-hint bad'; }
+        else if (res.obj.taken) { h.textContent = t('hint_taken'); h.className = 'username-hint bad'; }
+        else { h.textContent = t('hint_ok'); h.className = 'username-hint ok'; }
+      }
+    } catch {}
+  }, 400);
+}
+
+async function doRegister() {
+  const btn = document.getElementById('regBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('POST', '/register', {
+      username: document.getElementById('regUser').value,
+      password: document.getElementById('regPass').value,
+      code: document.getElementById('regCode').value,
+      name: document.getElementById('regName').value
+    });
+    if (res.success) {
+      const login = await api('POST', '/login', {
+        username: document.getElementById('regUser').value,
+        password: document.getElementById('regPass').value
+      });
+      if (login.success) window.location.href = DASHBOARD;
+      else switchTab('login');
+    } else showError(res.msg || t('network_err'));
+  } catch { showError(t('network_err')); }
+  btn.disabled = false;
+}
+
+(async () => {
+  try {
+    const r = await fetch(API + '/stats', { credentials: 'same-origin' });
+    if (r.ok) window.location.href = DASHBOARD;
+  } catch {}
+})();
+
+render();
+document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('regPass').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+</script>
+</body>
+</html>
