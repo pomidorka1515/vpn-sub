@@ -50,6 +50,7 @@ class Config(MutableMapping):
                     raise e
             except FileNotFoundError:
                 pass
+
         self.log.info("loaded Config")
 
     def reload(self) -> bool | None:
@@ -112,7 +113,7 @@ class Config(MutableMapping):
         except json.JSONDecodeError as e:
             self.log.critical(f"""JSON Decoding exception!
             Error: {e}
-            Location: position {e.pos}, line {e.lineno}, coloumn {e.colno}""")
+            Location: position {e.pos}, \nline {e.lineno}, \ncoloumn {e.colno}""")
             return
         except Exception as e:
             self.log.critical(f"EXCEPTION IN CONFIG: {e}")

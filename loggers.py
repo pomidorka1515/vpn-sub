@@ -38,7 +38,7 @@ class Logger(logging.Logger):
             handler = logging.StreamHandler()
             handler.setFormatter(self._make_formatter())
             self.addHandler(handler)
-
+        
     def _make_formatter(self):
         parent = self
         class Fmt(logging.Formatter):
