@@ -31,7 +31,6 @@ class Config(MutableMapping):
         self._lock = threading.RLock()
         self._indent = indent
         self.reload()
-        self.log.info("loaded Config")
 
         schema_path = self._data.get('$schema')
         if schema_path:
@@ -48,11 +47,13 @@ class Config(MutableMapping):
                     self.log.warning(f"Schema validation error: {e.message} -> {list(e.absolute_path)}")
                 else:
                     self.log.critical(f"Schema validation error! Refusing to start.")
-                    raise e # Re-raise
+                    raise e
             except FileNotFoundError:
                 pass
+        self.log.info("loaded Config")
 
     def reload(self) -> bool | None:
+        """Refresh the data if it was updated outside of Python."""
         try:
             current_mtime = os.path.getmtime(self._path)
             if current_mtime > self._last_mtime:
@@ -71,6 +72,7 @@ class Config(MutableMapping):
             raise Exception(f"config file reload error: {e}") from e
 
     def _atomic_write(self, data) -> None:
+        """Atomic write. Nothing much."""
         dir_path = os.path.dirname(self._path)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
@@ -93,6 +95,8 @@ class Config(MutableMapping):
         self._last_mtime = os.path.getmtime(self._path)
 
     def _ensure_recent(self) -> None:
+        """Ensure the data is up-to-date.
+        WARNING: this MUST be called on every method like __getitem__, etc."""
         if self._batch_mode:
             return
         try:
@@ -192,7 +196,7 @@ class Config(MutableMapping):
                 self._save_to_disk()
     _MISSING = object()
     def pop(self, key, default=_MISSING) -> Any:
-        box = []
+        box = [] # fugly but works
         def _mut(d):
             if key in d:
                 box.append(d.pop(key))
