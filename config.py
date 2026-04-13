@@ -93,6 +93,8 @@ class Config(MutableMapping):
         self._last_mtime = os.path.getmtime(self._path)
 
     def _ensure_recent(self) -> None:
+        if self._batch_mode:
+            return
         try:
             current_mtime = os.path.getmtime(self._path)
             if current_mtime > self._last_mtime:
@@ -234,18 +236,23 @@ class Config(MutableMapping):
             d['anything'] += 1
             d['x'].pop("124", None)"""
         self._lock.acquire()
-        self._batch_mode = True
-        self._batch_flock_fd = open(self._path + '.lock', 'w')
-        fcntl.flock(self._batch_flock_fd, fcntl.LOCK_EX)
         try:
-            current_mtime = os.path.getmtime(self._path)
-            if current_mtime > self._last_mtime:
-                with open(self._path, 'r', encoding='utf-8') as f:
-                    self._data = json.load(f)
-                self._last_mtime = current_mtime
-        except FileNotFoundError:
-            pass
-        return self
+            self._batch_mode = True
+            self._batch_flock_fd = open(self._path + '.lock', 'w')
+            fcntl.flock(self._batch_flock_fd, fcntl.LOCK_EX)
+            try:
+                current_mtime = os.path.getmtime(self._path)
+                if current_mtime > self._last_mtime:
+                    with open(self._path, 'r', encoding='utf-8') as f:
+                        self._data = json.load(f)
+                    self._last_mtime = current_mtime
+            except FileNotFoundError:
+                pass
+            return self
+        except Exception:
+            self._lock.release()
+            self._batch_mode = False
+            raise
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self._batch_mode = False
         try:
@@ -259,4 +266,4 @@ class Config(MutableMapping):
                 except OSError:
                     pass
                 self._batch_flock_fd = None
-                self._lock.release()
+            self._lock.release()

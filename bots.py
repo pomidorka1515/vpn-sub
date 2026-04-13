@@ -222,7 +222,7 @@ class AdminBot:
         text = "👥 <b>Список пользователей:</b>\n\n" + "\n".join([f"- <code>{u}</code>" for u in users])
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
     def _cb_online_users(self, chat_id):
-        online_users = self.sub.get_online_users(new = True)
+        online_users = cast(dict, self.sub.get_online_users(new = True))
         if not online_users:
             self.bot.send_message(chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu())
             return
@@ -480,9 +480,8 @@ class PublicBot:
         self.sub = sub
 
         if 'tg_lang' not in self.cfg['publicbot']:
-            def _init_lang(data):
+            with self.cfg as data:
                 data['publicbot']['tg_lang'] = {}
-            self.cfg.update(_init_lang)
 
         token = self.cfg['publicbot'].get('token')
         if not token:
@@ -505,9 +504,8 @@ class PublicBot:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
 
     def set_lang(self, uid: int, lang: str):
-        def _u(data):
+        with self.cfg as data:
             data['publicbot']['tg_lang'][str(uid)] = lang
-        self.cfg.update(_u)
     def msg(self, tgid: int | str | None, key: str, **kwargs):
         if tgid is None or isinstance(tgid, str): # evil pylance haha
             return
@@ -659,9 +657,8 @@ class PublicBot:
         
         elif text in [self.TEXTS['ru']['btn_logout'], self.TEXTS['en']['btn_logout']]:
             if not self.sub.is_registered(uid): return
-            def _u(d):
+            with self.cfg as d:
                 d['tgids'].pop(str(uid), None)
-            self.cfg.update(_u)
             self.bot.send_message(message.chat.id, t['logout_success'], reply_markup=self.get_menu(uid))
 
         elif text in [self.TEXTS['ru']['btn_help'], self.TEXTS['en']['btn_help']]:
@@ -879,9 +876,8 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
             return
 
-        def _link_tg(data):
+        with self.cfg as data:
             data.setdefault('tgids', {})[str(uid)] = internal_username
-        self.cfg.update(_link_tg)
 
         self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
         self.send_info(message.chat.id, uid, lang)
@@ -911,9 +907,8 @@ class PublicBot:
         if email in users_pw and users_pw[email] == self.sub.hash(password):
             internal_username = webui_users.get(email)
             if internal_username and internal_username in self.cfg['users']:
-                def _link_tg(data):
+                with self.cfg as data:
                     data.setdefault('tgids', {})[str(uid)] = internal_username
-                self.cfg.update(_link_tg)
                 
                 self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
                 self.send_info(message.chat.id, uid, lang)
