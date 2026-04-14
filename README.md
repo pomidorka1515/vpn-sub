@@ -17,7 +17,7 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 <details>
 <summary>Click to expand diagram</summary>
 
-​```
+
 ┌──────────┐   ┌──────────┐   ┌─────────┐
 │ AdminBot │   │PublicBot │   │ WebApi  │
 └────┬─────┘   └────┬─────┘   └────┬────┘
@@ -33,7 +33,7 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 ┌────────┐ ┌────────┐  ┌────────┐
 │3x-ui #1│ │3x-ui #2│  │  ...   │
 └────────┘ └────────┘  └────────┘
-```
+
 
 </details>
 - `core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
