@@ -148,55 +148,14 @@ class WebApi:
             return wrapped
         return decorator    
     def reg_handles(self):
-        
-        # @self.app.route(f"{self.uri}/register", methods=['POST'])
-        # @self.rate_limit(5)
-        # def _register():
-        #     return self.register()
-        # @self.app.route(f"{self.uri}/login", methods=['POST'])
-        # @self.rate_limit(10)
-        # def _login():
-        #     return self.login()
-        # @self.app.route(f"{self.uri}/bonus", methods=['POST'])
-        # @self.rate_limit(15)
-        # def _apply_bonus():
-        #     return self.bonus()
-        # @self.app.route(f"{self.uri}/stats")
-        # @self.rate_limit(20)
-        # def _stats():
-        #     return self.stats()
-        # @self.app.route(f"{self.uri}/reset", methods=['POST'])
-        # @self.rate_limit(5)
-        # def _reset():
-        #     return self.reset()
-        # @self.app.route(f"{self.uri}/settings", methods=['POST'])
-        # @self.rate_limit(15)
-        # def _settings():
-        #     return self.settings()
-        # @self.app.route(f"{self.uri}/logout", methods=['POST'])
-        # @self.rate_limit(20)
-        # def _logout():
-        #     return self.logout()
-        # @self.app.route(f"{self.uri}/fingerprints")
-        # @self.rate_limit(60)
-        # def _fps():
-        #     return self.fps()
-        # @self.app.route(f"{self.uri}/delete", methods=['DELETE'])
-        # @self.rate_limit(3)
-        # def _delete():
-        #     return self.delete()
-        # @self.app.route(f"{self.uri}/validate", methods=['POST'])
-        # @self.rate_limit(60)
-        # def _validate_username():
-        #     return self.validate_username()
-        # @self.app.route(f"{self.uri}/profiles", methods=['POST'])
-        # @self.rate_limit(60)
-        # def _profiles():
-        #     return self.profiles()
+        @self.app.route(f"/sub/auth")
+        def _auth():
+            return send_file('/var/www/sub/new/res/auth.html', etag=False)
         @self.app.route(f"/sub/panel")
-        def _panel():
-            return self.panel()
-
+        def _panel(): 
+            token = request.cookies.get('token')
+            if not self.validate_token(token): return make_response(redirect('/sub/auth'))
+            return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
         for method, path, handler_method, req_limit in self.MAP:
             path = self.uri+path
             try:
@@ -249,12 +208,6 @@ class WebApi:
             "taken": taken,
             "sanitized": sanitized
         })
-    def panel(self) -> Response:
-        token = request.cookies.get('token')
-        if not self.validate_token(token):
-            return make_response(redirect('/sub/auth'))
-        return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
-
     @requires_webapi_auth
     @requires_fields('lang')
     def profiles(self, username) -> Tuple[Response, int] | Response:
