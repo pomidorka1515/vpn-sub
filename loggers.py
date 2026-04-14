@@ -2,6 +2,8 @@ import logging
 import re
 import html
 
+from contextlib import contextmanager
+
 _ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 __all__ = ['Logger']
@@ -59,3 +61,13 @@ class Logger(logging.Logger):
         simple_fmt = logging.Formatter('%(levelname)s [%(name)s] %(message)s')
         tg_handler.setFormatter(simple_fmt)
         self.addHandler(tg_handler)
+
+    @contextmanager
+    def loading(self):
+        self.debug(f"Loading {self.name}...")
+        try:
+            yield
+            self.info(f"Loaded {self.name}!")
+        except Exception:
+            self.error(f"Failed to load {self.name}.")
+            raise

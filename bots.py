@@ -22,17 +22,16 @@ class AdminBot:
 
     def __init__(self, sub: Subscription, cfg: Config):
         self.log = Logger(type(self).__name__)
-        self.log.debug("starting Telegram bot")
-        
-        self.cfg = cfg
-        self.sub = sub
- 
-        self.bot = telebot.TeleBot(self.cfg['bot']['token'])
-        self.admin_uids = self.cfg['bot']['whitelist']
-        
-        self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start)
-        self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks)
-        self._pending_codes = {}
+        with self.log.loading():        
+            self.cfg = cfg
+            self.sub = sub 
+            self.bot = telebot.TeleBot(self.cfg['bot']['token'])
+            self.admin_uids = self.cfg['bot']['whitelist']
+            
+            self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start)
+            self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks)
+            self._pending_codes = {}
+
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids
  
@@ -474,31 +473,28 @@ class PublicBot:
     Classes depending on this: none"""
     def __init__(self, sub: Subscription, cfg: Config):
         self.log = Logger(type(self).__name__)
-        self.log.debug("starting Public Telegram bot")
-        
-        self.cfg = cfg
-        self.sub = sub
+        with self.log.loading():        
+            self.cfg = cfg
+            self.sub = sub
+            if 'tg_lang' not in self.cfg['publicbot']:
+                with self.cfg as data:
+                    data['publicbot']['tg_lang'] = {}
+    
+            token = self.cfg['publicbot'].get('token')
+            if not token:
+                self.log.critical("public_bot_token not found in config.json! Public bot will not start.")
+                return
 
-        if 'tg_lang' not in self.cfg['publicbot']:
-            with self.cfg as data:
-                data['publicbot']['tg_lang'] = {}
+            self.bot = telebot.TeleBot(token)
 
-        token = self.cfg['publicbot'].get('token')
-        if not token:
-            self.log.critical("public_bot_token not found in config.json! Public bot will not start.")
-            return
+            self.TEXTS = self.cfg['publicbot']['lang']
 
-        self.bot = telebot.TeleBot(token)
-
-        self.TEXTS = self.cfg['publicbot']['lang']
-
-        self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start)
-        self.bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))(self.set_lang_callback)
-        self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback)
-        self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback)
-        self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback)
-        self.bot.message_handler(func=lambda m: True)(self.handle_text)
-
+            self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start)
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))(self.set_lang_callback)
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback)
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback)
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback)
+            self.bot.message_handler(func=lambda m: True)(self.handle_text)
 
     def get_lang(self, uid: int) -> str:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')

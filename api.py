@@ -31,15 +31,15 @@ class WebApi:
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        self.log.debug("loading Public Api")
-        self.cfg = cfg
-        self.app = app
-        self.sub = sub
-        self.bw = bw
-        self.uri = f"/{self.cfg['uri']}/webapi" 
-        self._rl_data = {}
-        self._rl_lock = threading.Lock()
-        self.reg_handles()
+        with self.log.loading():
+            self.cfg = cfg
+            self.app = app
+            self.sub = sub
+            self.bw = bw
+            self.uri = f"/{self.cfg['uri']}/webapi" 
+            self._rl_data = {}
+            self._rl_lock = threading.Lock()
+            self.reg_handles()
     
     def rate_limit(self, max_requests: int):
         """Rate-limiting decorator."""
@@ -427,17 +427,17 @@ class Api:
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        self.log.debug("loading Api")
-        self.cfg = cfg
-        self.app = app
-        self.sub = sub
-        self.bw = bw
-        self.nginx404 = nginx_404
-        self.resp = Response(self.nginx404, status=404, mimetype='text/html')
-        self.resp.headers['Content-Type'] = "text/html"
-        self.uri = self.cfg['uri']
-        self.token = self.cfg['api_token']
-        self.reg_handles()
+        with self.log.loading():
+            self.cfg = cfg
+            self.app = app
+            self.sub = sub
+            self.bw = bw
+            self.nginx404 = nginx_404
+            self.resp = Response(self.nginx404, status=404, mimetype='text/html')
+            self.resp.headers['Content-Type'] = "text/html"
+            self.uri = self.cfg['uri']
+            self.token = self.cfg['api_token']
+            self.reg_handles()
     
     def require_auth(self, t) -> bool:
             return t == self.token
@@ -490,237 +490,7 @@ class Api:
         def _api_code_list():
             return self.api_code_list()
         
-        self.log.info("loaded Api")
     def handle_404(self, e = ""):
         return self.resp
     def handle_405(self, e = ""):
         return self.resp
-
-    def api_reset(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('username')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-        try:
-            obj = self.sub.reset_user(cast(dict, request.json).get('username', ''))
-            if not isinstance(obj, dict):
-                return jsonify({"success": False, "msg": "Unknown username", "obj": None})
-            return jsonify({"success": True, "msg": None, "obj": obj})
-        except Exception as e:
-            return jsonify({"success": False, "msg": str(e), "obj": None})
-   
-    def api_onlines(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        try:
-            obj = self.sub.get_online_users()
-            return jsonify({"success": True, "msg": None, "obj": obj})
-        except Exception as e:
-            return jsonify({"success": False, "msg": str(e), "obj": None}), 500
-  
-    def api_isonline(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('username')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-        obj = self.sub.is_online(cast(dict, request.json).get('username', ''))
-        if not isinstance(obj, bool):
-            return jsonify({"success": False, "msg": "Unknown username", "obj": None}), 400
-        return jsonify({"success": True, "msg": None, "obj": obj})
-    
-    def api_code_list(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        
-        obj = self.sub.list_code()
-        return jsonify({"success": True, "msg": None, "obj": obj})
-    def api_code_add(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('code', 'action')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-
-        content = cast(dict, request.json)
-        code = content.get('code', '')
-        action = content.get('action', '')
-        days = content.get('days', 0)
-        gb = content.get('gb', 0)
-        wl_gb = content.get('wl_gb', 0)
-        perma = content.get('perma', False)
-        if action not in ["register", "bonus"]:
-            return jsonify({"success": False, "msg": "action field must be either \"register\" or \"bonus\"", "obj": None}), 400
-
-        try:
-            obj = self.sub.add_code(
-                code=code,
-                action=action,
-                permanent=perma,
-                days=days,
-                wl_gb=wl_gb,
-                gb=gb
-            )
-            return jsonify({"success": True, "msg": None, "obj": None})
-        except Exception as e:
-            return jsonify({"success": False, "msg": str(e), "obj": None}), 500
-    def api_code_delete(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('code')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-
-        content = cast(dict, request.json)
-        code = content.get('code', '')
-
-        try:
-            obj = self.sub.delete_code(code=code)
-            if obj == False: # None is falsy too
-                return jsonify({"success": False, "msg": "Code not found", "obj": None}), 400
-            else:
-                return jsonify({"success": True, "msg": None, "obj": None})
-        except Exception as e:
-            return jsonify({"success": False, "msg": str(e), "obj": None}), 500
-        
-
-    def api_code_get(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('code')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-
-        content = cast(dict, request.json)
-        code = content.get('code', '')
-
-        obj = self.sub.get_code(code=code)
-        if not isinstance(obj, dict):
-            return jsonify({"success": False, "msg": "Code not found", "obj": None}), 400
-        else:
-            return jsonify({"success": True, "msg": None, "obj": obj})
-    def api_list(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        
-        users = []
-        for i, v in self.cfg['users'].items():
-            users.append(i)
-        return jsonify({"success": True, "msg": None, "obj": users})
-
-    def api_add(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('user')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-        
-        content = cast(dict, request.json)
-        timee = content.get('time', 0)
-        limit = content.get('limit', 0)
-        if content['user'] in self.cfg['users']: return jsonify({"success": False, "msg": "User already exists", "obj": None}), 400
-        # try: uuid = T['users'][content['user']]
-        # except: return {"success": False, "msg": "Unknown username.", "obj": None}
-        # reference >> {"username": username, "token": token, "uuid": uuid, "fingerprint": fingerprint}
-        try: result = self.sub.add_new_user(username=content['user'], 
-                                   displayname=content['displayname'],
-                                   limit=limit,
-                                   timee=timee)
-        except Exception as e: return jsonify({"success": False, "msg": f"error {str(e)}", "obj": None}), 500
-        return jsonify({"success": True,"msg": None, "obj": result}), 201
-
-    def api_refresh(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        
-        try:
-            for cc, ccc in self.cfg['users'].items():
-                self.sub.add_users(cc)
-        except Exception as e:
-            return jsonify({"success": False, "msg": str(e), "obj": None}), 400
-        return jsonify({"success": True,"msg": None, "obj": None})
-
-    def api_delete(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('user')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-        
-        content = cast(dict, request.json)
-        try: userid = self.cfg['users'][content['user']]
-        except KeyError: return jsonify({"success": False, "msg": "Unknown username.", "obj": None}), 400
-        try: self.sub.delete_user(username=content['user'],
-                             perma=content['perma'])
-        except Exception as e: return jsonify({"success": False, "msg": str(e), "obj": None}), 500
-        return jsonify({"success": True,"msg": None, "obj": None})
-
-    def api_info(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('user')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-        
-        content = cast(dict, request.json)
-        try: userid = self.cfg['users'][content['user']]
-        except KeyError: return jsonify({"success": False, "msg": "Unknown username.", "obj": None}), 400
-
-        bandwidths = self.sub.bandwidth(username=content['user'])
-        wl_bandwidths = self.sub.bandwidth(username=content['user'], whitelist=True)
-        obj = {
-            "uuid": userid,
-            "token": self.cfg['tokens'][content['user']],
-            "bandwidth": {
-                "raw_table": bandwidths,
-                "upload": round(bandwidths[0] / 10**6, 2),
-                "download": round(bandwidths[1] / 10**6, 2),
-                "total": round(bandwidths[2] / 10**6, 2),
-                "monthly": round(self.cfg['bw'][content['user']][1], 2),
-                "limit": self.cfg['bw'][content['user']][0]
-            },
-            "wl_bandwidth": {
-                "raw_table": wl_bandwidths,
-                "upload": round(wl_bandwidths[0] / 10**6, 2),
-                "download": round(wl_bandwidths[1] / 10**6, 2),
-                "total": round(wl_bandwidths[2] / 10**6, 2),
-                "monthly": round(self.cfg['wl_bw'][content['user']][1], 2),
-                "limit": self.cfg['wl_bw'][content['user']][0]
-            },
-            "fingerprint": self.cfg['userFingerprints'][content['user']],
-            "displayname": self.cfg['displaynames'][content['user']],
-            "enable": self.cfg['status'][content['user']],
-            "enableTime": self.cfg['statusTime'][content['user']],
-            "enableWl": self.cfg['statusWl'][content['user']],
-            "time": self.cfg['time'][content['user']],
-            "online": self.sub.is_online(content['user'])
-        }
-        return jsonify({"success": True, "msg": None, "obj": obj})
-
-    def api_change(self) -> Tuple[Response, int] | Response:
-        if not self.require_auth(request.headers.get('Authorization')):
-            return self.resp
-        err = validate_fields('user')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-        
-        content = cast(dict, request.json)
-        displayname = content.get('displayname', None)
-        token = content.get('token', None)
-        fingerprint = content.get('fingerprint', None)
-        limit = content.get('limit', None)
-        timee = content.get('time', None)
-        
-        try:
-            self.sub.update_params(
-                username = content['user'],
-                displayname = displayname,
-                token = token,
-                fingerprint = fingerprint,
-                limit = limit,
-                timee = timee
-            )
-        except Exception as e:
-            return jsonify({"success": False, "msg": str(e), "obj": None})
-        return jsonify({"success": True, "msg": None, "obj": None})

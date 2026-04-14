@@ -54,30 +54,29 @@ class XUiSession(requests.Session):
                  nginx_auth: tuple | None = None,  # nginx_auth=('user', 'pass')
                  ignore_inbounds: list[int] | None = None
                 ):
-        super().__init__()
         self.log = Logger(type(self).__name__)
-        self.log.debug("loading XUiSession")
-        self.username = username
-        self.password = password
-        self.refresh_interval = refresh_interval
-        self.ignore_inbounds = ignore_inbounds if ignore_inbounds is not None else []
-        protocol = "https" if https else "http"
-        clean_uri = f"/{uri.strip('/')}/" if uri.strip('/') else "/"
-        self.port = str(port)
-        self.address = address
-        self.name = name
-        self.local = self.address in ('localhost', '::1', '127.0.0.1')
-        self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
-        self.last_login = None
-        self._lock = threading.Lock()
-        self._running = False
-        self._cache: list[dict] | None = None
-        self._cache_time: float = 0
-
-        if nginx_auth:
-            self.auth = nginx_auth
-        self.login()
-        self.log.info("loaded XUiSession")
+        with self.log.loading():
+            super().__init__()
+            self.username = username
+            self.password = password
+            self.refresh_interval = refresh_interval
+            self.ignore_inbounds = ignore_inbounds if ignore_inbounds is not None else []
+            protocol = "https" if https else "http"
+            clean_uri = f"/{uri.strip('/')}/" if uri.strip('/') else "/"
+            self.port = str(port)
+            self.address = address
+            self.name = name
+            self.local = self.address in ('localhost', '::1', '127.0.0.1')
+            self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
+            self.last_login = None
+            self._lock = threading.Lock()
+            self._running = False
+            self._cache: list[dict] | None = None
+            self._cache_time: float = 0
+    
+            if nginx_auth:
+                self.auth = nginx_auth
+            self.login()
 
     def request(self, *args, **kwargs):
         if self._needs_refresh():
@@ -143,27 +142,28 @@ class Subscription:
                  panels: list[XUiSession],
                  whitelist_panel: XUiSession | None):
         self.log = Logger(type(self).__name__)
-        self.log.debug("loading Subscription")
-        self.cfg = cfg
-        self.whitelist_panel = whitelist_panel
-        self.browser_html = ""
-        self.fps = self.cfg['fingerprints']
-        self.nginx404 = nginx_404
-        self.resp = Response(self.nginx404, status=404, mimetype='text/html')
-        self.BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')
-        self.RATIO = 1.073741824 # GiB to GB ratio. constant
-        self.FILTERS = {
-            'displayname': ':;"\'?/<>{}[]*&^%$#@\\|',
-        }
-        self.panels = panels.copy()
-        self.SALT = self.cfg['salt']
-        with open('/var/www/sub/index.html', 'r') as f:
-            self.browser_html = f.read()
-        if self.whitelist_panel: self.panels.append(self.whitelist_panel)
-        self.log.info("loaded Subscription")
+        with self.log.loading():
+            self.cfg = cfg
+            self.whitelist_panel = whitelist_panel
+            self.browser_html = ""
+            self.fps = self.cfg['fingerprints']
+            self.nginx404 = nginx_404
+            self.resp = Response(self.nginx404, status=404, mimetype='text/html')
+            self.BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')
+            self.RATIO = 1.073741824 # GiB to GB ratio. constant
+            self.FILTERS = {
+                'displayname': ':;"\'?/<>{}[]*&^%$#@\\|',
+            }
+            self.panels = panels.copy()
+            self.SALT = self.cfg['salt']
+            with open('/var/www/sub/index.html', 'r') as f:
+                self.browser_html = f.read()
+            if self.whitelist_panel:
+                self.panels.append(self.whitelist_panel)
 
     def hash(self, s: str) -> str:
         return hashlib.sha256((self.SALT + s).encode()).hexdigest()
+    
     def isuuid(self, s: str) -> bool:
         """Validate a UUID."""
         try:
@@ -1023,18 +1023,19 @@ class BWatch:
                  sub: Subscription, 
                  bot: Any | None = None):
         self.log = Logger(type(self).__name__)
-        self.log.debug("loading BWatch")
-        self.cfg = cfg
-        self._lock = threading.Lock()
-        self._stop_event = threading.Event()
-        self.sub = sub
-        self.bot = bot
-        self.mem = {}
-        self.wl_mem = {}
-        self._t1 = threading.Thread(target=self._every_120s, daemon=True)
-        self._t2 = threading.Thread(target=self._every_2h, daemon=True)
-        self._t3 = threading.Thread(target=self._every_15s, daemon=True)
-        self._t4 = threading.Thread(target=self._every_24h, daemon=True)
+        with self.log.loading():
+            self.cfg = cfg
+            self._lock = threading.Lock()
+            self._stop_event = threading.Event()
+            self.sub = sub
+            self.bot = bot
+            self.mem = {}
+            self.wl_mem = {}
+            self._t1 = threading.Thread(target=self._every_120s, daemon=True)
+            self._t2 = threading.Thread(target=self._every_2h, daemon=True)
+            self._t3 = threading.Thread(target=self._every_15s, daemon=True)
+            self._t4 = threading.Thread(target=self._every_24h, daemon=True)
+    
     def start(self):
         for i in list(self.cfg['users'].keys()):
             self.wl_mem[i] = self.sub.bandwidth(username=i, whitelist=True)
