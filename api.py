@@ -227,6 +227,19 @@ class WebApi:
         return _ok(obj=self.cfg['fingerprints'])
     @requires_webapi_auth
     def delete(self, username) -> Tuple[Response, int] | Response:
+        content = cast(dict, request.json) if request.is_json else {}
+        current_password = content.get('current_password') if content else None
+        if not current_password or not isinstance(current_password, str):
+            return _err("current_password required", 400)
+        cur_ext = next(
+            (e for e, u in cast(dict, self.cfg.get('webui_users', {})).items() if u == username),
+            None,
+        )
+        if not cur_ext:
+            return _err("Account has no credentials set", 400)
+        stored = cast(dict, self.cfg.get('webui_passwords', {})).get(cur_ext, '')
+        if not stored or not hmac.compare_digest(stored, self.sub.hash(current_password)):
+            return _err("Invalid current password", 401)
         try:
             self.sub.delete_user(
                 username=username,

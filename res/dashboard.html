@@ -317,7 +317,8 @@ body {
           <div class="username-hint" id="setUserHint"></div>
         </div>
       </div>
-      <div class="settings-row"><label data-t="password"></label><input type="password" id="setPass"></div>
+      <div class="settings-row"><label data-t="password"></label><input type="password" id="setPass" autocomplete="new-password"></div>
+      <div class="settings-row"><label data-t="current_password"></label><input type="password" id="setCurPass" autocomplete="current-password"></div>
     </div>
     <div class="settings-actions">
       <button class="btn btn-primary" style="width:auto;padding:8px 24px" onclick="saveSettings()" id="btnSave"></button>
@@ -365,7 +366,9 @@ const L = {
     expires: 'Expires', status: 'Status', total_traffic: 'Total traffic',
     wl_traffic: 'Whitelist traffic', monthly: 'Monthly', wl_monthly: 'Whitelist monthly',
     display_name: 'Display name', fingerprint: 'Fingerprint', username: 'Username',
-    password: 'Password', token: 'Token',
+    password: 'Password', current_password: 'Current password', token: 'Token',
+    current_pw_required: 'Enter your current password to confirm.',
+    invalid_current_pw: 'Invalid current password',
     copy: 'Copy', copied: 'Copied', apply: 'Apply', save: 'Save', saved: 'Saved',
     refresh: 'Refresh', logout: 'Logout',
     reset_uuid: 'Reset UUID & token', delete_account: 'Delete account',
@@ -392,7 +395,9 @@ const L = {
     expires: 'Истекает', status: 'Статус', total_traffic: 'Весь трафик',
     wl_traffic: 'Трафик WL', monthly: 'За месяц', wl_monthly: 'WL за месяц',
     display_name: 'Имя', fingerprint: 'Отпечаток', username: 'Логин',
-    password: 'Пароль', token: 'Токен',
+    password: 'Пароль', current_password: 'Текущий пароль', token: 'Токен',
+    current_pw_required: 'Введите текущий пароль для подтверждения.',
+    invalid_current_pw: 'Неверный текущий пароль',
     copy: 'Копировать', copied: 'Скопировано', apply: 'Применить', save: 'Сохранить', saved: 'Сохранено',
     refresh: 'Обновить', logout: 'Выйти',
     reset_uuid: 'Сбросить UUID и токен', delete_account: 'Удалить аккаунт',
@@ -433,6 +438,7 @@ function renderLang() {
   document.getElementById('bonusInput').placeholder = t('enter_code');
   document.getElementById('setUser').placeholder = t('keep_empty');
   document.getElementById('setPass').placeholder = t('keep_empty');
+  document.getElementById('setCurPass').placeholder = t('keep_empty');
   if (currentStats) renderStats(currentStats);
 }
 
@@ -648,18 +654,28 @@ async function saveSettings() {
   const fp = document.getElementById('setFp').value;
   const user = document.getElementById('setUser').value.trim();
   const pass = document.getElementById('setPass').value;
+  const curPass = document.getElementById('setCurPass').value;
   if (name) body.name = name;
   if (fp) body.fingerprint = fp;
   if (user && pass) { body.username = user; body.password = pass; }
   if (!Object.keys(body).length) return;
 
   const msg = document.getElementById('settingsMsg');
+  if (body.username || body.password) {
+    if (!curPass) {
+      msg.textContent = t('current_pw_required'); msg.className = 'settings-msg err';
+      setTimeout(() => { msg.textContent = ''; }, 3000);
+      return;
+    }
+    body.current_password = curPass;
+  }
   const res = await api('POST', '/settings', body);
   if (!res) return;
   if (res.success) {
     msg.textContent = t('saved'); msg.className = 'settings-msg ok';
     document.getElementById('setUser').value = '';
     document.getElementById('setPass').value = '';
+    document.getElementById('setCurPass').value = '';
     document.getElementById('setUserHint').textContent = '';
     document.getElementById('setUserHint').className = 'username-hint';
     loadStats();
@@ -678,7 +694,9 @@ async function doReset() {
 async function doDelete() {
   if (!(await confirmDialog(t('confirm_delete'), t('confirm_title_delete')))) return;
   if (!(await confirmDialog(t('confirm_delete2'), t('confirm_title_final')))) return;
-  const res = await api('DELETE', '/delete');
+  const curPass = prompt(t('current_pw_required'));
+  if (!curPass) return;
+  const res = await api('DELETE', '/delete', { current_password: curPass });
   if (!res) return;
   if (res.success) { window.location.href = AUTH_PAGE; }
   else toast(res.msg || 'Error', 'error');
