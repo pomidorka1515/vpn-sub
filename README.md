@@ -1,4 +1,4 @@
-# bwatch
+# vpn-sub
 
 VPN subscription management service. Flask + Telegram bots + 3x-ui panel glue.
 Fully synchronous, file-backed config, designed to run on a single small VPS.
