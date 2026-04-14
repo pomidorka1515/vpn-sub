@@ -3,6 +3,7 @@ from loggers import Logger
 from typing import ItemsView, KeysView, Self, Any, Iterator, ValuesView
 import threading
 import os
+import copy
 import json
 import jsonschema
 import tempfile
@@ -30,6 +31,7 @@ class Config(MutableMapping):
             self._batch_mode = False
             self._lock = threading.RLock()
             self._indent = indent
+            self._batch_flock_fd = None
             self.reload()
 
             schema_path = self._data.get('$schema')
@@ -54,23 +56,22 @@ class Config(MutableMapping):
 
     def reload(self) -> bool | None:
         """Refresh the data if it was updated outside of Python."""
-        try:
-            current_mtime = os.path.getmtime(self._path)
-            if current_mtime > self._last_mtime:
-                with self._lock:
+        with self._lock:
+            try:
+                current_mtime = os.path.getmtime(self._path)
+                if current_mtime > self._last_mtime:
                     with open(self._path, 'r', encoding='utf-8') as f:
                         self._data = json.load(f)
                     self._last_mtime = current_mtime
-                return True
-            return False
-        except FileNotFoundError:
-            with self._lock:
+                    return True
+                return False
+            except FileNotFoundError:
                 self._data = {}
                 self._last_mtime = 0
                 self._save_to_disk()
-            return True
-        except Exception as e:
-            raise RuntimeError(f"config file reload error: {e}") from e
+                return True
+            except Exception as e:
+                raise RuntimeError(f"config file reload error: {e}") from e
 
     def _atomic_write(self, data) -> None:
         """Atomic write. Nothing much."""
@@ -86,6 +87,8 @@ class Config(MutableMapping):
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=self._indent, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(temp_path, self._path)
         except Exception:
             os.unlink(temp_path)
@@ -95,34 +98,41 @@ class Config(MutableMapping):
         self._atomic_write(self._data)
         self._last_mtime = os.path.getmtime(self._path)
 
-    def _ensure_recent(self) -> None:
-        """Ensure the data is up-to-date.
-        WARNING: this MUST be called on every method like __getitem__, etc."""
+    def _ensure_recent(self, _caller_holds_lock: bool = False) -> None:
+        """Ensure the data is up-to-date."""
         if self._batch_mode:
             return
-        try:
-            current_mtime = os.path.getmtime(self._path)
-            if current_mtime > self._last_mtime:
-                with self._lock:
-                    if os.path.getmtime(self._path) > self._last_mtime:
+        
+        def _do_ensure():
+            try:
+                lockfile = self._path + '.lock'
+                with open(lockfile, 'w') as lf:
+                    fcntl.flock(lf, fcntl.LOCK_SH)
+                    current_mtime = os.path.getmtime(self._path)
+                    if current_mtime > self._last_mtime:
                         with open(self._path, 'r', encoding='utf-8') as f:
                             self._data = json.load(f)
                         self._last_mtime = current_mtime
-        except FileNotFoundError:
-            pass 
-        except json.JSONDecodeError as e:
-            self.log.critical(f"""JSON Decoding exception!
-            Error: {e}
-            Location: position {e.pos}, \nline {e.lineno}, \ncoloumn {e.colno}""")
-            return
-        except Exception as e:
-            self.log.critical(f"EXCEPTION IN CONFIG: {e}")
-            return
-
+            except FileNotFoundError:
+                pass
+            except json.JSONDecodeError as e:
+                self.log.critical(f"JSON Decoding exception: {e}")
+            except Exception as e:
+                self.log.critical(f"EXCEPTION IN CONFIG: {e}")
+        
+        if _caller_holds_lock:
+            _do_ensure()
+        else:
+            with self._lock:
+                _do_ensure()
+    
     def __getitem__(self, key) -> Any:
         with self._lock:
-            self._ensure_recent()
-            return self._data[key]
+            self._ensure_recent(True)
+            value = self._data[key]
+            if isinstance(value, (dict, list)):
+                return copy.deepcopy(value)
+            return value
 
     def __setitem__(self, key, value) -> None:
         self.update(lambda d: d.__setitem__(key, value))
@@ -136,39 +146,44 @@ class Config(MutableMapping):
 
     def __contains__(self, key) -> bool:
         with self._lock:
-            self._ensure_recent()
+            self._ensure_recent(True)
             return key in self._data
 
     def __len__(self) -> int:
         with self._lock:
-            self._ensure_recent()
+            self._ensure_recent(True)
             return len(self._data)
 
     def __iter__(self) -> Iterator:
         with self._lock:
-            self._ensure_recent()
-            return iter(self._data.copy())
+            self._ensure_recent(True)
+            return iter(list(self._data.keys()))
 
-    def keys(self) -> KeysView:
+    def keys(self) -> list:
         with self._lock:
-            self._ensure_recent()
-            return self._data.keys()
+            self._ensure_recent(True)
+            return list(self._data.keys())
     
-    def values(self) -> ValuesView:
+    def values(self) -> list[Any]:
         with self._lock:
-            self._ensure_recent()
-            return self._data.values()
+            self._ensure_recent(True)
+            return [copy.deepcopy(v) if isinstance(v, (dict, list)) else v \
+                for v in self._data.values()]
     
-    def items(self) -> ItemsView:
+    def items(self) -> list[tuple[str, Any]]:
         with self._lock:
-            self._ensure_recent()
-            return self._data.items()
+            self._ensure_recent(True)
+            return [(k, copy.deepcopy(v) if isinstance(v, (dict, list)) else v) \
+                for k, v in self._data.items()]
 
     # Dictionary access methods
     def get(self, key, default=None) -> Any:
         with self._lock:
-            self._ensure_recent()
-            return self._data.get(key, default)
+            self._ensure_recent(True)
+            value = self._data.get(key, default)
+            if isinstance(value, (dict, list)):
+                return copy.deepcopy(value)
+            return value
     # I know thats not "standard dict bevaviour". 
     def update(self, mutate: Callable[[dict], None] | None = None) -> None: # type: ignore[reportIncompatibleMethodOverride]
         """Main method to mutate the config.
@@ -231,9 +246,8 @@ class Config(MutableMapping):
     
     def copy(self) -> dict:
         with self._lock:
-            self._ensure_recent()
-            return self._data.copy()
-
+            self._ensure_recent(True)
+            return copy.deepcopy(self._data)
     def __enter__(self) -> Self:
         """Batch mode support.
         Usage:
