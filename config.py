@@ -37,7 +37,7 @@ class Config(MutableMapping):
                 if schema_path.startswith('http://') or schema_path.startswith('https://'):
                     self.log.warning("JSON schema looks like a link. Skipping.")
                     return
-                    try:
+                try:
                     schema_file = os.path.join(os.path.dirname(self._path), schema_path)
                     with open(schema_file) as f:
                         schema = json.load(f)
