@@ -62,6 +62,7 @@ class Config(MutableMapping):
                         self._data = json.load(f)
                     self._last_mtime = current_mtime
                 return True
+            return False
         except FileNotFoundError:
             with self._lock:
                 self._data = {}
@@ -69,7 +70,7 @@ class Config(MutableMapping):
                 self._save_to_disk()
             return True
         except Exception as e:
-            raise Exception(f"config file reload error: {e}") from e
+            raise RuntimeError(f"config file reload error: {e}") from e
 
     def _atomic_write(self, data) -> None:
         """Atomic write. Nothing much."""
@@ -236,7 +237,7 @@ class Config(MutableMapping):
     def __enter__(self) -> Self:
         """Batch mode support.
         Usage:
-        with cfg as d: # Instance of Config
+        with cfg as d: # Instance of Config, not a regular dict
             d['anything'] += 1
             d['x'].pop("124", None)"""
         self._lock.acquire()
