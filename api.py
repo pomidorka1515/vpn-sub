@@ -12,7 +12,7 @@ import hmac
 
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
-from typing import cast, Tuple, Any, Self, Callable
+from typing import cast, Tuple, Any, Self, Callable, Literal, Optional
 
 def _ok(
     code: int = 200,
@@ -83,10 +83,29 @@ def requires_fields(*fields) -> Callable[[Callable[..., Any]], Callable[..., Any
         return wrapper
     return decorator
 
+HTTPMethod = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+RouteEntry = tuple[HTTPMethod, str, str, Optional[int]]
+# (method, path, handler_method, rate_limit)
+
+
 class WebApi:
     """Public api for web ui.
     Dependencies: Subscription, BWatch
     Classes depending on this: none"""
+    MAP: list[RouteEntry] = [
+        # (method, path, handler_method, rate_limit)
+        ('POST', '/register', 'register', 5),
+        ('POST', '/login', 'login', 10),
+        ('POST', '/bonus', 'bonus', 15),
+        ('GET', '/stats', 'stats', 20),
+        ('POST', '/reset', 'reset', 3),
+        ('POST', '/settings', 'settings', 15),
+        ('POST', '/logout', 'logout', 20),
+        ('GET', '/fingerprints', 'fps', None),
+        ('DELETE', '/delete', 'delete', 3),
+        ('POST', '/validate', 'validate_username', 75),
+        ('POST', '/profiles', 'profiles', None)
+    ]
     def __init__(self,
                  app: Flask,
                  cfg: Config,
@@ -129,54 +148,66 @@ class WebApi:
             return wrapped
         return decorator    
     def reg_handles(self):
-        @self.app.route(f"{self.uri}/register", methods=['POST'])
-        @self.rate_limit(5)
-        def _register():
-            return self.register()
-        @self.app.route(f"{self.uri}/login", methods=['POST'])
-        @self.rate_limit(10)
-        def _login():
-            return self.login()
-        @self.app.route(f"{self.uri}/bonus", methods=['POST'])
-        @self.rate_limit(15)
-        def _apply_bonus():
-            return self.bonus()
-        @self.app.route(f"{self.uri}/stats")
-        @self.rate_limit(20)
-        def _stats():
-            return self.stats()
-        @self.app.route(f"{self.uri}/reset", methods=['POST'])
-        @self.rate_limit(5)
-        def _reset():
-            return self.reset()
-        @self.app.route(f"{self.uri}/settings", methods=['POST'])
-        @self.rate_limit(15)
-        def _settings():
-            return self.settings()
-        @self.app.route(f"{self.uri}/logout", methods=['POST'])
-        @self.rate_limit(20)
-        def _logout():
-            return self.logout()
-        @self.app.route(f"{self.uri}/fingerprints")
-        @self.rate_limit(60)
-        def _fps():
-            return self.fps()
-        @self.app.route(f"{self.uri}/delete", methods=['DELETE'])
-        @self.rate_limit(3)
-        def _delete():
-            return self.delete()
-        @self.app.route(f"{self.uri}/validate", methods=['POST'])
-        @self.rate_limit(60)
-        def _validate_username():
-            return self.validate_username()
-        @self.app.route(f"{self.uri}/profiles", methods=['POST'])
-        @self.rate_limit(60)
-        def _profiles():
-            return self.profiles()
+        
+        # @self.app.route(f"{self.uri}/register", methods=['POST'])
+        # @self.rate_limit(5)
+        # def _register():
+        #     return self.register()
+        # @self.app.route(f"{self.uri}/login", methods=['POST'])
+        # @self.rate_limit(10)
+        # def _login():
+        #     return self.login()
+        # @self.app.route(f"{self.uri}/bonus", methods=['POST'])
+        # @self.rate_limit(15)
+        # def _apply_bonus():
+        #     return self.bonus()
+        # @self.app.route(f"{self.uri}/stats")
+        # @self.rate_limit(20)
+        # def _stats():
+        #     return self.stats()
+        # @self.app.route(f"{self.uri}/reset", methods=['POST'])
+        # @self.rate_limit(5)
+        # def _reset():
+        #     return self.reset()
+        # @self.app.route(f"{self.uri}/settings", methods=['POST'])
+        # @self.rate_limit(15)
+        # def _settings():
+        #     return self.settings()
+        # @self.app.route(f"{self.uri}/logout", methods=['POST'])
+        # @self.rate_limit(20)
+        # def _logout():
+        #     return self.logout()
+        # @self.app.route(f"{self.uri}/fingerprints")
+        # @self.rate_limit(60)
+        # def _fps():
+        #     return self.fps()
+        # @self.app.route(f"{self.uri}/delete", methods=['DELETE'])
+        # @self.rate_limit(3)
+        # def _delete():
+        #     return self.delete()
+        # @self.app.route(f"{self.uri}/validate", methods=['POST'])
+        # @self.rate_limit(60)
+        # def _validate_username():
+        #     return self.validate_username()
+        # @self.app.route(f"{self.uri}/profiles", methods=['POST'])
+        # @self.rate_limit(60)
+        # def _profiles():
+        #     return self.profiles()
         @self.app.route(f"/sub/panel")
         def _panel():
             return self.panel()
-    
+
+        for method, path, handler_method, req_limit in self.MAP:
+            path = self.uri+path
+            try:
+                func = getattr(self, handler_method)
+            except AttributeError:
+                self.log.critical(f"method {handler_method} doesnt exist!")
+                return
+            
+            if req_limit is not None:
+                func = self.rate_limit(req_limit)(func)
+            self.app.add_url_rule(path, handler_method, func, methods=[method])
     def validate_token(self, token: str | None = None) -> str | None:
         def _v(t: str | None) -> str | None:
             if not t or len(t) < 30:
