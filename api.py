@@ -8,8 +8,6 @@ import threading
 import time
 import uuid
 import random
-import datetime
-import decimal
 import hmac
 
 from functools import wraps
@@ -67,23 +65,19 @@ class Route(NamedTuple):
 
 
 def _ok(
-    code: int = 200,
     msg: str | None = None,
-    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | decimal.Decimal | \
-        datetime.datetime | datetime.time | datetime.timedelta | datetime.date \
-        | None = None
+    code: int = 200,
+    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | None = None
 ) -> Tuple[Response, int]:
-    """Internal helper function to return an error Response."""
+    """Internal helper function to return a successful Response."""
     return jsonify({"success": True, "msg": msg, "obj": obj}), code
 
 def _err(
     msg: str | None = None,
     code: int = 400,
-    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | decimal.Decimal | \
-        datetime.datetime | datetime.time | datetime.timedelta | datetime.date \
-        | None = None
+    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | None = None
 ) -> Tuple[Response, int]:
-    """Internal helper function to return a successful Response."""
+    """Internal helper function to return an error Response."""
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
 def requires_admin_auth(f):
@@ -347,7 +341,8 @@ class WebApi(BaseApi):
             if isinstance(x, str):
                 return _err(x, 400)
             return _ok()
-        except:
+        except Exception as e:
+            self.log.critical(e)
             return _err("Internal server error", 500)
     @requires_webapi_auth
     def reset(self, username) -> ResponseType:
@@ -357,7 +352,8 @@ class WebApi(BaseApi):
             if not isinstance(x, dict):
                 return _err("Internal server error", 500)
             return _ok(obj=x)
-        except:
+        except Exception as e:
+            self.log.critical(e)
             return _err("Internal server error", 500)
     @requires_webapi_auth
     @requires_fields('code')
@@ -393,7 +389,8 @@ class WebApi(BaseApi):
                 timee=days
             )
             return _ok(obj=obj)
-        except:
+        except Exception as e:
+            self.log.critical(e)
             return _err("Internal server error", 500)
     @requires_webapi_auth
     def stats(self, username) -> ResponseType:
@@ -472,7 +469,7 @@ class WebApi(BaseApi):
                 return _err(x, 400)
             if not isinstance(x, dict):
                 return _err("Internal server error", 500)
-            return _ok(201, "Created", x)
+            return _ok("Created", 201, x)
         except Exception as e:
             self.log.critical(f"error: {str(e)}")
             return _err("Internal server error", 500)
