@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from core import Subscription, BWatch, nginx_404
 from config import Config
 from loggers import Logger
@@ -12,7 +14,57 @@ import hmac
 
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
-from typing import cast, Tuple, Any, Self, Callable, Literal, Optional
+from abc import ABC, abstractmethod
+from typing import cast, Tuple, Any, Callable, Literal, Optional, NamedTuple
+
+
+HTTPMethod = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+ResponseType = Tuple[Response, int] | Response
+
+class BaseApi(ABC):
+    app: Flask
+    cfg: Config
+    sub: Subscription
+    log: Any
+    uri: str
+    _rl_data: dict
+    _rl_lock: threading.Lock
+
+    @abstractmethod
+    def reg_handles(self) -> None: ...
+
+class Route(NamedTuple):
+    method: HTTPMethod
+    path: str
+    handler: str
+    rate_limit: Optional[int]
+
+    def register(self, api: BaseApi):
+        try:
+            func = getattr(api, self.handler)
+        except AttributeError:
+            api.log.critical(f"method {self.handler} doesnt exist!")
+            return
+        if self.rate_limit is not None:
+            _max = self.rate_limit
+            _func = func
+            @wraps(_func)
+            def rl_func(*args, **kwargs):
+                ip = request.headers.get('X-Real-IP', request.remote_addr)
+                now = time.time()
+                with api._rl_lock:
+                    stale = [k for k, v in api._rl_data.items() if v and now - v[-1] > 60]
+                    for k in stale:
+                        del api._rl_data[k]
+                    api._rl_data.setdefault(ip, [])
+                    api._rl_data[ip] = [t for t in api._rl_data[ip] if now - t < 60]
+                    if len(api._rl_data[ip]) >= _max:
+                        return _err(msg="Too many requests.", code=429)
+                    api._rl_data[ip].append(now)
+                return _func(*args, **kwargs)
+            func = rl_func
+        api.app.add_url_rule(api.uri + self.path, self.handler, func, methods=[self.method])
+
 
 def _ok(
     code: int = 200,
@@ -68,6 +120,27 @@ def requires_no_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def rate_limit(max_requests: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Rate-limit by IP. Reads _rl_data and _rl_lock from the instance (self)."""
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            ip = request.headers.get('X-Real-IP', request.remote_addr)
+            now = time.time()
+            with self._rl_lock:
+                stale = [k for k, v in self._rl_data.items() if v and now - v[-1] > 60]
+                for k in stale:
+                    del self._rl_data[k]
+                self._rl_data.setdefault(ip, [])
+                self._rl_data[ip] = [t for t in self._rl_data[ip] if now - t < 60]
+                if len(self._rl_data[ip]) >= max_requests:
+                    return _err(msg="Too many requests.", code=429)
+                self._rl_data[ip].append(now)
+            return f(self, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def requires_fields(*fields) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Validate request.json has all named fields. Returns 400 on failure."""
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -83,28 +156,23 @@ def requires_fields(*fields) -> Callable[[Callable[..., Any]], Callable[..., Any
         return wrapper
     return decorator
 
-HTTPMethod = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
-RouteEntry = tuple[HTTPMethod, str, str, Optional[int]]
-# (method, path, handler_method, rate_limit)
 
-
-class WebApi:
+class WebApi(BaseApi):
     """Public api for web ui.
     Dependencies: Subscription, BWatch
     Classes depending on this: none"""
-    MAP: list[RouteEntry] = [
-        # (method, path, handler_method, rate_limit)
-        ('POST', '/register', 'register', 5),
-        ('POST', '/login', 'login', 10),
-        ('POST', '/bonus', 'bonus', 15),
-        ('GET', '/stats', 'stats', 20),
-        ('POST', '/reset', 'reset', 3),
-        ('POST', '/settings', 'settings', 15),
-        ('POST', '/logout', 'logout', 20),
-        ('GET', '/fingerprints', 'fps', None),
-        ('DELETE', '/delete', 'delete', 3),
-        ('POST', '/validate', 'validate_username', 75),
-        ('POST', '/profiles', 'profiles', None)
+    MAP: list[Route] = [
+        Route('POST', '/register', 'register', 5),
+        Route('POST', '/login', 'login', 10),
+        Route('POST', '/bonus', 'bonus', 15),
+        Route('GET', '/stats', 'stats', 20),
+        Route('POST', '/reset', 'reset', 3),
+        Route('POST', '/settings', 'settings', 15),
+        Route('POST', '/logout', 'logout', 20),
+        Route('GET', '/fingerprints', 'fps', None),
+        Route('DELETE', '/delete', 'delete', 3),
+        Route('POST', '/validate', 'validate_username', 75),
+        Route('POST', '/profiles', 'profiles', None),
     ]
     def __init__(self,
                  app: Flask,
@@ -122,31 +190,6 @@ class WebApi:
             self._rl_lock = threading.Lock()
             self.reg_handles()
     
-    def rate_limit(self, max_requests: int):
-        """Rate-limiting decorator."""
-        def decorator(f):
-            @wraps(f) 
-            def wrapped(*args, **kwargs):
-                ip = request.headers.get('X-Real-IP', request.remote_addr)
-                now = time.time()
-                
-
-                with self._rl_lock:
-                    stale = [k for k, v in self._rl_data.items() if v and now - v[-1] > 60]
-                    for k in stale:
-                        del self._rl_data[k]
-                    
-                    if ip not in self._rl_data:
-                        self._rl_data[ip] = []
-                    self._rl_data[ip] = [t for t in self._rl_data[ip] if now - t < 60]
-                    if len(self._rl_data[ip]) >= max_requests:
-
-                        return _err(msg="Too many requests.", code=429)
-                    self._rl_data[ip].append(now)
-                
-                return f(*args, **kwargs)
-            return wrapped
-        return decorator    
     def reg_handles(self):
         @self.app.route(f"/sub/auth")
         def _auth():
@@ -156,17 +199,8 @@ class WebApi:
             token = request.cookies.get('token')
             if not self.validate_token(token): return make_response(redirect('/sub/auth'))
             return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
-        for method, path, handler_method, req_limit in self.MAP:
-            path = self.uri+path
-            try:
-                func = getattr(self, handler_method)
-            except AttributeError:
-                self.log.critical(f"method {handler_method} doesnt exist!")
-                return
-            
-            if req_limit is not None:
-                func = self.rate_limit(req_limit)(func)
-            self.app.add_url_rule(path, handler_method, func, methods=[method])
+        for route in self.MAP:
+            route.register(self)
     def validate_token(self, token: str | None = None) -> str | None:
         def _v(t: str | None) -> str | None:
             if not t or len(t) < 30:
@@ -184,7 +218,7 @@ class WebApi:
         users_pw = cast(dict, self.cfg.get('webui_passwords', {}))
         if username not in users_pw:
             return False
-        if hmac.compare_digest(users_pw[username], self.sub.hash(password)):
+        if not hmac.compare_digest(users_pw[username], self.sub.hash(password)):
             return False
         webui_users = cast(dict, self.cfg.get('webui_users', {}))
         internal = webui_users.get(username)
@@ -192,7 +226,7 @@ class WebApi:
             return False
         return internal
     @requires_fields('username')
-    def validate_username(self) -> Tuple[Response, int] | Response:
+    def validate_username(self) -> ResponseType:
         """Check if a username is valid (no illegal chars). POST {"username": "..."}"""
         
         content = cast(dict, request.json)
@@ -210,7 +244,7 @@ class WebApi:
         })
     @requires_webapi_auth
     @requires_fields('lang')
-    def profiles(self, username) -> Tuple[Response, int] | Response:
+    def profiles(self, username) -> ResponseType:
         content = cast(dict, request.json)
         if content['lang'] not in ['ru', 'en']:
             return _err("Unknown language", 400)
@@ -223,10 +257,10 @@ class WebApi:
             obj[name] = desc
         return _ok(obj=obj)
     @requires_webapi_auth
-    def fps(self, username) -> Tuple[Response, int] | Response:
+    def fps(self, username) -> ResponseType:
         return _ok(obj=self.cfg['fingerprints'])
     @requires_webapi_auth
-    def delete(self, username) -> Tuple[Response, int] | Response:
+    def delete(self, username) -> ResponseType:
         content = cast(dict, request.json) if request.is_json else {}
         current_password = content.get('current_password') if content else None
         if not current_password or not isinstance(current_password, str):
@@ -271,7 +305,7 @@ class WebApi:
         )
         return resp
     @requires_webapi_auth
-    def settings(self, username) -> Tuple[Response, int] | Response:
+    def settings(self, username) -> ResponseType:
         """Update users display name or fingerprint.
         Changing ext_username or ext_password requires `current_password` in body."""
         content = cast(dict, request.json)
@@ -316,7 +350,7 @@ class WebApi:
         except:
             return _err("Internal server error", 500)
     @requires_webapi_auth
-    def reset(self, username) -> Tuple[Response, int] | Response:
+    def reset(self, username) -> ResponseType:
         """Reset token and UUID (api wrapper)"""
         try:
             x = self.sub.reset_user(username)
@@ -327,15 +361,14 @@ class WebApi:
             return _err("Internal server error", 500)
     @requires_webapi_auth
     @requires_fields('code')
-    def bonus(self, username) -> Tuple[Response, int] | Response:
+    def bonus(self, username) -> ResponseType:
         """Apply bonus code"""
 
         content = cast(dict, request.json)
-        codeobj = self.sub.consume_code(content['code'])
-        if not isinstance(codeobj, dict):
+        codeobj = self.sub.get_code(content['code'])
+        if not isinstance(codeobj, dict) or codeobj.get('action') != 'bonus':
             return _err("Unknown code", 404)
-        if codeobj['action'] != 'bonus':
-            return _err("Unknown code", 404)
+        self.sub.consume_code(content['code'])
         days = codeobj['days']
         gb = codeobj['gb']
         wl_gb = codeobj['wl_gb']
@@ -363,7 +396,7 @@ class WebApi:
         except:
             return _err("Internal server error", 500)
     @requires_webapi_auth
-    def stats(self, username) -> Tuple[Response, int] | Response:
+    def stats(self, username) -> ResponseType:
         """Get user info from token"""
         bandwidths = self.sub.bandwidth(username)
         wl_bandwidths = self.sub.bandwidth(username, whitelist=True)
@@ -396,15 +429,14 @@ class WebApi:
         return _ok(obj=obj)
     @requires_no_auth
     @requires_fields('username', 'password', 'code', 'name')
-    def register(self) -> Tuple[Response, int] | Response:
+    def register(self) -> ResponseType:
         """Register a new user via code"""
         content = cast(dict, request.json)
         code = cast(str, content.get('code'))
-        codeobj = self.sub.consume_code(code=code)
-        if not isinstance(codeobj, dict): # action days gb
+        codeobj = self.sub.get_code(code=code)
+        if not isinstance(codeobj, dict) or codeobj.get('action') != 'register':
             return _err("Invalid code", 403)
-        if codeobj['action'] != 'register':
-            return _err("Invalid code", 403)
+        self.sub.consume_code(code=code)
         # Sanitize: usernames allowlist-only, displaynames blocklist
         l_displayname = self.sub.FILTERS.get('displayname', '')
 
@@ -445,7 +477,7 @@ class WebApi:
             self.log.critical(f"error: {str(e)}")
             return _err("Internal server error", 500)
     @requires_fields('username', 'password')
-    def login(self) -> Tuple[Response, int] | Response:
+    def login(self) -> ResponseType:
         """Get the cookie for auth."""
         content = cast(dict, request.json)
         internal = self.validate_credentials(content['username'], content['password'])
@@ -487,54 +519,4 @@ class Api:
             return t == self.token
 
     def reg_handles(self):
-        @self.app.errorhandler(404)
-        def _handle_404(e):
-            return self.handle_404(e)
-        @self.app.errorhandler(405)
-        def _handle_405(e):
-            return self.handle_405(e)
-        
-        @self.app.route(f"/{self.uri}/api/user/list", methods=['GET'])
-        def _api_list():
-            return self.api_list()
-        @self.app.route(f"/{self.uri}/api/user/add", methods=['POST'])
-        def _api_add():
-            return self.api_add()
-        @self.app.route(f"/{self.uri}/api/user/refresh", methods=['GET'])
-        def _api_refresh():
-            return self.api_refresh()
-        @self.app.route(f"/{self.uri}/api/user/delete", methods=['POST'])
-        def _api_delete():
-            return self.api_delete()
-        @self.app.route(f"/{self.uri}/api/user/info", methods=['POST'])
-        def _api_info():
-            return self.api_info()
-        @self.app.route(f"/{self.uri}/api/user/isonline", methods=['POST'])
-        def _api_isonline():
-            return self.api_isonline()
-        @self.app.route(f"/{self.uri}/api/user/reset", methods=['POST'])
-        def _api_reset():
-            return self.api_reset()
-        @self.app.route(f"/{self.uri}/api/user/change", methods=['POST'])
-        def _api_change():
-            return self.api_change()
-        @self.app.route(f"/{self.uri}/api/user/onlines", methods=['GET'])
-        def _api_onlines():
-            return self.api_onlines()
-        @self.app.route(f"/{self.uri}/api/code/get", methods=['POST'])
-        def _api_code_get():
-            return self.api_code_get()
-        @self.app.route(f"/{self.uri}/api/code/delete", methods=['POST'])
-        def _api_code_delete():
-            return self.api_code_delete()
-        @self.app.route(f"/{self.uri}/api/code/add", methods=['POST'])
-        def _api_code_add():
-            return self.api_code_add()
-        @self.app.route(f"/{self.uri}/api/code/list", methods=['GET'])
-        def _api_code_list():
-            return self.api_code_list()
-        
-    def handle_404(self, e = ""):
-        return self.resp
-    def handle_405(self, e = ""):
-        return self.resp
+        pass
