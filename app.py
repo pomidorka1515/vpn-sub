@@ -100,9 +100,7 @@ def get_sub() -> Response:
         ua = request.headers.get('User-Agent', ''),
         ip = request.headers.get('X-Real-IP', '')
     )
-@app.route(f"/{cfg['uri']}/auth")
-def route_auth() -> Response:
-    return send_file('/var/www/sub/new/res/auth.html')
+
 log.info("Launch successful!")
 
 if __name__ == '__main__': # Dev, gunicorn doesnt gaf
