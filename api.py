@@ -6,20 +6,82 @@ import threading
 import time
 import uuid
 import random
+import datetime
+import decimal
+import hmac
 
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
-from typing import cast, Tuple
+from typing import cast, Tuple, Any, Self, Callable
 
-def validate_fields(*fields) -> str | None:
-    """Module-level method to verify fields for the APIs."""
-    content = request.json
-    if content is None:
-        return "Missing JSON Data."
-    for field in fields:
-        if field not in content:
-            return f"Missing '{field}' key in JSON."
-    return None
+def _ok(
+    code: int = 200,
+    msg: str | None = None,
+    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | decimal.Decimal | \
+        datetime.datetime | datetime.time | datetime.timedelta | datetime.date \
+        | None = None
+) -> Tuple[Response, int]:
+    """Internal helper function to return an error Response."""
+    return jsonify({"success": True, "msg": msg, "obj": obj}), code
+
+def _err(
+    msg: str | None = None,
+    code: int = 400,
+    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | decimal.Decimal | \
+        datetime.datetime | datetime.time | datetime.timedelta | datetime.date \
+        | None = None
+) -> Tuple[Response, int]:
+    """Internal helper function to return a successful Response."""
+    return jsonify({"success": False, "msg": msg, "obj": obj}), code
+
+def requires_admin_auth(f):
+    """Admin API auth via Authorization header. Returns fake nginx 404 on failure."""
+    @wraps(f)
+    def wrapper(self, *args, **kwargs):
+        if request.headers.get('Authorization') != self.token:
+            return self.resp
+        return f(self, *args, **kwargs)
+    return wrapper
+
+
+def requires_webapi_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+    """WebApi auth via token cookie. Injects `username` as first arg after self.
+    Returns 401 on failure."""
+    @wraps(f)
+    def wrapper(self, *args, **kwargs):
+        token = request.cookies.get('token')
+        username = self.validate_token(token)
+        if not username:
+            return _err("Invalid token.", 401)
+        return f(self, username, *args, **kwargs)
+    return wrapper
+
+
+def requires_no_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+    """WebApi: reject if already authenticated (for register). Returns 403."""
+    @wraps(f)
+    def wrapper(self, *args, **kwargs):
+        token = request.cookies.get('token')
+        if token and self.validate_token(token):
+            return _err("Must not be authorized.", 403)
+        return f(self, *args, **kwargs)
+    return wrapper
+
+
+def requires_fields(*fields) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Validate request.json has all named fields. Returns 400 on failure."""
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            content = request.json
+            if content is None:
+                return _err("Missing JSON data.", 400)
+            missing = [x for x in fields if x not in content]
+            if missing:
+                return _err(f"Missing fields: {', '.join(missing)}", 400)
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 class WebApi:
     """Public api for web ui.
@@ -59,7 +121,8 @@ class WebApi:
                         self._rl_data[ip] = []
                     self._rl_data[ip] = [t for t in self._rl_data[ip] if now - t < 60]
                     if len(self._rl_data[ip]) >= max_requests:
-                        return jsonify({"success": False, "msg": "429 Too many requests", "obj": None}), 429
+
+                        return _err(msg="Too many requests.", code=429)
                     self._rl_data[ip].append(now)
                 
                 return f(*args, **kwargs)
@@ -131,49 +194,42 @@ class WebApi:
         users_pw = cast(dict, self.cfg.get('webui_passwords', {}))
         if username not in users_pw:
             return False
-        if users_pw[username] != self.sub.hash(password):
+        if hmac.compare_digest(users_pw[username], self.sub.hash(password)):
             return False
         webui_users = cast(dict, self.cfg.get('webui_users', {}))
         internal = webui_users.get(username)
         if not internal or internal not in self.cfg['users']:
             return False
         return internal
-    def _inv_t(self) -> Tuple[Response, int] | Response:
-        return jsonify({"success": False, "msg": "Invalid token.", "obj": None}), 401
-
+    @requires_fields('username')
     def validate_username(self) -> Tuple[Response, int] | Response:
         """Check if a username is valid (no illegal chars). POST {"username": "..."}"""
-        err = validate_fields('username')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
+        
         content = cast(dict, request.json)
         raw = cast(str, content.get('username'))
+        if not isinstance(raw, str):
+            return _err("username must be a string")
         sanitized = self.sub.sanitize(raw)
         valid = raw == sanitized and len(raw) > 0
         taken = sanitized in cast(dict, self.cfg.get('webui_users', {}))
-        return jsonify({"success": True, "msg": None, "obj": {
+        return _ok(obj={
             "MAX_LENGTH": 32,
             "valid": valid,
             "taken": taken,
             "sanitized": sanitized
-        }})
+        })
     def panel(self) -> Response:
         token = request.cookies.get('token')
         if not self.validate_token(token):
             return make_response(redirect('/sub/auth'))
-        return send_file('/var/www/sub/new/res/dashboard.html')
+        return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
 
-    def profiles(self) -> Tuple[Response, int] | Response:
-        token = request.cookies.get('token')
-        username = cast(str, self.validate_token(token))
-        if not username:
-            return self._inv_t()
-        err = validate_fields('lang')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
+    @requires_webapi_auth
+    @requires_fields('lang')
+    def profiles(self, username) -> Tuple[Response, int] | Response:
         content = cast(dict, request.json)
         if content['lang'] not in ['ru', 'en']:
-            return jsonify({"success": False, "msg": "Unknown language", "obj": None}), 400
+            return _err("Unknown language", 400)
 
         index = 0 if content['lang'] == 'en' else 1
         obj = {}
@@ -181,26 +237,19 @@ class WebApi:
             name = name[index]
             desc = self.cfg['profileDescriptions'][i_name][index]
             obj[name] = desc
-        return jsonify({"success": True, "msg": None, "obj": obj})
-    def fps(self) -> Tuple[Response, int] | Response:
-        token = request.cookies.get('token')
-        username = cast(str, self.validate_token(token))
-        if not username:
-            return self._inv_t()
-        return jsonify({"success": True, "msg": None, "obj": self.cfg['fingerprints']}) 
-    def delete(self) -> Tuple[Response, int] | Response:
-        token = request.cookies.get('token')
-        username = cast(str, self.validate_token(token))
-        if not username:
-            return self._inv_t()
-        
+        return _ok(obj=obj)
+    @requires_webapi_auth
+    def fps(self, username) -> Tuple[Response, int] | Response:
+        return _ok(obj=self.cfg['fingerprints'])
+    @requires_webapi_auth
+    def delete(self, username) -> Tuple[Response, int] | Response:
         try:
             self.sub.delete_user(
                 username=username,
                 perma=True
             )
-
-            resp = jsonify({"success": True, "msg": "Deleted account", "obj": None})
+            
+            resp, code = _ok(msg="Deleted account")
             resp.set_cookie(
                 'token',
                 '',
@@ -209,12 +258,12 @@ class WebApi:
                 secure=True,
                 samesite='Lax'
             )
-            return resp
+            return resp, code
         except Exception as e:
             self.log.error(f"/delete {username}: {str(e)}")
-            return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
+            return _err("Internal server error", 500)
     def logout(self) -> Response:
-        resp = jsonify({"success": True, "msg": "Logged out", "obj": None})
+        resp, code = _ok(msg="Logged out")
         resp.set_cookie(
             'token', 
             '', 
@@ -224,27 +273,38 @@ class WebApi:
             samesite='Lax'
         )
         return resp
-    def settings(self) -> Tuple[Response, int] | Response:
-        """Update users display name or fingerprint."""
-        token = request.cookies.get('token')
-        username = self.validate_token(token)
-        if not username:
-            return self._inv_t() # Guard!
-        # not needed err = validate_fields('displayname')
+    @requires_webapi_auth
+    def settings(self, username) -> Tuple[Response, int] | Response:
+        """Update users display name or fingerprint.
+        Changing ext_username or ext_password requires `current_password` in body."""
         content = cast(dict, request.json)
         displayname = content.get('name', None)
         fingerprint = content.get('fingerprint', None)
         ext_username = content.get('username', None)
         ext_password = content.get('password', None)
+        current_password = content.get('current_password', None)
         if fingerprint:
             if fingerprint not in self.cfg['fingerprints']:
-                return jsonify({"success": False, "msg": "Unknown fingerprint", "obj": None}), 400
+                return _err("Unknown fingerprint")
         if displayname:
             if len(displayname) > 16:
-                return jsonify({"success": False, "msg": "displayname exceeds max. length of 16", "obj": None}), 400
+                return _err("displayname exceeds max. length of 16")
         if ext_username:
             if len(ext_username) > 32:
-                return jsonify({"success": False, "msg": "username exceeds max. length of 32", "obj": None}), 400
+                return _err("username exceeds max. length of 32")
+        # Credential changes require the current password (guards stolen cookies)
+        if ext_username or ext_password:
+            if not current_password or not isinstance(current_password, str):
+                return _err("current_password required to change credentials", 400)
+            cur_ext = next(
+                (e for e, u in cast(dict, self.cfg.get('webui_users', {})).items() if u == username),
+                None,
+            )
+            if not cur_ext:
+                return _err("Account has no credentials set", 400)
+            stored = cast(dict, self.cfg.get('webui_passwords', {})).get(cur_ext, '')
+            if not stored or not hmac.compare_digest(stored, self.sub.hash(current_password)):
+                return _err("Invalid current password", 401)
         try:
             x = self.sub.update_params(
                 username=username,
@@ -254,40 +314,31 @@ class WebApi:
                 fingerprint=fingerprint
             )
             if isinstance(x, str):
-                return jsonify({"success": False, "msg": x, "obj": None}), 400
-            return jsonify({"success": True, "msg": None, "obj": None})
+                return _err(x, 400)
+            return _ok()
         except:
-             return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
-    def reset(self) -> Tuple[Response, int] | Response:
+            return _err("Internal server error", 500)
+    @requires_webapi_auth
+    def reset(self, username) -> Tuple[Response, int] | Response:
         """Reset token and UUID (api wrapper)"""
-        token = request.cookies.get('token')
-        username = self.validate_token(token)
-        if not username:
-            return self._inv_t()
-
         try:
             x = self.sub.reset_user(username)
             if not isinstance(x, dict):
-                return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
-            return jsonify({"success": True, "msg": None, "obj": x})
+                return _err("Internal server error", 500)
+            return _ok(obj=x)
         except:
-            return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
-    def bonus(self) -> Tuple[Response, int] | Response:
+            return _err("Internal server error", 500)
+    @requires_webapi_auth
+    @requires_fields('code')
+    def bonus(self, username) -> Tuple[Response, int] | Response:
         """Apply bonus code"""
-        token = request.cookies.get('token')
-        username = self.validate_token(token)
-        if not username:
-            return self._inv_t()
-        err = validate_fields('code')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
 
         content = cast(dict, request.json)
         codeobj = self.sub.consume_code(content['code'])
         if not isinstance(codeobj, dict):
-            return jsonify({"success": False, "msg": "Unknown code", "obj": None}), 400
+            return _err("Unknown code", 404)
         if codeobj['action'] != 'bonus':
-            return jsonify({"success": False, "msg": "Unknown code", "obj": None}), 400
+            return _err("Unknown code", 404)
         days = codeobj['days']
         gb = codeobj['gb']
         wl_gb = codeobj['wl_gb']
@@ -311,15 +362,12 @@ class WebApi:
                 wl_limit=wl_gb,
                 timee=days
             )
-            return jsonify({"success": True, "msg": None, "obj": obj})
+            return _ok(obj=obj)
         except:
-            return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
-    def stats(self) -> Tuple[Response, int] | Response:
+            return _err("Internal server error", 500)
+    @requires_webapi_auth
+    def stats(self, username) -> Tuple[Response, int] | Response:
         """Get user info from token"""
-        token = request.cookies.get('token')
-        username = self.validate_token(token)
-        if not username:
-            return self._inv_t()
         bandwidths = self.sub.bandwidth(username)
         wl_bandwidths = self.sub.bandwidth(username, whitelist=True)
         obj = {
@@ -348,22 +396,18 @@ class WebApi:
                 "wl_limit": self.cfg['wl_bw'].get(username, [0,0])[0]
             }
         }
-        return jsonify({"success": True, "msg": None, "obj": obj})
+        return _ok(obj=obj)
+    @requires_no_auth
+    @requires_fields('username', 'password', 'code', 'name')
     def register(self) -> Tuple[Response, int] | Response:
         """Register a new user via code"""
-        err = validate_fields('username', 'password', 'code', 'name')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
-        token = request.cookies.get('token')
-        if token:
-            return jsonify({"success": False, "msg": "Must not be authorized.", "obj": None}), 403
         content = cast(dict, request.json)
         code = cast(str, content.get('code'))
-        codeobj = self.sub.get_code(code=code)
+        codeobj = self.sub.consume_code(code=code)
         if not isinstance(codeobj, dict): # action days gb
-            return jsonify({"success": False, "msg": "Invalid code", "obj": None}), 403
+            return _err("Invalid code", 403)
         if codeobj['action'] != 'register':
-            return jsonify({"success": False, "msg": "Invalid code", "obj": None}), 403
+            return _err("Invalid code", 403)
         # Sanitize: usernames allowlist-only, displaynames blocklist
         l_displayname = self.sub.FILTERS.get('displayname', '')
 
@@ -375,12 +419,13 @@ class WebApi:
         gb = codeobj['gb']
         # Create the user
         if len(displayname) > 16:
-            return jsonify({"success": False, "msg": "displayname exceeds max. length of 16", "obj": None}), 400
+            return _err("displayname exceeds max. length of 16")
         if len(ext_username) > 32:
-            return jsonify({"success": False, "msg": "username exceeds max. length of 32", "obj": None}), 400
+            return _err("username exceeds max. length of 32")
 
+        # Fast-path pre-check for nicer error. The real atomic check is inside add_new_user.
         if ext_username in self.cfg['webui_users']:
-            return jsonify({"success": False, "msg": "Username already exists", "obj": None}), 403
+            return _err("Username already exists", 403)
         try:
             x = self.sub.add_new_user(
                 username=internal_username,
@@ -391,24 +436,26 @@ class WebApi:
                 limit=gb, # No conversion needed (in GB alrrady)
                 timee=int(time.time() + days * 86400) if days else 0 # Current time in UTC (plus day amount)
             )
+            if isinstance(x, str):
+                # Atomic uniqueness check lost the race, or validation failed
+                if "exists" in x.lower():
+                    return _err("Username already exists", 403)
+                return _err(x, 400)
             if not isinstance(x, dict):
-                return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
-            if not codeobj.get('perma', False): self.sub.delete_code(code)
-            return jsonify({"success": True, "msg": "Created", "obj": x}), 201
+                return _err("Internal server error", 500)
+            return _ok(201, "Created", x)
         except Exception as e:
             self.log.critical(f"error: {str(e)}")
-            return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
+            return _err("Internal server error", 500)
+    @requires_fields('username', 'password')
     def login(self) -> Tuple[Response, int] | Response:
         """Get the cookie for auth."""
-        err = validate_fields('username', 'password')
-        if err:
-            return jsonify({"success": False, "msg": err, "obj": None}), 400
         content = cast(dict, request.json)
         internal = self.validate_credentials(content['username'], content['password'])
         if not internal:
-            return jsonify({"success": False, "msg": "Invalid credentials.", "obj": None}), 401
+            return _err("Invalid credentials.", 401)
         token = self.cfg['tokens'][internal]
-        r = jsonify({"success": True, "msg": "Successful login", "obj": {"username": content['username']}})
+        r, code = _ok(msg="Successful login", obj={"username": content['username']})
         r.set_cookie(
             key='token',
             value=token,
@@ -417,7 +464,7 @@ class WebApi:
             secure=True,
             samesite='Lax'
         )
-        return r        
+        return r, code
 
 
 class Api:

@@ -435,14 +435,10 @@ class Subscription:
     ) -> dict | str:
         """Adds a new user. Returns string with error if any argument is incorrect.
         Now also suppports ext username and password (optional). Sanitize them first!"""
-        if self.isuser(username):
-            return "Username exists"
         if ext_username:
             ext_username = self.sanitize(ext_username)
             if len(ext_username) > 32:
                 return "Ext Username too long"
-            if ext_username in self.cfg['webui_users']:
-                return "Ext Username exists"
         if token is None:
             token = ''.join(random.choices(string.ascii_letters + string.digits + '_-', k=40))
         if userid is None:
@@ -459,12 +455,17 @@ class Subscription:
             return "Invalid timestamp"
         if ext_password is not None:
             ext_password = self.hash(ext_password)
-        
-        
+
+
         displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
         if len(displayname) > 16:
             return "Displayname too long"
         with self.cfg as d:
+            # Atomic uniqueness checks under the batch lock (prevents races)
+            if username in d['users']:
+                return "Username exists"
+            if ext_username and ext_username in d.get('webui_users', {}):
+                return "Ext Username exists"
             d['users'][username] = userid
             d['tokens'][username] = token
             d['userFingerprints'][username] = fingerprint

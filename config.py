@@ -23,35 +23,34 @@ class Config(MutableMapping):
                  indent: int = 4,
                  strict_schema: bool = True):
         self.log = Logger(type(self).__name__)
-        self.log.debug("loading Config")
-        self._path = path
-        self._data = {}
-        self._last_mtime = 0
-        self._batch_mode = False
-        self._lock = threading.RLock()
-        self._indent = indent
-        self.reload()
+        with self.log.loading():
+            self._path = path
+            self._data = {}
+            self._last_mtime = 0
+            self._batch_mode = False
+            self._lock = threading.RLock()
+            self._indent = indent
+            self.reload()
 
-        schema_path = self._data.get('$schema')
-        if schema_path:
-            if schema_path.startswith('http://') or schema_path.startswith('https://'):
-                self.log.warning("JSON schema looks like a link. Skipping.")
-                return
-            try:
-                schema_file = os.path.join(os.path.dirname(self._path), schema_path)
-                with open(schema_file) as f:
-                    schema = json.load(f)
-                jsonschema.validate(self._data, schema)
-            except jsonschema.ValidationError as e:
-                if not strict_schema:
-                    self.log.warning(f"Schema validation error: {e.message} -> {list(e.absolute_path)}")
-                else:
-                    self.log.critical(f"Schema validation error! Refusing to start.")
-                    raise e
-            except FileNotFoundError:
-                pass
+            schema_path = self._data.get('$schema')
+            if schema_path:
+                if schema_path.startswith('http://') or schema_path.startswith('https://'):
+                    self.log.warning("JSON schema looks like a link. Skipping.")
+                    return
+                    try:
+                    schema_file = os.path.join(os.path.dirname(self._path), schema_path)
+                    with open(schema_file) as f:
+                        schema = json.load(f)
+                    jsonschema.validate(self._data, schema)
+                except jsonschema.ValidationError as e:
+                    if not strict_schema:
+                        self.log.warning(f"Schema validation error: {e.message} -> {list(e.absolute_path)}")
+                    else:
+                        self.log.critical(f"Schema validation error! Refusing to start.")
+                        raise e
+                except FileNotFoundError:
+                    pass
 
-        self.log.info("loaded Config")
 
     def reload(self) -> bool | None:
         """Refresh the data if it was updated outside of Python."""
