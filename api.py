@@ -389,40 +389,26 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     @requires_fields('code')
     def bonus(self, username) -> ResponseType:
-        """Apply bonus code"""
-
-        content = cast(dict, request.json)
-        codeobj = self.sub.get_code(content['code'])
-        if not isinstance(codeobj, dict) or codeobj.get('action') != 'bonus':
-            return _err("Unknown code", 404)
-        self.sub.consume_code(content['code'])
-        days = codeobj['days']
-        gb = codeobj['gb']
-        wl_gb = codeobj['wl_gb']
-        if self.cfg['time'][username] == 0:
-            days = 0
-        else:
-            days = self.cfg['time'][username] + days * 86400
-        if self.cfg['bw'][username][0] == 0:
-            gb = 0
-        else:
-            gb = self.cfg['bw'][username][0] + gb
-        if self.cfg['wl_bw'][username][0] == 0:
-            wl_gb = 0
-        else:
-            wl_gb = self.cfg['wl_bw'][username][0] + wl_gb
-        obj = {"days": codeobj['days'], "gb": codeobj['gb'], "wl_gb": codeobj['wl_gb'], "perma": codeobj['perma']}
+        """Apply bonus code."""
+        content = request.json
+        
         try:
-            self.sub.update_params(
+            result = self.sub.apply_bonus_code(
                 username=username,
-                limit=gb,
-                wl_limit=wl_gb,
-                timee=days
+                code=cast(str, content["code"]),
             )
-            return _ok(obj=obj)
         except Exception as e:
-            self.log.critical(e)
+            self.log.critical(f"bonus failed: {e}")
             return _err("Internal server error", 500)
+    
+        if isinstance(result, str):
+            if result == "Unknown code":
+                return _err(result, 404)
+            if result == "Unknown user":
+                return _err(result, 404)
+            return _err(result, 400)
+    
+        return _ok(obj=result)
     @requires_webapi_auth
     def stats(self, username) -> ResponseType:
         """Get user info from token"""
@@ -455,55 +441,31 @@ class WebApi(BaseApi):
             }
         }
         return _ok(obj=obj)
+
     @requires_no_auth
     @requires_fields('username', 'password', 'code', 'name')
     def register(self) -> ResponseType:
-        """Register a new user via code"""
-        content = cast(dict, request.json)
-        code = cast(str, content.get('code'))
-        codeobj = self.sub.get_code(code=code)
-        if not isinstance(codeobj, dict) or codeobj.get('action') != 'register':
-            return _err("Invalid code", 403)
-        self.sub.consume_code(code=code)
-        # Sanitize: usernames allowlist-only, displaynames blocklist
-        l_displayname = self.sub.FILTERS.get('displayname', '')
-
-        displayname = cast(str, content.get('name')).translate(str.maketrans('', '', l_displayname))
-        ext_username = self.sub.sanitize(cast(str, content.get('username')))
-        uid_short = uuid.uuid4().hex[:16]
-        internal_username = f"web_{uid_short}"
-        days = codeobj['days']
-        gb = codeobj['gb']
-        # Create the user
-        if len(displayname) > 16:
-            return _err("displayname exceeds max. length of 16")
-        if len(ext_username) > 32:
-            return _err("username exceeds max. length of 32")
-
-        # Fast-path pre-check for nicer error. The real atomic check is inside add_new_user.
-        if ext_username in self.cfg['webui_users']:
-            return _err("Username already exists", 403)
+        """Register a new user via code."""
+        content = request.json    
         try:
-            x = self.sub.add_new_user(
-                username=internal_username,
-                displayname=displayname,
-                ext_username=ext_username,
-                ext_password=content.get('password'),
-                token=None, # Let method generate
-                limit=gb, # No conversion needed (in GB alrrady)
-                timee=int(time.time() + days * 86400) if days else 0 # Current time in UTC (plus day amount)
+            result = self.sub.register_with_code(
+                code=cast(str, content['code']),
+                username=f"web_{uuid.uuid4().hex[:16]}",
+                displayname=cast(str, content['name']),
+                ext_username=cast(str, content['username']),
+                ext_password=cast(str, content['password']),
             )
-            if isinstance(x, str):
-                # Atomic uniqueness check lost the race, or validation failed
-                if "exists" in x.lower():
-                    return _err("Username already exists", 403)
-                return _err(x, 400)
-            if not isinstance(x, dict):
-                return _err("Internal server error", 500)
-            return _ok("Created", 201, x)
         except Exception as e:
-            self.log.critical(f"error: {str(e)}")
+            self.log.critical(f"register failed: {e}")
             return _err("Internal server error", 500)
+    
+        if isinstance(result, str):
+            if result in {"Invalid code", "Username exists", "Ext Username exists"}:
+                return _err(result, 403)
+            return _err(result, 400)
+    
+        return _ok("Created", 201, result)
+
     @requires_fields('username', 'password')
     def login(self) -> ResponseType:
         """Get the cookie for auth."""

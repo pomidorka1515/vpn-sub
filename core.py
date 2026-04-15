@@ -254,6 +254,32 @@ class Subscription:
         except Exception as e:
             self.log.warning(f"getinbounds fail: {e}")
             return []
+    def _rollback_registered_user(
+        self,
+        *,
+        username: str,
+        ext_username: str,
+        consumed_code: dict[str, Any] | None,
+    ) -> None:
+        """Best-effort rollback for register_with_code()."""
+        with self.cfg as d:
+            d.get("users", {}).pop(username, None)
+            d.get("tokens", {}).pop(username, None)
+            d.get("userFingerprints", {}).pop(username, None)
+            d.get("status", {}).pop(username, None)
+            d.get("statusTime", {}).pop(username, None)
+            d.get("statusWl", {}).pop(username, None)
+            d.get("displaynames", {}).pop(username, None)
+            d.get("bw", {}).pop(username, None)
+            d.get("wl_bw", {}).pop(username, None)
+            d.get("time", {}).pop(username, None)
+            d.get("webui_passwords", {}).pop(ext_username, None)
+            d.get("webui_users", {}).pop(ext_username, None)
+    
+            if consumed_code is not None:
+                codes = d.setdefault("codes", [])
+                if not any(item.get("code") == consumed_code["code"] for item in codes):
+                    codes.append(consumed_code)
     def bandwidth(self, username: str, whitelist: bool = False) -> list[int]:
         """Get bandwidth info about a user.
         Output: [upload, download, total]. In bytes."""
@@ -595,6 +621,142 @@ class Subscription:
         with self.cfg as t: t['users'][username] = uid
 
         return True
+    def register_with_code(
+        self,
+        *,
+        code: str,
+        username: str,
+        displayname: str,
+        ext_username: str,
+        ext_password: str,
+    ) -> dict[str, Any] | str:
+        """Create a new web user from a register code.
+    
+        Returns a user dict on success, or a human-readable error string on
+        validation/business-rule failure.
+    
+        """
+        if not code or not isinstance(code, str):
+            return "Invalid code"
+        if not username or not isinstance(username, str):
+            return "Invalid username"
+        if not isinstance(displayname, str):
+            return "Invalid displayname"
+        if not ext_username or not isinstance(ext_username, str):
+            return "Invalid username"
+        if not ext_password or not isinstance(ext_password, str):
+            return "Invalid password"
+    
+        ext_username = self.sanitize(ext_username)
+        if not ext_username:
+            return "Invalid username"
+        if len(ext_username) > 32:
+            return "Ext Username too long"
+    
+        displayname = displayname.translate(
+            str.maketrans("", "", self.FILTERS.get("displayname", ""))
+        )
+        if len(displayname) > 16:
+            return "Displayname too long"
+    
+        token = ''.join(random.choices(string.ascii_letters + string.digits + '_-', k=40))
+        userid = str(uuid.uuid4())
+        fingerprint = random.choice(self.fps)
+        hashed_password = self.hash(ext_password)
+    
+        consumed_code: dict[str, Any] | None = None
+        result: dict[str, Any] | None = None
+    
+        with self.cfg as d:
+            codes = d.setdefault("codes", [])
+    
+            match_index = None
+            match_item = None
+            for i, item in enumerate(codes):
+                if item.get("code") == code:
+                    match_index = i
+                    match_item = item
+                    break
+
+            if match_item is None:
+                return "Invalid code"
+            if match_item.get("action") != "register":
+                return "Invalid code"
+    
+            try:
+                days = int(match_item.get("days", 0))
+                gb = int(match_item.get("gb", 0))
+                wl_gb = int(match_item.get("wl_gb", 0))
+            except (TypeError, ValueError):
+                return "Invalid code"
+    
+        users = d.setdefault("users", {})
+        tokens = d.setdefault("tokens", {})
+        user_fingerprints = d.setdefault("userFingerprints", {})
+        status = d.setdefault("status", {})
+        status_time = d.setdefault("statusTime", {})
+        status_wl = d.setdefault("statusWl", {})
+        displaynames = d.setdefault("displaynames", {})
+        bw = d.setdefault("bw", {})
+        wl_bw = d.setdefault("wl_bw", {})
+        times = d.setdefault("time", {})
+        webui_passwords = d.setdefault("webui_passwords", {})
+        webui_users = d.setdefault("webui_users", {})
+
+        if username in users:
+            return "Username exists"
+        if ext_username in webui_users:
+            return "Ext Username exists"
+
+        timee = int(time.time() + days * 86400) if days else 0
+
+        if not match_item.get("perma", False):
+            consumed_code = {
+                "code": code,
+                "action": "register",
+                "perma": False,
+                "days": days,
+                "gb": gb,
+                "wl_gb": wl_gb,
+            }
+            del codes[match_index]
+
+        users[username] = userid
+        tokens[username] = token
+        user_fingerprints[username] = fingerprint
+        status[username] = True
+        status_time[username] = True
+        status_wl[username] = True
+        displaynames[username] = displayname
+        bw[username] = [gb, 0]
+        wl_bw[username] = [wl_gb, 0]
+        times[username] = timee
+        webui_passwords[ext_username] = hashed_password
+        webui_users[ext_username] = username
+
+        result = {
+            "username": username,
+            "token": token,
+            "uuid": userid,
+            "fingerprint": fingerprint,
+            "limit": gb,
+            "wl_limit": wl_gb,
+            "time": timee,
+        }
+
+        try:
+            self.add_users(username=username)
+        except Exception as e:
+            self.log.critical(f"register_with_code backend sync failed for {username}: {e}")
+            self._rollback_registered_user(
+                username=username,
+                ext_username=ext_username,
+                consumed_code=consumed_code,
+            )
+            raise RuntimeError(f"backend sync failed for {username}") from e
+    
+        return result if result is not None else "Internal error"
+
     def get_code(self, code: str) -> dict | bool:
         """Search for a code. Returns a dict if found, False if isnt."""
 
@@ -612,6 +774,91 @@ class Subscription:
                     "wl_gb": result.get('wl_gb', 0)}
         else:
             return False
+    
+    def apply_bonus_code(self, *, username: str, code: str) -> dict[str, Any] | str:
+        """Atomically validate/consume a bonus code and apply it to a user.
+    
+        Returns:
+            dict: Applied bonus info on success.
+            str: Human-readable error on validation/failure.
+            """
+        if not isinstance(username, str) or not username:
+            return "Unknown user"
+        if not isinstance(code, str) or not code:
+            return "Unknown code"
+    
+        result: dict[str, Any] | None = None
+    
+        with self.cfg as d:
+            users = d.setdefault("users", {})
+            bw_map = d.setdefault("bw", {})
+            wl_bw_map = d.setdefault("wl_bw", {})
+            time_map = d.setdefault("time", {})
+            codes = d.setdefault("codes", [])
+    
+            if username not in users:
+                return "Unknown user"
+            if username not in bw_map or username not in wl_bw_map or username not in time_map:
+                return "Broken user state"
+    
+            code_index: int | None = None
+            code_item: dict[str, Any] | None = None
+    
+            for i, item in enumerate(codes):
+                if item.get("code") == code:
+                    code_index = i
+                    code_item = item
+                    break
+    
+            if code_item is None or code_item.get("action") != "bonus":
+                return "Unknown code"
+    
+            try:
+                delta_days = int(code_item.get("days", 0))
+                delta_gb = int(code_item.get("gb", 0))
+                delta_wl_gb = int(code_item.get("wl_gb", 0))
+            except (TypeError, ValueError):
+                return "Invalid code"
+    
+            if delta_days < 0 or delta_gb < 0 or delta_wl_gb < 0:
+                return "Invalid code"
+    
+            current_time = time_map[username]
+            current_bw = bw_map[username]
+            current_wl_bw = wl_bw_map[username]
+    
+            if not isinstance(current_time, int):
+                return "Broken user state"
+            if not isinstance(current_bw, list) or len(current_bw) < 2:
+                return "Broken user state"
+            if not isinstance(current_wl_bw, list) or len(current_wl_bw) < 2:
+                return "Broken user state"
+            if not isinstance(current_bw[0], int) or not isinstance(current_wl_bw[0], int):
+                return "Broken user state"
+    
+            new_time = 0 if current_time == 0 else current_time + delta_days * 86400
+            new_limit = 0 if current_bw[0] == 0 else current_bw[0] + delta_gb
+            new_wl_limit = 0 if current_wl_bw[0] == 0 else current_wl_bw[0] + delta_wl_gb
+    
+            if not code_item.get("perma", False):
+                del codes[code_index]  # type: ignore[index]
+    
+            current_bw[0] = new_limit
+            current_wl_bw[0] = new_wl_limit
+            time_map[username] = new_time
+    
+            result = {
+                "days": delta_days,
+                "gb": delta_gb,
+                "wl_gb": delta_wl_gb,
+                "perma": bool(code_item.get("perma", False)),
+                "time": new_time,
+                "limit": new_limit,
+                "wl_limit": new_wl_limit,
+            }
+    
+        return result if result is not None else "Internal server error"
+
     def add_code(self, 
                  code: str, 
                  action: str, 
@@ -672,44 +919,16 @@ class Subscription:
         for i in self.cfg['codes']:
             x.append(i.get('code'))
         return x
-    def bonus_code(self, value: int | str, code: str, telegram: bool = True) -> None | bool:
-        """Apply a bonus code to a user from Telegram. False if code not valid.
-        telegram: if True, provide a ID for value. if False, provide internal username"""
-
-        userobj = self.get_info_telegram(tgid=value, reverse=not telegram)
-        if not userobj:
+    def bonus_code(self, value: int | str, code: str) -> dict[str, Any] | bool:
+        """Apply a bonus code for a Telegram user."""
+        username = self.get_username_telegram(value)
+        if not isinstance(username, str) or not username:
             return False
-        codeobj = self.consume_code(code=code)
-        if not isinstance(codeobj, dict):
+        result = self.apply_bonus_code(username=username, code=code)
+        if isinstance(result, str):
+            self.log.error(f"Error in applying code: {result}")
             return False
-        if codeobj['action'] != "bonus": # Only bonus codes allowed
-            return False
-
-        username = userobj['username']
-        days = codeobj.get('days', 0)
-        ts = userobj['time']
-        if ts: # No time limit -> keep unchanged
-            timee = int(ts + (days * 86400)) if days else None # No increment -> dont change
-        else:
-            timee = None
-        limit = codeobj.get('gb', 0)
-        wl_limit = codeobj.get('wl_gb', 0)
-        ul = userobj['limit']
-        wl_ul = userobj['wl_limit']
-        if ul:
-            limit = ul + limit if limit else None
-        else:
-            limit = None
-        if wl_ul:
-            wl_limit = wl_ul + wl_limit if wl_limit else None
-        else:
-            wl_limit = None
-        self.update_params(
-            username=username,
-            limit=limit,
-            wl_limit=wl_limit,
-            timee=timee
-        )
+        return result
     def get_info_telegram(self, tgid: int | str, reverse: bool = False) -> dict | None:
         """Returns all user info by telegram ID. None if target uid wasnt found.
         reverse: lookup by internal usermame"""
