@@ -15,27 +15,67 @@ from flask import Flask, Response, jsonify, send_file, redirect, request, make_r
 from abc import ABC, abstractmethod
 from typing import cast, Tuple, Any, Callable, Literal, Optional, NamedTuple
 
-
+JsonifyValue =  str | int | float | bool | dict | list | tuple | uuid.UUID | None
 HTTPMethod = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 ResponseType = Tuple[Response, int] | Response
 
 class BaseApi(ABC):
-    app: Flask
-    cfg: Config
-    sub: Subscription
-    log: Any
-    uri: str
-    _rl_data: dict
-    _rl_lock: threading.Lock
+    """Base class for API handlers. Enforces required attributes and route registration."""
+    
+    ROUTES: list[Route]  # subclasses must define this
+    
+    def __init__(self,
+                 app: Flask, 
+                 cfg: Config, 
+                 sub: Subscription, 
+                 bw: BWatch,
+                 uri: str):
+        self.log = Logger(type(self).__name__)
+        with self.log.loading():
+            self.app = app
+            self.cfg = cfg
+            self.sub = sub
+            self.bw = bw
+            self.uri = uri
+            self._rl_data: dict = {}
+            self._rl_lock = threading.Lock()
+            self._register_routes()
+            self.reg_handles()
 
-    @abstractmethod
-    def reg_handles(self) -> None: ...
+    def __init_subclass__(cls, **kwargs):
+        """Called when a class inherits from BaseApi. Validates at import time."""
+        super().__init_subclass__(**kwargs)
+        
+        if not hasattr(cls, 'ROUTES'):
+            raise TypeError(f"{cls.__name__} must define ROUTES")
+        
+        for route in cls.ROUTES:
+            route.validate()
+            if not hasattr(cls, route.handler):
+                raise TypeError(
+                    f"{cls.__name__}.ROUTES references '{route.handler}' "
+                    f"but no such method exists"
+                )
+    
+    def _register_routes(self):
+        for route in self.ROUTES:
+            route.register(self)
+    
+    def reg_handles(self) -> None:
+        """Optional: subclass setup beyond route registration (error handlers, etc)."""
+        pass
 
 class Route(NamedTuple):
     method: HTTPMethod
     path: str
     handler: str
     rate_limit: Optional[int]
+
+    def validate(self):
+        if not self.path.startswith('/'):
+            raise ValueError(f"Route path must start with '/', got '{self.path}'")
+        if self.rate_limit is not None and self.rate_limit <= 0:
+            raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
 
     def register(self, api: BaseApi):
         try:
@@ -67,7 +107,7 @@ class Route(NamedTuple):
 def _ok(
     msg: str | None = None,
     code: int = 200,
-    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | None = None
+    obj: JsonifyValue = None
 ) -> Tuple[Response, int]:
     """Internal helper function to return a successful Response."""
     return jsonify({"success": True, "msg": msg, "obj": obj}), code
@@ -75,7 +115,7 @@ def _ok(
 def _err(
     msg: str | None = None,
     code: int = 400,
-    obj: str | int | float | bool | dict | list | tuple | uuid.UUID | None = None
+    obj: JsonifyValue = None
 ) -> Tuple[Response, int]:
     """Internal helper function to return an error Response."""
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
@@ -155,18 +195,20 @@ class WebApi(BaseApi):
     """Public api for web ui.
     Dependencies: Subscription, BWatch
     Classes depending on this: none"""
-    MAP: list[Route] = [
-        Route('POST', '/register', 'register', 5),
-        Route('POST', '/login', 'login', 10),
-        Route('POST', '/bonus', 'bonus', 15),
-        Route('GET', '/stats', 'stats', 20),
-        Route('POST', '/reset', 'reset', 3),
-        Route('POST', '/settings', 'settings', 15),
-        Route('POST', '/logout', 'logout', 20),
-        Route('GET', '/fingerprints', 'fps', None),
-        Route('DELETE', '/delete', 'delete', 3),
-        Route('POST', '/validate', 'validate_username', 75),
-        Route('POST', '/profiles', 'profiles', None),
+    ROUTES: list[Route] = [
+        Route('POST', '/webapi/register', 'register', 5),
+        Route('POST', '/webapi/login', 'login', 10),
+        Route('POST', '/webapi/bonus', 'bonus', 15),
+        Route('GET', '/webapi/stats', 'stats', 20),
+        Route('POST', '/webapi/reset', 'reset', 3),
+        Route('POST', '/webapi/settings', 'settings', 15),
+        Route('POST', '/webapi/logout', 'logout', 20),
+        Route('GET', '/webapi/fingerprints', 'fps', None),
+        Route('DELETE', '/webapi/delete', 'delete', 3),
+        Route('POST', '/webapi/validate', 'validate_username', 75),
+        Route('POST', '/webapi/profiles', 'profiles', None),
+        Route('GET', '/panel', 'gui_panel', None),
+        Route('GET', '/auth', 'gui_auth', None)
     ]
     def __init__(self,
                  app: Flask,
@@ -174,27 +216,9 @@ class WebApi(BaseApi):
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        with self.log.loading():
-            self.cfg = cfg
-            self.app = app
-            self.sub = sub
-            self.bw = bw
-            self.uri = f"/{self.cfg['uri']}/webapi" 
-            self._rl_data = {}
-            self._rl_lock = threading.Lock()
-            self.reg_handles()
+        uri = f"/{cfg['uri']}" 
+        super().__init__(app, cfg, sub, bw, uri)
     
-    def reg_handles(self):
-        @self.app.route(f"/sub/auth")
-        def _auth():
-            return send_file('/var/www/sub/new/res/auth.html', etag=False)
-        @self.app.route(f"/sub/panel")
-        def _panel(): 
-            token = request.cookies.get('token')
-            if not self.validate_token(token): return make_response(redirect('/sub/auth'))
-            return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
-        for route in self.MAP:
-            route.register(self)
     def validate_token(self, token: str | None = None) -> str | None:
         def _v(t: str | None) -> str | None:
             if not t or len(t) < 30:
@@ -219,6 +243,13 @@ class WebApi(BaseApi):
         if not internal or internal not in self.cfg['users']:
             return False
         return internal
+    def gui_panel(self) -> ResponseType:
+        token = request.cookies.get('token')
+        if not self.validate_token(token):
+            return make_response(redirect('/sub/auth'))
+        return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
+    def gui_auth(self) -> ResponseType:
+        return send_file('/var/www/sub/new/res/auth.html', etag=False)
     @requires_fields('username')
     def validate_username(self) -> ResponseType:
         """Check if a username is valid (no illegal chars). POST {"username": "..."}"""
@@ -493,27 +524,5 @@ class WebApi(BaseApi):
         return r, code
 
 
-class Api:
-    def __init__(self,
-                 app: Flask,
-                 cfg: Config,
-                 sub: Subscription,
-                 bw: BWatch):
-        self.log = Logger(type(self).__name__)
-        with self.log.loading():
-            self.cfg = cfg
-            self.app = app
-            self.sub = sub
-            self.bw = bw
-            self.nginx404 = nginx_404
-            self.resp = Response(self.nginx404, status=404, mimetype='text/html')
-            self.resp.headers['Content-Type'] = "text/html"
-            self.uri = self.cfg['uri']
-            self.token = self.cfg['api_token']
-            self.reg_handles()
-    
-    def require_auth(self, t) -> bool:
-            return t == self.token
-
-    def reg_handles(self):
-        pass
+# class Api: 
+# Rewrite later

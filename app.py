@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core import Subscription, BWatch, XUiSession, Response, Flask, request, send_file
-from api import WebApi, Api
+from api import WebApi
 from bots import PublicBot, AdminBot
 from config import Config
 from loggers import Logger
