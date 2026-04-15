@@ -361,7 +361,6 @@ class Subscription:
                 for tgid in tgids_to_delete:
                     data.get('tgids', {}).pop(tgid, None)
 
-            self.restart()
         self.log.info(f"deleted user {username} {"permanently" if perma else ""}")
     def update_user(self, 
                     username: str, 
@@ -430,8 +429,7 @@ class Subscription:
         fingerprint: str | None = None,
         limit: int = 0,
         wl_limit: int = 5,
-        timee: int = 0,
-        restart: bool = True
+        timee: int = 0
     ) -> dict | str:
         """Adds a new user. Returns string with error if any argument is incorrect.
         Now also suppports ext username and password (optional). Sanitize them first!"""
@@ -482,7 +480,6 @@ class Subscription:
         
         try: self.add_users(username=username)
         except Exception as e: raise Exception(f"add new user: {username}: {e}")
-        if restart: self.restart()
         return {"username": username, "token": token, "uuid": userid, "fingerprint": fingerprint, "displayname": displayname} # for API
     def update_params(
         self,
@@ -557,7 +554,6 @@ class Subscription:
                 t['webui_passwords'][ext_username] = ext_password
                 t['webui_users'][ext_username] = username                
 
-        if restart: self.restart()
     def update_uuid(self, username: str, uid: str) -> bool:
         """Seperate method for updating the UUID. True on success.
         Potentially dangerous operation, seperate function."""
@@ -807,7 +803,6 @@ class Subscription:
         ) != None:
             self.log.critical(f"reset_user: something happened")
             raise Exception
-        self.restart(0.2)
         return {'uuid': newid, 'token': newt}
     def fmt_bytes(self, value: int) -> tuple[str, str]:
         for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
