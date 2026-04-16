@@ -18,6 +18,7 @@ try:
 except ModuleNotFoundError as exc:
     raise RuntimeError("Run this on linux.") from exc
 
+__all__ = ['ConfigError', 'SchemaValidationError', 'FileCorruptionError', 'Config']
 
 class ConfigError(RuntimeError):
     """Base config manager error."""
@@ -209,9 +210,11 @@ class Config(MutableMapping[str, Any]):
         still works, but `mutate()` / `edit()` is clearer.
         """
         if len(args) == 1 and callable(args[0]) and not kwargs:
-            self.log.warning(
-                "Config.update(callable) is deprecated; use mutate() or edit()."
-            )
+            if not self._warned_update_callable:
+                self.log.warning(
+                    "Config.update(callable) is deprecated; use mutate() or edit()."
+                )
+                self._warned_update_callable = True
             self.mutate(args[0])
             return
 
@@ -600,6 +603,9 @@ class _ConfigTransaction(MutableMapping[str, Any]):
 
     def __len__(self) -> int:
         return len(self._require_active())
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._require_active()
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._require_active().get(key, default)
