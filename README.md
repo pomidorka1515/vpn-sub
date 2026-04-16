@@ -36,4 +36,4 @@ See config.schema.json for the full config shape.
 Personal project. Works in production for my small user base. Not stable..
 
 ## License
-TODO
+GPL v3
