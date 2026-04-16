@@ -570,8 +570,8 @@ class Subscription:
             t['displaynames'][username] =  displayname
             t['tokens'][username] = token
             t['userFingerprints'][username] = fingerprint
-            t['bw'][username] = [limit, self.cfg['bw'][username][1]]
-            t['wl_bw'][username] = [wl_limit, self.cfg['wl_bw'][username][1]]
+            t['bw'][username] = [limit, t['bw'][username][1]]
+            t['wl_bw'][username] = [wl_limit, t['wl_bw'][username][1]]
             t['time'][username] = timee
             if ext_password and ext_username:
                 if _old_ext_username and _old_ext_username != ext_username:
@@ -690,59 +690,59 @@ class Subscription:
             except (TypeError, ValueError):
                 return "Invalid code"
     
-        users = d.setdefault("users", {})
-        tokens = d.setdefault("tokens", {})
-        user_fingerprints = d.setdefault("userFingerprints", {})
-        status = d.setdefault("status", {})
-        status_time = d.setdefault("statusTime", {})
-        status_wl = d.setdefault("statusWl", {})
-        displaynames = d.setdefault("displaynames", {})
-        bw = d.setdefault("bw", {})
-        wl_bw = d.setdefault("wl_bw", {})
-        times = d.setdefault("time", {})
-        webui_passwords = d.setdefault("webui_passwords", {})
-        webui_users = d.setdefault("webui_users", {})
+            users = d.setdefault("users", {})
+            tokens = d.setdefault("tokens", {})
+            user_fingerprints = d.setdefault("userFingerprints", {})
+            status = d.setdefault("status", {})
+            status_time = d.setdefault("statusTime", {})
+            status_wl = d.setdefault("statusWl", {})
+            displaynames = d.setdefault("displaynames", {})
+            bw = d.setdefault("bw", {})
+            wl_bw = d.setdefault("wl_bw", {})
+            times = d.setdefault("time", {})
+            webui_passwords = d.setdefault("webui_passwords", {})
+            webui_users = d.setdefault("webui_users", {})
 
-        if username in users:
-            return "Username exists"
-        if ext_username in webui_users:
-            return "Ext Username exists"
+            if username in users:
+                return "Username exists"
+            if ext_username in webui_users:
+                return "Ext Username exists"
 
-        timee = int(time.time() + days * 86400) if days else 0
+            timee = int(time.time() + days * 86400) if days else 0
+    
+            if not match_item.get("perma", False):
+                consumed_code = {
+                    "code": code,
+                    "action": "register",
+                    "perma": False,
+                    "days": days,
+                    "gb": gb,
+                    "wl_gb": wl_gb
+                }
+                del codes[match_index]
+    
+            users[username] = userid
+            tokens[username] = token
+            user_fingerprints[username] = fingerprint
+            status[username] = True
+            status_time[username] = True
+            status_wl[username] = True
+            displaynames[username] = displayname
+            bw[username] = [gb, 0]
+            wl_bw[username] = [wl_gb, 0]
+            times[username] = timee
+            webui_passwords[ext_username] = hashed_password
+            webui_users[ext_username] = username
 
-        if not match_item.get("perma", False):
-            consumed_code = {
-                "code": code,
-                "action": "register",
-                "perma": False,
-                "days": days,
-                "gb": gb,
-                "wl_gb": wl_gb,
+            result = {
+                "username": username,
+                "token": token,
+                "uuid": userid,
+                "fingerprint": fingerprint,
+                "limit": gb,
+                "wl_limit": wl_gb,
+                "time": timee,
             }
-            del codes[match_index]
-
-        users[username] = userid
-        tokens[username] = token
-        user_fingerprints[username] = fingerprint
-        status[username] = True
-        status_time[username] = True
-        status_wl[username] = True
-        displaynames[username] = displayname
-        bw[username] = [gb, 0]
-        wl_bw[username] = [wl_gb, 0]
-        times[username] = timee
-        webui_passwords[ext_username] = hashed_password
-        webui_users[ext_username] = username
-
-        result = {
-            "username": username,
-            "token": token,
-            "uuid": userid,
-            "fingerprint": fingerprint,
-            "limit": gb,
-            "wl_limit": wl_gb,
-            "time": timee,
-        }
 
         try:
             self.add_users(username=username)
@@ -875,44 +875,19 @@ class Subscription:
         with self.cfg as t:
             t['codes'].append({"code": code, "action": action, "perma": permanent, "days": days, "gb": gb, "wl_gb": wl_gb})
 
-    def consume_code(self, code: str) -> dict | bool:
-        """Atomically find, validate, and delete (if non-perma) a code.
-        Returns the code dict on success, False if not found or invalid."""
-        box = []
-        def _u(t):
-            for i, item in enumerate(t['codes']):
-                if item.get('code') == code:
-                    action = item.get('action', '')
-                    if action not in ['register', 'bonus']:
-                        return
-                    box.append({
-                        'action': action,
-                        'perma': item.get('perma', False),
-                        'days': item.get('days', 0),
-                        'gb': item.get('gb', 0),
-                        'wl_gb': item.get('wl_gb', 0),
-                    })
-                    if not item.get('perma', False):
-                        del t['codes'][i]
-                    return
-        self.cfg.update(_u)
-        return box[0] if box else False
-
     def delete_code(self, code: str) -> None | bool:
         """Deletes a specified code. False if not found. Ignores 'perma' flag obviously."""
         
-        pos = None
-        for i, item in enumerate(self.cfg['codes']):
-            if item.get('code') == code:
-                pos = i
-                break
-        
-        if pos is None:
+        def _delete(t):
+            for i, item in enumerate(t['codes']):
+                if item.get('code') == code:
+                    del t['codes'][i]
+                    return True
             return False
-            
-        def _u(t):
-            del t['codes'][pos]
-        self.cfg.update(_u)
+        
+        result = self.cfg.mutate(_delete)
+        if not result:
+            return False
     def list_code(self) -> list:
         """List all codes, without any additional info."""
         x = []
@@ -1320,6 +1295,7 @@ class BWatch:
     def check(self):
         #1. check if someones limit is over
         # theres no global command cuz we dont dirrmectly edit T <-- these comments so ancient 
+        # new codebase, new mel
         for i in list(self.cfg['users'].keys()):
             if self.cfg['time'][i] != 0:
                 if (self.cfg['time'][i] - int(time.time())) <= 0:
@@ -1334,7 +1310,7 @@ class BWatch:
                         id = self.sub.get_username_telegram(tgid=i, reverse=True)
                         if id not in self.cfg['_notified']:
                             def _u(t): t['_notified'].append(id)
-                            self.cfg.update(_u)
+                            self.cfg.mutate(_u)
                             if self.bot: self.bot.msg(cast(int, id), 'warning_days', days=days)
             if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3:
                 if self.cfg['statusWl'].get(i, True):
@@ -1345,7 +1321,7 @@ class BWatch:
                 id = self.sub.get_username_telegram(tgid=i, reverse=True)
                 if id not in self.cfg['_wl_notified']:
                     def _u(t): t['_wl_notified'].append(id)
-                    self.cfg.update(_u)
+                    self.cfg.mutate(_u)
                     if self.bot: self.bot.msg(id, 'warning_traffic_whitelist', used=int(round(self.cfg['wl_bw'][i][1] / 10**6, 0)), available=self.cfg['wl_bw'][i][0])
             if not self.cfg['status'][i]:
                 continue
@@ -1359,7 +1335,7 @@ class BWatch:
                 id = self.sub.get_username_telegram(tgid=i, reverse=True)
                 if id not in self.cfg['_notified']:
                     def _u(t): t['_notified'].append(id)
-                    self.cfg.update(_u)                    
+                    self.cfg.mutate(_u)                    
                     if self.bot: self.bot.msg(id, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
     def is_first(self):
         now = datetime.now()

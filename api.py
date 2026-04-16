@@ -84,23 +84,7 @@ class Route(NamedTuple):
             api.log.critical(f"method {self.handler} doesnt exist!")
             return
         if self.rate_limit is not None:
-            _max = self.rate_limit
-            _func = func
-            @wraps(_func)
-            def rl_func(*args, **kwargs):
-                ip = request.headers.get('X-Real-IP', request.remote_addr)
-                now = time.time()
-                with api._rl_lock:
-                    stale = [k for k, v in api._rl_data.items() if v and now - v[-1] > 60]
-                    for k in stale:
-                        del api._rl_data[k]
-                    api._rl_data.setdefault(ip, [])
-                    api._rl_data[ip] = [t for t in api._rl_data[ip] if now - t < 60]
-                    if len(api._rl_data[ip]) >= _max:
-                        return _err(msg="Too many requests.", code=429)
-                    api._rl_data[ip].append(now)
-                return _func(*args, **kwargs)
-            func = rl_func
+            func = rate_limit(self.rate_limit)(func)
         api.app.add_url_rule(api.uri + self.path, self.handler, func, methods=[self.method])
 
 
