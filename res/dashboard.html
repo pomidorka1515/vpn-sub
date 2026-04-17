@@ -696,7 +696,7 @@ async function doDelete() {
   if (!(await confirmDialog(t('confirm_delete2'), t('confirm_title_final')))) return;
   const curPass = prompt(t('current_pw_required'));
   if (!curPass) return;
-  const res = await api('DELETE', '/delete', { current_password: curPass });
+  const res = await api('POST', '/delete', { current_password: curPass });
   if (!res) return;
   if (res.success) { window.location.href = AUTH_PAGE; }
   else toast(res.msg || 'Error', 'error');

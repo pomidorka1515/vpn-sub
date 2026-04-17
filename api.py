@@ -12,7 +12,7 @@ import hmac
 
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import cast, Tuple, Any, Callable, Literal, Optional, NamedTuple
 
 JsonifyValue =  str | int | float | bool | dict | list | tuple | uuid.UUID | None
@@ -165,9 +165,11 @@ def requires_fields(*fields) -> Callable[[Callable[..., Any]], Callable[..., Any
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
         def wrapper(*args, **kwargs):
-            content = request.json
+            content = request.get_json(silent=True)
             if content is None:
                 return _err("Missing JSON data.", 400)
+            if not isinstance(content, dict):
+                return _err("Body must be a JSON dict.", 400)
             missing = [x for x in fields if x not in content]
             if missing:
                 return _err(f"Missing fields: {', '.join(missing)}", 400)
@@ -189,8 +191,8 @@ class WebApi(BaseApi):
         Route('POST', '/webapi/settings', 'settings', 15),
         Route('POST', '/webapi/logout', 'logout', 20),
         Route('GET', '/webapi/fingerprints', 'fps', None),
-        Route('DELETE', '/webapi/delete', 'delete', 3),
-        Route('POST', '/webapi/validate', 'validate_username', 75),
+        Route('POST', '/webapi/delete', 'delete', 3),
+        Route('POST', '/webapi/validate', 'validate_username', 80),
         Route('POST', '/webapi/profiles', 'profiles', None),
         Route('GET', '/panel', 'gui_panel', None),
         Route('GET', '/auth', 'gui_auth', None)
@@ -303,7 +305,8 @@ class WebApi(BaseApi):
         except Exception as e:
             self.log.error(f"/delete {username}: {str(e)}")
             return _err("Internal server error", 500)
-    def logout(self) -> Response:
+    @requires_webapi_auth
+    def logout(self) -> ResponseType:
         resp, code = _ok(msg="Logged out")
         resp.set_cookie(
             'token', 
@@ -313,7 +316,7 @@ class WebApi(BaseApi):
             secure=True, 
             samesite='Lax'
         )
-        return resp
+        return resp, code
     @requires_webapi_auth
     def settings(self, username) -> ResponseType:
         """Update users display name or fingerprint.
@@ -375,7 +378,7 @@ class WebApi(BaseApi):
     @requires_fields('code')
     def bonus(self, username) -> ResponseType:
         """Apply bonus code."""
-        content = request.json
+        content = cast(dict, request.json)
         
         try:
             result = self.sub.apply_bonus_code(
@@ -431,7 +434,7 @@ class WebApi(BaseApi):
     @requires_fields('username', 'password', 'code', 'name')
     def register(self) -> ResponseType:
         """Register a new user via code."""
-        content = request.json    
+        content = cast(dict, request.json)
         try:
             result = self.sub.register_with_code(
                 code=cast(str, content['code']),
