@@ -13,7 +13,9 @@ import hmac
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
 from abc import ABC
-from typing import cast, Tuple, Any, Callable, Literal, Optional, NamedTuple
+from typing import cast, Tuple, Any, Callable, Literal, NamedTuple
+
+__all__ = ['WebApi', 'Api', 'BaseApi']
 
 JsonifyValue =  str | int | float | bool | dict | list | tuple | uuid.UUID | None
 HTTPMethod = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
@@ -66,10 +68,11 @@ class BaseApi(ABC):
         pass
 
 class Route(NamedTuple):
+    """A Flask route, used in BaseApi."""
     method: HTTPMethod
     path: str
     handler: str
-    rate_limit: Optional[int]
+    rate_limit: int | None = None
 
     def validate(self):
         if not self.path.startswith('/'):
@@ -476,7 +479,22 @@ class WebApi(BaseApi):
 
 class Api(BaseApi):
     ROUTES = [
-        
+        Route('GET', '/api/user/list', 'user_list'),
+        Route('GET', '/api/user/info', 'user_info'),
+        Route('POST', '/api/user/add', 'user_add'),
+        Route('POST', '/api/user/delete', 'user_delete'),
+        Route('GET', '/api/user/refresh', 'user_refresh'),
+        Route('GET', '/api/user/onlines', 'user_onlines'),
+        Route('POST', '/api/user/reset', 'user_reset'),
+
+
+        Route('GET', '/api/panel/status', 'panel_status'),
+
+
+        Route('GET', '/api/code/list', 'code_list'),
+        Route('GET', '/api/code/info', 'code_info'),
+        Route('POST', '/api/code/add', 'code_add'),
+        Route('POST', '/api/code/delete', 'code_delete')
     ]
 
     def __init__(self,
@@ -487,3 +505,47 @@ class Api(BaseApi):
         self.log = Logger(type(self).__name__)
         uri = f"/sub/{cfg['api_uri']}"
         super().__init__(app, cfg, sub, bw, uri)
+
+    # TODO: make this
+    @requires_admin_auth
+    def user_list(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    @requires_fields('user')
+    def user_info(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    @requires_fields('user', 'displayname')
+    def user_add(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    @requires_fields('user')
+    def user_delete(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    def user_refresh(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    def user_onlines(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    @requires_fields('user')
+    def user_reset(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    def panel_status(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    def code_list(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    @requires_fields('code')
+    def code_info(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    @requires_fields('code', 'action')
+    def code_add(self) -> ResponseType: return _err("Not implemented", 501)
+    
+    @requires_admin_auth
+    @requires_fields('code')
+    def code_delete(self) -> ResponseType: return _err("Not implemented", 501)
