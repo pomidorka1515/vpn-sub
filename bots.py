@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from config import Config
 from loggers import Logger
-from core import Subscription, BWatch
+from core import Subscription, BWatch, XUiSession
 
 import telebot
 import time
@@ -20,7 +20,9 @@ class AdminBot:
     Dependencies: Subscription
     Classes depending on this: none"""
 
-    def __init__(self, sub: Subscription, cfg: Config):
+    def __init__(self,
+                 sub: Subscription,
+                 cfg: Config):
         self.log = Logger(type(self).__name__)
         with self.log.loading():        
             self.cfg = cfg
@@ -35,14 +37,14 @@ class AdminBot:
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids
  
-    def msg(self, text: str, parse_mode: str = "HTML"):
+    def msg(self, text: str, parse_mode: str = "HTML") -> None:
         for uid in self.admin_uids:
             try:
                 self.bot.send_message(uid, text, parse_mode=parse_mode)
             except Exception as e:
                 self.log.error(f"Не удалось отправить сообщение админу {uid}: {e}")
     
-    def get_main_menu(self):
+    def get_main_menu(self) -> types.InlineKeyboardMarkup:
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton("👥 Список юзеров", callback_data="list_users"),
@@ -57,7 +59,7 @@ class AdminBot:
         )
         return markup
  
-    def get_codes_menu(self):
+    def get_codes_menu(self) -> types.InlineKeyboardMarkup:
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton("➕ Добавить код", callback_data="add_code"),
@@ -68,7 +70,7 @@ class AdminBot:
         )
         return markup
  
-    def get_users_menu(self, prefix: str):
+    def get_users_menu(self, prefix: str) -> types.InlineKeyboardMarkup:
         markup = types.InlineKeyboardMarkup(row_width=2)
         buttons = []
         for user in self.cfg['users'].keys():
@@ -78,8 +80,8 @@ class AdminBot:
         return markup
  
  
-    def cmd_start(self, message):
-        if not self.is_admin(message.from_user.id):
+    def cmd_start(self, message: types.Message) -> None:
+        if not self.is_admin(cast(types.User, message.from_user).id):
             return
         self.bot.send_message(
             message.chat.id, 
@@ -87,82 +89,88 @@ class AdminBot:
             reply_markup=self.get_main_menu()
         )
  
-    def handle_callbacks(self, call):
+    def handle_callbacks(self, call: types.CallbackQuery):
         if not self.is_admin(call.from_user.id):
             return
- 
-        chat_id = call.message.chat.id
-        self.bot.answer_callback_query(call.id)
         
+        data = cast(str, call.data)
+        message = cast(types.Message, call.message)
+        chat_id = message.chat.id
+        self.bot.answer_callback_query(call.id)
+
+
         try:
-            if call.data == "cancel":
-                self.bot.edit_message_text("Действие отменено. Главное меню:", chat_id, call.message.message_id, reply_markup=self.get_main_menu())
+            if data == "cancel":
+                self.bot.edit_message_text("Действие отменено. Главное меню:", chat_id, message.message_id, reply_markup=self.get_main_menu())
                 self.bot.clear_step_handler_by_chat_id(chat_id) 
 
-            elif call.data == "online_users":
+            elif data == "online_users":
                 self._cb_online_users(chat_id)  
             
-            elif call.data == "list_users":
+            elif data == "list_users":
                 self._cb_list_users(chat_id)
                 
-            elif call.data == "refresh_all":
+            elif data == "refresh_all":
                 self._cb_refresh(chat_id)
 
-            elif call.data == "reset_user":
+            elif data == "reset_user":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя:")
                 self.bot.register_next_step_handler(msg, self._step_reset_user)
 
-            elif call.data == "add_user":
+            elif data == "add_user":
                 msg = self.bot.send_message(chat_id, "Введите username нового пользователя (или /start для отмены):")
                 self.bot.register_next_step_handler(msg, self._step_add_user_name)
  
-            elif call.data == "action_info":
+            elif data == "action_info":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
                 self.bot.register_next_step_handler(msg, self._step_info_user)
  
-            elif call.data == "action_del":
+            elif data == "action_del":
                 if not self.cfg['users']:
                     self.bot.send_message(chat_id, "Список пуст.", reply_markup=self.get_main_menu())
                     return
-                self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, call.message.message_id, reply_markup=self.get_users_menu("dodel"))
+                self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, message.message_id, reply_markup=self.get_users_menu("dodel"))
  
-            elif call.data.startswith("dodel_"):
-                username = call.data.split("dodel_", 1)[1]
+            elif data.startswith("dodel_"):
+                username = data.split("dodel_", 1)[1]
                 self._cb_del_user(chat_id, username)
  
-            elif call.data == "codes_menu":
-                self.bot.edit_message_text("🎟 Управление кодами:", chat_id, call.message.message_id, reply_markup=self.get_codes_menu())
+            elif data == "codes_menu":
+                self.bot.edit_message_text("🎟 Управление кодами:", chat_id, message.message_id, reply_markup=self.get_codes_menu())
  
-            elif call.data == "list_codes":
+            elif data == "list_codes":
                 self._cb_list_codes(chat_id)
  
-            elif call.data == "info_code":
+            elif data == "info_code":
                 msg = self.bot.send_message(chat_id, "Введите код (или /start для отмены):")
                 self.bot.register_next_step_handler(msg, self._step_info_code)
  
-            elif call.data == "del_code":
+            elif data == "del_code":
                 msg = self.bot.send_message(chat_id, "Введите код для удаления (или /start для отмены):")
                 self.bot.register_next_step_handler(msg, self._step_del_code)
  
-            elif call.data == "add_code":
+            elif data == "add_code":
                 msg = self.bot.send_message(chat_id, "Введите название кода (или /start для отмены):")
                 self.bot.register_next_step_handler(msg, self._step_add_code_name)
 
-            elif call.data == "status_panels":
+            elif data == "status_panels":
                 self._cb_all_panels_status(chat_id)
-            elif call.data.startswith("codetype_"):
-                 code_type = call.data.split("codetype_", 1)[1]
-                 code_name = self._pending_codes.pop(chat_id, None)
-                 if not code_name:
-                     self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
-                     return
-                 msg = self.bot.send_message(chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML")
-                 self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name) 
+            elif data.startswith("codetype_"):
+                code_type = data.split("codetype_", 1)[1]
+                code_name = self._pending_codes.pop(chat_id, None)
+                if not code_name:
+                    self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
+                    return
+                msg = self.bot.send_message(chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML")
+                self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name) 
         except Exception as e:
             self.log.error(f"Ошибка в боте: {e}", exc_info=True)
             self.bot.send_message(chat_id, f"⚠️ Произошла ошибка: {e}")
 
-    def _cb_panel_info(self, chat_id, panel, last):
+    def _cb_panel_info(self, 
+                       chat_id: int, 
+                       panel: XUiSession, 
+                       last: bool) -> None:
         info = cast(dict, self.sub.getstatus(panel).get('obj'))
 
         sys_up = self.sub.fmt_time(info.get('uptime', 0))
@@ -199,7 +207,8 @@ class AdminBot:
 ├ <b>RAM:</b> <code>{info['appStats']['mem'] / MB:.2f} MB</code>
 └ <b>Uptime:</b> <code>{app_up}</code>"""
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None)
-    def _cb_all_panels_status(self, chat_id):
+
+    def _cb_all_panels_status(self, chat_id: int) -> None:
         msg = self.bot.send_message(chat_id, "⏳ Получение статуса панелей...")
         panels = list(self.sub.panels)
         for i, panel in enumerate(panels):
@@ -212,22 +221,23 @@ class AdminBot:
             self.bot.delete_message(chat_id, msg.message_id)
         except Exception:
             pass
-    def _cb_list_users(self, chat_id):
+    def _cb_list_users(self, chat_id: int) -> None:
         users = list(self.cfg['users'].keys())
+
         if not users:
             self.bot.send_message(chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu())
             return
         
         text = "👥 <b>Список пользователей:</b>\n\n" + "\n".join([f"- <code>{u}</code>" for u in users])
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
-    def _cb_online_users(self, chat_id):
+    def _cb_online_users(self, chat_id: int) -> None:
         online_users = cast(dict, self.sub.get_online_users(new = True))
         if not online_users:
             self.bot.send_message(chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu())
             return
         text = "👥 <b>Список пользователей онлайн:</b>\n\n" + "\n".join([f"- <code>{u}</code>{", логин: "+v if v else ""}" for u, v in online_users.items()])
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
-    def _cb_refresh(self, chat_id):
+    def _cb_refresh(self, chat_id: int) -> None:
         try:
             for cc in self.cfg['users'].keys():
                 self.sub.add_users(cc)
@@ -235,7 +245,7 @@ class AdminBot:
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}")
  
-    def _cb_info_user(self, chat_id, username):
+    def _cb_info_user(self, chat_id: int, username: str) -> None:
         if username not in self.cfg['users']:
             self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
             return
@@ -281,7 +291,7 @@ class AdminBot:
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}", reply_markup=self.get_main_menu())
  
-    def _cb_del_user(self, chat_id, username):
+    def _cb_del_user(self, chat_id: int, username: str) -> None:
         if username not in self.cfg['users']:
             self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
             return
@@ -291,9 +301,11 @@ class AdminBot:
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}")
  
-    def _step_reset_user(self, message):
-        if message.text.startswith('/'): return 
-        username = message.text.strip()
+    def _step_reset_user(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return 
+        username = text.strip()
+
         if not self.sub.isuser(username):
             self.bot.send_message(message.chat.id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
             return
@@ -304,9 +316,10 @@ class AdminBot:
             self.log.critical(f"exception in reset_user: {e}")
             return
         self.bot.send_message(message.chat.id, f"✅ Пользователь был сброшен.\n\nToken: <code>{obj['token']}</code>\nUUID: <code>{obj['uuid']}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
-    def _step_add_user_name(self, message):
-        if message.text.startswith('/'): return 
-        username = message.text.strip()
+    def _step_add_user_name(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return 
+        username = text.strip()
         if username in self.cfg['users']:
             self.bot.send_message(message.chat.id, "❌ Этот username уже существует.", reply_markup=self.get_main_menu())
             return
@@ -314,26 +327,29 @@ class AdminBot:
         msg = self.bot.send_message(message.chat.id, "Введите DisplayName (Отображаемое имя):")
         self.bot.register_next_step_handler(msg, self._step_add_user_display, username)
  
-    def _step_add_user_display(self, message, username):
-        if message.text.startswith('/'): return
-        displayname = message.text.strip()
+    def _step_add_user_display(self, message: types.Message, username: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        displayname = text.strip()
         
         msg = self.bot.send_message(message.chat.id, "Введите лимит в гигабайтах (или 0 для безлимита):")
         self.bot.register_next_step_handler(msg, self._step_add_user_limit, username, displayname)
-    def _step_add_user_limit(self, message, username, displayname):
-        if message.text.startswith('/'): return
+    def _step_add_user_limit(self, message: types.Message, username: str, displayname: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
         try:
-            limit = int(message.text.strip())
+            limit = int(text.strip())
         except ValueError:
             self.bot.send_message(message.chat.id, "❌ Ошибка: Лимит должен быть числом.", reply_markup=self.get_main_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Введите кол-во дней подписки (0 для безлимита):")
         self.bot.register_next_step_handler(msg, self._step_add_user_time, username, displayname, limit)
-    def _step_add_user_time(self, message, username, displayname, limit):
-        if message.text.startswith('/'): return
+    def _step_add_user_time(self, message: types.Message, username: str, displayname: str, limit: int) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
  
         try:
-            timee = int(message.text.strip())
+            timee = int(text.strip())
         except ValueError:
             self.bot.send_message(message.chat.id, "❌ Ошибка: Лимит времени должен быть числом.", reply_markup=self.get_main_menu())
             return
@@ -344,12 +360,13 @@ class AdminBot:
             self.bot.send_message(message.chat.id, f"✅ Пользователь <b>{username}</b> успешно добавлен!", parse_mode="HTML", reply_markup=self.get_main_menu())
         except Exception as e:
             self.bot.send_message(message.chat.id, f"❌ Ошибка при добавлении: {e}", reply_markup=self.get_main_menu())
-    def _step_info_user(self, message):
-        if message.text.startswith('/'): return
-        username = message.text.strip()
+    def _step_info_user(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        username = text.strip()
         self._cb_info_user(message.chat.id, username)
  
-    def _cb_list_codes(self, chat_id):
+    def _cb_list_codes(self, chat_id: int) -> None:
         try:
             codes = self.sub.list_code()
             if not codes:
@@ -360,9 +377,10 @@ class AdminBot:
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
  
-    def _step_info_code(self, message):
-        if message.text.startswith('/'): return
-        code = message.text.strip()
+    def _step_info_code(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        code = text.strip()
         try:
             info = cast(dict, self.sub.get_code(code))
             if not info:
@@ -380,9 +398,10 @@ class AdminBot:
         except Exception as e:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
  
-    def _step_del_code(self, message):
-        if message.text.startswith('/'): return
-        code = message.text.strip()
+    def _step_del_code(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        code = text.strip()
         try:
             x = self.sub.delete_code(code)
             if x is False:
@@ -392,9 +411,10 @@ class AdminBot:
         except Exception as e:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
  
-    def _step_add_code_name(self, message):
-        if message.text.startswith('/'): return
-        code_name = message.text.strip()
+    def _step_add_code_name(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        code_name = text.strip()
         self._pending_codes[message.chat.id] = code_name  
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -405,38 +425,42 @@ class AdminBot:
         self.bot.send_message(message.chat.id, f"Код: <b>{code_name}</b>\nВыберите тип:", parse_mode="HTML", reply_markup=markup)
     
 
-    def _step_add_code_days(self, message, code_type, code_name):
-        if message.text.startswith('/'): return
+    def _step_add_code_days(self, message: types.Message, code_type: str, code_name: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
         try:
-            days = int(message.text.strip())
+            days = int(text.strip())
         except ValueError:
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Введите количество гигабайтов (в гб, или 0 для безлимита):")
         self.bot.register_next_step_handler(msg, self._step_add_code_time, code_type, code_name, days)
  
-    def _step_add_code_time(self, message, code_type, code_name, days):
-        if message.text.startswith('/'): return
+    def _step_add_code_time(self, message: types.Message, code_type: str, code_name: str, days: int) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
         try:
-            gb = int(message.text.strip())
+            gb = int(text.strip())
         except ValueError:
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Введите количество гигабайтов для ВЛ локаций (в гб, или 0 для безлимита)")
         self.bot.register_next_step_handler(msg, self._step_add_code_wl_time, code_type, code_name, days, gb)
     
-    def _step_add_code_wl_time(self, message, code_type, code_name, days, gb):
-        if message.text.startswith('/'): return
+    def _step_add_code_wl_time(self, message: types.Message, code_type: str, code_name: str, days: int, gb: int) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
         try:
-            wl_gb = int(message.text.strip())
+            wl_gb = int(text.strip())
         except ValueError:
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Перманентный код? Да/Нет:")
         self.bot.register_next_step_handler(msg, self._step_add_code_perma, code_type, code_name, days, gb, wl_gb)
-    def _step_add_code_perma(self, message, code_type, code_name, days, gb, wl_gb):
-        if message.text.startswith('/'): return
-        content = message.text.strip().lower()
+    def _step_add_code_perma(self, message: types.Message, code_type: str, code_name: str, days: int, gb: int, wl_gb: int) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        content = text.strip().lower()
         perma = False
         if content == "да":
             perma = True
@@ -462,7 +486,7 @@ class AdminBot:
             )
         except Exception as e:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
-    def start(self):
+    def start(self) -> None:
         bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
         bot_thread.start()
         self.log.info("loaded telegram bot")
@@ -494,7 +518,7 @@ class PublicBot:
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback)
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback)
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback)
-            self.bot.message_handler(func=lambda m: True)(self.handle_text)
+            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe: True)(self.handle_text)
 
     def get_lang(self, uid: int) -> str:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
@@ -502,8 +526,8 @@ class PublicBot:
     def set_lang(self, uid: int, lang: str):
         with self.cfg as data:
             data['publicbot']['tg_lang'][str(uid)] = lang
-    def msg(self, tgid: int | str | None, key: str, **kwargs):
-        if tgid is None or isinstance(tgid, str): # evil pylance haha
+    def msg(self, tgid: int | str | None, key: str, **kwargs) -> None:
+        if tgid is None or isinstance(tgid, str):
             return
         lang = self.get_lang(tgid)
         t = self.TEXTS[lang]
@@ -514,7 +538,7 @@ class PublicBot:
             text = text.format(**kwargs)
         try: self.bot.send_message(tgid, text, parse_mode="HTML")
         except Exception: pass
-    def get_menu(self, uid: int):
+    def get_menu(self, uid: int) -> types.ReplyKeyboardMarkup:
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         is_reg = self.sub.is_registered(uid)
@@ -536,7 +560,7 @@ class PublicBot:
         return markup
 
 
-    def send_info(self, chat_id: int, uid: int, lang: str):
+    def send_info(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
         info = self.sub.get_info_telegram(uid)
         if not info:
@@ -578,8 +602,8 @@ class PublicBot:
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_menu(uid))
 
 
-    def cmd_start(self, message):
-        uid = message.from_user.id
+    def cmd_start(self, message: types.Message) -> None:
+        uid = cast(types.User, message.from_user).id
         self.bot.clear_step_handler_by_chat_id(message.chat.id)
         
         if str(uid) not in self.cfg['publicbot']['tg_lang']:
@@ -595,19 +619,22 @@ class PublicBot:
             msg_text = t['welcome_reg'] if self.sub.is_registered(uid) else t['welcome_new']
             self.bot.send_message(message.chat.id, msg_text, reply_markup=self.get_menu(uid))
 
-    def set_lang_callback(self, call):
+    def set_lang_callback(self, call: types.CallbackQuery) -> None:
+        data = cast(str, call.data)
+        message = cast(types.Message, call.message)
         uid = call.from_user.id
-        new_lang = call.data.split('_', 1)[1]
+        new_lang = data.split('_', 1)[1]
         self.set_lang(uid, new_lang)
         
         self.bot.answer_callback_query(call.id)
         t = self.TEXTS[new_lang]
-        self.bot.send_message(call.message.chat.id, t['lang_set'], reply_markup=self.get_menu(uid))
+        self.bot.send_message(message.chat.id, t['lang_set'], reply_markup=self.get_menu(uid))
 
-        self.bot.delete_message(call.message.chat.id, call.message.message_id)
+        self.bot.delete_message(message.chat.id, message.message_id)
 
-    def handle_text(self, message):
-        uid = message.from_user.id
+    def handle_text(self, message: types.Message) -> None:
+        
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         text = message.text
@@ -724,7 +751,8 @@ class PublicBot:
             msg = self.bot.send_message(message.chat.id, t['confirm_delete'], parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_delete)
 
-    def login_callback(self, call):
+    def login_callback(self, call: types.CallbackQuery) -> None:
+        message = cast(types.Message, call.message)
         uid = call.from_user.id
         if self.sub.is_registered(uid): return
         lang = self.get_lang(uid)
@@ -734,13 +762,14 @@ class PublicBot:
         self.bot.answer_callback_query(call.id)
 
         if action == "login_credentials":
-            msg = self.bot.send_message(call.message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())
+            msg = self.bot.send_message(message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_login_email)
         elif action == "login_token":
-            msg = self.bot.send_message(call.message.chat.id, t['enter_token'], reply_markup=types.ReplyKeyboardRemove())
+            msg = self.bot.send_message(message.chat.id, t['enter_token'], reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_login_token)
 
-    def settings_callback(self, call):
+    def settings_callback(self, call: types.CallbackQuery) -> None:
+        message = cast(types.Message, call.message)
         uid = call.from_user.id
         if not self.sub.is_registered(uid): return
         lang = self.get_lang(uid)
@@ -748,11 +777,11 @@ class PublicBot:
         action = call.data  # set_name, set_fp, set_pass, set_login
 
         self.bot.answer_callback_query(call.id)
-        try: self.bot.delete_message(call.message.chat.id, call.message.message_id)
+        try: self.bot.delete_message(message.chat.id, message.message_id)
         except Exception: pass
 
         if action == "set_name":
-            msg = self.bot.send_message(call.message.chat.id, t['settings_name_prompt'], reply_markup=types.ReplyKeyboardRemove())
+            msg = self.bot.send_message(message.chat.id, t['settings_name_prompt'], reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_settings_name)
         elif action == "set_fp":
             markup = types.InlineKeyboardMarkup(row_width=2)
@@ -761,20 +790,22 @@ class PublicBot:
             for fp in self.cfg['fingerprints']:
                 label = f"✅ {fp}" if fp == current_fp else fp
                 markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}"))
-            self.bot.send_message(call.message.chat.id, t['settings_fp_prompt'], reply_markup=markup)
+            self.bot.send_message(message.chat.id, t['settings_fp_prompt'], reply_markup=markup)
         elif action == "set_login":
-            msg = self.bot.send_message(call.message.chat.id, t['settings_login_prompt'], reply_markup=types.ReplyKeyboardRemove())
+            msg = self.bot.send_message(message.chat.id, t['settings_login_prompt'], reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_settings_login)
         elif action == "set_pass":
-            msg = self.bot.send_message(call.message.chat.id, t['settings_pass_prompt'], reply_markup=types.ReplyKeyboardRemove())
+            msg = self.bot.send_message(message.chat.id, t['settings_pass_prompt'], reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_settings_pass)
 
-    def fp_callback(self, call):
+    def fp_callback(self, call: types.CallbackQuery) -> None:
+        data = cast(str, call.data)
+        message = cast(types.Message, call.message)
         uid = call.from_user.id
         if not self.sub.is_registered(uid): return
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        fp = call.data[3:]  # strip "fp_"
+        fp = data[3:]  # strip "fp_"
 
         username = self.sub.get_username_telegram(uid)
         if not isinstance(username, str): return
@@ -782,22 +813,23 @@ class PublicBot:
         self.bot.answer_callback_query(call.id)
         result = self.sub.update_params(username=username, fingerprint=fp)
         if isinstance(result, str):
-            self.bot.send_message(call.message.chat.id, f"❌ {result}", reply_markup=self.get_menu(uid))
+            self.bot.send_message(message.chat.id, f"❌ {result}", reply_markup=self.get_menu(uid))
         else:
-            self.bot.send_message(call.message.chat.id, t['settings_fp_success'], reply_markup=self.get_menu(uid))
-        try: self.bot.delete_message(call.message.chat.id, call.message.message_id)
+            self.bot.send_message(message.chat.id, t['settings_fp_success'], reply_markup=self.get_menu(uid))
+        try: self.bot.delete_message(message.chat.id, message.message_id)
         except Exception: pass
 
-    def step_settings_name(self, message):
-        if message.text.startswith('/'):
+    def step_settings_name(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'):
             return self.cmd_start(message)
-        uid = message.from_user.id
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         username = self.sub.get_username_telegram(uid)
         if not isinstance(username, str): return
         
-        new_name = message.text.strip()
+        new_name = text.strip()
         if len(new_name) > 16:
             self.bot.send_message(message.chat.id, t['length_displayname'].format(ln=16), reply_markup=self.get_menu(uid))
             return
@@ -808,16 +840,17 @@ class PublicBot:
         else:
             self.bot.send_message(message.chat.id, t['settings_name_success'], reply_markup=self.get_menu(uid))
 
-    def step_settings_login(self, message):
-        if message.text.startswith('/'):
+    def step_settings_login(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'):
             return self.cmd_start(message)
-        uid = message.from_user.id
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         username = self.sub.get_username_telegram(uid)
         if not isinstance(username, str): return
 
-        new_login = message.text.strip()
+        new_login = text.strip()
         if len(new_login) > 32:
             self.bot.send_message(message.chat.id, t['length_username'].format(ln=16), reply_markup=self.get_menu(uid))
             return
@@ -828,10 +861,11 @@ class PublicBot:
         else:
             self.bot.send_message(message.chat.id, t['settings_login_success'], reply_markup=self.get_menu(uid))
 
-    def step_settings_pass(self, message):
-        if message.text.startswith('/'):
+    def step_settings_pass(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'):
             return self.cmd_start(message)
-        uid = message.from_user.id
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         username = self.sub.get_username_telegram(uid)
@@ -839,7 +873,7 @@ class PublicBot:
         if not self.cfg['webui_users'].get(username, None):
             self.bot.send_message(message.chat.id, t['no_account'], reply_markup=self.get_menu(uid))
             return
-        new_pass = message.text.strip()
+        new_pass = text.strip()
         try: self.bot.delete_message(message.chat.id, message.message_id)
         except Exception: pass
 
@@ -859,15 +893,16 @@ class PublicBot:
         else:
             self.bot.send_message(message.chat.id, t['settings_pass_success'], reply_markup=self.get_menu(uid))
 
-    def step_delete(self, message):
-        if message.text.startswith('/'):
+    def step_delete(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'):
             return self.cmd_start(message)
-        uid = message.from_user.id
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
 
         confirm = t['delete_confirm_input']
-        if message.text.strip().lower() != confirm.lower():
+        if text.strip().lower() != confirm.lower():
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
             return
 
@@ -882,13 +917,14 @@ class PublicBot:
             self.log.error(f"Delete error for uid {uid}: {e}")
             self.bot.send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
 
-    def step_login_token(self, message):
-        if message.text.startswith('/'): return self.cmd_start(message)
+    def step_login_token(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return self.cmd_start(message)
 
-        uid = message.from_user.id
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        raw = message.text.strip()
+        raw = text.strip()
 
         if '?' in raw:
             qs = urllib.parse.urlparse(raw).query
@@ -910,23 +946,25 @@ class PublicBot:
 
         self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
         self.send_info(message.chat.id, uid, lang)
-    def step_login_email(self, message):
-        if message.text.startswith('/'): return self.cmd_start(message)
+    def step_login_email(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return self.cmd_start(message)
             
-        uid = message.from_user.id
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        email = message.text.strip()
+        email = text.strip()
             
         msg = self.bot.send_message(message.chat.id, t['enter_pass'])
         self.bot.register_next_step_handler(msg, self.step_login_pass, email)
-    def step_login_pass(self, message, email):
-        if message.text.startswith('/'): return self.cmd_start(message)
+    def step_login_pass(self, message: types.Message, email: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return self.cmd_start(message)
         
-        uid = message.from_user.id
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        password = message.text.strip()
+        password = text.strip()
             
         try: self.bot.delete_message(message.chat.id, message.message_id)
         except Exception: pass    
@@ -945,14 +983,15 @@ class PublicBot:
                     
         self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
 
-    def step_reset(self, message):
-        if message.text.startswith('/'): return self.cmd_start(message)
-        uid = message.from_user.id
+    def step_reset(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return self.cmd_start(message)
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
 
         confirm = t['reset_confirm_input'] # string they need to say
-        userinput = message.text.strip().lower()
+        userinput = text.strip().lower()
         if userinput == confirm.lower():
             try:
                 username = self.sub.get_username_telegram(uid)
@@ -969,16 +1008,17 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
             return
 
-    def step_bonus(self, message):
-        uid = message.from_user.id
+    def step_bonus(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         
-        if message.text.startswith('/'): 
+        if text.startswith('/'): 
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
             return
             
-        code = message.text.strip()
+        code = text.strip()
         try:
             res = self.sub.bonus_code(value=uid, code=code)
             if res is False:
@@ -990,7 +1030,7 @@ class PublicBot:
              self.log.error(f"Bonus error for uid {uid}: {e}")
              self.bot.send_message(message.chat.id, "⚠️ Error occurred", reply_markup=self.get_menu(uid))
 
-    def start(self):
+    def start(self) -> None:
         if hasattr(self, 'bot'):
             bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
             bot_thread.start()

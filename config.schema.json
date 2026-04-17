@@ -15,6 +15,7 @@
     "properties": {
         "$schema": { "type": "string" },
         "uri": { "type": "string" },
+        "api_uri": { "type": "string" },
         "api_token": { "type": "string" },
         "salt": { "type": "string" },
         "sub_name": { "type": "string" },

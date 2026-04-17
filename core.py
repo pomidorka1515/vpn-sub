@@ -188,9 +188,11 @@ class Subscription:
         reversed_tokens = {t: u for u, t in self.cfg["tokens"].items()}
         return reversed_tokens.get(token, None)
 
-    def isuser(self, username: str):
+    def isuser(self, username: str) -> bool:
         """Know if a username exists."""
-        return username and username in self.cfg['users']
+        if username and username in self.cfg['users']:
+            return True
+        return False
     def restart(self, delay: int | float = 0.1) -> None:
         """Restart gunicorn with a delay (in seconds, defaults to 100ms)"""
         def _restart():

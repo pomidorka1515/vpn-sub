@@ -472,7 +472,18 @@ class WebApi(BaseApi):
             samesite='Lax'
         )
         return r, code
+    
 
+class Api(BaseApi):
+    ROUTES = [
+        
+    ]
 
-# class Api: 
-# Rewrite later
+    def __init__(self,
+                 app: Flask,
+                 cfg: Config,
+                 sub: Subscription,
+                 bw: BWatch):
+        self.log = Logger(type(self).__name__)
+        uri = f"/sub/{cfg['api_uri']}"
+        super().__init__(app, cfg, sub, bw, uri)
