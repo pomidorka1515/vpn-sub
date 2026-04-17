@@ -163,7 +163,7 @@ class AdminBot:
             self.bot.send_message(chat_id, f"⚠️ Произошла ошибка: {e}")
 
     def _cb_panel_info(self, chat_id, panel, last):
-        info = self.sub.getstatus(panel)
+        info = cast(dict, self.sub.getstatus(panel).get('obj'))
 
         sys_up = self.sub.fmt_time(info.get('uptime', 0))
         app_up = self.sub.fmt_time(info.get('appStats', {}).get('uptime', 0))
@@ -526,19 +526,15 @@ class PublicBot:
             )
         else:
             markup.add(
-                types.KeyboardButton(t['btn_info']),
-                types.KeyboardButton(t['btn_bonus']),
-                types.KeyboardButton(t['btn_settings']),
-                types.KeyboardButton(t['btn_reset']),
-                types.KeyboardButton(t['btn_logout']),
-                types.KeyboardButton(t['btn_help']),
-                types.KeyboardButton(t['btn_delete'])
+                types.KeyboardButton(t['btn_main_account']),
+                types.KeyboardButton(t['btn_main_sub'])
             )
         markup.add(
                 types.KeyboardButton(t['btn_lang']), 
                 types.KeyboardButton(t['btn_support'])
         )
         return markup
+
 
     def send_info(self, chat_id: int, uid: int, lang: str):
         t = self.TEXTS[lang]
@@ -643,6 +639,43 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['choose_login'], reply_markup=markup)
             # msg = self.bot.send_message(message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())
             # self.bot.register_next_step_handler(msg, self.step_login_email)
+        elif text in [self.TEXTS['ru']['btn_main_sub'], self.TEXTS['en']['btn_main_sub']]:
+            if not self.sub.is_registered(uid): return
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            markup.add(
+                types.KeyboardButton(t['btn_main_back']),
+
+                types.KeyboardButton(t['btn_info']),
+                types.KeyboardButton(t['btn_bonus']),
+                types.KeyboardButton(t['btn_reset']),
+
+                types.KeyboardButton(t['btn_lang']),
+                types.KeyboardButton(t['btn_support'])
+            )
+
+            self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=markup)
+
+        elif text in [self.TEXTS['ru']['btn_main_account'], self.TEXTS['en']['btn_main_account']]:
+            if not self.sub.is_registered(uid): return
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            markup.add(
+                types.KeyboardButton(t['btn_main_back']),
+
+                types.KeyboardButton(t['btn_settings']),
+                types.KeyboardButton(t['btn_logout']),
+                types.KeyboardButton(t['btn_help']),
+                types.KeyboardButton(t['btn_delete']),
+
+                types.KeyboardButton(t['btn_lang']),
+                types.KeyboardButton(t['btn_support'])
+            )
+
+            self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=markup)
+
+        elif text in [self.TEXTS['ru']['btn_main_back'], self.TEXTS['en']['btn_main_back']]:
+            if not self.sub.is_registered(uid): return
+            self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=self.get_menu(uid))
+
         elif text in [self.TEXTS['ru']['btn_reset'], self.TEXTS['en']['btn_reset']]:
             if not self.sub.is_registered(uid): return
             msg = self.bot.send_message(message.chat.id, t['confirm_reset'], reply_markup=types.ReplyKeyboardRemove())

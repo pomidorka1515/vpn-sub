@@ -210,7 +210,7 @@ class Subscription:
             if x.status_code not in [200]:
                 self.log.error(f"getstatus fail: {data['msg']}")
                 return {}
-            return data['obj']
+            return data
         except Exception as e:
             self.log.error(f"getstatus fail: {e}")
             return {}
@@ -222,7 +222,7 @@ class Subscription:
         def _fetch() -> list[dict]:
             x = panel.get(f"{panel.base_url}panel/api/inbounds/list")
             data = x.json()
-            if x.status_code not in [200]:
+            if x.status_code not in [200] or not data.get("success"):
                 self.log.error(f"getinbounds fail: {data['msg']}")
                 return []
             x = data['obj']
