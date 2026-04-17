@@ -1,4 +1,5 @@
 config.json
+.claudeignore
 *.lock
 __pycache__/
 *.pyc
