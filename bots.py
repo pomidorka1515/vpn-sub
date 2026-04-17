@@ -513,7 +513,7 @@ class PublicBot:
         if kwargs:
             text = text.format(**kwargs)
         try: self.bot.send_message(tgid, text, parse_mode="HTML")
-        except: pass
+        except Exception: pass
     def get_menu(self, uid: int):
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
@@ -716,7 +716,7 @@ class PublicBot:
 
         self.bot.answer_callback_query(call.id)
         try: self.bot.delete_message(call.message.chat.id, call.message.message_id)
-        except: pass
+        except Exception: pass
 
         if action == "set_name":
             msg = self.bot.send_message(call.message.chat.id, t['settings_name_prompt'], reply_markup=types.ReplyKeyboardRemove())
@@ -753,7 +753,7 @@ class PublicBot:
         else:
             self.bot.send_message(call.message.chat.id, t['settings_fp_success'], reply_markup=self.get_menu(uid))
         try: self.bot.delete_message(call.message.chat.id, call.message.message_id)
-        except: pass
+        except Exception: pass
 
     def step_settings_name(self, message):
         if message.text.startswith('/'):
@@ -808,7 +808,7 @@ class PublicBot:
             return
         new_pass = message.text.strip()
         try: self.bot.delete_message(message.chat.id, message.message_id)
-        except: pass
+        except Exception: pass
 
         # Need current ext_username to update password (update_params requires both)
         ext_username = None
@@ -896,7 +896,7 @@ class PublicBot:
         password = message.text.strip()
             
         try: self.bot.delete_message(message.chat.id, message.message_id)
-        except: pass    
+        except Exception: pass    
         users_pw = cast(dict, self.cfg.get('webui_passwords', {}))
         webui_users = cast(dict, self.cfg.get('webui_users', {}))
         

@@ -1358,7 +1358,7 @@ class BWatch:
         def _u(t): 
             t['_notified'] = []
             t['_wl_notified'] = []
-        self.cfg.update(_u)
+        self.cfg.mutate(_u)
     def _every_120s(self):
         while not self._stop_event.wait(120):
             self.check()

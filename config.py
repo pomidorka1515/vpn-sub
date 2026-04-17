@@ -255,17 +255,6 @@ class Config(MutableMapping[str, Any]):
             finally:
                 fcntl.flock(lock_fp, fcntl.LOCK_UN)
 
-    def _file_signature(self) -> tuple[int, int, int, int] | None:
-        try:
-            stat_result = os.stat(self._path)
-        except FileNotFoundError:
-            return None
-        return (
-            stat_result.st_mtime_ns,
-            stat_result.st_size,
-            stat_result.st_ino,
-            stat_result.st_dev,
-        )
 
     def _read_json_object(self) -> dict[str, Any]:
         try:
