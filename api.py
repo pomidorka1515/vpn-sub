@@ -79,12 +79,13 @@ class Route(NamedTuple):
 
     def register(self, api: BaseApi):
         try:
-            func = getattr(api, self.handler)
+            func = getattr(type(api), self.handler)
         except AttributeError:
             api.log.critical(f"method {self.handler} doesnt exist!")
             return
         if self.rate_limit is not None:
             func = rate_limit(self.rate_limit)(func)
+        func = func.__get__(api, type(api))
         api.app.add_url_rule(api.uri + self.path, self.handler, func, methods=[self.method])
 
 
