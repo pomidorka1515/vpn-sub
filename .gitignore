@@ -12,3 +12,4 @@ venv/
 *.swp
 *.md
 !README.md
+!API.md
