@@ -2,3 +2,4 @@ jsonschema>=4.20.0
 requests>=2.31.0
 pyTelegramBotAPI>=4.15.0
 Flask>=2.3.0
+qrcode
