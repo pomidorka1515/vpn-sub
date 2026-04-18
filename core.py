@@ -142,14 +142,17 @@ class Subscription:
     Dependencies: XUiSession, Config.
     Classes depending on this: Literally all except Logger, Config, XUiSession"""
     def __init__(self, 
-                 cfg: Config, 
+                 cfg: Config,
+                 app: Flask,
                  panels: list[XUiSession],
                  whitelist_panel: XUiSession | None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
+            self.app = app
             self.whitelist_panel = whitelist_panel
             self.browser_html = ""
+            self.uri = cfg['uri']
             self.fps = self.cfg['fingerprints']
             self.nginx404 = nginx_404
             self.resp = Response(self.nginx404, status=404, mimetype='text/html')
@@ -160,11 +163,24 @@ class Subscription:
             }
             self.panels = panels.copy()
             self.SALT = self.cfg['salt']
-            with open('/var/www/sub/index.html', 'r') as f:
+            with open('res/browser.html', 'r') as f:
                 self.browser_html = f.read()
             if self.whitelist_panel:
                 self.panels.append(self.whitelist_panel)
+            self.start()
 
+    def start(self):
+        @self.app.route(f"/{self.uri}/redirect")
+        def _redir():
+            return send_file('res/redirect.html', etag=False)
+        @self.app.route(f"/{self.uri}", strict_slashes=False)
+        def _sub():
+            return self.get_subscription(
+                token=request.args.get('token', ''),
+                lang=request.args.get('lang', ''),
+                ua=request.headers.get('User-Agent', ''),
+                ip=request.headers.get('X-Real-IP', '')
+            )
     def hash(self, s: str) -> str:
         return hashlib.sha256((self.SALT + s).encode()).hexdigest()
     
@@ -206,6 +222,7 @@ class Subscription:
         bio = io.BytesIO()
         img.save(bio, 'PNG')
         bio.seek(0)
+        bio.name = "qr.png"
         return bio
     
     def restart(self, delay: int | float = 0.1) -> None:
@@ -1031,6 +1048,7 @@ class Subscription:
         if h > 0:
             return f"{h}ч {m}м"
         return f"{m}м"
+    
     def get_subscription(self, token: str, lang: str, ua: str, ip: str) -> Response:
         """You alredy know what this is."""
         if not token:
@@ -1388,3 +1406,4 @@ class BWatch:
     def _every_24h(self):
         while not self._stop_event.wait(86400):
             self.reset()
+

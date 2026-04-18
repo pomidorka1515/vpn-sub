@@ -56,7 +56,7 @@ for i, v in cfg['3xui'].items():
         log.critical(f"ERROR when initializing panel {i}: {str(e)}")
 
 # Create instances
-sub = Subscription(cfg=cfg, panels=panels, whitelist_panel=wl) # type: ignore
+sub = Subscription(cfg=cfg, app=app, panels=panels, whitelist_panel=wl) # type: ignore
 bw = BWatch(cfg=cfg, sub=sub)
 # api = Api(app=app, cfg=cfg, sub=sub, bw=bw)
 webapi = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)
@@ -91,17 +91,8 @@ loggers = [
 for l in loggers:
     l.set_tg_bot(bot=adminbot)
 
-@app.route(f"/{cfg['uri']}", strict_slashes=False)
-def get_sub() -> Response:
-    """Helper for get_sub method. Not feeling like chaining the classes even more."""
-    return sub.get_subscription(
-        token = request.args.get('token', ''),
-        lang = request.args.get('lang', ''),
-        ua = request.headers.get('User-Agent', ''),
-        ip = request.headers.get('X-Real-IP', '')
-    )
-
 log.info("Launch successful!")
 
 if __name__ == '__main__': # Dev, gunicorn doesnt gaf
     app.run(port=5550)
+    

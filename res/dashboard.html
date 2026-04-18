@@ -90,6 +90,26 @@ body {
 .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
 .btn-copy.copied { border-color: var(--green); color: var(--green); }
 
+.qr-section {
+  margin-top: 16px; padding: 16px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  display: flex; justify-content: center; align-items: center;
+}
+.qr-container { position: relative; display: inline-block; }
+.qr-container canvas {
+  border-radius: 8px; background: white; padding: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.btn-close {
+  position: absolute; top: -8px; right: -8px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text2); font-size: 14px; font-weight: bold;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+.btn-close:hover { background: var(--red); color: white; border-color: var(--red); }
+
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .stat-item { padding: 14px; background: var(--bg); border-radius: 8px; }
 .stat-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
@@ -259,6 +279,13 @@ body {
     <div class="sub-link-wrap">
       <div class="sub-link-box" id="subLink">—</div>
       <button class="btn-copy" onclick="copyLink()" id="btnCopy"></button>
+      <button class="btn-copy" onclick="showQrCode()" id="btnQr" data-t="qr"></button>
+    </div>
+    <div class="qr-section" id="qrSection" style="display: none;">
+      <div class="qr-container">
+        <canvas id="qrCanvas" width="200" height="200"></canvas>
+        <button class="btn-close" onclick="hideQrCode()">×</button>
+      </div>
     </div>
   </div>
 
@@ -369,7 +396,7 @@ const L = {
     password: 'Password', current_password: 'Current password', token: 'Token',
     current_pw_required: 'Enter your current password to confirm.',
     invalid_current_pw: 'Invalid current password',
-    copy: 'Copy', copied: 'Copied', apply: 'Apply', save: 'Save', saved: 'Saved',
+    copy: 'Copy', copied: 'Copied', qr: 'QR', apply: 'Apply', save: 'Save', saved: 'Saved',
     refresh: 'Refresh', logout: 'Logout',
     reset_uuid: 'Reset UUID & token', delete_account: 'Delete account',
     enter_code: 'Enter code', keep_empty: 'Leave empty to keep',
@@ -398,7 +425,7 @@ const L = {
     password: 'Пароль', current_password: 'Текущий пароль', token: 'Токен',
     current_pw_required: 'Введите текущий пароль для подтверждения.',
     invalid_current_pw: 'Неверный текущий пароль',
-    copy: 'Копировать', copied: 'Скопировано', apply: 'Применить', save: 'Сохранить', saved: 'Сохранено',
+    copy: 'Копировать', copied: 'Скопировано', qr: 'QR', apply: 'Применить', save: 'Сохранить', saved: 'Сохранено',
     refresh: 'Обновить', logout: 'Выйти',
     reset_uuid: 'Сбросить UUID и токен', delete_account: 'Удалить аккаунт',
     enter_code: 'Введите код', keep_empty: 'Оставьте пустым',
@@ -431,6 +458,7 @@ function renderLang() {
   document.getElementById('btnRefresh').textContent = t('refresh');
   document.getElementById('btnLogout').textContent = t('logout');
   document.getElementById('btnCopy').textContent = t('copy');
+  document.getElementById('btnQr').textContent = t('qr');
   document.getElementById('btnApply').textContent = t('apply');
   document.getElementById('btnSave').textContent = t('save');
   document.getElementById('btnReset').textContent = t('reset_uuid');
@@ -705,6 +733,41 @@ async function doDelete() {
 async function doLogout() {
   try { await api('POST', '/logout'); } catch {}
   window.location.href = AUTH_PAGE;
+}
+
+async function showQrCode() {
+  const link = document.getElementById('subLink').textContent;
+  if (!link || link === '—') return;
+
+  try {
+    const res = await fetch(API + '/qr', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: link })
+    });
+
+    if (!res.ok) throw new Error('Failed to generate QR code');
+
+    const blob = await res.blob();
+    const canvas = document.getElementById('qrCanvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      document.getElementById('qrSection').style.display = 'block';
+    };
+
+    img.src = URL.createObjectURL(blob);
+  } catch (err) {
+    toast('Failed to generate QR code', 'error');
+  }
+}
+
+function hideQrCode() {
+  document.getElementById('qrSection').style.display = 'none';
 }
 
 renderLang();

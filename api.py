@@ -197,7 +197,8 @@ class WebApi(BaseApi):
         Route('POST', '/webapi/validate', 'validate_username', 80),
         Route('POST', '/webapi/profiles', 'profiles', None),
         Route('GET', '/panel', 'gui_panel', None),
-        Route('GET', '/auth', 'gui_auth', None)
+        Route('GET', '/auth', 'gui_auth', None),
+        Route('POST', '/webapi/qr', 'qr', 80)
     ]
     def __init__(self,
                  app: Flask,
@@ -239,6 +240,13 @@ class WebApi(BaseApi):
         return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
     def gui_auth(self) -> ResponseType:
         return send_file('/var/www/sub/new/res/auth.html', etag=False)
+
+    @requires_webapi_auth
+    @requires_fields('text')
+    def qr(self, username) -> ResponseType:
+        content = cast(dict, request.json)
+        text = content.get('text')
+        return send_file(self.sub.make_qr(text), mimetype="image/png", etag=False)
     @requires_fields('username')
     def validate_username(self) -> ResponseType:
         """Check if a username is valid (no illegal chars). POST {"username": "..."}"""
@@ -558,3 +566,4 @@ class Api(BaseApi):
     @requires_admin_auth
     @requires_fields('code')
     def code_delete(self) -> ResponseType: return _err("Not implemented", 501)
+

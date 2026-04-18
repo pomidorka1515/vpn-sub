@@ -577,9 +577,6 @@ class PublicBot:
             
         status = "🟢" if info['status'] else "🔴"
         online = "🟢" if self.sub.is_online(info['username']) else "🔴"
-        domain = "pomi.lol" 
-        uri = self.cfg['uri']
-        link = f"https://{domain}/{uri}?token={info['token']}&lang={lang}"
         fingerprint = self.cfg['userFingerprints'].get(info['username'])
         text = t['info_text'].format(
             status=status,
@@ -596,8 +593,7 @@ class PublicBot:
             down=info['down'],
             wl_down=info['wl_down'],
             days=time_str,
-            fingerprint=fingerprint,
-            link=link
+            fingerprint=fingerprint
         )
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_menu(uid))
 
@@ -673,6 +669,7 @@ class PublicBot:
                 types.KeyboardButton(t['btn_main_back']),
 
                 types.KeyboardButton(t['btn_info']),
+                types.KeyboardButton(t['btn_get_sub']),
                 types.KeyboardButton(t['btn_bonus']),
                 types.KeyboardButton(t['btn_reset']),
 
@@ -751,6 +748,29 @@ class PublicBot:
             msg = self.bot.send_message(message.chat.id, t['confirm_delete'], parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_delete)
 
+        elif text in [self.TEXTS['ru']['btn_get_sub'], self.TEXTS['en']['btn_get_sub']]:
+            if not self.sub.is_registered(uid): return
+            self.send_link(message.chat.id, uid, lang)
+    def send_link(self, chat_id: int, uid: int, lang: str) -> None:
+        t = self.TEXTS[lang]
+        info = self.sub.get_info_telegram(uid)
+        if not info:
+            return
+
+        link = f"https://pomi.lol/{self.cfg['uri']}?token={info['token']}&lang={lang}"
+        
+        qr = self.sub.make_qr(link)
+
+        text = t['get_sub_text'].format(
+            link=link
+        )
+        
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton(t['get_sub_btn_link'], url=link),
+            types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"https://pomi.lol/{self.cfg['uri']}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
+        )
+        self.bot.send_photo(chat_id, qr, text, parse_mode="Markdown", reply_markup=markup)
     def login_callback(self, call: types.CallbackQuery) -> None:
         message = cast(types.Message, call.message)
         uid = call.from_user.id
