@@ -19,6 +19,9 @@ import signal
 import urllib.parse
 import os
 import sys
+import io
+import qrcode
+from PIL import Image
 
 from flask import Flask, Response, send_file, request
 from datetime import timedelta, datetime, timezone
@@ -197,6 +200,14 @@ class Subscription:
         if username and username in self.cfg['users']:
             return True
         return False
+    
+    def make_qr(self, text: str) -> io.BytesIO:
+        img = qrcode.make(text)
+        bio = io.BytesIO()
+        img.save(bio, 'PNG')
+        bio.seek(0)
+        return bio
+    
     def restart(self, delay: int | float = 0.1) -> None:
         """Restart gunicorn with a delay (in seconds, defaults to 100ms)"""
         def _restart():

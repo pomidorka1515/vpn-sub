@@ -503,16 +503,23 @@ class Api(BaseApi):
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
         uri = f"/sub/{cfg['api_uri']}"
+        self.token = cfg['api_token']
+        self.resp = Response(nginx_404, status=404, mimetype="text/html")
         super().__init__(app, cfg, sub, bw, uri)
 
     # TODO: make this
     @requires_admin_auth
-    def user_list(self) -> ResponseType: return _err("Not implemented", 501)
+    def user_list(self) -> ResponseType: 
+        users = list(self.cfg['users'].keys())
+        if not users:
+            return _ok(obj=[])
+        return _ok(obj=users)
+        
     
     @requires_admin_auth
     @requires_fields('user')
-    def user_info(self) -> ResponseType: return _err("Not implemented", 501)
-    
+    def user_info(self) -> ResponseType:
+        pass
     @requires_admin_auth
     @requires_fields('user', 'displayname')
     def user_add(self) -> ResponseType: return _err("Not implemented", 501)
@@ -525,8 +532,11 @@ class Api(BaseApi):
     def user_refresh(self) -> ResponseType: return _err("Not implemented", 501)
     
     @requires_admin_auth
-    def user_onlines(self) -> ResponseType: return _err("Not implemented", 501)
-    
+    def user_onlines(self) -> ResponseType:
+        online_users = cast(dict, self.sub.get_online_users(new = True))
+        if not online_users:
+            return _ok(obj=[])
+        return _ok(obj=online_users)
     @requires_admin_auth
     @requires_fields('user')
     def user_reset(self) -> ResponseType: return _err("Not implemented", 501)
