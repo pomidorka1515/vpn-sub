@@ -8,7 +8,6 @@ import threading
 import time
 import uuid
 import random
-import hmac
 
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
@@ -226,7 +225,7 @@ class WebApi(BaseApi):
         users_pw = cast(dict, self.cfg.get('webui_passwords', {}))
         if username not in users_pw:
             return False
-        if not hmac.compare_digest(users_pw[username], self.sub.hash(password)):
+        if not self.sub.compare(users_pw[username], self.sub.hash(password)):
             return False
         webui_users = cast(dict, self.cfg.get('webui_users', {}))
         internal = webui_users.get(username)
@@ -287,7 +286,7 @@ class WebApi(BaseApi):
         if not cur_ext:
             return _err("Account has no credentials set", 400)
         stored = cast(dict, self.cfg.get('webui_passwords', {})).get(cur_ext, '')
-        if not stored or not hmac.compare_digest(stored, self.sub.hash(current_password)):
+        if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
             return _err("Invalid current password", 401)
         try:
             self.sub.delete_user(
@@ -350,7 +349,7 @@ class WebApi(BaseApi):
             if not cur_ext:
                 return _err("Account has no credentials set", 400)
             stored = cast(dict, self.cfg.get('webui_passwords', {})).get(cur_ext, '')
-            if not stored or not hmac.compare_digest(stored, self.sub.hash(current_password)):
+            if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
                 return _err("Invalid current password", 401)
         try:
             x = self.sub.update_params(

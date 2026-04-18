@@ -7,6 +7,7 @@ from config import Config
 import requests
 import threading
 import hashlib
+import hmac
 import re
 import json
 import string
@@ -163,6 +164,9 @@ class Subscription:
 
     def hash(self, s: str) -> str:
         return hashlib.sha256((self.SALT + s).encode()).hexdigest()
+    
+    def compare(self, a: str, b: str) -> bool:
+        return hmac.compare_digest(a, b)
     
     def isuuid(self, s: str) -> bool:
         """Validate a UUID."""
