@@ -282,9 +282,15 @@ body {
       <button class="btn-copy" onclick="showQrCode()" id="btnQr" data-t="qr"></button>
     </div>
     <div class="qr-section" id="qrSection" style="display: none;">
-      <div class="qr-container">
-        <canvas id="qrCanvas" width="200" height="200"></canvas>
-        <button class="btn-close" onclick="hideQrCode()">×</button>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:12px; width:100%">
+        <div class="lang-toggle">
+          <button class="lang-btn active" id="qrBtnLink" onclick="setQrMode('link')" data-t="qr_link"></button>
+          <button class="lang-btn" id="qrBtnHapp" onclick="setQrMode('happ')" data-t="qr_happ"></button>
+        </div>
+        <div class="qr-container">
+          <canvas id="qrCanvas" width="200" height="200"></canvas>
+          <button class="btn-close" onclick="hideQrCode()">×</button>
+        </div>
       </div>
     </div>
   </div>
@@ -398,6 +404,7 @@ const L = {
     invalid_current_pw: 'Invalid current password',
     copy: 'Copy', copied: 'Copied', qr: 'QR', apply: 'Apply', save: 'Save', saved: 'Saved',
     refresh: 'Refresh', logout: 'Logout',
+    qr_link: 'Link', qr_happ: 'Happ',
     reset_uuid: 'Reset UUID & token', delete_account: 'Delete account',
     enter_code: 'Enter code', keep_empty: 'Leave empty to keep',
     online: 'Online', offline: 'Offline',
@@ -427,6 +434,7 @@ const L = {
     invalid_current_pw: 'Неверный текущий пароль',
     copy: 'Копировать', copied: 'Скопировано', qr: 'QR', apply: 'Применить', save: 'Сохранить', saved: 'Сохранено',
     refresh: 'Обновить', logout: 'Выйти',
+    qr_link: 'Ссылка', qr_happ: 'Happ',
     reset_uuid: 'Сбросить UUID и токен', delete_account: 'Удалить аккаунт',
     enter_code: 'Введите код', keep_empty: 'Оставьте пустым',
     online: 'В сети', offline: 'Не в сети',
@@ -463,6 +471,8 @@ function renderLang() {
   document.getElementById('btnSave').textContent = t('save');
   document.getElementById('btnReset').textContent = t('reset_uuid');
   document.getElementById('btnDelete').textContent = t('delete_account');
+  document.getElementById('qrBtnLink').textContent = t('qr_link');
+  document.getElementById('qrBtnHapp').textContent = t('qr_happ');
   document.getElementById('bonusInput').placeholder = t('enter_code');
   document.getElementById('setUser').placeholder = t('keep_empty');
   document.getElementById('setPass').placeholder = t('keep_empty');
@@ -739,12 +749,11 @@ async function showQrCode() {
   const link = document.getElementById('subLink').textContent;
   if (!link || link === '—') return;
 
+  let url = API + '/qr?lang=' + lang;
+  if (qrMode === 'happ') url += '&happ=1';
+
   try {
-    const res = await fetch(API + '/qr', {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: link })
-    });
+    const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
 
     if (!res.ok) throw new Error('Failed to generate QR code');
 
@@ -768,6 +777,14 @@ async function showQrCode() {
 
 function hideQrCode() {
   document.getElementById('qrSection').style.display = 'none';
+}
+
+let qrMode = 'link';
+function setQrMode(mode) {
+  qrMode = mode;
+  document.getElementById('qrBtnLink').classList.toggle('active', mode === 'link');
+  document.getElementById('qrBtnHapp').classList.toggle('active', mode === 'happ');
+  showQrCode();
 }
 
 renderLang();

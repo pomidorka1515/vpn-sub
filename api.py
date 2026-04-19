@@ -201,7 +201,7 @@ class WebApi(BaseApi):
         Route('POST', '/webapi/profiles', 'profiles', None),
         Route('GET', '/panel', 'gui_panel', None),
         Route('GET', '/auth', 'gui_auth', None),
-        Route('POST', '/webapi/qr', 'qr', 80)
+        Route('GET', '/webapi/qr', 'qr', 80)
     ]
     def __init__(self,
                  app: Flask,
@@ -251,11 +251,25 @@ class WebApi(BaseApi):
         return send_file('/var/www/sub/new/res/auth.html', etag=False)
 
     @requires_webapi_auth
-    @requires_fields('text')
-    def qr(self, username) -> ResponseType:
-        content = cast(dict, request.json)
-        text = content.get('text')
-        return send_file(self.sub.make_qr(text), mimetype="image/png", etag=False)
+    def qr(self, username):
+        lang = request.args.get('lang', 'en')
+        if lang not in ['en', 'ru']:
+            lang = 'en'
+        
+        token = self.cfg['tokens'][username]
+        link = f"https://pomi.lol/sub?token={token}&lang={lang}"
+        
+        if request.args.get('happ') == '1':
+            link = f"happ://add/{link}"
+        
+        try:
+            buf = self.sub.make_qr(link)
+        except ValueError as e:
+            return _err(str(e), 400)
+        
+        response = make_response(send_file(buf, mimetype='image/png'))
+        response.headers['Cache-Control'] = 'private, max-age=300'
+        return response
     @requires_fields('username')
     def validate_username(self) -> ResponseType:
         """Check if a username is valid (no illegal chars). POST {"username": "..."}"""
