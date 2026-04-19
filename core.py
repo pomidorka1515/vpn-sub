@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from loggers import Logger
 from config import Config
-# from bots import PublicBot
+from session import XUiSession
 
-import requests
 import threading
 import hashlib
 import hmac
@@ -21,7 +20,6 @@ import os
 import sys
 import io
 import qrcode
-from PIL import Image
 
 from flask import Flask, Response, send_file, request
 from datetime import timedelta, datetime, timezone
@@ -42,101 +40,6 @@ nginx_404 = (
 if sys.platform != 'linux':
     raise RuntimeError("Must be run on Linux.")
 # time.time() - panel._cache_time < panel.refresh_interval
-class XUiSession(requests.Session):
-    """Internal use only class for making requests to XUi easy.
-    Dependencies: none
-    Classes depending on this: Subscription"""
-    def __init__(self,
-                 name: str,
-                 address: str,
-                 port: int | str,
-                 uri: str,
-                 username: str,
-                 password: str,
-                 refresh_interval=60,
-                 https: bool = False,
-                 nginx_auth: tuple | None = None,  # nginx_auth=('user', 'pass')
-                 ignore_inbounds: list[int] | None = None
-                ):
-        self.log = Logger(type(self).__name__)
-        with self.log.loading():
-            super().__init__()
-            self.username = username
-            self.password = password
-            self.refresh_interval = refresh_interval
-            self.ignore_inbounds = ignore_inbounds if ignore_inbounds is not None else []
-            protocol = "https" if https else "http"
-            clean_uri = f"/{uri.strip('/')}/" if uri.strip('/') else "/"
-            self.port = str(port)
-            self.address = address
-            self.name = name
-            self.local = self.address in ('localhost', '::1', '127.0.0.1')
-            self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
-            self.last_login = None
-            self._lock = threading.Lock()
-            self._running = False
-            self._cache_lock = threading.Lock()
-            self._cache: list[dict] | None = None
-            self._cache_time: float = 0
-    
-            if nginx_auth:
-                self.auth = nginx_auth
-            self.login()
-
-    def request(self, *args, **kwargs):
-        if self._needs_refresh():
-            self.login()
-        return super().request(*args, **kwargs)
-
-    def login(self):
-        self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui ")
-        with self._lock:
-            try:
-                login_url = f"{self.base_url}login"
-                login_data = {"username": self.username, "password": self.password}
-                response = super().request(
-                    "POST",
-                    login_url,
-                    json=login_data,
-                    headers={"Content-Type": "application/json"},
-                    timeout=10
-                )
-
-                if response.status_code != 200:
-                    raise Exception(f"HTTP {response.status_code}")
-
-                json_res = response.json()
-                if not json_res.get("success"):
-                    raise Exception(f"{json_res.get('msg')}")
-
-                self.last_login = datetime.now()
-                self.log.info(f"{self.address}:{self.port} > logged in as {self.username}")
-
-                if not self._running:
-                    self._start_refresh_thread()
-
-            except Exception as e:
-                self.log.critical(f"{self.address}:{self.port} > login failed: {str(e)}")
-                raise
-
-    def _start_refresh_thread(self):
-        self._running = True
-        def refresh_loop():
-            while self._running:
-                time.sleep(60)
-                if self._needs_refresh():
-                    try:
-                        self.log.info(f"{self.address}:{self.port} > refreshing session")
-                        self.login()
-                    except Exception:
-                        pass
-        thread = threading.Thread(target=refresh_loop, daemon=True)
-        thread.start()
-
-    def _needs_refresh(self):
-        if not self.last_login:
-            return True
-        return (datetime.now() - self.last_login) > timedelta(minutes=self.refresh_interval)
 
 class Subscription:
     """Core class, the heart of this monolith.
@@ -1086,7 +989,6 @@ Lang: {lang}""")
             lang=lang,
             bandwidths=bandwidths,
             status=status,
-            statusWl=statusWl,
             statusTime=statusTime,
             ts=times
         )
@@ -1354,7 +1256,7 @@ class BWatch:
                     mem_pct = (mem['current'] / mem['total']) * 100
                     if mem_pct > 90:
                         problems.append(f"RAM: {mem_pct:.0f}%")
-                
+
                 disk = status.get('disk', {})
                 if disk.get('total', 0) > 0:
                     disk_pct = (disk['current'] / disk['total']) * 100

@@ -549,8 +549,7 @@ class Api(BaseApi):
     
     @requires_admin_auth
     @requires_fields('user')
-    def user_info(self) -> ResponseType:
-        pass
+    def user_info(self) -> ResponseType: return _err("Not implemented", 501)
     @requires_admin_auth
     @requires_fields('user', 'displayname')
     def user_add(self) -> ResponseType: return _err("Not implemented", 501)

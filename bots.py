@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from config import Config
 from loggers import Logger
-from core import Subscription, BWatch, XUiSession
+from core import Subscription
+from session import XUiSession
 
 import telebot
 import time
@@ -14,6 +15,7 @@ from datetime import timedelta, timezone, datetime
 from telebot import types
 
 
+__all__ = ['AdminBot', 'PublicBot']
 
 class AdminBot:
     """Administrator bot for management purposes.
