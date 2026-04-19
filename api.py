@@ -184,7 +184,33 @@ class WebApi(BaseApi):
     """Public api for web ui.
     Dependencies: Subscription, BWatch
     Classes depending on this: none"""
+    _REDIRECT_HTML = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Opening...</title>
+</head>
+<body>
+    <p>Redirecting... If nothing happens, <a id="manual-link" href="#">click here</a>.</p>
+
+    <script>
+
+        const urlParams = new URLSearchParams(window.location.search);
+
+        const subUrl = urlParams.get('url') || '';
+        const prefix = urlParams.get('prefix') || '';
+
+        const link = prefix + subUrl;
+
+        document.getElementById('manual-link').href = link;
+
+        window.location.replace(link)
+    </script>
+</body>
+</html>
+"""
+
     ROUTES: list[Route] = [
+        Route('GET', '/redirect', 'redirect_page', None),
         Route('POST', '/webapi/register', 'register', 5),
         Route('POST', '/webapi/login', 'login', 10),
         Route('POST', '/webapi/bonus', 'bonus', 15),
@@ -233,6 +259,12 @@ class WebApi(BaseApi):
         if not internal or internal not in self.cfg['users']:
             return False
         return internal
+    def redirect_page(self) -> ResponseType:
+        prefix = request.args.get('prefix', '')
+        if not (prefix.startswith('happ://') or prefix.startswith('v2ray') or prefix.startswith('clash')):
+            return _err("Invalid prefix", 400)
+        return Response(self._REDIRECT_HTML, mimetype='text/html')
+
     def gui_panel(self) -> ResponseType:
         token = request.cookies.get('token')
         if not self.validate_token(token):

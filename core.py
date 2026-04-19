@@ -170,9 +170,6 @@ class Subscription:
             self.start()
 
     def start(self):
-        @self.app.route(f"/{self.uri}/redirect")
-        def _redir():
-            return send_file('res/redirect.html', etag=False)
         @self.app.route(f"/{self.uri}", strict_slashes=False)
         def _sub():
             return self.get_subscription(
