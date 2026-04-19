@@ -52,7 +52,7 @@ class Logger(logging.Logger):
                 record.levelname = orig_level
                 return val
         return Fmt(
-            fmt='%(asctime)s %(levelname)s [%(name)s] %(message)s',
+            fmt='%(asctime)s %(levelname)s [%(name)s] [%(threadName)s] %(message)s',
             datefmt='%Y-%m-%d %H:%M'
         )
     def set_tg_bot(self, bot):

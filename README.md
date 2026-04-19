@@ -25,7 +25,7 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 ```bash
 pip install -r requirements.txt
 cp config.example.json config.json  # fill in panel credentials, bot tokens, etc
-gunicorn -w 4 -b 127.0.0.1:5550 app:app
+gunicorn --threads 3 -b 127.0.0.1:5550 app:app
 ```
 See config.schema.json for the full config shape.
 ## Deployment

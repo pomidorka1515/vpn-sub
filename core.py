@@ -1183,11 +1183,11 @@ class BWatch:
             self.wl_mem = {}
             self._panel_alerts = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown = self.cfg.get('panel_alert_cooldown', None) or 3600
-            self._t1 = threading.Thread(target=self._every_120s, daemon=True)
-            self._t2 = threading.Thread(target=self._every_2h, daemon=True)
-            self._t3 = threading.Thread(target=self._every_15s, daemon=True)
-            self._t4 = threading.Thread(target=self._every_24h, daemon=True)
-            self._t5 = threading.Thread(target=self._every_5m, daemon=True)
+            self._t1 = threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs")
+            self._t2 = threading.Thread(target=self._every_2h, daemon=True, name="Date check")
+            self._t3 = threading.Thread(target=self._every_15s, daemon=True, name="Bandwidth")
+            self._t4 = threading.Thread(target=self._every_24h, daemon=True, name="Reset notifs")
+            self._t5 = threading.Thread(target=self._every_5m, daemon=True, name="Panels check")
     
     def start(self):
         for i in list(self.cfg['users'].keys()):

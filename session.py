@@ -71,6 +71,8 @@ class XUiSession(Session):
     def login(self):
         self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui ")
         with self._lock:
+            if self.last_login and not self._needs_refresh():
+                return
             try:
                 login_url = f"{self.base_url}login"
                 login_data = {"username": self.username, "password": self.password}
