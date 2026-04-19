@@ -75,6 +75,7 @@ class XUiSession(requests.Session):
             self.last_login = None
             self._lock = threading.Lock()
             self._running = False
+            self._cache_lock = threading.Lock()
             self._cache: list[dict] | None = None
             self._cache_time: float = 0
     
@@ -246,46 +247,42 @@ class Subscription:
         except Exception as e:
             self.log.error(f"getstatus fail: {e}")
             return {}
-    def getinbounds(self, 
-                    panel: XUiSession, 
-                    cache: bool | None = None) -> list[dict]:
-        """Get the inbounds list.
-        cache Control the caching. True = return cached data, False = get fresh data (no cache), None = standard cache system"""
-        def _fetch() -> list[dict]:
-            x = panel.get(f"{panel.base_url}panel/api/inbounds/list")
-            data = x.json()
-            if x.status_code not in [200] or not data.get("success"):
-                self.log.error(f"getinbounds fail: {data['msg']}")
+
+    def getinbounds(self, panel: XUiSession) -> list[dict]:
+        """Get inbounds list. Uses cache with TTL, panel.local skips cache."""
+        now = time.time()
+        ttl = 2 if panel.local else 15  # fast local, slow remote
+        
+        with panel._cache_lock:
+            if (panel._cache is not None 
+                and now - panel._cache_time < ttl):
+                return panel._cache
+        
+        try:
+            response = panel.get(f"{panel.base_url}panel/api/inbounds/list")
+            data = response.json()
+            if response.status_code not in [200] or not data.get("success"):
+                self.log.error(f"getinbounds fail: {data.get('msg')}")
                 return []
-            x = data['obj']
-            panel._cache = x
-            panel._cache_time = time.time()
-            return x
-        try: 
-            inbounds = []
-            if cache is not None:
-                if cache:
-                    inbounds = panel._cache or []
-                else:
-                    inbounds = _fetch()
-            else:             
-                if panel.local:
-                    inbounds = _fetch()
-                else:
-                    if time.time() - panel._cache_time < 15:
-                        if panel._cache:
-                            inbounds = panel._cache
-                        else:
-                            inbounds = _fetch()
-                    else:
-                        inbounds = _fetch()
-                    
+            inbounds = data['obj']
             if panel.ignore_inbounds:
                 inbounds = [i for i in inbounds if i['id'] not in panel.ignore_inbounds]
+            with panel._cache_lock:
+                panel._cache = inbounds
+                panel._cache_time = now
             return inbounds
         except Exception as e:
             self.log.warning(f"getinbounds fail: {e}")
             return []
+    
+    def _drop_cache(self, panel: XUiSession | None = None) -> None:
+        """Drop cached inbounds. Call after mutations."""
+        targets = [panel] if panel else list(self.panels)
+        for p in targets:
+            with p._cache_lock:
+                p._cache = None
+                p._cache_time = 0
+    
     def _rollback_registered_user(
         self,
         *,
@@ -389,6 +386,7 @@ class Subscription:
                 else:
                     self.log.error(f"add user: failed to add user {username}:\n{response.text}")
                     raise Exception(response.text)
+        self._drop_cache()
     def delete_user(self, username: str, perma: bool = False) -> None:
         """Delete a user, either from panels or from storage too."""
         userid = self.cfg['users'][username]
@@ -419,7 +417,7 @@ class Subscription:
                 for tgid in tgids_to_delete:
                     data.get('tgids', {}).pop(tgid, None)
 
-        self.log.info(f"deleted user {username} {"permanently" if perma else ""}")
+        self._drop_cache()
     def update_user(self, 
                     username: str, 
                     enable: bool | None = None, 
@@ -476,6 +474,7 @@ class Subscription:
                 data.setdefault('statusWl', {})[username] = wl_enable
             
             self.log.info(f"Set WL status for {username} to {wl_enable}")
+        self._drop_cache()
     def add_new_user(
         self,
         username: str,
@@ -538,6 +537,7 @@ class Subscription:
         
         try: self.add_users(username=username)
         except Exception as e: raise Exception(f"add new user: {username}: {e}")
+        self._drop_cache()
         return {"username": username, "token": token, "uuid": userid, "fingerprint": fingerprint, "displayname": displayname} # for API
     def update_params(
         self,
@@ -611,7 +611,7 @@ class Subscription:
                     t.get('webui_users', {}).pop(_old_ext_username, None)
                 t['webui_passwords'][ext_username] = ext_password
                 t['webui_users'][ext_username] = username                
-
+        self._drop_cache()
     def update_uuid(self, username: str, uid: str) -> bool:
         """Seperate method for updating the UUID. True on success.
         Potentially dangerous operation, seperate function."""
@@ -651,7 +651,7 @@ class Subscription:
                 if not (response.status_code in [200, 201] and response.json().get('success')):
                     self.log.critical(f"update_uuid failed: {response.json().get('msg')}")
         with self.cfg as t: t['users'][username] = uid
-
+        self._drop_cache()
         return True
     def register_with_code(
         self,
@@ -806,7 +806,6 @@ class Subscription:
                     "wl_gb": result.get('wl_gb', 0)}
         else:
             return False
-    
     def apply_bonus_code(self, *, username: str, code: str) -> dict[str, Any] | str:
         """Atomically validate/consume a bonus code and apply it to a user.
     
@@ -1029,6 +1028,7 @@ class Subscription:
         ) != None:
             self.log.critical(f"reset_user: something happened")
             raise Exception
+        self._drop_cache()
         return {'uuid': newid, 'token': newt}
     def fmt_bytes(self, value: int) -> tuple[str, str]:
         for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
@@ -1168,7 +1168,6 @@ Lang: {lang}""")
                           lang: str,
                           bandwidths: list[int], 
                           status: bool,
-                          statusWl: bool,
                           statusTime: bool,
                           ts: int) -> str:
 
