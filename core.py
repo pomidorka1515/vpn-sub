@@ -223,7 +223,8 @@ class Subscription:
         return bio
     
     def restart(self, delay: int | float = 0.1) -> None:
-        """Restart gunicorn with a delay (in seconds, defaults to 100ms)"""
+        """Restart gunicorn with a delay (in seconds, defaults to 100ms).
+        Redundant already, but i will keep it here."""
         def _restart():
             try:
                 sig = signal.SIGHUP
@@ -1243,7 +1244,8 @@ class BWatch:
     def __init__(self, 
                  cfg: Config, 
                  sub: Subscription, 
-                 bot: Any | None = None):
+                 bot: Any | None = None,
+                 admin_bot: Any | None = None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
@@ -1251,12 +1253,16 @@ class BWatch:
             self._stop_event = threading.Event()
             self.sub = sub
             self.bot = bot
+            self.admin_bot = admin_bot
             self.mem = {}
             self.wl_mem = {}
+            self._panel_alerts = {} # only used by 1 thread, no lock needed yet
+            self._panel_alert_cooldown = self.cfg.get('panel_alert_cooldown', None) or 3600
             self._t1 = threading.Thread(target=self._every_120s, daemon=True)
             self._t2 = threading.Thread(target=self._every_2h, daemon=True)
             self._t3 = threading.Thread(target=self._every_15s, daemon=True)
             self._t4 = threading.Thread(target=self._every_24h, daemon=True)
+            self._t5 = threading.Thread(target=self._every_5m, daemon=True)
     
     def start(self):
         for i in list(self.cfg['users'].keys()):
@@ -1269,7 +1275,8 @@ class BWatch:
         self._t2.start()
         self._t3.start()
         self._t4.start()
-        self.log.info("loaded BWatch")
+        self._t5.start()
+
     def stop(self):
         self._stop_event.set()
 
@@ -1324,10 +1331,53 @@ class BWatch:
                     data['wl_bw'][i][1] += delta
                     self.wl_mem[i] = cur
 
+    def panel_health_check(self):
+        """Check each panel's Xray status and resource usage. Alert on issues."""
+        for panel in self.sub.panels:
+            try:
+                status = self.sub.getstatus(panel)
+                if not status:
+                    continue
+                
+                key = panel.name
+                problems = []
+                
+                xray = status.get('xray', {})
+                if xray.get('state') != 'running':
+                    problems.append(f"Xray: {xray.get('state', 'unknown')} - {xray.get('errorMsg', '')}")
+                
+                cpu = status.get('cpu', 0)
+                if cpu > 90:
+                    problems.append(f"CPU: {cpu}%")
+                
+                mem = status.get('mem', {})
+                if mem.get('total', 0) > 0:
+                    mem_pct = (mem['current'] / mem['total']) * 100
+                    if mem_pct > 90:
+                        problems.append(f"RAM: {mem_pct:.0f}%")
+                
+                disk = status.get('disk', {})
+                if disk.get('total', 0) > 0:
+                    disk_pct = (disk['current'] / disk['total']) * 100
+                    if disk_pct > 90:
+                        problems.append(f"Disk: {disk_pct:.0f}%")
+                
+                if problems:
+                    last = self._panel_alerts.get(key, 0)
+                    if time.time() - last > self._panel_alert_cooldown:
+                        self._panel_alerts[key] = time.time()
+                        if self.admin_bot: 
+                            msg = f"⚠️ Panel {key}:\n" + "\n".join(f"- {p}" for p in problems)
+                            self.admin_bot.msg(msg)
+                else:
+                    self._panel_alerts.pop(key, None)
+            except Exception as e:
+                self.log.error(f"health check {panel.address}: {e}")
+
     def check(self):
         #1. check if someones limit is over
         # theres no global command cuz we dont dirrmectly edit T <-- these comments so ancient 
-        # new codebase, new mel
+        # new codebase, new me ^^
         for i in list(self.cfg['users'].keys()):
             if self.cfg['time'][i] != 0:
                 if (self.cfg['time'][i] - int(time.time())) <= 0:
@@ -1391,6 +1441,8 @@ class BWatch:
             t['_notified'] = []
             t['_wl_notified'] = []
         self.cfg.mutate(_u)
+
+
     def _every_120s(self):
         while not self._stop_event.wait(120):
             self.check()
@@ -1403,4 +1455,6 @@ class BWatch:
     def _every_24h(self):
         while not self._stop_event.wait(86400):
             self.reset()
-
+    def _every_5m(self):
+        while not self._stop_event.wait(300):
+            self.panel_health_check()
