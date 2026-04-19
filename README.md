@@ -25,12 +25,17 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 ```bash
 pip install -r requirements.txt
 cp config.example.json config.json  # fill in panel credentials, bot tokens, etc
-gunicorn --threads 3 -b 127.0.0.1:5550 app:app
+gunicorn --threads 4 -b 127.0.0.1:5550 app:app
 ```
-See config.schema.json for the full config shape.
+
+**Note:** Use `--threads` (not `-w`/`--workers`) — the app uses file locking to elect a primary worker for background tasks (BWatch bandwidth monitor, bots). Multiple *processes* will each try to start background threads, which is wasteful; multiple *threads* within one process works correctly.
+
+See `config.schema.json` for the full config shape.
+
 ## Deployment
 - Meant to run under gunicorn behind nginx
 - Systemd unit recommended for persistence
+- Startup order matters: panels → Subscription → BWatch + bots (handled automatically by `app.py`)
 
 ## Status
 Personal project. Works in production for my small user base. Not stable..
