@@ -111,11 +111,11 @@ def requires_admin_auth(f):
     """Admin API auth via Authorization header. Returns fake nginx 404 on failure."""
     @wraps(f)
     def wrapper(self, *args, **kwargs):
-        if request.headers.get('Authorization') != self.token:
-            return self.resp
+        provided = request.headers.get('Authorization', '')
+        if not provided or not self.sub.compare(provided, self.token):
+            return _err("Unauthorized", 401)
         return f(self, *args, **kwargs)
     return wrapper
-
 
 def requires_webapi_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
@@ -162,7 +162,7 @@ def rate_limit(max_requests: int) -> Callable[[Callable[..., Any]], Callable[...
     return decorator
 
 
-def requires_fields(*fields) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def requires_fields(*fields: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Validate request.json has all named fields. Returns 400 on failure."""
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
@@ -178,6 +178,22 @@ def requires_fields(*fields) -> Callable[[Callable[..., Any]], Callable[..., Any
             return f(*args, **kwargs)
         return wrapper
     return decorator
+
+def requires_args(*arg: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Validate request.args has all named fields. Returns 400 on failure."""
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            content = request.args
+            if content is None:
+                return _err("Missing data.", 400)
+            missing = [x for x in arg if x not in content]
+            if missing:
+                return _err(f"Missing args: {', '.join(missing)}", 400)
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
 
 
 class WebApi(BaseApi):
@@ -507,7 +523,6 @@ class Api(BaseApi):
         self.log = Logger(type(self).__name__)
         uri = f"/sub/{cfg['api_uri']}"
         self.token = cfg['api_token']
-        self.resp = Response(nginx_404, status=404, mimetype="text/html")
         super().__init__(app, cfg, sub, bw, uri)
 
     # TODO: make this
@@ -520,33 +535,86 @@ class Api(BaseApi):
         
     
     @requires_admin_auth
+    @requires_args('user')
     def user_info(self) -> ResponseType: 
-        username = request.args.get('username', None)
-        pretty = request.args.get('beautify', False)
-        if not username:
-            return _err("'username' param missing")
+        username = request.args['user']
+        pretty = request.args.get('beautify', '').lower() in ('1', 'true', 'yes')
         return _ok(obj=self.sub.get_info(username=username, pretty=pretty))
+ 
     @requires_admin_auth
     @requires_fields('user', 'displayname')
-    def user_add(self) -> ResponseType: return _err("Not implemented", 501)
-    
+    def user_add(self) -> ResponseType: 
+        try:
+            content = cast(dict, request.json)
+            username = cast(str, content.get('user'))
+            if self.sub.isuser(username):
+                return _err("Username exists")
+            x = self.sub.add_new_user(
+                username=username,
+                displayname=cast(str, content.get('displayname', None)),
+                ext_username=cast(str, content.get('ext_username', None)),
+                ext_password=cast(str, content.get('ext_password', None)),
+                token=cast(str, content.get('token', None)),
+                userid=cast(str, content.get('userid', None)),
+                fingerprint=cast(str, content.get('fingerprint', None)),
+                limit=cast(int, content.get('limit', 0)),
+                wl_limit=cast(int, content.get('wl_limit', 5)),
+                timee=cast(int, content.get('time', 0))
+            )
+            if not isinstance(x, dict):
+                return _err(msg=x)
+            return _ok("Created", 201)
+        except Exception as e:
+            self.log.error(f"user_add: {e}")
+            return _err(f"Error: {str(e)}", 500)
+
     @requires_admin_auth
     @requires_fields('user')
-    def user_delete(self) -> ResponseType: return _err("Not implemented", 501)
-    
+    def user_delete(self) -> ResponseType:
+        try:
+            content = cast(dict, request.json)
+            username = cast(str, content.get('user'))
+            perma = cast(bool, content.get('perma', True))
+            if not self.sub.isuser(username):
+                return _err("Unknown username")
+            self.sub.delete_user(username, perma)
+            return _ok("Deleted")
+        except Exception as e:
+            self.log.error(f"user_delete: {e}")
+            return _err(f"Error: {str(e)}", 500)
+
     @requires_admin_auth
-    def user_refresh(self) -> ResponseType: return _err("Not implemented", 501)
+    def user_refresh(self) -> ResponseType:
+        try:
+            for cc in self.cfg['users'].keys():
+                self.sub.add_users(cc)
+            return _ok("Refreshed all users.")
+        except Exception as e:
+            self.log.error(f"user_refresh: {e}")
+            return _err(f"Error: {str(e)}", 500)
     
     @requires_admin_auth
     def user_onlines(self) -> ResponseType:
-        online_users = cast(dict, self.sub.get_online_users(new = True))
+        new = request.args.get('keyed', '').lower() in ('1', 'true', 'yes')
+        online_users = cast(dict, self.sub.get_online_users(new = new))
         if not online_users:
             return _ok(obj=[])
         return _ok(obj=online_users)
+
     @requires_admin_auth
     @requires_fields('user')
-    def user_reset(self) -> ResponseType: return _err("Not implemented", 501)
-    
+    def user_reset(self) -> ResponseType:
+        try:
+            content = cast(dict, request.json)
+            username = cast(str, content.get('user'))
+            if not self.sub.isuser(username):
+                return _err("Unknown username")
+            x = self.sub.reset_user(username)
+            return _ok(obj=x)
+        except Exception as e:
+            self.log.error(f"user_reset fail: {e}")
+            return _err(str(e), 500)
+            
     @requires_admin_auth
     def panel_status(self) -> ResponseType: return _err("Not implemented", 501)
     

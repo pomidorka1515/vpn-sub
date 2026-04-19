@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core import Subscription, BWatch, XUiSession, Response, Flask, request, send_file
-from api import WebApi
+from api import WebApi, Api
 from bots import PublicBot, AdminBot
 from config import Config
 from loggers import Logger
@@ -58,7 +58,7 @@ for i, v in cfg['3xui'].items():
 # Create instances
 sub = Subscription(cfg=cfg, app=app, panels=panels, whitelist_panel=wl) # type: ignore
 bw = BWatch(cfg=cfg, sub=sub)
-# api = Api(app=app, cfg=cfg, sub=sub, bw=bw)
+api = Api(app=app, cfg=cfg, sub=sub, bw=bw)
 webapi = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)
 adminbot = AdminBot(sub=sub, cfg=cfg)
 bot = PublicBot(sub=sub, cfg=cfg)
@@ -83,7 +83,7 @@ loggers = [
     log,
     sub.log,
     bw.log,
-    # api.log,
+    api.log,
     webapi.log,
     adminbot.log,
     bot.log
