@@ -215,7 +215,7 @@ function validateUsername() {
   if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
   vt = setTimeout(async () => {
     try {
-      const res = await api('POST', '/validate', { username: v });
+      const res = await api('GET', `/validate?username=${v}`);
       if (res.success && res.obj) {
         if (!res.obj.valid) { h.textContent = t('hint_invalid') + res.obj.sanitized; h.className = 'username-hint bad'; }
         else if (res.obj.taken) { h.textContent = t('hint_taken'); h.className = 'username-hint bad'; }

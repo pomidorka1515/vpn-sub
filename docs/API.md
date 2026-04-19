@@ -295,16 +295,12 @@ Response (success):
 
 ---
 
-### POST /validate
+### GET /validate
 Description: Validate a username for illegal characters and availability.
 Rate limit: 80
 Authentication: none
-Body:
-```jsonc
-{
-    "username": "" // str
-}
-```
+Args:
+    username: Username to validate.
 Response (success):
 ```jsonc
 // HTTP 200
@@ -321,18 +317,33 @@ Response (success):
 
 ---
 
-### POST /qr
-Description: Generate a QR code.
+### GET /qr
+Description: Generate a QR code of your subscription link.
 Rate limit: 80
 Authentication: cookie
-Body:
-```jsonc
-{
-	"text": "your_text"
-}
-```
+Params:
+    happ: if 1, append happ://add/ to the start of the link
 Response (success):
 **Returns an image (PNG)**. Be careful.
 `HTTP 200`, Mimetype: `image/png`
 
 ---
+
+### GET /profiles
+Description: Get all currently available profiles and their descriptions.
+Rate limit: 60
+Authentication: cookie
+Params:
+    lang: language. either 'en' or 'ru'
+Response (success):
+```jsonc
+// HTTP 200
+{
+    "success": true,
+    "msg": null,
+    "obj": {
+        "[ Profile Name ]": "Some long description...",
+        "[ Another Profile ]": "Another description"
+    }
+}
+```

@@ -184,7 +184,7 @@ class WebApi(BaseApi):
     """Public api for web ui.
     Dependencies: Subscription, BWatch
     Classes depending on this: none"""
-    _REDIRECT_HTML = """<!DOCTYPE html><html><head><title>Opening...</title></head><body><p>Redirecting... If nothing happens, <a id="manual-link" href="#">click here</a>.</p><script>const urlParams = new URLSearchParams(window.location.search);const subUrl = urlParams.get('url') || '';const prefix = urlParams.get('prefix') || '';const link = prefix + subUrl;document.getElementById('manual-link').href = link;window.location.replace(link)</script></body></html>"""
+    _REDIRECT_HTML = """<!DOCTYPE html><html><head><title>Opening...</title></head><body><p>Redirecting... If nothing happens, <a id="manual-link" href="#">click here</a>.</p><script>const urlParams=new URLSearchParams(window.location.search);const subUrl=urlParams.get('url')||'';const prefix=urlParams.get('prefix')||'';const link=prefix+subUrl;document.getElementById('manual-link').href=link;window.location.replace(link)</script></body></html>"""
 
     ROUTES: list[Route] = [
         Route('GET', '/redirect', 'redirect_page', None),
@@ -197,8 +197,8 @@ class WebApi(BaseApi):
         Route('POST', '/webapi/logout', 'logout', 20),
         Route('GET', '/webapi/fingerprints', 'fps', None),
         Route('POST', '/webapi/delete', 'delete', 3),
-        Route('POST', '/webapi/validate', 'validate_username', 80),
-        Route('POST', '/webapi/profiles', 'profiles', None),
+        Route('GET', '/webapi/validate', 'validate_username', 80),
+        Route('GET', '/webapi/profiles', 'profiles', 60),
         Route('GET', '/panel', 'gui_panel', None),
         Route('GET', '/auth', 'gui_auth', None),
         Route('GET', '/webapi/qr', 'qr', 80)
@@ -270,14 +270,14 @@ class WebApi(BaseApi):
         response = make_response(send_file(buf, mimetype='image/png'))
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
-    @requires_fields('username')
+
     def validate_username(self) -> ResponseType:
-        """Check if a username is valid (no illegal chars). POST {"username": "..."}"""
-        
-        content = cast(dict, request.json)
-        raw = cast(str, content.get('username'))
+        """Check if a username is valid (no illegal chars)"""
+        raw = request.args.get('username', None)
+        if not raw:
+            return _err("'username' field is missing")
         if not isinstance(raw, str):
-            return _err("username must be a string")
+            return _err("'username' must be a string")
         sanitized = self.sub.sanitize(raw)
         valid = raw == sanitized and len(raw) > 0
         taken = sanitized in cast(dict, self.cfg.get('webui_users', {}))
@@ -288,13 +288,12 @@ class WebApi(BaseApi):
             "sanitized": sanitized
         })
     @requires_webapi_auth
-    @requires_fields('lang')
     def profiles(self, username) -> ResponseType:
-        content = cast(dict, request.json)
-        if content['lang'] not in ['ru', 'en']:
+        lang = request.args.get('lang')
+        if lang not in ['ru', 'en']:
             return _err("Unknown language", 400)
 
-        index = 0 if content['lang'] == 'en' else 1
+        index = 0 if lang == 'en' else 1
         obj = {}
         for i_name, name in self.cfg['profiles'].items():
             name = name[index]
