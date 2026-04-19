@@ -432,35 +432,8 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     def stats(self, username) -> ResponseType:
         """Get user info from token"""
-        bandwidths = self.sub.bandwidth(username)
-        wl_bandwidths = self.sub.bandwidth(username, whitelist=True)
-        obj = {
-            "_": random.choice(cast(list, self.cfg.get('funny_strings', []))),
-            "token": self.cfg['tokens'][username],
-            "link": f"https://pomi.lol/sub?token={self.cfg['tokens'][username]}",
-            "displayname": self.cfg['displaynames'][username], # No leaking internal usernames!
-            "uuid": self.cfg['users'][username],
-            "fingerprint": self.cfg['userFingerprints'][username],
-            "enabled": self.cfg['status'][username],
-            "wl_enabled": self.cfg['statusWl'][username],
-            "time": self.cfg['time'][username],
-            "online": self.sub.is_online(username),
-            "bandwidth": {
-                "total": {
-                    "upload": bandwidths[0],
-                    "download": bandwidths[1]
-                },
-                "wl_total": {
-                    "upload": wl_bandwidths[0],
-                    "download": wl_bandwidths[1]
-                },
-                "monthly": self.cfg['bw'][username][1],
-                "wl_monthly": self.cfg['wl_bw'].get(username, [0,0])[1],
-                "limit": self.cfg['bw'][username][0],
-                "wl_limit": self.cfg['wl_bw'].get(username, [0,0])[0]
-            }
-        }
-        return _ok(obj=obj)
+        return _ok(obj=self.sub.get_info(username))
+
 
     @requires_no_auth
     @requires_fields('username', 'password', 'code', 'name')
@@ -547,8 +520,12 @@ class Api(BaseApi):
         
     
     @requires_admin_auth
-    @requires_fields('user')
-    def user_info(self) -> ResponseType: return _err("Not implemented", 501)
+    def user_info(self) -> ResponseType: 
+        username = request.args.get('username', None)
+        pretty = request.args.get('beautify', False)
+        if not username:
+            return _err("'username' param missing")
+        return _ok(obj=self.sub.get_info(username=username, pretty=pretty))
     @requires_admin_auth
     @requires_fields('user', 'displayname')
     def user_add(self) -> ResponseType: return _err("Not implemented", 501)

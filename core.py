@@ -838,34 +838,58 @@ class Subscription:
             self.log.error(f"Error in applying code: {result}")
             return False
         return result
-    def get_info_telegram(self, tgid: int | str, reverse: bool = False) -> dict | None:
-        """Returns all user info by telegram ID. None if target uid wasnt found.
-        reverse: lookup by internal usermame"""
-        if reverse:
-            username = tgid
-        else:
-            username = cast(str, self.cfg['tgids'].get(str(tgid)))
+    def get_info(self, username: str, pretty: bool = False) -> dict | None:
+        """Get all info about a user. None if not found."""
+        if not self.cfg['users'].get(username, None):
+            return None
+        
+        conf = self.cfg.copy()
+        bandwidths = self.bandwidth(username=username)
+        wl_bandwidths = self.bandwidth(username=username, whitelist=True)
+        monthly = conf['bw'][username][1]
+        wl_monthly = conf['wl_bw'][username][1]
+        if pretty:
+            for i in range(len(bandwidths)):
+                bandwidths[i] = round(bandwidths[i] / 10**6, 2) # type: ignore[reportArgumentType]
+            for i in range(len(wl_bandwidths)):
+                wl_bandwidths[i] = round(wl_bandwidths[i] / 10**6, 2) # type: ignore[reportArgumentType]
+            monthly = round(monthly / 10**6, 2)
+            wl_monthly = round(wl_monthly / 10**6, 2)
+        return {
+            "_": random.choice(cast(list, conf.get('funny_strings', []))),
+            "token": conf['tokens'][username],
+            "link": f"https://pomi.lol/sub?token={conf['tokens'][username]}",
+            "displayname": conf['displaynames'][username],
+            "uuid": conf['users'][username],
+            "fingerprint": conf['userFingerprints'][username],
+            "enabled": conf['status'][username],
+            "wl_enabled": conf['statusWl'][username],
+            "time": conf['time'][username],
+            "online": self.is_online(username),
+            "bandwidth": {
+                "total": {
+                    "upload": bandwidths[0],
+                    "download": bandwidths[1],
+                    "total": bandwidths[2]
+                },
+                "wl_total": {
+                    "upload": wl_bandwidths[0],
+                    "download": wl_bandwidths[1],
+                    "total": wl_bandwidths[2]
+                },
+                "monthly": monthly,
+                "wl_monthly": wl_monthly,
+                "limit": conf['bw'][username][0],
+                "wl_limit": conf['wl_bw'][username][0]
+            }
+        }
+    def get_info_telegram(self, tgid: int) -> dict | None:
+        """Returns all user info by telegram ID. None if target uid wasnt found."""
+        username = cast(str, self.cfg['tgids'].get(str(tgid), None))
         if not username:
             return None
-        bandwidths = self.bandwidth(username=username) # type: ignore # this useless too btw i guarded everything
-        wl_bandwidths = self.bandwidth(username=username, whitelist=True) # type: ignore
-        return {
-            "username": username,
-            "up": round(bandwidths[0] / 10**6, 2),
-            "down": round(bandwidths[1] / 10**6, 2),
-            "wl_up": round(wl_bandwidths[0] / 10**6, 2),
-            "wl_down": round(wl_bandwidths[1] / 10**6, 2),
-            "total": round(bandwidths[2] / 10**6, 2),
-            "wl_total": round(wl_bandwidths[2] / 10**6, 2),
-            "monthly": round(self.cfg['bw'][username][1] / 10**6),
-            "limit": self.cfg['bw'][username][0],
-            "wl_monthly": round(self.cfg['wl_bw'][username][1] / 10**6),
-            "wl_limit": self.cfg['wl_bw'][username][0],
-            "time": self.cfg['time'].get(username, 0),
-            "token": self.cfg['tokens'].get(username),
-            "displayname": self.cfg['displaynames'].get(username),
-            "status": self.cfg['status'].get(username)
-        }
+        return self.get_info(username, True)
+    
     def is_registered(self, tgid: int) -> bool:
         """Check if a telegram user is already registered."""
         return str(tgid) in self.cfg['tgids']

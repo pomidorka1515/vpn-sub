@@ -248,27 +248,28 @@ class AdminBot:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}")
  
     def _cb_info_user(self, chat_id: int, username: str) -> None:
-        if username not in self.cfg['users']:
-            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
-            return
-        
         try:
-            bandwidths = self.sub.bandwidth(username=username)
-            wl_bandwidths = self.sub.bandwidth(username=username, whitelist=True)
-            up = round(bandwidths[0] / 10**6, 2)
-            down = round(bandwidths[1] / 10**6, 2)
-            wl_up = round(wl_bandwidths[0] / 10**6, 2)
-            wl_down = round(wl_bandwidths[1] / 10**6, 2)
-            monthly = round(self.cfg['bw'][username][1] / 10**6, 2)
-            wl_monthly = round(self.cfg['wl_bw'][username][1] / 10**6, 2)
-            limit = self.cfg['bw'][username][0]
-            wl_limit = self.cfg['wl_bw'][username][0]
-            times = self.cfg['time'].get(username, 0)
-            token = self.cfg['tokens'].get(username)
-            displayname = self.cfg['displaynames'].get(username, "N/A")
-            status = "🟢 Включен" if self.cfg['status'].get(username) else "🔴 Отключен"
-            online = "🟢 Да" if self.sub.is_online(username) else "🔴 Нет"
-            fingerprint = self.cfg['userFingerprints'].get(username)
+            info = self.sub.get_info(username, pretty=True)
+            if not info:
+                self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+                return
+
+            bw = info['bandwidth']
+            up = bw['total']['upload']
+            down = bw['total']['download']
+            wl_up = bw['wl_total']['upload']
+            wl_down = bw['wl_total']['download']
+            monthly = bw['monthly']
+            wl_monthly = bw['wl_monthly']
+            limit = bw['limit']
+            wl_limit = bw['wl_limit']
+            times = info['time']
+            token = info['token']
+            displayname = info['displayname']
+            status = "🟢 Включен" if info['enabled'] else "🔴 Отключен"
+            wl_status = "🟢 Включен" if info['wl_enabled'] else "🔴 Отключен"
+            online = "🟢 Да" if info['online'] else "🔴 Нет"
+            fingerprint = info['fingerprint']
             if times:
                 days_left = str((times - int(time.time())) // 86400)
                 date = datetime.fromtimestamp(times, tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
@@ -279,6 +280,7 @@ class AdminBot:
                 f"ℹ️ <b>Информация о <code>{username}</code></b>\n\n"
                 f"Имя: <code>{displayname}</code>\n"
                 f"Статус: {status}\n"
+                f"Статус WL: {wl_status}\n"
                 f"В сети: {online}\n"
                 f"Трафик в этом месяце: {monthly if monthly else "0"} MB / {limit} GB\n"
                 f"Трафик WL в этом месяце: {wl_monthly if wl_monthly else "0"} MB / {wl_limit} GB\n"
@@ -568,8 +570,17 @@ class PublicBot:
         if not info:
             return
         daystext = "дней" if lang == 'ru' else "days"  
-        limit_str = f"{info['limit']} GB" if info['limit'] else t['unlimited']
-        wl_limit_str = f"{info['wl_limit']} GB" if info['wl_limit'] else t['unlimited']
+        limit_str = f"{info['bandwidth']['limit']} GB" if info['bandwidth']['limit'] else t['unlimited']
+        wl_limit_str = f"{info['bandwidth']['wl_limit']} GB" if info['bandwidth']['wl_limit'] else t['unlimited']
+
+        monthly_str = info['bandwidth']['monthly']
+        wl_monthly_str = info['bandwidth']['wl_monthly']
+
+        if limit_str == t['unlimited']:
+            monthly_str = t['unlimited']
+        if wl_limit_str == t['unlimited']:
+            wl_monthly_str = t['unlimited']
+        
         if info['time']:
             days_left = str((info['time'] - int(time.time())) // 86400)
             date_end = datetime.fromtimestamp(info['time'], tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
@@ -577,25 +588,27 @@ class PublicBot:
         else:
             time_str = t['lifetime']
             
-        status = "🟢" if info['status'] else "🔴"
-        online = "🟢" if self.sub.is_online(info['username']) else "🔴"
-        fingerprint = self.cfg['userFingerprints'].get(info['username'])
+        status = "🟢" if info['enabled'] else "🔴"
+        wl_status = "🟢" if info['wl_enabled'] else "🔴"
+
+        online = "🟢" if info['online'] else "🔴"
         text = t['info_text'].format(
-            status=status,
-            online=online,
             username=info['displayname'],
-            total=info['total'],
-            wl_total=info['wl_total'],
-            monthly=info['monthly'],
-            wl_monthly=info['wl_monthly'],
+            status=status,
+            wl_status=wl_status,
+            online=online,
+            total=info['bandwidth']['total']['total'],
+            monthly=monthly_str,
             limit=limit_str,
+            wl_total=info['bandwidth']['wl_total']['total'],
+            wl_monthly=wl_monthly_str,
             wl_limit=wl_limit_str,
-            up=info['up'],
-            wl_up=info['wl_up'],
-            down=info['down'],
-            wl_down=info['wl_down'],
+            up=info['bandwidth']['total']['upload'],
+            down=info['bandwidth']['total']['download'],
+            wl_up=info['bandwidth']['wl_total']['upload'],
+            wl_down=info['bandwidth']['wl_total']['download'],
             days=time_str,
-            fingerprint=fingerprint
+            fingerprint=info['fingerprint']
         )
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_menu(uid))
 
