@@ -52,6 +52,16 @@ class Config(MutableMapping[str, Any]):
         sync_mode: str = "data",
         isolate_commits: bool = True,
     ) -> None:
+        """
+        Args:
+            path: Path to the JSON config file (created if missing).
+            indent: JSON indentation width for writes.
+            strict_schema: If True, schema errors raise; if False, they log a warning.
+            sync_mode: 'full' fsyncs file + parent directory, 'data' fsyncs file only,
+                'none' skips fsync entirely.
+            isolate_commits: If True, deep-copies data after commit so any references
+                that leaked out of the transaction can't mutate the live config.
+        """
         self.log = Logger(type(self).__name__)
         self._path = path
         self._indent = indent
@@ -82,7 +92,11 @@ class Config(MutableMapping[str, Any]):
             self.reload()
 
     def reload(self) -> bool:
-        """Reload from disk if changed. Creates the file if missing."""
+        """Reload from disk if the file changed since last load. Creates the file if missing.
+
+        Returns:
+            True if the data was actually reloaded, False if the file was unchanged.
+        """
         with self._lock:
             self._raise_if_used_inside_transaction()
             return self._reload_locked(create_if_missing=True, exclusive=True)
@@ -98,10 +112,16 @@ class Config(MutableMapping[str, Any]):
         return _ConfigTransaction(self)
 
     def mutate(self, callback: Callable[[MutableMapping[str, Any]], Any]) -> Any:
-        """Run a callback inside a transaction.
+        """Run a callback inside a transaction and return its result.
 
         Keep callbacks short and non-blocking: they run while holding the
         in-process lock and the inter-process file lock.
+
+        Args:
+            callback: Called with the transaction mapping as its only argument.
+
+        Returns:
+            Deep-copied return value of the callback.
         """
         with self.edit() as tx:
             result = callback(tx)
@@ -183,6 +203,7 @@ class Config(MutableMapping[str, Any]):
             return tuple((k, self._detach(v)) for k, v in self._data.items())
 
     def copy(self) -> dict[str, Any]:
+        """Return a deep copy of the current config data as a plain dict."""
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
@@ -227,6 +248,11 @@ class Config(MutableMapping[str, Any]):
         return self._detach(result)
 
     def _raise_if_used_inside_transaction(self) -> None:
+        """Raise if the calling thread already owns an active transaction.
+
+        Direct Config access (e.g. cfg["key"]) inside a transaction block would
+        bypass the working copy and cause a stale-read / lost-write hazard.
+        """
         tx = self._active_transaction
         if tx is None:
             return
@@ -372,6 +398,11 @@ class Config(MutableMapping[str, Any]):
             return True
 
     def _ensure_recent_locked(self) -> None:
+        """Reload from disk under a shared lock if the file has changed.
+
+        Called before every read to guarantee consistency in multi-process
+        deployments where another worker may have committed a write.
+        """
         with self._locked_file(exclusive=False):
             signature = self._file_signature()
             if signature is None:
