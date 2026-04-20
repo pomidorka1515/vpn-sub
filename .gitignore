@@ -15,3 +15,6 @@ venv/
 !API.md
 !API_ADMIN.md
 backup/
+discord/venv
+discord/.venv
+discord/config.json

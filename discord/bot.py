@@ -1,1 +1,38 @@
 import disnake
+from disnake.ext import commands
+import httpx
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import Config
+from loggers import Logger
+
+log = Logger("Bot")
+
+# CFG = read-only
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+cfg = Config(
+    path=os.path.join(SCRIPT_DIR, 'config.json'),
+    indent=4,
+    strict_schema=False,
+    sync_mode="none",
+    isolate_commits=False
+)
+
+client = commands.InteractionBot(intents=disnake.Intents.default())
+
+api = httpx.AsyncClient(
+    base_url=cfg.get('api_base_url', ''),
+    headers={"Authorization": cfg.get('api_token', '')},
+    timeout=5.0
+)
+@client.event
+async def on_ready():
+    log.info(f"Logged in as {client.user} ID {client.user.id}")
+
+try:
+    client.run(cfg.get('token', ''))
+except disnake.LoginFailure:
+    log.critical("Token invalid, bot will not start!")
