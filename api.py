@@ -525,7 +525,6 @@ class Api(BaseApi):
         self.token = cfg['api_token']
         super().__init__(app, cfg, sub, bw, uri)
 
-    # TODO: make this
     @requires_admin_auth
     def user_list(self) -> ResponseType: 
         users = list(self.cfg['users'].keys())
@@ -616,20 +615,74 @@ class Api(BaseApi):
             return _err(str(e), 500)
             
     @requires_admin_auth
-    def panel_status(self) -> ResponseType: return _err("Not implemented", 501)
+    def panel_status(self) -> ResponseType: 
+        try:
+            query = request.args.get('name', None)
+            if query is None:
+                result = {}
+                for panel in self.sub.panels:
+                    result[panel.name] = self.sub.getstatus(panel)
+                return _ok(obj=result)
+
+            for panel in self.sub.panels:
+                if panel.name == query:
+                    return _ok(obj=self.sub.getstatus(panel))
+
+            return _err("panel not found")
+        except Exception as e:
+            self.log.error(f"panel_status fail: {e}")
+            return _err(str(e), 500)
     
     @requires_admin_auth
-    def code_list(self) -> ResponseType: return _err("Not implemented", 501)
+    def code_list(self) -> ResponseType: 
+        try:
+            return _ok(obj=self.sub.list_code())
+        except Exception as e:
+            return _err(str(e), 500)
     
     @requires_admin_auth
     @requires_fields('code')
-    def code_info(self) -> ResponseType: return _err("Not implemented", 501)
+    def code_info(self) -> ResponseType:
+        try:
+            code = request.args.get('code')
+            x = self.sub.get_code(code)
+            if not isinstance(x, dict):
+                return _err("Code not found", 404)
+            return _ok(obj=x)
+        except Exception as e:
+            return _err(str(e), 500)
     
     @requires_admin_auth
     @requires_fields('code', 'action')
-    def code_add(self) -> ResponseType: return _err("Not implemented", 501)
-    
+    def code_add(self) -> ResponseType: 
+        try:
+            content = cast(dict, request.json)
+            name = content.get('code')
+            action = content.get('action')
+            permanent = content.get('perma', False)
+            days = content.get('days', 0)
+            gb = content.get('gb', 0)
+            wl_gb = content.get('wl_gb', 0)
+
+            self.sub.add_code(
+                name, action, permanent, days, gb, wl_gb
+            )
+            return _ok("Created", 201)
+        except ValueError as e: # add_code raises
+            return _err(str(e), 400)
+        except Exception as e:
+            return _err(str(e), 500)
+
     @requires_admin_auth
     @requires_fields('code')
-    def code_delete(self) -> ResponseType: return _err("Not implemented", 501)
+    def code_delete(self) -> ResponseType:
+        try:
+            content = cast(dict, request.json)
+            name = content.get('code')
+            x = self.sub.delete_code(name)
+            if x is not None:
+                return _err("Code not found", 404)
+            return _ok("Deleted")
+        except Exception as e:
+            return _err(str(e), 500)
 

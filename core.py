@@ -803,8 +803,12 @@ class Subscription:
         """Creates a code. Simple."""
 
         if action not in ["register", "bonus"]:
-            self.log.critical(f"failed to create code {code}: invalid action {action}")
             raise ValueError(f"code {code} action must be register or bonus")
+
+        if not isinstance(permanent, bool):
+            raise ValueError(f"permanent param must be a bool")
+        if not (isinstance(days, int) or isinstance(gb, int) or isinstance(wl_gb, int)):
+            raise ValueError("days must be positive integer")
 
         with self.cfg as t:
             t['codes'].append({"code": code, "action": action, "perma": permanent, "days": days, "gb": gb, "wl_gb": wl_gb})
