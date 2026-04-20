@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, MutableMapping
 from loggers import Logger
-from typing import Any, Self
+from typing import (
+    Any, Self, Literal,
+    KeysView, ItemsView, ValuesView,
+    cast
+)
 from types import TracebackType
 from contextlib import contextmanager
 import copy
@@ -20,7 +24,9 @@ try:
 except ModuleNotFoundError as exc:
     raise RuntimeError("Run this on linux.") from exc
 
-__all__ = ['ConfigError', 'SchemaValidationError', 'FileCorruptionError', 'Config']
+__all__ = ['ConfigError', 'SchemaValidationError', 'FileCorruptionError', 'ReadOnlyConfigError', 'Config']
+
+SYNC_MODES = Literal['full', 'data', 'none']
 
 class ConfigError(RuntimeError):
     """Base config manager error."""
@@ -33,6 +39,8 @@ class SchemaValidationError(ConfigError):
 class FileCorruptionError(ConfigError):
     """Raised when config JSON cannot be decoded."""
 
+class ReadOnlyConfigError(ConfigError):
+    """Raised when trying to mutate a read-only config instance."""
 
 class Config(MutableMapping[str, Any]):
     """Thread-safe, process-safe JSON config manager.
@@ -50,8 +58,9 @@ class Config(MutableMapping[str, Any]):
         self,
         path: str,
         indent: int = 4,
+        read_only: bool = False,
         strict_schema: bool = True,
-        sync_mode: str = "data",
+        sync_mode: SYNC_MODES = 'data',
         isolate_commits: bool = True,
         backup_dir: str | None = None,
         backup_interval: int | float = 7200,
@@ -61,6 +70,9 @@ class Config(MutableMapping[str, Any]):
         Args:
             path: Path to the JSON config file (created if missing).
             indent: JSON indentation width for writes.
+            read_only: Read-only, raises on writes. Handle with caution.
+                WARNING: This arg is also immutable.
+                You cannot make a Config() instance read-only past __init__ and vise versa.
             strict_schema: If True, schema errors raise; if False, they log a warning.
             sync_mode: 'full' fsyncs file + parent directory, 'data' fsyncs file only,
                 'none' skips fsync entirely.
@@ -96,6 +108,8 @@ class Config(MutableMapping[str, Any]):
     
         self._warned_update_callable = False
 
+        self._read_only = read_only
+
         self._backup_dir = backup_dir
         self._backup_interval = backup_interval
         self._backup_retention = backup_retention
@@ -118,8 +132,10 @@ class Config(MutableMapping[str, Any]):
                 self.log.error(f"backup failed: {e}")
 
     def _instance_backup_dir(self) -> str:
+        """Called only within backup thread. self._backup_dir is always str by then."""
         name = os.path.splitext(os.path.basename(self._path))[0]
-        return os.path.join(self._backup_dir, name)
+        dir = cast(str, self._backup_dir)
+        return os.path.join(dir, name)
 
     def _do_backup(self):
         """Take a snapshot and write it to a per-instance subdirectory."""
@@ -156,6 +172,10 @@ class Config(MutableMapping[str, Any]):
             except OSError as e:
                 self.log.error(f"prune failed for {f}: {e}")
     
+    def _raise_if_read_only(self):
+        if self._read_only:
+            raise ReadOnlyConfigError("Cannot modify read-only config instance")
+    
     def reload(self) -> bool:
         """Reload from disk if the file changed since last load. Creates the file if missing.
 
@@ -174,6 +194,7 @@ class Config(MutableMapping[str, Any]):
                 tx["x"].pop("124", None)
                 tx["count"] += 1
         """
+        self._raise_if_read_only()
         return _ConfigTransaction(self)
 
     def mutate(self, callback: Callable[[MutableMapping[str, Any]], Any]) -> Any:
@@ -188,11 +209,13 @@ class Config(MutableMapping[str, Any]):
         Returns:
             Deep-copied return value of the callback.
         """
+        self._raise_if_read_only()
         with self.edit() as tx:
             result = callback(tx)
         return self._detach(result)
 
     def __enter__(self) -> _ConfigTransaction:
+        self._raise_if_read_only()
         tx = self.edit()
         self._context_transaction = tx
         try:
@@ -220,9 +243,11 @@ class Config(MutableMapping[str, Any]):
             return self._detach(self._data[key])
 
     def __setitem__(self, key: str, value: Any) -> None:
+        self._raise_if_read_only()
         self._run_edit(lambda tx: tx.__setitem__(key, value))
 
     def __delitem__(self, key: str) -> None:
+        self._raise_if_read_only()
         self._run_edit(lambda tx: tx.__delitem__(key))
 
     def __contains__(self, key: object) -> bool:
@@ -249,19 +274,19 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return iter(tuple(self._data.keys()))
     
-    def keys(self):  # type: ignore[reportIncompatibleMethodOverride]
+    def keys(self) -> tuple[str, ...]: # type: ignore[reportIncompatibleMethodOverride]
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
             return tuple(self._data.keys())
     
-    def values(self): # type: ignore[reportIncompatibleMethodOverride]
+    def values(self) -> tuple[str, ...]: # type: ignore[reportIncompatibleMethodOverride]
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
             return tuple(self._detach(v) for v in self._data.values())
     
-    def items(self): # type: ignore[reportIncompatibleMethodOverride]
+    def items(self) -> tuple[tuple[str, Any], ...]: # type: ignore[reportIncompatibleMethodOverride]
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
@@ -275,17 +300,21 @@ class Config(MutableMapping[str, Any]):
             return copy.deepcopy(self._data)
 
     def clear(self) -> None:
+        self._raise_if_read_only()
         self._run_edit(lambda tx: tx.clear())
 
     def pop(self, key: str, default: Any = _MISSING) -> Any:
+        self._raise_if_read_only()
         if default is self._MISSING:
             return self._run_edit(lambda tx: tx.pop(key))
         return self._run_edit(lambda tx: tx.pop(key, default))
 
     def popitem(self) -> tuple[str, Any]:
+        self._raise_if_read_only()
         return self._run_edit(lambda tx: tx.popitem())
 
     def setdefault(self, key: str, default: Any = None) -> Any:
+        self._raise_if_read_only()
         return self._run_edit(lambda tx: tx.setdefault(key, default))
 
     def update(self, *args: Any, **kwargs: Any) -> None:
@@ -295,6 +324,7 @@ class Config(MutableMapping[str, Any]):
             cfg.update(lambda tx: ...)
         still works, but `mutate()` / `edit()` is clearer.
         """
+        self._raise_if_read_only()
         if len(args) == 1 and callable(args[0]) and not kwargs:
             if not self._warned_update_callable:
                 self.log.warning(
@@ -484,6 +514,7 @@ class Config(MutableMapping[str, Any]):
             self._last_signature = signature
 
     def _atomic_write(self, data: dict[str, Any]) -> None:
+        self._raise_if_read_only()
         self._ensure_parent_dir()
         dir_path = os.path.dirname(self._path) or "."
     
