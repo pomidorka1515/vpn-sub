@@ -59,7 +59,7 @@ Description: Get full info about a user.
 Authentication: header  
 Args:  
     user: Internal username.  
-    beautify: (optional) `1`/`true`/`yes` to return formatted values in MB.  
+    beautify: (optional) bool-like (`1`, `true`, `yes`, `on`, `y`) to return formatted values in MB.  
 Response (success):  
 ```jsonc  
 // HTTP 200  
@@ -118,7 +118,7 @@ Body:
 ```jsonc  
 {  
     "user": "",      // str, internal username  
-    "perma": true    // OPTIONAL bool, permanent delete (default: true)  
+    "perma": true    // OPTIONAL bool-like (true, 'yes', '1', 'on', 'y'), permanent delete (default: true)  
 }  
 ```  
 Response (success):  
@@ -162,7 +162,7 @@ Response (success):
 Description: Get currently online users.  
 Authentication: header  
 Args:  
-    keyed: (optional) `1`/`true`/`yes` to return a dict keyed by username: ExternalUsernameOrNull instead of a list.  
+    keyed: (optional) bool-like (`1`, `true`, `yes`, `on`, `y`) to return a dict keyed by username: ExternalUsernameOrNull instead of a list.  
 Response (success):  
 ```jsonc  
 // HTTP 200  
@@ -293,7 +293,7 @@ Body:
 {  
     "code": "",      // str, code string (required)  
     "action": "",    // str, code action (required)  
-    "perma": false,  // OPTIONAL bool, reusable (default: false)  
+    "perma": false,  // OPTIONAL bool-like (true, 'yes', '1', 'on', 'y'), reusable (default: false)  
     "days": 0,       // OPTIONAL int, days to add  
     "gb": 0,         // OPTIONAL int, GB to add to monthly limit  
     "wl_gb": 0       // OPTIONAL int, GB to add to whitelist limit  

@@ -392,7 +392,7 @@ class Subscription:
         timee: int = 0
     ) -> dict | str:
         """Adds a new user. Returns string with error if any argument is incorrect.
-        Now also suppports ext username and password (optional). Sanitize them first!"""
+        Now also suppports ext username and password (optional)"""
         if ext_username:
             ext_username = self.sanitize(ext_username)
             if len(ext_username) > 32:

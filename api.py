@@ -107,6 +107,20 @@ def _err(
     """Internal helper function to return an error Response."""
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
+def _parse_bool(value: bool | str | int | None) -> bool | None:
+    """Convert boolean-like values to actual bool."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value = value.lower().strip()
+        if value in ('true', 'yes', '1', 'on', 'y'):
+            return True
+        if value in ('false', 'no', '0', 'off', 'n'):
+            return False
+    if isinstance(value, int):
+        return bool(value)
+    return None
+
 def requires_admin_auth(f):
     """Admin API auth via Authorization header. Returns fake nginx 404 on failure."""
     @wraps(f)
@@ -275,7 +289,7 @@ class WebApi(BaseApi):
         token = self.cfg['tokens'][username]
         link = f"https://pomi.lol/sub?token={token}&lang={lang}"
         
-        if request.args.get('happ') == '1':
+        if _parse_bool(request.args.get('happ')):
             link = f"happ://add/{link}"
         
         try:
@@ -548,6 +562,8 @@ class Api(BaseApi):
             username = cast(str, content.get('user'))
             if self.sub.isuser(username):
                 return _err("Username exists")
+            
+
             x = self.sub.add_new_user(
                 username=username,
                 displayname=cast(str, content.get('displayname', None)),
@@ -573,7 +589,9 @@ class Api(BaseApi):
         try:
             content = cast(dict, request.json)
             username = cast(str, content.get('user'))
-            perma = cast(bool, content.get('perma', True))
+            perma = _parse_bool(content.get('perma', 'true'))
+            if perma is None:
+                return _err("'perma' must be bool-like")
             if not self.sub.isuser(username):
                 return _err("Unknown username")
             self.sub.delete_user(username, perma)
@@ -594,7 +612,9 @@ class Api(BaseApi):
     
     @requires_admin_auth
     def user_onlines(self) -> ResponseType:
-        new = request.args.get('keyed', '').lower() in ('1', 'true', 'yes')
+        new = _parse_bool(request.args.get('keyed', ''))
+        if new is None:
+            return _err("'keyed' must be bool-like")
         online_users = cast(dict, self.sub.get_online_users(new = new))
         if not online_users:
             return _ok(obj=[])
@@ -645,6 +665,8 @@ class Api(BaseApi):
     def code_info(self) -> ResponseType:
         try:
             code = request.args.get('code')
+            if not isinstance(code, str):
+                return _err("'code' must be a str")
             x = self.sub.get_code(code)
             if not isinstance(x, dict):
                 return _err("Code not found", 404)
@@ -657,15 +679,50 @@ class Api(BaseApi):
     def code_add(self) -> ResponseType: 
         try:
             content = cast(dict, request.json)
-            name = content.get('code')
-            action = content.get('action')
-            permanent = content.get('perma', False)
-            days = content.get('days', 0)
-            gb = content.get('gb', 0)
-            wl_gb = content.get('wl_gb', 0)
+            raw_data = {
+                "name": content.get('code'),
+                "action": content.get('action'),
+                "permanent": content.get('perma', 'false'),
+                "days": content.get('days', 0),
+                "gb": content.get('gb', 0),
+                "wl_gb": content.get('wl_gb', 0)
+            }
+
+            data = {}
+
+            for k, v in raw_data.items():
+                if k in ['name', 'action']:
+                    if not isinstance(v, str):
+                        return _err(f"{k} must be string")
+                    if not v:
+                        return _err(f"{k} cannot be empty")
+                    data[k] = v
+                
+                elif k == 'permanent':
+                    parsed = _parse_bool(v)
+                    if parsed is None:
+                        return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
+                    data[k] = parsed 
+                
+                elif k in ['days', 'gb', 'wl_gb']:
+                    try:
+                        data[k] = int(v)
+                    except (ValueError, TypeError):
+                        return _err(f"{k} must be an integer, got: {v}")
+
+            if data['action'] not in ['register', 'bonus']:
+                return _err("action must be 'register' or 'bonus'")
+
+            if data['days'] < 0 or data['gb'] < 0 or data['wl_gb'] < 0:
+                return _err("days, gb, and wl_gb must be non-negative")
 
             self.sub.add_code(
-                name, action, permanent, days, gb, wl_gb
+                code=data['name'],
+                action=data['action'],
+                permanent=data['permanent'], 
+                days=data['days'], 
+                gb=data['gb'], 
+                wl_gb=data['wl_gb']  
             )
             return _ok("Created", 201)
         except ValueError as e: # add_code raises
@@ -679,6 +736,8 @@ class Api(BaseApi):
         try:
             content = cast(dict, request.json)
             name = content.get('code')
+            if not isinstance(name, str):
+                return _err(f"name must be str")
             x = self.sub.delete_code(name)
             if x is not None:
                 return _err("Code not found", 404)

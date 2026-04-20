@@ -31,6 +31,7 @@ cfg = Config(
 # Add as many as yw, the loop will take care of them.
 
 panels = []
+wl = None
 for i, v in cfg['3xui'].items():
     x = cfg['3xui']
     auth = x[i].get('nginx_auth', None)
@@ -64,7 +65,7 @@ for i, v in cfg['3xui'].items():
         log.critical(f"ERROR when initializing panel {i}: {str(e)}")
 
 # Create instances
-sub = Subscription(cfg=cfg, app=app, panels=panels, whitelist_panel=wl) # type: ignore
+sub = Subscription(cfg=cfg, app=app, panels=panels, whitelist_panel=wl)
 bw = BWatch(cfg=cfg, sub=sub)
 api = Api(app=app, cfg=cfg, sub=sub, bw=bw)
 webapi = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)
