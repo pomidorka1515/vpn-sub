@@ -6,10 +6,12 @@ from typing import Any, Self
 from types import TracebackType
 from contextlib import contextmanager
 import copy
+import glob
 import json
 import os
 import tempfile
 import threading
+from datetime import datetime
 
 import jsonschema
 
@@ -51,6 +53,9 @@ class Config(MutableMapping[str, Any]):
         strict_schema: bool = True,
         sync_mode: str = "data",
         isolate_commits: bool = True,
+        backup_dir: str | None = None,
+        backup_interval: int | float = 7200,
+        backup_retention: int = 3
     ) -> None:
         """
         Args:
@@ -61,6 +66,9 @@ class Config(MutableMapping[str, Any]):
                 'none' skips fsync entirely.
             isolate_commits: If True, deep-copies data after commit so any references
                 that leaked out of the transaction can't mutate the live config.
+            backup_dir: Backup directory. Backups are disabled if set to None.
+            backup_interval: Interval in seconds for the backups, in seconds.
+            backup_retention: Amount of concurrent backups kept on disk.
         """
         self.log = Logger(type(self).__name__)
         self._path = path
@@ -87,10 +95,67 @@ class Config(MutableMapping[str, Any]):
         self._schema_cache: dict[str, Any] | None = None
     
         self._warned_update_callable = False
-    
+
+        self._backup_dir = backup_dir
+        self._backup_interval = backup_interval
+        self._backup_retention = backup_retention
+        self._backup_stop = threading.Event()
+
+        self._backup_t = threading.Thread(target=self._backup_loop, daemon=True, name="Backup")
+        
         with self.log.loading():
             self.reload()
 
+        if backup_dir:
+            self._backup_t.start()
+    def _backup_loop(self):
+        while not self._backup_stop.wait(self._backup_interval):
+            try:
+                self._do_backup()
+                self._prune_backups()
+                self.log.error("backup successful")
+            except Exception as e:
+                self.log.error(f"backup failed: {e}")
+
+    def _instance_backup_dir(self) -> str:
+        name = os.path.splitext(os.path.basename(self._path))[0]
+        return os.path.join(self._backup_dir, name)
+
+    def _do_backup(self):
+        """Take a snapshot and write it to a per-instance subdirectory."""
+        instance_dir = self._instance_backup_dir()
+        os.makedirs(instance_dir, exist_ok=True)
+        snapshot = self.copy()
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_path = os.path.join(instance_dir, f"{timestamp}.json")
+        
+        fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
+        os.close(fd)
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(snapshot, f, indent=self._indent, ensure_ascii=False)
+            os.replace(tmp, backup_path)
+        except Exception:
+            try: os.unlink(tmp)
+            except FileNotFoundError: pass
+            raise
+        
+        self.log.debug(f"backup saved: {backup_path}")
+    
+    def _prune_backups(self):
+        """Keep only the N most recent backups."""
+        instance_dir = self._instance_backup_dir()
+        pattern = os.path.join(instance_dir, "*.json")
+        files = sorted(glob.glob(pattern)) 
+        to_delete = files[:-self._backup_retention]
+        for f in to_delete:
+            try:
+                os.unlink(f)
+                self.log.debug(f"pruned old backup: {f}")
+            except OSError as e:
+                self.log.error(f"prune failed for {f}: {e}")
+    
     def reload(self) -> bool:
         """Reload from disk if the file changed since last load. Creates the file if missing.
 

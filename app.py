@@ -17,7 +17,15 @@ app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 
 log = Logger("other") # Logger for other stuff outside classes
 
-cfg = Config('/var/www/sub/config.json', 4)
+cfg = Config(
+    path="../config.json",
+    indent=4,
+    strict_schema=True,
+    sync_mode="data",
+    isolate_commits=True,
+
+    backup_dir="./backup/"
+)
 
 # Panels.
 # Add as many as yw, the loop will take care of them.
