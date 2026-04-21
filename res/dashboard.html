@@ -381,6 +381,7 @@ body {
   <div class="modal danger">
     <div class="modal-title" id="modalTitle"></div>
     <div class="modal-msg" id="modalMsg"></div>
+    <input type="password" id="modalInput" class="bonus-input" style="display:none;margin-bottom:16px" autocomplete="current-password">
     <div class="modal-actions">
       <button class="modal-btn" id="modalCancel"></button>
       <button class="modal-btn danger" id="modalOk"></button>
@@ -498,15 +499,19 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 2500);
 }
 
-function confirmDialog(message, title) {
+function confirmDialog(message, title, withInput = false) {
   return new Promise(resolve => {
     const overlay = document.getElementById('modalOverlay');
     const okBtn = document.getElementById('modalOk');
     const cancelBtn = document.getElementById('modalCancel');
+    const input = document.getElementById('modalInput');
     document.getElementById('modalTitle').textContent = title || t('danger_zone');
     document.getElementById('modalMsg').textContent = message;
     okBtn.textContent = t('confirm_yes');
     cancelBtn.textContent = t('confirm_cancel');
+    input.value = '';
+    input.style.display = withInput ? 'block' : 'none';
+    if (withInput) input.placeholder = t('current_password');
 
     const close = (val) => {
       overlay.classList.remove('show');
@@ -517,23 +522,23 @@ function confirmDialog(message, title) {
       resolve(val);
     };
     const onKey = (e) => {
-      if (e.key === 'Escape') close(false);
-      else if (e.key === 'Enter') close(true);
+      if (e.key === 'Escape') close(withInput ? null : false);
+      else if (e.key === 'Enter') close(withInput ? input.value || null : true);
     };
-    okBtn.onclick = () => close(true);
-    cancelBtn.onclick = () => close(false);
-    overlay.onclick = (e) => { if (e.target === overlay) close(false); };
+    okBtn.onclick = () => close(withInput ? input.value || null : true);
+    cancelBtn.onclick = () => close(withInput ? null : false);
+    overlay.onclick = (e) => { if (e.target === overlay) close(withInput ? null : false); };
     document.addEventListener('keydown', onKey);
     overlay.classList.add('show');
-    cancelBtn.focus();
+    if (withInput) input.focus(); else cancelBtn.focus();
   });
 }
 
 function fmtBytes(b) {
   if (b === 0) return '0 B';
   const u = ['B','KB','MB','GB','TB'];
-  const i = Math.floor(Math.log(b) / Math.log(1024));
-  return (b / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + u[i];
+  const i = Math.floor(Math.log(b) / Math.log(1000));
+  return (b / Math.pow(1000, i)).toFixed(i > 1 ? 2 : 0) + ' ' + u[i];
 }
 
 function fmtTime(ts) {
@@ -675,7 +680,7 @@ function validateSettingsUsername() {
   if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
   svt = setTimeout(async () => {
     try {
-      const res = await api('GET', `/validate?username=${v}`);
+      const res = await api('GET', `/validate?username=${encodeURIComponent(v)}`);
       if (!res) return;
       if (res.success && res.obj) {
         if (!res.obj.valid) { h.textContent = t('hint_invalid') + res.obj.sanitized; h.className = 'username-hint bad'; }
@@ -732,7 +737,7 @@ async function doReset() {
 async function doDelete() {
   if (!(await confirmDialog(t('confirm_delete'), t('confirm_title_delete')))) return;
   if (!(await confirmDialog(t('confirm_delete2'), t('confirm_title_final')))) return;
-  const curPass = prompt(t('current_pw_required'));
+  const curPass = await confirmDialog(t('current_pw_required'), t('confirm_title_delete'), true);
   if (!curPass) return;
   const res = await api('POST', '/delete', { current_password: curPass });
   if (!res) return;
