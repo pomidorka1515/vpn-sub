@@ -242,7 +242,10 @@ class AdminBot:
     def _cb_refresh(self, chat_id: int) -> None:
         try:
             for cc in self.cfg['users'].keys():
-                self.sub.add_users(cc)
+                x = self.sub.add_users(cc)
+                if x is not None:
+                    self.bot.send_message(chat_id, f"Произошла ошибка: {x}")
+                    return
             self.bot.send_message(chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu())
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}")
@@ -300,7 +303,10 @@ class AdminBot:
             self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
             return
         try:
-            self.sub.delete_user(username=username, perma=True)
+            x = self.sub.delete_user(username=username, perma=True)
+            if x is not None:
+                self.bot.send_message(chat_id, f"Произошла ошибка: {x}")
+                return
             self.bot.send_message(chat_id, f"✅ Пользователь <b>{username}</b> удален.", parse_mode="HTML", reply_markup=self.get_main_menu())
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}")

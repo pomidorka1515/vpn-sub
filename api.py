@@ -556,25 +556,59 @@ class Api(BaseApi):
  
     @requires_admin_auth
     @requires_fields('user', 'displayname')
-    def user_add(self) -> ResponseType: 
+    def user_add(self) -> ResponseType:
         try:
             content = cast(dict, request.json)
-            username = cast(str, content.get('user'))
-            if self.sub.isuser(username):
+            raw_data = {
+                "user": content.get('user'),
+                "displayname": content.get('displayname'),
+                "ext_username": content.get('ext_username', None),
+                "ext_password": content.get('ext_password', None),
+                "token": content.get('token', None),
+                "userid": content.get('userid', None),
+                "fingerprint": content.get('fingerprint', None),
+                "limit": content.get('limit', 0),
+                "wl_limit": content.get('wl_limit', 5),
+                "time": content.get('time', 0),
+            }
+
+            data = {}
+
+            for k, v in raw_data.items():
+                if k in ['user', 'displayname']:
+                    if not isinstance(v, str):
+                        return _err(f"{k} must be a string")
+                    if not v:
+                        return _err(f"{k} cannot be empty")
+                    data[k] = v
+
+                elif k in ['ext_username', 'ext_password', 'token', 'userid', 'fingerprint']:
+                    if v is not None and not isinstance(v, str):
+                        return _err(f"{k} must be a string or null")
+                    data[k] = v
+
+                elif k in ['limit', 'wl_limit', 'time']:
+                    try:
+                        data[k] = int(v)
+                    except (ValueError, TypeError):
+                        return _err(f"{k} must be an integer, got: {v}")
+                    if data[k] < 0:
+                        return _err(f"{k} must be non-negative")
+
+            if self.sub.isuser(data['user']):
                 return _err("Username exists")
-            
 
             x = self.sub.add_new_user(
-                username=username,
-                displayname=cast(str, content.get('displayname', None)),
-                ext_username=cast(str, content.get('ext_username', None)),
-                ext_password=cast(str, content.get('ext_password', None)),
-                token=cast(str, content.get('token', None)),
-                userid=cast(str, content.get('userid', None)),
-                fingerprint=cast(str, content.get('fingerprint', None)),
-                limit=cast(int, content.get('limit', 0)),
-                wl_limit=cast(int, content.get('wl_limit', 5)),
-                timee=cast(int, content.get('time', 0))
+                username=data['user'],
+                displayname=data['displayname'],
+                ext_username=data['ext_username'],
+                ext_password=data['ext_password'],
+                token=data['token'],
+                userid=data['userid'],
+                fingerprint=data['fingerprint'],
+                limit=data['limit'],
+                wl_limit=data['wl_limit'],
+                timee=data['time']
             )
             if not isinstance(x, dict):
                 return _err(msg=x)
@@ -594,7 +628,9 @@ class Api(BaseApi):
                 return _err("'perma' must be bool-like")
             if not self.sub.isuser(username):
                 return _err("Unknown username")
-            self.sub.delete_user(username, perma)
+            err = self.sub.delete_user(username, perma)
+            if isinstance(err, str):
+                return _err(err, 500)
             return _ok("Deleted")
         except Exception as e:
             self.log.error(f"user_delete: {e}")
@@ -603,8 +639,13 @@ class Api(BaseApi):
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
         try:
+            errors = []
             for cc in self.cfg['users'].keys():
-                self.sub.add_users(cc)
+                err = self.sub.add_users(cc)
+                if isinstance(err, str):
+                    errors.append(f"{cc}: {err}")
+            if errors:
+                return _err(f"Failed: {'; '.join(errors)}", 500)
             return _ok("Refreshed all users.")
         except Exception as e:
             self.log.error(f"user_refresh: {e}")
@@ -629,6 +670,8 @@ class Api(BaseApi):
             if not self.sub.isuser(username):
                 return _err("Unknown username")
             x = self.sub.reset_user(username)
+            if isinstance(x, str):
+                return _err(x, 500)
             return _ok(obj=x)
         except Exception as e:
             self.log.error(f"user_reset fail: {e}")
@@ -738,8 +781,7 @@ class Api(BaseApi):
             name = content.get('code')
             if not isinstance(name, str):
                 return _err(f"name must be str")
-            x = self.sub.delete_code(name)
-            if x is not None:
+            if not self.sub.delete_code(name):
                 return _err("Code not found", 404)
             return _ok("Deleted")
         except Exception as e:

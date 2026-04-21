@@ -78,18 +78,19 @@ Authentication: header
 Body:  
 ```jsonc  
 {  
-    "user": "",           // str, internal username (required)  
-    "displayname": "",    // str (required)  
-    "ext_username": "",   // OPTIONAL str, web UI login username  
-    "ext_password": "",   // OPTIONAL str, web UI login password  
-    "token": "",          // OPTIONAL str, subscription token (auto-generated if omitted)  
-    "userid": "",         // OPTIONAL str, UUID (auto-generated if omitted)  
-    "fingerprint": "",    // OPTIONAL str, TLS fingerprint  
-    "limit": 0,           // OPTIONAL int, monthly GB limit (0 = unlimited)  
-    "wl_limit": 5,        // OPTIONAL int, whitelist monthly GB limit  
-    "time": 0             // OPTIONAL int, expiry unix timestamp (0 = unlimited)  
+    "user": "",           // str, internal username (required, non-empty)  
+    "displayname": "",    // str (required, non-empty)  
+    "ext_username": "",   // OPTIONAL str or null, web UI login username  
+    "ext_password": "",   // OPTIONAL str or null, web UI login password  
+    "token": "",          // OPTIONAL str or null, subscription token (auto-generated if omitted)  
+    "userid": "",         // OPTIONAL str or null, UUID (auto-generated if omitted)  
+    "fingerprint": "",    // OPTIONAL str or null, TLS fingerprint  
+    "limit": 0,           // OPTIONAL int >= 0, monthly GB limit (0 = unlimited)  
+    "wl_limit": 5,        // OPTIONAL int >= 0, whitelist monthly GB limit (default: 5)  
+    "time": 0             // OPTIONAL int >= 0, expiry unix timestamp (0 = unlimited)  
 }  
 ```  
+All fields are strictly type-checked. Wrong types return HTTP 400 with a descriptive message.  
 Response (success):  
 ```jsonc  
 // HTTP 201  
@@ -104,7 +105,7 @@ Response (error):
 // HTTP 400  
 {  
 	"success": false, 
-	"msg": "Username exists", 
+	"msg": "Username exists", // or type/validation error description
 	"obj": null  
 }  
 ```  

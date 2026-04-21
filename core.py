@@ -246,8 +246,9 @@ class Subscription:
                         down_total += v['down']
         
         return BandwidthInfo(up_total, down_total, up_total + down_total)
-    def add_users(self, username: str) -> None:
-        """Add a user to panels. Dont confuse with add_new_user!"""
+    def add_users(self, username: str) -> None | str:
+        """Add a user to panels. Dont confuse with add_new_user!
+        str with error on error."""
         userid = self.cfg['users'][username]
         panels = self.panels
         
@@ -298,9 +299,13 @@ class Subscription:
                     self.log.info(f"add user: successfully added {username} to ID {j}")
                 else:
                     self.log.error(f"add user: failed to add user {username}:\n{response.text}")
-                    raise Exception(response.text)
+                    return response.json().get('message')
+                    
         self._drop_cache()
-    def delete_user(self, username: str, perma: bool = False) -> None:
+    def delete_user(self,
+                    username: str,
+                    perma: bool = False
+    ) -> None | str:
         """Delete a user, either from panels or from storage too."""
         userid = self.cfg['users'][username]
         panels = self.panels
@@ -309,10 +314,12 @@ class Subscription:
             inbounds = self.getinbounds(panel)
 
             for j in inbounds:
-                k = panel.post(
+                response = panel.post(
                     f"{panel.base_url}panel/api/inbounds/{str(j['id'])}/delClient/{userid}",
                     headers={'Accept': 'application/json'}
                 )
+                if not (response.status_code in [200, 201] and response.json().get('success')):
+                    return response.json().get('msg', 'panel rejected update')
 
 
         if perma:
@@ -331,18 +338,19 @@ class Subscription:
                     data.get('tgids', {}).pop(tgid, None)
 
         self._drop_cache()
+        return None
     def update_user(self, 
                     username: str, 
                     enable: bool | None = None, 
                     timee: bool | None = None, 
-                    wl_enable: bool | None = None) -> None:
-        """Disable/enable a user. wl_enable controls specifically the whitelist node."""
-        userid = self.cfg['users'][username]
+                    wl_enable: bool | None = None) -> None | str:
+        """Disable/enable a user. wl_enable controls specifically the whitelist node.
+        None on success."""
+        userid = self.cfg['users'][username]
         if enable is not None:
             panels = list(self.panels)
             if self.whitelist_panel: panels.remove(self.whitelist_panel)
             for panel in panels:
-                # if panel == self.whitelist_panel: continue 
                 inbounds = self.getinbounds(panel)
                 l = [i['id'] for i in inbounds if i['protocol'] == "vless"]
                 the = {str(vi['id']): vx for vi in inbounds for vx in vi['clientStats'] if vx['uuid'] == userid}
@@ -357,7 +365,9 @@ class Subscription:
                         data={'id': k, 'settings': json.dumps({"clients": [payload]})},
                         headers={'Accept': 'application/json'}
                     )
-            
+                    
+                    if not (response.status_code in [200, 201] and response.json().get('success')):
+                        return response.json().get('msg', 'panel rejected update')
             with self.cfg as data:
                 data['status'][username] = enable
                 if timee is not None: data['statusTime'][username] = timee
@@ -388,6 +398,7 @@ class Subscription:
             
             self.log.info(f"Set WL status for {username} to {wl_enable}")
         self._drop_cache()
+        return None
     def add_new_user(
         self,
         username: str,
@@ -448,8 +459,11 @@ class Subscription:
                 d.setdefault('webui_passwords', {})[ext_username] = ext_password
                 d.setdefault('webui_users', {})[ext_username] = username
         
-        try: self.add_users(username=username)
-        except Exception as e: raise Exception(f"add new user: {username}: {e}")
+        x = self.add_users(username=username)
+        if x is not None:
+            return x
+            self.log.error(f"add_new_user: {x}")
+        
         self._drop_cache()
         return {"username": username, "token": token, "uuid": userid, "fingerprint": fingerprint, "displayname": displayname} # for API
     def update_params(
@@ -462,8 +476,7 @@ class Subscription:
         fingerprint: str | None = None,
         limit: int | None = None,
         wl_limit: int | None = None,
-        timee: int | None = None,
-        restart: bool = True
+        timee: int | None = None
     ) -> str | None:
         """Updates certain fields for any user. Changing UUIDs isnt supported.
         Invalid params return str, None on success."""
@@ -525,11 +538,11 @@ class Subscription:
                 t['webui_passwords'][ext_username] = ext_password
                 t['webui_users'][ext_username] = username                
         self._drop_cache()
-    def update_uuid(self, username: str, uid: str) -> bool:
-        """Seperate method for updating the UUID. True on success.
+    def update_uuid(self, username: str, uid: str) -> None | str:
+        """Seperate method for updating the UUID. None on success, str on error.
         Potentially dangerous operation, seperate function."""
         if not self.isuser(username):
-            return False
+            return "Unknown username"
         olduid = self.cfg['users'][username]
         for panel in self.panels:
             inbounds = self.getinbounds(panel)
@@ -563,9 +576,11 @@ class Subscription:
                 )
                 if not (response.status_code in [200, 201] and response.json().get('success')):
                     self.log.critical(f"update_uuid failed: {response.json().get('msg')}")
+                    return response.json().get('msg')
+        
         with self.cfg as t: t['users'][username] = uid
         self._drop_cache()
-        return True
+
     def register_with_code(
         self,
         *,
@@ -823,35 +838,24 @@ class Subscription:
         with self.cfg as t:
             t['codes'].append({"code": code, "action": action, "perma": permanent, "days": days, "gb": gb, "wl_gb": wl_gb})
 
-    def delete_code(self, code: str) -> None | bool:
-        """Deletes a specified code. False if not found. Ignores 'perma' flag obviously."""
-        
+    def delete_code(self, code: str) -> bool:
+        """Returns True if deleted, False if not found."""
         def _delete(t):
             for i, item in enumerate(t['codes']):
                 if item.get('code') == code:
                     del t['codes'][i]
                     return True
             return False
-        
-        result = self.cfg.mutate(_delete)
-        if not result:
-            return False
-    def list_code(self) -> list:
-        """List all codes, without any additional info."""
-        x = []
-        for i in self.cfg['codes']:
-            x.append(i.get('code'))
-        return x
-    def bonus_code(self, value: int | str, code: str) -> dict[str, Any] | bool:
+        return self.cfg.mutate(_delete)
+    def list_code(self) -> list[str]:
+        return [c['code'] for c in self.cfg['codes'] if 'code' in c]
+    def bonus_code(self, value: int | str, code: str) -> dict[str, Any] | str:
         """Apply a bonus code for a Telegram user."""
         username = self.get_username_telegram(value)
         if not isinstance(username, str) or not username:
-            return False
-        result = self.apply_bonus_code(username=username, code=code)
-        if isinstance(result, str):
-            self.log.error(f"Error in applying code: {result}")
-            return False
-        return result
+            return "Unknown Telegram user"
+        return self.apply_bonus_code(username=username, code=code)
+
     def get_info(self, username: str, pretty: bool = False) -> dict | None:
         """Get all info about a user. None if not found."""
         if not self.cfg['users'].get(username, None):
@@ -949,23 +953,25 @@ class Subscription:
     def is_online(self, username: str) -> bool:
         """Simplest method here lol. But useful."""
         return username in self.get_online_users()
-    def reset_user(self, username: str) -> dict:
+    def reset_user(self, username: str) -> dict | str:
         """Resets token and uuid to randomness. Dict with new values on success."""
         if not self.isuser(username):
-            self.log.warning(f"reset_user: user {username} not found!")
-            raise Exception
+            return "Unknown user"
         newid = str(uuid.uuid4())
         newt = ''.join(random.choices(string.ascii_lowercase + string.ascii_uppercase + string.digits, k=40))
-        if not self.update_uuid(username, newid):
-            self.log.critical("reset_user: something happened, look above")
-            raise Exception
-        if self.update_params(
+        x = self.update_uuid(username, newid)
+        if x is not None:
+            self.log.critical(f"reset_user: error in update_uuid: {x}")
+            return x
+        xx = self.update_params(
             username=username,
-            token=newt,
-            restart=False
-        ) != None:
-            self.log.critical(f"reset_user: something happened")
-            raise Exception
+            token=newt
+        )
+        if xx is not None:
+            self.log.critical(f"reset_user: error in update_params: {xx}")
+            return xx
+    
+
         self._drop_cache()
         return {'uuid': newid, 'token': newt}
     def fmt_bytes(self, value: int) -> tuple[str, str]:
