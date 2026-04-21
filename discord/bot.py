@@ -32,6 +32,10 @@ api = httpx.AsyncClient(
 async def on_ready():
     log.info(f"Logged in as {client.user} ID {client.user.id}")
 
+@client.slash_command(description="Multiplies the number by a multiplier")
+async def multiply(inter, number: int, multiplier: int = 7):
+    await inter.response.send_message(number * multiplier)
+
 try:
     client.run(cfg.get('token', ''))
 except disnake.LoginFailure:

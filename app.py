@@ -20,6 +20,7 @@ log = Logger("other") # Logger for other stuff outside classes
 cfg = Config(
     path="../config.json",
     indent=4,
+    read_only=False,
     strict_schema=True,
     sync_mode="data",
     isolate_commits=True,

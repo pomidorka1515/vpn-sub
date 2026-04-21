@@ -23,7 +23,7 @@ import qrcode
 
 from flask import Flask, Response, send_file, request
 from datetime import timedelta, datetime, timezone
-from typing import Any, cast
+from typing import Any, cast, NamedTuple
 
 __all__ = ["Subscription", "BWatch"]
 
@@ -40,6 +40,14 @@ nginx_404 = (
 if sys.platform != 'linux':
     raise RuntimeError("Must be run on Linux.")
 # time.time() - panel._cache_time < panel.refresh_interval
+
+class BandwidthInfo(NamedTuple):
+    """Every value is in bytes.
+    ' | float' is present because get_info formats these values into floats.
+    bandwidth() itself returns int, always."""
+    upload: int | float
+    download: int | float
+    total: int | float
 
 class Subscription:
     """Core class, the heart of this monolith.
@@ -138,6 +146,7 @@ class Subscription:
             time.sleep(delay)
             os.kill(os.getppid(), sig)
         threading.Thread(target=_restart, daemon=True).start()
+    
     def getstatus(self, panel: XUiSession) -> dict:
         """Get the information about a panel."""
         try:
@@ -212,30 +221,31 @@ class Subscription:
                 codes = d.setdefault("codes", [])
                 if not any(item.get("code") == consumed_code["code"] for item in codes):
                     codes.append(consumed_code)
-    def bandwidth(self, username: str, whitelist: bool = False) -> list[int]:
-        """Get bandwidth info about a user.
-        Output: [upload, download, total]. In bytes."""
+    
+    def bandwidth(self, 
+                  username: str,
+                  whitelist: bool = False
+    ) -> BandwidthInfo:
+        """Get bandwidth info about a user. Returns BandwidthInfo(upload, download, total). In bytes."""
         userid = self.cfg["users"][username]
-        # whitelist True -> use self.whitelist_panel ONLY
-        # whitelist False -> use all except self.whitelist_panel
         panels = [self.whitelist_panel] if whitelist else list(self.panels)
-        if not whitelist and self.whitelist_panel: panels.remove(self.whitelist_panel)
-        traffic_records = [[], []]
+        if not whitelist and self.whitelist_panel: 
+            panels.remove(self.whitelist_panel)
+        
         if not panels:
-            return [0, 0, 0]
+            return BandwidthInfo(0, 0, 0)
+        
+        up_total = 0
+        down_total = 0
         for panel in panels:
-            inbounds = self.getinbounds(panel) # type: ignore
+            inbounds = self.getinbounds(panel)
             for i in inbounds:
                 for v in (i['clientStats'] or []):
                     if v['uuid'] == userid:
-                        traffic_records[0].append(v['up'])
-                        traffic_records[1].append(v['down'])
+                        up_total += v['up']
+                        down_total += v['down']
         
-        total = [0, 0, 0]
-        total[0] = sum(traffic_records[0])
-        total[1] = sum(traffic_records[1])
-        total[2] = total[0] + total[1]
-        return total
+        return BandwidthInfo(up_total, down_total, up_total + down_total)
     def add_users(self, username: str) -> None:
         """Add a user to panels. Dont confuse with add_new_user!"""
         userid = self.cfg['users'][username]
@@ -853,12 +863,9 @@ class Subscription:
         monthly = conf['bw'][username][1]
         wl_monthly = conf['wl_bw'][username][1]
         if pretty:
-            for i in range(len(bandwidths)):
-                bandwidths[i] = round(bandwidths[i] / 10**6, 2) # type: ignore[reportArgumentType]
-            for i in range(len(wl_bandwidths)):
-                wl_bandwidths[i] = round(wl_bandwidths[i] / 10**6, 2) # type: ignore[reportArgumentType]
-            monthly = round(monthly / 10**6, 2)
-            wl_monthly = round(wl_monthly / 10**6, 2)
+            bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in bandwidths))
+            wl_bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in wl_bandwidths))
+
         return {
             "_": random.choice(cast(list, conf.get('funny_strings', []))),
             "token": conf['tokens'][username],
@@ -872,14 +879,14 @@ class Subscription:
             "online": self.is_online(username),
             "bandwidth": {
                 "total": {
-                    "upload": bandwidths[0],
-                    "download": bandwidths[1],
-                    "total": bandwidths[2]
+                    "upload": bandwidths.upload,
+                    "download": bandwidths.download,
+                    "total": bandwidths.total
                 },
                 "wl_total": {
-                    "upload": wl_bandwidths[0],
-                    "download": wl_bandwidths[1],
-                    "total": wl_bandwidths[2]
+                    "upload": wl_bandwidths.upload,
+                    "download": wl_bandwidths.download,
+                    "total": wl_bandwidths.total
                 },
                 "monthly": monthly,
                 "wl_monthly": wl_monthly,
@@ -1071,17 +1078,17 @@ Lang: {lang}""")
         dt = "Bandwidth: " if lang == "en" else "Трафик: "
         dt = dt + "↑ %s1%u1 / ↓ %s2%u2"
         if need_dummy_link:
-            if (int(bandwidths[0]) / 10**6) > 10**4:
-                dt = dt.replace("%s1", str(round(bandwidths[0] / 10**9, 1)))
+            if (int(bandwidths.upload) / 10**6) > 10**4:
+                dt = dt.replace("%s1", str(round(bandwidths.upload / 10**9, 1)))
                 dt = dt.replace("%u1", "GB")
             else:
-                dt = dt.replace("%s1", str(int(round(bandwidths[0] / 10**6, 0))))
+                dt = dt.replace("%s1", str(int(round(bandwidths.upload / 10**6, 0))))
                 dt = dt.replace("%u1", "MB")
-            if (int(bandwidths[1]) / 10**6) > 10**4:
-                dt = dt.replace("%s2", str(round(bandwidths[1] / 10**9, 1)))
+            if (int(bandwidths.download) / 10**6) > 10**4:
+                dt = dt.replace("%s2", str(round(bandwidths.download / 10**9, 1)))
                 dt = dt.replace("%u2", "GB")
             else:
-                dt = dt.replace("%s2", str(int(round(bandwidths[1] / 10**6, 0))))
+                dt = dt.replace("%s2", str(int(round(bandwidths.download / 10**6, 0))))
                 dt = dt.replace("%u2", "MB")
 
         dt = urllib.parse.quote(dt)
@@ -1105,9 +1112,9 @@ Lang: {lang}""")
         if not status:
             desc = self.cfg['description'][2] if lang == "en" else self.cfg['description'][3]
         if status:
-            v, label = self.fmt_bytes(int(bandwidths[0]))
+            v, label = self.fmt_bytes(int(bandwidths.upload))
             desc = desc.replace("%s1", v).replace("%u1", label)
-            v, label = self.fmt_bytes(int(bandwidths[1]))
+            v, label = self.fmt_bytes(int(bandwidths.download))
             desc = desc.replace("%s2", v).replace("%u2", label)
 
             if self.cfg['bw'][username][0] != 0:
