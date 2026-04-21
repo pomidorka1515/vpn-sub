@@ -1062,8 +1062,12 @@ class PublicBot:
         code = text.strip()
         try:
             res = self.sub.bonus_code(value=uid, code=code)
-            if res is False:
-                self.bot.send_message(message.chat.id, t['invalid_code'], reply_markup=self.get_menu(uid))
+            if isinstance(res, str):
+                if res.lower() == "unknown code":
+                    self.bot.send_message(message.chat.id, t['invalid_code'], reply_markup=self.get_menu(uid))
+                else:
+                    self.bot.send_message(message.chat.id, "Internal Server Error", reply_markup=self.get_menu(uid))
+                return
             else:
                 self.bot.send_message(message.chat.id, t['bonus_success'], reply_markup=self.get_menu(uid))
                 self.send_info(message.chat.id, uid, lang)

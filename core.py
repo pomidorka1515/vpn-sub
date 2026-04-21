@@ -42,9 +42,11 @@ if sys.platform != 'linux':
 # time.time() - panel._cache_time < panel.refresh_interval
 
 class BandwidthInfo(NamedTuple):
-    """Every value is in bytes.
+    """
+    Every value is in bytes.
     ' | float' is present because get_info formats these values into floats.
-    bandwidth() itself returns int, always."""
+    bandwidth() itself returns int, always.
+    """
     upload: int | float
     download: int | float
     total: int | float
@@ -90,13 +92,16 @@ class Subscription:
                 ua=request.headers.get('User-Agent', ''),
                 ip=request.headers.get('X-Real-IP', '')
             )
+
     def hash(self, s: str) -> str:
         return hashlib.sha256((self.SALT + s).encode()).hexdigest()
     
-    def compare(self, a: str, b: str) -> bool:
+    @staticmethod
+    def compare(a: str, b: str) -> bool:
         return hmac.compare_digest(a, b)
     
-    def isuuid(self, s: str) -> bool:
+    @staticmethod
+    def isuuid(s: str) -> bool:
         """Validate a UUID."""
         try:
             val = uuid.UUID(s, version=4)
@@ -108,7 +113,8 @@ class Subscription:
         """Parse a User-Agent against a regex to detect if it is a browser."""
         return self.BROWSER_UA.search(ua)
 
-    def sanitize(self, s: str) -> str:
+    @staticmethod
+    def sanitize(s: str) -> str:
         """Sanitize an external username"""
         s = s[:32]
         return re.sub(r'[^A-Za-z0-9_\-]', '', s)
@@ -126,7 +132,8 @@ class Subscription:
             return True
         return False
     
-    def make_qr(self, text: str) -> io.BytesIO:
+    @staticmethod
+    def make_qr(text: str) -> io.BytesIO:
         img = qrcode.make(text)
         bio = io.BytesIO()
         img.save(bio, 'PNG')
@@ -134,15 +141,15 @@ class Subscription:
         bio.name = "qr.png"
         return bio
     
-    def restart(self, delay: int | float = 0.1) -> None:
+    @staticmethod
+    def restart(delay: int | float = 0.1) -> None:
         """Restart gunicorn with a delay (in seconds, defaults to 100ms).
         Redundant already, but i will keep it here."""
         def _restart():
             try:
                 sig = signal.SIGHUP
             except NameError:
-                self.log.critical("Failed to restart. Are you running on Linux?")
-                raise
+                raise RuntimeError("Must be ran on Linux.")
             time.sleep(delay)
             os.kill(os.getppid(), sig)
         threading.Thread(target=_restart, daemon=True).start()
@@ -161,7 +168,7 @@ class Subscription:
             return {}
 
     def getinbounds(self, panel: XUiSession) -> list[dict]:
-        """Get inbounds list. Uses cache with TTL, panel.local skips cache."""
+        """Get inbounds list. Uses cache with TTL, panel.local (almost) skips cache."""
         now = time.time()
         ttl = 2 if panel.local else 15  # fast local, slow remote
         
@@ -238,7 +245,7 @@ class Subscription:
         up_total = 0
         down_total = 0
         for panel in panels:
-            inbounds = self.getinbounds(panel)
+            inbounds = self.getinbounds(panel) # type: ignore[reportArugmentType]
             for i in inbounds:
                 for v in (i['clientStats'] or []):
                     if v['uuid'] == userid:
@@ -346,7 +353,7 @@ class Subscription:
                     wl_enable: bool | None = None) -> None | str:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
         None on success."""
-        userid = self.cfg['users'][username]
+        userid = self.cfg['users'][username]
         if enable is not None:
             panels = list(self.panels)
             if self.whitelist_panel: panels.remove(self.whitelist_panel)
@@ -360,7 +367,7 @@ class Subscription:
                     payload['enable'] = enable
                     del payload['inboundId']
                     payload['id'] = userid
-                    panel.post(
+                    response = panel.post(
                         f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
                         data={'id': k, 'settings': json.dumps({"clients": [payload]})},
                         headers={'Accept': 'application/json'}
@@ -974,12 +981,16 @@ class Subscription:
 
         self._drop_cache()
         return {'uuid': newid, 'token': newt}
-    def fmt_bytes(self, value: int) -> tuple[str, str]:
+
+    @staticmethod
+    def fmt_bytes(value: int | float) -> tuple[str, str]:
         for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
             if value >= div:
                 return str(round(value / div, 2)), unit
         return str(round(value / 10**6, 2)), "MB"
-    def fmt_time(self, seconds: int) -> str:
+
+    @staticmethod
+    def fmt_time(seconds: int) -> str:
         if seconds < 60:
             return f"{seconds}с"
         m, s = divmod(seconds, 60)
@@ -1063,13 +1074,11 @@ Lang: {lang}""")
             if not status:
                 break
             link = self.cfg['masterLinks'][p_key]
-            flag = self.cfg['flags'][p_key]
+            flag = self.cfg['flags'][p_key] if is_happ else ""
             node = self.cfg['profileNodes'][p_key]
             domain = self.cfg['nodes'][node]
-            if not is_happ:
-                flag = ""
             link = link.replace("DOMAIN", domain)
-            if "FINGERPRINT" in link: link = link.replace("FINGERPRINT", self.cfg['userFingerprints'][username])
+            link = link.replace("FINGERPRINT", self.cfg['userFingerprints'][username])
             link = link.replace("UUID", user_uuid)
             link = link.replace("NAME", (flag + p_name[0] if lang == "en" else flag + p_name[1]))
             if "EXTRA" in link:
@@ -1084,18 +1093,10 @@ Lang: {lang}""")
         dt = "Bandwidth: " if lang == "en" else "Трафик: "
         dt = dt + "↑ %s1%u1 / ↓ %s2%u2"
         if need_dummy_link:
-            if (int(bandwidths.upload) / 10**6) > 10**4:
-                dt = dt.replace("%s1", str(round(bandwidths.upload / 10**9, 1)))
-                dt = dt.replace("%u1", "GB")
-            else:
-                dt = dt.replace("%s1", str(int(round(bandwidths.upload / 10**6, 0))))
-                dt = dt.replace("%u1", "MB")
-            if (int(bandwidths.download) / 10**6) > 10**4:
-                dt = dt.replace("%s2", str(round(bandwidths.download / 10**9, 1)))
-                dt = dt.replace("%u2", "GB")
-            else:
-                dt = dt.replace("%s2", str(int(round(bandwidths.download / 10**6, 0))))
-                dt = dt.replace("%u2", "MB")
+            v, label = self.fmt_bytes(bandwidths.upload)
+            dt = dt.replace("%s1", v).replace("%u1", label)
+            v, label = self.fmt_bytes(bandwidths.download)
+            dt = dt.replace("%s2", v).replace("%u2", label)
 
         dt = urllib.parse.quote(dt)
         dummy = f"vless://0@localhost:1?type=tcp&security=none#" + dt
@@ -1109,7 +1110,7 @@ Lang: {lang}""")
                           username: str,
                           name: str,
                           lang: str,
-                          bandwidths: list[int], 
+                          bandwidths: BandwidthInfo, 
                           status: bool,
                           statusTime: bool,
                           ts: int) -> str:
@@ -1222,6 +1223,10 @@ class BWatch:
     def stop(self):
         self._stop_event.set()
 
+    def _update_user(self, *args, **kwargs):
+        x = self.sub.update_user(*args, **kwargs)
+        if x is not None:
+            self.log.critical(f"update_user error: {x}") 
     def bandwidth_check(self):
         updates = {}    # username -> (delta, current) for main
         wl_updates = {} # username -> (delta, current) for whitelist
@@ -1233,8 +1238,7 @@ class BWatch:
                     except Exception as e: self.log.critical(f"bw_check: {i}: {e}")
             if self.cfg['bw'].get(i, [0, 0])[0] != 0:
                 if self.cfg['bw'][i][1] < self.cfg['bw'][i][0] * 1000**3 and not self.cfg['status'][i]:
-                    try: self.sub.update_user(username=i, enable=True)
-                    except Exception as e: self.log.critical(f"bw_check: {i}: {e}")
+                    self._update_user(username=i, enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i)
                     if i not in self.mem:
@@ -1248,8 +1252,7 @@ class BWatch:
             # Whitelist bandwidth
             if self.cfg['wl_bw'].get(i, [0, 0])[0] != 0:
                 if self.cfg['wl_bw'][i][1] < self.cfg['wl_bw'][i][0] * 1000**3 and not self.cfg['statusWl'][i]:
-                    try: self.sub.update_user(username=i, wl_enable=True)
-                    except Exception as e: self.log.critical(f"bw_check: {i}: {e}")
+                    self._update_user(username=i, wl_enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i, whitelist=True)
                     if i not in self.wl_mem:
@@ -1324,8 +1327,7 @@ class BWatch:
             if self.cfg['time'][i] != 0:
                 if (self.cfg['time'][i] - int(time.time())) <= 0:
                     if self.cfg['statusTime'][i]:
-                        try: self.sub.update_user(username=i, enable=False, timee=False)
-                        except Exception as e: self.log.critical(f"check: tick: time upd: {str(e)}")
+                        self._update_user(username=i, enable=False, timee=False)
                         if self.bot: self.bot.msg(self.sub.get_username_telegram(tgid=i, reverse=True), 'warning_disabled') # sub expired
                     continue
                 else:
@@ -1338,8 +1340,7 @@ class BWatch:
                             if self.bot: self.bot.msg(cast(int, id), 'warning_days', days=days)
             if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3:
                 if self.cfg['statusWl'].get(i, True):
-                    try: self.sub.update_user(username=i, wl_enable=False)
-                    except Exception as e: self.log.critical(f"check: tick: disable whitelist: {str(e)}")
+                    self._update_user(username=i, wl_enable=False)
                     if self.bot: self.bot.msg(self.sub.get_username_telegram(tgid=i, reverse=True), 'warning_traffic_whitelist_disabled', available=self.cfg['wl_bw'][i][0])
             elif self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3 * 0.95: # 95%
                 id = self.sub.get_username_telegram(tgid=i, reverse=True)
@@ -1352,8 +1353,7 @@ class BWatch:
             if self.cfg['bw'][i][0] == 0:
                 continue
             if self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > self.cfg['bw'][i][0] * 1000**3:
-                try: self.sub.update_user(username=i, enable=False, timee=True)
-                except Exception as e: self.log.critical(f"check: tick: disable: {str(e)}")
+                self._update_user(username=i, enable=False, timee=True)
                 if self.bot: self.bot.msg(self.sub.get_username_telegram(tgid=i, reverse=True), 'warning_traffic_disabled', available=self.cfg['bw'][i][0])
             elif self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > self.cfg['bw'][i][0] * 1000**3 * 0.95: # 95%
                 id = self.sub.get_username_telegram(tgid=i, reverse=True)

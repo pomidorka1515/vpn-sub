@@ -13,17 +13,17 @@ class XUiSession(Session):
     """Persistent X-UI Session. Supports basic auth, https, and more.
     Please note that this should only be used in Subscripiton, nowhere else."""
     def __init__(self,
-                 name: str,
-                 address: str,
-                 port: int | str,
-                 uri: str,
-                 username: str,
-                 password: str,
-                 refresh_interval: int | float = 60,
-                 https: bool = False,
-                 nginx_auth: tuple | None = None,  # nginx_auth=('user', 'pass')
-                 ignore_inbounds: list[int] | None = None
-                ):
+            name: str,
+            address: str,
+            port: int | str,
+            uri: str,
+            username: str,
+            password: str,
+            refresh_interval: int | float = 60,
+            https: bool = False,
+            nginx_auth: tuple | None = None,  # nginx_auth=('user', 'pass')
+            ignore_inbounds: tuple[int, ...] = () # Can be empty
+    ):
         """
         Args:
             name: The display name for a panel.
