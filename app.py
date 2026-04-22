@@ -47,7 +47,8 @@ for i, v in cfg['3xui'].items():
             password=x[i]['password'],
             https=x[i]['https'],
             nginx_auth=auth,
-            ignore_inbounds=tuple(x[i]['ignore_inbounds'])
+            ignore_inbounds=tuple(x[i]['ignore_inbounds']),
+            inject_headers=x[i]['inject_headers']
         )
         continue
     try:
@@ -60,7 +61,8 @@ for i, v in cfg['3xui'].items():
             password=x[i]['password'],
             https=x[i]['https'],
             nginx_auth=auth,
-            ignore_inbounds=tuple(x[i]['ignore_inbounds'])
+            ignore_inbounds=tuple(x[i]['ignore_inbounds']),
+            inject_headers=x[i]['inject_headers']
         ))
     except Exception as e:
         log.critical(f"ERROR when initializing panel {i}: {str(e)}")

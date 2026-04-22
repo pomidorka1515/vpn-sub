@@ -759,7 +759,7 @@ class Api(BaseApi):
             if data['days'] < 0 or data['gb'] < 0 or data['wl_gb'] < 0:
                 return _err("days, gb, and wl_gb must be non-negative")
 
-            self.sub.add_code(
+            x = self.sub.add_code(
                 code=data['name'],
                 action=data['action'],
                 permanent=data['permanent'], 
@@ -767,9 +767,9 @@ class Api(BaseApi):
                 gb=data['gb'], 
                 wl_gb=data['wl_gb']  
             )
+            if isinstance(x, str):
+                return _err(x)
             return _ok("Created", 201)
-        except ValueError as e: # add_code raises
-            return _err(str(e), 400)
         except Exception as e:
             return _err(str(e), 500)
 

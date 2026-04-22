@@ -625,15 +625,17 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                 cfg._last_signature = signature
     
             elif signature == cfg._last_signature:
-                current = cfg._data
-    
+                # Shared reference — deep copy so nested mutations don't bleed
+                # into the live config during the transaction.
+                current = copy.deepcopy(cfg._data)
+
             else:
                 current = cfg._read_json_object()
                 cfg._validate_schema(current)
                 cfg._data = current
                 cfg._last_signature = signature
-    
-            self._original = current
+
+            self._original = copy.deepcopy(current)
             self._data = copy.deepcopy(current)
             self.owner_thread_id = threading.get_ident()
             cfg._active_transaction = self

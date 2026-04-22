@@ -135,7 +135,8 @@
                     "ignore_inbounds": {
                         "type": "array",
                         "items": { "type": "integer" }
-                    }
+                    },
+                    "inject_headers": { "type": "object" }
                 }
             }
         },

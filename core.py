@@ -32,14 +32,13 @@ nginx_404 = (
     "<head><title>404 Not Found</title></head>\r\n"
     "<body>\r\n"
     "<center><h1>404 Not Found</h1></center>\r\n"
-    "<hr><center>nginx/1.29.7</center>\r\n"
+    "<hr><center>nginx/1.29.8</center>\r\n"
     "</body>\r\n"
     "</html>\r\n"
 )
 
 if sys.platform != 'linux':
     raise RuntimeError("Must be run on Linux.")
-# time.time() - panel._cache_time < panel.refresh_interval
 
 class BandwidthInfo(NamedTuple):
     """
@@ -52,8 +51,8 @@ class BandwidthInfo(NamedTuple):
     total: int | float
 
 class Subscription:
-    """Core class, the heart of this monolith.
-    Dependencies: XUiSession, Config.
+    """Core class.  
+    Dependencies: XUiSession, Config.  
     Classes depending on this: Literally all except Logger, Config, XUiSession"""
     def __init__(self, 
                  cfg: Config,
@@ -171,11 +170,10 @@ class Subscription:
         """Get inbounds list. Uses cache with TTL, panel.local (almost) skips cache."""
         now = time.time()
         ttl = 2 if panel.local else 15  # fast local, slow remote
-        
-        with panel._cache_lock:
-            if (panel._cache is not None 
-                and now - panel._cache_time < ttl):
-                return panel._cache
+
+        cached = panel.get_cache()
+        if cached is not None and now - panel._cache_time < ttl:
+            return cached
         
         try:
             response = panel.get(f"{panel.base_url}panel/api/inbounds/list")
@@ -186,9 +184,7 @@ class Subscription:
             inbounds = data['obj']
             if panel.ignore_inbounds:
                 inbounds = [i for i in inbounds if i['id'] not in panel.ignore_inbounds]
-            with panel._cache_lock:
-                panel._cache = inbounds
-                panel._cache_time = now
+            panel.set_cache(inbounds)
             return inbounds
         except Exception as e:
             self.log.warning(f"getinbounds fail: {e}")
@@ -198,9 +194,7 @@ class Subscription:
         """Drop cached inbounds. Call after mutations."""
         targets = [panel] if panel else list(self.panels)
         for p in targets:
-            with p._cache_lock:
-                p._cache = None
-                p._cache_time = 0
+            p.clear_cache()
     
     def _rollback_registered_user(
         self,
@@ -306,7 +300,7 @@ class Subscription:
                     self.log.info(f"add user: successfully added {username} to ID {j}")
                 else:
                     self.log.error(f"add user: failed to add user {username}:\n{response.text}")
-                    return response.json().get('message')
+                    return response.json().get('msg')
                     
         self._drop_cache()
     def delete_user(self,
@@ -466,13 +460,14 @@ class Subscription:
                 d.setdefault('webui_passwords', {})[ext_username] = ext_password
                 d.setdefault('webui_users', {})[ext_username] = username
         
-        x = self.add_users(username=username)
-        if x is not None:
-            return x
-            self.log.error(f"add_new_user: {x}")
-        
-        self._drop_cache()
-        return {"username": username, "token": token, "uuid": userid, "fingerprint": fingerprint, "displayname": displayname} # for API
+        try:
+            x = self.add_users(username=username)
+            if x is not None:
+                self.log.error(f"add_new_user: {x}")
+                return x
+            return {"username": username, "token": token, "uuid": userid, "fingerprint": fingerprint, "displayname": displayname}
+        finally:
+            self._drop_cache()
     def update_params(
         self,
         username: str,
@@ -831,20 +826,28 @@ class Subscription:
                  permanent: bool = False, 
                  days: int = 0, 
                  gb: int = 0,
-                 wl_gb: int = 0) -> None:
+                 wl_gb: int = 0) -> None | str:
         """Creates a code. Simple."""
 
+        if not isinstance(code, str) or not code:
+            return "code must be a non-empty string"
         if action not in ["register", "bonus"]:
-            raise ValueError(f"code {code} action must be register or bonus")
-
+            return f"action must be 'register' or 'bonus', got '{action}'"
         if not isinstance(permanent, bool):
-            raise ValueError(f"permanent param must be a bool")
-        if not (isinstance(days, int) or isinstance(gb, int) or isinstance(wl_gb, int)):
-            raise ValueError("days must be positive integer")
-
+            return "permanent must be a bool"
+        if not all(isinstance(x, int) for x in (days, gb, wl_gb)):
+            return "days, gb, wl_gb must be integers"
+        if days < 0 or gb < 0 or wl_gb < 0:
+            return "days, gb, wl_gb must be non-negative"
+        
         with self.cfg as t:
-            t['codes'].append({"code": code, "action": action, "perma": permanent, "days": days, "gb": gb, "wl_gb": wl_gb})
-
+            if any(c.get('code') == code for c in t['codes']):
+                return f"code '{code}' already exists"
+            t['codes'].append({
+                "code": code, "action": action, "perma": permanent,
+                "days": days, "gb": gb, "wl_gb": wl_gb
+            })
+        return None
     def delete_code(self, code: str) -> bool:
         """Returns True if deleted, False if not found."""
         def _delete(t):
@@ -1010,7 +1013,6 @@ class Subscription:
         self.log.info(f"""subscription hit!
 IP: {ip}
 User-Agent: {ua}
-Token: {token}
 Username: {"none" if not username else username}
 Lang: {lang}""")
         if not username or username not in self.cfg['users']:
@@ -1019,17 +1021,19 @@ Lang: {lang}""")
             return self.resp
         bandwidths = self.bandwidth(username)
 
+        cfg = self.cfg.copy()
+        
         browser = self.isbrowser(ua=ua)
-        name = self.cfg['displaynames'][username]
-        need_dummy_link = True if ("v2rayNG" in ua) or ("v2rayN" in ua) else False
-        is_happ = True if ua.startswith("Happ/") else False
+        name = cfg['displaynames'][username]
+        need_dummy_link = "v2rayn" in ua.lower() or "v2rayng" in ua.lower()
+        is_happ = ua.startswith("Happ/")
 
-        status = self.cfg['status'][username]
-        statusTime = self.cfg['statusTime'][username]
-        statusWl = self.cfg['statusWl'][username]
-        times = self.cfg['time'][username]
+        status = cfg['status'][username]
+        statusTime = cfg['statusTime'][username]
+        statusWl = cfg['statusWl'][username]
+        times = cfg['time'][username]
         mimetype = "text/plain" if not browser else "text/html"
-        sub_name = self.cfg['sub_name']
+        sub_name = cfg['sub_name']
         userinfo = "upload=%i1;download=%i2;total=%i3;expire=%i4"
         if browser:
             return Response(self.browser_html, mimetype=mimetype)
@@ -1046,13 +1050,13 @@ Lang: {lang}""")
         )
         announce = f"base64:{base64.b64encode(desc.encode('utf-8')).decode('utf-8')}"
         if status:
-            userinfo = userinfo.replace("%i1", str(bandwidths[0]) if self.cfg['bw'][username][0] == 0 else str(int(self.cfg['bw'][username][1] / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i2", str(bandwidths[1]) if self.cfg['bw'][username][0] == 0 else str(int(self.cfg['bw'][username][1] / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i3", "0" if self.cfg['bw'][username][0] == 0 else str(int(self.cfg['bw'][username][0] * 10**9 * self.RATIO)))
+            userinfo = userinfo.replace("%i1", str(bandwidths[0]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO)))
+            userinfo = userinfo.replace("%i2", str(bandwidths[1]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO)))
+            userinfo = userinfo.replace("%i3", "0" if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][0] * 10**9 * self.RATIO)))
         else:
-            userinfo = userinfo.replace("%i1", str(int(self.cfg['bw'][username][0] * 10**9 / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i2", str(int(self.cfg['bw'][username][0] * 10**9 / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i3", str(int(self.cfg['bw'][username][0] * 10**9 * self.RATIO)))
+            userinfo = userinfo.replace("%i1", str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO)))
+            userinfo = userinfo.replace("%i2", str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO)))
+            userinfo = userinfo.replace("%i3", str(int(cfg['bw'][username][0] * 10**9 * self.RATIO)))
         userinfo = userinfo.replace("%i4", str(times))
         headers = {
             'Profile-Title': sub_name,
@@ -1064,25 +1068,25 @@ Lang: {lang}""")
             'announce': announce,
             'Content-Type': "text/plain"
         }
-        if is_happ: headers['routing'] = f"happ://routing/onadd/{base64.b64encode(json.dumps(self.cfg['routing']).encode('utf-8')).decode('utf-8')}"
-        user_uuid = self.cfg['users'][username]
+        if is_happ: headers['routing'] = f"happ://routing/onadd/{base64.b64encode(json.dumps(cfg['routing']).encode('utf-8')).decode('utf-8')}"
+        user_uuid = cfg['users'][username]
         generated_links = []
 
-        for p_key, p_name in self.cfg['profiles'].items():
-            if p_key in self.cfg['whitelistProfiles'] and not statusWl:
+        for p_key, p_name in cfg['profiles'].items():
+            if p_key in cfg['whitelistProfiles'] and not statusWl:
                 continue
             if not status:
                 break
-            link = self.cfg['masterLinks'][p_key]
-            flag = self.cfg['flags'][p_key] if is_happ else ""
-            node = self.cfg['profileNodes'][p_key]
-            domain = self.cfg['nodes'][node]
+            link = cfg['masterLinks'][p_key]
+            flag = cfg['flags'][p_key] if is_happ else ""
+            node = cfg['profileNodes'][p_key]
+            domain = cfg['nodes'][node]
             link = link.replace("DOMAIN", domain)
-            link = link.replace("FINGERPRINT", self.cfg['userFingerprints'][username])
+            link = link.replace("FINGERPRINT", cfg['userFingerprints'][username])
             link = link.replace("UUID", user_uuid)
             link = link.replace("NAME", (flag + p_name[0] if lang == "en" else flag + p_name[1]))
             if "EXTRA" in link:
-                extra_data = self.cfg['xhttpExtra'].get(p_key)
+                extra_data = cfg['xhttpExtra'].get(p_key)
                 if extra_data:
                     json_str = json.dumps(extra_data, separators=(',', ':'))
                     encoded_extra = urllib.parse.quote(json_str)
@@ -1114,22 +1118,23 @@ Lang: {lang}""")
                           status: bool,
                           statusTime: bool,
                           ts: int) -> str:
+        cfg = self.cfg.copy()
 
-        desc = self.cfg['description'][0] if lang == "en" else self.cfg['description'][1]
+        desc = cfg['description'][0] if lang == "en" else cfg['description'][1]
         if not status:
-            desc = self.cfg['description'][2] if lang == "en" else self.cfg['description'][3]
+            desc = cfg['description'][2] if lang == "en" else cfg['description'][3]
         if status:
             v, label = self.fmt_bytes(int(bandwidths.upload))
             desc = desc.replace("%s1", v).replace("%u1", label)
             v, label = self.fmt_bytes(int(bandwidths.download))
             desc = desc.replace("%s2", v).replace("%u2", label)
 
-            if self.cfg['bw'][username][0] != 0:
-                desc = desc.replace("%x1", self.cfg['description'][4] if lang == "en" else self.cfg['description'][5])
+            if cfg['bw'][username][0] != 0:
+                desc = desc.replace("%x1", cfg['description'][4] if lang == "en" else cfg['description'][5])
             else:
                 desc = desc.replace("%x1", "")
-            if self.cfg['time'][username] != 0:
-                desc = desc.replace("%t1", self.cfg['description'][6] if lang == "en" else self.cfg['description'][7])
+            if cfg['time'][username] != 0:
+                desc = desc.replace("%t1", cfg['description'][6] if lang == "en" else cfg['description'][7])
                 desc = desc.replace(
                     "%t3",
                     datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
@@ -1139,34 +1144,34 @@ Lang: {lang}""")
                     str((ts - int(time.time())) // 86400)
                 )
             else:
-                t1 = (self.cfg['description'][4] if lang == "en" else self.cfg['description'][5]) if self.cfg['bw'][username][0] != 0 else ""
+                t1 = (cfg['description'][4] if lang == "en" else self.cfg['description'][5]) if cfg['bw'][username][0] != 0 else ""
                 desc = desc.replace("%t1", t1).replace("%t2", "").replace("%t3", "")
-            if self.cfg['bw'][username][0] != 0:
-                v, label = self.fmt_bytes(int(self.cfg['bw'][username][1]))
+            if cfg['bw'][username][0] != 0:
+                v, label = self.fmt_bytes(int(cfg['bw'][username][1]))
                 desc = desc.replace("%n1", v).replace("%y1", label)
-                desc = desc.replace("%n2", str(self.cfg['bw'][username][0])).replace("%y2", "GB")
+                desc = desc.replace("%n2", str(cfg['bw'][username][0])).replace("%y2", "GB")
             else:
                 desc = desc.replace("%n1", "").replace("%y1", "").replace("%n2", "").replace("%y2", "")
-            if self.cfg['wl_bw'][username][0] != 0:
-                if self.cfg['wl_bw'][username][1] > self.cfg['wl_bw'][username][0] * 10**9: 
-                    desc = desc.replace("%l1", self.cfg['description'][12] if lang == "en" else self.cfg['description'][13])
+            if cfg['wl_bw'][username][0] != 0:
+                if cfg['wl_bw'][username][1] > cfg['wl_bw'][username][0] * 10**9: 
+                    desc = desc.replace("%l1", cfg['description'][12] if lang == "en" else cfg['description'][13])
                 else:
-                    desc = desc.replace("%l1", self.cfg['description'][10] if lang == "en" else self.cfg['description'][11])
+                    desc = desc.replace("%l1", cfg['description'][10] if lang == "en" else cfg['description'][11])
                 
-                v, label = self.fmt_bytes(int(self.cfg['wl_bw'][username][1]))
+                v, label = self.fmt_bytes(int(cfg['wl_bw'][username][1]))
                 desc = desc.replace("%w1", v).replace("%i1", label)
 
-                desc = desc.replace("%w2", str(self.cfg['wl_bw'][username][0])).replace("%i2", "GB")
+                desc = desc.replace("%w2", str(cfg['wl_bw'][username][0])).replace("%i2", "GB")
             else:
                 desc = desc.replace("%l1", "").replace("%w1", "").replace("%i1", "").replace("%w2", "").replace("%i2", "")
         else:
-            if self.cfg['bw'][username][0] != 0:
-                v, label = self.fmt_bytes(int(self.cfg['bw'][username][1]))
+            if cfg['bw'][username][0] != 0:
+                v, label = self.fmt_bytes(int(cfg['bw'][username][1]))
                 desc = desc.replace("%n1", v).replace("%u1", label)
 
-                desc = desc.replace("%n2", str(self.cfg['bw'][username][0])).replace("%u2", "GB")
+                desc = desc.replace("%n2", str(cfg['bw'][username][0])).replace("%u2", "GB")
             if not statusTime:
-                desc = desc.replace("%t1", self.cfg['description'][8] if lang == "en" else self.cfg['description'][9])
+                desc = desc.replace("%t1", cfg['description'][8] if lang == "en" else cfg['description'][9])
                 desc = desc.replace(
                     "%t3",
                     datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
@@ -1234,8 +1239,7 @@ class BWatch:
             # Main bandwidth
             if self.cfg['time'].get(i, 0) != 0:
                 if (self.cfg['time'][i] - int(time.time())) >= 0 and not self.cfg['statusTime'][i]:
-                    try: self.sub.update_user(username=i, enable=True, timee=True)
-                    except Exception as e: self.log.critical(f"bw_check: {i}: {e}")
+                    self._update_user(username=i, enable=True, timee=True)
             if self.cfg['bw'].get(i, [0, 0])[0] != 0:
                 if self.cfg['bw'][i][1] < self.cfg['bw'][i][0] * 1000**3 and not self.cfg['status'][i]:
                     self._update_user(username=i, enable=True)
@@ -1244,7 +1248,7 @@ class BWatch:
                     if i not in self.mem:
                         self.mem[i] = current_bws
                     else:
-                        delta = current_bws[2] - self.mem[i][2]
+                        delta = current_bws.total - self.mem[i].total
                         if delta > 0:
                             updates[i] = (delta, current_bws)
                 except Exception as e:
@@ -1258,7 +1262,7 @@ class BWatch:
                     if i not in self.wl_mem:
                         self.wl_mem[i] = current_bws
                     else:
-                        delta = current_bws[2] - self.wl_mem[i][2]
+                        delta = current_bws.total - self.wl_mem[i].total
                         if delta > 0:
                             wl_updates[i] = (delta, current_bws)
                 except Exception as e:

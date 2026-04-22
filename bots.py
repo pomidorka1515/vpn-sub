@@ -366,7 +366,10 @@ class AdminBot:
 
         timee = int(time.time() + (timee * 86400)) if timee else 0
         try:
-            self.sub.add_new_user(username=username, displayname=displayname, limit=limit, timee=timee)
+            result = self.sub.add_new_user(username=username, displayname=displayname, limit=limit, timee=timee)
+            if isinstance(result, str):
+                self.bot.send_message(message.chat.id, f"❌ Ошибка: {result}", reply_markup=self.get_main_menu())
+                return
             self.bot.send_message(message.chat.id, f"✅ Пользователь <b>{username}</b> успешно добавлен!", parse_mode="HTML", reply_markup=self.get_main_menu())
         except Exception as e:
             self.bot.send_message(message.chat.id, f"❌ Ошибка при добавлении: {e}", reply_markup=self.get_main_menu())
@@ -480,7 +483,13 @@ class AdminBot:
             self.bot.send_message(message.chat.id, "❌ Неизвестное значение (только да/нет)", reply_markup=self.get_codes_menu())
             return
         try:
-            self.sub.add_code(code=code_name, action=code_type, permanent=perma, days=days, gb=gb, wl_gb=wl_gb)
+            err = self.sub.add_code(
+                code=code_name, action=code_type, permanent=perma, 
+                days=days, gb=gb, wl_gb=wl_gb
+            )
+            if isinstance(err, str):
+                self.bot.send_message(message.chat.id, f"❌ {err}", reply_markup=self.get_codes_menu())
+                return
             self.bot.send_message(
                 message.chat.id,
                 f"""✅ Код создан!
@@ -499,7 +508,6 @@ class AdminBot:
     def start(self) -> None:
         bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
         bot_thread.start()
-        self.log.info("loaded telegram bot")
 
 class PublicBot:
     """Public telegram bot for end users.
@@ -528,7 +536,7 @@ class PublicBot:
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback)
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback)
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback)
-            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe: True)(self.handle_text)
+            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello: True)(self.handle_text)
 
     def get_lang(self, uid: int) -> str:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
@@ -952,8 +960,13 @@ class PublicBot:
             self.bot.send_message(message.chat.id, "❌ Error", reply_markup=self.get_menu(uid))
             return
         try:
-            self.sub.delete_user(username=username, perma=True)
+            err = self.sub.delete_user(username=username, perma=True)
+            if isinstance(err, str):
+                self.log.error(f"Delete error for uid {uid}: {err}")
+                self.bot.send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
+                return
             self.bot.send_message(message.chat.id, t['delete_success'], reply_markup=self.get_menu(uid))
+        
         except Exception as e:
             self.log.error(f"Delete error for uid {uid}: {e}")
             self.bot.send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
@@ -1079,5 +1092,4 @@ class PublicBot:
         if hasattr(self, 'bot'):
             bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
             bot_thread.start()
-            self.log.info("loaded Public Telegram bot")
 

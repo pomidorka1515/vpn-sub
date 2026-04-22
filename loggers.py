@@ -1,6 +1,7 @@
 import logging
 import re
 import html
+import time
 
 from contextlib import contextmanager
 
@@ -53,11 +54,12 @@ class Logger(logging.Logger):
                 return val
         return Fmt(
             fmt='%(asctime)s %(levelname)s [%(name)s] [%(threadName)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M'
+            datefmt='%Y-%m-%d %H:%M:%S'
         )
     def set_tg_bot(self, bot):
+        self.handlers = [h for h in self.handlers if not isinstance(h, _TelegramLogger)]
         tg_handler = _TelegramLogger(bot)
-        tg_handler.setLevel(logging.INFO) 
+        tg_handler.setLevel(logging.WARNING) 
         simple_fmt = logging.Formatter('%(levelname)s [%(name)s] %(message)s')
         tg_handler.setFormatter(simple_fmt)
         self.addHandler(tg_handler)
@@ -65,9 +67,11 @@ class Logger(logging.Logger):
     @contextmanager
     def loading(self):
         self.debug(f"Loading {self.name}...")
+        t0 = time.monotonic()
         try:
             yield
-            self.info(f"Loaded {self.name}!")
+            dt = (time.monotonic() - t0) * 1000
+            self.info(f"Loaded {self.name}! ({dt:.1f}ms)")
         except Exception:
             self.error(f"Failed to load {self.name}.")
             raise
