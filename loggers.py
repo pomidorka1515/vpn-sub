@@ -75,3 +75,14 @@ class Logger(logging.Logger):
         except Exception:
             self.error(f"Failed to load {self.name}.")
             raise
+
+    @contextmanager
+    def span(self, name: str, verbose: bool = False):
+        if verbose: self.debug(f"Executing: {name}")
+        t0 = time.monotonic()
+        try:
+            yield
+            dt = (time.monotonic() - t0) * 1000
+            self.info(f"Executed: {name}")
+        except Exception as e:
+            self.error(f"Fail when executing {name}: {e}")
