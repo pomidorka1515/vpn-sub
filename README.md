@@ -30,7 +30,7 @@ gunicorn --threads 4 -b 127.0.0.1:5550 app:app
 
 **Note:** Use `--threads` (not `-w`/`--workers`) — the app uses file locking to elect a primary worker for background tasks (BWatch bandwidth monitor, bots). Multiple *processes* will each try to start background threads, which is wasteful; multiple *threads* within one process works correctly.
 
-See `config.schema.json` for the full config shape.
+Config is validated against `config.schema.json` (pointed to by `"$schema"` in the config file) on every load and commit. Remote schemas are rejected; the schema is cached and only re-read when the file changes.
 
 ## Deployment
 - Meant to run under gunicorn behind nginx
