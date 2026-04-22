@@ -25,7 +25,7 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 ```bash
 pip install -r requirements.txt
 cp config.example.json config.json  # fill in panel credentials, bot tokens, etc
-gunicorn --threads 4 -b 127.0.0.1:5550 app:app
+gunicorn --threads 4 -b 127.0.0.1:5550 --graceful-timeout 30 app:app
 ```
 
 **Note:** Use `--threads` (not `-w`/`--workers`) — the app uses file locking to elect a primary worker for background tasks (BWatch bandwidth monitor, bots). Multiple *processes* will each try to start background threads, which is wasteful; multiple *threads* within one process works correctly.
