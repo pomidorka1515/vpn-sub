@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fcntl
 import sys
+import atexit
 
 from core import (
     Subscription, BWatch, 
@@ -94,6 +95,23 @@ panels, wl = _build_panels(cfg)
 if not panels and wl is None:
     log.critical("No panels initialized. Cannot start.")
     sys.exit(1)
+
+# ------------------------------------------------------------
+# Graceful shutdown
+# ------------------------------------------------------------
+def _shutdown():
+    log.info("Shutting down...")
+    if _is_primary:
+        bw.stop()
+        adminbot.stop()
+        bot.stop()
+    for panel in panels:
+        panel.close()
+    if wl:
+        wl.close()
+    log.info("Shutdown complete.")
+
+atexit.register(_shutdown)
 
 # ------------------------------------------------------------
 # Wire up components
