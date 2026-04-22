@@ -506,9 +506,14 @@ class AdminBot:
         except Exception as e:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
     def start(self) -> None:
-        bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
+        bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Admin TG Bot")
         bot_thread.start()
-
+    def stop(self):
+        try:
+            self.msg("⚠️ Shutdown")
+        except Exception:
+            pass
+        self.bot.stop_polling()
 class PublicBot:
     """Public telegram bot for end users.
     Dependencies: Subscription
@@ -1090,6 +1095,8 @@ class PublicBot:
 
     def start(self) -> None:
         if hasattr(self, 'bot'):
-            bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True)
+            bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Public TG Bot")
             bot_thread.start()
 
+    def stop(self):
+        self.bot.stop_polling()
