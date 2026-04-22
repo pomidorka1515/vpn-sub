@@ -16,6 +16,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 cfg = Config(
     path=os.path.join(SCRIPT_DIR, 'config.json'),
     indent=4,
+    read_only=True,
     strict_schema=False,
     sync_mode="none",
     isolate_commits=False

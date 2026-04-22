@@ -24,8 +24,10 @@ import qrcode
 from flask import Flask, Response, send_file, request
 from datetime import timedelta, datetime, timezone
 from typing import Any, cast, NamedTuple
+from dataclasses import dataclass, asdict
 
-__all__ = ["Subscription", "BWatch"]
+# Not sure why you would use Bandwidth* classes, but why not.
+__all__ = ["Subscription", "BWatch", "BandwidthInfo", "BandwidthSnapshot"]
 
 nginx_404 = (
     "<html>\r\n"
@@ -50,18 +52,28 @@ class BandwidthInfo(NamedTuple):
     download: int | float
     total: int | float
 
+@dataclass
+class BandwidthSnapshot:
+    ts: int
+    up: int = 0
+    down: int = 0
+    wl_up: int = 0
+    wl_down: int = 0
+
 class Subscription:
     """Core class.  
     Dependencies: XUiSession, Config.  
     Classes depending on this: Literally all except Logger, Config, XUiSession"""
     def __init__(self, 
                  cfg: Config,
+                 bw_cfg: Config,
                  app: Flask,
                  panels: list[XUiSession],
                  whitelist_panel: XUiSession | None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
+            self.bw_cfg = bw_cfg
             self.app = app
             self.whitelist_panel = whitelist_panel
             self.browser_html = ""
@@ -247,6 +259,14 @@ class Subscription:
                         down_total += v['down']
         
         return BandwidthInfo(up_total, down_total, up_total + down_total)
+    def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
+        """Return snapshots for a user, clamped to retention window."""
+        cutoff = int(time.time()) - days * 86400
+        user_data = self.bw_cfg.get("users", {}).get(username, {})
+        raw = user_data.get("snapshots", [])
+        return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
+
+
     def add_users(self, username: str) -> None | str:
         """Add a user to panels. Dont confuse with add_new_user!
         str with error on error."""
@@ -1191,12 +1211,14 @@ class BWatch:
     Classes depending on this: Api, WebApi"""
     def __init__(self, 
                  cfg: Config, 
+                 bw_cfg: Config,
                  sub: Subscription, 
                  bot: Any | None = None,
                  admin_bot: Any | None = None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
+            self.bw_cfg = bw_cfg
             self._lock = threading.Lock()
             self._stop_event = threading.Event()
             self.sub = sub
@@ -1209,21 +1231,30 @@ class BWatch:
             self._t1 = threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs")
             self._t2 = threading.Thread(target=self._every_2h, daemon=True, name="Date check")
             self._t3 = threading.Thread(target=self._every_15s, daemon=True, name="Bandwidth")
-            self._t4 = threading.Thread(target=self._every_24h, daemon=True, name="Reset notifs")
+            self._t4 = threading.Thread(target=self._every_24h, daemon=True, name="Reset notifs & Prune BW Info")
             self._t5 = threading.Thread(target=self._every_5m, daemon=True, name="Panels check")
+            self._t6 = threading.Thread(target=self._every_24h_snapshot, daemon=True, name="Daily BW Snapshot")
     
     def start(self):
+        # Micro optimizations go!
+        initial_mem = {}
+        initial_wl_mem = {}
         for i in list(self.cfg['users'].keys()):
-            self.wl_mem[i] = self.sub.bandwidth(username=i, whitelist=True)
+            initial_wl_mem[i] = self.sub.bandwidth(username=i, whitelist=True)
             if self.cfg['bw'][i][0] == 0:
                 continue
-            self.mem[i] = self.sub.bandwidth(username=i)
-
+            initial_mem[i] = self.sub.bandwidth(username=i)
+        
+        with self._lock:
+            self.mem = initial_mem
+            self.wl_mem = initial_wl_mem
+    
         self._t1.start()
         self._t2.start()
         self._t3.start()
         self._t4.start()
         self._t5.start()
+        self._t6.start()
 
     def stop(self):
         self._stop_event.set()
@@ -1232,6 +1263,16 @@ class BWatch:
         x = self.sub.update_user(*args, **kwargs)
         if x is not None:
             self.log.critical(f"update_user error: {x}") 
+    
+    def prune_old_snapshots(self): 
+        with self.bw_cfg as d:            
+            retention = d.get("_meta", {}).get("retention_days", 30) # 30-day default
+            cutoff = int(time.time()) - retention * 86400
+            for user in d.get("users", {}):
+                snapshots = d["users"][user]["snapshots"]
+                d["users"][user]["snapshots"] = [s for s in snapshots if s["ts"] >= cutoff]                                                                                                                                                                                                     
+            d["_meta"]["last_prune"] = int(time.time())
+
     def bandwidth_check(self):
         updates = {}    # username -> (delta, current) for main
         wl_updates = {} # username -> (delta, current) for whitelist
@@ -1245,12 +1286,13 @@ class BWatch:
                     self._update_user(username=i, enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i)
-                    if i not in self.mem:
-                        self.mem[i] = current_bws
-                    else:
-                        delta = current_bws.total - self.mem[i].total
-                        if delta > 0:
-                            updates[i] = (delta, current_bws)
+                    with self._lock:
+                        if i not in self.mem:
+                            self.mem[i] = current_bws
+                        else:
+                            delta = current_bws.total - self.mem[i].total
+                            if delta > 0:
+                                updates[i] = (delta, current_bws)
                 except Exception as e:
                     self.log.critical(f"BW error for {i}: {e}")
             # Whitelist bandwidth
@@ -1259,26 +1301,28 @@ class BWatch:
                     self._update_user(username=i, wl_enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i, whitelist=True)
-                    if i not in self.wl_mem:
-                        self.wl_mem[i] = current_bws
-                    else:
-                        delta = current_bws.total - self.wl_mem[i].total
-                        if delta > 0:
-                            wl_updates[i] = (delta, current_bws)
+                    with self._lock:
+                        if i not in self.wl_mem:
+                            self.wl_mem[i] = current_bws
+                        else:
+                            delta = current_bws.total - self.wl_mem[i].total
+                            if delta > 0:
+                                wl_updates[i] = (delta, current_bws)
                 except Exception as e:
                     self.log.critical(f"BW wl error for {i}: {e}")
         if not updates and not wl_updates:
             return
 
         with self.cfg as data:
-            for i, (delta, cur) in updates.items():
-                if i in data['bw']:
-                    data['bw'][i][1] += delta
-                    self.mem[i] = cur
-            for i, (delta, cur) in wl_updates.items():
-                if i in data['wl_bw']:
-                    data['wl_bw'][i][1] += delta
-                    self.wl_mem[i] = cur
+            with self._lock:
+                for i, (delta, cur) in updates.items():
+                    if i in data['bw']:
+                        data['bw'][i][1] += delta
+                        self.mem[i] = cur
+                for i, (delta, cur) in wl_updates.items():
+                    if i in data['wl_bw']:
+                        data['wl_bw'][i][1] += delta
+                        self.wl_mem[i] = cur
 
     def panel_health_check(self):
         """Check each panel's Xray status and resource usage. Alert on issues."""
@@ -1365,6 +1409,7 @@ class BWatch:
                     def _u(t): t['_notified'].append(id)
                     self.cfg.mutate(_u)                    
                     if self.bot: self.bot.msg(id, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
+
     def is_first(self):
         now = datetime.now()
         if now.day != 1:
@@ -1388,7 +1433,47 @@ class BWatch:
             t['_wl_notified'] = []
         self.cfg.mutate(_u)
 
+    def _record_daily_snapshot(self):
+        """Record one bandwidth snapshot per user for today (UTC midnight).
+        Reads mem/wl_mem under lock, writes to bw_history.json."""
 
+        midnight = int(time.time()) - (int(time.time()) % 86400)
+        
+        with self.cfg as main:
+            user_limits = {
+                u: (main['bw'][u][0], main['wl_bw'][u][0])
+                for u in main['users'].keys()
+            }
+        
+        for username, (limit, wl_limit) in user_limits.items():
+            if limit == 0 and wl_limit == 0:
+                continue
+            
+            current = self.sub.bandwidth(username=username)
+            wl_current = self.sub.bandwidth(username=username, whitelist=True)
+            
+            with self._lock:
+                last_mem = self.mem.get(username)
+                last_wl_mem = self.wl_mem.get(username)
+                self.mem[username] = current
+                self.wl_mem[username] = wl_current
+            
+            daily_up = int(current.upload - last_mem.upload) if last_mem else int(current.upload)
+            daily_down = int(current.download - last_mem.download) if last_mem else int(current.download)
+            wl_up = int(wl_current.upload - last_wl_mem.upload) if last_wl_mem else int(wl_current.upload)
+            wl_down = int(wl_current.download - last_wl_mem.download) if last_wl_mem else int(wl_current.download)
+            
+            snap = BandwidthSnapshot(ts=midnight, up=daily_up, down=daily_down, wl_up=wl_up, wl_down=wl_down)
+            
+            with self.bw_cfg as d:
+                users = d.setdefault("users", {})
+                user_data = users.setdefault(username, {"snapshots": []})
+                snaps = user_data["snapshots"]
+                if snaps and snaps[0]["ts"] == midnight:
+                    snaps[0] = asdict(snap)
+                else:
+                    snaps.insert(0, asdict(snap))
+    
     def _every_120s(self):
         while not self._stop_event.wait(120):
             self.check()
@@ -1401,6 +1486,10 @@ class BWatch:
     def _every_24h(self):
         while not self._stop_event.wait(86400):
             self.reset()
+            self.prune_old_snapshots()
+    def _every_24h_snapshot(self):
+        while not self._stop_event.wait(86400):
+            self.record_daily_snapshot()
     def _every_5m(self):
         while not self._stop_event.wait(300):
             self.panel_health_check()

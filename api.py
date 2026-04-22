@@ -13,6 +13,7 @@ from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
 from abc import ABC
 from typing import cast, Tuple, Any, Callable, Literal, NamedTuple
+from dataclasses import asdict
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
@@ -229,6 +230,7 @@ class WebApi(BaseApi):
         Route('POST', '/webapi/delete', 'delete', 3),
         Route('GET', '/webapi/validate', 'validate_username', 80),
         Route('GET', '/webapi/profiles', 'profiles', 60),
+        Route('GET', '/webapi/history', 'bandwidth_history', 30),
         Route('GET', '/panel', 'gui_panel', None),
         Route('GET', '/auth', 'gui_auth', None),
         Route('GET', '/webapi/qr', 'qr', 80)
@@ -464,6 +466,14 @@ class WebApi(BaseApi):
         """Get user info from token"""
         return _ok(obj=self.sub.get_info(username))
 
+    @requires_webapi_auth
+    def bandwidth_history(self, username) -> ResponseType:
+        """Return bandwidth history snapshots for the authenticated user."""
+        days = request.args.get('days', 30, type=int)
+        days = max(1, min(days, 90))
+        snapshots = self.sub.get_bw_history(username, days)
+        return _ok(obj=[asdict(s) for s in snapshots])
+
 
     @requires_no_auth
     @requires_fields('username', 'password', 'code', 'name')
@@ -526,7 +536,9 @@ class Api(BaseApi):
         Route('GET', '/api/code/list', 'code_list'),
         Route('GET', '/api/code/info', 'code_info'),
         Route('POST', '/api/code/add', 'code_add'),
-        Route('POST', '/api/code/delete', 'code_delete')
+        Route('POST', '/api/code/delete', 'code_delete'),
+
+        Route('GET', '/api/health', 'health')
     ]
 
     def __init__(self,
@@ -787,3 +799,5 @@ class Api(BaseApi):
         except Exception as e:
             return _err(str(e), 500)
 
+    def health(self) -> ResponseType:
+        return Response(), 204

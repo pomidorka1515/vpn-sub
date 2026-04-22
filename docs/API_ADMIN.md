@@ -209,6 +209,23 @@ Response (error):
 
 ---  
 
+
+
+---
+
+### GET /api/health
+Description: Lightweight health check. Returns HTTP 204 with no body on success.
+Authentication: header
+Body: none
+Response (success):
+```jsonc
+// HTTP 204
+(no body)
+```
+Use this to verify the API is reachable and the token is valid.
+
+---
+
 ### GET /api/panel/status  
 Description: Get status of one or all panels.  
 Authentication: header  

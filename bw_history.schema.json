@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bandwidth History Config",
+  "description": "Daily bandwidth snapshots per user, auto-pruned to 90 days",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 90,
+          "description": "How many days of history to keep per user"
+        },
+        "last_prune": {
+          "type": "integer",
+          "description": "Unix timestamp of last prune run"
+        }
+      }
+    },
+    "users": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-zA-Z0-9_-]{1,32}$": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "snapshots": {
+              "type": "array",
+              "description": "Daily bandwidth snapshots, newest first",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "ts": {
+                    "type": "integer",
+                    "description": "Unix timestamp at start of day (midnight UTC)"
+                  },
+                  "up": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Upload bytes in this day"
+                  },
+                  "down": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Download bytes in this day"
+                  },
+                  "wl_up": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Whitelist upload bytes"
+                  },
+                  "wl_down": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Whitelist download bytes"
+                  }
+                },
+                "required": ["ts", "up", "down"]
+              }
+            }
+          },
+          "required": ["snapshots"]
+        }
+      }
+    }
+  }
+}

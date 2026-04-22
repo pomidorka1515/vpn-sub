@@ -329,21 +329,48 @@ Response (success):
 
 ---  
 
-### GET /profiles  
-Description: Get all currently available profiles and their descriptions.  
-Rate limit: 60  
-Authentication: cookie  
-Params:  
-    lang: language. either 'en' or 'ru'  
-Response (success):  
-```jsonc  
-// HTTP 200  
-{  
-    "success": true,  
-    "msg": null,  
-    "obj": {  
-        "[ Profile Name ]": "Some long description...",  
-        "[ Another Profile ]": "Another description"  
-    }  
-}  
-```  
+### GET /profiles
+Description: Get all currently available profiles and their descriptions.
+Rate limit: 60
+Authentication: cookie
+Params:
+    lang: language. either 'en' or 'ru'
+Response (success):
+```jsonc
+// HTTP 200
+{
+    "success": true,
+    "msg": null,
+    "obj": {
+        "[ Profile Name ]": "Some long description...",
+        "[ Another Profile ]": "Another description"
+    }
+}
+```
+
+---
+
+### GET /history
+Description: Get daily bandwidth history for yourself.
+Rate limit: 30
+Authentication: cookie
+Params:
+    days: (optional) int, number of days to return (default: 30, max: 90).
+Response (success):
+```jsonc
+// HTTP 200
+{
+    "success": true,
+    "msg": null,
+    "obj": [
+        {
+            "ts": 1714000000,   // int, unix timestamp (UTC midnight of the day)
+            "up": 500000000,    // int, upload bytes used this day
+            "down": 1200000000, // int, download bytes used this day
+            "wl_up": 0,         // int, whitelist upload bytes
+            "wl_down": 0        // int, whitelist download bytes
+        }
+    ]
+}
+```
+Data is newest-first. Entries older than the retention window (90 days) are not returned.

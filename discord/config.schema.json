@@ -1,0 +1,13 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Discord bot",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["token", "api_token", "api_base_url"],
+    "properties": {
+        "$schema": { "type": "string" },
+        "token": { "type": "string" },
+        "api_token": { "type": "string" },
+        "api_base_url": { "type": "string" }
+    }
+}
