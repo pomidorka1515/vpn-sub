@@ -97,23 +97,6 @@ if not panels and wl is None:
     sys.exit(1)
 
 # ------------------------------------------------------------
-# Graceful shutdown
-# ------------------------------------------------------------
-def _shutdown():
-    log.info("Shutting down...")
-    if _is_primary:
-        bw.stop()
-        adminbot.stop()
-        bot.stop()
-    for panel in panels:
-        panel.close()
-    if wl:
-        wl.close()
-    log.info("Shutdown complete.")
-
-atexit.register(_shutdown)
-
-# ------------------------------------------------------------
 # Wire up components
 # ------------------------------------------------------------
 sub      = Subscription(cfg=cfg, bw_cfg=bw_cfg, app=app, panels=panels, whitelist_panel=wl)
@@ -123,7 +106,7 @@ webapi   = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)
 adminbot = AdminBot(sub=sub, cfg=cfg)
 bot      = PublicBot(sub=sub, cfg=cfg)
 
-bw.bot = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
+bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
 
 # ------------------------------------------------------------
 # Broadcast selected loggers to AdminBot
@@ -146,8 +129,25 @@ if _acquire_primary_lock():
     adminbot.start()
     bot.start()
     log.info("Launch successful!")
+    _is_primary = True
 else:
     log.info("Secondary worker, skipping background tasks.")
+    _is_primary = False
+# ------------------------------------------------------------
+# Graceful shutdown
+# ------------------------------------------------------------
+def _shutdown():
+    log.info("Shutting down...")
+    if _is_primary:
+        bw.stop()
+        adminbot.stop()
+        bot.stop()
+    for panel in panels:
+        panel.close()
+    if wl:
+        wl.close()
+    log.info("Shutdown complete.")
+atexit.register(_shutdown)
 
 
 if __name__ == '__main__':  # Dev only; gunicorn doesnt gaf
