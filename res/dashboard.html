@@ -327,6 +327,9 @@ body {
         <div class="bw-bar-bg"><div class="bw-bar-fill wl" id="bwWlBar" style="width:0%"></div></div>
       </div>
     </div>
+    <div style="display:flex;justify-content:center;margin-top:14px">
+      <button class="btn" style="width:auto;padding:9px 20px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:13px" onclick="window.location.href='/sub/history'" data-t="extra_bw"></button>
+    </div>
   </div>
 
   <div class="card">
@@ -399,6 +402,7 @@ const L = {
     settings: 'Settings', account: 'Account', danger_zone: 'Danger zone',
     expires: 'Expires', status: 'Status', total_traffic: 'Total traffic',
     wl_traffic: 'Whitelist traffic', monthly: 'Monthly', wl_monthly: 'Whitelist monthly',
+    extra_bw: 'Additional bandwidth info',
     display_name: 'Display name', fingerprint: 'Fingerprint', username: 'Username',
     password: 'Password', current_password: 'Current password', token: 'Token',
     current_pw_required: 'Enter your current password to confirm.',
@@ -429,6 +433,7 @@ const L = {
     settings: 'Настройки', account: 'Аккаунт', danger_zone: 'Опасная зона',
     expires: 'Истекает', status: 'Статус', total_traffic: 'Весь трафик',
     wl_traffic: 'Трафик WL', monthly: 'За месяц', wl_monthly: 'WL за месяц',
+    extra_bw: 'Дополнительная информация о трафике',
     display_name: 'Имя', fingerprint: 'Отпечаток', username: 'Логин',
     password: 'Пароль', current_password: 'Текущий пароль', token: 'Токен',
     current_pw_required: 'Введите текущий пароль для подтверждения.',
@@ -456,7 +461,7 @@ const L = {
   }
 };
 
-let lang = localStorage.getItem('panel_lang') || 'en';
+let lang = localStorage.getItem('lang') || 'en';
 function t(k) { return L[lang]?.[k] || L.en[k] || k; }
 
 function renderLang() {
@@ -481,7 +486,7 @@ function renderLang() {
   if (currentStats) renderStats(currentStats);
 }
 
-function setLang(l) { lang = l; localStorage.setItem('panel_lang', l); renderLang(); }
+function setLang(l) { lang = l; localStorage.setItem('lang', l); renderLang(); }
 
 async function api(method, path, body) {
   const opts = { method, credentials: 'same-origin', headers: {} };

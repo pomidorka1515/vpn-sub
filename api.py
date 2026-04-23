@@ -233,6 +233,7 @@ class WebApi(BaseApi):
         Route('GET', '/webapi/history', 'bandwidth_history', 30),
         Route('GET', '/panel', 'gui_panel', None),
         Route('GET', '/auth', 'gui_auth', None),
+        Route('GET', '/history', 'gui_history', None),
         Route('GET', '/webapi/qr', 'qr', 80)
     ]
     def __init__(self,
@@ -278,10 +279,15 @@ class WebApi(BaseApi):
         token = request.cookies.get('token')
         if not self.validate_token(token):
             return make_response(redirect('/sub/auth'))
-        return send_file('/var/www/sub/new/res/dashboard.html', etag=False)
+        return send_file('res/dashboard.html', etag=False)
     def gui_auth(self) -> ResponseType:
-        return send_file('/var/www/sub/new/res/auth.html', etag=False)
-
+        return send_file('res/auth.html', etag=False)
+    def gui_history(self):
+        token = request.cookies.get('token')
+        if not self.validate_token(token):
+            return make_response(redirect('/sub/auth'))
+        return send_file('res/history.html', etag=False)
+    
     @requires_webapi_auth
     def qr(self, username):
         lang = request.args.get('lang', 'en')

@@ -152,7 +152,7 @@ const L = {
   }
 };
 
-let lang = localStorage.getItem('panel_lang') || 'en';
+let lang = localStorage.getItem('lang') || 'en';
 let curTab = 'login';
 
 function t(k) { return L[lang]?.[k] || L.en[k] || k; }
@@ -169,7 +169,7 @@ function render() {
   document.getElementById('regBtn').textContent = t('create_account');
 }
 
-function setLang(l) { lang = l; localStorage.setItem('panel_lang', l); render(); }
+function setLang(l) { lang = l; localStorage.setItem('lang', l); render(); }
 
 async function api(method, path, body) {
   const opts = { method, credentials: 'same-origin', headers: {} };

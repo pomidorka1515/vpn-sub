@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>History</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a0a0b; --surface: #131316; --surface2: #1a1a1f;
+  --border: #252529; --border-h: #35353b;
+  --text: #e4e4e7; --text2: #8e8e96;
+  --accent: #6366f1; --accent-dim: #4f46e5; --accent-light: #a5b4fc;
+  --wl: #0ea5e9; --wl-light: #7dd3fc;
+  --green: #22c55e; --red: #ef4444; --orange: #f59e0b;
+  --radius: 10px;
+}
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; -webkit-font-smoothing: antialiased;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+
+.btn-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: none; color: var(--text2);
+  font-family: inherit; font-size: 12px; cursor: pointer;
+  transition: all .2s;
+}
+.btn-back:hover { border-color: var(--border-h); color: var(--text); }
+.btn-back .arrow { font-size: 14px; line-height: 1; }
+
+.lang-toggle {
+  display: flex; gap: 2px; background: var(--bg);
+  border-radius: 6px; padding: 2px; margin-right: 4px;
+}
+.lang-btn {
+  padding: 4px 10px; border: none; background: none;
+  color: var(--text2); font-family: inherit; font-size: 11px;
+  font-weight: 600; border-radius: 4px; cursor: pointer;
+  transition: all .2s; letter-spacing: .5px;
+}
+.lang-btn.active { background: var(--surface2); color: var(--text); }
+.btn-sm {
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px;
+  background: none; color: var(--text2); font-family: inherit; font-size: 12px;
+  cursor: pointer; transition: all .2s;
+}
+.btn-sm:hover { border-color: var(--border-h); color: var(--text); }
+
+.dash-content { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+
+.page-title {
+  font-size: 18px; font-weight: 500; margin-bottom: 22px;
+  letter-spacing: .2px;
+}
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px; margin-bottom: 16px;
+}
+.card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
+}
+.card-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text2);
+}
+.card-sub {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  color: var(--text2);
+}
+.card-sub .up-val { color: var(--accent-light); }
+.card-sub .down-val { color: var(--accent); }
+.card-sub.wl .up-val { color: var(--wl-light); }
+.card-sub.wl .down-val { color: var(--wl); }
+
+/* range slider */
+.range-row {
+  display: flex; align-items: center; gap: 16px;
+}
+.range-input {
+  -webkit-appearance: none; appearance: none;
+  flex: 1; height: 6px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 3px;
+  outline: none; cursor: pointer;
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  border: 2px solid var(--surface);
+  transition: transform .15s;
+}
+.range-input::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  border: 2px solid var(--surface);
+}
+.range-input::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.range-value {
+  display: flex; align-items: baseline; gap: 4px;
+  min-width: 70px; justify-content: flex-end;
+}
+.range-value .num {
+  font-family: 'JetBrains Mono', monospace; font-size: 16px;
+  font-weight: 500; color: var(--text);
+}
+.range-value .suffix { font-size: 12px; color: var(--text2); }
+
+.chart-wrap {
+  position: relative; height: 280px; margin-top: 4px;
+}
+.chart-empty {
+  text-align: center; padding: 80px 0; color: var(--text2);
+  font-size: 13px;
+}
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; z-index: 100; animation: fadeUp .3s ease; pointer-events: none;
+}
+.toast.error { border-color: rgba(239,68,68,.3); color: var(--red); }
+.toast.success { border-color: rgba(34,197,94,.3); color: var(--green); }
+
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+@media (max-width: 500px) {
+  .dash-content { padding: 20px 14px; }
+  .topbar { padding: 14px 16px; }
+  .chart-wrap { height: 240px; }
+  .card { padding: 18px; }
+  .card-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <button class="btn-back" onclick="goBack()" id="btnBack">
+      <span class="arrow">←</span><span id="btnBackText">Back</span>
+    </button>
+  </div>
+  <div class="topbar-right">
+    <div class="lang-toggle">
+      <button class="lang-btn" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" onclick="setLang('ru')">RU</button>
+    </div>
+    <button class="btn-sm" onclick="loadHistory()" id="btnRefresh"></button>
+  </div>
+</div>
+
+<div class="dash-content">
+  <h1 class="page-title" data-t="page_title"></h1>
+
+  <div class="card">
+    <div class="card-title" data-t="range" style="margin-bottom:14px"></div>
+    <div class="range-row">
+      <input type="range" class="range-input" id="daysRange" min="1" max="90" value="30">
+      <div class="range-value">
+        <span class="num" id="daysValue">30</span>
+        <span class="suffix" data-t="days_suffix"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title" data-t="regular_traffic"></div>
+      <div class="card-sub" id="regSummary">—</div>
+    </div>
+    <div class="chart-wrap" id="regWrap">
+      <canvas id="regChart"></canvas>
+    </div>
+    <div class="chart-empty" id="regEmpty" style="display:none" data-t="no_data"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title" data-t="wl_traffic"></div>
+      <div class="card-sub wl" id="wlSummary">—</div>
+    </div>
+    <div class="chart-wrap" id="wlWrap">
+      <canvas id="wlChart"></canvas>
+    </div>
+    <div class="chart-empty" id="wlEmpty" style="display:none" data-t="no_data"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const API = '/sub/webapi';
+const AUTH_PAGE = '/sub/auth';
+const DASHBOARD_PAGE = '/sub/panel'; 
+
+const L = {
+  en: {
+    page_title: 'Bandwidth history',
+    range: 'Range', days_suffix: 'days',
+    regular_traffic: 'Regular traffic', wl_traffic: 'Whitelist traffic',
+    upload: 'Upload', download: 'Download',
+    no_data: 'No data for this period',
+    refresh: 'Refresh', back: 'Back',
+    network_err: 'Network error',
+    total: 'Total'
+  },
+  ru: {
+    page_title: 'История трафика',
+    range: 'Период', days_suffix: 'дн.',
+    regular_traffic: 'Обычный трафик', wl_traffic: 'Трафик WL',
+    upload: 'Отправлено', download: 'Получено',
+    no_data: 'Нет данных за этот период',
+    refresh: 'Обновить', back: 'Назад',
+    network_err: 'Ошибка сети',
+    total: 'Всего'
+  }
+};
+
+// lang resolution: ?lang= wins; else localStorage; else English
+function resolveLang() {
+  const params = new URLSearchParams(window.location.search);
+  const q = (params.get('lang') || '').toLowerCase();
+  if (q === 'en' || q === 'ru') {
+    localStorage.setItem('lang', q);
+    return q;
+  }
+  const stored = localStorage.getItem('lang');
+  if (stored === 'en' || stored === 'ru') return stored;
+  return 'en';
+}
+let lang = resolveLang();
+function t(k) { return L[lang]?.[k] || L.en[k] || k; }
+
+function renderLang() {
+  document.querySelectorAll('.lang-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent.toLowerCase() === lang));
+  document.querySelectorAll('[data-t]').forEach(el =>
+    el.textContent = t(el.getAttribute('data-t')));
+  document.getElementById('btnRefresh').textContent = t('refresh');
+  document.getElementById('btnBackText').textContent = t('back');
+  document.title = t('page_title');
+  // re-render charts so legends/tooltips pick up the new language
+  if (lastData) renderCharts(lastData);
+  if (lastData) renderSummaries(lastData);
+}
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('lang', l);
+  renderLang();
+}
+
+function goBack() {
+  window.location.href = DASHBOARD_PAGE
+}
+
+async function api(method, path) {
+  const r = await fetch(API + path, { method, credentials: 'same-origin' });
+  if (r.status === 401) { window.location.href = AUTH_PAGE; return null; }
+  return await r.json();
+}
+
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  const u = ['B','KB','MB','GB','TB'];
+  const i = Math.floor(Math.log(b) / Math.log(1000));
+  return (b / Math.pow(1000, i)).toFixed(i > 1 ? 2 : 0) + ' ' + u[i];
+}
+
+function fmtDay(ts) {
+  const d = new Date(ts * 1000);
+  // short M/D label, UTC to match endpoint's UTC midnights
+  return (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+}
+
+// build a contiguous day range (oldest -> newest), filling gaps with zeros
+function fillDays(entries, days) {
+  const map = new Map();
+  for (const e of entries) map.set(e.ts, e);
+
+  const todayUtc = Math.floor(Date.now() / 1000 / 86400) * 86400;
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const ts = todayUtc - i * 86400;
+    const e = map.get(ts);
+    out.push({
+      ts,
+      up: e?.up || 0,
+      down: e?.down || 0,
+      wl_up: e?.wl_up || 0,
+      wl_down: e?.wl_down || 0,
+    });
+  }
+  return out;
+}
+
+let regChart = null, wlChart = null;
+let lastData = null;
+let lastDays = 30;
+
+function makeChart(ctx, data, downColor, upColor) {
+  return new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => fmtDay(d.ts)),
+      datasets: [
+        {
+          label: t('download'),
+          data: data.map(d => d.down !== undefined ? d.down : d.wl_down),
+          backgroundColor: downColor,
+          borderWidth: 0,
+          borderRadius: 2,
+          stack: 's',
+        },
+        {
+          label: t('upload'),
+          data: data.map(d => d.up !== undefined ? d.up : d.wl_up),
+          backgroundColor: upColor,
+          borderWidth: 0,
+          borderRadius: 2,
+          stack: 's',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 250 },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: {
+            color: '#8e8e96',
+            font: { family: 'JetBrains Mono', size: 10 },
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 12,
+          },
+          border: { color: '#252529' },
+        },
+        y: {
+          stacked: true,
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            color: '#8e8e96',
+            font: { family: 'JetBrains Mono', size: 10 },
+            callback: v => fmtBytes(v),
+          },
+          border: { display: false },
+        },
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#e4e4e7',
+            font: { family: 'Outfit', size: 12 },
+            boxWidth: 10, boxHeight: 10,
+            padding: 14, usePointStyle: true, pointStyle: 'rectRounded',
+          },
+        },
+        tooltip: {
+          backgroundColor: '#1a1a1f',
+          borderColor: '#252529',
+          borderWidth: 1,
+          titleColor: '#e4e4e7',
+          bodyColor: '#e4e4e7',
+          titleFont: { family: 'Outfit', size: 12, weight: '600' },
+          bodyFont: { family: 'JetBrains Mono', size: 11 },
+          padding: 10,
+          cornerRadius: 6,
+          callbacks: {
+            label: c => ' ' + c.dataset.label + ': ' + fmtBytes(c.parsed.y),
+            footer: items => {
+              const total = items.reduce((s, it) => s + it.parsed.y, 0);
+              return t('total') + ': ' + fmtBytes(total);
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderCharts(filled) {
+  // separate datasets so each chart only sees its own values
+  const reg = filled.map(d => ({ ts: d.ts, down: d.down, up: d.up }));
+  const wl  = filled.map(d => ({ ts: d.ts, wl_down: d.wl_down, wl_up: d.wl_up }));
+
+  const regHasData = reg.some(d => d.down || d.up);
+  const wlHasData  = wl.some(d => d.wl_down || d.wl_up);
+
+  document.getElementById('regWrap').style.display = regHasData ? '' : 'none';
+  document.getElementById('regEmpty').style.display = regHasData ? 'none' : '';
+  document.getElementById('wlWrap').style.display = wlHasData ? '' : 'none';
+  document.getElementById('wlEmpty').style.display = wlHasData ? 'none' : '';
+
+  if (regChart) { regChart.destroy(); regChart = null; }
+  if (wlChart)  { wlChart.destroy();  wlChart  = null; }
+
+  if (regHasData) {
+    regChart = makeChart(
+      document.getElementById('regChart').getContext('2d'),
+      reg, '#6366f1', '#a5b4fc'
+    );
+  }
+  if (wlHasData) {
+    wlChart = makeChart(
+      document.getElementById('wlChart').getContext('2d'),
+      wl, '#0ea5e9', '#7dd3fc'
+    );
+  }
+}
+
+function renderSummaries(filled) {
+  let regUp = 0, regDown = 0, wlUp = 0, wlDown = 0;
+  for (const d of filled) {
+    regUp += d.up; regDown += d.down;
+    wlUp += d.wl_up; wlDown += d.wl_down;
+  }
+  const sumHtml = (up, down) =>
+    '↑ <span class="up-val">' + fmtBytes(up) + '</span>' +
+    '   ↓ <span class="down-val">' + fmtBytes(down) + '</span>' +
+    '   · ' + t('total') + ' ' + fmtBytes(up + down);
+  document.getElementById('regSummary').innerHTML = sumHtml(regUp, regDown);
+  document.getElementById('wlSummary').innerHTML = sumHtml(wlUp, wlDown);
+}
+
+async function loadHistory() {
+  document.getElementById('btnRefresh').disabled = true;
+  const days = parseInt(document.getElementById('daysRange').value, 10);
+  lastDays = days;
+  const res = await api('GET', '/history?days=' + days);
+  if (!res) return;
+  if (!res.success) { toast(res.msg || t('network_err'), 'error'); return; }
+  const filled = fillDays(res.obj || [], days);
+  lastData = filled;
+  renderCharts(filled);
+  renderSummaries(filled);
+  document.getElementById('btnRefresh').disabled = false;
+}
+
+// debounce slider input
+let dbT;
+const rangeEl = document.getElementById('daysRange');
+const dValEl = document.getElementById('daysValue');
+rangeEl.addEventListener('input', () => {
+  dValEl.textContent = rangeEl.value;
+  clearTimeout(dbT);
+  dbT = setTimeout(loadHistory, 1069);
+});
+
+renderLang();
+loadHistory();
+</script>
+</body>
+</html>
+

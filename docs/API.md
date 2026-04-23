@@ -369,6 +369,9 @@ Response (success):
             "down": 1200000000, // int, download bytes used this day
             "wl_up": 0,         // int, whitelist upload bytes
             "wl_down": 0        // int, whitelist download bytes
+        },
+        {
+        	// Same object, a day earlier...
         }
     ]
 }

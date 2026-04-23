@@ -142,7 +142,7 @@ class Subscription:
         if username and username in self.cfg['users']:
             return True
         return False
-    
+
     @staticmethod
     def make_qr(text: str) -> io.BytesIO:
         img = qrcode.make(text)
@@ -1101,10 +1101,11 @@ Lang: {lang}""")
             flag = cfg['flags'][p_key] if is_happ else ""
             node = cfg['profileNodes'][p_key]
             domain = cfg['nodes'][node]
+            name = flag + p_name[0 if lang == "en" else 1]
             link = link.replace("DOMAIN", domain)
             link = link.replace("FINGERPRINT", cfg['userFingerprints'][username])
             link = link.replace("UUID", user_uuid)
-            link = link.replace("NAME", (flag + p_name[0] if lang == "en" else flag + p_name[1]))
+            link = link.replace("NAME", name)
             if "EXTRA" in link:
                 extra_data = cfg['xhttpExtra'].get(p_key)
                 if extra_data:
@@ -1433,7 +1434,7 @@ class BWatch:
             t['_wl_notified'] = []
         self.cfg.mutate(_u)
 
-    def _record_daily_snapshot(self):
+    def record_daily_snapshot(self):
         """Record one bandwidth snapshot per user for today (UTC midnight).
         Reads mem/wl_mem under lock, writes to bw_history.json."""
 
