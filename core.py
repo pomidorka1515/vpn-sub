@@ -1165,8 +1165,7 @@ Lang: {lang}""")
                     str((ts - int(time.time())) // 86400)
                 )
             else:
-                t1 = (cfg['description'][4] if lang == "en" else self.cfg['description'][5]) if cfg['bw'][username][0] != 0 else ""
-                desc = desc.replace("%t1", t1).replace("%t2", "").replace("%t3", "")
+                desc = desc.replace("%t1", "").replace("%t2", "").replace("%t3", "")
             if cfg['bw'][username][0] != 0:
                 v, label = self.fmt_bytes(int(cfg['bw'][username][1]))
                 desc = desc.replace("%n1", v).replace("%y1", label)
