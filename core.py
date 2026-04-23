@@ -1222,11 +1222,13 @@ class BWatch:
             self.bw_cfg = bw_cfg
             self._lock = threading.Lock()
             self._stop_event = threading.Event()
+            self._snapshot_lock = threading.Lock()
             self.sub = sub
             self.bot = bot
             self.admin_bot = admin_bot
             self.mem = {}
             self.wl_mem = {}
+            self._snapshot_initialized = False
             self._panel_alerts = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown = self.cfg.get('panel_alert_cooldown', None) or 3600
             self._t1 = threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs")
@@ -1249,7 +1251,7 @@ class BWatch:
         with self._lock:
             self.mem = initial_mem
             self.wl_mem = initial_wl_mem
-    
+        self._snapshot_initialized = True
         self._t1.start()
         self._t2.start()
         self._t3.start()
@@ -1437,43 +1439,62 @@ class BWatch:
     def record_daily_snapshot(self):
         """Record one bandwidth snapshot per user for today (UTC midnight).
         Reads mem/wl_mem under lock, writes to bw_history.json."""
+        with self._snapshot_lock:
+            midnight = int(time.time()) - (int(time.time()) % 86400)
+            initialized = self._snapshot_initialized
 
-        midnight = int(time.time()) - (int(time.time()) % 86400)
-        
-        with self.cfg as main:
-            user_limits = {
-                u: (main['bw'][u][0], main['wl_bw'][u][0])
-                for u in main['users'].keys()
-            }
-        
-        for username, (limit, wl_limit) in user_limits.items():
-            if limit == 0 and wl_limit == 0:
-                continue
-            
-            current = self.sub.bandwidth(username=username)
-            wl_current = self.sub.bandwidth(username=username, whitelist=True)
-            
-            with self._lock:
-                last_mem = self.mem.get(username)
-                last_wl_mem = self.wl_mem.get(username)
-                self.mem[username] = current
-                self.wl_mem[username] = wl_current
-            
-            daily_up = int(current.upload - last_mem.upload) if last_mem else int(current.upload)
-            daily_down = int(current.download - last_mem.download) if last_mem else int(current.download)
-            wl_up = int(wl_current.upload - last_wl_mem.upload) if last_wl_mem else int(wl_current.upload)
-            wl_down = int(wl_current.download - last_wl_mem.download) if last_wl_mem else int(wl_current.download)
-            
-            snap = BandwidthSnapshot(ts=midnight, up=daily_up, down=daily_down, wl_up=wl_up, wl_down=wl_down)
-            
-            with self.bw_cfg as d:
-                users = d.setdefault("users", {})
-                user_data = users.setdefault(username, {"snapshots": []})
-                snaps = user_data["snapshots"]
-                if snaps and snaps[0]["ts"] == midnight:
-                    snaps[0] = asdict(snap)
+            if not initialized:
+                with self._lock:
+                    for username in list(self.cfg['users'].keys()):
+                        current = self.sub.bandwidth(username=username)
+                        wl_current = self.sub.bandwidth(username=username, whitelist=True)
+                        self.mem[username] = current
+                        self.wl_mem[username] = wl_current
+                return
+
+            with self.cfg as main:
+                user_limits = {
+                    u: (main['bw'][u][0], main['wl_bw'][u][0])
+                    for u in main['users'].keys()
+                }
+
+            for username, (limit, wl_limit) in user_limits.items():
+                if limit == 0 and wl_limit == 0:
+                    continue
+
+                current = self.sub.bandwidth(username=username)
+                wl_current = self.sub.bandwidth(username=username, whitelist=True)
+
+                with self._lock:
+                    last_mem = self.mem.get(username)
+                    last_wl_mem = self.wl_mem.get(username)
+                    self.mem[username] = current
+                    self.wl_mem[username] = wl_current
+
+                if last_mem:
+                    daily_up = int(current.upload - last_mem.upload)
+                    daily_down = int(current.download - last_mem.download)
                 else:
-                    snaps.insert(0, asdict(snap))
+                    daily_up = 0
+                    daily_down = 0
+
+                if last_wl_mem:
+                    wl_up = int(wl_current.upload - last_wl_mem.upload)
+                    wl_down = int(wl_current.download - last_wl_mem.download)
+                else:
+                    wl_up = 0
+                    wl_down = 0
+
+                snap = BandwidthSnapshot(ts=midnight, up=daily_up, down=daily_down, wl_up=wl_up, wl_down=wl_down)
+
+                with self.bw_cfg as d:
+                    users = d.setdefault("users", {})
+                    user_data = users.setdefault(username, {"snapshots": []})
+                    snaps = user_data["snapshots"]
+                    if snaps and snaps[0]["ts"] == midnight:
+                        snaps[0] = asdict(snap)
+                    else:
+                        snaps.insert(0, asdict(snap))
     
     def _every_120s(self):
         while not self._stop_event.wait(120):
