@@ -3,6 +3,8 @@ from __future__ import annotations
 import fcntl
 import sys
 import atexit
+import threading
+threading.main_thread().name = 'main'
 
 from core import (
     Subscription, BWatch, 
