@@ -6,9 +6,11 @@ import atexit
 import threading
 threading.main_thread().name = 'main'
 
+from typing import Any
+
 from core import (
     Subscription, BWatch,
-    Response, Flask, request, send_file
+    Flask
 )
 from session import XUiSession
 from api import WebApi, Api
@@ -29,7 +31,7 @@ def _build_panels(cfg: Config) -> tuple[list[XUiSession], XUiSession | None]:
     whitelist: XUiSession | None = None
     
     for name, panel_cfg in cfg['3xui'].items():
-        kwargs = {
+        kwargs: dict[str, Any] = {
             'name': panel_cfg['name'],
             'address': panel_cfg['address'],
             'port': panel_cfg['port'],
@@ -78,7 +80,7 @@ app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 # ------------------------------------------------------------
 # Configs (two separate files)
 # ------------------------------------------------------------
-_config_kwargs = {
+_config_kwargs: dict[str, Any] = {
     'read_only': False,
     'strict_schema': True,
     'sync_mode': 'data',

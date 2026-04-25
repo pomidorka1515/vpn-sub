@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from core import BandwidthSnapshot, fmt_bytes
-
+from typing import cast
 __all__ = ['bandwidth_chart']
 
 # Palette — gray with subtle accents
@@ -48,7 +50,7 @@ _LANG = {
 
 
 
-def _style_axes(ax, title: str) -> None:
+def _style_axes(ax: Axes, title: str) -> None:
     """Apply consistent gray-themed styling to a subplot."""
     ax.set_facecolor(_PANEL)
     ax.set_title(title, color=_TEXT, fontsize=11, fontweight='500', 
@@ -89,18 +91,23 @@ def bandwidth_chart(
     t = _LANG.get(lang, _LANG["en"])
     snaps = sorted(snapshots, key=lambda s: s.ts)
     
-    labels = [datetime.utcfromtimestamp(s.ts).strftime('%m/%d') for s in snaps]
+    labels = [datetime.fromtimestamp(s.ts, tz=timezone.utc).strftime('%m/%d') 
+              for s in snaps]
+    
     reg_up    = [s.up    for s in snaps]
     reg_down  = [s.down  for s in snaps]
     wl_up     = [s.wl_up for s in snaps]
     wl_down   = [s.wl_down for s in snaps]
-    
-    fig, (ax_reg, ax_wl) = plt.subplots(
+    # fig, (ax_reg, ax_wl)
+    result = plt.subplots(
         2, 1,
         figsize=(10, 7),
         dpi=140,
         gridspec_kw={'hspace': 0.35},
     )
+    fig = result[0]
+    ax_reg = cast(Axes, result[1][0])
+    ax_wl = cast(Axes, result[1][1])
     fig.patch.set_facecolor(_BG)
 
     header = f'{t["bandwidth"]} — {label}' if label else t["bandwidth"]

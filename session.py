@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from requests import Session
 
 from loggers import Logger
+from custom_types import Inbound
 
+from typing import Any
 __all__ = ['XUiSession']
 
 class XUiSession(Session):
@@ -21,9 +23,9 @@ class XUiSession(Session):
             password: str,
             refresh_interval: int | float = 60,
             https: bool = False,
-            nginx_auth: tuple | None = None,  # nginx_auth=('user', 'pass')
+            nginx_auth: tuple[str, str] | None = None,  # nginx_auth=('user', 'pass')
             ignore_inbounds: tuple[int, ...] = (),  # Can be empty
-            inject_headers: dict | None = None,
+            inject_headers: dict[str, Any] | None = None,
     ):
         """
         Args:
@@ -58,7 +60,7 @@ class XUiSession(Session):
             self._lock = threading.RLock()
             self._running = threading.Event()
             self._cache_lock = threading.Lock()
-            self._cache: list[dict] | None = None
+            self._cache: list[Inbound] | None = None
             self._cache_time: float = 0
             self._inject_headers = inject_headers or {}
 
@@ -67,7 +69,7 @@ class XUiSession(Session):
 
             self.login()
 
-    def request(self, *args, **kwargs):
+    def request(self, *args: Any, **kwargs: Any):
         with self._lock:
             if self._needs_refresh():
                 self.login()
@@ -127,12 +129,12 @@ class XUiSession(Session):
             return True
         return (datetime.now() - self.last_login) > timedelta(minutes=self.refresh_interval)
 
-    def get_cache(self) -> list[dict] | None:
+    def get_cache(self) -> list[Inbound] | None:
         """Thread-safe cache read."""
         with self._cache_lock:
             return self._cache
 
-    def set_cache(self, data: list[dict]) -> None:
+    def set_cache(self, data: list[Inbound]) -> None:
         """Thread-safe cache write."""
         with self._cache_lock:
             self._cache = data

@@ -5,17 +5,18 @@ import time
 
 from contextlib import contextmanager
 
+from custom_types import AdminBotLike
 _ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 __all__ = ['Logger']
 
 class _TelegramLogger(logging.Handler):
-    def __init__(self, bot):
+    def __init__(self, bot: AdminBotLike): # cannot use *Bot classes due to circular import
         super().__init__()
         self.bot = bot
         self.ansi_escape = _ANSI_ESCAPE
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord):
         try:
             msg_text = self.format(record)
             clean_text = self.ansi_escape.sub('', msg_text)
@@ -34,7 +35,11 @@ class Logger(logging.Logger):
     }
     RESET = '\033[0m'
 
-    def __init__(self, name: str, level=logging.DEBUG, bot = None):
+    def __init__(self, 
+                 name: str, 
+                 level: int = logging.DEBUG, 
+                 bot: AdminBotLike | None = None
+        ):
         super().__init__(name, level)
         self.ansi_escape = _ANSI_ESCAPE
         if not self.handlers:
@@ -45,7 +50,7 @@ class Logger(logging.Logger):
     def _make_formatter(self):
         parent = self
         class Fmt(logging.Formatter):
-            def format(self, record):
+            def format(self, record: logging.LogRecord):
                 orig_level = record.levelname
                 color = parent.COLORS.get(record.levelname, parent.RESET)
                 record.levelname = f"{color}{record.levelname}{parent.RESET}"
@@ -56,7 +61,7 @@ class Logger(logging.Logger):
             fmt='%(asctime)s %(levelname)s [%(name)s] [%(threadName)s] %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-    def set_tg_bot(self, bot):
+    def set_tg_bot(self, bot: AdminBotLike):
         self.handlers = [h for h in self.handlers if not isinstance(h, _TelegramLogger)]
         tg_handler = _TelegramLogger(bot)
         tg_handler.setLevel(logging.WARNING) 
@@ -83,6 +88,6 @@ class Logger(logging.Logger):
         try:
             yield
             dt = (time.monotonic() - t0) * 1000
-            self.info(f"Executed: {name}")
+            self.info(f"Executed: {name} ({dt}ms)")
         except Exception as e:
             self.error(f"Fail when executing {name}: {e}")

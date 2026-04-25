@@ -11,12 +11,12 @@ import uuid
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
 from abc import ABC
-from typing import cast, Tuple, Any, Callable, Literal, NamedTuple
+from typing import cast, Tuple, Any, Callable, Literal, NamedTuple, TypedDict
 from dataclasses import asdict
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | uuid.UUID | None
+JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | uuid.UUID | NamedTuple | TypedDict | None
 HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 ResponseType = Tuple[Response, int] | Response
 
@@ -331,7 +331,7 @@ class WebApi(BaseApi):
             return _err("Unknown language", 400)
 
         index = 0 if lang == 'en' else 1
-        obj = {}
+        obj: dict[str, Any] = {}
         for i_name, name in self.cfg['profiles'].items():
             name = name[index]
             desc = self.cfg['profileDescriptions'][i_name][index]
@@ -576,7 +576,7 @@ class Api(BaseApi):
     def user_add(self) -> ResponseType:
         try:
             content = cast(dict[str, Any], request.json)
-            raw_data = {
+            raw_data: dict[str, Any] = {
                 "user": content.get('user'),
                 "displayname": content.get('displayname'),
                 "ext_username": content.get('ext_username', None),
@@ -589,7 +589,7 @@ class Api(BaseApi):
                 "time": content.get('time', 0),
             }
 
-            data = {}
+            data: dict[str, Any] = {}
 
             for k, v in raw_data.items():
                 if k in ['user', 'displayname']:
@@ -638,7 +638,7 @@ class Api(BaseApi):
     @requires_fields('user')
     def user_delete(self) -> ResponseType:
         try:
-            content = cast(dict, request.json)
+            content = cast(dict[str, Any], request.json)
             username = cast(str, content.get('user'))
             perma = _parse_bool(content.get('perma', 'true'))
             if perma is None:
@@ -656,7 +656,7 @@ class Api(BaseApi):
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
         try:
-            errors = []
+            errors: list[str] = []
             for cc in self.cfg['users'].keys():
                 err = self.sub.add_users(cc)
                 if isinstance(err, str):
@@ -702,7 +702,7 @@ class Api(BaseApi):
                 result = {}
                 for panel in self.sub.panels:
                     result[panel.name] = self.sub.getstatus(panel)
-                return _ok(obj=result)
+                return _ok(obj=cast(dict[str, Any], result))
 
             for panel in self.sub.panels:
                 if panel.name == query:
@@ -739,7 +739,7 @@ class Api(BaseApi):
     def code_add(self) -> ResponseType: 
         try:
             content = cast(dict[str, Any], request.json)
-            raw_data = {
+            raw_data: dict[str, Any] = {
                 "name": content.get('code'),
                 "action": content.get('action'),
                 "permanent": content.get('perma', 'false'),
@@ -748,7 +748,7 @@ class Api(BaseApi):
                 "wl_gb": content.get('wl_gb', 0)
             }
 
-            data = {}
+            data: dict[str, Any] = {}
 
             for k, v in raw_data.items():
                 if k in ['name', 'action']:

@@ -42,7 +42,8 @@ class ReadOnlyConfigError(ConfigError):
     """Raised when trying to mutate a read-only config instance."""
 
 class Config(MutableMapping[str, Any]):
-    """Thread-safe, process-safe JSON config manager.
+    """
+    Thread-safe, process-safe JSON config manager.
 
     Notes:
     - Uses a dedicated `.lock` file for inter-process locking.
@@ -51,7 +52,7 @@ class Config(MutableMapping[str, Any]):
     - Top-level JSON must be an object.
     """
 
-    _MISSING = object()
+    MISSING = object()
 
     def __init__(
         self,
@@ -302,9 +303,9 @@ class Config(MutableMapping[str, Any]):
         self._raise_if_read_only()
         self._run_edit(lambda tx: tx.clear())
 
-    def pop(self, key: str, default: Any = _MISSING) -> Any:
+    def pop(self, key: str, default: Any = MISSING) -> Any:
         self._raise_if_read_only()
-        if default is self._MISSING:
+        if default is self.MISSING:
             return self._run_edit(lambda tx: tx.pop(key))
         return self._run_edit(lambda tx: tx.pop(key, default))
 
@@ -581,7 +582,10 @@ class Config(MutableMapping[str, Any]):
         if isinstance(value, (dict, list)):
             return copy.deepcopy(cast(dict[Any, Any], value))
         return value
-    
+
+# pyright: reportPrivateUsage=false
+# mypy: disable-error-code="attr-defined"
+# pylint: disable=protected-access
 
 class _ConfigTransaction(MutableMapping[str, Any]):
     """A batch edit working copy.
@@ -733,9 +737,9 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     def clear(self) -> None:
         self._require_active().clear()
 
-    def pop(self, key: str, default: Any = Config._MISSING) -> Any:
+    def pop(self, key: str, default: Any = Config.MISSING) -> Any:
         data = self._require_active()
-        if default is Config._MISSING:
+        if default is Config.MISSING:
             return data.pop(key)
         return data.pop(key, default)
 

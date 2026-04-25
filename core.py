@@ -24,8 +24,16 @@ import qrcode
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
 from typing import Any, cast, NamedTuple
-from custom_types import ServerMetricsResponse
+from custom_types import (
+    ServerMetricsResponse, Inbound, 
+    SettingsClient, NewUserInfo,
+    RegisterWithCodeInfo, CodeObject,
+    UserInfo, ResetUserObject,
+    ApplyBonusCodeObject,
+    client_stats_to_settings
+)
 from dataclasses import dataclass, asdict
+from collections.abc import MutableMapping
 
 __all__ = ["Subscription", "BWatch", "BandwidthInfo", "BandwidthSnapshot", "fmt_bytes", "fmt_bytes_tuple"]
 
@@ -128,7 +136,7 @@ class Subscription:
 
     def start(self):
         @self.app.route(f"/{self.uri}", strict_slashes=False)
-        def _sub():
+        def _sub(): # type: ignore[reportUnusedFunction]
             return self.get_subscription(
                 token=request.args.get('token', ''),
                 lang=request.args.get('lang', ''),
@@ -210,13 +218,13 @@ class Subscription:
             self.log.error(f"getstatus fail: {e}")
             return None
 
-    def getinbounds(self, panel: XUiSession) -> list[dict]:
+    def getinbounds(self, panel: XUiSession) -> list[Inbound]:
         """Get inbounds list. Uses cache with TTL, panel.local (almost) skips cache."""
         now = time.time()
         ttl = 2 if panel.local else 15  # fast local, slow remote
 
         cached = panel.get_cache()
-        if cached is not None and now - panel._cache_time < ttl:
+        if cached is not None and now - panel._cache_time < ttl: # type: ignore[reportPrivateUsage]
             return cached
         
         try:
@@ -279,11 +287,11 @@ class Subscription:
         
         if not panels:
             return BandwidthInfo(0, 0, 0)
-        
+        panels = cast(list[XUiSession], panels)
         up_total = 0
         down_total = 0
         for panel in panels:
-            inbounds = self.getinbounds(panel) # type: ignore[reportArugmentType]
+            inbounds = self.getinbounds(panel)
             for i in inbounds:
                 for v in (i['clientStats'] or []):
                     if v['uuid'] == userid:
@@ -307,8 +315,8 @@ class Subscription:
         
         for panel in panels:
             inbounds = self.getinbounds(panel)
-            list_2_add = []
-            need_vision = []
+            list_2_add: list[int] = []
+            need_vision: list[int] = []
             for i in inbounds:
                 if i['protocol'] != "vless":
                     self.log.debug(f"Non-VLESS inbound found ({i['protocol']}). Ignoring.")
@@ -321,7 +329,7 @@ class Subscription:
                 if streamsettings['network'] in ['tcp', 'raw']:
                     need_vision.append(i['id'])
             
-            payload = {"clients": [{
+            payload: dict[str, list[SettingsClient]] = {"clients": [{
                 "id": userid,
                 "flow": "",
                 "email": "",
@@ -338,7 +346,7 @@ class Subscription:
             for j in list_2_add:
                 payload['clients'][0]['email'] = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
                 payload['clients'][0]['flow'] = "xtls-rprx-vision" if j in need_vision else ""
-                data = {
+                data: dict[str, Any] = {
                     'id': j,
                     'settings': json.dumps(payload)
                 }
@@ -408,10 +416,9 @@ class Subscription:
                 l = [i['id'] for i in inbounds if i['protocol'] == "vless"]
                 the = {str(vi['id']): vx for vi in inbounds for vx in vi['clientStats'] if vx['uuid'] == userid}
                 for k in l:
-                    if str(k) not in the: continue
-                    payload = the[str(k)]
+                    if str(k) not in the: continue 
+                    payload = client_stats_to_settings(the[str(k)])
                     payload['enable'] = enable
-                    del payload['inboundId']
                     payload['id'] = userid
                     response = panel.post(
                         f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
@@ -435,9 +442,8 @@ class Subscription:
             
             for k in l:
                 if str(k) not in the: continue
-                payload = the[str(k)]
+                payload = client_stats_to_settings(the[str(k)])
                 payload['enable'] = wl_enable
-                del payload['inboundId']
                 payload['id'] = userid
                 
                 panel.post(
@@ -464,7 +470,7 @@ class Subscription:
         limit: int = 0,
         wl_limit: int = 5,
         timee: int = 0
-    ) -> dict | str:
+    ) -> NewUserInfo | str:
         """Adds a new user. Returns string with error if any argument is incorrect.
         Now also suppports ext username and password (optional)"""
         if ext_username:
@@ -600,15 +606,15 @@ class Subscription:
         olduid = self.cfg['users'][username]
         for panel in self.panels:
             inbounds = self.getinbounds(panel)
-            l = []
-            need_vision = []
+            l: list[int] = []
+            need_vision: list[int] = []
             for i in inbounds:
                 l.append(i['id'])
-            the = {}
+            the: dict[str, SettingsClient] = {}
             for vi in inbounds:
                 for vx in vi['clientStats']:
                     if vx['uuid'] == olduid:
-                        the[str(vi['id'])] = vx
+                        the[str(vi['id'])] = client_stats_to_settings(vx)
                         if json.loads(vi['streamSettings'])['network'] in ["tcp", "raw"]:
                             need_vision.append(vi['id'])
                         break
@@ -618,8 +624,7 @@ class Subscription:
                 payload = the[str(k)]
                 payload['id'] = uid
                 payload['flow'] = "xtls-rprx-vision" if k in need_vision else ""
-                del payload['inboundId']
-                data = {
+                data: dict[str, Any] = {
                     'id': k,
                     'settings': json.dumps({"clients": [payload]})
                 }
@@ -643,22 +648,22 @@ class Subscription:
         displayname: str,
         ext_username: str,
         ext_password: str,
-    ) -> dict[str, Any] | str:
+    ) -> RegisterWithCodeInfo | str:
         """Create a new web user from a register code.
     
         Returns a user dict on success, or a human-readable error string on
         validation/business-rule failure.
     
         """
-        if not code or not isinstance(code, str):
+        if not code or not isinstance(code, str): # type: ignore[reportUnnecessaryIsInstance]
             return "Invalid code"
-        if not username or not isinstance(username, str):
+        if not username or not isinstance(username, str): # type: ignore[reportUnnecessaryIsInstance]
             return "Invalid username"
-        if not isinstance(displayname, str):
+        if not isinstance(displayname, str): # type: ignore[reportUnnecessaryIsInstance]
             return "Invalid displayname"
-        if not ext_username or not isinstance(ext_username, str):
+        if not ext_username or not isinstance(ext_username, str): # type: ignore[reportUnnecessaryIsInstance]
             return "Invalid username"
-        if not ext_password or not isinstance(ext_password, str):
+        if not ext_password or not isinstance(ext_password, str): # type: ignore[reportUnnecessaryIsInstance]
             return "Invalid password"
     
         ext_username = self.sanitize(ext_username)
@@ -679,7 +684,6 @@ class Subscription:
         hashed_password = self.hash(ext_password)
     
         consumed_code: dict[str, Any] | None = None
-        result: dict[str, Any] | None = None
     
         with self.cfg as d:
             codes = d.setdefault("codes", [])
@@ -748,7 +752,7 @@ class Subscription:
             webui_passwords[ext_username] = hashed_password
             webui_users[ext_username] = username
 
-            result = {
+            result: RegisterWithCodeInfo = {
                 "username": username,
                 "token": token,
                 "uuid": userid,
@@ -769,9 +773,9 @@ class Subscription:
             )
             raise RuntimeError(f"backend sync failed for {username}") from e
     
-        return result if result is not None else "Internal error"
+        return result or "Internal error"
 
-    def get_code(self, code: str) -> dict | bool:
+    def get_code(self, code: str) -> CodeObject | bool:
         """Search for a code. Returns a dict if found, False if isnt."""
 
         result = next((item for item in self.cfg['codes'] if item.get("code") == code), None)
@@ -788,19 +792,19 @@ class Subscription:
                     "wl_gb": result.get('wl_gb', 0)}
         else:
             return False
-    def apply_bonus_code(self, *, username: str, code: str) -> dict[str, Any] | str:
+    def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject | str:
         """Atomically validate/consume a bonus code and apply it to a user.
     
         Returns:
             dict: Applied bonus info on success.
             str: Human-readable error on validation/failure.
             """
-        if not isinstance(username, str) or not username:
+        if not isinstance(username, str) or not username: # type: ignore[reportUnnecessaryIsInstance]
             return "Unknown user"
-        if not isinstance(code, str) or not code:
+        if not isinstance(code, str) or not code: # type: ignore[reportUnnecessaryIsInstance]
             return "Unknown code"
     
-        result: dict[str, Any] | None = None
+        result: ApplyBonusCodeObject | None = None
     
         with self.cfg as d:
             users = d.setdefault("users", {})
@@ -842,9 +846,9 @@ class Subscription:
     
             if not isinstance(current_time, int):
                 return "Broken user state"
-            if not isinstance(current_bw, list) or len(current_bw) < 2:
+            if not isinstance(current_bw, list) or len(current_bw) < 2: # type: ignore
                 return "Broken user state"
-            if not isinstance(current_wl_bw, list) or len(current_wl_bw) < 2:
+            if not isinstance(current_wl_bw, list) or len(current_wl_bw) < 2: # type: ignore
                 return "Broken user state"
             if not isinstance(current_bw[0], int) or not isinstance(current_wl_bw[0], int):
                 return "Broken user state"
@@ -870,7 +874,7 @@ class Subscription:
                 "wl_limit": new_wl_limit,
             }
     
-        return result if result is not None else "Internal server error"
+        return result or "Internal server error"
 
     def add_code(self, 
                  code: str, 
@@ -881,13 +885,13 @@ class Subscription:
                  wl_gb: int = 0) -> None | str:
         """Creates a code. Simple."""
 
-        if not isinstance(code, str) or not code:
+        if not isinstance(code, str) or not code: # type: ignore[reportUnnecessaryIsInstance]
             return "code must be a non-empty string"
         if action not in ["register", "bonus"]:
             return f"action must be 'register' or 'bonus', got '{action}'"
-        if not isinstance(permanent, bool):
+        if not isinstance(permanent, bool): # type: ignore[reportUnnecessaryIsInstance]
             return "permanent must be a bool"
-        if not all(isinstance(x, int) for x in (days, gb, wl_gb)):
+        if not all(isinstance(x, int) for x in (days, gb, wl_gb)): # type: ignore[reportUnnecessaryIsInstance]
             return "days, gb, wl_gb must be integers"
         if days < 0 or gb < 0 or wl_gb < 0:
             return "days, gb, wl_gb must be non-negative"
@@ -902,8 +906,8 @@ class Subscription:
         return None
     def delete_code(self, code: str) -> bool:
         """Returns True if deleted, False if not found."""
-        def _delete(t):
-            for i, item in enumerate(t['codes']):
+        def _delete(t: MutableMapping[str, Any]):
+            for i, item in enumerate(cast(dict[CodeObject, str], t['codes'])):
                 if item.get('code') == code:
                     del t['codes'][i]
                     return True
@@ -911,14 +915,14 @@ class Subscription:
         return self.cfg.mutate(_delete)
     def list_code(self) -> list[str]:
         return [c['code'] for c in self.cfg['codes'] if 'code' in c]
-    def bonus_code(self, value: int | str, code: str) -> dict[str, Any] | str:
+    def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject | str:
         """Apply a bonus code for a Telegram user."""
         username = self.get_username_telegram(value)
         if not isinstance(username, str) or not username:
             return "Unknown Telegram user"
         return self.apply_bonus_code(username=username, code=code)
 
-    def get_info(self, username: str, pretty: bool = False) -> dict | None:
+    def get_info(self, username: str, pretty: bool = False) -> UserInfo | None:
         """Get all info about a user. None if not found."""
         if not self.cfg['users'].get(username, None):
             return None
@@ -933,7 +937,7 @@ class Subscription:
             wl_bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in wl_bandwidths))
 
         return {
-            "_": random.choice(cast(list, conf.get('funny_strings', []))),
+            "_": random.choice(cast(list[str], conf.get('funny_strings', []))),
             "token": conf['tokens'][username],
             "link": f"https://pomi.lol/sub?token={conf['tokens'][username]}",
             "displayname": conf['displaynames'][username],
@@ -960,7 +964,7 @@ class Subscription:
                 "wl_limit": conf['wl_bw'][username][0]
             }
         }
-    def get_info_telegram(self, tgid: int) -> dict | None:
+    def get_info_telegram(self, tgid: int) -> UserInfo | None:
         """Returns all user info by telegram ID. None if target uid wasnt found."""
         username = cast(str, self.cfg['tgids'].get(str(tgid), None))
         if not username:
@@ -982,7 +986,7 @@ class Subscription:
     def get_emails(self, username: str, panel: XUiSession) -> dict[str, str]:
         """Get the panel emails. {'inboundId': 'actual_panel_email', ...}"""
         inbounds = self.getinbounds(panel=panel)
-        emails = {}
+        emails: dict[str, str] = {}
         for i in inbounds:
             for r in i['clientStats']:
                 actual_email = r.get('email', '')
@@ -995,7 +999,7 @@ class Subscription:
     def get_online_users(self, new: bool = False) -> list[str] | dict[str, str | None]:
         """Get the list of currently online users.
         new: False = ['username', ...]. True = {'username': ext_username_or_None, ...}"""
-        online_users = set()
+        online_users: set[str] = set()
         for panel in self.panels:
             try:
                 res = panel.post(f"{panel.base_url}panel/api/inbounds/onlines")
@@ -1015,7 +1019,7 @@ class Subscription:
     def is_online(self, username: str) -> bool:
         """Simplest method here lol. But useful."""
         return username in self.get_online_users()
-    def reset_user(self, username: str) -> dict | str:
+    def reset_user(self, username: str) -> ResetUserObject | str:
         """Resets token and uuid to randomness. Dict with new values on success."""
         if not self.isuser(username):
             return "Unknown user"
@@ -1044,6 +1048,7 @@ class Subscription:
         m, s = divmod(seconds, 60)
         h, m = divmod(m, 60)
         d, h = divmod(h, 24)
+        _ = s # Type checkers, just shut up already.
         if d > 0:
             return f"{d}д {h}ч {m}м"
         if h > 0:
@@ -1103,7 +1108,7 @@ Lang: {lang}""")
             userinfo = userinfo.replace("%i2", str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO)))
             userinfo = userinfo.replace("%i3", str(int(cfg['bw'][username][0] * 10**9 * self.RATIO)))
         userinfo = userinfo.replace("%i4", str(times))
-        headers = {
+        headers: dict[str, Any] = {
             'Profile-Title': sub_name,
             'Subscription-Userinfo': userinfo,
             'profile-update-interval': "1",
@@ -1115,7 +1120,7 @@ Lang: {lang}""")
         }
         if is_happ: headers['routing'] = f"happ://routing/onadd/{base64.b64encode(json.dumps(cfg['routing']).encode('utf-8')).decode('utf-8')}"
         user_uuid = cfg['users'][username]
-        generated_links = []
+        generated_links: list[str] = []
 
         for p_key, p_name in cfg['profiles'].items():
             if p_key in cfg['whitelistProfiles'] and not statusWl:
@@ -1250,8 +1255,8 @@ class BWatch:
             self.sub = sub
             self.bot = bot
             self.admin_bot = admin_bot
-            self.mem = {}
-            self.wl_mem = {}
+            self.mem: dict[str, BandwidthInfo] = {}
+            self.wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized = False
             self._panel_alerts: dict[str, Any] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', None) or 3600
@@ -1286,7 +1291,7 @@ class BWatch:
     def stop(self):
         self._stop_event.set()
 
-    def _update_user(self, *args, **kwargs):
+    def _update_user(self, *args: Any, **kwargs: Any):
         x = self.sub.update_user(*args, **kwargs)
         if x is not None:
             self.log.critical(f"update_user error: {x}") 
@@ -1301,8 +1306,8 @@ class BWatch:
             d["_meta"]["last_prune"] = int(time.time())
 
     def bandwidth_check(self):
-        updates = {}    # username -> (delta, current) for main
-        wl_updates = {} # username -> (delta, current) for whitelist
+        updates: dict[str, tuple[int | float, BandwidthInfo]] = {}    # username -> (delta, current) for main
+        wl_updates: dict[str, tuple[int | float, BandwidthInfo]] = {} # username -> (delta, current) for whitelist
         for i in list(self.cfg['users'].keys()):
             # Main bandwidth
             if self.cfg['time'].get(i, 0) != 0:
@@ -1410,8 +1415,8 @@ class BWatch:
                     if days <= 2:
                         id = self.sub.get_username_telegram(tgid=i, reverse=True)
                         if id not in self.cfg['_notified']:
-                            def _u(t): t['_notified'].append(id)
-                            self.cfg.mutate(_u)
+                            def _u_(t: MutableMapping[str, Any]): t['_notified'].append(id)
+                            self.cfg.mutate(_u_)
                             if self.bot: self.bot.msg(cast(int, id), 'warning_days', days=days)
             if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3:
                 if self.cfg['statusWl'].get(i, True):
@@ -1420,8 +1425,8 @@ class BWatch:
             elif self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3 * 0.95: # 95%
                 id = self.sub.get_username_telegram(tgid=i, reverse=True)
                 if id not in self.cfg['_wl_notified']:
-                    def _u(t): t['_wl_notified'].append(id)
-                    self.cfg.mutate(_u)
+                    def _up(t: MutableMapping[str, Any]): t['_wl_notified'].append(id)
+                    self.cfg.mutate(_up)
                     if self.bot: self.bot.msg(id, 'warning_traffic_whitelist', used=int(round(self.cfg['wl_bw'][i][1] / 10**6, 0)), available=self.cfg['wl_bw'][i][0])
             if not self.cfg['status'][i]:
                 continue
@@ -1433,8 +1438,8 @@ class BWatch:
             elif self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > self.cfg['bw'][i][0] * 1000**3 * 0.95: # 95%
                 id = self.sub.get_username_telegram(tgid=i, reverse=True)
                 if id not in self.cfg['_notified']:
-                    def _u(t): t['_notified'].append(id)
-                    self.cfg.mutate(_u)                    
+                    def _up_(t: MutableMapping[str, Any]): t['_notified'].append(id)
+                    self.cfg.mutate(_up_)                    
                     if self.bot: self.bot.msg(id, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
 
     def is_first(self):
@@ -1453,12 +1458,11 @@ class BWatch:
             t['_last_reset'] = today
             t['_notified'] = []
             t['_wl_notified'] = []
-
+    
     def reset(self):
-        def _u(t): 
+        with self.cfg as t:
             t['_notified'] = []
             t['_wl_notified'] = []
-        self.cfg.mutate(_u)
 
     def record_daily_snapshot(self):
         """Record one bandwidth snapshot per user for today (UTC midnight).
