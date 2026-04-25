@@ -5,8 +5,8 @@ from datetime import datetime
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
-from core import BandwidthSnapshot
+from matplotlib.ticker import FuncFormatter
+from core import BandwidthSnapshot, fmt_bytes
 
 __all__ = ['bandwidth_chart']
 
@@ -20,7 +20,7 @@ _BORDER   = '#3a3a42'
 
 _REG_DOWN = '#9ca3af'  # gray-400
 _REG_UP   = '#d1d5db'  # gray-300
-_WL_DOWN  = '#6b7280'  # gray-500 — slightly darker for distinction
+_WL_DOWN  = '#6b7280'  # gray-500
 _WL_UP    = '#a1a1aa'  # zinc-400
 
 _LANG = {
@@ -46,14 +46,6 @@ _LANG = {
     }
 }
 
-def _fmt_bytes(b: float) -> str:
-    """Format bytes as short human-readable string. Used for axis labels."""
-    if b <= 0:
-        return '0'
-    for unit, div in (('TB', 10**12), ('GB', 10**9), ('MB', 10**6), ('KB', 10**3)):
-        if b >= div:
-            return f'{b / div:.1f} {unit}'
-    return f'{int(b)} B'
 
 
 def _style_axes(ax, title: str) -> None:
@@ -72,7 +64,7 @@ def _style_axes(ax, title: str) -> None:
         ax.spines[side].set_linewidth(0.8)
     
     ax.tick_params(colors=_TEXT_DIM, labelsize=9, length=0)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: _fmt_bytes(v)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: fmt_bytes(v)))
 
 
 def bandwidth_chart(

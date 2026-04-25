@@ -21,13 +21,13 @@ import sys
 import io
 import qrcode
 
-from flask import Flask, Response, send_file, request
+from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
 from typing import Any, cast, NamedTuple
+from custom_types import ServerMetricsResponse
 from dataclasses import dataclass, asdict
 
-# Not sure why you would use Bandwidth* classes, but why not.
-__all__ = ["Subscription", "BWatch", "BandwidthInfo", "BandwidthSnapshot"]
+__all__ = ["Subscription", "BWatch", "BandwidthInfo", "BandwidthSnapshot", "fmt_bytes", "fmt_bytes_tuple"]
 
 nginx_404 = (
     "<html>\r\n"
@@ -42,6 +42,27 @@ nginx_404 = (
 if sys.platform != 'linux':
     raise RuntimeError("Must be run on Linux.")
 
+def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
+    """
+    Format bytes into a tuple.
+    Returns:
+        tuple[amount, label]  
+        Example: tuple["193", "MB"]
+    """
+    for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
+        if value >= div:
+            return str(round(value / div, 2)), unit
+    return str(round(value / 10**6, 2)), "MB"
+
+def fmt_bytes(b: float) -> str:
+    """Format bytes as short human-readable string. Does NOT return a tuple."""
+    if b <= 0:
+        return '0'
+    for unit, div in (('TB', 10**12), ('GB', 10**9), ('MB', 10**6), ('KB', 10**3)):
+        if b >= div:
+            return f'{b / div:.1f} {unit}'
+    return f'{int(b)} B'
+
 class BandwidthInfo(NamedTuple):
     """
     Every value is in bytes.
@@ -51,6 +72,17 @@ class BandwidthInfo(NamedTuple):
     upload: int | float
     download: int | float
     total: int | float
+
+    @staticmethod
+    def format_bytes(b: int) -> float:
+        return round(b / 10**6, 2)
+
+    def format_all(self) -> BandwidthInfo:
+        return BandwidthInfo(
+            self.format_bytes(int(self.upload)),
+            self.format_bytes(int(self.download)),
+            self.format_bytes(int(self.total))
+        )
 
 @dataclass
 class BandwidthSnapshot:
@@ -165,18 +197,18 @@ class Subscription:
             os.kill(os.getppid(), sig)
         threading.Thread(target=_restart, daemon=True).start()
     
-    def getstatus(self, panel: XUiSession) -> dict:
+    def getstatus(self, panel: XUiSession) -> ServerMetricsResponse | None:
         """Get the information about a panel."""
         try:
             x = panel.get(f"{panel.base_url}panel/api/server/status")
             data = x.json()
             if x.status_code not in [200]:
                 self.log.error(f"getstatus fail: {data['msg']}")
-                return {}
+                return None
             return data
         except Exception as e:
             self.log.error(f"getstatus fail: {e}")
-            return {}
+            return None
 
     def getinbounds(self, panel: XUiSession) -> list[dict]:
         """Get inbounds list. Uses cache with TTL, panel.local (almost) skips cache."""
@@ -1006,13 +1038,6 @@ class Subscription:
         return {'uuid': newid, 'token': newt}
 
     @staticmethod
-    def fmt_bytes(value: int | float) -> tuple[str, str]:
-        for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
-            if value >= div:
-                return str(round(value / div, 2)), unit
-        return str(round(value / 10**6, 2)), "MB"
-
-    @staticmethod
     def fmt_time(seconds: int) -> str:
         if seconds < 60:
             return f"{seconds}с"
@@ -1118,9 +1143,9 @@ Lang: {lang}""")
         dt = "Bandwidth: " if lang == "en" else "Трафик: "
         dt = dt + "↑ %s1%u1 / ↓ %s2%u2"
         if need_dummy_link:
-            v, label = self.fmt_bytes(bandwidths.upload)
+            v, label = fmt_bytes_tuple(bandwidths.upload)
             dt = dt.replace("%s1", v).replace("%u1", label)
-            v, label = self.fmt_bytes(bandwidths.download)
+            v, label = fmt_bytes_tuple(bandwidths.download)
             dt = dt.replace("%s2", v).replace("%u2", label)
 
         dt = urllib.parse.quote(dt)
@@ -1145,9 +1170,9 @@ Lang: {lang}""")
         if not status:
             desc = cfg['description'][2] if lang == "en" else cfg['description'][3]
         if status:
-            v, label = self.fmt_bytes(int(bandwidths.upload))
+            v, label = fmt_bytes_tuple(int(bandwidths.upload))
             desc = desc.replace("%s1", v).replace("%u1", label)
-            v, label = self.fmt_bytes(int(bandwidths.download))
+            v, label = fmt_bytes_tuple(int(bandwidths.download))
             desc = desc.replace("%s2", v).replace("%u2", label)
 
             if cfg['bw'][username][0] != 0:
@@ -1167,7 +1192,7 @@ Lang: {lang}""")
             else:
                 desc = desc.replace("%t1", "").replace("%t2", "").replace("%t3", "")
             if cfg['bw'][username][0] != 0:
-                v, label = self.fmt_bytes(int(cfg['bw'][username][1]))
+                v, label = fmt_bytes_tuple(int(cfg['bw'][username][1]))
                 desc = desc.replace("%n1", v).replace("%y1", label)
                 desc = desc.replace("%n2", str(cfg['bw'][username][0])).replace("%y2", "GB")
             else:
@@ -1178,7 +1203,7 @@ Lang: {lang}""")
                 else:
                     desc = desc.replace("%l1", cfg['description'][10] if lang == "en" else cfg['description'][11])
                 
-                v, label = self.fmt_bytes(int(cfg['wl_bw'][username][1]))
+                v, label = fmt_bytes_tuple(int(cfg['wl_bw'][username][1]))
                 desc = desc.replace("%w1", v).replace("%i1", label)
 
                 desc = desc.replace("%w2", str(cfg['wl_bw'][username][0])).replace("%i2", "GB")
@@ -1186,7 +1211,7 @@ Lang: {lang}""")
                 desc = desc.replace("%l1", "").replace("%w1", "").replace("%i1", "").replace("%w2", "").replace("%i2", "")
         else:
             if cfg['bw'][username][0] != 0:
-                v, label = self.fmt_bytes(int(cfg['bw'][username][1]))
+                v, label = fmt_bytes_tuple(int(cfg['bw'][username][1]))
                 desc = desc.replace("%n1", v).replace("%u1", label)
 
                 desc = desc.replace("%n2", str(cfg['bw'][username][0])).replace("%u2", "GB")
@@ -1228,8 +1253,8 @@ class BWatch:
             self.mem = {}
             self.wl_mem = {}
             self._snapshot_initialized = False
-            self._panel_alerts = {} # only used by 1 thread, no lock needed yet
-            self._panel_alert_cooldown = self.cfg.get('panel_alert_cooldown', None) or 3600
+            self._panel_alerts: dict[str, Any] = {} # only used by 1 thread, no lock needed yet
+            self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', None) or 3600
             self._t1 = threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs")
             self._t2 = threading.Thread(target=self._every_2h, daemon=True, name="Date check")
             self._t3 = threading.Thread(target=self._every_15s, daemon=True, name="Bandwidth")
@@ -1335,7 +1360,7 @@ class BWatch:
                     continue
                 
                 key = panel.name
-                problems = []
+                problems: list[Any] = []
                 
                 xray = status.get('xray', {})
                 if xray.get('state') != 'running':

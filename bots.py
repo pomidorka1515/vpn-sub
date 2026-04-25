@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from config import Config
 from loggers import Logger
-from core import Subscription
+from core import Subscription, fmt_bytes
 from session import XUiSession
+from chart import bandwidth_chart
 
 import telebot
 import time
@@ -320,11 +321,12 @@ class AdminBot:
             self.bot.send_message(message.chat.id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
             return
     
-        try:
-            obj = self.sub.reset_user(username)
-        except Exception as e:
-            self.log.critical(f"exception in reset_user: {e}")
+        
+        obj = self.sub.reset_user(username)
+        if isinstance(obj, str):
+            self.bot.send_message(message.chat.id, f"❌ Ошибка сброса: {obj}")
             return
+        
         self.bot.send_message(message.chat.id, f"✅ Пользователь был сброшен.\n\nToken: <code>{obj['token']}</code>\nUUID: <code>{obj['uuid']}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
     def _step_add_user_name(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -541,7 +543,8 @@ class PublicBot:
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback)
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback)
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback)
-            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello: True)(self.handle_text)
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))(self.chart_callback)
+            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp: True)(self.handle_text)
 
     def get_lang(self, uid: int) -> str:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
@@ -706,6 +709,7 @@ class PublicBot:
                 types.KeyboardButton(t['btn_get_sub']),
                 types.KeyboardButton(t['btn_bonus']),
                 types.KeyboardButton(t['btn_reset']),
+                types.KeyboardButton(t['btn_chart']),
 
                 types.KeyboardButton(t['btn_lang']),
                 types.KeyboardButton(t['btn_support'])
@@ -785,6 +789,17 @@ class PublicBot:
         elif text in [self.TEXTS['ru']['btn_get_sub'], self.TEXTS['en']['btn_get_sub']]:
             if not self.sub.is_registered(uid): return
             self.send_link(message.chat.id, uid, lang)
+
+        elif text in [self.TEXTS['ru']['btn_chart'], self.TEXTS['en']['btn_chart']]:
+            if not self.sub.is_registered(uid): return
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            markup.add(
+                types.InlineKeyboardButton(t['btn_chart_days'].format(days=3), callback_data="chart_3"),
+                types.InlineKeyboardButton(t['btn_chart_days'].format(days=14), callback_data="chart_14"),
+                types.InlineKeyboardButton(t['btn_chart_days'].format(days=30), callback_data="chart_30"),
+                types.InlineKeyboardButton(t['btn_chart_days'].format(days=90), callback_data="chart_90")
+            )
+            self.bot.send_message(message.chat.id, t['choose_chart_days'], reply_markup=markup)
     def send_link(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
         info = self.sub.get_info_telegram(uid)
@@ -1066,6 +1081,81 @@ class PublicBot:
         else:
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
             return
+
+    def chart_callback(self, call: types.CallbackQuery) -> None:
+        data = cast(str, call.data)
+        message = cast(types.Message, call.message)
+        uid = call.from_user.id
+        if not self.sub.is_registered(uid): return
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+
+        days = int(data.split('_')[1])
+        username = self.sub.get_username_telegram(uid)
+        if not isinstance(username, str): return
+
+        self.bot.answer_callback_query(call.id)
+
+        try:
+            snapshots = self.sub.get_bw_history(username, days=days)
+            info = self.sub.get_info(username, pretty=False)
+            if not info or 'bandwidth' not in info:
+                self.bot.send_message(message.chat.id, "Error", reply_markup=self.get_menu(uid))
+                return
+
+            bandwidths = info['bandwidth']
+
+            upload_fmt = fmt_bytes(bandwidths['total']['upload'])
+            download_fmt = fmt_bytes(bandwidths['total']['download'])
+            wl_upload_fmt = fmt_bytes(bandwidths['wl_total']['upload'])
+            wl_download_fmt = fmt_bytes(bandwidths['wl_total']['download'])
+
+            limit = bandwidths['limit']
+            monthly = bandwidths['monthly']
+
+            if limit == 0:
+                limit_str = t['unlimited']
+                used_str = t['unlimited']
+                percent_str = "N/A"
+            else:
+                limit_str = f"{limit} GB"
+                used_str = fmt_bytes(monthly)
+                percent_str = f"{int((monthly / (limit * 10**9)) * 100)}%" if monthly > 0 else "0%"
+
+            wl_limit = bandwidths['wl_limit']
+            wl_monthly = bandwidths['wl_monthly']
+
+            if wl_limit == 0:
+                wl_limit_str = t['unlimited']
+                wl_used_str = t['unlimited']
+                wl_percent_str = "N/A"
+            else:
+                wl_limit_str = f"{wl_limit} GB"
+                wl_used_str = fmt_bytes(wl_monthly)
+                wl_percent_str = f"{int((wl_monthly / (wl_limit * 10**9)) * 100)}%" if wl_monthly > 0 else "0%"
+
+            text = t['chart_text'].format(
+                days=days,
+                upload=upload_fmt,
+                download=download_fmt,
+                used=used_str,
+                limit=limit_str,
+                percent=percent_str,
+                wl_upload=wl_upload_fmt,
+                wl_download=wl_download_fmt,
+                wl_used=wl_used_str,
+                wl_limit=wl_limit_str,
+                wl_percent=wl_percent_str
+            )
+
+            chart_img = bandwidth_chart(snapshots, label=info['displayname'], lang=lang)
+            if chart_img is not None:
+                self.bot.send_photo(message.chat.id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
+            else:
+                self.bot.send_message(message.chat.id, text + "\n\n" + t.get('no_data', 'No chart data available'), parse_mode="HTML", reply_markup=self.get_menu(uid))
+        except Exception as e:
+            self.log.error(f"Chart error for uid {uid}: {e}", exc_info=True)
+            self.bot.send_message(message.chat.id, "Error occurred", reply_markup=self.get_menu(uid))
 
     def step_bonus(self, message: types.Message) -> None:
         text = cast(str, message.text)

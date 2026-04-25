@@ -4,7 +4,6 @@ from collections.abc import Callable, Iterator, MutableMapping
 from loggers import Logger
 from typing import (
     Any, Self, Literal,
-    KeysView, ItemsView, ValuesView,
     cast
 )
 from types import TracebackType
@@ -392,7 +391,7 @@ class Config(MutableMapping[str, Any]):
             raise ConfigError(
                 f"Config file '{self._path}' must contain a JSON object at the top level."
             )
-        return data
+        return cast(dict[str, Any], data)
 
     def _load_schema(self, data: dict[str, Any]) -> dict[str, Any] | None:
         schema_ref = data.get("$schema")
@@ -445,7 +444,7 @@ class Config(MutableMapping[str, Any]):
         self._schema_cache_path = schema_path
         self._schema_cache_signature = schema_sig
         self._schema_cache = schema
-        return schema
+        return cast(dict[Any, Any], schema)
 
     def _validate_schema(self, data: dict[str, Any]) -> None:
         schema = self._load_schema(data)
@@ -580,7 +579,7 @@ class Config(MutableMapping[str, Any]):
     @staticmethod
     def _detach(value: Any) -> Any:
         if isinstance(value, (dict, list)):
-            return copy.deepcopy(value)
+            return copy.deepcopy(cast(dict[Any, Any], value))
         return value
     
 
@@ -595,8 +594,8 @@ class _ConfigTransaction(MutableMapping[str, Any]):
 
     def __init__(self, config: Config) -> None:
         self._config = config
-        self._data: dict[str, Any] | None = None
-        self._original: dict[str, Any] | None = None
+        self.data: dict[str, Any] | None = None
+        self.original: dict[str, Any] | None = None
         self._lock_fp = None
         self.owner_thread_id: int | None = None
     
@@ -635,12 +634,12 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                 cfg._data = current
                 cfg._last_signature = signature
 
-            self._original = copy.deepcopy(current)
-            self._data = copy.deepcopy(current)
+            self.original = copy.deepcopy(current)
+            self.data = copy.deepcopy(current)
             self.owner_thread_id = threading.get_ident()
             cfg._active_transaction = self
             return self
-    
+
         except Exception:
             try:
                 if self._lock_fp is not None:
@@ -648,8 +647,8 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                     self._lock_fp.close()
             finally:
                 self._lock_fp = None
-                self._data = None
-                self._original = None
+                self.data = None
+                self.original = None
                 self.owner_thread_id = None
                 cfg._active_transaction = None
                 cfg._lock.release()
@@ -662,33 +661,33 @@ class _ConfigTransaction(MutableMapping[str, Any]):
         exc_tb: TracebackType | None,
     ) -> bool | None:
         cfg = self._config
-    
+
         try:
             if exc_type is None:
-                if self._data is None or self._original is None:
+                if self.data is None or self.original is None:
                     raise RuntimeError("Transaction is not active.")
-    
-                if self._data != self._original:
-                    cfg._validate_schema(self._data)
-                    cfg._atomic_write(self._data)
-    
+
+                if self.data != self.original:
+                    cfg._validate_schema(self.data)
+                    cfg._atomic_write(self.data)
+
                     signature = cfg._file_signature()
                     if signature is None:
                         raise ConfigError(
                             "Config file disappeared immediately after commit."
                         )
-    
+
                     if cfg._isolate_commits:
-                        cfg._data = copy.deepcopy(self._data)
+                        cfg._data = copy.deepcopy(self.data)
                     else:
-                        cfg._data = self._data
-    
+                        cfg._data = self.data
+
                     cfg._last_signature = signature
                 else:
-                    cfg._data = self._original
-    
+                    cfg._data = self.original
+
             return False
-    
+
         finally:
             try:
                 if self._lock_fp is not None:
@@ -696,16 +695,16 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                     self._lock_fp.close()
             finally:
                 self._lock_fp = None
-                self._data = None
-                self._original = None
+                self.data = None
+                self.original = None
                 self.owner_thread_id = None
                 cfg._active_transaction = None
                 cfg._lock.release()
 
     def _require_active(self) -> dict[str, Any]:
-        if self._data is None:
+        if self.data is None:
             raise RuntimeError("Transaction is not active.")
-        return self._data
+        return self.data
 
     def __getitem__(self, key: str) -> Any:
         return self._require_active()[key]

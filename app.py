@@ -7,7 +7,7 @@ import threading
 threading.main_thread().name = 'main'
 
 from core import (
-    Subscription, BWatch, 
+    Subscription, BWatch,
     Response, Flask, request, send_file
 )
 from session import XUiSession

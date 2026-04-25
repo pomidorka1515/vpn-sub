@@ -18,3 +18,4 @@ backup/
 discord/venv
 discord/.venv
 discord/config.json
+test_chart.py
