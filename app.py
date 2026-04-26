@@ -111,6 +111,7 @@ adminbot = AdminBot(sub=sub, cfg=cfg)
 bot      = PublicBot(sub=sub, cfg=cfg)
 
 bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
+bw.admin_bot = adminbot
 
 # ------------------------------------------------------------
 # Broadcast selected loggers to AdminBot

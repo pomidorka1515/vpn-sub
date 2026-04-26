@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from config import Config
 from loggers import Logger
-from core import Subscription, fmt_bytes
+from core import Subscription, fmt_bytes, SERVER_TZ
 from session import XUiSession
 from chart import bandwidth_chart
 
@@ -12,7 +12,7 @@ import threading
 import urllib.parse
 
 from typing import cast, Any
-from datetime import timedelta, timezone, datetime
+from datetime import datetime
 from telebot import types
 
 
@@ -279,7 +279,7 @@ class AdminBot:
             fingerprint = info['fingerprint']
             if times:
                 days_left = str((times - int(time.time())) // 86400)
-                date = datetime.fromtimestamp(times, tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
+                date = datetime.fromtimestamp(times, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
             else:
                 days_left = "N/A"
                 date = "N/A"
@@ -607,7 +607,7 @@ class PublicBot:
         
         if info['time']:
             days_left = str((info['time'] - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(info['time'], tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
+            date_end = datetime.fromtimestamp(info['time'], tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t['lifetime']
@@ -1101,7 +1101,7 @@ class PublicBot:
             if not 1 <= days <= 90:
                 raise ValueError
         except (ValueError, IndexError):
-            self.bot.answer_callback_query(call.id, t['chart_invalid_period'], reply_markup=self.get_menu(uid))
+            self.bot.answer_callback_query(call.id, t['chart_invalid_period'])
             return
         
         username = self.sub.get_username_telegram(uid)
@@ -1133,7 +1133,7 @@ class PublicBot:
             snapshots = self.sub.get_bw_history(username, days=days)
             info = self.sub.get_info(username, pretty=False)
             if not info or 'bandwidth' not in info:
-                self.bot.send_message(message.chat.id, "Error fetching data", 
+                self.bot.send_message(chat_id, "Error fetching data", 
                                       reply_markup=self.get_menu(uid))
                 return
 
@@ -1186,13 +1186,13 @@ class PublicBot:
                 text = text[:1020] + "..."
             chart_img = bandwidth_chart(snapshots, label=info['displayname'], lang=lang)
             if chart_img is not None:
-                self.bot.send_photo(message.chat.id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
+                self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
             else:
-                self.bot.send_message(message.chat.id, text + "\n\n" + t.get('no_data', 'No chart data available'), parse_mode="HTML", reply_markup=self.get_menu(uid))
+                self.bot.send_message(chat_id, text + "\n\n" + t.get('no_data', 'No chart data available'), parse_mode="HTML", reply_markup=self.get_menu(uid))
         except Exception as e:
             self.log.error(f"Chart error for uid {uid}: {e}", exc_info=True)
             try:
-                self.bot.send_message(message.chat.id, "Error occurred", reply_markup=self.get_menu(uid))
+                self.bot.send_message(chat_id, "Error occurred", reply_markup=self.get_menu(uid))
             except Exception:
                 pass
 

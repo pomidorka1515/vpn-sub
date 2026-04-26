@@ -40,7 +40,8 @@ from collections.abc import MutableMapping
 __all__ = [
     "Subscription", "BWatch", 
     "BandwidthInfo", "BandwidthSnapshot", 
-    "fmt_bytes", "fmt_bytes_tuple"
+    "fmt_bytes", "fmt_bytes_tuple",
+    "SERVER_TZ"
 ]
 
 nginx_404 = (
@@ -1265,7 +1266,7 @@ Lang: {lang}""")
                 desc = desc.replace("%t1", cfg['description'][8] if lang == "en" else cfg['description'][9])
                 desc = desc.replace(
                     "%t3",
-                    datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
+                    datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
                 )
                 desc = desc.replace(
                     "%t2",
@@ -1367,7 +1368,7 @@ class BWatch:
                         if i not in self.mem:
                             self.mem[i] = current_bws
                         else:
-                            delta = current_bws.total - self.mem[i].total
+                            delta = int(current_bws.total - self.mem[i].total)
                             if delta > 0:
                                 updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
                                 
@@ -1383,7 +1384,7 @@ class BWatch:
                         if i not in self.wl_mem:
                             self.wl_mem[i] = current_bws
                         else:
-                            delta = current_bws.total - self.wl_mem[i].total
+                            delta = int(current_bws.total - self.wl_mem[i].total)
                             if delta > 0:
                                 wl_updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
                                 

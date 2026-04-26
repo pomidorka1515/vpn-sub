@@ -1,6 +1,6 @@
 from typing import (
     TypedDict, Protocol,
-    runtime_checkable
+    runtime_checkable, Any
 )
 
 ### Bots ###
@@ -17,7 +17,7 @@ class PublicBotLike(Protocol):
 
     def msg(
         self, 
-        tgId: int | str | None,
+        tgid: int | str | None,
         key: str,
         **kwargs: Any
     ) -> None: ... 

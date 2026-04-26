@@ -14,6 +14,7 @@ import json
 import os
 import tempfile
 import threading
+import io
 from datetime import datetime
 
 import jsonschema
@@ -83,17 +84,17 @@ class Config(MutableMapping[str, Any]):
             backup_retention: Amount of concurrent backups kept on disk.
         """
         self.log = Logger(type(self).__name__)
-        self._path = path
-        self._indent = indent
-        self._strict_schema = strict_schema
+        self._path: str = path
+        self._indent: int = indent
+        self._strict_schema: bool = strict_schema
     
         if sync_mode not in ["full", "data", "none"]:
             raise ValueError("sync_mode must be 'full', 'data', or 'none'")
-        self._sync_mode = sync_mode
+        self._sync_mode: SYNC_MODES = sync_mode
     
         # True = safer: committed state is detached from leaked tx refs
         # False = faster but unsafe if refs escape the transaction
-        self._isolate_commits = isolate_commits
+        self._isolate_commits: bool = isolate_commits
     
         self._data: dict[str, Any] = {}
         self._last_signature: tuple[int, int, int, int] | None = None
@@ -106,13 +107,13 @@ class Config(MutableMapping[str, Any]):
         self._schema_cache_signature: tuple[int, int, int, int] | None = None
         self._schema_cache: dict[str, Any] | None = None
     
-        self._warned_update_callable = False
+        self._warned_update_callable: bool = False
 
-        self._read_only = read_only
+        self._read_only: bool = read_only
 
-        self._backup_dir = backup_dir
-        self._backup_interval = backup_interval
-        self._backup_retention = backup_retention
+        self._backup_dir: str | None = backup_dir
+        self._backup_interval: int | float = backup_interval
+        self._backup_retention: int = backup_retention
         self._backup_stop = threading.Event()
 
         self._backup_t = threading.Thread(target=self._backup_loop, daemon=True, name="Backup")
@@ -122,7 +123,8 @@ class Config(MutableMapping[str, Any]):
 
         if backup_dir:
             self._backup_t.start()
-    def _backup_loop(self):
+    
+    def _backup_loop(self) -> None:
         while not self._backup_stop.wait(self._backup_interval):
             try:
                 self._do_backup()
@@ -137,7 +139,7 @@ class Config(MutableMapping[str, Any]):
         dir = cast(str, self._backup_dir)
         return os.path.join(dir, name)
 
-    def _do_backup(self):
+    def _do_backup(self) -> None:
         """Take a snapshot and write it to a per-instance subdirectory."""
         instance_dir = self._instance_backup_dir()
         os.makedirs(instance_dir, exist_ok=True)
@@ -159,7 +161,7 @@ class Config(MutableMapping[str, Any]):
         
         self.log.debug(f"backup saved: {backup_path}")
     
-    def _prune_backups(self):
+    def _prune_backups(self) -> None:
         """Keep only the N most recent backups."""
         instance_dir = self._instance_backup_dir()
         pattern = os.path.join(instance_dir, "*.json")
@@ -172,7 +174,7 @@ class Config(MutableMapping[str, Any]):
             except OSError as e:
                 self.log.error(f"prune failed for {f}: {e}")
     
-    def _raise_if_read_only(self):
+    def _raise_if_read_only(self) -> None:
         if self._read_only:
             raise ReadOnlyConfigError("Cannot modify read-only config instance")
     
@@ -597,10 +599,10 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     """
 
     def __init__(self, config: Config) -> None:
-        self._config = config
+        self._config: Config = config
         self.data: dict[str, Any] | None = None
         self.original: dict[str, Any] | None = None
-        self._lock_fp = None
+        self._lock_fp: io.BufferedRandom | None = None
         self.owner_thread_id: int | None = None
     
     def __enter__(self) -> Self:

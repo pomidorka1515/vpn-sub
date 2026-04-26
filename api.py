@@ -211,10 +211,7 @@ def requires_args(*arg: str) -> Callable[[Callable[..., Any]], Callable[..., Any
 
 
 class WebApi(BaseApi):
-    """Public api for web ui.
-    Dependencies: Subscription, BWatch
-    Classes depending on this: none"""
-    _REDIRECT_HTML = """<!DOCTYPE html><html><head><title>Opening...</title></head><body><p>Redirecting... If nothing happens, <a id="manual-link" href="#">click here</a>.</p><script>const urlParams=new URLSearchParams(window.location.search);const subUrl=urlParams.get('url')||'';const prefix=urlParams.get('prefix')||'';const link=prefix+subUrl;document.getElementById('manual-link').href=link;window.location.replace(link)</script></body></html>"""
+    # _REDIRECT_HTML = """..."""
 
     ROUTES: list[Route] = [
         Route('GET', '/redirect', 'redirect_page', None),
@@ -242,6 +239,8 @@ class WebApi(BaseApi):
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
         uri = f"/{cfg['uri']}" 
+        with open('res/redirect.html', 'r', encoding='utf-8') as f:
+            self.redirect_html = f.read()
         super().__init__(app, cfg, sub, bw, uri)
     
     def validate_token(self, token: str | None = None) -> str | None:
@@ -272,7 +271,7 @@ class WebApi(BaseApi):
         prefix = request.args.get('prefix', '')
         if not (prefix.startswith('happ://') or prefix.startswith('v2ray') or prefix.startswith('clash')):
             return _err("Invalid prefix", 400)
-        return Response(self._REDIRECT_HTML, mimetype='text/html')
+        return Response(self.redirect_html, mimetype='text/html')
 
     def gui_panel(self) -> ResponseType:
         token = request.cookies.get('token')
