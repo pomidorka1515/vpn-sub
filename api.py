@@ -211,7 +211,6 @@ def requires_args(*arg: str) -> Callable[[Callable[..., Any]], Callable[..., Any
 
 
 class WebApi(BaseApi):
-    # _REDIRECT_HTML = """..."""
 
     ROUTES: list[Route] = [
         Route('GET', '/redirect', 'redirect_page', None),
@@ -232,6 +231,7 @@ class WebApi(BaseApi):
         Route('GET', '/history', 'gui_history', None),
         Route('GET', '/webapi/qr', 'qr', 80)
     ]
+
     def __init__(self,
                  app: Flask,
                  cfg: Config,

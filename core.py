@@ -1319,12 +1319,11 @@ class BWatch:
             if self.cfg['bw'][i][0] == 0:
                 continue
             initial_mem[i] = self.sub.bandwidth(username=i)
-        
-        # These dictionaries arent being accessed by anything yet, 
-        # no locking needed
-        self.mem = initial_mem
-        self.wl_mem = initial_wl_mem
-        self._snapshot_initialized = True
+
+        with self._snapshot_lock:
+            self.mem = initial_mem
+            self.wl_mem = initial_wl_mem
+            self._snapshot_initialized = True
 
         ### Start Threads ###
         self._t1.start()
@@ -1515,12 +1514,12 @@ class BWatch:
             initialized = self._snapshot_initialized
 
             if not initialized:
-                with self._lock:
-                    for username in list(self.cfg['users'].keys()):
-                        current = self.sub.bandwidth(username=username)
-                        wl_current = self.sub.bandwidth(username=username, whitelist=True)
-                        self.mem[username] = current
-                        self.wl_mem[username] = wl_current
+                for username in list(self.cfg['users'].keys()):
+                    current = self.sub.bandwidth(username=username)
+                    wl_current = self.sub.bandwidth(username=username, whitelist=True)
+                    self.mem[username] = current
+                    self.wl_mem[username] = wl_current
+                self._snapshot_initialized = True
                 return
 
             with self.cfg as main:
@@ -1533,14 +1532,14 @@ class BWatch:
                 if limit == 0 and wl_limit == 0:
                     continue
 
+                last_mem = self.mem.get(username)
+                last_wl_mem = self.wl_mem.get(username)
+
                 current = self.sub.bandwidth(username=username)
                 wl_current = self.sub.bandwidth(username=username, whitelist=True)
 
-                with self._lock:
-                    last_mem = self.mem.get(username)
-                    last_wl_mem = self.wl_mem.get(username)
-                    self.mem[username] = current
-                    self.wl_mem[username] = wl_current
+                self.mem[username] = current
+                self.wl_mem[username] = wl_current
 
                 if last_mem:
                     daily_up = int(current.upload - last_mem.upload)
@@ -1562,8 +1561,10 @@ class BWatch:
                     users = d.setdefault("users", {})
                     user_data = users.setdefault(username, {"snapshots": []})
                     snaps = user_data["snapshots"]
-                    if snaps and snaps[0]["ts"] == midnight:
-                        snaps[0] = asdict(snap)
+
+                    existing_idx = next((i for i, s in enumerate(snaps) if s["ts"] == midnight), None)
+                    if existing_idx is not None:
+                        snaps[existing_idx] = asdict(snap)
                     else:
                         snaps.insert(0, asdict(snap))
     

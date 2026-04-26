@@ -58,6 +58,7 @@ class AdminBot:
             types.InlineKeyboardButton("🎟 Коды", callback_data="codes_menu"),
             types.InlineKeyboardButton("🟢Пользователи онлайн", callback_data="online_users"),
             types.InlineKeyboardButton("⚠ Сбросить пользователя", callback_data="reset_user"),
+            types.InlineKeyboardButton("📈 История трафика", callback_data="chart"),
             types.InlineKeyboardButton("ℹ️ Статус панелей", callback_data="status_panels")
         )
         return markup
@@ -166,6 +167,10 @@ class AdminBot:
                     return
                 msg = self.bot.send_message(chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML")
                 self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name) # type: ignore[call-arg]
+
+            elif data == "chart":
+                msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
+                self.bot.register_next_step_handler(msg, self._step_chart_username) # type: ignore
         except Exception as e:
             self.log.error(f"Ошибка в боте: {e}", exc_info=True)
             self.bot.send_message(chat_id, f"⚠️ Произошла ошибка: {e}")
@@ -488,7 +493,7 @@ class AdminBot:
             return
         try:
             err = self.sub.add_code(
-                code=code_name, action=code_type, permanent=perma, 
+                code=code_name, action=code_type, permanent=perma,
                 days=days, gb=gb, wl_gb=wl_gb
             )
             if isinstance(err, str):
@@ -509,6 +514,111 @@ class AdminBot:
             )
         except Exception as e:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
+
+    def _step_chart_username(self, message: types.Message) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        username = text.strip()
+
+        if not self.sub.isuser(username):
+            self.bot.send_message(message.chat.id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+
+        msg = self.bot.send_message(message.chat.id, "Введите количество дней (1-90):")
+        self.bot.register_next_step_handler(msg, self._step_chart_days, username) # type: ignore[call-arg]
+
+    def _step_chart_days(self, message: types.Message, username: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+
+        try:
+            days = int(text.strip())
+            if not 1 <= days <= 90:
+                raise ValueError
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Введите число от 1 до 90.", reply_markup=self.get_main_menu())
+            return
+
+        self.bot.send_message(message.chat.id, "⏳ Генерация графика...")
+
+        thread = threading.Thread(
+            target=self._render_chart,
+            kwargs={"username": username, "days": days, "chat_id": message.chat.id},
+            daemon=True,
+            name=f"admin-chart-{username}"
+        )
+        thread.start()
+
+    def _render_chart(self, *, username: str, days: int, chat_id: int) -> None:
+        try:
+            snapshots = self.sub.get_bw_history(username, days=days)
+            info = self.sub.get_info(username, pretty=False)
+            if not info or 'bandwidth' not in info:
+                self.bot.send_message(chat_id, "❌ Ошибка получения данных", reply_markup=self.get_main_menu())
+                return
+
+            bandwidths = info['bandwidth']
+
+            upload_fmt = fmt_bytes(bandwidths['total']['upload'])
+            download_fmt = fmt_bytes(bandwidths['total']['download'])
+            wl_upload_fmt = fmt_bytes(bandwidths['wl_total']['upload'])
+            wl_download_fmt = fmt_bytes(bandwidths['wl_total']['download'])
+
+            limit = bandwidths['limit']
+            monthly = bandwidths['monthly']
+
+            if limit == 0:
+                limit_str = "Безлимит"
+                used_str = "Безлимит"
+                percent_str = "N/A"
+            else:
+                limit_str = f"{limit} GB"
+                used_str = fmt_bytes(monthly)
+                percent_str = f"{int((monthly / (limit * 10**9)) * 100)}%" if monthly > 0 else "0%"
+
+            wl_limit = bandwidths['wl_limit']
+            wl_monthly = bandwidths['wl_monthly']
+
+            if wl_limit == 0:
+                wl_limit_str = "Безлимит"
+                wl_used_str = "Безлимит"
+                wl_percent_str = "N/A"
+            else:
+                wl_limit_str = f"{wl_limit} GB"
+                wl_used_str = fmt_bytes(wl_monthly)
+                wl_percent_str = f"{int((wl_monthly / (wl_limit * 10**9)) * 100)}%" if wl_monthly > 0 else "0%"
+
+            text = f"""📈 <b>График трафика за {days} дней</b>
+
+<b>Пользователь:</b> <code>{username}</code> ({info['displayname']})
+
+<b>Общий трафик:</b>
+├ Upload: {upload_fmt}
+├ Download: {download_fmt}
+├ Использовано: {used_str} / {limit_str}
+└ Процент: {percent_str}
+
+<b>WL трафик:</b>
+├ Upload: {wl_upload_fmt}
+├ Download: {wl_download_fmt}
+├ Использовано: {wl_used_str} / {wl_limit_str}
+└ Процент: {wl_percent_str}"""
+
+            if len(text) > 1024:
+                text = text[:1020] + "..."
+
+            chart_img = bandwidth_chart(snapshots, label=info['displayname'], lang='ru')
+            if chart_img is not None:
+                self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_main_menu())
+            else:
+                self.bot.send_message(chat_id, text + "\n\n❌ Нет данных для графика", parse_mode="HTML", reply_markup=self.get_main_menu())
+        except Exception as e:
+            self.log.error(f"Chart error for username {username}: {e}", exc_info=True)
+            try:
+                self.bot.send_message(chat_id, f"❌ Произошла ошибка: {e}", reply_markup=self.get_main_menu())
+            except Exception:
+                pass
+
     def start(self) -> None:
         bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Admin TG Bot") # type: ignore[call-arg]
         bot_thread.start()
