@@ -63,7 +63,7 @@ class XUiSession(Session):
             self._cache: list[Inbound] | None = None
             self._cache_time: float = 0
             self._inject_headers = inject_headers or {}
-
+    
             if nginx_auth:
                 self.auth = nginx_auth
 

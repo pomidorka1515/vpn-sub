@@ -11,12 +11,13 @@ import uuid
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
 from abc import ABC
-from typing import cast, Tuple, Any, Callable, Literal, NamedTuple, TypedDict
+from typing import cast, Tuple, Any, Callable, Literal, NamedTuple, TypedDict, Union
 from dataclasses import asdict
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | uuid.UUID | NamedTuple | TypedDict | None
+JsonifyValue = Union[str, int, float, bool, dict, list, tuple, uuid.UUID, None]
+# JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | uuid.UUID | NamedTuple | TypedDict | None
 HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 ResponseType = Tuple[Response, int] | Response
 

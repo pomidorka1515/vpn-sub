@@ -91,3 +91,4 @@ class Logger(logging.Logger):
             self.info(f"Executed: {name} ({dt}ms)")
         except Exception as e:
             self.error(f"Fail when executing {name}: {e}")
+            raise

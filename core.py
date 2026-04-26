@@ -139,7 +139,7 @@ class Subscription:
             self.FILTERS: dict[str, str] = {
                 'displayname': ':;"\'?/<>{}[]*&^%$#@\\|',
             }
-            self.panels: list['XUiSession'] = copy.deepcopy(panels)
+            self.panels: list['XUiSession'] = list(panels)
             self.SALT: str = self.cfg['salt']
             with open('res/browser.html', 'r') as f:
                 self.browser_html: str = f.read()
