@@ -11,6 +11,7 @@ import re
 import json
 import string
 import random
+import copy
 import uuid
 import time
 import base64
@@ -113,24 +114,24 @@ class Subscription:
                  whitelist_panel: XUiSession | None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.cfg = cfg
-            self.bw_cfg = bw_cfg
-            self.app = app
-            self.whitelist_panel = whitelist_panel
-            self.browser_html = ""
-            self.uri = cfg['uri']
-            self.fps = self.cfg['fingerprints']
-            self.nginx404 = nginx_404
+            self.cfg: Config = cfg
+            self.bw_cfg: Config = bw_cfg
+            self.app: Flask = app
+            self.whitelist_panel: XUiSession | None  = whitelist_panel
+            self.browser_html: str = ""
+            self.uri: str = cfg['uri']
+            self.fps: list[str] = self.cfg['fingerprints']
+            self.nginx404: str = nginx_404
             self.resp = Response(self.nginx404, status=404, mimetype='text/html')
             self.BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')
-            self.RATIO = 1.073741824 # GiB to GB ratio. constant
-            self.FILTERS = {
+            self.RATIO: float = 1.073741824 # GiB to GB
+            self.FILTERS: dict[str, str] = {
                 'displayname': ':;"\'?/<>{}[]*&^%$#@\\|',
             }
-            self.panels = panels.copy()
-            self.SALT = self.cfg['salt']
+            self.panels: list['XUiSession'] = copy.deepcopy(panels)
+            self.SALT: str = self.cfg['salt']
             with open('res/browser.html', 'r') as f:
-                self.browser_html = f.read()
+                self.browser_html: str = f.read()
             if self.whitelist_panel:
                 self.panels.append(self.whitelist_panel)
             self.start()
@@ -147,7 +148,7 @@ class Subscription:
 
     def hash(self, s: str) -> str:
         return hashlib.sha256((self.SALT + s).encode()).hexdigest()
-    
+     
     @staticmethod
     def compare(a: str, b: str) -> bool:
         return hmac.compare_digest(a, b)
@@ -1405,9 +1406,6 @@ class BWatch:
                 self.log.error(f"health check {panel.address}: {e}")
 
     def check(self):
-        #1. check if someones limit is over
-        # theres no global command cuz we dont dirrmectly edit T <-- these comments so ancient 
-        # new codebase, new me ^^
         for i in list(self.cfg['users'].keys()):
             if self.cfg['time'][i] != 0:
                 if (self.cfg['time'][i] - int(time.time())) <= 0:
