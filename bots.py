@@ -667,6 +667,7 @@ class PublicBot:
 
         self.bot.delete_message(message.chat.id, message.message_id)
 
+    
     def handle_text(self, message: types.Message) -> None:
         
         uid = cast(types.User, message.from_user).id
@@ -1088,21 +1089,52 @@ class PublicBot:
         data = cast(str, call.data)
         message = cast(types.Message, call.message)
         uid = call.from_user.id
-        if not self.sub.is_registered(uid): return
+
+        if not self.sub.is_registered(uid):
+            return
+        
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
 
-        days = int(data.split('_')[1])
+        try:
+            days = int(data.split('_', 1)[1])
+            if not 1 <= days <= 90:
+                raise ValueError
+        except (ValueError, IndexError):
+            self.bot.answer_callback_query(call.id, t['chart_invalid_period'], reply_markup=self.get_menu(uid))
+            return
+        
         username = self.sub.get_username_telegram(uid)
-        if not isinstance(username, str): return
+        if not isinstance(username, str):
+            return
+        
+        self.bot.answer_callback_query(call.id, t['chart_generating'])
 
-        self.bot.answer_callback_query(call.id)
+        thread = threading.Thread(
+            target=self._render_chart,
+            kwargs={"uid": uid, "username": username, "days": days,
+                    "lang": lang, "chat_id": message.chat.id},
+            daemon=True,
+            name=f"chart-{uid}"
+        )
+        thread.start()
 
+    def _render_chart(
+        self,
+        *,
+        uid: int, 
+        username: str,
+        days: int,
+        lang: str,
+        chat_id: int
+    ) -> None:
+        t = self.TEXTS[lang]
         try:
             snapshots = self.sub.get_bw_history(username, days=days)
             info = self.sub.get_info(username, pretty=False)
             if not info or 'bandwidth' not in info:
-                self.bot.send_message(message.chat.id, "Error", reply_markup=self.get_menu(uid))
+                self.bot.send_message(message.chat.id, "Error fetching data", 
+                                      reply_markup=self.get_menu(uid))
                 return
 
             bandwidths = info['bandwidth']
@@ -1150,6 +1182,8 @@ class PublicBot:
                 wl_percent=wl_percent_str
             )
 
+            if len(text) > 1024:
+                text = text[:1020] + "..."
             chart_img = bandwidth_chart(snapshots, label=info['displayname'], lang=lang)
             if chart_img is not None:
                 self.bot.send_photo(message.chat.id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
@@ -1157,7 +1191,10 @@ class PublicBot:
                 self.bot.send_message(message.chat.id, text + "\n\n" + t.get('no_data', 'No chart data available'), parse_mode="HTML", reply_markup=self.get_menu(uid))
         except Exception as e:
             self.log.error(f"Chart error for uid {uid}: {e}", exc_info=True)
-            self.bot.send_message(message.chat.id, "Error occurred", reply_markup=self.get_menu(uid))
+            try:
+                self.bot.send_message(message.chat.id, "Error occurred", reply_markup=self.get_menu(uid))
+            except Exception:
+                pass
 
     def step_bonus(self, message: types.Message) -> None:
         text = cast(str, message.text)

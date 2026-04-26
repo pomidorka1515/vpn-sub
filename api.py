@@ -474,7 +474,10 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     def bandwidth_history(self, username: str) -> ResponseType:
         """Return bandwidth history snapshots for the authenticated user."""
-        days = request.args.get('days', 30, type=int)
+        try:
+            days = int(request.args.get('days', 30))
+        except (ValueError, TypeError):
+            return _err("'days' must be an integer")
         days = max(1, min(days, 90))
         snapshots = self.sub.get_bw_history(username, days)
         return _ok(obj=[asdict(s) for s in snapshots])

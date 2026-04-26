@@ -150,16 +150,16 @@ body {
 
 <div class="topbar">
   <div class="topbar-left">
-    <button class="btn-back" onclick="goBack()" id="btnBack">
-      <span class="arrow">←</span><span id="btnBackText">Back</span>
+    <button class="btn-back" onclick="goBack()" id="btnBack" aria-label="Go back to dashboard">
+      <span class="arrow" aria-hidden="true">←</span><span id="btnBackText">Back</span>
     </button>
   </div>
   <div class="topbar-right">
-    <div class="lang-toggle">
-      <button class="lang-btn" onclick="setLang('en')">EN</button>
-      <button class="lang-btn" onclick="setLang('ru')">RU</button>
+    <div class="lang-toggle" role="group" aria-label="Language selection">
+      <button class="lang-btn" onclick="setLang('en')" aria-label="Switch to English">EN</button>
+      <button class="lang-btn" onclick="setLang('ru')" aria-label="Switch to Russian">RU</button>
     </div>
-    <button class="btn-sm" onclick="loadHistory()" id="btnRefresh"></button>
+    <button class="btn-sm" onclick="loadHistory()" id="btnRefresh" aria-label="Refresh data"></button>
   </div>
 </div>
 
@@ -200,11 +200,13 @@ body {
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" onerror="handleChartJsError()"></script>
 <script>
-const API = '/sub/webapi';
-const AUTH_PAGE = '/sub/auth';
-const DASHBOARD_PAGE = '/sub/panel'; 
+const BASE_PATH = window.location.pathname.split('/').slice(0, -1).join('/') || '/sub';
+const API = BASE_PATH + '/webapi';
+const AUTH_PAGE = BASE_PATH + '/auth';
+const DASHBOARD_PAGE = BASE_PATH + '/panel';
+const DEBOUNCE_MS = 1000; 
 
 const L = {
   en: {
@@ -215,7 +217,9 @@ const L = {
     no_data: 'No data for this period',
     refresh: 'Refresh', back: 'Back',
     network_err: 'Network error',
-    total: 'Total'
+    total: 'Total',
+    loading: 'Loading...',
+    chart_load_err: 'Failed to load charting library'
   },
   ru: {
     page_title: 'История трафика',
@@ -225,7 +229,9 @@ const L = {
     no_data: 'Нет данных за этот период',
     refresh: 'Обновить', back: 'Назад',
     network_err: 'Ошибка сети',
-    total: 'Всего'
+    total: 'Всего',
+    loading: 'Загрузка...',
+    chart_load_err: 'Не удалось загрузить библиотеку графиков'
   }
 };
 
@@ -252,9 +258,10 @@ function renderLang() {
   document.getElementById('btnRefresh').textContent = t('refresh');
   document.getElementById('btnBackText').textContent = t('back');
   document.title = t('page_title');
-  // re-render charts so legends/tooltips pick up the new language
-  if (lastData) renderCharts(lastData);
-  if (lastData) renderSummaries(lastData);
+  if (lastData) {
+    updateChartLabels();
+    renderSummaries(lastData);
+  }
 }
 
 function setLang(l) {
@@ -267,15 +274,33 @@ function goBack() {
   window.location.href = DASHBOARD_PAGE
 }
 
+function handleChartJsError() {
+  toast(t('chart_load_err'), 'error');
+  document.getElementById('regWrap').innerHTML = '<div class="chart-empty">' + t('chart_load_err') + '</div>';
+  document.getElementById('wlWrap').innerHTML = '<div class="chart-empty">' + t('chart_load_err') + '</div>';
+}
+
 async function api(method, path) {
-  const r = await fetch(API + path, { method, credentials: 'same-origin' });
-  if (r.status === 401) { window.location.href = AUTH_PAGE; return null; }
-  return await r.json();
+  try {
+    const r = await fetch(API + path, { method, credentials: 'same-origin' });
+    if (r.status === 401) { window.location.href = AUTH_PAGE; return null; }
+    return await r.json();
+  } catch (e) {
+    toast(t('network_err'), 'error');
+    return null;
+  }
 }
 
 function toast(msg, type = 'success') {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
   const el = document.createElement('div');
-  el.className = 'toast ' + type; el.textContent = msg;
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  el.setAttribute('role', 'alert');
+  el.setAttribute('aria-live', 'polite');
+  el.style.cursor = 'pointer';
+  el.onclick = () => el.remove();
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 2500);
 }
@@ -318,7 +343,23 @@ let regChart = null, wlChart = null;
 let lastData = null;
 let lastDays = 30;
 
+function updateChartLabels() {
+  if (regChart) {
+    regChart.data.datasets[0].label = t('download');
+    regChart.data.datasets[1].label = t('upload');
+    regChart.update('none');
+  }
+  if (wlChart) {
+    wlChart.data.datasets[0].label = t('download');
+    wlChart.data.datasets[1].label = t('upload');
+    wlChart.update('none');
+  }
+}
+
 function makeChart(ctx, data, downColor, upColor) {
+  if (typeof Chart === 'undefined') {
+    throw new Error('Chart.js not loaded');
+  }
   return new Chart(ctx, {
     type: 'bar',
     data: {
@@ -404,33 +445,59 @@ function makeChart(ctx, data, downColor, upColor) {
   });
 }
 
+function setLoading(isLoading) {
+  const regWrap = document.getElementById('regWrap');
+  const wlWrap = document.getElementById('wlWrap');
+  const regEmpty = document.getElementById('regEmpty');
+  const wlEmpty = document.getElementById('wlEmpty');
+
+  if (isLoading) {
+    regWrap.style.display = 'none';
+    wlWrap.style.display = 'none';
+    regEmpty.textContent = t('loading');
+    wlEmpty.textContent = t('loading');
+    regEmpty.style.display = '';
+    wlEmpty.style.display = '';
+  }
+}
+
 function renderCharts(filled) {
-  // separate datasets so each chart only sees its own values
   const reg = filled.map(d => ({ ts: d.ts, down: d.down, up: d.up }));
   const wl  = filled.map(d => ({ ts: d.ts, wl_down: d.wl_down, wl_up: d.wl_up }));
 
   const regHasData = reg.some(d => d.down || d.up);
   const wlHasData  = wl.some(d => d.wl_down || d.wl_up);
 
-  document.getElementById('regWrap').style.display = regHasData ? '' : 'none';
-  document.getElementById('regEmpty').style.display = regHasData ? 'none' : '';
-  document.getElementById('wlWrap').style.display = wlHasData ? '' : 'none';
-  document.getElementById('wlEmpty').style.display = wlHasData ? 'none' : '';
+  const regWrap = document.getElementById('regWrap');
+  const regEmpty = document.getElementById('regEmpty');
+  const wlWrap = document.getElementById('wlWrap');
+  const wlEmpty = document.getElementById('wlEmpty');
+
+  regWrap.style.display = regHasData ? '' : 'none';
+  regEmpty.textContent = t('no_data');
+  regEmpty.style.display = regHasData ? 'none' : '';
+  wlWrap.style.display = wlHasData ? '' : 'none';
+  wlEmpty.textContent = t('no_data');
+  wlEmpty.style.display = wlHasData ? 'none' : '';
 
   if (regChart) { regChart.destroy(); regChart = null; }
   if (wlChart)  { wlChart.destroy();  wlChart  = null; }
 
-  if (regHasData) {
-    regChart = makeChart(
-      document.getElementById('regChart').getContext('2d'),
-      reg, '#6366f1', '#a5b4fc'
-    );
-  }
-  if (wlHasData) {
-    wlChart = makeChart(
-      document.getElementById('wlChart').getContext('2d'),
-      wl, '#0ea5e9', '#7dd3fc'
-    );
+  try {
+    if (regHasData) {
+      regChart = makeChart(
+        document.getElementById('regChart').getContext('2d'),
+        reg, '#6366f1', '#a5b4fc'
+      );
+    }
+    if (wlHasData) {
+      wlChart = makeChart(
+        document.getElementById('wlChart').getContext('2d'),
+        wl, '#0ea5e9', '#7dd3fc'
+      );
+    }
+  } catch (e) {
+    handleChartJsError();
   }
 }
 
@@ -449,27 +516,40 @@ function renderSummaries(filled) {
 }
 
 async function loadHistory() {
-  document.getElementById('btnRefresh').disabled = true;
+  const btnRefresh = document.getElementById('btnRefresh');
+  btnRefresh.disabled = true;
+  btnRefresh.setAttribute('aria-busy', 'true');
   const days = parseInt(document.getElementById('daysRange').value, 10);
   lastDays = days;
+  setLoading(true);
   const res = await api('GET', '/history?days=' + days);
-  if (!res) return;
-  if (!res.success) { toast(res.msg || t('network_err'), 'error'); return; }
+  if (!res) {
+    btnRefresh.disabled = false;
+    btnRefresh.setAttribute('aria-busy', 'false');
+    return;
+  }
+  if (!res.success) {
+    toast(res.msg || t('network_err'), 'error');
+    btnRefresh.disabled = false;
+    btnRefresh.setAttribute('aria-busy', 'false');
+    return;
+  }
   const filled = fillDays(res.obj || [], days);
   lastData = filled;
   renderCharts(filled);
   renderSummaries(filled);
-  document.getElementById('btnRefresh').disabled = false;
+  btnRefresh.disabled = false;
+  btnRefresh.setAttribute('aria-busy', 'false');
 }
 
-// debounce slider input
 let dbT;
 const rangeEl = document.getElementById('daysRange');
 const dValEl = document.getElementById('daysValue');
+rangeEl.setAttribute('aria-label', 'Select number of days');
 rangeEl.addEventListener('input', () => {
   dValEl.textContent = rangeEl.value;
   clearTimeout(dbT);
-  dbT = setTimeout(loadHistory, 1069);
+  dbT = setTimeout(loadHistory, DEBOUNCE_MS);
 });
 
 renderLang();

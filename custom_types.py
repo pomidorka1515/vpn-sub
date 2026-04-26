@@ -11,6 +11,16 @@ class AdminBotLike(Protocol):
 
     def msg(self, text: str, parse_mode: str = "HTML") -> None: ...
 
+@runtime_checkable
+class PublicBotLike(Protocol):
+    """Stub protocol for PublicBot."""
+
+    def msg(
+        self, 
+        tgId: int | str | None,
+        key: str,
+        **kwargs: Any
+    ) -> None: ... 
 ### 3x-ui status object ###
 class MemoryStats(TypedDict):
     current: int

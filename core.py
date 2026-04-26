@@ -30,6 +30,7 @@ from custom_types import (
     RegisterWithCodeInfo, CodeObject,
     UserInfo, ResetUserObject,
     ApplyBonusCodeObject,
+    PublicBotLike, AdminBotLike,
     client_stats_to_settings
 )
 from dataclasses import dataclass, asdict
@@ -1243,23 +1244,24 @@ class BWatch:
                  cfg: Config, 
                  bw_cfg: Config,
                  sub: Subscription, 
-                 bot: Any | None = None,
-                 admin_bot: Any | None = None):
+                 bot: PublicBotLike | None = None,
+                 admin_bot: AdminBotLike | None = None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.cfg = cfg
-            self.bw_cfg = bw_cfg
+            self.cfg: Config = cfg
+            self.bw_cfg: Config = bw_cfg
             self._lock = threading.Lock()
             self._stop_event = threading.Event()
             self._snapshot_lock = threading.Lock()
-            self.sub = sub
-            self.bot = bot
-            self.admin_bot = admin_bot
+            self.sub: Subscription = sub
+            self.bot: PublicBotLike | None = bot
+            self.admin_bot: AdminBotLike | None = admin_bot
             self.mem: dict[str, BandwidthInfo] = {}
             self.wl_mem: dict[str, BandwidthInfo] = {}
-            self._snapshot_initialized = False
+            self._snapshot_initialized: bool = False
             self._panel_alerts: dict[str, Any] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', None) or 3600
+
             self._t1 = threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs")
             self._t2 = threading.Thread(target=self._every_2h, daemon=True, name="Date check")
             self._t3 = threading.Thread(target=self._every_15s, daemon=True, name="Bandwidth")
@@ -1269,18 +1271,21 @@ class BWatch:
     
     def start(self):
         # Micro optimizations go!
-        initial_mem = {}
-        initial_wl_mem = {}
+        initial_mem: dict[str, BandwidthInfo] = {}
+        initial_wl_mem: dict[str, BandwidthInfo] = {}
         for i in list(self.cfg['users'].keys()):
             initial_wl_mem[i] = self.sub.bandwidth(username=i, whitelist=True)
             if self.cfg['bw'][i][0] == 0:
                 continue
             initial_mem[i] = self.sub.bandwidth(username=i)
         
-        with self._lock:
-            self.mem = initial_mem
-            self.wl_mem = initial_wl_mem
+        # These dictionaries arent being accessed by anything yet, 
+        # no locking needed
+        self.mem = initial_mem
+        self.wl_mem = initial_wl_mem
         self._snapshot_initialized = True
+
+        ### Start Threads ###
         self._t1.start()
         self._t2.start()
         self._t3.start()
@@ -1365,7 +1370,7 @@ class BWatch:
                     continue
                 
                 key = panel.name
-                problems: list[Any] = []
+                problems: list[str] = []
                 
                 xray = status.get('xray', {})
                 if xray.get('state') != 'running':
@@ -1524,6 +1529,7 @@ class BWatch:
                     else:
                         snaps.insert(0, asdict(snap))
     
+    ### Helper functions ###
     def _every_120s(self):
         while not self._stop_event.wait(120):
             self.check()
