@@ -24,7 +24,7 @@ import qrcode
 
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
-from typing import Any, cast, NamedTuple
+from typing import Any, cast, NamedTuple, overload, Literal
 from custom_types import (
     ServerMetricsResponse, Inbound, 
     SettingsClient, NewUserInfo,
@@ -37,7 +37,11 @@ from custom_types import (
 from dataclasses import dataclass, asdict
 from collections.abc import MutableMapping
 
-__all__ = ["Subscription", "BWatch", "BandwidthInfo", "BandwidthSnapshot", "fmt_bytes", "fmt_bytes_tuple"]
+__all__ = [
+    "Subscription", "BWatch", 
+    "BandwidthInfo", "BandwidthSnapshot", 
+    "fmt_bytes", "fmt_bytes_tuple"
+]
 
 nginx_404 = (
     "<html>\r\n"
@@ -51,6 +55,8 @@ nginx_404 = (
 
 if sys.platform != 'linux':
     raise RuntimeError("Must be run on Linux.")
+
+SERVER_TZ = timezone(timedelta(hours=3)) # MSK
 
 def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
     """
@@ -93,6 +99,10 @@ class BandwidthInfo(NamedTuple):
             self.format_bytes(int(self.download)),
             self.format_bytes(int(self.total))
         )
+
+class BandwidthUpdate(NamedTuple):
+    delta: int
+    current: BandwidthInfo
 
 @dataclass
 class BandwidthSnapshot:
@@ -162,9 +172,9 @@ class Subscription:
         except ValueError:
             return False
     
-    def isbrowser(self, ua: str):
+    def isbrowser(self, ua: str) -> bool:
         """Parse a User-Agent against a regex to detect if it is a browser."""
-        return self.BROWSER_UA.search(ua)
+        return bool(self.BROWSER_UA.search(ua))
 
     @staticmethod
     def sanitize(s: str) -> str:
@@ -976,9 +986,17 @@ class Subscription:
     def is_registered(self, tgid: int) -> bool:
         """Check if a telegram user is already registered."""
         return str(tgid) in self.cfg['tgids']
+
+    @overload
+    def get_username_telegram(self, tgid: int | str, reverse: Literal[False] = False) -> str | None: ...
+    
+    @overload
+    def get_username_telegram(self, tgid: int | str, reverse: Literal[True]) -> int | None: ...
+    
     def get_username_telegram(self, tgid: int | str, reverse: bool = False) -> int | str | None:
         """Get the internal username for a tgid.
         Parameter reverse: if True, get tg id from username. Otherwise default behaviour."""
+
         if not reverse:
             return self.cfg['tgids'].get(str(tgid))
         for i, v in self.cfg['tgids'].items():
@@ -998,6 +1016,12 @@ class Subscription:
                     emails[str(i['id'])] = actual_email
         return emails
 
+    @overload
+    def get_online_users(self, new: Literal[False] = False) -> list[str]: ...
+    
+    @overload
+    def get_online_users(self, new: Literal[True]) -> dict[str, str | None]: ...
+    
     def get_online_users(self, new: bool = False) -> list[str] | dict[str, str | None]:
         """Get the list of currently online users.
         new: False = ['username', ...]. True = {'username': ext_username_or_None, ...}"""
@@ -1057,7 +1081,14 @@ class Subscription:
             return f"{h}ч {m}м"
         return f"{m}м"
     
-    def get_subscription(self, token: str, lang: str, ua: str, ip: str) -> Response:
+    def get_subscription(
+        self, 
+        *,
+        token: str, 
+        lang: str, 
+        ua: str, 
+        ip: str
+    ) -> Response:
         """You alredy know what this is."""
         if not token:
             return self.resp
@@ -1067,6 +1098,7 @@ IP: {ip}
 User-Agent: {ua}
 Username: {"none" if not username else username}
 Lang: {lang}""")
+        
         if not username or username not in self.cfg['users']:
             return self.resp
         if lang not in ["ru", "en"]:
@@ -1079,18 +1111,17 @@ Lang: {lang}""")
         name = cfg['displaynames'][username]
         need_dummy_link = "v2rayn" in ua.lower() or "v2rayng" in ua.lower()
         is_happ = ua.startswith("Happ/")
-
-        status = cfg['status'][username]
-        statusTime = cfg['statusTime'][username]
-        statusWl = cfg['statusWl'][username]
-        times = cfg['time'][username]
         mimetype = "text/plain" if not browser else "text/html"
-        sub_name = cfg['sub_name']
-        userinfo = "upload=%i1;download=%i2;total=%i3;expire=%i4"
         if browser:
             return Response(self.browser_html, mimetype=mimetype)
 
-        # desc = desc.replace("%s3", name)
+        status: bool = cfg['status'][username]
+        statusTime: bool = cfg['statusTime'][username]
+        statusWl: bool = cfg['statusWl'][username]
+        times: int = cfg['time'][username]
+        sub_name: str = cfg['sub_name']
+        userinfo = "upload={upload};download={download};total={total};expire={expire}"
+
         desc = self.build_description(
             username=username,
             name=name,
@@ -1102,14 +1133,22 @@ Lang: {lang}""")
         )
         announce = f"base64:{base64.b64encode(desc.encode('utf-8')).decode('utf-8')}"
         if status:
-            userinfo = userinfo.replace("%i1", str(bandwidths[0]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i2", str(bandwidths[1]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i3", "0" if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][0] * 10**9 * self.RATIO)))
+            upload = str(bandwidths[0]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO))
+            download = str(bandwidths[1]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO))
+            total = "0" if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][0] * 10**9 * self.RATIO))
         else:
-            userinfo = userinfo.replace("%i1", str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i2", str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO)))
-            userinfo = userinfo.replace("%i3", str(int(cfg['bw'][username][0] * 10**9 * self.RATIO)))
-        userinfo = userinfo.replace("%i4", str(times))
+            upload = str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO))
+            download = str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO))
+            total = str(int(cfg['bw'][username][0] * 10**9 * self.RATIO))
+        expire = str(times)
+
+        userinfo = userinfo.format(
+            upload=upload,
+            download=download,
+            total=total,
+            expire=expire
+        )
+        
         headers: dict[str, Any] = {
             'Profile-Title': sub_name,
             'Subscription-Userinfo': userinfo,
@@ -1121,7 +1160,7 @@ Lang: {lang}""")
             'Content-Type': "text/plain"
         }
         if is_happ: headers['routing'] = f"happ://routing/onadd/{base64.b64encode(json.dumps(cfg['routing']).encode('utf-8')).decode('utf-8')}"
-        user_uuid = cfg['users'][username]
+        user_uuid: str = cfg['users'][username]
         generated_links: list[str] = []
 
         for p_key, p_name in cfg['profiles'].items():
@@ -1129,11 +1168,11 @@ Lang: {lang}""")
                 continue
             if not status:
                 break
-            link = cfg['masterLinks'][p_key]
-            flag = cfg['flags'][p_key] if is_happ else ""
-            node = cfg['profileNodes'][p_key]
-            domain = cfg['nodes'][node]
-            name = flag + p_name[0 if lang == "en" else 1]
+            link: str = cfg['masterLinks'][p_key]
+            flag: str = cfg['flags'][p_key] if is_happ else ""
+            node: str = cfg['profileNodes'][p_key]
+            domain: str = cfg['nodes'][node]
+            name: str = flag + p_name[0 if lang == "en" else 1]
             link = link.replace("DOMAIN", domain)
             link = link.replace("FINGERPRINT", cfg['userFingerprints'][username])
             link = link.replace("UUID", user_uuid)
@@ -1190,7 +1229,7 @@ Lang: {lang}""")
                 desc = desc.replace("%t1", cfg['description'][6] if lang == "en" else cfg['description'][7])
                 desc = desc.replace(
                     "%t3",
-                    datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=3))).strftime("%d.%m.%y %H:%M")
+                    datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
                 )
                 desc = desc.replace(
                     "%t2",
@@ -1312,8 +1351,8 @@ class BWatch:
             d["_meta"]["last_prune"] = int(time.time())
 
     def bandwidth_check(self):
-        updates: dict[str, tuple[int | float, BandwidthInfo]] = {}    # username -> (delta, current) for main
-        wl_updates: dict[str, tuple[int | float, BandwidthInfo]] = {} # username -> (delta, current) for whitelist
+        updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
+        wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
         for i in list(self.cfg['users'].keys()):
             # Main bandwidth
             if self.cfg['time'].get(i, 0) != 0:
@@ -1330,9 +1369,10 @@ class BWatch:
                         else:
                             delta = current_bws.total - self.mem[i].total
                             if delta > 0:
-                                updates[i] = (delta, current_bws)
+                                updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
+                                
                 except Exception as e:
-                    self.log.critical(f"BW error for {i}: {e}")
+                    self.log.error(f"BW error for {i}: {e}")
             # Whitelist bandwidth
             if self.cfg['wl_bw'].get(i, [0, 0])[0] != 0:
                 if self.cfg['wl_bw'][i][1] < self.cfg['wl_bw'][i][0] * 1000**3 and not self.cfg['statusWl'][i]:
@@ -1345,7 +1385,8 @@ class BWatch:
                         else:
                             delta = current_bws.total - self.wl_mem[i].total
                             if delta > 0:
-                                wl_updates[i] = (delta, current_bws)
+                                wl_updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
+                                
                 except Exception as e:
                     self.log.critical(f"BW wl error for {i}: {e}")
         if not updates and not wl_updates:
@@ -1353,14 +1394,14 @@ class BWatch:
 
         with self.cfg as data:
             with self._lock:
-                for i, (delta, cur) in updates.items():
+                for i, update in updates.items():
                     if i in data['bw']:
-                        data['bw'][i][1] += delta
-                        self.mem[i] = cur
-                for i, (delta, cur) in wl_updates.items():
+                        data['bw'][i][1] += update.delta
+                        self.mem[i] = update.current
+                for i, update in wl_updates.items():
                     if i in data['wl_bw']:
-                        data['wl_bw'][i][1] += delta
-                        self.wl_mem[i] = cur
+                        data['wl_bw'][i][1] += update.delta
+                        self.wl_mem[i] = update.current
 
     def panel_health_check(self):
         """Check each panel's Xray status and resource usage. Alert on issues."""
@@ -1407,43 +1448,41 @@ class BWatch:
 
     def check(self):
         for i in list(self.cfg['users'].keys()):
+            tg_user = self.sub.get_username_telegram(tgid=i, reverse=True)
             if self.cfg['time'][i] != 0:
                 if (self.cfg['time'][i] - int(time.time())) <= 0:
                     if self.cfg['statusTime'][i]:
                         self._update_user(username=i, enable=False, timee=False)
-                        if self.bot: self.bot.msg(self.sub.get_username_telegram(tgid=i, reverse=True), 'warning_disabled') # sub expired
+                        if self.bot: self.bot.msg(tg_user, 'warning_disabled') # sub expired
                     continue
                 else:
                     days = (self.cfg['time'][i] - int(time.time())) // 86400
                     if days <= 2:
-                        id = self.sub.get_username_telegram(tgid=i, reverse=True)
-                        if id not in self.cfg['_notified']:
-                            def _u_(t: MutableMapping[str, Any]): t['_notified'].append(id)
+                        if tg_user not in self.cfg['_notified']:
+                            def _u_(t: MutableMapping[str, Any]): t['_notified'].append(tg_user)
                             self.cfg.mutate(_u_)
-                            if self.bot: self.bot.msg(cast(int, id), 'warning_days', days=days)
+                            if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
             if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3:
                 if self.cfg['statusWl'].get(i, True):
                     self._update_user(username=i, wl_enable=False)
-                    if self.bot: self.bot.msg(self.sub.get_username_telegram(tgid=i, reverse=True), 'warning_traffic_whitelist_disabled', available=self.cfg['wl_bw'][i][0])
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=self.cfg['wl_bw'][i][0])
             elif self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3 * 0.95: # 95%
-                id = self.sub.get_username_telegram(tgid=i, reverse=True)
-                if id not in self.cfg['_wl_notified']:
-                    def _up(t: MutableMapping[str, Any]): t['_wl_notified'].append(id)
+                if tg_user not in self.cfg['_wl_notified']:
+                    def _up(t: MutableMapping[str, Any]): t['_wl_notified'].append(tg_user)
                     self.cfg.mutate(_up)
-                    if self.bot: self.bot.msg(id, 'warning_traffic_whitelist', used=int(round(self.cfg['wl_bw'][i][1] / 10**6, 0)), available=self.cfg['wl_bw'][i][0])
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(self.cfg['wl_bw'][i][1] / 10**6, 0)), available=self.cfg['wl_bw'][i][0])
             if not self.cfg['status'][i]:
                 continue
             if self.cfg['bw'][i][0] == 0:
                 continue
             if self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > self.cfg['bw'][i][0] * 1000**3:
                 self._update_user(username=i, enable=False, timee=True)
-                if self.bot: self.bot.msg(self.sub.get_username_telegram(tgid=i, reverse=True), 'warning_traffic_disabled', available=self.cfg['bw'][i][0])
+                if self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=self.cfg['bw'][i][0])
             elif self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > self.cfg['bw'][i][0] * 1000**3 * 0.95: # 95%
-                id = self.sub.get_username_telegram(tgid=i, reverse=True)
-                if id not in self.cfg['_notified']:
-                    def _up_(t: MutableMapping[str, Any]): t['_notified'].append(id)
+                if tg_user not in self.cfg['_notified']:
+                    def _up_(t: MutableMapping[str, Any]): t['_notified'].append(tg_user)
                     self.cfg.mutate(_up_)                    
-                    if self.bot: self.bot.msg(id, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
 
     def is_first(self):
         now = datetime.now()
