@@ -129,7 +129,7 @@ class Config(MutableMapping[str, Any]):
             try:
                 self._do_backup()
                 self._prune_backups()
-                self.log.error("backup successful")
+                self.log.info("backup successful")
             except Exception as e:
                 self.log.error(f"backup failed: {e}")
 
