@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, MutableMapping
+from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from loggers import Logger
 from typing import (
     Any, Self, Literal,
@@ -24,9 +24,172 @@ try:
 except ModuleNotFoundError as exc:
     raise RuntimeError("Run this on linux.") from exc
 
-__all__ = ['ConfigError', 'SchemaValidationError', 'FileCorruptionError', 'ReadOnlyConfigError', 'Config']
+__all__ = [
+    'ConfigError', 'SchemaValidationError', 'FileCorruptionError',
+    'ReadOnlyConfigError', 'Config', 'LinesConfig'
+]
 
 SYNC_MODES = Literal['full', 'data', 'none']
+
+# ---------------------------------------------------------------------------
+# Module-level file primitives (shared by Config and LinesConfig)
+# ---------------------------------------------------------------------------
+
+def _ensure_parent_dir(path: str) -> None:
+    dir_path = os.path.dirname(path)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
+
+def _lockfile_path(path: str) -> str:
+    return f"{path}.lock"
+
+@contextmanager
+def _locked_file(path: str, *, exclusive: bool) -> Iterator[None]:
+    _ensure_parent_dir(path)
+    mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+    with open(_lockfile_path(path), "a+b") as lock_fp:
+        fcntl.flock(lock_fp, mode)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_fp, fcntl.LOCK_UN)
+
+def _stat_signature(path: str) -> tuple[int, int, int, int] | None:
+    try:
+        stat_result = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return (
+        stat_result.st_mtime_ns,
+        stat_result.st_size,
+        stat_result.st_ino,
+        stat_result.st_dev,
+    )
+
+def _file_signature(path: str) -> tuple[int, int, int, int] | None:
+    return _stat_signature(path)
+
+def _fsync_parent_dir(path: str) -> None:
+    dir_path = os.path.dirname(path) or "."
+    dir_fd = os.open(dir_path, os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+def _atomic_write_json(
+    path: str,
+    data: dict[str, Any],
+    *,
+    indent: int,
+    sync_mode: SYNC_MODES,
+) -> tuple[int, int, int, int] | None:
+    """Write atomically: temp file + os.replace. Returns new file signature."""
+    _ensure_parent_dir(path)
+    dir_path = os.path.dirname(path) or "."
+
+    fd, temp_path = tempfile.mkstemp(dir=dir_path, prefix=".tmp_", suffix=".json")
+    os.close(fd)
+
+    try:
+        if os.path.exists(path):
+            existing = os.stat(path, follow_symlinks=False)
+            os.chmod(temp_path, existing.st_mode & 0o777)
+            try:
+                os.chown(temp_path, existing.st_uid, existing.st_gid)
+            except PermissionError:
+                pass
+
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=indent, ensure_ascii=False)
+            handle.write("\n")
+
+            if sync_mode != "none":
+                handle.flush()
+                os.fsync(handle.fileno())
+
+        os.replace(temp_path, path)
+
+        if sync_mode == "full":
+            _fsync_parent_dir(path)
+
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+    return _file_signature(path)
+
+def _instance_backup_dir(path: str, backup_dir: str) -> str:
+    name = os.path.splitext(os.path.basename(path))[0]
+    return os.path.join(backup_dir, name)
+
+def _do_backup(
+    path: str,
+    indent: int,
+    instance_dir: str,
+    log: Logger,
+) -> None:
+    """Take a snapshot and write it to a per-instance subdirectory."""
+    os.makedirs(instance_dir, exist_ok=True)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = os.path.join(instance_dir, f"{timestamp}.json")
+
+    fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
+    os.close(fd)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=indent, ensure_ascii=False)
+        os.replace(tmp, backup_path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
+    log.debug(f"backup saved: {backup_path}")
+
+def _prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
+    """Keep only the N most recent backups."""
+    pattern = os.path.join(instance_dir, "*.json")
+    files = sorted(glob.glob(pattern))
+    to_delete = files[:-retention]
+    for f in to_delete:
+        try:
+            os.unlink(f)
+            log.debug(f"pruned old backup: {f}")
+        except OSError as e:
+            log.error(f"prune failed for {f}: {e}")
+
+def _make_backup_thread(
+    *,
+    path: str,
+    indent: int,
+    backup_dir: str,
+    backup_interval: int | float,
+    backup_retention: int,
+    stop_event: threading.Event,
+) -> threading.Thread:
+    def loop() -> None:
+        log = Logger("Backup")
+        instance_dir = _instance_backup_dir(path, backup_dir)
+        while not stop_event.wait(backup_interval):
+            try:
+                _do_backup(path, indent, instance_dir, log)
+                _prune_backups(instance_dir, backup_retention, log)
+                log.info("backup successful")
+            except Exception as e:
+                log.error(f"backup failed: {e}")
+    return threading.Thread(target=loop, daemon=True, name="Backup")
 
 class ConfigError(RuntimeError):
     """Base config manager error."""
@@ -116,64 +279,26 @@ class Config(MutableMapping[str, Any]):
         self._backup_retention: int = backup_retention
         self._backup_stop = threading.Event()
 
-        self._backup_t = threading.Thread(target=self._backup_loop, daemon=True, name="Backup")
-        
         with self.log.loading():
             self.reload()
 
         if backup_dir:
+            self._backup_t = _make_backup_thread(
+                path=self._path,
+                indent=self._indent,
+                backup_dir=backup_dir,
+                backup_interval=backup_interval,
+                backup_retention=backup_retention,
+                stop_event=self._backup_stop
+            )
             self._backup_t.start()
-    
-    def _backup_loop(self) -> None:
-        while not self._backup_stop.wait(self._backup_interval):
-            try:
-                self._do_backup()
-                self._prune_backups()
-                self.log.info("backup successful")
-            except Exception as e:
-                self.log.error(f"backup failed: {e}")
+        else:
+            self._backup_t: threading.Thread | None = None
 
-    def _instance_backup_dir(self) -> str:
-        """Called only within backup thread. self._backup_dir is always str by then."""
-        name = os.path.splitext(os.path.basename(self._path))[0]
-        dir = cast(str, self._backup_dir)
-        return os.path.join(dir, name)
+    @property
+    def path(self):
+        return self._path
 
-    def _do_backup(self) -> None:
-        """Take a snapshot and write it to a per-instance subdirectory."""
-        instance_dir = self._instance_backup_dir()
-        os.makedirs(instance_dir, exist_ok=True)
-        snapshot = self.copy()
-
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup_path = os.path.join(instance_dir, f"{timestamp}.json")
-        
-        fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
-        os.close(fd)
-        try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(snapshot, f, indent=self._indent, ensure_ascii=False)
-            os.replace(tmp, backup_path)
-        except Exception:
-            try: os.unlink(tmp)
-            except FileNotFoundError: pass
-            raise
-        
-        self.log.debug(f"backup saved: {backup_path}")
-    
-    def _prune_backups(self) -> None:
-        """Keep only the N most recent backups."""
-        instance_dir = self._instance_backup_dir()
-        pattern = os.path.join(instance_dir, "*.json")
-        files = sorted(glob.glob(pattern)) 
-        to_delete = files[:-self._backup_retention]
-        for f in to_delete:
-            try:
-                os.unlink(f)
-                self.log.debug(f"pruned old backup: {f}")
-            except OSError as e:
-                self.log.error(f"prune failed for {f}: {e}")
-    
     def _raise_if_read_only(self) -> None:
         if self._read_only:
             raise ReadOnlyConfigError("Cannot modify read-only config instance")
@@ -359,26 +484,6 @@ class Config(MutableMapping[str, Any]):
                 "while a batch edit is active."
             )
 
-    def _ensure_parent_dir(self) -> None:
-        dir_path = os.path.dirname(self._path)
-        if dir_path:
-            os.makedirs(dir_path, exist_ok=True)
-
-    def _lockfile_path(self) -> str:
-        return f"{self._path}.lock"
-
-    @contextmanager
-    def _locked_file(self, *, exclusive: bool) -> Iterator[None]:
-        self._ensure_parent_dir()
-        mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-        with open(self._lockfile_path(), "a+b") as lock_fp:
-            fcntl.flock(lock_fp, mode)
-            try:
-                yield
-            finally:
-                fcntl.flock(lock_fp, fcntl.LOCK_UN)
-
-
     def _read_json_object(self) -> dict[str, Any]:
         try:
             with open(self._path, "r", encoding="utf-8") as handle:
@@ -400,10 +505,10 @@ class Config(MutableMapping[str, Any]):
         schema_ref = data.get("$schema")
         if not schema_ref:
             return None
-    
+
         if not isinstance(schema_ref, str):
             raise SchemaValidationError("'$schema' must be a string.")
-    
+
         if schema_ref.startswith(("http://", "https://")):
             message = (
                 "Remote JSON schemas are not supported for security/reliability reasons."
@@ -412,11 +517,11 @@ class Config(MutableMapping[str, Any]):
                 raise SchemaValidationError(message)
             self.log.warning(message)
             return None
-    
+
         schema_path = os.path.normpath(
             os.path.join(os.path.dirname(self._path), schema_ref)
         )
-        schema_sig = self._stat_signature(schema_path)
+        schema_sig = _stat_signature(schema_path)
     
         if (
             schema_path == self._schema_cache_path
@@ -466,8 +571,8 @@ class Config(MutableMapping[str, Any]):
             self.log.warning(message)
 
     def _reload_locked(self, *, create_if_missing: bool, exclusive: bool) -> bool:
-        with self._locked_file(exclusive=exclusive):
-            signature = self._file_signature()
+        with _locked_file(self._path, exclusive=exclusive):
+            signature = _file_signature(self._path)
 
             if signature is None:
                 if not create_if_missing:
@@ -475,9 +580,12 @@ class Config(MutableMapping[str, Any]):
 
                 empty: dict[str, Any] = {}
                 self._validate_schema(empty)
-                self._atomic_write(empty)
+                _atomic_write_json(
+                    self._path, empty,
+                    indent=self._indent, sync_mode=self._sync_mode,
+                )
 
-                new_signature = self._file_signature()
+                new_signature = _file_signature(self._path)
                 if new_signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
 
@@ -500,8 +608,8 @@ class Config(MutableMapping[str, Any]):
         Called before every read to guarantee consistency in multi-process
         deployments where another worker may have committed a write.
         """
-        with self._locked_file(exclusive=False):
-            signature = self._file_signature()
+        with _locked_file(self._path, exclusive=False):
+            signature = _file_signature(self._path)
             if signature is None:
                 raise ConfigError(
                     f"Config file '{self._path}' disappeared while in use."
@@ -517,68 +625,11 @@ class Config(MutableMapping[str, Any]):
 
     def _atomic_write(self, data: dict[str, Any]) -> None:
         self._raise_if_read_only()
-        self._ensure_parent_dir()
-        dir_path = os.path.dirname(self._path) or "."
-    
-        fd, temp_path = tempfile.mkstemp(
-            dir=dir_path,
-            prefix=".tmp_",
-            suffix=".json",
+        _atomic_write_json(
+            self._path, data,
+            indent=self._indent, sync_mode=self._sync_mode,
         )
-        os.close(fd)
-    
-        try:
-            if os.path.exists(self._path):
-                existing = os.stat(self._path, follow_symlinks=False)
-                os.chmod(temp_path, existing.st_mode & 0o777)
-                try:
-                    os.chown(temp_path, existing.st_uid, existing.st_gid)
-                except PermissionError:
-                    pass
-    
-            with open(temp_path, "w", encoding="utf-8") as handle:
-                json.dump(data, handle, indent=self._indent, ensure_ascii=False)
-                handle.write("\n")
-    
-                if self._sync_mode != "none":
-                    handle.flush()
-                    os.fsync(handle.fileno())
-    
-            os.replace(temp_path, self._path)
-    
-            if self._sync_mode == "full":
-                self._fsync_parent_dir()
-    
-        except Exception:
-            try:
-                os.unlink(temp_path)
-            except FileNotFoundError:
-                pass
-            raise
 
-    def _fsync_parent_dir(self) -> None:
-        dir_path = os.path.dirname(self._path) or "."
-        dir_fd = os.open(dir_path, os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
-
-    def _stat_signature(self, path: str) -> tuple[int, int, int, int] | None:
-        try:
-            stat_result = os.stat(path)
-        except FileNotFoundError:
-            return None
-        return (
-            stat_result.st_mtime_ns,
-            stat_result.st_size,
-            stat_result.st_ino,
-            stat_result.st_dev,
-        )
-    
-    def _file_signature(self) -> tuple[int, int, int, int] | None:
-        return self._stat_signature(self._path)
-    
     @staticmethod
     def _detach(value: Any) -> Any:
         if isinstance(value, (dict, list)):
@@ -606,32 +657,34 @@ class _ConfigTransaction(MutableMapping[str, Any]):
         self.owner_thread_id: int | None = None
     
     def __enter__(self) -> Self:
-        cfg = self._config
+        cfg: Config = self._config
         cfg._lock.acquire()
-    
+        lock_fp: io.BufferedRandom | None = None
+
         try:
             if cfg._active_transaction is not None:
                 raise RuntimeError("Nested batch edits are not supported.")
-    
-            cfg._ensure_parent_dir()
-            self._lock_fp = open(cfg._lockfile_path(), "a+b")
-            fcntl.flock(self._lock_fp, fcntl.LOCK_EX)
-    
-            signature = cfg._file_signature()
-    
+
+            _ensure_parent_dir(cfg._path)
+            lock_fp = open(_lockfile_path(cfg._path), "a+b")
+            fcntl.flock(lock_fp, fcntl.LOCK_EX)
+
+            signature = _file_signature(cfg._path)
+
             if signature is None:
                 current: dict[str, Any] = {}
                 cfg._validate_schema(current)
-                cfg._atomic_write(current)
-                signature = cfg._file_signature()
+                _atomic_write_json(
+                    cfg._path, current,
+                    indent=cfg._indent, sync_mode=cfg._sync_mode,
+                )
+                signature = _file_signature(cfg._path)
                 if signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
                 cfg._data = current
                 cfg._last_signature = signature
-    
+
             elif signature == cfg._last_signature:
-                # Shared reference — deep copy so nested mutations don't bleed
-                # into the live config during the transaction.
                 current = copy.deepcopy(cfg._data)
 
             else:
@@ -644,13 +697,14 @@ class _ConfigTransaction(MutableMapping[str, Any]):
             self.data = copy.deepcopy(current)
             self.owner_thread_id = threading.get_ident()
             cfg._active_transaction = self
+            self._lock_fp = lock_fp
             return self
 
         except Exception:
             try:
-                if self._lock_fp is not None:
-                    fcntl.flock(self._lock_fp, fcntl.LOCK_UN)
-                    self._lock_fp.close()
+                if lock_fp is not None:
+                    fcntl.flock(lock_fp, fcntl.LOCK_UN)
+                    lock_fp.close()
             finally:
                 self._lock_fp = None
                 self.data = None
@@ -677,7 +731,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                     cfg._validate_schema(self.data)
                     cfg._atomic_write(self.data)
 
-                    signature = cfg._file_signature()
+                    signature = _file_signature(cfg._path)
                     if signature is None:
                         raise ConfigError(
                             "Config file disappeared immediately after commit."
@@ -754,3 +808,171 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     def update(self, *args: Any, **kwargs: Any) -> None:
         self._require_active().update(*args, **kwargs)
 
+
+# ---------------------------------------------------------------------------
+# LinesConfig — append-only line-based config (JSONL, NDJSON, etc.)
+# ---------------------------------------------------------------------------
+
+class LinesConfig:
+    """
+    Thread-safe, process-safe line-based config manager.
+
+    Each line is a JSON object. The file is append-only for writes; reads
+    can iterate from the beginning or tail. Suitable for JSONL/NDJSON logs.
+
+    Notes:
+    - Uses a dedicated `.lock` file for inter-process locking.
+    - Sync behavior is consistent with Config (full/data/none via sync_mode).
+    - Automatic backup support with configurable interval and retention.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        sync_mode: SYNC_MODES = 'data',
+        backup_dir: str | None = None,
+        backup_interval: int | float = 7200,
+        backup_retention: int = 3,
+    ) -> None:
+        """
+        Args:
+            path: Path to the line-based file (created if missing).
+            sync_mode: 'full' fsyncs file + parent directory, 'data' fsyncs file only,
+                'none' skips fsync entirely.
+            backup_dir: Backup directory. Backups are disabled if set to None.
+            backup_interval: Interval in seconds for backups.
+            backup_retention: Amount of concurrent backups kept on disk.
+        """
+        self.log = Logger(type(self).__name__)
+        with self.log.loading():
+            self._path: str = path
+            self._sync_mode: SYNC_MODES = sync_mode
+            self._lock = threading.RLock()
+
+            self._backup_dir: str | None = backup_dir
+            self._backup_interval: int | float = backup_interval
+            self._backup_retention: int = backup_retention
+            self._backup_stop = threading.Event()
+
+            _ensure_parent_dir(path)
+            if backup_dir:
+
+                self._backup_t = _make_backup_thread(
+                    path=self._path,
+                    indent=4,
+                    backup_dir=backup_dir,
+                    backup_interval=backup_interval,
+                    backup_retention=backup_retention,
+                    stop_event=self._backup_stop
+                )
+                self._backup_t.start()
+            else:
+                self._backup_t: threading.Thread | None = None
+
+    @property
+    def path(self) -> str:
+        return self._path
+
+    def append(self, record: dict[str, Any]) -> None:
+        """Append a JSON object as a new line. Thread-safe."""
+        line = json.dumps(record, ensure_ascii=False) + "\n"
+        with self._lock:
+            with _locked_file(self._path, exclusive=True):
+                with open(self._path, "a", encoding="utf-8") as f:
+                    f.write(line)
+                    if self._sync_mode != "none":
+                        f.flush()
+                        os.fsync(f.fileno())
+                if self._sync_mode == "full":
+                    _fsync_parent_dir(self._path)
+
+    def append_many(self, records: Iterable[dict[str, Any]]) -> None:
+        """Append multiple records in a single atomic write. Thread-safe."""
+        lines = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+        with self._lock:
+            with _locked_file(self._path, exclusive=True):
+                with open(self._path, "a", encoding="utf-8") as f:
+                    f.write(lines)
+                    if self._sync_mode != "none":
+                        f.flush()
+                        os.fsync(f.fileno())
+                if self._sync_mode == "full":
+                    _fsync_parent_dir(self._path)
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        """Iterate over all lines. Thread-safe at read-time."""
+        with self._lock:
+            with _locked_file(self._path, exclusive=False):
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                yield json.loads(line)
+                except FileNotFoundError:
+                    return
+
+    def tail(self, n: int = 100) -> Iterator[dict[str, Any]]:
+        """Iterate over the last n lines. Thread-safe at read-time."""
+        with self._lock:
+            with _locked_file(self._path, exclusive=False):
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        f.seek(0, io.SEEK_END)
+                        remaining = f.tell()
+                        if remaining == 0:
+                            return
+                        lines: list[str] = []
+                        while remaining > 0 and len(lines) < n:
+                            chunk_size = min(8192, remaining)
+                            f.seek(remaining - chunk_size)
+                            chunk = f.read(chunk_size)
+                            remaining -= chunk_size
+                            lines = chunk.splitlines(keepends=True) + lines
+                        for line in lines[-n:]:
+                            line = line.strip()
+                            if line:
+                                yield json.loads(line)
+                except FileNotFoundError:
+                    return
+
+    def count(self) -> int:
+        """Count total lines. Thread-safe at read-time."""
+        with self._lock:
+            with _locked_file(self._path, exclusive=False):
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        return sum(1 for line in f if line.strip())
+                except FileNotFoundError:
+                    return 0
+
+    def clear(self) -> None:
+        """Truncate the file. Thread-safe."""
+        with self._lock:
+            with _locked_file(self._path, exclusive=True):
+                with open(self._path, "w", encoding="utf-8") as f:
+                    if self._sync_mode != "none":
+                        f.flush()
+                        os.fsync(f.fileno())
+                if self._sync_mode == "full":
+                    _fsync_parent_dir(self._path)
+
+    def close(self) -> None:
+        """Stop backup thread. Does not affect the data file."""
+        self._backup_stop.set()
+        if self._backup_t is not None:
+            self._backup_t.join(timeout=5)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        self._backup_stop.set()

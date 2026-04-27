@@ -292,7 +292,8 @@ class WebApi(BaseApi):
             lang = 'en'
         
         token = self.cfg['tokens'][username]
-        link = f"https://pomi.lol/sub?token={token}&lang={lang}"
+        domain = self.cfg['domain']
+        link = f"{domain}/sub?token={token}&lang={lang}"
         
         if _parse_bool(request.args.get('happ')):
             link = f"happ://add/{link}"
