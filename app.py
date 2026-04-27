@@ -15,7 +15,7 @@ from core import (
 from session import XUiSession
 from api import WebApi, Api
 from bots import PublicBot, AdminBot
-from config import Config
+from config import Config, LinesConfig
 from loggers import Logger
 
 ##############################################################
@@ -88,8 +88,13 @@ _config_kwargs: dict[str, Any] = {
     'backup_dir': './backup/',
 }
 
+_line_config_kwargs: dict[str, Any] = {
+    'sync_mode': 'data',
+    'backup_dir': './backup/'
+}
 cfg = Config(path='../config.json', indent=4, **_config_kwargs)
 bw_cfg = Config(path='../bw_history.json', indent=2, **_config_kwargs)
+line_cfg = LinesConfig(path='../log.jsonl', **_line_config_kwargs)
 
 # ------------------------------------------------------------
 # Panels
@@ -114,7 +119,7 @@ bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
 bw.admin_bot = adminbot
 
 # ------------------------------------------------------------
-# Broadcast selected loggers to AdminBot
+# Broadcast selected loggers to AdminBot and jsonl file
 # ------------------------------------------------------------
 loggers = (
     log, 
@@ -125,7 +130,10 @@ loggers = (
     
     adminbot.log, bot.log
 )
-for l in loggers: l.set_tg_bot(bot=adminbot)
+for l in loggers:
+    l.set_tg_bot(adminbot)
+    l.set_jsonl_handler(line_cfg)
+
 # ------------------------------------------------------------
 # Single-primary-worker startup
 # ------------------------------------------------------------

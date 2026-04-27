@@ -1,6 +1,6 @@
 from typing import (
     TypedDict, Protocol,
-    runtime_checkable, Any
+    runtime_checkable, Any, Iterable
 )
 
 ### Bots ###
@@ -21,6 +21,21 @@ class PublicBotLike(Protocol):
         key: str,
         **kwargs: Any
     ) -> None: ... 
+
+@runtime_checkable
+class LinesConfigLike(Protocol):
+    """Sub protocol for LinesConfig."""
+
+    def append(
+        self,
+        record: dict[str, Any]
+    ) -> None: ...
+
+    def append_many(
+        self, 
+        records: Iterable[dict[str, Any]]
+    ) -> None: ...
+
 ### 3x-ui status object ###
 class MemoryStats(TypedDict):
     current: int

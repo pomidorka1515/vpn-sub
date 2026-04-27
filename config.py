@@ -171,7 +171,7 @@ def _prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
             log.error(f"prune failed for {f}: {e}")
 
 def _make_backup_thread(
-    *,
+    *, # NOTE: kwarg only for safety
     path: str,
     indent: int,
     backup_dir: str,
@@ -913,28 +913,34 @@ class LinesConfig:
                     return
 
     def tail(self, n: int = 100) -> Iterator[dict[str, Any]]:
-        """Iterate over the last n lines. Thread-safe at read-time."""
+        """Iterate over the last n lines. Thread-safe at read-time.
+
+        Holds the lock only during the brief yield phase, not during I/O.
+        """
+        raw_lines = b""
+        with _locked_file(self._path, exclusive=False):
+            try:
+                with open(self._path, "rb") as f:
+                    f.seek(0, io.SEEK_END)
+                    remaining: int = f.tell()
+                    if remaining == 0:
+                        return
+                    while remaining > 0:
+                        chunk_size = min(8192, remaining)
+                        f.seek(max(0, remaining - chunk_size))
+                        chunk = f.read(chunk_size)
+                        remaining -= chunk_size
+                        raw_lines = chunk + raw_lines
+            except FileNotFoundError:
+                return
+
+        # Parse outside the lock — no filesystem I/O, just CPU work
+        lines = raw_lines.decode("utf-8").splitlines()
         with self._lock:
-            with _locked_file(self._path, exclusive=False):
-                try:
-                    with open(self._path, "r", encoding="utf-8") as f:
-                        f.seek(0, io.SEEK_END)
-                        remaining = f.tell()
-                        if remaining == 0:
-                            return
-                        lines: list[str] = []
-                        while remaining > 0 and len(lines) < n:
-                            chunk_size = min(8192, remaining)
-                            f.seek(remaining - chunk_size)
-                            chunk = f.read(chunk_size)
-                            remaining -= chunk_size
-                            lines = chunk.splitlines(keepends=True) + lines
-                        for line in lines[-n:]:
-                            line = line.strip()
-                            if line:
-                                yield json.loads(line)
-                except FileNotFoundError:
-                    return
+            for line in lines[-n:]:
+                line = line.strip()
+                if line:
+                    yield json.loads(line)
 
     def count(self) -> int:
         """Count total lines. Thread-safe at read-time."""
