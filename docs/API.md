@@ -5,7 +5,7 @@ Authentication: a cookie named 'token'.
 Cookie is httponly, samesite=lax, secure=True  
 
 ## Root URI (subject to change)  
-`https://pomi.lol/sub/webapi`  
+`{domain}/sub/webapi` where `domain` is your domain    
 
 ## Response format  
 Every response follows this pattern:  

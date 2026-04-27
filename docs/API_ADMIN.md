@@ -5,7 +5,7 @@ Authentication: `Authorization` header with the admin API token.
 On failure, returns HTTP 401.  
 
 ## Root URI (subject to change)  
-`https://pomi.lol/sub/{api_uri}`  
+`{domain}/sub/{api_uri}` where `domain` is your domain.  
 
 ## Response format  
 Every response follows this pattern:  

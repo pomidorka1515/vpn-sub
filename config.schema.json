@@ -13,33 +13,40 @@
     ],
     "additionalProperties": false,
     "properties": {
-        "$schema": { "type": "string" },
-        "uri": { "type": "string" },
-        "api_uri": { "type": "string" },
-        "api_token": { "type": "string" },
-        "panel_alert_cooldown": { "type": "integer" },
-        "salt": { "type": "string" },
-        "sub_name": { "type": "string" },
+        "$schema": { "type": "string", "description": "Schema file." },
+        "uri": { "type": "string", "description": "Main URI for the service.", "default": "sub" },
+        "api_uri": { "type": "string", "description": "Admin API URI." },
+        "api_token": { "type": "string", "description": "Admin API Access token." },
+        "panel_alert_cooldown": { "type": "integer", "description": "Panel alert cooldown in seconds.", "default": 3600 },
+        "domain": { "type": "string", "description": "Your domain." },
+        "salt": { "type": "string", "description": "Salt for passwords, pick something strong." },
+        "sub_name": { "type": "string", "description": "Text displayed in VPN clients." },
 
         "fingerprints": {
             "type": "array",
             "items": { "type": "string" },
-            "uniqueItems": true
+            "uniqueItems": true,
+            "default": ["safari", "chrome", "edge", "firefox"],
+            "description": "List of allowed fingerprints. Dont add anything invalid, see xray uTLS section for the full list."
         },
 
         "nodes": {
             "type": "object",
-            "additionalProperties": { "type": "string" }
+            "additionalProperties": { "type": "string" },
+            "description": "List of nodes. Must be raw domains or IPs."
         },
 
         "bot": {
             "type": "object",
             "required": ["token", "whitelist"],
             "additionalProperties": false,
+            "description": "Admin bot configuration object.",
             "properties": {
-                "token": { "type": "string" },
+                "token": { "type": "string", "description": "Token for your admin bot." },
                 "whitelist": {
                     "type": "array",
+                    "description": "List of users who are allowed to use the admin bot (UIDs)",
+                    "default": [],
                     "items": { "type": "integer" }
                 }
             }
@@ -47,6 +54,8 @@
 
         "routing": {
             "type": "object",
+            "description": "Happ routing object. Leave blank to disable.",
+            "default": {},
             "required": ["Name", "GlobalProxy", "DomainStrategy", "DirectSites", "DirectPackages", "DirectIp"],
             "properties": {
                 "Name": { "type": "string" },
@@ -60,20 +69,24 @@
 
         "webui_passwords": {
             "type": "object",
+            "description": "WebUI hashed passwords.",
             "additionalProperties": { "type": "string" }
         },
         "webui_users": {
             "type": "object",
+            "description": "WebUI references \"external_username\": \"internal_username\"",
             "additionalProperties": { "type": "string" }
         },
 
         "funny_strings": {
             "type": "array",
+            "description": "type shit",
             "items": { "type": "string" }
         },
 
         "publicbot": {
             "type": "object",
+            "description": "Object for the public bot.",
             "required": ["token", "tg_lang", "lang"],
             "additionalProperties": false,
             "properties": {
@@ -96,6 +109,7 @@
 
         "codes": {
             "type": "array",
+            "description": "Object of codes.",
             "items": {
                 "type": "object",
                 "required": ["code", "action", "perma", "days", "gb"],
@@ -113,6 +127,7 @@
 
         "3xui": {
             "type": "object",
+            "description": "3x-ui panels.",
             "additionalProperties": {
                 "type": "object",
                 "required": ["name", "address", "port", "uri", "username", "password", "https", "whitelist", "ignore_inbounds"],

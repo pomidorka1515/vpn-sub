@@ -785,7 +785,7 @@ class Subscription:
             )
             raise RuntimeError(f"backend sync failed for {username}") from e
     
-        return result or "Internal error"
+        return result
 
     def get_code(self, code: str) -> CodeObject | bool:
         """Search for a code. Returns a dict if found, False if isnt."""
@@ -944,6 +944,7 @@ class Subscription:
         wl_bandwidths = self.bandwidth(username=username, whitelist=True)
         monthly = conf['bw'][username][1]
         wl_monthly = conf['wl_bw'][username][1]
+        domain = self.cfg['domain']
         if pretty:
             bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in bandwidths))
             wl_bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in wl_bandwidths))
@@ -951,7 +952,7 @@ class Subscription:
         return {
             "_": random.choice(cast(list[str], conf.get('funny_strings', []))),
             "token": conf['tokens'][username],
-            "link": f"https://pomi.lol/sub?token={conf['tokens'][username]}",
+            "link": f"{domain}/sub?token={conf['tokens'][username]}",
             "displayname": conf['displaynames'][username],
             "uuid": conf['users'][username],
             "fingerprint": conf['userFingerprints'][username],
@@ -1099,7 +1100,7 @@ User-Agent: {ua}
 Username: {"none" if not username else username}
 Lang: {lang}""")
         
-        if not username or username not in self.cfg['users']:
+        if not username:
             return self.resp
         if lang not in ["ru", "en"]:
             return self.resp
@@ -1302,15 +1303,15 @@ class BWatch:
             self._panel_alerts: dict[str, Any] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', None) or 3600
 
-            self._t1 = threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs")
-            self._t2 = threading.Thread(target=self._every_2h, daemon=True, name="Date check")
-            self._t3 = threading.Thread(target=self._every_15s, daemon=True, name="Bandwidth")
-            self._t4 = threading.Thread(target=self._every_24h, daemon=True, name="Reset notifs & Prune BW Info")
-            self._t5 = threading.Thread(target=self._every_5m, daemon=True, name="Panels check")
-            self._t6 = threading.Thread(target=self._every_24h_snapshot, daemon=True, name="Daily BW Snapshot")
-    
+            self._threads: tuple[threading.Thread, ...] = (
+                threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs"),
+                threading.Thread(target=self._every_2h, daemon=True, name="Date check"),
+                threading.Thread(target=self._every_15s, daemon=True, name="Bandwidth"),
+                threading.Thread(target=self._every_24h, daemon=True, name="Reset notifs & Prune BW Info"),
+                threading.Thread(target=self._every_5m, daemon=True, name="Panels check"),
+                threading.Thread(target=self._every_24h_snapshot, daemon=True, name="Daily BW Snapshot")
+            )
     def start(self):
-        # Micro optimizations go!
         initial_mem: dict[str, BandwidthInfo] = {}
         initial_wl_mem: dict[str, BandwidthInfo] = {}
         for i in list(self.cfg['users'].keys()):
@@ -1325,16 +1326,15 @@ class BWatch:
             self._snapshot_initialized = True
 
         ### Start Threads ###
-        self._t1.start()
-        self._t2.start()
-        self._t3.start()
-        self._t4.start()
-        self._t5.start()
-        self._t6.start()
 
+        for thread in self._threads:
+            thread.start()
+    
     def stop(self):
         self._stop_event.set()
-
+        for thread in self._threads:
+            thread.join(timeout=5)
+        
     def _update_user(self, *args: Any, **kwargs: Any):
         x = self.sub.update_user(*args, **kwargs)
         if x is not None:
@@ -1484,6 +1484,8 @@ class BWatch:
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
 
     def is_first(self):
+        # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
+        # NOTE: Exclusive to one thread only.
         now = datetime.now()
         if now.day != 1:
             return

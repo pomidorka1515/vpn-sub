@@ -276,19 +276,19 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return iter(tuple(self._data.keys()))
     
-    def keys(self) -> tuple[str, ...]: # type: ignore[reportIncompatibleMethodOverride]
+    def keys(self) -> tuple[Any, ...]: # pyright: ignore[reportIncompatibleMethodOverride]
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
             return tuple(self._data.keys())
     
-    def values(self) -> tuple[str, ...]: # type: ignore[reportIncompatibleMethodOverride]
+    def values(self) -> tuple[Any, ...]: # pyright: ignore[reportIncompatibleMethodOverride]
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
             return tuple(self._detach(v) for v in self._data.values())
     
-    def items(self) -> tuple[tuple[str, Any], ...]: # type: ignore[reportIncompatibleMethodOverride]
+    def items(self) -> tuple[tuple[str, Any], ...]: # pyright: ignore[reportIncompatibleMethodOverride]
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()

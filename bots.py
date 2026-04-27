@@ -23,19 +23,22 @@ class AdminBot:
     Dependencies: Subscription
     Classes depending on this: none"""
 
+    USERS_PER_PAGE = 10
+
     def __init__(self,
                  sub: Subscription,
                  cfg: Config):
         self.log = Logger(type(self).__name__)
-        with self.log.loading():        
+        with self.log.loading():
             self.cfg = cfg
-            self.sub = sub 
+            self.sub = sub
             self.bot = telebot.TeleBot(self.cfg['bot']['token'])
-            self.admin_uids = self.cfg['bot']['whitelist']
-            
+            self.admin_uids: list[int] = self.cfg['bot']['whitelist']
+
             self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # type: ignore
             self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks) # type: ignore
             self._pending_codes: dict[Any, Any] = {}
+            self._pagination_state: dict[int, dict[str, Any]] = {}
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids
@@ -74,13 +77,34 @@ class AdminBot:
         )
         return markup
  
-    def get_users_menu(self, prefix: str) -> types.InlineKeyboardMarkup:
+    def get_users_menu(self, prefix: str, page: int = 0) -> types.InlineKeyboardMarkup:
+        """Get paginated user list with navigation buttons."""
+        all_users = list(self.cfg['users'].keys())
+        total_users = len(all_users)
+        total_pages = max(1, (total_users - 1) // self.USERS_PER_PAGE + 1)
+
+        page = max(0, min(page, total_pages - 1))
+        start_idx = page * self.USERS_PER_PAGE
+        end_idx = min(start_idx + self.USERS_PER_PAGE, total_users)
+        page_users = all_users[start_idx:end_idx]
+
         markup = types.InlineKeyboardMarkup(row_width=2)
         buttons: list[types.InlineKeyboardButton] = []
-        for user in self.cfg['users'].keys():
+        for user in page_users:
             buttons.append(types.InlineKeyboardButton(user, callback_data=f"{prefix}_{user}"))
         markup.add(*buttons)  # type: ignore[call-arg]
-        markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel")) # type: ignore[call-arg]
+
+        nav_buttons: list[types.InlineKeyboardButton] = []
+        if page > 0:
+            nav_buttons.append(types.InlineKeyboardButton("◀️", callback_data=f"page_{prefix}_{page - 1}"))
+        if page < total_pages - 1:
+            nav_buttons.append(types.InlineKeyboardButton("▶️", callback_data=f"page_{prefix}_{page + 1}"))
+
+        if nav_buttons:
+            markup.add(*nav_buttons)  # type: ignore[call-arg]
+            markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))  # type: ignore[call-arg]
+
+        markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))  # type: ignore[call-arg]
         return markup
  
  
@@ -106,13 +130,20 @@ class AdminBot:
         try:
             if data == "cancel":
                 self.bot.edit_message_text("Действие отменено. Главное меню:", chat_id, message.message_id, reply_markup=self.get_main_menu())
-                self.bot.clear_step_handler_by_chat_id(chat_id) 
+                self.bot.clear_step_handler_by_chat_id(chat_id)
+
+            elif data == "noop":
+                pass  # Page indicator button, do nothing
 
             elif data == "online_users":
                 self._cb_online_users(chat_id)  
             
             elif data == "list_users":
                 self._cb_list_users(chat_id)
+
+            elif data.startswith("page_list_users_"):
+                page = int(data.split("_")[-1])
+                self._cb_list_users(chat_id, page)
                 
             elif data == "refresh_all":
                 self._cb_refresh(chat_id)
@@ -133,8 +164,14 @@ class AdminBot:
                 if not self.cfg['users']:
                     self.bot.send_message(chat_id, "Список пуст.", reply_markup=self.get_main_menu())
                     return
-                self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, message.message_id, reply_markup=self.get_users_menu("dodel"))
- 
+                page = self._pagination_state.get(chat_id, {}).get('del_page', 0)
+                self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, message.message_id, reply_markup=self.get_users_menu("dodel", page))
+
+            elif data.startswith("page_dodel_"):
+                page = int(data.split("_")[-1])
+                self._pagination_state.setdefault(chat_id, {})['del_page'] = page
+                self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, message.message_id, reply_markup=self.get_users_menu("dodel", page))
+
             elif data.startswith("dodel_"):
                 username = data.split("dodel_", 1)[1]
                 self._cb_del_user(chat_id, username)
@@ -232,15 +269,35 @@ class AdminBot:
             self.bot.delete_message(chat_id, msg.message_id)
         except Exception:
             pass
-    def _cb_list_users(self, chat_id: int) -> None:
-        users = list(self.cfg['users'].keys())
+    def _cb_list_users(self, chat_id: int, page: int = 0) -> None:
+        all_users = list(self.cfg['users'].keys())
+        total_users = len(all_users)
 
-        if not users:
+        if not all_users:
             self.bot.send_message(chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu())
             return
-        
-        text = "👥 <b>Список пользователей:</b>\n\n" + "\n".join([f"- <code>{u}</code>" for u in users])
-        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
+
+        total_pages = max(1, (total_users - 1) // self.USERS_PER_PAGE + 1)
+        page = max(0, min(page, total_pages - 1))
+        start_idx = page * self.USERS_PER_PAGE
+        end_idx = min(start_idx + self.USERS_PER_PAGE, total_users)
+        page_users = all_users[start_idx:end_idx]
+
+        text = f"👥 <b>Список пользователей</b> ({total_users} всего)\n\n"
+        text += "\n".join([f"- <code>{u}</code>" for u in page_users])
+
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        nav_buttons: list[types.InlineKeyboardButton] = []
+        if page > 0:
+            nav_buttons.append(types.InlineKeyboardButton("◀️", callback_data="page_list_users_" + str(page - 1)))
+        if page < total_pages - 1:
+            nav_buttons.append(types.InlineKeyboardButton("▶️", callback_data="page_list_users_" + str(page + 1)))
+        if nav_buttons:
+            markup.add(*nav_buttons)  # type: ignore[call-arg]
+            markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))  # type: ignore[call-arg]
+
+        markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))  # type: ignore[call-arg]
+        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
     def _cb_online_users(self, chat_id: int) -> None:
         online_users = cast(dict[str, Any], self.sub.get_online_users(new = True))
         if not online_users:
@@ -282,6 +339,7 @@ class AdminBot:
             wl_status = "🟢 Включен" if info['wl_enabled'] else "🔴 Отключен"
             online = "🟢 Да" if info['online'] else "🔴 Нет"
             fingerprint = info['fingerprint']
+            domain = self.cfg['domain']
             if times:
                 days_left = str((times - int(time.time())) // 86400)
                 date = datetime.fromtimestamp(times, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
@@ -301,7 +359,7 @@ class AdminBot:
                 f"Upload: {up} MB | Download: {down} MB\n"
                 f"WL Upload: {wl_up} MB | Download: {wl_down} MB\n"
                 f"Отпечаток: <code>{fingerprint}</code>\n"
-                f"Ссылка: <code>https://pomi.lol/sub?token={token}&lang=ru</code>\n"
+                f"Ссылка: <code>{domain}/sub?token={token}&lang=ru</code>\n"
             )
             self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
         except Exception as e:
@@ -656,7 +714,7 @@ class PublicBot:
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback) # type: ignore
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback) # type: ignore
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))(self.chart_callback) # type: ignore
-            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit: True)(self.handle_text) # type: ignore
+            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this: True)(self.handle_text) # type: ignore
   
     def get_lang(self, uid: int) -> str:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
@@ -919,7 +977,8 @@ class PublicBot:
         if not info:
             return
 
-        link = f"https://pomi.lol/{self.cfg['uri']}?token={info['token']}&lang={lang}"
+        domain = self.cfg['domain']
+        link = f"{domain}/{self.cfg['uri']}?token={info['token']}&lang={lang}"
         
         qr = self.sub.make_qr(link)
 
@@ -927,10 +986,11 @@ class PublicBot:
             link=link
         )
         
+        domain = self.cfg['domain']
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add( # type: ignore
             types.InlineKeyboardButton(t['get_sub_btn_link'], url=link),
-            types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"https://pomi.lol/{self.cfg['uri']}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
+            types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"{domain}/{self.cfg['uri']}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
         )
         self.bot.send_photo(chat_id, qr, text, parse_mode="Markdown", reply_markup=markup)
     def login_callback(self, call: types.CallbackQuery) -> None:
