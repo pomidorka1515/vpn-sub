@@ -11,7 +11,6 @@ import re
 import json
 import string
 import random
-import copy
 import uuid
 import time
 import base64

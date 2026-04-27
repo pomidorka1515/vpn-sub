@@ -16,7 +16,7 @@ from dataclasses import asdict
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-JsonifyValue = Union[str, int, float, bool, dict, list, tuple, uuid.UUID, None]
+JsonifyValue = Union[str, int, float, bool, dict[str, Any], TypedDict, list[Any], tuple[Any, ...], uuid.UUID, None]
 # JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | uuid.UUID | NamedTuple | TypedDict | None
 HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 ResponseType = Tuple[Response, int] | Response
@@ -122,6 +122,7 @@ def _parse_bool(value: bool | str | int | None) -> bool | None:
         return bool(value)
     return None
 
+# ── Auth decorators ──────────────────────────────────────────────
 def requires_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     """Admin API auth via Authorization header. Returns fake nginx 404 on failure."""
     @wraps(f)
@@ -131,7 +132,6 @@ def requires_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
             return _err("Unauthorized", 401)
         return f(self, *args, **kwargs)
     return wrapper
-
 def requires_webapi_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
     Returns 401 on failure."""
@@ -143,8 +143,6 @@ def requires_webapi_auth(f: Callable[..., Any]) -> Callable[..., Any]:
             return _err("Invalid token.", 401)
         return f(self, username, *args, **kwargs)
     return wrapper
-
-
 def requires_no_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)
@@ -155,7 +153,7 @@ def requires_no_auth(f: Callable[..., Any]) -> Callable[..., Any]:
         return f(self, *args, **kwargs)
     return wrapper
 
-
+# ── Rate limiting ────────────────────────────────────────────────
 def rate_limit(max_requests: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Rate-limit by IP. Reads rl_data and rl_lock from the instance (self)."""
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -176,7 +174,7 @@ def rate_limit(max_requests: int) -> Callable[[Callable[..., Any]], Callable[...
         return wrapper
     return decorator
 
-
+# ── Validation decorators ────────────────────────────────────────
 def requires_fields(*fields: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Validate request.json has all named fields. Returns 400 on failure."""
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -187,13 +185,13 @@ def requires_fields(*fields: str) -> Callable[[Callable[..., Any]], Callable[...
                 return _err("Missing JSON data.", 400)
             if not isinstance(content, dict):
                 return _err("Body must be a JSON dict.", 400)
+            
             missing = [x for x in fields if x not in content]
             if missing:
                 return _err(f"Missing fields: {', '.join(missing)}", 400)
             return f(*args, **kwargs)
         return wrapper
     return decorator
-
 def requires_args(*arg: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Validate request.args has all named fields. Returns 400 on failure."""
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:

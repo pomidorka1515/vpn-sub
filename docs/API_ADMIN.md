@@ -365,3 +365,14 @@ Response (error):
 	"obj": null  
 }  
 ```  
+
+---
+
+### GET /api/health
+Description: Verify connectivity.  
+Auth: None  
+Response (success):  
+```jsonc  
+// HTTP 204
+// <no content>
+```  
