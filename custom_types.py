@@ -27,6 +27,7 @@ __all__ = [
 
     'client_stats_to_settings'
 ]
+_MISSING = object()
 
 ### Stub Protocols ###
 
@@ -35,6 +36,7 @@ class AdminBotLike(Protocol):
     """Stub protocol for AdminBot class to avoid circular imports."""
 
     def msg(self, text: str, parse_mode: str = "HTML") -> None: ...
+
 
 @runtime_checkable
 class PublicBotLike(Protocol):
@@ -47,11 +49,10 @@ class PublicBotLike(Protocol):
         **kwargs: Any
     ) -> None: ... 
 
+
 @runtime_checkable
 class ConfigLike(Protocol):
     """Stub protocol for Config."""
-
-    MISSING: object = object()
 
     @property
     def path(self) -> str: ...
@@ -102,13 +103,14 @@ class ConfigLike(Protocol):
 
     def clear(self) -> None: ...
 
-    def pop(self, key: str, default: Any = MISSING) -> Any: ...
+    def pop(self, key: str, default: Any = _MISSING) -> Any: ...
 
     def popitem(self) -> tuple[str, Any]: ...
 
     def setdefault(self, key: str, default: Any = None) -> Any: ... 
 
     def update(self, *args: Any, **kwargs: Any) -> None: ...
+
 
 @runtime_checkable
 class _ConfigTransactionLike(Protocol):
@@ -140,13 +142,14 @@ class _ConfigTransactionLike(Protocol):
 
     def clear(self) -> None: ...
 
-    def pop(self, key: str, default: Any = ConfigLike.MISSING) -> Any: ...
+    def pop(self, key: str, default: Any = _MISSING) -> Any: ...
 
     def popitem(self) -> tuple[str, Any]: ...
 
     def setdefault(self, key: str, default: Any = None) -> Any: ...
 
     def update(self, *args: Any, **kwargs: Any) -> None: ...
+
 
 @runtime_checkable
 class LinesConfigLike(Protocol):
@@ -195,36 +198,44 @@ class LinesConfigLike(Protocol):
         exc_tb: TracebackType | None,
     ) -> None: ...
 
+
 ### 3x-ui status object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class MemoryStats:
     current: int
     total: int
+    
 @dataclass(slots=True, frozen=True, kw_only=True)
 class SwapStats:
     current: int
     total: int
+    
 @dataclass(slots=True, frozen=True, kw_only=True)
 class DiskStats:
     current: int
     total: int
+    
 @dataclass(slots=True, frozen=True, kw_only=True)
 class XrayStats:
     state: str
     errorMsg: str
     version: str
+    
 @dataclass(slots=True, frozen=True, kw_only=True)
 class NetIOStats:
     up: int
     down: int
+    
 @dataclass(slots=True, frozen=True, kw_only=True)
 class NetTrafficStats:
     sent: int
     recv: int
+    
 @dataclass(slots=True, frozen=True, kw_only=True)
 class PublicIPStats:
     ipv4: str
     ipv6: str
+    
 @dataclass(slots=True, frozen=True, kw_only=True)
 class AppStats:
     threads: int
@@ -233,7 +244,7 @@ class AppStats:
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ServerMetricsObj:
-    cpu: int
+    cpu: int | float
     cpuCores: int
     logicalPro: int
     cpuSpeedMhz: int
@@ -256,6 +267,7 @@ class ServerMetricsResponse:
     msg: str
     obj: ServerMetricsObj
 
+
 ### 3x-ui inbound list object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ClientStats:
@@ -272,6 +284,7 @@ class ClientStats:
     total: int
     reset: int
     lastOnline: int
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class Inbound:
@@ -293,6 +306,7 @@ class Inbound:
     streamSettings: str
     tag: str
     sniffing: str
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class InboundListResponse:
@@ -384,6 +398,7 @@ class UserInfoBandwidth:
     wl_monthly: int | float
     limit: int
     wl_limit: int
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class UserInfo:
     _: str
@@ -399,7 +414,13 @@ class UserInfo:
     bandwidth: UserInfoBandwidth
 
 ### Helper functions ###
-def client_stats_to_settings(stats: ClientStats, flow: str = '', limit_ip: int = 0, tg_id: str | int = '', comment: str = '') -> SettingsClient:
+def client_stats_to_settings(
+    stats: ClientStats, 
+    flow: str = '', 
+    limit_ip: int = 0, 
+    tg_id: str | int = '', 
+    comment: str = ''
+) -> SettingsClient:
     """Convert ClientStats to SettingsClient format.
 
     Args:

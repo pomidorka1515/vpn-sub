@@ -44,7 +44,7 @@ class BaseApi(ABC):
             self._register_routes()
             self.reg_handles()
 
-    def __init_subclass__(cls, **kwargs: dict[str, Any]):
+    def __init_subclass__(cls, **kwargs: Any):
         """Called when a class inherits from BaseApi. Validates at import time."""
         super().__init_subclass__(**kwargs)
         
@@ -370,7 +370,7 @@ class WebApi(BaseApi):
             self.log.error(f"/delete {username}: {str(e)}")
             return _err("Internal server error", 500)
     @requires_webapi_auth
-    def logout(self) -> ResponseType:
+    def logout(self, username: str) -> ResponseType:
         resp, code = _ok(msg="Logged out")
         resp.set_cookie(
             'token', 
@@ -382,6 +382,7 @@ class WebApi(BaseApi):
         )
         return resp, code
     @requires_webapi_auth
+    @requires_fields()
     def settings(self, username: str) -> ResponseType:
         """Update users display name or fingerprint.
         Changing ext_username or ext_password requires `current_password` in body."""
@@ -673,7 +674,7 @@ class Api(BaseApi):
     
     @requires_admin_auth
     def user_onlines(self) -> ResponseType:
-        new = _parse_bool(request.args.get('keyed', ''))
+        new = _parse_bool(request.args.get('keyed', False))
         if new is None:
             return _err("'keyed' must be bool-like")
         online_users = cast(dict[str, Any], self.sub.get_online_users(new = new))
@@ -704,7 +705,12 @@ class Api(BaseApi):
             if query is None:
                 result: dict[str, ServerMetricsResponse | None] = {}
                 for panel in self.sub.panels:
-                    result[panel.name] = self.sub.getstatus(panel)
+                    _ = self.sub.getstatus(panel)
+                    if _ is None:
+                        self.log.error(f"getstatus: {panel.name} returned None")
+                    else:
+                        _ = asdict(_)
+                    result[panel.name] = _
                 return _ok(obj=result)
 
             for panel in self.sub.panels:
@@ -727,7 +733,7 @@ class Api(BaseApi):
             return _err(str(e), 500)
     
     @requires_admin_auth
-    @requires_fields('code')
+    @requires_args('code')
     def code_info(self) -> ResponseType:
         try:
             code = request.args.get('code')

@@ -767,8 +767,8 @@ class PublicBot:
         limit_str = f"{info.bandwidth.limit} GB" if info.bandwidth.limit else t['unlimited']
         wl_limit_str = f"{info.bandwidth.wl_limit} GB" if info.bandwidth.wl_limit else t['unlimited']
 
-        monthly_str = str(info.bandwidth.monthly)
-        wl_monthly_str = str(info.bandwidth.wl_monthly)
+        monthly_str = f"{info.bandwidth.monthly / (1024 ** 2):.2f}"
+        wl_monthly_str = f"{info.bandwidth.wl_monthly / (1024 ** 2):.2f}"
 
         if limit_str == t['unlimited']:
             monthly_str = t['unlimited']
