@@ -11,9 +11,9 @@ from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
 from abc import ABC
 from typing import cast, Tuple, Any, Callable, Literal, NamedTuple, Union
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 
-from custom_types import ConfigLike, UserInfo, ServerMetricsResponse
+from custom_types import ConfigLike, UserInfo, ServerMetricsResponse, NewUserInfo
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
 JsonifyValue = Union[str, int, float, bool, dict[str, Any], list[Any], tuple[Any, ...], uuid.UUID, None]
@@ -432,9 +432,9 @@ class WebApi(BaseApi):
         """Reset token and UUID (api wrapper)"""
         try:
             x = self.sub.reset_user(username)
-            if not isinstance(x, dict):
+            if not is_dataclass(x):
                 return _err("Internal server error", 500)
-            return _ok(obj={**x})
+            return _ok(obj=asdict(x))
         except Exception as e:
             self.log.critical(e)
             return _err("Internal server error", 500)
@@ -460,14 +460,14 @@ class WebApi(BaseApi):
                 return _err(result, 404)
             return _err(result, 400)
     
-        return _ok(obj={**result})
+        return _ok(obj=asdict(result))
     @requires_webapi_auth
     def stats(self, username: str) -> ResponseType:
         """Get user info from token"""
         x = self.sub.get_info(username)
         x = cast(UserInfo, x) # NOTE: get_info returns 'None' when the user is not found,
                               # NOTE: but @requires_webapi_auth guarrantees the user exists.
-        return _ok(obj={**x})
+        return _ok(obj=asdict(x))
 
     @requires_webapi_auth
     def bandwidth_history(self, username: str) -> ResponseType:
@@ -503,7 +503,7 @@ class WebApi(BaseApi):
                 return _err(result, 403)
             return _err(result, 400)
     
-        return _ok("Created", 201, {**result})
+        return _ok("Created", 201, asdict(result))
 
     @requires_fields('username', 'password')
     def login(self) -> ResponseType:
@@ -572,7 +572,7 @@ class Api(BaseApi):
         pretty = request.args.get('beautify', '').lower() in ('1', 'true', 'yes')
         x = self.sub.get_info(username=username, pretty=pretty)
         x = cast(UserInfo, x) # NOTE: see WebApi.stats()
-        return _ok(obj={**x})
+        return _ok(obj=asdict(x))
  
     @requires_admin_auth
     @requires_fields('user', 'displayname')
@@ -630,7 +630,7 @@ class Api(BaseApi):
                 wl_limit=data['wl_limit'],
                 timee=data['time']
             )
-            if not isinstance(x, dict):
+            if not isinstance(x, NewUserInfo):
                 return _err(msg=x)
             return _ok("Created", 201)
         except Exception as e:
@@ -692,7 +692,7 @@ class Api(BaseApi):
             x = self.sub.reset_user(username)
             if isinstance(x, str):
                 return _err(x, 500)
-            return _ok(obj={**x})
+            return _ok(obj=asdict(x))
         except Exception as e:
             self.log.error(f"user_reset fail: {e}")
             return _err(str(e), 500)
@@ -712,7 +712,7 @@ class Api(BaseApi):
                     res = self.sub.getstatus(panel)
                     if res is None:
                         return _err("getstatus() returned None; panel may be down")
-                    return _ok(obj={**res})
+                    return _ok(obj=asdict(res))
 
             return _err("panel not found")
         except Exception as e:
@@ -734,9 +734,9 @@ class Api(BaseApi):
             if not isinstance(code, str):
                 return _err("'code' must be a str")
             x = self.sub.get_code(code)
-            if not isinstance(x, dict):
+            if not is_dataclass(x):
                 return _err("Code not found", 404)
-            return _ok(obj={**x})
+            return _ok(obj=asdict(x))
         except Exception as e:
             return _err(str(e), 500)
     

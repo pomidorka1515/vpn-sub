@@ -13,6 +13,7 @@ import urllib.parse
 from typing import cast, Any
 from datetime import datetime
 from telebot import types
+from dataclasses import is_dataclass
 
 from custom_types import ConfigLike
 
@@ -220,39 +221,39 @@ class AdminBot:
         if info is None:
             self.bot.send_message(chat_id, "Произошла ошибка: getstatus() вернул None", reply_markup=self.get_main_menu())
             return
-        obj = info['obj']
-        sys_up = self.sub.fmt_time(obj['uptime'])
-        app_up = self.sub.fmt_time(obj['appStats']['uptime'])
-        xr = obj['xray']
-        xr_state = xr['state']
-        xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xr['errorMsg']}"        
+        obj = info.obj
+        sys_up = self.sub.fmt_time(obj.uptime)
+        app_up = self.sub.fmt_time(obj.appStats.uptime)
+        xr = obj.xray
+        xr_state = xr.state
+        xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xr.errorMsg}"        
         GB = 1024 ** 3
         MB = 1024 ** 2
         text = f"""📊 <b>Статус сервера {panel.name}</b>
 
 🖥 <b>Система</b>
-├ <b>CPU:</b> <code>{int(round(obj['cpu']))}%</code> (<code>{obj['cpuCores']}</code>/<code>{obj['logicalPro']}</code> ядер, <code>{int(round(obj['cpuSpeedMhz']))} MHz</code>)
-├ <b>Load:</b> <code>{obj['loads'][0]}</code> | <code>{obj['loads'][1]}</code> | <code>{obj['loads'][2]}</code>
-├ <b>RAM:</b> <code>{obj['mem']['current'] / GB:.2f} GB</code> / <code>{obj['mem']['total'] / GB:.2f} GB</code>
+├ <b>CPU:</b> <code>{int(round(obj.cpu))}%</code> (<code>{obj.cpuCores}</code>/<code>{obj.logicalPro}</code> ядер, <code>{int(round(obj.cpuSpeedMhz))} MHz</code>)
+├ <b>Load:</b> <code>{obj.loads[0]}</code> | <code>{obj.loads[1]}</code> | <code>{obj.loads[2]}</code>
+├ <b>RAM:</b> <code>{obj.mem.current / GB:.2f} GB</code> / <code>{obj.mem.total / GB:.2f} GB</code>
 └ <b>Uptime:</b> <code>{sys_up}</code>
 
 💾 <b>Накопители</b>
-├ <b>Диск:</b> <code>{obj['disk']['current'] / GB:.2f} GB</code> / <code>{obj['disk']['total'] / GB:.2f} GB</code>
-└ <b>Swap:</b> <code>{obj['swap']['current'] / GB:.2f} GB</code> / <code>{obj['swap']['total'] / GB:.2f} GB</code>
+├ <b>Диск:</b> <code>{obj.disk.current / GB:.2f} GB</code> / <code>{obj.disk.total / GB:.2f} GB</code>
+└ <b>Swap:</b> <code>{obj.swap.current / GB:.2f} GB</code> / <code>{obj.swap.total / GB:.2f} GB</code>
 
 🌐 <b>Сеть & IP</b>
-├ <b>IPv4:</b> <code>{obj['publicIP']['ipv4']}</code>
-├ <b>IPv6:</b> <code>{obj['publicIP']['ipv6'] or 'Отключен'}</code>
-├ <b>Соединения:</b> <code>{obj['tcpCount']}</code> TCP / <code>{obj['udpCount']}</code> UDP
-├ <b>Скорость:</b> ⬇️ <code>{obj['netIO']['down'] / MB:.2f} MB/s</code> | ⬆️ <code>{obj['netIO']['up'] / MB:.2f} MB/s</code>
-└ <b>Трафик:</b> ⬇️ <code>{obj['netTraffic']['recv'] / GB:.2f} GB</code> | ⬆️ <code>{obj['netTraffic']['sent'] / GB:.2f} GB</code>
+├ <b>IPv4:</b> <code>{obj.publicIP.ipv4}</code>
+├ <b>IPv6:</b> <code>{obj.publicIP.ipv6 or 'Отключен'}</code>
+├ <b>Соединения:</b> <code>{obj.tcpCount}</code> TCP / <code>{obj.udpCount}</code> UDP
+├ <b>Скорость:</b> ⬇️ <code>{obj.netIO.down / MB:.2f} MB/s</code> | ⬆️ <code>{obj.netIO.up / MB:.2f} MB/s</code>
+└ <b>Трафик:</b> ⬇️ <code>{obj.netTraffic.recv / GB:.2f} GB</code> | ⬆️ <code>{obj.netTraffic.sent / GB:.2f} GB</code>
 
-⚡️ <b>Xray Core v{obj['xray']['version']}</b>
+⚡️ <b>Xray Core v{obj.xray.version}</b>
 └ <b>Статус:</b> {xr_status}
 
 🤖 <b>Other</b>
-├ <b>Потоков:</b> <code>{obj['appStats']['threads']}</code>
-├ <b>RAM:</b> <code>{obj['appStats']['mem'] / MB:.2f} MB</code>
+├ <b>Потоков:</b> <code>{obj.appStats.threads}</code>
+├ <b>RAM:</b> <code>{obj.appStats.mem / MB:.2f} MB</code>
 └ <b>Uptime:</b> <code>{app_up}</code>"""
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None)
 
@@ -323,23 +324,23 @@ class AdminBot:
                 self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
                 return
 
-            bw = info['bandwidth']
-            up = bw['total']['upload']
-            down = bw['total']['download']
-            wl_up = bw['wl_total']['upload']
-            wl_down = bw['wl_total']['download']
-            monthly = bw['monthly']
-            wl_monthly = bw['wl_monthly']
-            limit = bw['limit']
-            wl_limit = bw['wl_limit']
-            times = info['time']
-            token = info['token']
-            displayname = info['displayname']
-            status = "🟢 Включен" if info['enabled'] else "🔴 Отключен"
-            wl_status = "🟢 Включен" if info['wl_enabled'] else "🔴 Отключен"
-            online = "🟢 Да" if info['online'] else "🔴 Нет"
-            fingerprint = info['fingerprint']
-            domain = self.cfg['domain']
+            bw = info.bandwidth
+            up = bw.total.upload
+            down = bw.total.download
+            wl_up = bw.wl_total.upload
+            wl_down = bw.wl_total.download
+            monthly = bw.monthly
+            wl_monthly = bw.wl_monthly
+            limit = bw.limit
+            wl_limit = bw.wl_limit
+            times = info.time
+            token = info.token
+            displayname = info.displayname
+            status = "🟢 Включен" if info.enabled else "🔴 Отключен"
+            wl_status = "🟢 Включен" if info.wl_enabled else "🔴 Отключен"
+            online = "🟢 Да" if info.online else "🔴 Нет"
+            fingerprint = info.fingerprint
+            domain: str = self.cfg['domain']
             if times:
                 days_left = str((times - int(time.time())) // 86400)
                 date = datetime.fromtimestamp(times, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
@@ -393,7 +394,7 @@ class AdminBot:
             self.bot.send_message(message.chat.id, f"❌ Ошибка сброса: {obj}")
             return
         
-        self.bot.send_message(message.chat.id, f"✅ Пользователь был сброшен.\n\nToken: <code>{obj['token']}</code>\nUUID: <code>{obj['uuid']}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
+        self.bot.send_message(message.chat.id, f"✅ Пользователь был сброшен.\n\nToken: <code>{obj.token}</code>\nUUID: <code>{obj.uuid}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
     def _step_add_user_name(self, message: types.Message) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return 
@@ -468,11 +469,11 @@ class AdminBot:
                 return
             text = (
                 f"ℹ️ <b>Код: <code>{code}</code></b>\n\n"
-                f"Тип: <code>{info.get('action', 'N/A')}</code>\n"
-                f"Перманентный: <b>{"Да" if info.get('perma', False) else "Нет"}</b>\n"
-                f"Дней: <code>{info.get('days', 'N/A')}</code>\n"
-                f"Гигабайт: <code>{info.get('gb', 'N/A')}</code>\n"
-                f"ВЛ Гигабайт: <code>{info.get('wl_gb', 'N/A')}</code>\n"
+                f"Тип: <code>{info.action}</code>\n"
+                f"Перманентный: <b>{"Да" if info.perma else "Нет"}</b>\n"
+                f"Дней: <code>{info.days}</code>\n"
+                f"Гигабайт: <code>{info.gb}</code>\n"
+                f"ВЛ Гигабайт: <code>{info.wl_gb}</code>\n"
             )
             self.bot.send_message(message.chat.id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
         except Exception as e:
@@ -611,19 +612,19 @@ class AdminBot:
         try:
             snapshots = self.sub.get_bw_history(username, days=days)
             info = self.sub.get_info(username, pretty=False)
-            if not info or 'bandwidth' not in info:
+            if not info:
                 self.bot.send_message(chat_id, "❌ Ошибка получения данных", reply_markup=self.get_main_menu())
                 return
 
-            bandwidths = info['bandwidth']
+            bandwidths = info.bandwidth
 
-            upload_fmt = fmt_bytes(bandwidths['total']['upload'])
-            download_fmt = fmt_bytes(bandwidths['total']['download'])
-            wl_upload_fmt = fmt_bytes(bandwidths['wl_total']['upload'])
-            wl_download_fmt = fmt_bytes(bandwidths['wl_total']['download'])
+            upload_fmt = fmt_bytes(bandwidths.total.upload)
+            download_fmt = fmt_bytes(bandwidths.total.download)
+            wl_upload_fmt = fmt_bytes(bandwidths.wl_total.upload)
+            wl_download_fmt = fmt_bytes(bandwidths.wl_total.download)
 
-            limit = bandwidths['limit']
-            monthly = bandwidths['monthly']
+            limit = bandwidths.limit
+            monthly = bandwidths.monthly
 
             if limit == 0:
                 limit_str = "Безлимит"
@@ -634,8 +635,8 @@ class AdminBot:
                 used_str = fmt_bytes(monthly)
                 percent_str = f"{int((monthly / (limit * 10**9)) * 100)}%" if monthly > 0 else "0%"
 
-            wl_limit = bandwidths['wl_limit']
-            wl_monthly = bandwidths['wl_monthly']
+            wl_limit = bandwidths.wl_limit
+            wl_monthly = bandwidths.wl_monthly
 
             if wl_limit == 0:
                 wl_limit_str = "Безлимит"
@@ -648,7 +649,7 @@ class AdminBot:
 
             text = f"""📈 <b>График трафика за {days} дней</b>
 
-<b>Пользователь:</b> <code>{username}</code> ({info['displayname']})
+<b>Пользователь:</b> <code>{username}</code> ({info.displayname})
 
 <b>Общий трафик:</b>
 ├ Upload: {upload_fmt}
@@ -665,7 +666,7 @@ class AdminBot:
             if len(text) > 1024:
                 text = text[:1020] + "..."
 
-            chart_img = bandwidth_chart(snapshots, label=info['displayname'], lang='ru')
+            chart_img = bandwidth_chart(snapshots, label=info.displayname, lang='ru')
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_main_menu())
             else:
@@ -706,8 +707,9 @@ class PublicBot:
 
             self.bot = telebot.TeleBot(token)
 
-            self.TEXTS = self.cfg['publicbot']['lang']
+            self.TEXTS: dict[str, dict[str, str]] = self.cfg['publicbot']['lang']
 
+            # NOTE: dumbass telebot has trash typing
             self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # pyright: ignore[reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))(self.set_lang_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
@@ -762,45 +764,45 @@ class PublicBot:
         if not info:
             return
         daystext = "дней" if lang == 'ru' else "days"  
-        limit_str = f"{info['bandwidth']['limit']} GB" if info['bandwidth']['limit'] else t['unlimited']
-        wl_limit_str = f"{info['bandwidth']['wl_limit']} GB" if info['bandwidth']['wl_limit'] else t['unlimited']
+        limit_str = f"{info.bandwidth.limit} GB" if info.bandwidth.limit else t['unlimited']
+        wl_limit_str = f"{info.bandwidth.wl_limit} GB" if info.bandwidth.wl_limit else t['unlimited']
 
-        monthly_str = info['bandwidth']['monthly']
-        wl_monthly_str = info['bandwidth']['wl_monthly']
+        monthly_str = str(info.bandwidth.monthly)
+        wl_monthly_str = str(info.bandwidth.wl_monthly)
 
         if limit_str == t['unlimited']:
             monthly_str = t['unlimited']
         if wl_limit_str == t['unlimited']:
             wl_monthly_str = t['unlimited']
         
-        if info['time']:
-            days_left = str((info['time'] - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(info['time'], tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+        if info.time:
+            days_left = str((info.time - int(time.time())) // 86400)
+            date_end = datetime.fromtimestamp(info.time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t['lifetime']
             
-        status = "🟢" if info['enabled'] else "🔴"
-        wl_status = "🟢" if info['wl_enabled'] else "🔴"
+        status = "🟢" if info.enabled else "🔴"
+        wl_status = "🟢" if info.wl_enabled else "🔴"
 
-        online = "🟢" if info['online'] else "🔴"
+        online = "🟢" if info.online else "🔴"
         text = t['info_text'].format(
-            username=info['displayname'],
+            username=info.displayname,
             status=status,
             wl_status=wl_status,
             online=online,
-            total=info['bandwidth']['total']['total'],
+            total=info.bandwidth.total.total,
             monthly=monthly_str,
             limit=limit_str,
-            wl_total=info['bandwidth']['wl_total']['total'],
+            wl_total=info.bandwidth.wl_total.total,
             wl_monthly=wl_monthly_str,
             wl_limit=wl_limit_str,
-            up=info['bandwidth']['total']['upload'],
-            down=info['bandwidth']['total']['download'],
-            wl_up=info['bandwidth']['wl_total']['upload'],
-            wl_down=info['bandwidth']['wl_total']['download'],
+            up=info.bandwidth.total.upload,
+            down=info.bandwidth.total.download,
+            wl_up=info.bandwidth.wl_total.upload,
+            wl_down=info.bandwidth.wl_total.download,
             days=time_str,
-            fingerprint=info['fingerprint']
+            fingerprint=info.fingerprint
         )
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_menu(uid))
 
@@ -978,7 +980,7 @@ class PublicBot:
             return
 
         domain = self.cfg['domain']
-        link = f"{domain}/{self.cfg['uri']}?token={info['token']}&lang={lang}"
+        link = f"{domain}/{self.cfg['uri']}?token={info.token}&lang={lang}"
         
         qr = self.sub.make_qr(link)
 
@@ -1245,7 +1247,8 @@ class PublicBot:
                 if not isinstance(username, str):
                     return
                 obj = self.sub.reset_user(username)
-                if not isinstance(obj, dict):
+                if not is_dataclass(obj):
+                    self.log.error(f"reset_user error: {obj}")
                     self.bot.send_message(message.chat.id, "Unknown error", reply_markup=self.get_menu(uid))
                     return
                 self.bot.send_message(message.chat.id, t['reset_success'], reply_markup=self.get_menu(uid))
@@ -1302,20 +1305,20 @@ class PublicBot:
         try:
             snapshots = self.sub.get_bw_history(username, days=days)
             info = self.sub.get_info(username, pretty=False)
-            if not info or 'bandwidth' not in info:
+            if not info:
                 self.bot.send_message(chat_id, "Error fetching data", 
                                       reply_markup=self.get_menu(uid))
                 return
 
-            bandwidths = info['bandwidth']
+            bandwidths = info.bandwidth
 
-            upload_fmt = fmt_bytes(bandwidths['total']['upload'])
-            download_fmt = fmt_bytes(bandwidths['total']['download'])
-            wl_upload_fmt = fmt_bytes(bandwidths['wl_total']['upload'])
-            wl_download_fmt = fmt_bytes(bandwidths['wl_total']['download'])
+            upload_fmt = fmt_bytes(bandwidths.total.upload)
+            download_fmt = fmt_bytes(bandwidths.total.download)
+            wl_upload_fmt = fmt_bytes(bandwidths.wl_total.upload)
+            wl_download_fmt = fmt_bytes(bandwidths.wl_total.download)
 
-            limit = bandwidths['limit']
-            monthly = bandwidths['monthly']
+            limit = bandwidths.limit
+            monthly = bandwidths.monthly
 
             if limit == 0:
                 limit_str = t['unlimited']
@@ -1326,8 +1329,8 @@ class PublicBot:
                 used_str = fmt_bytes(monthly)
                 percent_str = f"{int((monthly / (limit * 10**9)) * 100)}%" if monthly > 0 else "0%"
 
-            wl_limit = bandwidths['wl_limit']
-            wl_monthly = bandwidths['wl_monthly']
+            wl_limit = bandwidths.wl_limit
+            wl_monthly = bandwidths.wl_monthly
 
             if wl_limit == 0:
                 wl_limit_str = t['unlimited']
@@ -1354,7 +1357,7 @@ class PublicBot:
 
             if len(text) > 1024:
                 text = text[:1020] + "..."
-            chart_img = bandwidth_chart(snapshots, label=info['displayname'], lang=lang)
+            chart_img = bandwidth_chart(snapshots, label=info.displayname, lang=lang)
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
             else:

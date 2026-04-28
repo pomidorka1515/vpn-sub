@@ -23,11 +23,13 @@ import qrcode
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
 from typing import Any, cast, NamedTuple, overload, Literal
+from dacite import from_dict
 from custom_types import (
     ServerMetricsResponse, Inbound, 
     SettingsClient, NewUserInfo,
     RegisterWithCodeInfo, CodeObject,
-    UserInfo, ResetUserObject,
+    UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal, 
+    ResetUserObject, 
     ApplyBonusCodeObject,
     PublicBotLike, AdminBotLike,
     client_stats_to_settings,
@@ -238,17 +240,18 @@ class Subscription:
 
         cached = panel.get_cache()
         if cached is not None and now - panel.cache_time < ttl:
-            return cached
+            return cached # NOTE: cache stores dataclasses!
         
         try:
             response = panel.get(f"{panel.base_url}panel/api/inbounds/list")
-            data = response.json()
+            data: dict[str, Any] = response.json()
             if response.status_code not in [200] or not data.get("success"):
                 self.log.error(f"getinbounds fail: {data.get('msg')}")
                 return []
-            inbounds = data['obj']
+            raw_inbounds: list[dict[str, Any]] = data['obj']
+            inbounds = [from_dict(Inbound, i) for i in raw_inbounds]
             if panel.ignore_inbounds:
-                inbounds = [i for i in inbounds if i['id'] not in panel.ignore_inbounds]
+                inbounds = [i for i in inbounds if i.id not in panel.ignore_inbounds]
             panel.set_cache(inbounds)
             return inbounds
         except Exception as e:
@@ -306,10 +309,10 @@ class Subscription:
         for panel in panels:
             inbounds = self.getinbounds(panel)
             for i in inbounds:
-                for v in (i['clientStats'] or []):
-                    if v['uuid'] == userid:
-                        up_total += v['up']
-                        down_total += v['down']
+                for v in (i.clientStats or []):
+                    if v.uuid == userid:
+                        up_total += v.up
+                        down_total += v.down
         
         return BandwidthInfo(up_total, down_total, up_total + down_total)
     def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
@@ -331,34 +334,46 @@ class Subscription:
             list_2_add: list[int] = []
             need_vision: list[int] = []
             for i in inbounds:
-                if i['protocol'] != "vless":
-                    self.log.debug(f"Non-VLESS inbound found ({i['protocol']}). Ignoring.")
+                if i.protocol != "vless":
+                    self.log.debug(f"Non-VLESS inbound found ({i.protocol}). Ignoring.")
                     continue
-                already_exists = any(v['uuid'] == userid for v in i['clientStats'])
+                already_exists = any(v.uuid == userid for v in i.clientStats)
                 if already_exists:
                     continue
-                list_2_add.append(i['id'])
-                streamsettings = json.loads(i['streamSettings'])
+                list_2_add.append(i.id)
+                streamsettings = json.loads(i.streamSettings)
                 if streamsettings['network'] in ['tcp', 'raw']:
-                    need_vision.append(i['id'])
+                    need_vision.append(i.id)
             
-            payload: dict[str, list[SettingsClient]] = {"clients": [{
-                "id": userid,
-                "flow": "",
-                "email": "",
-                "limitIp": 0,
-                "totalGB": 0,
-                "expiryTime": 0,
-                "enable": True,
-                "tgId": "",
-                "subId": "",
-                "comment": "",
-                "reset": 0
-            }]}
+            payload: dict[str, list[SettingsClient]] = {"clients": [SettingsClient(
+                id=userid,
+                flow="",
+                email="",
+                limitIp=0,
+                totalGB=0,
+                expiryTime=0,
+                enable=True,
+                tgId="",
+                subId="",
+                comment="",
+                reset=0
+            )]}
+            #     "id": userid,
+            #     "flow": "",
+            #     "email": "",
+            #     "limitIp": 0,
+            #     "totalGB": 0,
+            #     "expiryTime": 0,
+            #     "enable": True,
+            #     "tgId": "",
+            #     "subId": "",
+            #     "comment": "",
+            #     "reset": 0
+            # }]}
 
             for j in list_2_add:
-                payload['clients'][0]['email'] = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
-                payload['clients'][0]['flow'] = "xtls-rprx-vision" if j in need_vision else ""
+                payload['clients'][0].email = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
+                payload['clients'][0].flow = "xtls-rprx-vision" if j in need_vision else ""
                 data: dict[str, Any] = {
                     'id': j,
                     'settings': json.dumps(payload)
@@ -390,7 +405,7 @@ class Subscription:
 
             for j in inbounds:
                 response = panel.post(
-                    f"{panel.base_url}panel/api/inbounds/{str(j['id'])}/delClient/{userid}",
+                    f"{panel.base_url}panel/api/inbounds/{str(j.id)}/delClient/{userid}",
                     headers={'Accept': 'application/json'}
                 )
                 if not (response.status_code in [200, 201] and response.json().get('success')):
@@ -427,13 +442,13 @@ class Subscription:
             if self.whitelist_panel: panels.remove(self.whitelist_panel)
             for panel in panels:
                 inbounds = self.getinbounds(panel)
-                l = [i['id'] for i in inbounds if i['protocol'] == "vless"]
-                the = {str(vi['id']): vx for vi in inbounds for vx in vi['clientStats'] if vx['uuid'] == userid}
+                l = [i.id for i in inbounds if i.protocol == "vless"]
+                the = {str(vi.id): vx for vi in inbounds for vx in vi.clientStats if vx.uuid == userid}
                 for k in l:
                     if str(k) not in the: continue 
                     payload = client_stats_to_settings(the[str(k)])
-                    payload['enable'] = enable
-                    payload['id'] = userid
+                    payload.enable = enable
+                    payload.id = userid
                     response = panel.post(
                         f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
                         data={'id': k, 'settings': json.dumps({"clients": [payload]})},
@@ -451,14 +466,14 @@ class Subscription:
         if wl_enable is not None and self.whitelist_panel:
             panel = self.whitelist_panel
             inbounds = self.getinbounds(panel)
-            l = [i['id'] for i in inbounds if i['protocol'] == "vless"]
-            the = {str(vi['id']): vx for vi in inbounds for vx in vi['clientStats'] if vx['uuid'] == userid}
+            l = [i.id for i in inbounds if i.protocol == "vless"]
+            the = {str(vi.id): vx for vi in inbounds for vx in vi.clientStats if vx.uuid == userid}
             
             for k in l:
                 if str(k) not in the: continue
                 payload = client_stats_to_settings(the[str(k)])
-                payload['enable'] = wl_enable
-                payload['id'] = userid
+                payload.enable = wl_enable
+                payload.id = userid
                 
                 panel.post(
                     f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
@@ -537,7 +552,14 @@ class Subscription:
             if x is not None:
                 self.log.error(f"add_new_user: {x}")
                 return x
-            return {"username": username, "token": token, "uuid": userid, "fingerprint": fingerprint, "displayname": displayname}
+
+            return NewUserInfo(
+                username=username,
+                token=token,
+                uuid=userid,
+                fingerprint=fingerprint,
+                displayname=displayname
+            )
         finally:
             self._drop_cache()
     def update_params(
@@ -620,27 +642,27 @@ class Subscription:
         Potentially dangerous operation, seperate function."""
         if not self.isuser(username):
             return "Unknown username"
-        olduid = self.cfg['users'][username]
+        olduid: str = self.cfg['users'][username]
         for panel in self.panels:
             inbounds = self.getinbounds(panel)
             l: list[int] = []
             need_vision: list[int] = []
             for i in inbounds:
-                l.append(i['id'])
+                l.append(i.id)
             the: dict[str, SettingsClient] = {}
             for vi in inbounds:
-                for vx in vi['clientStats']:
-                    if vx['uuid'] == olduid:
-                        the[str(vi['id'])] = client_stats_to_settings(vx)
-                        if json.loads(vi['streamSettings'])['network'] in ["tcp", "raw"]:
-                            need_vision.append(vi['id'])
+                for vx in vi.clientStats:
+                    if vx.uuid == olduid:
+                        the[str(vi.id)] = client_stats_to_settings(vx)
+                        if json.loads(vi.streamSettings)['network'] in ["tcp", "raw"]:
+                            need_vision.append(vi.id)
                         break
             for k in l:
                 if str(k) not in the:
                     continue
                 payload = the[str(k)]
-                payload['id'] = uid
-                payload['flow'] = "xtls-rprx-vision" if k in need_vision else ""
+                payload.id = uid
+                payload.flow = "xtls-rprx-vision" if k in need_vision else ""
                 data: dict[str, Any] = {
                     'id': k,
                     'settings': json.dumps({"clients": [payload]})
@@ -769,15 +791,15 @@ class Subscription:
             webui_passwords[ext_username] = hashed_password
             webui_users[ext_username] = username
 
-            result: RegisterWithCodeInfo = {
-                "username": username,
-                "token": token,
-                "uuid": userid,
-                "fingerprint": fingerprint,
-                "limit": gb,
-                "wl_limit": wl_gb,
-                "time": timee,
-            }
+            result = RegisterWithCodeInfo(
+                username=username,
+                token=token,
+                uuid=userid,
+                fingerprint=fingerprint,
+                limit=gb,
+                wl_limit=wl_gb,
+                time=timee
+            )
 
         try:
             self.add_users(username=username)
@@ -802,11 +824,14 @@ class Subscription:
             if code_type not in ["register", "bonus"]:
                 self.log.critical(f"code {code} has an action {code_type}, must be either register or bonus")
                 raise ValueError("")
-            return {"action": code_type, 
-                    "perma": result.get('perma', False), 
-                    "days": result.get('days', 0), 
-                    "gb": result.get('gb', 0), 
-                    "wl_gb": result.get('wl_gb', 0)}
+            return CodeObject(
+                code=code,
+                action=code_type,
+                perma=result.get('perma', False),
+                days=result.get('days', 0),
+                gb=result.get('gb', 0),
+                wl_gb=result.get('wl_gb', 0)
+            )
         else:
             return False
     def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject | str:
@@ -879,15 +904,15 @@ class Subscription:
             current_wl_bw[0] = new_wl_limit
             time_map[username] = new_time
     
-            result = {
-                "days": delta_days,
-                "gb": delta_gb,
-                "wl_gb": delta_wl_gb,
-                "perma": bool(code_item.get("perma", False)),
-                "time": new_time,
-                "limit": new_limit,
-                "wl_limit": new_wl_limit,
-            }
+            result = ApplyBonusCodeObject(
+                days=delta_days,
+                gb=delta_gb,
+                wl_gb=delta_wl_gb,
+                perma=bool(code_item.get('perma', False)),
+                time=new_time,
+                limit=new_limit,
+                wl_limit=new_wl_limit
+            )
     
         return result
 
@@ -921,7 +946,7 @@ class Subscription:
         """Returns True if deleted, False if not found."""
         def _delete(t: MutableMapping[str, Any]):
             for i, item in enumerate(cast(dict[CodeObject, str], t['codes'])):
-                if item.get('code') == code:
+                if item.code == code:
                     del t['codes'][i]
                     return True
             return False
@@ -950,34 +975,63 @@ class Subscription:
             bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in bandwidths))
             wl_bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in wl_bandwidths))
 
-        return {
-            "_": random.choice(cast(list[str], conf.get('funny_strings', []))),
-            "token": conf['tokens'][username],
-            "link": f"{domain}/sub?token={conf['tokens'][username]}",
-            "displayname": conf['displaynames'][username],
-            "uuid": conf['users'][username],
-            "fingerprint": conf['userFingerprints'][username],
-            "enabled": conf['status'][username],
-            "wl_enabled": conf['statusWl'][username],
-            "time": conf['time'][username],
-            "online": self.is_online(username),
-            "bandwidth": {
-                "total": {
-                    "upload": bandwidths.upload,
-                    "download": bandwidths.download,
-                    "total": bandwidths.total
-                },
-                "wl_total": {
-                    "upload": wl_bandwidths.upload,
-                    "download": wl_bandwidths.download,
-                    "total": wl_bandwidths.total
-                },
-                "monthly": monthly,
-                "wl_monthly": wl_monthly,
-                "limit": conf['bw'][username][0],
-                "wl_limit": conf['wl_bw'][username][0]
-            }
-        }
+        # return {
+        #     "_": random.choice(cast(list[str], conf.get('funny_strings', []))),
+        #     "token": conf['tokens'][username],
+        #     "link": f"{domain}/sub?token={conf['tokens'][username]}",
+        #     "displayname": conf['displaynames'][username],
+        #     "uuid": conf['users'][username],
+        #     "fingerprint": conf['userFingerprints'][username],
+        #     "enabled": conf['status'][username],
+        #     "wl_enabled": conf['statusWl'][username],
+        #     "time": conf['time'][username],
+        #     "online": self.is_online(username),
+        #     "bandwidth": {
+        #         "total": {
+        #             "upload": bandwidths.upload,
+        #             "download": bandwidths.download,
+        #             "total": bandwidths.total
+        #         },
+        #         "wl_total": {
+        #             "upload": wl_bandwidths.upload,
+        #             "download": wl_bandwidths.download,
+        #             "total": wl_bandwidths.total
+        #         },
+        #         "monthly": monthly,
+        #         "wl_monthly": wl_monthly,
+        #         "limit": conf['bw'][username][0],
+        #         "wl_limit": conf['wl_bw'][username][0]
+        #     }
+        # }
+        return UserInfo(
+            _=random.choice(cast(list[str], conf.get('funny_strings', []))),
+            token=conf['tokens'][username],
+            link=f"{domain}/sub?token={conf['tokens'][username]}",
+            displayname=conf['displaynames'][username],
+            uuid=conf['users'][username],
+            fingerprint=conf['userFingerprints'][username],
+            enabled=conf['status'][username],
+            wl_enabled=conf['statusWl'][username],
+            time=conf['time'][username],
+            online=self.is_online(username),
+            bandwidth=UserInfoBandwidth(
+                total=UserInfoBandwidthTotal(
+                    upload=bandwidths.upload,
+                    download=bandwidths.download,
+                    total=bandwidths.total
+                ),
+                wl_total=UserInfoBandwidthTotal(
+                    upload=wl_bandwidths.upload,
+                    download=wl_bandwidths.download,
+                    total=wl_bandwidths.total
+                ),
+                monthly=monthly,
+                wl_monthly=wl_monthly,
+                limit=conf['bw'][username][0],
+                wl_limit=conf['wl_bw'][username][0]
+            )
+
+        )
     def get_info_telegram(self, tgid: int) -> UserInfo | None:
         """Returns all user info by telegram ID. None if target uid wasnt found."""
         username = cast(str, self.cfg['tgids'].get(str(tgid), None))
@@ -1011,12 +1065,12 @@ class Subscription:
         inbounds = self.getinbounds(panel=panel)
         emails: dict[str, str] = {}
         for i in inbounds:
-            for r in i['clientStats']:
-                actual_email = r.get('email', '')
+            for r in i.clientStats:
+                actual_email = r.email
                 parts = actual_email.rsplit('-', 1)
                 parsed_username = parts[0] if len(parts) == 2 else actual_email
                 if parsed_username == username:
-                    emails[str(i['id'])] = actual_email
+                    emails[str(i.id)] = actual_email
         return emails
 
     @overload
@@ -1071,7 +1125,7 @@ class Subscription:
     
 
         self._drop_cache()
-        return {'uuid': newid, 'token': newt}
+        return ResetUserObject(uuid=newid, token=newt)
 
     @staticmethod
     def fmt_time(seconds: int) -> str:
@@ -1417,25 +1471,25 @@ class BWatch:
                 
                 key = panel.name
                 problems: list[str] = []
-                obj = status['obj']
+                obj = status.obj
 
-                xray = obj['xray']
-                if xray['state'] != 'running':
-                    problems.append(f"Xray: {xray['state']} - {xray['errorMsg']}")
+                xray = obj.xray
+                if xray.state != 'running':
+                    problems.append(f"Xray: {xray.state} - {xray.errorMsg}")
                 
-                cpu = obj['cpu']
+                cpu = obj.cpu
                 if cpu > 90:
                     problems.append(f"CPU: {cpu}%")
                 
-                mem = obj['mem']
-                if mem['total'] > 0:
-                    mem_pct = (mem['current'] / mem['total']) * 100
+                mem = obj.mem
+                if mem.total > 0:
+                    mem_pct = (mem.current / mem.total) * 100
                     if mem_pct > 90:
                         problems.append(f"RAM: {mem_pct:.0f}%")
 
-                disk = obj['disk']
-                if disk['total']> 0:
-                    disk_pct = (disk['current'] / disk['total']) * 100
+                disk = obj.disk
+                if disk.total > 0:
+                    disk_pct = (disk.current / disk.total) * 100
                     if disk_pct > 90:
                         problems.append(f"Disk: {disk_pct:.0f}%")
                 

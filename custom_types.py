@@ -1,14 +1,34 @@
 from __future__ import annotations
 
 from typing import (
-    TypedDict, Protocol,
+    Protocol,
     runtime_checkable, Any, Iterable,
     Callable, Iterator, Self
 )
 from types import TracebackType
 from collections.abc import MutableMapping
 
-### Bots ###
+from dataclasses import dataclass
+
+__all__ = [
+    'AdminBotLike', 'PublicBotLike', 
+    'ConfigLike', 'LinesConfigLike',
+
+    'MemoryStats', 'SwapStats', 'DiskStats', 'XrayStats',
+    'NetIOStats', 'NetTrafficStats', 'PublicIPStats', 'AppStats',
+
+    'ServerMetricsObj', 'ServerMetricsResponse', 'ClientStats',
+    'Inbound', 'InboundListResponse', 'InboundSettings',
+
+    'SettingsClient', 'NewUserInfo', 'RegisterWithCodeInfo',
+    'CodeObject', 'ResetUserObject', 'ApplyBonusCodeObject',
+
+    'UserInfoBandwidthTotal', 'UserInfoBandwidth', 'UserInfo',
+
+    'client_stats_to_settings'
+]
+
+### Stub Protocols ###
 
 @runtime_checkable
 class AdminBotLike(Protocol):
@@ -176,34 +196,43 @@ class LinesConfigLike(Protocol):
     ) -> None: ...
 
 ### 3x-ui status object ###
-class MemoryStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class MemoryStats:
     current: int
     total: int
-class SwapStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class SwapStats:
     current: int
     total: int
-class DiskStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class DiskStats:
     current: int
     total: int
-class XrayStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class XrayStats:
     state: str
     errorMsg: str
     version: str
-class NetIOStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class NetIOStats:
     up: int
     down: int
-class NetTrafficStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class NetTrafficStats:
     sent: int
     recv: int
-class PublicIPStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class PublicIPStats:
     ipv4: str
     ipv6: str
-class AppStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class AppStats:
     threads: int
     mem: int
     uptime: int
 
-class ServerMetricsObj(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ServerMetricsObj:
     cpu: int
     cpuCores: int
     logicalPro: int
@@ -221,13 +250,15 @@ class ServerMetricsObj(TypedDict):
     publicIP: PublicIPStats
     appStats: AppStats
 
-class ServerMetricsResponse(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ServerMetricsResponse:
     success: bool
     msg: str
     obj: ServerMetricsObj
 
 ### 3x-ui inbound list object ###
-class ClientStats(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ClientStats:
     id: int
     inboundId: int
     enable: bool
@@ -242,7 +273,8 @@ class ClientStats(TypedDict):
     reset: int
     lastOnline: int
 
-class Inbound(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class Inbound:
     id: int
     up: int
     down: int
@@ -262,13 +294,15 @@ class Inbound(TypedDict):
     tag: str
     sniffing: str
 
-class InboundListResponse(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class InboundListResponse:
     success: bool
     msg: str
     obj: list[Inbound]
 
 ### 3x-ui client settings object ###
-class SettingsClient(TypedDict):
+@dataclass(slots=True, kw_only=True)
+class SettingsClient: # NOTE: this must NOT be frozen
     id: str
     flow: str
     email: str
@@ -281,12 +315,14 @@ class SettingsClient(TypedDict):
     comment: str
     reset: int
 
-class InboundSettings(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class InboundSettings:
     clients: list[SettingsClient]
 
 ### add_new_user() ###
 
-class NewUserInfo(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class NewUserInfo:
     username: str
     token: str
     uuid: str
@@ -295,7 +331,8 @@ class NewUserInfo(TypedDict):
 
 ### register_with_code() ###
 
-class RegisterWithCodeInfo(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class RegisterWithCodeInfo:
     username: str
     token: str
     uuid: str
@@ -305,8 +342,9 @@ class RegisterWithCodeInfo(TypedDict):
     time: int
 
 ### Code Object ###
-
-class CodeObject(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class CodeObject:
+    code: str
     action: str
     perma: bool
     days: int
@@ -314,19 +352,21 @@ class CodeObject(TypedDict):
     wl_gb: int
 
 ### reset_user() ###
-class ResetUserObject(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ResetUserObject:
     uuid: str
     token: str
 
 ### get_info() ###
-class UserInfoBandwidthTotal(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class UserInfoBandwidthTotal:
     upload: int | float
     download: int | float
     total: int | float
 
 ### apply_bonus_code() ###
-
-class ApplyBonusCodeObject(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ApplyBonusCodeObject:
     days: int
     gb: int
     wl_gb: int
@@ -336,16 +376,16 @@ class ApplyBonusCodeObject(TypedDict):
     wl_limit: int
 
 ### User Info ###
-
-class UserInfoBandwidth(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class UserInfoBandwidth:
     total: UserInfoBandwidthTotal
     wl_total: UserInfoBandwidthTotal
     monthly: int | float
     wl_monthly: int | float
     limit: int
     wl_limit: int
-
-class UserInfo(TypedDict):
+@dataclass(slots=True, frozen=True, kw_only=True)
+class UserInfo:
     _: str
     token: str
     link: str
@@ -369,16 +409,17 @@ def client_stats_to_settings(stats: ClientStats, flow: str = '', limit_ip: int =
         tg_id: Optional Telegram ID (default: '')
         comment: Optional comment (default: '')
     """
-    return {
-        'id': stats['uuid'],
-        'flow': flow,
-        'email': stats['email'],
-        'limitIp': limit_ip,
-        'totalGB': stats['total'],
-        'expiryTime': stats['expiryTime'],
-        'enable': stats['enable'],
-        'tgId': tg_id,
-        'subId': stats['subId'],
-        'comment': comment,
-        'reset': stats['reset']
-    }
+
+    return SettingsClient(
+        id=stats.uuid,
+        flow=flow,
+        email=stats.email,
+        limitIp=limit_ip,
+        totalGB=stats.total,
+        expiryTime=stats.expiryTime,
+        enable=stats.enable,
+        tgId=tg_id,
+        subId=stats.subId,
+        comment=comment,
+        reset=stats.reset
+    )
