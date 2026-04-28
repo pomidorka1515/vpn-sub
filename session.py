@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime, timedelta
-from requests import Session
+from requests import Session, Response
 
 from loggers import Logger
 from custom_types import Inbound
@@ -38,7 +37,7 @@ class XUiSession(Session):
             refresh_interval: Interval in minutes, controls session refresh cycle.
             https: set False for HTTP.
             nginx_auth: External authentication (A.K.A. Basic Auth.). Format: ('username', 'password')
-            ignore_inbounds: A list of inbound IDs to permanently ignore.
+            ignore_inbounds: A tuple of inbound IDs to permanently ignore.
             inject_headers: Extra headers merged into every request. 
                 Caller-supplied headers take precedence.
         """
@@ -56,12 +55,12 @@ class XUiSession(Session):
             self.name = name
             self.local = self.address in ('localhost', '::1', '127.0.0.1', '0.0.0.0')
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
-            self.last_login: datetime | None = None
+            self._login_monotonic: float = 0
             self._lock = threading.RLock()
             self._running = threading.Event()
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
-            self._cache_time: float = 0
+            self.cache_time: float = 0
             self._inject_headers = inject_headers or {}
     
             if nginx_auth:
@@ -69,7 +68,7 @@ class XUiSession(Session):
 
             self.login()
 
-    def request(self, *args: Any, **kwargs: Any):
+    def request(self, *args: Any, **kwargs: Any) -> Response:
         with self._lock:
             if self._needs_refresh():
                 self.login()
@@ -77,10 +76,10 @@ class XUiSession(Session):
         kwargs["headers"] = {**self._inject_headers, **headers}
         return super().request(*args, **kwargs)
 
-    def login(self):
+    def login(self) -> None:
         self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui ")
         with self._lock:
-            if self.last_login and not self._needs_refresh():
+            if self._login_monotonic and not self._needs_refresh():
                 return
             try:
                 login_url = f"{self.base_url}login"
@@ -100,7 +99,7 @@ class XUiSession(Session):
                 if not json_res.get("success"):
                     raise Exception(f"{json_res.get('msg')}")
 
-                self.last_login = datetime.now()
+                self._login_monotonic = time.monotonic()
                 self.log.info(f"{self.address}:{self.port} > logged in as {self.username}")
 
                 if not self._running.is_set():
@@ -109,10 +108,10 @@ class XUiSession(Session):
             except Exception as e:
                 self.log.critical(f"{self.address}:{self.port} > login failed: {str(e)}")
                 raise
-
-    def _start_refresh_thread(self):
+                
+    def _start_refresh_thread(self) -> None:
         self._running.set()
-        def refresh_loop():
+        def refresh_loop() -> None:
             while self._running.is_set():
                 time.sleep(60)
                 if self._needs_refresh():
@@ -124,10 +123,10 @@ class XUiSession(Session):
         thread = threading.Thread(target=refresh_loop, daemon=True, name="3x-ui")
         thread.start()
 
-    def _needs_refresh(self):
-        if not self.last_login:
+    def _needs_refresh(self) -> bool:
+        if not self._login_monotonic:
             return True
-        return (datetime.now() - self.last_login) > timedelta(minutes=self.refresh_interval)
+        return (time.monotonic() - self._login_monotonic) > (self.refresh_interval * 60)
 
     def get_cache(self) -> list[Inbound] | None:
         """Thread-safe cache read."""
@@ -146,9 +145,9 @@ class XUiSession(Session):
             self._cache = None
             self._cache_time = 0
 
-    def close(self):
+    def close(self) -> None:
         self._running.clear()
         super().close()
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.close()

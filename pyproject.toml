@@ -1,0 +1,112 @@
+[project]
+name = "vpn-sub"
+version = "0.1.0"
+description = "VPN subscription management service. Flask + Telegram bots + 3x-ui panel glue."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.13"
+dependencies = [
+    "jsonschema>=4.20.0",
+    "requests>=2.31.0",
+    "pyTelegramBotAPI>=4.15.0",
+    "Flask>=3.0.0",
+    "qrcode>=7.4",
+    "Pillow>=10.0.0",
+    "matplotlib>=3.8.0",
+    "gunicorn>=21.0.0",
+]
+
+[project.optional-dependencies]
+# pip install -e ".[dev]"
+dev = [
+    "mypy>=1.15",
+    "types-requests>=2.31",
+    "types-jsonschema>=4.23",
+    "types-Pillow>=10.2",
+]
+
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Flat layout — no packages, only top-level modules.
+py-modules = [
+    "app", "api", "bots", "chart",
+    "config", "core", "custom_types",
+    "loggers", "session",
+]
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.14"
+
+# Explicit list — new modules must be consciously opted in to type-checking.
+files = [
+    "config.py",
+    "custom_types.py",
+    "loggers.py",
+    "session.py",
+    "chart.py",
+    "core.py",
+    "api.py",
+    "bots.py",
+    "app.py",
+]
+
+# -- strict mode --------------------------------------------------------
+# Listed individually (instead of strict = true) so per-module relaxations
+# below are legible: you can see exactly which flags are being turned off
+# and why, rather than guessing which subset of --strict is in play.
+disallow_any_generics          = true
+disallow_untyped_calls         = true
+disallow_untyped_defs          = true
+disallow_incomplete_defs       = true
+check_untyped_defs             = true
+disallow_untyped_decorators    = true
+warn_redundant_casts           = true
+warn_unused_ignores            = true
+warn_return_any                = true
+no_implicit_reexport           = true
+strict_equality                = true
+extra_checks                   = true
+
+# -- extra quality flags ------------------------------------------------
+warn_unreachable    = true   # dead code after raise / return / assert False
+warn_unused_configs = true   # catch stale per-module overrides
+
+# -- output -------------------------------------------------------------
+pretty              = true
+show_error_codes    = true
+show_column_numbers = true
+show_error_context  = true
+
+# -- third-party stubs --------------------------------------------------
+# qrcode has no py.typed and no stub package on PyPI.
+# telebot (pyTelegramBotAPI >=4.x) ships py.typed — no override needed.
+# Flask, matplotlib, Pillow, requests all ship bundled types or stubs.
+[[tool.mypy.overrides]]
+module = ["qrcode.*"]
+ignore_missing_imports = true
+
+# -- per-module relaxations ---------------------------------------------
+# bots, core, and api are large files that are not yet fully annotated.
+# Strict def-level checks are turned off so mypy still catches errors
+# inside the functions that ARE annotated, without failing on every
+# unannotated def. Remove entries here as annotations are filled in.
+[[tool.mypy.overrides]]
+module = ["bots", "core", "api"]
+disallow_untyped_defs       = false
+disallow_incomplete_defs    = false
+disallow_untyped_calls      = false
+warn_return_any             = false
+
+# -- pylance compatibility ----------------------------------------------
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+venvPath = "."                                                                                                                                                                                                    
+venv = "venv"

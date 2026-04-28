@@ -7,12 +7,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from core import BandwidthSnapshot, fmt_bytes
-from typing import cast
+from typing import cast, TypedDict
 __all__ = ['bandwidth_chart']
 
-# Palette — gray with subtle accents
 _BG       = '#1a1a1d'
 _PANEL    = '#232327'
 _GRID     = '#2c2c31'
@@ -20,10 +18,16 @@ _TEXT     = '#d4d4d8'
 _TEXT_DIM = '#8e8e96'
 _BORDER   = '#3a3a42'
 
-_REG_DOWN = '#9ca3af'  # gray-400
-_REG_UP   = '#d1d5db'  # gray-300
-_WL_DOWN  = '#6b7280'  # gray-500
-_WL_UP    = '#a1a1aa'  # zinc-400
+_REG_DOWN = '#9ca3af'
+_REG_UP   = '#d1d5db'
+_WL_DOWN  = '#6b7280'
+_WL_UP    = '#a1a1aa'
+
+### NOTE ###
+# Matplotlib typings arent perfect.
+# Having >20 pyright errors with strict type checking 
+#  is normal, its just noise.
+### NOTE ###
 
 _LANG = {
     "ru": {
@@ -48,7 +52,13 @@ _LANG = {
     }
 }
 
+class _BarKwargs(TypedDict):
+    width: float
+    edgecolor: str
+    zorder: int
 
+def _format_ticks(v: float, pos: float | None) -> str:
+    return fmt_bytes(v) 
 
 def _style_axes(ax: Axes, title: str) -> None:
     """Apply consistent gray-themed styling to a subplot."""
@@ -66,7 +76,7 @@ def _style_axes(ax: Axes, title: str) -> None:
         ax.spines[side].set_linewidth(0.8)
     
     ax.tick_params(colors=_TEXT_DIM, labelsize=9, length=0)
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: fmt_bytes(v)))
+    ax.yaxis.set_major_formatter(FuncFormatter(_format_ticks))
 
 
 def bandwidth_chart(
@@ -116,8 +126,7 @@ def bandwidth_chart(
                  x=0.07, y=0.97, ha='left')
     fig.text(0.07, 0.935, period, color=_TEXT_DIM, fontsize=10, ha='left')
     
-    bar_kwargs = dict(width=0.75, edgecolor='none', zorder=2)
-
+    bar_kwargs = _BarKwargs(width=0.75, edgecolor='none',zorder=2)
     _style_axes(ax_reg, t["regular_traffic"])
     ax_reg.bar(labels, reg_down, color=_REG_DOWN, label=t["download"], **bar_kwargs)
     ax_reg.bar(labels, reg_up, bottom=reg_down, color=_REG_UP,

@@ -3,6 +3,7 @@ import re
 import html
 import time
 
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
@@ -22,7 +23,7 @@ class _TelegramLogger(logging.Handler):
         self.bot = bot
         self.ansi_escape = _ANSI_ESCAPE
 
-    def emit(self, record: logging.LogRecord, **kwargs: Any):
+    def emit(self, record: logging.LogRecord, **kwargs: Any) -> None:
         """
         Args:
             record: The record to broadcast.
@@ -46,7 +47,7 @@ class _JSONLinesLogger(logging.Handler):
         self.cfg = config
         self.ansi_escape = _ANSI_ESCAPE
 
-    def emit(self, record: logging.LogRecord):
+    def emit(self, record: logging.LogRecord) -> None:
         """
         Args:
             record: The record to broadcast.
@@ -90,10 +91,10 @@ class Logger(logging.Logger):
             handler.setFormatter(self._make_formatter())
             self.addHandler(handler)
         
-    def _make_formatter(self):
+    def _make_formatter(self) -> logging.Formatter:
         parent = self
         class Fmt(logging.Formatter):
-            def format(self, record: logging.LogRecord):
+            def format(self, record: logging.LogRecord) -> str:
                 orig_level = record.levelname
                 color = parent.COLORS.get(record.levelname, parent.RESET)
                 record.levelname = f"{color}{record.levelname}{parent.RESET}"
@@ -105,22 +106,22 @@ class Logger(logging.Logger):
             datefmt='%Y-%m-%d %H:%M:%S'
         )
     
-    def set_tg_bot(self, bot: AdminBotLike):
+    def set_tg_bot(self, bot: AdminBotLike, level: int | None = None) -> None:
         self.handlers = [h for h in self.handlers if not isinstance(h, _TelegramLogger)]
         tg_handler = _TelegramLogger(bot)
-        tg_handler.setLevel(logging.WARNING) 
+        if level is None: tg_handler.setLevel(logging.WARNING) 
         simple_fmt = logging.Formatter('%(levelname)s [%(name)s] %(message)s')
         tg_handler.setFormatter(simple_fmt)
         self.addHandler(tg_handler)
 
-    def set_jsonl_handler(self, lines_config: LinesConfigLike):
+    def set_jsonl_handler(self, lines_config: LinesConfigLike, level: int | None = None) -> None:
         self.handlers = [h for h in self.handlers if not isinstance(h, _JSONLinesLogger)]
         jsonl_handler = _JSONLinesLogger(lines_config)
-        jsonl_handler.setLevel(logging.INFO)
+        if level is None: jsonl_handler.setLevel(logging.INFO)
         self.addHandler(jsonl_handler)
     
     @contextmanager
-    def loading(self):
+    def loading(self) -> Generator[None, None, None]:
         self.debug(f"Loading {self.name}...")
         t0 = time.monotonic()
         try:
@@ -132,13 +133,13 @@ class Logger(logging.Logger):
             raise
 
     @contextmanager
-    def span(self, name: str, verbose: bool = False):
+    def span(self, name: str, verbose: bool = False) -> Generator[None, None, None]:
         if verbose: self.debug(f"Executing: {name}")
         t0 = time.monotonic()
         try:
             yield
             dt = (time.monotonic() - t0) * 1000
-            self.info(f"Executed: {name} ({dt}ms)")
+            self.info(f"Executed: {name} ({dt:.1f}ms)")
         except Exception as e:
             self.error(f"Fail when executing {name}: {e}")
             raise

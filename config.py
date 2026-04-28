@@ -12,6 +12,7 @@ import copy
 import glob
 import json
 import os
+import shutil
 import tempfile
 import threading
 import io
@@ -131,37 +132,70 @@ def _do_backup(
     indent: int,
     instance_dir: str,
     log: Logger,
+    *,
+    raw: bool = False,
 ) -> None:
-    """Take a snapshot and write it to a per-instance subdirectory."""
+    """Take a snapshot and write it to a per-instance subdirectory.
+
+    Args:
+        raw: When True (used by LinesConfig) the file is copied byte-for-byte
+             instead of being parsed and re-serialised as JSON.  This is required
+             because JSONL files are not valid single-document JSON and
+             json.load() would raise JSONDecodeError on them.
+    """
     os.makedirs(instance_dir, exist_ok=True)
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = os.path.join(instance_dir, f"{timestamp}.json")
 
-    fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
-    os.close(fd)
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=indent, ensure_ascii=False)
-        os.replace(tmp, backup_path)
-    except Exception:
+    if raw:
+        backup_path = os.path.join(instance_dir, f"{timestamp}.jsonl")
+        fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
+        os.close(fd)
         try:
-            os.unlink(tmp)
+            shutil.copy2(path, tmp)
+            os.replace(tmp, backup_path)
         except FileNotFoundError:
-            pass
-        raise
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+            return
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+            raise
+    else:
+        backup_path = os.path.join(instance_dir, f"{timestamp}.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return
+
+        fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
+        os.close(fd)
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=indent, ensure_ascii=False)
+            os.replace(tmp, backup_path)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+            raise
 
     log.debug(f"backup saved: {backup_path}")
 
 def _prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
     """Keep only the N most recent backups."""
-    pattern = os.path.join(instance_dir, "*.json")
-    files = sorted(glob.glob(pattern))
+    # Match both .json (Config) and .jsonl (LinesConfig) backup files.
+    files = sorted(
+        glob.glob(os.path.join(instance_dir, "*.json"))
+        + glob.glob(os.path.join(instance_dir, "*.jsonl"))
+    )
     to_delete = files[:-retention]
     for f in to_delete:
         try:
@@ -171,20 +205,30 @@ def _prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
             log.error(f"prune failed for {f}: {e}")
 
 def _make_backup_thread(
-    *, # NOTE: kwarg only for safety
+    *, # NOTE: kwargs only for safety
     path: str,
     indent: int,
     backup_dir: str,
     backup_interval: int | float,
     backup_retention: int,
     stop_event: threading.Event,
+    raw: bool = False,
 ) -> threading.Thread:
+    """
+    Args:
+        path: Path to file.
+        indent: Amount of spaces to use as indent.
+        backup_dir: Path to backup.
+        backup_interval: Time in seconds between backups.
+        stop_event: Threading event to use.
+        raw: see _do_backup raw kwarg.
+    """
     def loop() -> None:
         log = Logger("Backup")
         instance_dir = _instance_backup_dir(path, backup_dir)
         while not stop_event.wait(backup_interval):
             try:
-                _do_backup(path, indent, instance_dir, log)
+                _do_backup(path, indent, instance_dir, log, raw=raw)
                 _prune_backups(instance_dir, backup_retention, log)
                 log.info("backup successful")
             except Exception as e:
@@ -220,9 +264,11 @@ class Config(MutableMapping[str, Any]):
 
     def __init__(
         self,
+        *,
         path: str,
         indent: int = 4,
         read_only: bool = False,
+        # read_only_jsonc: bool = False, TODO
         strict_schema: bool = True,
         sync_mode: SYNC_MODES = 'data',
         isolate_commits: bool = True,
@@ -247,6 +293,8 @@ class Config(MutableMapping[str, Any]):
             backup_retention: Amount of concurrent backups kept on disk.
         """
         self.log = Logger(type(self).__name__)
+        if not path.endswith('.json'):
+            self.log.warning("path doesnt end with .json, did you specify the correct path?")
         self._path: str = path
         self._indent: int = indent
         self._strict_schema: bool = strict_schema
@@ -273,7 +321,10 @@ class Config(MutableMapping[str, Any]):
         self._warned_update_callable: bool = False
 
         self._read_only: bool = read_only
-
+        # self._read_only_jsonc: bool = read_only_jsonc TODO
+        # if self._read_only_jsonc and not self._read_only:
+        #         raise ConfigError("read_only_jsonc cannot be True when read-only mode is not enabled")
+        
         self._backup_dir: str | None = backup_dir
         self._backup_interval: int | float = backup_interval
         self._backup_retention: int = backup_retention
@@ -283,7 +334,7 @@ class Config(MutableMapping[str, Any]):
             self.reload()
 
         if backup_dir:
-            self._backup_t = _make_backup_thread(
+            self._backup_t: threading.Thread | None = _make_backup_thread(
                 path=self._path,
                 indent=self._indent,
                 backup_dir=backup_dir,
@@ -293,11 +344,35 @@ class Config(MutableMapping[str, Any]):
             )
             self._backup_t.start()
         else:
-            self._backup_t: threading.Thread | None = None
+            self._backup_t = None
 
     @property
-    def path(self):
+    def path(self) -> str:
         return self._path
+    
+    @property
+    def size(self) -> int:
+        return os.path.getsize(self.path)
+    
+    def close(self) -> None:
+        """Stop the backup thread if one is running. Does not affect the data file."""
+        self._backup_stop.set()
+        if self._backup_t is not None:
+            self._backup_t.join(timeout=5)
+
+    def backup_now(self) -> None:
+        """Trigger an immediate backup snapshot, regardless of the schedule.
+
+        Obeys the same retention limit as the scheduled backup thread.
+
+        Raises:
+            ConfigError: If no backup_dir was configured on this instance.
+        """
+        if self._backup_dir is None:
+            raise ConfigError("backup_now() requires a backup_dir to be configured.")
+        instance_dir = _instance_backup_dir(self._path, self._backup_dir)
+        _do_backup(self._path, self._indent, instance_dir, self.log)
+        _prune_backups(instance_dir, self._backup_retention, self.log)
 
     def _raise_if_read_only(self) -> None:
         if self._read_only:
@@ -438,7 +513,7 @@ class Config(MutableMapping[str, Any]):
 
     def popitem(self) -> tuple[str, Any]:
         self._raise_if_read_only()
-        return self._run_edit(lambda tx: tx.popitem())
+        return cast(tuple[str, Any], self._run_edit(lambda tx: tx.popitem())) # _run_edit() returns Any but tx.popitem() is guarranteed to be a tuple[str, Any]
 
     def setdefault(self, key: str, default: Any = None) -> Any:
         self._raise_if_read_only()
@@ -531,7 +606,7 @@ class Config(MutableMapping[str, Any]):
     
         try:
             with open(schema_path, "r", encoding="utf-8") as handle:
-                schema = json.load(handle)
+                schema: dict[str, Any] = json.load(handle)
         except FileNotFoundError as exc:
             if self._strict_schema:
                 raise SchemaValidationError(
@@ -552,7 +627,7 @@ class Config(MutableMapping[str, Any]):
         self._schema_cache_path = schema_path
         self._schema_cache_signature = schema_sig
         self._schema_cache = schema
-        return cast(dict[Any, Any], schema)
+        return schema
 
     def _validate_schema(self, data: dict[str, Any]) -> None:
         schema = self._load_schema(data)
@@ -580,12 +655,10 @@ class Config(MutableMapping[str, Any]):
 
                 empty: dict[str, Any] = {}
                 self._validate_schema(empty)
-                _atomic_write_json(
+                new_signature = _atomic_write_json(
                     self._path, empty,
                     indent=self._indent, sync_mode=self._sync_mode,
                 )
-
-                new_signature = _file_signature(self._path)
                 if new_signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
 
@@ -637,9 +710,10 @@ class Config(MutableMapping[str, Any]):
         return value
 
 # pyright: reportPrivateUsage=false
+# pyright: reportUnnecessaryIsInstance=false
 # mypy: disable-error-code="attr-defined"
+# mypy: disable-error-code="override"
 # pylint: disable=protected-access
-
 class _ConfigTransaction(MutableMapping[str, Any]):
     """A batch edit working copy.
 
@@ -674,11 +748,10 @@ class _ConfigTransaction(MutableMapping[str, Any]):
             if signature is None:
                 current: dict[str, Any] = {}
                 cfg._validate_schema(current)
-                _atomic_write_json(
+                signature = _atomic_write_json(
                     cfg._path, current,
                     indent=cfg._indent, sync_mode=cfg._sync_mode,
                 )
-                signature = _file_signature(cfg._path)
                 if signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
                 cfg._data = current
@@ -719,7 +792,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> Literal[False] | None:
         cfg = self._config
 
         try:
@@ -836,7 +909,8 @@ class LinesConfig:
     ) -> None:
         """
         Args:
-            path: Path to the line-based file (created if missing).
+            path: Path to the line-based file (created if missing, including
+                parent directories).
             sync_mode: 'full' fsyncs file + parent directory, 'data' fsyncs file only,
                 'none' skips fsync entirely.
             backup_dir: Backup directory. Backups are disabled if set to None.
@@ -845,6 +919,8 @@ class LinesConfig:
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
+            if not path.endswith('.jsonl'):
+                self.log.warning("path doesnt end with .jsonl, did you specify the correct path?")
             self._path: str = path
             self._sync_mode: SYNC_MODES = sync_mode
             self._lock = threading.RLock()
@@ -855,24 +931,31 @@ class LinesConfig:
             self._backup_stop = threading.Event()
 
             _ensure_parent_dir(path)
+            if not os.path.exists(self._path):
+                with open(self._path, "a", encoding="utf-8"):
+                    pass
             if backup_dir:
-
-                self._backup_t = _make_backup_thread(
+                self._backup_t: threading.Thread | None  = _make_backup_thread(
                     path=self._path,
                     indent=4,
                     backup_dir=backup_dir,
                     backup_interval=backup_interval,
                     backup_retention=backup_retention,
-                    stop_event=self._backup_stop
+                    stop_event=self._backup_stop,
+                    raw=True,
                 )
                 self._backup_t.start()
             else:
-                self._backup_t: threading.Thread | None = None
+                self._backup_t = None
 
     @property
     def path(self) -> str:
         return self._path
 
+    @property
+    def size(self) -> int:
+        return os.path.getsize(self.path)
+    
     def append(self, record: dict[str, Any]) -> None:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
@@ -913,34 +996,60 @@ class LinesConfig:
                     return
 
     def tail(self, n: int = 100) -> Iterator[dict[str, Any]]:
-        """Iterate over the last n lines. Thread-safe at read-time.
-
-        Holds the lock only during the brief yield phase, not during I/O.
-        """
+        """Iterate over the last n lines. Thread-safe at read-time."""
         raw_lines = b""
-        with _locked_file(self._path, exclusive=False):
-            try:
-                with open(self._path, "rb") as f:
-                    f.seek(0, io.SEEK_END)
-                    remaining: int = f.tell()
-                    if remaining == 0:
-                        return
-                    while remaining > 0:
-                        chunk_size = min(8192, remaining)
-                        f.seek(max(0, remaining - chunk_size))
-                        chunk = f.read(chunk_size)
-                        remaining -= chunk_size
-                        raw_lines = chunk + raw_lines
-            except FileNotFoundError:
-                return
+        with self._lock:
+            with _locked_file(self._path, exclusive=False):
+                try:
+                    with open(self._path, "rb") as f:
+                        f.seek(0, io.SEEK_END)
+                        remaining: int = f.tell()
+                        if remaining == 0:
+                            return
+                        while remaining > 0:
+                            chunk_size = min(8192, remaining)
+                            f.seek(max(0, remaining - chunk_size))
+                            chunk = f.read(chunk_size)
+                            remaining -= chunk_size
+                            raw_lines = chunk + raw_lines
+                except FileNotFoundError:
+                    return
 
         # Parse outside the lock — no filesystem I/O, just CPU work
         lines = raw_lines.decode("utf-8").splitlines()
+        for line in lines[-n:]:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
+
+    def read_all(self) -> list[dict[str, Any]]:
+        """Return all records as a list. Thread-safe.
+
+        Convenience wrapper over list(self), prefer iterating directly when
+        the file is large and you don't need everything in memory at once.
+        """
+        return list(self)
+
+    def first(self, n: int = 1) -> list[dict[str, Any]]:
+        """Return the first n records without reading the whole file. Thread-safe.
+
+        Stops reading as soon as n records have been collected, making it
+        efficient for large files where only the oldest entries are needed.
+        """
+        result: list[dict[str, Any]] = []
         with self._lock:
-            for line in lines[-n:]:
-                line = line.strip()
-                if line:
-                    yield json.loads(line)
+            with _locked_file(self._path, exclusive=False):
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                result.append(json.loads(line))
+                                if len(result) >= n:
+                                    break
+                except FileNotFoundError:
+                    pass
+        return result
 
     def count(self) -> int:
         """Count total lines. Thread-safe at read-time."""
@@ -962,6 +1071,66 @@ class LinesConfig:
                         os.fsync(f.fileno())
                 if self._sync_mode == "full":
                     _fsync_parent_dir(self._path)
+
+    def compact(self, keep: Callable[[dict[str, Any]], bool] | None = None) -> int:
+        """Rewrite the file keeping only records that satisfy `keep`. Thread-safe.
+
+        This is the primary way to delete or deduplicate records, since JSONL
+        files do not support in-place line removal.
+
+        Args:
+            keep: Predicate called for every record. Records for which it returns
+                True are retained. Pass None to keep all records (acts as a
+                clean rewrite with no lines dropped).
+
+        Returns:
+            Number of records retained after compaction.
+        """
+        dir_path = os.path.dirname(self._path) or "."
+        with self._lock:
+            with _locked_file(self._path, exclusive=True):
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        records = [json.loads(line) for line in f if line.strip()]
+                except FileNotFoundError:
+                    return 0
+
+                kept = [r for r in records if keep(r)] if keep is not None else records
+
+                fd, tmp = tempfile.mkstemp(dir=dir_path, prefix=".tmp_compact_", suffix=".jsonl")
+                os.close(fd)
+                try:
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        for r in kept:
+                            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+                        if self._sync_mode != "none":
+                            f.flush()
+                            os.fsync(f.fileno())
+                    os.replace(tmp, self._path)
+                    if self._sync_mode == "full":
+                        _fsync_parent_dir(self._path)
+                except Exception:
+                    try:
+                        os.unlink(tmp)
+                    except FileNotFoundError:
+                        pass
+                    raise
+
+        return len(kept)
+
+    def backup_now(self) -> None:
+        """Trigger an immediate backup snapshot, regardless of the schedule.
+
+        Obeys the same retention limit as the scheduled backup thread.
+
+        Raises:
+            ConfigError: If no backup_dir was configured on this instance.
+        """
+        if self._backup_dir is None:
+            raise ConfigError("backup_now() requires a backup_dir to be configured.")
+        instance_dir = _instance_backup_dir(self._path, self._backup_dir)
+        _do_backup(self._path, 4, instance_dir, self.log, raw=True)
+        _prune_backups(instance_dir, self._backup_retention, self.log)
 
     def close(self) -> None:
         """Stop backup thread. Does not affect the data file."""

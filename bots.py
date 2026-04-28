@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from config import Config
 from loggers import Logger
 from core import Subscription, fmt_bytes, SERVER_TZ
 from session import XUiSession
@@ -15,6 +14,7 @@ from typing import cast, Any
 from datetime import datetime
 from telebot import types
 
+from custom_types import ConfigLike
 
 __all__ = ['AdminBot', 'PublicBot']
 
@@ -27,7 +27,7 @@ class AdminBot:
 
     def __init__(self,
                  sub: Subscription,
-                 cfg: Config):
+                 cfg: ConfigLike):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
@@ -35,8 +35,8 @@ class AdminBot:
             self.bot = telebot.TeleBot(self.cfg['bot']['token'])
             self.admin_uids: list[int] = self.cfg['bot']['whitelist']
 
-            self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # type: ignore
-            self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks) # type: ignore
+            self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # pyright: ignore[reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self._pending_codes: dict[Any, Any] = {}
             self._pagination_state: dict[int, dict[str, Any]] = {}
 
@@ -52,7 +52,7 @@ class AdminBot:
     
     def get_main_menu(self) -> types.InlineKeyboardMarkup:
         markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add( # type: ignore[call-arg]
+        markup.add( # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("👥 Список юзеров", callback_data="list_users"),
             types.InlineKeyboardButton("ℹ️ Инфо о юзере", callback_data="action_info"),
             types.InlineKeyboardButton("➕ Добавить", callback_data="add_user"),
@@ -68,7 +68,7 @@ class AdminBot:
  
     def get_codes_menu(self) -> types.InlineKeyboardMarkup:
         markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add( # type: ignore[call-arg]
+        markup.add( # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("➕ Добавить код", callback_data="add_code"),
             types.InlineKeyboardButton("❌ Удалить код", callback_data="del_code"),
             types.InlineKeyboardButton("📋 Список кодов", callback_data="list_codes"),
@@ -92,7 +92,7 @@ class AdminBot:
         buttons: list[types.InlineKeyboardButton] = []
         for user in page_users:
             buttons.append(types.InlineKeyboardButton(user, callback_data=f"{prefix}_{user}"))
-        markup.add(*buttons)  # type: ignore[call-arg]
+        markup.add(*buttons)  # pyright: ignore[reportUnknownMemberType]
 
         nav_buttons: list[types.InlineKeyboardButton] = []
         if page > 0:
@@ -101,10 +101,10 @@ class AdminBot:
             nav_buttons.append(types.InlineKeyboardButton("▶️", callback_data=f"page_{prefix}_{page + 1}"))
 
         if nav_buttons:
-            markup.add(*nav_buttons)  # type: ignore[call-arg]
-            markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))  # type: ignore[call-arg]
+            markup.add(*nav_buttons)  # pyright: ignore[reportUnknownMemberType]
+            markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))  # pyright: ignore[reportUnknownMemberType]
 
-        markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))  # type: ignore[call-arg]
+        markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         return markup
  
  
@@ -150,15 +150,15 @@ class AdminBot:
 
             elif data == "reset_user":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя:")
-                self.bot.register_next_step_handler(msg, self._step_reset_user) # type: ignore
+                self.bot.register_next_step_handler(msg, self._step_reset_user) # pyright: ignore[reportUnknownMemberType]
 
             elif data == "add_user":
                 msg = self.bot.send_message(chat_id, "Введите username нового пользователя (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_add_user_name) # type: ignore
+                self.bot.register_next_step_handler(msg, self._step_add_user_name) # pyright: ignore[reportUnknownMemberType]
  
             elif data == "action_info":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_info_user) # type: ignore
+                self.bot.register_next_step_handler(msg, self._step_info_user) # pyright: ignore[reportUnknownMemberType]
  
             elif data == "action_del":
                 if not self.cfg['users']:
@@ -184,15 +184,15 @@ class AdminBot:
  
             elif data == "info_code":
                 msg = self.bot.send_message(chat_id, "Введите код (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_info_code)  # type: ignore
+                self.bot.register_next_step_handler(msg, self._step_info_code)  # pyright: ignore[reportUnknownMemberType]
  
             elif data == "del_code":
                 msg = self.bot.send_message(chat_id, "Введите код для удаления (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_del_code) # type: ignore
+                self.bot.register_next_step_handler(msg, self._step_del_code) # pyright: ignore[reportUnknownMemberType]
  
             elif data == "add_code":
                 msg = self.bot.send_message(chat_id, "Введите название кода (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_add_code_name) # type: ignore
+                self.bot.register_next_step_handler(msg, self._step_add_code_name) # pyright: ignore[reportUnknownMemberType]
 
             elif data == "status_panels":
                 self._cb_all_panels_status(chat_id)
@@ -203,11 +203,11 @@ class AdminBot:
                     self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
                     return
                 msg = self.bot.send_message(chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML")
-                self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name) # type: ignore[call-arg]
+                self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name) # pyright: ignore[reportUnknownMemberType]
 
             elif data == "chart":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_chart_username) # type: ignore
+                self.bot.register_next_step_handler(msg, self._step_chart_username) # pyright: ignore[reportUnknownMemberType]
         except Exception as e:
             self.log.error(f"Ошибка в боте: {e}", exc_info=True)
             self.bot.send_message(chat_id, f"⚠️ Произошла ошибка: {e}")
@@ -220,39 +220,39 @@ class AdminBot:
         if info is None:
             self.bot.send_message(chat_id, "Произошла ошибка: getstatus() вернул None", reply_markup=self.get_main_menu())
             return
-        info = info['obj']
-        sys_up = self.sub.fmt_time(info.get('uptime', 0))
-        app_up = self.sub.fmt_time(info.get('appStats', {}).get('uptime', 0))
-        xr = info.get('xray', {})
-        xr_state = xr.get('state', 'unknown')
-        xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xr.get('errorMsg', 'unknown error')}"        
+        obj = info['obj']
+        sys_up = self.sub.fmt_time(obj['uptime'])
+        app_up = self.sub.fmt_time(obj['appStats']['uptime'])
+        xr = obj['xray']
+        xr_state = xr['state']
+        xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xr['errorMsg']}"        
         GB = 1024 ** 3
         MB = 1024 ** 2
         text = f"""📊 <b>Статус сервера {panel.name}</b>
 
 🖥 <b>Система</b>
-├ <b>CPU:</b> <code>{int(round(info['cpu']))}%</code> (<code>{info['cpuCores']}</code>/<code>{info['logicalPro']}</code> ядер, <code>{int(round(info['cpuSpeedMhz']))} MHz</code>)
-├ <b>Load:</b> <code>{info['loads'][0]}</code> | <code>{info['loads'][1]}</code> | <code>{info['loads'][2]}</code>
-├ <b>RAM:</b> <code>{info['mem']['current'] / GB:.2f} GB</code> / <code>{info['mem']['total'] / GB:.2f} GB</code>
+├ <b>CPU:</b> <code>{int(round(obj['cpu']))}%</code> (<code>{obj['cpuCores']}</code>/<code>{obj['logicalPro']}</code> ядер, <code>{int(round(obj['cpuSpeedMhz']))} MHz</code>)
+├ <b>Load:</b> <code>{obj['loads'][0]}</code> | <code>{obj['loads'][1]}</code> | <code>{obj['loads'][2]}</code>
+├ <b>RAM:</b> <code>{obj['mem']['current'] / GB:.2f} GB</code> / <code>{obj['mem']['total'] / GB:.2f} GB</code>
 └ <b>Uptime:</b> <code>{sys_up}</code>
 
 💾 <b>Накопители</b>
-├ <b>Диск:</b> <code>{info['disk']['current'] / GB:.2f} GB</code> / <code>{info['disk']['total'] / GB:.2f} GB</code>
-└ <b>Swap:</b> <code>{info['swap']['current'] / GB:.2f} GB</code> / <code>{info['swap']['total'] / GB:.2f} GB</code>
+├ <b>Диск:</b> <code>{obj['disk']['current'] / GB:.2f} GB</code> / <code>{obj['disk']['total'] / GB:.2f} GB</code>
+└ <b>Swap:</b> <code>{obj['swap']['current'] / GB:.2f} GB</code> / <code>{obj['swap']['total'] / GB:.2f} GB</code>
 
 🌐 <b>Сеть & IP</b>
-├ <b>IPv4:</b> <code>{info['publicIP']['ipv4']}</code>
-├ <b>IPv6:</b> <code>{info['publicIP']['ipv6'] or 'Отключен'}</code>
-├ <b>Соединения:</b> <code>{info['tcpCount']}</code> TCP / <code>{info['udpCount']}</code> UDP
-├ <b>Скорость:</b> ⬇️ <code>{info['netIO']['down'] / MB:.2f} MB/s</code> | ⬆️ <code>{info['netIO']['up'] / MB:.2f} MB/s</code>
-└ <b>Трафик:</b> ⬇️ <code>{info['netTraffic']['recv'] / GB:.2f} GB</code> | ⬆️ <code>{info['netTraffic']['sent'] / GB:.2f} GB</code>
+├ <b>IPv4:</b> <code>{obj['publicIP']['ipv4']}</code>
+├ <b>IPv6:</b> <code>{obj['publicIP']['ipv6'] or 'Отключен'}</code>
+├ <b>Соединения:</b> <code>{obj['tcpCount']}</code> TCP / <code>{obj['udpCount']}</code> UDP
+├ <b>Скорость:</b> ⬇️ <code>{obj['netIO']['down'] / MB:.2f} MB/s</code> | ⬆️ <code>{obj['netIO']['up'] / MB:.2f} MB/s</code>
+└ <b>Трафик:</b> ⬇️ <code>{obj['netTraffic']['recv'] / GB:.2f} GB</code> | ⬆️ <code>{obj['netTraffic']['sent'] / GB:.2f} GB</code>
 
-⚡️ <b>Xray Core v{info['xray']['version']}</b>
+⚡️ <b>Xray Core v{obj['xray']['version']}</b>
 └ <b>Статус:</b> {xr_status}
 
 🤖 <b>Other</b>
-├ <b>Потоков:</b> <code>{info['appStats']['threads']}</code>
-├ <b>RAM:</b> <code>{info['appStats']['mem'] / MB:.2f} MB</code>
+├ <b>Потоков:</b> <code>{obj['appStats']['threads']}</code>
+├ <b>RAM:</b> <code>{obj['appStats']['mem'] / MB:.2f} MB</code>
 └ <b>Uptime:</b> <code>{app_up}</code>"""
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None)
 
@@ -293,10 +293,10 @@ class AdminBot:
         if page < total_pages - 1:
             nav_buttons.append(types.InlineKeyboardButton("▶️", callback_data="page_list_users_" + str(page + 1)))
         if nav_buttons:
-            markup.add(*nav_buttons)  # type: ignore[call-arg]
-            markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))  # type: ignore[call-arg]
+            markup.add(*nav_buttons)  # pyright: ignore[reportUnknownMemberType]
+            markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))  # pyright: ignore[reportUnknownMemberType]
 
-        markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))  # type: ignore[call-arg]
+        markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
     def _cb_online_users(self, chat_id: int) -> None:
         online_users = cast(dict[str, Any], self.sub.get_online_users(new = True))
@@ -403,14 +403,14 @@ class AdminBot:
             return
         
         msg = self.bot.send_message(message.chat.id, "Введите DisplayName (Отображаемое имя):")
-        self.bot.register_next_step_handler(msg, self._step_add_user_display, username)  # type: ignore[call-arg]
+        self.bot.register_next_step_handler(msg, self._step_add_user_display, username)  # pyright: ignore[reportUnknownMemberType]
     def _step_add_user_display(self, message: types.Message, username: str) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return
         displayname = text.strip()
         
         msg = self.bot.send_message(message.chat.id, "Введите лимит в гигабайтах (или 0 для безлимита):")
-        self.bot.register_next_step_handler(msg, self._step_add_user_limit, username, displayname) # type: ignore[call-arg]
+        self.bot.register_next_step_handler(msg, self._step_add_user_limit, username, displayname) # pyright: ignore[reportUnknownMemberType]
     def _step_add_user_limit(self, message: types.Message, username: str, displayname: str) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return
@@ -420,7 +420,7 @@ class AdminBot:
             self.bot.send_message(message.chat.id, "❌ Ошибка: Лимит должен быть числом.", reply_markup=self.get_main_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Введите кол-во дней подписки (0 для безлимита):")
-        self.bot.register_next_step_handler(msg, self._step_add_user_time, username, displayname, limit) # type: ignore[call-arg]
+        self.bot.register_next_step_handler(msg, self._step_add_user_time, username, displayname, limit) # pyright: ignore[reportUnknownMemberType]
     def _step_add_user_time(self, message: types.Message, username: str, displayname: str, limit: int) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return
@@ -497,7 +497,7 @@ class AdminBot:
         code_name = text.strip()
         self._pending_codes[message.chat.id] = code_name  
         markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add( # type: ignore
+        markup.add( # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("📝 register", callback_data="codetype_register"),
             types.InlineKeyboardButton("🎁 bonus", callback_data="codetype_bonus"),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="codes_menu")
@@ -514,7 +514,7 @@ class AdminBot:
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Введите количество гигабайтов (в гб, или 0 для безлимита):")
-        self.bot.register_next_step_handler(msg, self._step_add_code_time, code_type, code_name, days) # type: ignore[call-arg]
+        self.bot.register_next_step_handler(msg, self._step_add_code_time, code_type, code_name, days) # pyright: ignore[reportUnknownMemberType]
  
     def _step_add_code_time(self, message: types.Message, code_type: str, code_name: str, days: int) -> None:
         text = cast(str, message.text)
@@ -525,7 +525,7 @@ class AdminBot:
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Введите количество гигабайтов для ВЛ локаций (в гб, или 0 для безлимита)")
-        self.bot.register_next_step_handler(msg, self._step_add_code_wl_time, code_type, code_name, days, gb) # type: ignore[call-arg]
+        self.bot.register_next_step_handler(msg, self._step_add_code_wl_time, code_type, code_name, days, gb) # pyright: ignore[reportUnknownMemberType]
     
     def _step_add_code_wl_time(self, message: types.Message, code_type: str, code_name: str, days: int, gb: int) -> None:
         text = cast(str, message.text)
@@ -536,7 +536,7 @@ class AdminBot:
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu())
             return
         msg = self.bot.send_message(message.chat.id, "Перманентный код? Да/Нет:")
-        self.bot.register_next_step_handler(msg, self._step_add_code_perma, code_type, code_name, days, gb, wl_gb) # type: ignore[call-arg]
+        self.bot.register_next_step_handler(msg, self._step_add_code_perma, code_type, code_name, days, gb, wl_gb) # pyright: ignore[reportUnknownMemberType]
     def _step_add_code_perma(self, message: types.Message, code_type: str, code_name: str, days: int, gb: int, wl_gb: int) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return
@@ -583,7 +583,7 @@ class AdminBot:
             return
 
         msg = self.bot.send_message(message.chat.id, "Введите количество дней (1-90):")
-        self.bot.register_next_step_handler(msg, self._step_chart_days, username) # type: ignore[call-arg]
+        self.bot.register_next_step_handler(msg, self._step_chart_days, username) # pyright: ignore[reportUnknownMemberType]
 
     def _step_chart_days(self, message: types.Message, username: str) -> None:
         text = cast(str, message.text)
@@ -678,9 +678,9 @@ class AdminBot:
                 pass
 
     def start(self) -> None:
-        bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Admin TG Bot") # type: ignore[call-arg]
+        bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Admin TG Bot") # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
         bot_thread.start()
-    def stop(self):
+    def stop(self) -> None:
         try:
             self.msg("⚠️ Shutdown")
         except Exception:
@@ -690,7 +690,7 @@ class PublicBot:
     """Public telegram bot for end users.
     Dependencies: Subscription
     Classes depending on this: none"""
-    def __init__(self, sub: Subscription, cfg: Config):
+    def __init__(self, sub: Subscription, cfg: ConfigLike):
         self.log = Logger(type(self).__name__)
         with self.log.loading():        
             self.cfg = cfg
@@ -708,13 +708,13 @@ class PublicBot:
 
             self.TEXTS = self.cfg['publicbot']['lang']
 
-            self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # type: ignore
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))(self.set_lang_callback) # type: ignore
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback) # type: ignore
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback) # type: ignore
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback) # type: ignore
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))(self.chart_callback) # type: ignore
-            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this: True)(self.handle_text) # type: ignore
+            self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # pyright: ignore[reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))(self.set_lang_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))(self.chart_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this_hhhhh: True)(self.handle_text) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
   
     def get_lang(self, uid: int) -> str:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
@@ -741,15 +741,15 @@ class PublicBot:
         
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         if not is_reg:
-            markup.add( # type: ignore
+            markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.KeyboardButton(t['btn_login'])
             )
         else:
-            markup.add( # type: ignore
+            markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.KeyboardButton(t['btn_main_account']),
                 types.KeyboardButton(t['btn_main_sub'])
             )
-        markup.add( # type: ignore
+        markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.KeyboardButton(t['btn_lang']), 
                 types.KeyboardButton(t['btn_support'])
         )
@@ -811,7 +811,7 @@ class PublicBot:
         
         if str(uid) not in self.cfg['publicbot']['tg_lang']:
             markup = types.InlineKeyboardMarkup()
-            markup.add( # type: ignore
+            markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
                 types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
             )
@@ -851,11 +851,11 @@ class PublicBot:
         elif text in [self.TEXTS['ru']['btn_bonus'], self.TEXTS['en']['btn_bonus']]:
             if not self.sub.is_registered(uid): return
             msg = self.bot.send_message(message.chat.id, t['enter_bonus'], reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_bonus) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_bonus) # pyright: ignore[reportUnknownMemberType]
             
         elif text in [self.TEXTS['ru']['btn_lang'], self.TEXTS['en']['btn_lang']]:
             markup = types.InlineKeyboardMarkup()
-            markup.add( # type: ignore
+            markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
                 types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
             )
@@ -863,7 +863,7 @@ class PublicBot:
         elif text in [self.TEXTS['ru']['btn_login'], self.TEXTS['en']['btn_login']]:
             if self.sub.is_registered(uid): return
             markup = types.InlineKeyboardMarkup(row_width=1)
-            markup.add( # type: ignore
+            markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(t['btn_login_credentials'], callback_data="login_credentials"),
                 types.InlineKeyboardButton(t['btn_login_token'], callback_data="login_token")
             )
@@ -872,8 +872,8 @@ class PublicBot:
             # self.bot.register_next_step_handler(msg, self.step_login_email)
         elif text in [self.TEXTS['ru']['btn_main_sub'], self.TEXTS['en']['btn_main_sub']]:
             if not self.sub.is_registered(uid): return
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-            markup.add( # type: ignore
+            reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            reply_markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.KeyboardButton(t['btn_main_back']),
 
                 types.KeyboardButton(t['btn_info']),
@@ -886,12 +886,12 @@ class PublicBot:
                 types.KeyboardButton(t['btn_support'])
             )
 
-            self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=markup)
+            self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=reply_markup)
 
         elif text in [self.TEXTS['ru']['btn_main_account'], self.TEXTS['en']['btn_main_account']]:
             if not self.sub.is_registered(uid): return
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-            markup.add( # type: ignore
+            reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            reply_markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.KeyboardButton(t['btn_main_back']),
 
                 types.KeyboardButton(t['btn_settings']),
@@ -903,7 +903,7 @@ class PublicBot:
                 types.KeyboardButton(t['btn_support'])
             )
 
-            self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=markup)
+            self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=reply_markup)
 
         elif text in [self.TEXTS['ru']['btn_main_back'], self.TEXTS['en']['btn_main_back']]:
             if not self.sub.is_registered(uid): return
@@ -912,7 +912,7 @@ class PublicBot:
         elif text in [self.TEXTS['ru']['btn_reset'], self.TEXTS['en']['btn_reset']]:
             if not self.sub.is_registered(uid): return
             msg = self.bot.send_message(message.chat.id, t['confirm_reset'], reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_reset) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_reset) # pyright: ignore[reportUnknownMemberType]
         
         elif text in [self.TEXTS['ru']['btn_support'], self.TEXTS['en']['btn_support']]:
             self.bot.send_message(message.chat.id, t['support_text'], parse_mode="HTML")
@@ -944,7 +944,7 @@ class PublicBot:
             fp_label = t['fp_label']
             pass_label = t['pass_label']
             login_label = t['login_label']
-            markup.add( # type: ignore
+            markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(name_label, callback_data="set_name"),
                 types.InlineKeyboardButton(fp_label, callback_data="set_fp"),
                 types.InlineKeyboardButton(login_label, callback_data="set_login"),
@@ -955,7 +955,7 @@ class PublicBot:
         elif text in [self.TEXTS['ru']['btn_delete'], self.TEXTS['en']['btn_delete']]:
             if not self.sub.is_registered(uid): return
             msg = self.bot.send_message(message.chat.id, t['confirm_delete'], parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_delete) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_delete) # pyright: ignore[reportUnknownMemberType]
 
         elif text in [self.TEXTS['ru']['btn_get_sub'], self.TEXTS['en']['btn_get_sub']]:
             if not self.sub.is_registered(uid): return
@@ -964,7 +964,7 @@ class PublicBot:
         elif text in [self.TEXTS['ru']['btn_chart'], self.TEXTS['en']['btn_chart']]:
             if not self.sub.is_registered(uid): return
             markup = types.InlineKeyboardMarkup(row_width=2)
-            markup.add( # type: ignore
+            markup.add( # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(t['btn_chart_days'].format(days=3), callback_data="chart_3"),
                 types.InlineKeyboardButton(t['btn_chart_days'].format(days=14), callback_data="chart_14"),
                 types.InlineKeyboardButton(t['btn_chart_days'].format(days=30), callback_data="chart_30"),
@@ -988,7 +988,7 @@ class PublicBot:
         
         domain = self.cfg['domain']
         markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add( # type: ignore
+        markup.add( # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton(t['get_sub_btn_link'], url=link),
             types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"{domain}/{self.cfg['uri']}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
         )
@@ -1005,10 +1005,10 @@ class PublicBot:
 
         if action == "login_credentials":
             msg = self.bot.send_message(message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_login_email) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_login_email) # pyright: ignore[reportUnknownMemberType]
         elif action == "login_token":
             msg = self.bot.send_message(message.chat.id, t['enter_token'], reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_login_token) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_login_token) # pyright: ignore[reportUnknownMemberType]
 
     def settings_callback(self, call: types.CallbackQuery) -> None:
         message = cast(types.Message, call.message)
@@ -1024,21 +1024,21 @@ class PublicBot:
 
         if action == "set_name":
             msg = self.bot.send_message(message.chat.id, t['settings_name_prompt'], reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_settings_name) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_settings_name) # pyright: ignore[reportUnknownMemberType]
         elif action == "set_fp":
             markup = types.InlineKeyboardMarkup(row_width=2)
             username = self.sub.get_username_telegram(uid)
             current_fp = self.cfg['userFingerprints'].get(username, '')
             for fp in self.cfg['fingerprints']:
                 label = f"✅ {fp}" if fp == current_fp else fp
-                markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}")) # type: ignore
+                markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}")) # pyright: ignore[reportUnknownMemberType]
             self.bot.send_message(message.chat.id, t['settings_fp_prompt'], reply_markup=markup)
         elif action == "set_login":
             msg = self.bot.send_message(message.chat.id, t['settings_login_prompt'], reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_settings_login) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_settings_login) # pyright: ignore[reportUnknownMemberType]
         elif action == "set_pass":
             msg = self.bot.send_message(message.chat.id, t['settings_pass_prompt'], reply_markup=types.ReplyKeyboardRemove())
-            self.bot.register_next_step_handler(msg, self.step_settings_pass) # type: ignore
+            self.bot.register_next_step_handler(msg, self.step_settings_pass) # pyright: ignore[reportUnknownMemberType]
 
     def fp_callback(self, call: types.CallbackQuery) -> None:
         data = cast(str, call.data)
@@ -1203,7 +1203,7 @@ class PublicBot:
         email = text.strip()
             
         msg = self.bot.send_message(message.chat.id, t['enter_pass'])
-        self.bot.register_next_step_handler(msg, self.step_login_pass, email) # type: ignore
+        self.bot.register_next_step_handler(msg, self.step_login_pass, email) # pyright: ignore[reportUnknownMemberType]
     def step_login_pass(self, message: types.Message, email: str) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return self.cmd_start(message)
@@ -1394,8 +1394,8 @@ class PublicBot:
 
     def start(self) -> None:
         if hasattr(self, 'bot'):
-            bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Public TG Bot") # type: ignore
+            bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Public TG Bot") # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
             bot_thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self.bot.stop_polling()

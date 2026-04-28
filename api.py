@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from core import Subscription, BWatch
-from config import Config
 from loggers import Logger
 
 import threading
@@ -11,12 +10,13 @@ import uuid
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
 from abc import ABC
-from typing import cast, Tuple, Any, Callable, Literal, NamedTuple, TypedDict, Union
+from typing import cast, Tuple, Any, Callable, Literal, NamedTuple, Union
 from dataclasses import asdict
 
+from custom_types import ConfigLike, UserInfo, ServerMetricsResponse
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-JsonifyValue = Union[str, int, float, bool, dict[str, Any], TypedDict, list[Any], tuple[Any, ...], uuid.UUID, None]
+JsonifyValue = Union[str, int, float, bool, dict[str, Any], list[Any], tuple[Any, ...], uuid.UUID, None]
 # JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | uuid.UUID | NamedTuple | TypedDict | None
 HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 ResponseType = Tuple[Response, int] | Response
@@ -28,7 +28,7 @@ class BaseApi(ABC):
     
     def __init__(self,
                  app: Flask, 
-                 cfg: Config, 
+                 cfg: ConfigLike, 
                  sub: Subscription, 
                  bw: BWatch,
                  uri: str):
@@ -198,8 +198,6 @@ def requires_args(*arg: str) -> Callable[[Callable[..., Any]], Callable[..., Any
         @wraps(f)
         def wrapper(*args: Any, **kwargs: Any):
             content = request.args
-            if content is None: # type: ignore[reportUnnecessaryComparison]
-                return _err("Missing data.", 400)
             missing = [x for x in arg if x not in content]
             if missing:
                 return _err(f"Missing args: {', '.join(missing)}", 400)
@@ -233,7 +231,7 @@ class WebApi(BaseApi):
 
     def __init__(self,
                  app: Flask,
-                 cfg: Config,
+                 cfg: ConfigLike,
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
@@ -312,8 +310,6 @@ class WebApi(BaseApi):
         raw = request.args.get('username', None)
         if not raw:
             return _err("'username' field is missing")
-        if not isinstance(raw, str): # type: ignore[reportUnnecessaryIsInstance]
-            return _err("'username' must be a string")
         sanitized = self.sub.sanitize(raw)
         valid = raw == sanitized and len(raw) > 0
         taken = sanitized in cast(dict[str, Any], self.cfg.get('webui_users', {}))
@@ -438,7 +434,7 @@ class WebApi(BaseApi):
             x = self.sub.reset_user(username)
             if not isinstance(x, dict):
                 return _err("Internal server error", 500)
-            return _ok(obj=x)
+            return _ok(obj={**x})
         except Exception as e:
             self.log.critical(e)
             return _err("Internal server error", 500)
@@ -464,11 +460,14 @@ class WebApi(BaseApi):
                 return _err(result, 404)
             return _err(result, 400)
     
-        return _ok(obj=result)
+        return _ok(obj={**result})
     @requires_webapi_auth
     def stats(self, username: str) -> ResponseType:
         """Get user info from token"""
-        return _ok(obj=self.sub.get_info(username))
+        x = self.sub.get_info(username)
+        x = cast(UserInfo, x) # NOTE: get_info returns 'None' when the user is not found,
+                              # NOTE: but @requires_webapi_auth guarrantees the user exists.
+        return _ok(obj={**x})
 
     @requires_webapi_auth
     def bandwidth_history(self, username: str) -> ResponseType:
@@ -504,7 +503,7 @@ class WebApi(BaseApi):
                 return _err(result, 403)
             return _err(result, 400)
     
-        return _ok("Created", 201, result)
+        return _ok("Created", 201, {**result})
 
     @requires_fields('username', 'password')
     def login(self) -> ResponseType:
@@ -550,7 +549,7 @@ class Api(BaseApi):
 
     def __init__(self,
                  app: Flask,
-                 cfg: Config,
+                 cfg: ConfigLike,
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
@@ -571,7 +570,9 @@ class Api(BaseApi):
     def user_info(self) -> ResponseType: 
         username = request.args['user']
         pretty = request.args.get('beautify', '').lower() in ('1', 'true', 'yes')
-        return _ok(obj=self.sub.get_info(username=username, pretty=pretty))
+        x = self.sub.get_info(username=username, pretty=pretty)
+        x = cast(UserInfo, x) # NOTE: see WebApi.stats()
+        return _ok(obj={**x})
  
     @requires_admin_auth
     @requires_fields('user', 'displayname')
@@ -691,7 +692,7 @@ class Api(BaseApi):
             x = self.sub.reset_user(username)
             if isinstance(x, str):
                 return _err(x, 500)
-            return _ok(obj=x)
+            return _ok(obj={**x})
         except Exception as e:
             self.log.error(f"user_reset fail: {e}")
             return _err(str(e), 500)
@@ -701,14 +702,17 @@ class Api(BaseApi):
         try:
             query = request.args.get('name', None)
             if query is None:
-                result = {}
+                result: dict[str, ServerMetricsResponse | None] = {}
                 for panel in self.sub.panels:
                     result[panel.name] = self.sub.getstatus(panel)
-                return _ok(obj=cast(dict[str, Any], result))
+                return _ok(obj=result)
 
             for panel in self.sub.panels:
                 if panel.name == query:
-                    return _ok(obj=self.sub.getstatus(panel))
+                    res = self.sub.getstatus(panel)
+                    if res is None:
+                        return _err("getstatus() returned None; panel may be down")
+                    return _ok(obj={**res})
 
             return _err("panel not found")
         except Exception as e:
@@ -732,7 +736,7 @@ class Api(BaseApi):
             x = self.sub.get_code(code)
             if not isinstance(x, dict):
                 return _err("Code not found", 404)
-            return _ok(obj=x)
+            return _ok(obj={**x})
         except Exception as e:
             return _err(str(e), 500)
     

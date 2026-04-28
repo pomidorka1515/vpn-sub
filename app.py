@@ -8,15 +8,14 @@ threading.main_thread().name = 'main'
 
 from typing import Any
 
-from core import (
-    Subscription, BWatch,
-    Flask
-)
+from core import Subscription, BWatch
 from session import XUiSession
 from api import WebApi, Api
 from bots import PublicBot, AdminBot
 from config import Config, LinesConfig
 from loggers import Logger
+
+from flask import Flask
 
 ##############################################################
 ### Startup sequence. Do not touch if you dont understand. ###
@@ -58,12 +57,15 @@ def _build_panels(cfg: Config) -> tuple[list[XUiSession], XUiSession | None]:
     
     return panels, whitelist
 
+_primary_lock_fd = None
 
 def _acquire_primary_lock() -> bool:
     """Try to acquire the single-primary-worker lock. Returns True on success."""
+    global _primary_lock_fd
     fd = open('/tmp/sub_primary.lock', 'w')
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _primary_lock_fd = fd
         log.info(f"I am the primary worker (pid={__import__('os').getpid()})")
         return True
     except OSError:
@@ -149,7 +151,7 @@ else:
 # ------------------------------------------------------------
 # Graceful shutdown
 # ------------------------------------------------------------
-def _shutdown():
+def _shutdown() -> None:
     log.info("Shutting down...")
     if _is_primary:
         bw.stop()

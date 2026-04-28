@@ -21,5 +21,6 @@ path = input("Enter path\n")
 if not path:
     path = "/var/www/static/other/"
 img = bandwidth_chart(snaps, label='VOIDBOUND XOOBERT V. GONGLER',lang= lang)
+assert img is not None
 with open(os.path.join(path, 'test-chart.png'), 'wb') as f:
     f.write(img.read())

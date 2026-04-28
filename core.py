@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from loggers import Logger
-from config import Config
 from session import XUiSession
 
 import threading
@@ -31,10 +30,13 @@ from custom_types import (
     UserInfo, ResetUserObject,
     ApplyBonusCodeObject,
     PublicBotLike, AdminBotLike,
-    client_stats_to_settings
+    client_stats_to_settings,
+    ConfigLike
 )
 from dataclasses import dataclass, asdict
 from collections.abc import MutableMapping
+
+# pyright: reportUnnecessaryIsInstance=false
 
 __all__ = [
     "Subscription", "BWatch", 
@@ -117,18 +119,17 @@ class Subscription:
     Dependencies: XUiSession, Config.  
     Classes depending on this: Literally all except Logger, Config, XUiSession"""
     def __init__(self, 
-                 cfg: Config,
-                 bw_cfg: Config,
+                 cfg: ConfigLike,
+                 bw_cfg: ConfigLike,
                  app: Flask,
                  panels: list[XUiSession],
                  whitelist_panel: XUiSession | None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.cfg: Config = cfg
-            self.bw_cfg: Config = bw_cfg
+            self.cfg: ConfigLike = cfg
+            self.bw_cfg: ConfigLike = bw_cfg
             self.app: Flask = app
             self.whitelist_panel: XUiSession | None  = whitelist_panel
-            self.browser_html: str = ""
             self.uri: str = cfg['uri']
             self.fps: list[str] = self.cfg['fingerprints']
             self.nginx404: str = nginx_404
@@ -148,7 +149,7 @@ class Subscription:
 
     def start(self):
         @self.app.route(f"/{self.uri}", strict_slashes=False)
-        def _sub(): # type: ignore[reportUnusedFunction]
+        def _sub(): # pyright: ignore[reportUnusedFunction]
             return self.get_subscription(
                 token=request.args.get('token', ''),
                 lang=request.args.get('lang', ''),
@@ -236,7 +237,7 @@ class Subscription:
         ttl = 2 if panel.local else 15  # fast local, slow remote
 
         cached = panel.get_cache()
-        if cached is not None and now - panel._cache_time < ttl: # type: ignore[reportPrivateUsage]
+        if cached is not None and now - panel.cache_time < ttl:
             return cached
         
         try:
@@ -375,6 +376,7 @@ class Subscription:
                     return response.json().get('msg')
                     
         self._drop_cache()
+        return None
     def delete_user(self,
                     username: str,
                     perma: bool = False
@@ -581,7 +583,9 @@ class Subscription:
         if wl_limit is None:
             wl_limit = self.cfg['wl_bw'][username][0]
         if timee is None:
-            timee = self.cfg['time'][username]
+            timestamp: int = self.cfg['time'][username]
+        else:
+            timestamp = timee
         if ext_password is not None and not _pw_already_hashed:
             ext_password = self.hash(ext_password)
         if ext_username is not None:
@@ -593,7 +597,7 @@ class Subscription:
             
         if fingerprint not in self.cfg['fingerprints']:
             return "Invalid fingerprint"
-        if timee > 2**31: # type: ignore # this is a useless error
+        if timestamp > 2**31:
             return "Invalid time"
 
         with self.cfg as t:
@@ -602,7 +606,7 @@ class Subscription:
             t['userFingerprints'][username] = fingerprint
             t['bw'][username] = [limit, t['bw'][username][1]]
             t['wl_bw'][username] = [wl_limit, t['wl_bw'][username][1]]
-            t['time'][username] = timee
+            t['time'][username] = timestamp
             if ext_password and ext_username:
                 if _old_ext_username and _old_ext_username != ext_username:
                     t.get('webui_passwords', {}).pop(_old_ext_username, None)
@@ -610,6 +614,7 @@ class Subscription:
                 t['webui_passwords'][ext_username] = ext_password
                 t['webui_users'][ext_username] = username                
         self._drop_cache()
+        return None
     def update_uuid(self, username: str, uid: str) -> None | str:
         """Seperate method for updating the UUID. None on success, str on error.
         Potentially dangerous operation, seperate function."""
@@ -651,6 +656,8 @@ class Subscription:
         
         with self.cfg as t: t['users'][username] = uid
         self._drop_cache()
+        return None
+    
 
     def register_with_code(
         self,
@@ -667,15 +674,13 @@ class Subscription:
         validation/business-rule failure.
     
         """
-        if not code or not isinstance(code, str): # type: ignore[reportUnnecessaryIsInstance]
+        if not code or not isinstance(code, str):
             return "Invalid code"
-        if not username or not isinstance(username, str): # type: ignore[reportUnnecessaryIsInstance]
+        if not username or not isinstance(username, str):
             return "Invalid username"
-        if not isinstance(displayname, str): # type: ignore[reportUnnecessaryIsInstance]
-            return "Invalid displayname"
-        if not ext_username or not isinstance(ext_username, str): # type: ignore[reportUnnecessaryIsInstance]
+        if not ext_username or not isinstance(ext_username, str): 
             return "Invalid username"
-        if not ext_password or not isinstance(ext_password, str): # type: ignore[reportUnnecessaryIsInstance]
+        if not ext_password or not isinstance(ext_password, str):
             return "Invalid password"
     
         ext_username = self.sanitize(ext_username)
@@ -811,20 +816,20 @@ class Subscription:
             dict: Applied bonus info on success.
             str: Human-readable error on validation/failure.
             """
-        if not isinstance(username, str) or not username: # type: ignore[reportUnnecessaryIsInstance]
+        if not isinstance(username, str) or not username: 
             return "Unknown user"
-        if not isinstance(code, str) or not code: # type: ignore[reportUnnecessaryIsInstance]
+        if not isinstance(code, str) or not code:
             return "Unknown code"
     
         result: ApplyBonusCodeObject | None = None
     
         with self.cfg as d:
-            users = d.setdefault("users", {})
-            bw_map = d.setdefault("bw", {})
-            wl_bw_map = d.setdefault("wl_bw", {})
-            time_map = d.setdefault("time", {})
-            codes = d.setdefault("codes", [])
-    
+            users: dict[str, str] = d.setdefault("users", {})
+            bw_map: dict[str, list[int]] = d.setdefault("bw", {})
+            wl_bw_map: dict[str, list[int]] = d.setdefault("wl_bw", {})
+            time_map: dict[str, int] = d.setdefault("time", {})
+            codes: list[dict[str, Any]] = d.setdefault("codes", [])
+
             if username not in users:
                 return "Unknown user"
             if username not in bw_map or username not in wl_bw_map or username not in time_map:
@@ -841,7 +846,9 @@ class Subscription:
     
             if code_item is None or code_item.get("action") != "bonus":
                 return "Unknown code"
-    
+
+            code_index = cast(int, code_index)
+
             try:
                 delta_days = int(code_item.get("days", 0))
                 delta_gb = int(code_item.get("gb", 0))
@@ -856,22 +863,18 @@ class Subscription:
             current_bw = bw_map[username]
             current_wl_bw = wl_bw_map[username]
     
-            if not isinstance(current_time, int):
+            if not isinstance(current_bw, list) or len(current_bw) < 2:
                 return "Broken user state"
-            if not isinstance(current_bw, list) or len(current_bw) < 2: # type: ignore
+            if not isinstance(current_wl_bw, list) or len(current_wl_bw) < 2:
                 return "Broken user state"
-            if not isinstance(current_wl_bw, list) or len(current_wl_bw) < 2: # type: ignore
-                return "Broken user state"
-            if not isinstance(current_bw[0], int) or not isinstance(current_wl_bw[0], int):
-                return "Broken user state"
-    
+
             new_time = 0 if current_time == 0 else current_time + delta_days * 86400
             new_limit = 0 if current_bw[0] == 0 else current_bw[0] + delta_gb
             new_wl_limit = 0 if current_wl_bw[0] == 0 else current_wl_bw[0] + delta_wl_gb
     
             if not code_item.get("perma", False):
-                del codes[code_index]  # type: ignore[index]
-    
+                del codes[code_index]
+
             current_bw[0] = new_limit
             current_wl_bw[0] = new_wl_limit
             time_map[username] = new_time
@@ -886,7 +889,7 @@ class Subscription:
                 "wl_limit": new_wl_limit,
             }
     
-        return result or "Internal server error"
+        return result
 
     def add_code(self, 
                  code: str, 
@@ -897,13 +900,11 @@ class Subscription:
                  wl_gb: int = 0) -> None | str:
         """Creates a code. Simple."""
 
-        if not isinstance(code, str) or not code: # type: ignore[reportUnnecessaryIsInstance]
+        if not isinstance(code, str) or not code: 
             return "code must be a non-empty string"
         if action not in ["register", "bonus"]:
             return f"action must be 'register' or 'bonus', got '{action}'"
-        if not isinstance(permanent, bool): # type: ignore[reportUnnecessaryIsInstance]
-            return "permanent must be a bool"
-        if not all(isinstance(x, int) for x in (days, gb, wl_gb)): # type: ignore[reportUnnecessaryIsInstance]
+        if not all(isinstance(x, int) for x in (days, gb, wl_gb)): 
             return "days, gb, wl_gb must be integers"
         if days < 0 or gb < 0 or wl_gb < 0:
             return "days, gb, wl_gb must be non-negative"
@@ -1003,7 +1004,8 @@ class Subscription:
         for i, v in self.cfg['tgids'].items():
             if v == tgid:
                 return int(i)
-                
+        return None
+
     def get_emails(self, username: str, panel: XUiSession) -> dict[str, str]:
         """Get the panel emails. {'inboundId': 'actual_panel_email', ...}"""
         inbounds = self.getinbounds(panel=panel)
@@ -1023,6 +1025,9 @@ class Subscription:
     @overload
     def get_online_users(self, new: Literal[True]) -> dict[str, str | None]: ...
     
+    @overload
+    def get_online_users(self, new: bool) -> list[str] | dict[str, str | None]: ...
+
     def get_online_users(self, new: bool = False) -> list[str] | dict[str, str | None]:
         """Get the list of currently online users.
         new: False = ['username', ...]. True = {'username': ext_username_or_None, ...}"""
@@ -1109,7 +1114,7 @@ Lang: {lang}""")
         cfg = self.cfg.copy()
         
         browser = self.isbrowser(ua=ua)
-        name = cfg['displaynames'][username]
+        displayname = cfg['displaynames'][username]
         need_dummy_link = "v2rayn" in ua.lower() or "v2rayng" in ua.lower()
         is_happ = ua.startswith("Happ/")
         mimetype = "text/plain" if not browser else "text/html"
@@ -1125,7 +1130,7 @@ Lang: {lang}""")
 
         desc = self.build_description(
             username=username,
-            name=name,
+            name=displayname,
             lang=lang,
             bandwidths=bandwidths,
             status=status,
@@ -1282,15 +1287,15 @@ class BWatch:
     Dependencies: Subscription
     Classes depending on this: Api, WebApi"""
     def __init__(self, 
-                 cfg: Config, 
-                 bw_cfg: Config,
+                 cfg: ConfigLike, 
+                 bw_cfg: ConfigLike,
                  sub: Subscription, 
                  bot: PublicBotLike | None = None,
                  admin_bot: AdminBotLike | None = None):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.cfg: Config = cfg
-            self.bw_cfg: Config = bw_cfg
+            self.cfg: ConfigLike = cfg
+            self.bw_cfg: ConfigLike = bw_cfg
             self._lock = threading.Lock()
             self._stop_event = threading.Event()
             self._snapshot_lock = threading.Lock()
@@ -1311,7 +1316,7 @@ class BWatch:
                 threading.Thread(target=self._every_5m, daemon=True, name="Panels check"),
                 threading.Thread(target=self._every_24h_snapshot, daemon=True, name="Daily BW Snapshot")
             )
-    def start(self):
+    def start(self) -> None:
         initial_mem: dict[str, BandwidthInfo] = {}
         initial_wl_mem: dict[str, BandwidthInfo] = {}
         for i in list(self.cfg['users'].keys()):
@@ -1330,17 +1335,17 @@ class BWatch:
         for thread in self._threads:
             thread.start()
     
-    def stop(self):
+    def stop(self) -> None:
         self._stop_event.set()
         for thread in self._threads:
             thread.join(timeout=5)
         
-    def _update_user(self, *args: Any, **kwargs: Any):
+    def _update_user(self, *args: Any, **kwargs: Any) -> None:
         x = self.sub.update_user(*args, **kwargs)
         if x is not None:
             self.log.critical(f"update_user error: {x}") 
     
-    def prune_old_snapshots(self): 
+    def prune_old_snapshots(self) -> None: 
         with self.bw_cfg as d:            
             retention = d.get("_meta", {}).get("retention_days", 30) # 30-day default
             cutoff = int(time.time()) - retention * 86400
@@ -1349,7 +1354,7 @@ class BWatch:
                 d["users"][user]["snapshots"] = [s for s in snapshots if s["ts"] >= cutoff]                                                                                                                                                                                                     
             d["_meta"]["last_prune"] = int(time.time())
 
-    def bandwidth_check(self):
+    def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
         wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
         for i in list(self.cfg['users'].keys()):
@@ -1402,7 +1407,7 @@ class BWatch:
                         data['wl_bw'][i][1] += update.delta
                         self.wl_mem[i] = update.current
 
-    def panel_health_check(self):
+    def panel_health_check(self) -> None:
         """Check each panel's Xray status and resource usage. Alert on issues."""
         for panel in self.sub.panels:
             try:
@@ -1412,23 +1417,24 @@ class BWatch:
                 
                 key = panel.name
                 problems: list[str] = []
+                obj = status['obj']
+
+                xray = obj['xray']
+                if xray['state'] != 'running':
+                    problems.append(f"Xray: {xray['state']} - {xray['errorMsg']}")
                 
-                xray = status.get('xray', {})
-                if xray.get('state') != 'running':
-                    problems.append(f"Xray: {xray.get('state', 'unknown')} - {xray.get('errorMsg', '')}")
-                
-                cpu = status.get('cpu', 0)
+                cpu = obj['cpu']
                 if cpu > 90:
                     problems.append(f"CPU: {cpu}%")
                 
-                mem = status.get('mem', {})
-                if mem.get('total', 0) > 0:
+                mem = obj['mem']
+                if mem['total'] > 0:
                     mem_pct = (mem['current'] / mem['total']) * 100
                     if mem_pct > 90:
                         problems.append(f"RAM: {mem_pct:.0f}%")
 
-                disk = status.get('disk', {})
-                if disk.get('total', 0) > 0:
+                disk = obj['disk']
+                if disk['total']> 0:
                     disk_pct = (disk['current'] / disk['total']) * 100
                     if disk_pct > 90:
                         problems.append(f"Disk: {disk_pct:.0f}%")
@@ -1445,7 +1451,7 @@ class BWatch:
             except Exception as e:
                 self.log.error(f"health check {panel.address}: {e}")
 
-    def check(self):
+    def check(self) -> None:
         for i in list(self.cfg['users'].keys()):
             tg_user = self.sub.get_username_telegram(tgid=i, reverse=True)
             if self.cfg['time'][i] != 0:
@@ -1483,7 +1489,7 @@ class BWatch:
                     self.cfg.mutate(_up_)                    
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
 
-    def is_first(self):
+    def is_first(self) -> None:
         # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
         # NOTE: Exclusive to one thread only.
         now = datetime.now()
@@ -1502,12 +1508,12 @@ class BWatch:
             t['_notified'] = []
             t['_wl_notified'] = []
     
-    def reset(self):
+    def reset(self) -> None:
         with self.cfg as t:
             t['_notified'] = []
             t['_wl_notified'] = []
 
-    def record_daily_snapshot(self):
+    def record_daily_snapshot(self) -> None:
         """Record one bandwidth snapshot per user for today (UTC midnight).
         Reads mem/wl_mem under lock, writes to bw_history.json."""
         with self._snapshot_lock:
@@ -1570,22 +1576,22 @@ class BWatch:
                         snaps.insert(0, asdict(snap))
     
     ### Helper functions ###
-    def _every_120s(self):
+    def _every_120s(self) -> None:
         while not self._stop_event.wait(120):
             self.check()
-    def _every_2h(self):
+    def _every_2h(self) -> None:
         while not self._stop_event.wait(7200):
             self.is_first()
-    def _every_15s(self):
+    def _every_15s(self) -> None:
         while not self._stop_event.wait(15):
             self.bandwidth_check()
-    def _every_24h(self):
+    def _every_24h(self) -> None:
         while not self._stop_event.wait(86400):
             self.reset()
             self.prune_old_snapshots()
-    def _every_24h_snapshot(self):
+    def _every_24h_snapshot(self) -> None:
         while not self._stop_event.wait(86400):
             self.record_daily_snapshot()
-    def _every_5m(self):
+    def _every_5m(self) -> None:
         while not self._stop_event.wait(300):
             self.panel_health_check()
