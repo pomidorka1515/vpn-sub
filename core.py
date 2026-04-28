@@ -224,11 +224,11 @@ class Subscription:
         """Get the information about a panel."""
         try:
             x = panel.get(f"{panel.base_url}panel/api/server/status")
-            data = x.json()
+            data: dict[str, Any] = x.json()
             if x.status_code not in [200]:
                 self.log.error(f"getstatus fail: {data['msg']}")
                 return None
-            return data
+            return from_dict(ServerMetricsResponse, data)
         except Exception as e:
             self.log.error(f"getstatus fail: {e}")
             return None
