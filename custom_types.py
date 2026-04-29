@@ -242,12 +242,12 @@ class AppStats:
     mem: int
     uptime: int
 
-@dataclass(slots=True, frozen=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class ServerMetricsObj:
     cpu: int | float
     cpuCores: int
     logicalPro: int
-    cpuSpeedMhz: int
+    cpuSpeedMhz: int | float
     mem: MemoryStats
     swap: SwapStats
     disk: DiskStats
@@ -261,6 +261,10 @@ class ServerMetricsObj:
     publicIP: PublicIPStats
     appStats: AppStats
 
+    def format(self) -> None:
+        self.cpu = round(self.cpu, 2)
+        self.cpuSpeedMhz = int(self.cpuSpeedMhz)
+        
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ServerMetricsResponse:
     success: bool

@@ -222,6 +222,7 @@ class AdminBot:
             self.bot.send_message(chat_id, "Произошла ошибка: getstatus() вернул None", reply_markup=self.get_main_menu())
             return
         obj = info.obj
+        obj.format()
         sys_up = self.sub.fmt_time(obj.uptime)
         app_up = self.sub.fmt_time(obj.appStats.uptime)
         xr = obj.xray

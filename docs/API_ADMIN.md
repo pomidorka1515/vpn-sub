@@ -37,7 +37,7 @@ Error:
 ```  
 
 ## Endpoints
-s
+
 ---  
 
 ### GET /api/user/list  
