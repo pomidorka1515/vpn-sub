@@ -431,7 +431,7 @@ class Config(MutableMapping[str, Any]):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> Literal[False] | None:
         tx = self._context_transaction
         self._context_transaction = None
         if tx is None:
@@ -520,22 +520,9 @@ class Config(MutableMapping[str, Any]):
         return self._run_edit(lambda tx: tx.setdefault(key, default))
 
     def update(self, *args: Any, **kwargs: Any) -> None:
-        """Atomic mapping-style update.
-
-        Backward compatibility:
-            cfg.update(lambda tx: ...)
-        still works, but `mutate()` / `edit()` is clearer.
-        """
+        """Atomic mapping-style update."""
         self._raise_if_read_only()
-        if len(args) == 1 and callable(args[0]) and not kwargs:
-            if not self._warned_update_callable:
-                self.log.warning(
-                    "Config.update(callable) is deprecated; use mutate() or edit()."
-                )
-                self._warned_update_callable = True
-            self.mutate(args[0])
-            return
-
+    
         updates = dict(*args, **kwargs)
         self._run_edit(lambda tx: tx.update(updates))
 

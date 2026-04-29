@@ -1,8 +1,6 @@
 jsonschema>=4.20.0
-jsonschema-stubs
 mypy
 requests>=2.31.0
-requests-stubs
 pyTelegramBotAPI>=4.15.0
 Flask>=2.3.0
 qrcode

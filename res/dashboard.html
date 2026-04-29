@@ -616,7 +616,7 @@ function renderStats(s) {
     banner.classList.remove('show');
   }
 
-  document.getElementById('subLink').textContent = s.link || '—';
+  document.getElementById('subLink').textContent = s.link ? s.link + '&lang=' + lang : '—';
 
   const expEl = document.getElementById('statExpiry');
   expEl.textContent = fmtTime(s.time);

@@ -360,25 +360,14 @@ class Subscription:
                 comment="",
                 reset=0
             )]}
-            #     "id": userid,
-            #     "flow": "",
-            #     "email": "",
-            #     "limitIp": 0,
-            #     "totalGB": 0,
-            #     "expiryTime": 0,
-            #     "enable": True,
-            #     "tgId": "",
-            #     "subId": "",
-            #     "comment": "",
-            #     "reset": 0
-            # }]}
 
             for j in list_2_add:
-                payload['clients'][0].email = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
-                payload['clients'][0].flow = "xtls-rprx-vision" if j in need_vision else ""
+                client = payload['clients'][0]
+                client.email = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
+                client.flow = "xtls-rprx-vision" if j in need_vision else ""
                 data: dict[str, Any] = {
                     'id': j,
-                    'settings': json.dumps(payload)
+                    'settings': json.dumps({"clients": [asdict(client)]})
                 }
                 response = panel.post(
                     f"{panel.base_url}panel/api/inbounds/addClient",
@@ -453,7 +442,7 @@ class Subscription:
                     payload.id = userid
                     response = panel.post(
                         f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
-                        data={'id': k, 'settings': json.dumps({"clients": [payload]})},
+                        data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
                         headers={'Accept': 'application/json'}
                     )
                     
@@ -479,7 +468,7 @@ class Subscription:
                 
                 panel.post(
                     f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
-                    data={'id': k, 'settings': json.dumps({"clients": [payload]})},
+                    data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
                     headers={'Accept': 'application/json'}
                 )
                 
@@ -667,7 +656,7 @@ class Subscription:
                 payload.flow = "xtls-rprx-vision" if k in need_vision else ""
                 data: dict[str, Any] = {
                     'id': k,
-                    'settings': json.dumps({"clients": [payload]})
+                    'settings': json.dumps({"clients": [asdict(payload)]})
                 }
                 response = panel.post(
                     f"{panel.base_url}panel/api/inbounds/updateClient/{olduid}",

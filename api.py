@@ -501,7 +501,7 @@ class WebApi(BaseApi):
             return _err("Internal server error", 500)
     
         if isinstance(result, str):
-            if result in {"Invalid code", "Username exists", "Ext Username exists"}:
+            if result in ["Invalid code", "Username exists", "Ext Username exists"]:
                 return _err(result, 403)
             return _err(result, 400)
     
