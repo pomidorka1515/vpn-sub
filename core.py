@@ -12,6 +12,7 @@ import string
 import random
 import uuid
 import time
+import copy
 import base64
 import signal
 import urllib.parse
@@ -156,7 +157,8 @@ class Subscription:
                 token=request.args.get('token', ''),
                 lang=request.args.get('lang', ''),
                 ua=request.headers.get('User-Agent', ''),
-                ip=request.headers.get('X-Real-IP', '')
+                ip=request.headers.get('X-Real-IP', ''),
+                force_json=request.args.get('force_json', '0')
             )
 
     def hash(self, s: str) -> str:
@@ -1147,7 +1149,8 @@ class Subscription:
         token: str, 
         lang: str, 
         ua: str, 
-        ip: str
+        ip: str,
+        force_json: str
     ) -> Response:
         """You alredy know what this is."""
         if not token:
@@ -1182,7 +1185,8 @@ Lang: {lang}""")
         sub_name: str = cfg['sub_name']
         userinfo = "upload={upload};download={download};total={total};expire={expire}"
 
-        desc = self.build_description(
+        desc = self._build_description(
+            cfg=cfg,
             username=username,
             name=displayname,
             lang=lang,
@@ -1219,58 +1223,58 @@ Lang: {lang}""")
             'announce': announce,
             'Content-Type': "text/plain"
         }
-        if is_happ: headers['routing'] = f"happ://routing/onadd/{base64.b64encode(json.dumps(cfg['routing']).encode('utf-8')).decode('utf-8')}"
+        
         user_uuid: str = cfg['users'][username]
-        generated_links: list[str] = []
 
-        for p_key, p_name in cfg['profiles'].items():
-            if p_key in cfg['whitelistProfiles'] and not statusWl:
-                continue
-            if not status:
-                break
-            link: str = cfg['masterLinks'][p_key]
-            flag: str = cfg['flags'][p_key] if is_happ else ""
-            node: str = cfg['profileNodes'][p_key]
-            domain: str = cfg['nodes'][node]
-            name: str = flag + p_name[0 if lang == "en" else 1]
-            link = link.replace("DOMAIN", domain)
-            link = link.replace("FINGERPRINT", cfg['userFingerprints'][username])
-            link = link.replace("UUID", user_uuid)
-            link = link.replace("NAME", name)
-            if "EXTRA" in link:
-                extra_data = cfg['xhttpExtra'].get(p_key)
-                if extra_data:
-                    json_str = json.dumps(extra_data, separators=(',', ':'))
-                    encoded_extra = urllib.parse.quote(json_str)
-                    link = link.replace("EXTRA", encoded_extra)
-                else:
-                    link = link.replace("extra=EXTRA&", "").replace("&extra=EXTRA", "").replace("extra=EXTRA", "")
-            generated_links.append(link)
-        dt = "Bandwidth: " if lang == "en" else "Трафик: "
-        dt = dt + "↑ %s1%u1 / ↓ %s2%u2"
-        if need_dummy_link:
-            v, label = fmt_bytes_tuple(bandwidths.upload)
-            dt = dt.replace("%s1", v).replace("%u1", label)
-            v, label = fmt_bytes_tuple(bandwidths.download)
-            dt = dt.replace("%s2", v).replace("%u2", label)
+        ### Content Generation ###
 
-        dt = urllib.parse.quote(dt)
-        dummy = f"vless://0@localhost:1?type=tcp&security=none#" + dt
-        if need_dummy_link:
-            generated_links = [dummy] + generated_links
-        raw_text = "\n".join(generated_links)
-        payload = base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
+        mode: Literal['b64', 'json'] = 'b64'
 
-        return Response(payload, mimetype=mimetype, headers=headers)
-    def build_description(self, 
-                          username: str,
-                          name: str,
-                          lang: str,
-                          bandwidths: BandwidthInfo, 
-                          status: bool,
-                          statusTime: bool,
-                          ts: int) -> str:
-        cfg = self.cfg.copy()
+        if is_happ or force_json == '1':
+            mode = 'json'
+        else:
+            mode = 'b64'
+
+        if mode == 'b64':
+            # Backwards compat, TODO: remove this entirely
+            if is_happ: headers['routing'] = f"happ://routing/onadd/{base64.b64encode(json.dumps(cfg['routing']).encode('utf-8')).decode('utf-8')}"
+            payload = self._build_link_array(
+                cfg=cfg,
+                status=status,
+                statusWl=statusWl,
+                lang=lang,
+                username=username,
+                bandwidths=bandwidths,
+                user_uuid=user_uuid,
+                is_happ=is_happ,
+                need_dummy_link=need_dummy_link
+            )
+            return Response(payload, mimetype=mimetype, headers=headers)
+        
+        elif mode == 'json':
+            json_payload = self._build_json(
+                cfg=cfg,
+                user_uuid=user_uuid,
+                username=username,
+                lang=lang
+            )
+            return Response(
+                response=json.dumps(json_payload, ensure_ascii=False),
+                mimetype='application/json; charset=utf-8',
+                headers=headers
+            )
+
+    @staticmethod
+    def _build_description(
+        cfg: dict[str, Any],
+        username: str,
+        name: str,
+        lang: str,
+        bandwidths: BandwidthInfo, 
+        status: bool,
+        statusTime: bool,
+        ts: int
+    ) -> str:
 
         desc = cfg['description'][0] if lang == "en" else cfg['description'][1]
         if not status:
@@ -1335,6 +1339,108 @@ Lang: {lang}""")
                 desc = desc.replace("%t1", "").replace("%t2", "").replace("%t3", "")
         desc = desc.replace("%s3", name)
         return desc
+
+    @staticmethod
+    def _build_link_array(
+        cfg: dict[str, Any],
+        status: bool,
+        statusWl: bool,
+        lang: str,
+        username: str,
+        is_happ: bool,
+        user_uuid: str,
+        bandwidths: BandwidthInfo,
+        need_dummy_link: bool
+    ) -> str:
+        """Build a base64-encoded link array."""
+        generated_links: list[str] = []
+
+        for p_key, p_name in cfg['profiles'].items():
+            if p_key in cfg['whitelistProfiles'] and not statusWl:
+                continue
+            if not status:
+                break
+            link: str = cfg['masterLinks'][p_key]
+            flag: str = cfg['flags'][p_key] if is_happ else ""
+            node: str = cfg['profileNodes'][p_key]
+            domain: str = cfg['nodes'][node]
+            name: str = flag + p_name[0 if lang == "en" else 1]
+            link = link.replace("DOMAIN", domain)
+            link = link.replace("FINGERPRINT", cfg['userFingerprints'][username])
+            link = link.replace("UUID", user_uuid)
+            link = link.replace("NAME", name)
+            if "EXTRA" in link:
+                extra_data = cfg['xhttpExtra'].get(p_key)
+                if extra_data:
+                    json_str = json.dumps(extra_data, separators=(',', ':'))
+                    encoded_extra = urllib.parse.quote(json_str)
+                    link = link.replace("EXTRA", encoded_extra)
+                else:
+                    link = link.replace("extra=EXTRA&", "").replace("&extra=EXTRA", "").replace("extra=EXTRA", "")
+            generated_links.append(link)
+        dt = "Bandwidth: " if lang == "en" else "Трафик: "
+        dt = dt + "↑ %s1%u1 / ↓ %s2%u2"
+        if need_dummy_link:
+            v, label = fmt_bytes_tuple(bandwidths.upload)
+            dt = dt.replace("%s1", v).replace("%u1", label)
+            v, label = fmt_bytes_tuple(bandwidths.download)
+            dt = dt.replace("%s2", v).replace("%u2", label)
+
+        dt = urllib.parse.quote(dt)
+        dummy = f"vless://0@localhost:1?type=tcp&security=none#" + dt
+        if need_dummy_link:
+            generated_links = [dummy] + generated_links
+        raw_text = "\n".join(generated_links)
+        payload = base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
+
+        return payload
+    
+    @staticmethod
+    def _build_json(
+        cfg: dict[str, Any],
+        user_uuid: str,
+        username: str,
+        lang: str
+    ) -> list[dict[str, Any]]:
+        """Build an array of profiles for Happ."""
+        obj: list[dict[str, Any]] = []
+        template: dict[str, Any] = cfg['json_template']
+        fingerprint: str = cfg['userFingerprints'][username]
+
+        for p_key, p_name_list in cfg['profiles'].items():
+            p_name: str = p_name_list[0 if lang == "en" else 1]
+            node: str = cfg['profileNodes'][p_key]
+            domain: str = cfg['nodes'][node]
+            is_reality: bool = False
+            result: dict[str, Any] = copy.deepcopy(template)
+            result['remarks'] = p_name
+            result['outbounds'][0] = cfg['json_profiles'][p_key]
+            result['outbounds'][0]['settings']['vnext'][0]['users'][0]['id'] = user_uuid
+            result['outbounds'][0]['settings']['vnext'][0]['address'] = domain
+            if result['outbounds'][0]['streamSettings'].get('tlsSettings', None) is not None:
+                result['outbounds'][0]['streamSettings']['tlsSettings']['serverName'] = domain
+                result['outbounds'][0]['streamSettings']['tlsSettings']['fingerprint'] = fingerprint
+            if result['outbounds'][0]['streamSettings'].get('realitySettings', None) is not None:
+                is_reality = True
+                result['outbounds'][0]['streamSettings']['realitySettings']['fingerprint'] = fingerprint
+            if result['outbounds'][0]['streamSettings'].get('xhttpSettings', None) is not None:
+                if not is_reality:
+                    result['outbounds'][0]['streamSettings']['xhttpSettings']['host'] = domain
+            if result['outbounds'][0]['streamSettings'].get('grpcSettings', None) is not None:
+                if not is_reality:
+                    result['outbounds'][0]['streamSettings']['grpcSettings']['authority'] = domain
+            if result['outbounds'][0]['streamSettings'].get('wsSettings', None) is not None:
+                wsSettings: dict[str, Any] = result['outbounds'][0]['streamSettings']['wsSettings']
+                wsSettings.setdefault('headers', {})
+                wsSettings['host'] = domain
+                wsSettings['headers']['Host'] = domain
+            if result['outbounds'][0]['streamSettings'].get('httpupgradeSettings', None) is not None:
+                httpupgradeSettings: dict[str, Any] = result['outbounds'][0]['streamSettings']['httpupgradeSettings']
+                httpupgradeSettings['host'] = domain
+            obj.append(result)
+        
+        return obj
+
 
 class BWatch:
     """Class for monitoring bandwidth.
@@ -1472,6 +1578,7 @@ class BWatch:
                 key = panel.name
                 problems: list[str] = []
                 obj = status.obj
+                obj.format()
 
                 xray = obj.xray
                 if xray.state != 'running':

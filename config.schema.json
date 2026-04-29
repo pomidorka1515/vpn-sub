@@ -4,9 +4,10 @@
     "type": "object",
     "required": [
         "uri", "api_token", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot", "routing",
+        "json_template",
         "publicbot", "codes", "3xui", "sub_name", "description", "flags",
         "users", "tokens", "displaynames", "tgids",
-        "bw", "wl_bw", "profiles", "profileDescriptions", "whitelistProfiles",
+        "bw", "wl_bw", "profiles", "json_profiles", "profileDescriptions", "whitelistProfiles",
         "masterLinks", "profileNodes", "userFingerprints",
         "time", "status", "statusTime", "statusWl",
         "_notified", "_wl_notified"
@@ -67,6 +68,30 @@
             }
         },
 
+        "json_template": {
+            "type": "object",
+            "description": "JSON Profile template.",
+            "default": {},
+            "required": ["dns", "routing", "inbounds", "outbounds", "remarks"],
+            "properties": {
+                "servers": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["servers", "queryStrategy"],
+                    "properties": {
+                        "servers": { "type": "array" },
+                        "queryStrategy": { "type": "string" }
+                    }
+                },
+                "routing": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "required": ["rules", "domainStrategy"],
+                    "$comment": "im not writing a full schema"
+                }
+            },
+            "additionalProperties": true
+        },
         "webui_passwords": {
             "type": "object",
             "description": "WebUI hashed passwords.",
@@ -205,6 +230,8 @@
             "type": "object",
             "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
         },
+        
+        "json_profiles": { "type": "object" },
 
         "profileDescriptions": {
             "type": "object",
