@@ -1408,7 +1408,9 @@ Lang: {lang}""")
         fingerprint: str = cfg['userFingerprints'][username]
 
         for p_key, p_name_list in cfg['profiles'].items():
-            p_name: str = p_name_list[0 if lang == "en" else 1]
+            flag: str = cfg['flags'][p_key]
+            p_name_raw: str = p_name_list[0 if lang == "en" else 1]
+            p_name: str = flag + p_name_raw
             node: str = cfg['profileNodes'][p_key]
             domain: str = cfg['nodes'][node]
             is_reality: bool = False
