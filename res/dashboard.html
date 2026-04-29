@@ -233,6 +233,18 @@ body {
 }
 .modal-btn.danger:hover { background: rgba(239,68,68,.12); border-color: var(--red); }
 
+.profile-item {
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.profile-item:last-child { border-bottom: none; }
+.profile-name { font-size: 13px; font-weight: 500; color: var(--accent); margin-bottom: 4px; }
+.profile-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.profiles-list {
+  max-height: 360px; overflow-y: auto; margin: 4px 0 18px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.profiles-loading { font-size: 13px; color: var(--text2); padding: 18px 0; text-align: center; }
+
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(8px) scale(.97); }
@@ -261,6 +273,7 @@ body {
       <button class="lang-btn" onclick="setLang('en')">EN</button>
       <button class="lang-btn" onclick="setLang('ru')">RU</button>
     </div>
+    <button class="btn-sm" onclick="showProfiles()" id="btnProfiles"></button>
     <button class="btn-sm" onclick="loadStats()" id="btnRefresh"></button>
     <button class="btn-sm danger" onclick="doLogout()" id="btnLogout"></button>
   </div>
@@ -380,6 +393,16 @@ body {
   </div>
 </div>
 
+<div class="modal-overlay" id="profilesOverlay">
+  <div class="modal" style="max-width:500px;width:100%">
+    <div class="modal-title" id="profilesTitle"></div>
+    <div class="profiles-list" id="profilesList"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="profilesClose"></button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal danger">
     <div class="modal-title" id="modalTitle"></div>
@@ -427,6 +450,8 @@ const L = {
     network_err: 'Network error',
     hint_invalid: 'Invalid characters. Try: ', hint_taken: 'Username taken', hint_ok: 'Available',
     bonus_reusable: '(reusable)',
+    profiles: 'Profiles', profiles_title: 'Available profiles',
+    no_profiles: 'No profiles available.', close: 'Close',
   },
   ru: {
     subscription: 'Подписка', usage: 'Использование', bonus_code: 'Бонус-код',
@@ -458,6 +483,8 @@ const L = {
     network_err: 'Ошибка сети',
     hint_invalid: 'Недопустимые символы. Попробуйте: ', hint_taken: 'Логин занят', hint_ok: 'Свободен',
     bonus_reusable: '(многоразовый)',
+    profiles: 'Профили', profiles_title: 'Доступные профили',
+    no_profiles: 'Профили недоступны.', close: 'Закрыть',
   }
 };
 
@@ -469,8 +496,11 @@ function renderLang() {
     b.classList.toggle('active', b.textContent.toLowerCase() === lang));
   document.querySelectorAll('[data-t]').forEach(el =>
     el.textContent = t(el.getAttribute('data-t')));
+  document.getElementById('btnProfiles').textContent = t('profiles');
   document.getElementById('btnRefresh').textContent = t('refresh');
   document.getElementById('btnLogout').textContent = t('logout');
+  document.getElementById('profilesTitle').textContent = t('profiles_title');
+  document.getElementById('profilesClose').textContent = t('close');
   document.getElementById('btnCopy').textContent = t('copy');
   document.getElementById('btnQr').textContent = t('qr');
   document.getElementById('btnApply').textContent = t('apply');
@@ -795,6 +825,42 @@ function setQrMode(mode) {
   document.getElementById('qrBtnLink').classList.toggle('active', mode === 'link');
   document.getElementById('qrBtnHapp').classList.toggle('active', mode === 'happ');
   showQrCode();
+}
+
+async function showProfiles() {
+  const overlay = document.getElementById('profilesOverlay');
+  const list = document.getElementById('profilesList');
+  list.innerHTML = '<div class="profiles-loading">…</div>';
+  overlay.classList.add('show');
+
+  const close = () => {
+    overlay.classList.remove('show');
+    overlay.onclick = null;
+    document.removeEventListener('keydown', onKey);
+    document.getElementById('profilesClose').onclick = null;
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.getElementById('profilesClose').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  document.addEventListener('keydown', onKey);
+
+  const res = await api('GET', '/profiles?lang=' + lang);
+  if (!res || !res.success) {
+    list.innerHTML = '<div class="profiles-loading">' + (res?.msg || t('network_err')) + '</div>';
+    return;
+  }
+  const obj = res.obj || {};
+  const keys = Object.keys(obj);
+  if (!keys.length) {
+    list.innerHTML = '<div class="profiles-loading">' + t('no_profiles') + '</div>';
+    return;
+  }
+  list.innerHTML = keys.map(name =>
+    `<div class="profile-item">
+      <div class="profile-name">${name}</div>
+      <div class="profile-desc">${obj[name]}</div>
+    </div>`
+  ).join('');
 }
 
 renderLang();

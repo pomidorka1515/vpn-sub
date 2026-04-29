@@ -10,16 +10,40 @@ import uuid
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
 from abc import ABC
-from typing import cast, Tuple, Any, Callable, Literal, NamedTuple, Union
+from typing import cast, Any, Callable, Literal, NamedTuple
 from dataclasses import asdict, is_dataclass
 
-from custom_types import ConfigLike, UserInfo, ServerMetricsResponse, NewUserInfo
+from custom_types import ConfigLike, UserInfo, NewUserInfo
+
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-JsonifyValue = Union[str, int, float, bool, dict[str, Any], list[Any], tuple[Any, ...], uuid.UUID, None]
-# JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | uuid.UUID | NamedTuple | TypedDict | None
+JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | None
 HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
-ResponseType = Tuple[Response, int] | Response
+ResponseType = tuple[Response, int] | Response
+
+class Route(NamedTuple):
+    """A Flask route, used in BaseApi."""
+    method: HTTPMethod
+    path: str
+    handler: str
+    rate_limit: int | None = None
+
+    def validate(self):
+        if not self.path.startswith('/'):
+            raise ValueError(f"Route path must start with '/', got '{self.path}'")
+        if self.rate_limit is not None and self.rate_limit <= 0:
+            raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
+
+    def register(self, api: BaseApi):
+        try:
+            func = getattr(type(api), self.handler)
+        except AttributeError:
+            api.log.critical(f"method {self.handler} doesnt exist!")
+            return
+        if self.rate_limit is not None:
+            func = rate_limit(self.rate_limit)(func)
+        func = func.__get__(api, type(api))
+        api.app.add_url_rule(api.uri + self.path, self.handler, func, methods=[self.method])
 
 class BaseApi(ABC):
     """Base class for API handlers. Enforces required attributes and route registration."""
@@ -67,36 +91,13 @@ class BaseApi(ABC):
         """Optional: subclass setup beyond route registration (error handlers, etc)."""
         pass
 
-class Route(NamedTuple):
-    """A Flask route, used in BaseApi."""
-    method: HTTPMethod
-    path: str
-    handler: str
-    rate_limit: int | None = None
-
-    def validate(self):
-        if not self.path.startswith('/'):
-            raise ValueError(f"Route path must start with '/', got '{self.path}'")
-        if self.rate_limit is not None and self.rate_limit <= 0:
-            raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
-
-    def register(self, api: BaseApi):
-        try:
-            func = getattr(type(api), self.handler)
-        except AttributeError:
-            api.log.critical(f"method {self.handler} doesnt exist!")
-            return
-        if self.rate_limit is not None:
-            func = rate_limit(self.rate_limit)(func)
-        func = func.__get__(api, type(api))
-        api.app.add_url_rule(api.uri + self.path, self.handler, func, methods=[self.method])
 
 
 def _ok(
     msg: str | None = None,
     code: int = 200,
     obj: JsonifyValue = None
-) -> Tuple[Response, int]:
+) -> tuple[Response, int]:
     """Internal helper function to return a successful Response."""
     return jsonify({"success": True, "msg": msg, "obj": obj}), code
 
@@ -104,7 +105,7 @@ def _err(
     msg: str | None = None,
     code: int = 400,
     obj: JsonifyValue = None
-) -> Tuple[Response, int]:
+) -> tuple[Response, int]:
     """Internal helper function to return an error Response."""
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
@@ -124,7 +125,7 @@ def _parse_bool(value: bool | str | int | None) -> bool | None:
 
 # ── Auth decorators ──────────────────────────────────────────────
 def requires_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
-    """Admin API auth via Authorization header. Returns fake nginx 404 on failure."""
+    """Admin API auth via Authorization header. Returns 401 on failure."""
     @wraps(f)
     def wrapper(self: Api, *args: Any, **kwargs: Any):
         provided = request.headers.get('Authorization', '')
@@ -210,7 +211,7 @@ def requires_args(*arg: str) -> Callable[[Callable[..., Any]], Callable[..., Any
 class WebApi(BaseApi):
 
     ROUTES: list[Route] = [
-        Route('GET', '/redirect', 'redirect_page', None),
+        Route('GET', '/redirect', 'redirect_page'),
         Route('POST', '/webapi/register', 'register', 5),
         Route('POST', '/webapi/login', 'login', 10),
         Route('POST', '/webapi/bonus', 'bonus', 15),
@@ -223,9 +224,9 @@ class WebApi(BaseApi):
         Route('GET', '/webapi/validate', 'validate_username', 80),
         Route('GET', '/webapi/profiles', 'profiles', 60),
         Route('GET', '/webapi/history', 'bandwidth_history', 30),
-        Route('GET', '/panel', 'gui_panel', None),
-        Route('GET', '/auth', 'gui_auth', None),
-        Route('GET', '/history', 'gui_history', None),
+        Route('GET', '/panel', 'gui_panel'),
+        Route('GET', '/auth', 'gui_auth'),
+        Route('GET', '/history', 'gui_history'),
         Route('GET', '/webapi/qr', 'qr', 80)
     ]
 
@@ -536,9 +537,7 @@ class Api(BaseApi):
         Route('GET', '/api/user/onlines', 'user_onlines'),
         Route('POST', '/api/user/reset', 'user_reset'),
 
-
         Route('GET', '/api/panel/status', 'panel_status'),
-
 
         Route('GET', '/api/code/list', 'code_list'),
         Route('GET', '/api/code/info', 'code_info'),
@@ -703,7 +702,7 @@ class Api(BaseApi):
         try:
             query = request.args.get('name', None)
             if query is None:
-                result: dict[str, ServerMetricsResponse | None] = {}
+                result: dict[str, dict[str, Any] | None] = {}
                 for panel in self.sub.panels:
                     _ = self.sub.getstatus(panel)
                     if _ is None:

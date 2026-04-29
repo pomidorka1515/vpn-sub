@@ -47,6 +47,8 @@ Error:
 }  
 ```  
 
+## Endpoints
+
 ---  
 
 ### POST /register  
