@@ -241,7 +241,7 @@ class Subscription:
         now = time.time()
         ttl = 2 if panel.local else 15  # fast local, slow remote
 
-        cached = panel.get_cache()
+        cached = panel.cache
         if cached is not None and now - panel.cache_time < ttl:
             return cached # NOTE: cache stores dataclasses!
         
@@ -255,7 +255,7 @@ class Subscription:
             inbounds = [from_dict(Inbound, i) for i in raw_inbounds]
             if panel.ignore_inbounds:
                 inbounds = [i for i in inbounds if i.id not in panel.ignore_inbounds]
-            panel.set_cache(inbounds)
+            panel.cache = inbounds
             return inbounds
         except Exception as e:
             self.log.warning(f"getinbounds fail: {e}")
@@ -326,7 +326,7 @@ class Subscription:
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
 
-    def add_users(self, *, username: str) -> str | None:
+    def add_users(self, username: str) -> str | None:
         userid = self.cfg['users'][username]
         panels = self.panels
         
