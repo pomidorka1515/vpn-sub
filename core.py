@@ -148,6 +148,7 @@ class Subscription:
                 self.browser_html: str = f.read()
             if self.whitelist_panel:
                 self.panels.append(self.whitelist_panel)
+
             self.start()
 
     def start(self):
@@ -199,7 +200,7 @@ class Subscription:
         if username and username in self.cfg['users']:
             return True
         return False
-
+    
     @staticmethod
     def make_qr(text: str) -> io.BytesIO:
         img = qrcode.make(text)
@@ -325,9 +326,7 @@ class Subscription:
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
 
-    def add_users(self, username: str) -> None | str:
-        """Add a user to panels. Dont confuse with add_new_user!
-        str with error on error."""
+    def add_users(self, *, username: str) -> str | None:
         userid = self.cfg['users'][username]
         panels = self.panels
         
@@ -379,8 +378,8 @@ class Subscription:
                     self.log.info(f"add user: successfully added {username} to ID {j}")
                 else:
                     self.log.error(f"add user: failed to add user {username}:\n{response.text}")
-                    return response.json().get('msg')
-                    
+                    return response.text
+                
         self._drop_cache()
         return None
     def delete_user(self,
@@ -539,10 +538,7 @@ class Subscription:
                 d.setdefault('webui_users', {})[ext_username] = username
         
         try:
-            x = self.add_users(username=username)
-            if x is not None:
-                self.log.error(f"add_new_user: {x}")
-                return x
+            self.add_users(username=username)
 
             return NewUserInfo(
                 username=username,

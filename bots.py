@@ -310,10 +310,7 @@ class AdminBot:
     def _cb_refresh(self, chat_id: int) -> None:
         try:
             for cc in self.cfg['users'].keys():
-                x = self.sub.add_users(cc)
-                if x is not None:
-                    self.bot.send_message(chat_id, f"Произошла ошибка: {x}")
-                    return
+                self.sub.add_users(cc)
             self.bot.send_message(chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu())
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}")

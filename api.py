@@ -659,13 +659,8 @@ class Api(BaseApi):
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
         try:
-            errors: list[str] = []
             for cc in self.cfg['users'].keys():
-                err = self.sub.add_users(cc)
-                if isinstance(err, str):
-                    errors.append(f"{cc}: {err}")
-            if errors:
-                return _err(f"Failed: {'; '.join(errors)}", 500)
+                self.sub.add_users(cc)
             return _ok("Refreshed all users.")
         except Exception as e:
             self.log.error(f"user_refresh: {e}")

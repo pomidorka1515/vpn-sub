@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from requests import Session, Response
-
+from concurrent.futures import ThreadPoolExecutor, Future
 from loggers import Logger
 from custom_types import Inbound
 
@@ -61,8 +61,10 @@ class XUiSession(Session):
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
             self.cache_time: float = 0
-            self._inject_headers = inject_headers or {}
-    
+            self._inject_headers: dict[str, Any] = inject_headers or {}
+
+            self._executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="3x-ui")
+
             if nginx_auth:
                 self.auth = nginx_auth
 
@@ -75,6 +77,15 @@ class XUiSession(Session):
         headers = kwargs.get("headers", {})
         kwargs["headers"] = {**self._inject_headers, **headers}
         return super().request(*args, **kwargs)
+
+    def async_request(self, *args: Any, **kwargs: Any) -> Future[Response]:
+        return self._executor.submit(self.request, *args, **kwargs)
+
+    def post_async(self, url: str, **kwargs: Any) -> Future[Response]:
+        return self.async_request('POST', url, **kwargs)
+
+    def get_async(self, url: str, **kwargs: Any) -> Future[Response]:
+        return self.async_request('GET', url, **kwargs)
 
     def login(self) -> None:
         self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui ")
@@ -150,4 +161,5 @@ class XUiSession(Session):
         super().close()
 
     def __del__(self) -> None:
+        self._executor.shutdown()
         self.close()
