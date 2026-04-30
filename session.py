@@ -25,6 +25,7 @@ class XUiSession(Session):
             nginx_auth: tuple[str, str] | None = None,  # nginx_auth=('user', 'pass')
             ignore_inbounds: tuple[int, ...] = (),  # Can be empty
             inject_headers: dict[str, Any] | None = None,
+            maximum_concurrent_executors: int = 15
     ):
         """
         Args:
@@ -40,6 +41,8 @@ class XUiSession(Session):
             ignore_inbounds: A tuple of inbound IDs to permanently ignore.
             inject_headers: Extra headers merged into every request. 
                 Caller-supplied headers take precedence.
+            maximum_concurrent_executors: Maximum amount of asyncronous ThreadPoolExecutor functions
+                running at the same time. 
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -62,8 +65,13 @@ class XUiSession(Session):
             self._cache: list[Inbound] | None = None
             self.cache_time: float = 0
             self._inject_headers: dict[str, Any] = inject_headers or {}
-
-            self._executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="3x-ui")
+            
+            if maximum_concurrent_executors < 1:
+                raise ValueError("maximum_concurrent_executors must be more than 1")
+            elif maximum_concurrent_executors < 5:
+                self.log.warning("A small limit of thread executors makes asynchronous operations pointless. Consider raising it.")
+            
+            self._executor = ThreadPoolExecutor(max_workers=maximum_concurrent_executors, thread_name_prefix="3x-ui")
 
             if nginx_auth:
                 self.auth = nginx_auth
@@ -83,7 +91,7 @@ class XUiSession(Session):
 
     def post_async(self, url: str, **kwargs: Any) -> Future[Response]:
         return self.async_request('POST', url, **kwargs)
-
+        
     def get_async(self, url: str, **kwargs: Any) -> Future[Response]:
         return self.async_request('GET', url, **kwargs)
 
