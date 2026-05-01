@@ -326,10 +326,24 @@ class Subscription:
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
 
-    def add_users(self, username: str) -> str | None:
+    def add_users(self, username: str) -> None:
         userid = self.cfg['users'][username]
         panels = self.panels
-        
+
+        payload = SettingsClient(
+            id=userid,
+            flow="",
+            email="",
+            limitIp=0,
+            totalGB=0,
+            expiryTime=0,
+            enable=True,
+            tgId="",
+            subId="",
+            comment="",
+            reset=0
+        )
+
         for panel in panels:
             inbounds = self.getinbounds(panel)
             list_2_add: list[int] = []
@@ -346,40 +360,22 @@ class Subscription:
                 if streamsettings['network'] in ['tcp', 'raw']:
                     need_vision.append(i.id)
             
-            payload: dict[str, list[SettingsClient]] = {"clients": [SettingsClient(
-                id=userid,
-                flow="",
-                email="",
-                limitIp=0,
-                totalGB=0,
-                expiryTime=0,
-                enable=True,
-                tgId="",
-                subId="",
-                comment="",
-                reset=0
-            )]}
-
+            
             for j in list_2_add:
-                client = payload['clients'][0]
+                client = payload
                 client.email = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
                 client.flow = "xtls-rprx-vision" if j in need_vision else ""
                 data: dict[str, Any] = {
                     'id': j,
                     'settings': json.dumps({"clients": [asdict(client)]})
                 }
-                response = panel.post(
-                    f"{panel.base_url}panel/api/inbounds/addClient",
+
+                panel.post_async(
+                    f"panel/api/inbounds/addClient",
                     data=data,
                     headers={'Accept': 'application/json'}
                 )
-                response_json = response.json()
-                if response.status_code in [200, 201] and response_json['success']:
-                    self.log.info(f"add user: successfully added {username} to ID {j}")
-                else:
-                    self.log.error(f"add user: failed to add user {username}:\n{response.text}")
-                    return response.text
-                
+        
         self._drop_cache()
         return None
     def delete_user(self,

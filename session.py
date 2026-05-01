@@ -111,6 +111,13 @@ class XUiSession(Session):
     def dead(self, value: bool, /) -> None:
         with self._health_check_lock:
             self._dead = value
+
+    
+    def _format_url(self, url: str, /) -> str:
+        if not url.startswith(self.base_url):
+            return self.base_url + url
+        else:
+            return url
     
     def _start_health_check_thread(self) -> None:
         self._health_check_thread.start()
@@ -148,35 +155,37 @@ class XUiSession(Session):
     
         headers = kwargs.get("headers", {})
         kwargs["headers"] = {**self._inject_headers, **headers}
-        
+
         return super().request(*args, **kwargs)
 
-    def _async_request_wrapper(self, log: bool, *args: Any, **kwargs: Any) -> Response:
+    def _async_request_wrapper(self, log: bool, method: str, url: str, *args: Any, **kwargs: Any) -> Response:
         """Executed inside the ThreadPoolExecutor to log failures without blocking."""
-        resp = self.request(*args, **kwargs)
+
+        url_fixed = self._format_url(url)
+        resp = self.request(method=method, url=url_fixed, timeout=kwargs.pop('timeout', 5), *args, **kwargs)
         
         if log:
             if resp.status_code >= 500:
-                self.log.error(f"async request failed: HTTP {resp.status_code} on {args[0] if args else 'unknown'}")
+                self.log.error(f"async request failed: HTTP {resp.status_code} on {url_fixed}")
             elif resp.status_code >= 400:
-                self.log.warning(f"async request failed: HTTP {resp.status_code} on {args[0] if args else 'unknown'}")
+                self.log.warning(f"async request failed: HTTP {resp.status_code} on {url_fixed}")
             try:
                 content = resp.json()
                 if not content.get('success'):
-                    self.log.error(f"async request failed: {content.get('msg')} on {args[0] if args else 'unknown'}")
+                    self.log.error(f"async request failed: {content.get('msg')} on {url_fixed}")
             except (json.JSONDecodeError, ValueError):
                 pass
         
         return resp
 
-    def async_request(self, *args: Any, **kwargs: Any) -> Future[Response]:
-        return self._executor.submit(self._async_request_wrapper, *args, **kwargs)
+    def async_request(self, method: str, url: str, log: bool, *args: Any, **kwargs: Any) -> Future[Response]:
+        return self._executor.submit(self._async_request_wrapper, log=log, method=method, url=url, *args, **kwargs)
 
     def post_async(self, url: str, log: bool = False, **kwargs: Any) -> Future[Response]:
-        return self.async_request('POST', url, log=log, **kwargs)
+        return self.async_request(method='POST', url=url, log=log, **kwargs)
 
     def get_async(self, url: str, log: bool = False, **kwargs: Any) -> Future[Response]:
-        return self.async_request('GET', url, log=log, **kwargs)
+        return self.async_request(method='GET', url=url, log=log, **kwargs) 
 
 
     def login(self) -> None:
@@ -245,7 +254,7 @@ class XUiSession(Session):
     def clear_cache(self) -> None:
         with self._cache_lock:
             self._cache = None
-            self._cache_time = 0
+            self.cache_time = 0
 
     def close(self) -> None:
         self._running.clear()
