@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+# NOTE: most of these are false positives
+
+# pyright: reportPrivateUsage=false
+# pyright: reportUnnecessaryIsInstance=false
+# pyright: reportIncompatibleMethodOverride=false
+# mypy: disable-error-code="attr-defined"
+# mypy: disable-error-code="override"
+# pylint: disable=protected-access
+
 from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from loggers import Logger
 from typing import (
     Any, Self, Literal,
-    cast
+    cast, TypeVar
 )
 from types import TracebackType
 from contextlib import contextmanager
@@ -31,6 +40,8 @@ __all__ = [
 ]
 
 SYNC_MODES = Literal['full', 'data', 'none']
+
+_T = TypeVar('_T', bound=Any)
 
 # ---------------------------------------------------------------------------
 # Module-level file primitives (shared by Config and LinesConfig)
@@ -260,8 +271,6 @@ class Config(MutableMapping[str, Any]):
     - Top-level JSON must be an object.
     """
 
-    MISSING = object()
-
     def __init__(
         self,
         *,
@@ -444,7 +453,7 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return self._detach(self._data[key])
 
-    def __setitem__(self, key: str, value: Any) -> None:
+    def __setitem__(self, key: str, value: object) -> None:
         self._raise_if_read_only()
         self._run_edit(lambda tx: tx.__setitem__(key, value))
 
@@ -476,19 +485,19 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return iter(tuple(self._data.keys()))
     
-    def keys(self) -> tuple[Any, ...]: # pyright: ignore[reportIncompatibleMethodOverride]
+    def keys(self) -> tuple[Any, ...]:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
             return tuple(self._data.keys())
     
-    def values(self) -> tuple[Any, ...]: # pyright: ignore[reportIncompatibleMethodOverride]
+    def values(self) -> tuple[Any, ...]: 
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
             return tuple(self._detach(v) for v in self._data.values())
     
-    def items(self) -> tuple[tuple[str, Any], ...]: # pyright: ignore[reportIncompatibleMethodOverride]
+    def items(self) -> tuple[tuple[str, Any], ...]:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
@@ -505,12 +514,12 @@ class Config(MutableMapping[str, Any]):
         self._raise_if_read_only()
         self._run_edit(lambda tx: tx.clear())
 
-    def pop(self, key: str, default: Any = MISSING) -> Any:
+    def pop(self, key: str, **kwargs: Any) -> Any:
         self._raise_if_read_only()
-        if default is self.MISSING:
-            return self._run_edit(lambda tx: tx.pop(key))
-        return self._run_edit(lambda tx: tx.pop(key, default))
-
+        if 'default' in kwargs:                         # NOTE: i have zero clue why i need to type kwargs=... for type checker peace
+            return self._run_edit(lambda tx: tx.pop(key, kwargs=kwargs['default'])) # pyright: ignore[reportUnknownLambdaType]
+        return self._run_edit(lambda tx: tx.pop(key))
+ 
     def popitem(self) -> tuple[str, Any]:
         self._raise_if_read_only()
         return cast(tuple[str, Any], self._run_edit(lambda tx: tx.popitem())) # _run_edit() returns Any but tx.popitem() is guarranteed to be a tuple[str, Any]
@@ -691,16 +700,17 @@ class Config(MutableMapping[str, Any]):
         )
 
     @staticmethod
-    def _detach(value: Any) -> Any:
+    def _detach(value: _T) -> _T:
         if isinstance(value, (dict, list)):
-            return copy.deepcopy(cast(dict[Any, Any], value))
+            return copy.deepcopy(cast(Any, value)) 
         return value
 
-# pyright: reportPrivateUsage=false
-# pyright: reportUnnecessaryIsInstance=false
-# mypy: disable-error-code="attr-defined"
-# mypy: disable-error-code="override"
-# pylint: disable=protected-access
+    def __del__(self) -> None:
+        try:
+            self.clear()
+        except Exception:
+            pass
+
 class _ConfigTransaction(MutableMapping[str, Any]):
     """A batch edit working copy.
 
@@ -716,10 +726,12 @@ class _ConfigTransaction(MutableMapping[str, Any]):
         self.original: dict[str, Any] | None = None
         self._lock_fp: io.BufferedRandom | None = None
         self.owner_thread_id: int | None = None
-    
+        self._cfg_lock_acquired: bool = False
+
     def __enter__(self) -> Self:
         cfg: Config = self._config
         cfg._lock.acquire()
+        self._cfg_lock_acquired = True
         lock_fp: io.BufferedRandom | None = None
 
         try:
@@ -820,6 +832,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                 self.owner_thread_id = None
                 cfg._active_transaction = None
                 cfg._lock.release()
+                self._cfg_lock_acquired = False
 
     def _require_active(self) -> dict[str, Any]:
         if self.data is None:
@@ -829,7 +842,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     def __getitem__(self, key: str) -> Any:
         return self._require_active()[key]
 
-    def __setitem__(self, key: str, value: Any) -> None:
+    def __setitem__(self, key: str, value: object) -> None:
         self._require_active()[key] = value
 
     def __delitem__(self, key: str) -> None:
@@ -853,11 +866,11 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     def clear(self) -> None:
         self._require_active().clear()
 
-    def pop(self, key: str, default: Any = Config.MISSING) -> Any:
+    def pop(self, key: str, **kwargs: Any) -> Any:
         data = self._require_active()
-        if default is Config.MISSING:
-            return data.pop(key)
-        return data.pop(key, default)
+        if 'default' in kwargs:
+            return data.pop(key, kwargs['default'])
+        return data.pop(key)
 
     def popitem(self) -> tuple[str, Any]:
         return self._require_active().popitem()
@@ -1137,4 +1150,9 @@ class LinesConfig:
         self.close()
 
     def __del__(self) -> None:
-        self._backup_stop.set()
+        try:
+            self._backup_stop.set()
+            if self._backup_t is not None and self._backup_t.is_alive():
+                self._backup_t.join(timeout=2)
+        except Exception:
+            pass

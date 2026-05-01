@@ -1,5 +1,6 @@
 config.json
 .claudeignore
+.claude/*
 *.lock
 __pycache__/
 *.pyc
@@ -19,5 +20,7 @@ discord/venv
 discord/.venv
 discord/config.json
 test_chart.py
+.python-version
+vpn_sub.egg-info/
 # My other project, sorry for cluttering...
 nep_bot.py 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 import time
-import copy
 import json
 
 from requests import Session, Response, Timeout
@@ -188,8 +187,7 @@ class XUiSession(Session):
 
                 if not self._running.is_set():
                     self._start_refresh_thread()
-                    self._start_health_check_thread()
-                
+
             except Exception as e:
                 self.log.critical(f"{self.address}:{self.port} > login failed: {str(e)}")
                 raise
@@ -222,7 +220,7 @@ class XUiSession(Session):
     def cache(self, value: list[Inbound], /) -> None:
         with self._cache_lock:
             self._cache = value
-            self._cache_time = time.monotonic()
+            self.cache_time = time.monotonic()
     
     def clear_cache(self) -> None:
         with self._cache_lock:

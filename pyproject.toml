@@ -14,6 +14,7 @@ dependencies = [
     "Pillow>=10.0.0",
     "matplotlib>=3.8.0",
     "gunicorn>=21.0.0",
+    "semble>=0.1.1",
 ]
 
 [project.optional-dependencies]
@@ -110,3 +111,8 @@ pythonVersion = "3.14"
 typeCheckingMode = "strict"
 venvPath = "."                                                                                                                                                                                                    
 venv = "venv"
+
+[tool.uv]
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'"
+]

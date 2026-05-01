@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import (
     Protocol,
     runtime_checkable, Any, Iterable,
-    Callable, Iterator, Self
+    Callable, Iterator, Self, TypeAlias
 )
 from types import TracebackType
 from collections.abc import MutableMapping
@@ -25,9 +25,12 @@ __all__ = [
 
     'UserInfoBandwidthTotal', 'UserInfoBandwidth', 'UserInfo',
 
-    'client_stats_to_settings'
+    'client_stats_to_settings',
+
+    'JsonValue', 'JsonDict'
 ]
-_MISSING = object()
+JsonValue: TypeAlias = int | float | dict[str, 'JsonValue'] | list['JsonValue'] | str | bool | None
+JsonDict = dict[str, JsonValue]
 
 ### Stub Protocols ###
 
@@ -81,7 +84,7 @@ class ConfigLike(Protocol):
 
     def __getitem__(self, key: str) -> Any: ...
 
-    def __setitem__(self, key: str, value: Any) -> None: ...
+    def __setitem__(self, key: str, value: object) -> None: ...
 
     def __delitem__(self, key: str) -> None: ...
 
@@ -103,7 +106,7 @@ class ConfigLike(Protocol):
 
     def clear(self) -> None: ...
 
-    def pop(self, key: str, default: Any = _MISSING) -> Any: ...
+    def pop(self, key: str, **kwargs: Any) -> Any: ...
 
     def popitem(self) -> tuple[str, Any]: ...
 
@@ -126,7 +129,7 @@ class _ConfigTransactionLike(Protocol):
 
     def __getitem__(self, key: str) -> Any: ...
 
-    def __setitem__(self, key: str, value: Any) -> None: ...
+    def __setitem__(self, key: str, value: object) -> None: ...
 
     def __delitem__(self, key: str) -> None: ...
 
@@ -142,7 +145,7 @@ class _ConfigTransactionLike(Protocol):
 
     def clear(self) -> None: ...
 
-    def pop(self, key: str, default: Any = _MISSING) -> Any: ...
+    def pop(self, key: str, **kwargs: Any) -> Any: ...
 
     def popitem(self) -> tuple[str, Any]: ...
 
