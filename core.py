@@ -226,7 +226,7 @@ class Subscription:
     def getstatus(self, panel: XUiSession) -> ServerMetricsResponse | None:
         """Get the information about a panel."""
         try:
-            x = panel.get(f"{panel.base_url}panel/api/server/status")
+            x = panel.get(f"panel/api/server/status")
             data: dict[str, Any] = x.json()
             if x.status_code not in [200]:
                 self.log.error(f"getstatus fail: {data['msg']}")
@@ -246,7 +246,7 @@ class Subscription:
             return cached # NOTE: cache stores dataclasses!
         
         try:
-            response = panel.get(f"{panel.base_url}panel/api/inbounds/list")
+            response = panel.get(f"panel/api/inbounds/list")
             data: dict[str, Any] = response.json()
             if response.status_code not in [200] or not data.get("success"):
                 self.log.error(f"getinbounds fail: {data.get('msg')}")
@@ -391,7 +391,7 @@ class Subscription:
 
             for j in inbounds:
                 response = panel.post(
-                    f"{panel.base_url}panel/api/inbounds/{str(j.id)}/delClient/{userid}",
+                    f"panel/api/inbounds/{str(j.id)}/delClient/{userid}",
                     headers={'Accept': 'application/json'}
                 )
                 if not (response.status_code in [200, 201] and response.json().get('success')):
@@ -436,7 +436,7 @@ class Subscription:
                     payload.enable = enable
                     payload.id = userid
                     response = panel.post(
-                        f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
+                        f"panel/api/inbounds/updateClient/{userid}",
                         data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
                         headers={'Accept': 'application/json'}
                     )
@@ -462,7 +462,7 @@ class Subscription:
                 payload.id = userid
                 
                 panel.post(
-                    f"{panel.base_url}panel/api/inbounds/updateClient/{userid}",
+                    f"panel/api/inbounds/updateClient/{userid}",
                     data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
                     headers={'Accept': 'application/json'}
                 )
@@ -651,7 +651,7 @@ class Subscription:
                     'settings': json.dumps({"clients": [asdict(payload)]})
                 }
                 response = panel.post(
-                    f"{panel.base_url}panel/api/inbounds/updateClient/{olduid}",
+                    f"panel/api/inbounds/updateClient/{olduid}",
                     data=data,
                     headers={'Accept': 'application/json'}
                 )
@@ -1071,7 +1071,7 @@ class Subscription:
         online_users: set[str] = set()
         for panel in self.panels:
             try:
-                res = panel.post(f"{panel.base_url}panel/api/inbounds/onlines")
+                res = panel.post(f"panel/api/inbounds/onlines")
                 if res.status_code in [200, 201] and res.json().get('success'):
                     for email in res.json().get('obj', []):
                         name_candidate = email.rsplit('-', 1)[0]

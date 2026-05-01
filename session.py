@@ -152,7 +152,17 @@ class XUiSession(Session):
                 self.login()
         if self.dead:
             return _FakeResponse({"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503)
-    
+
+        if len(args) > 1:
+            url = args[1]
+        else:
+            url = kwargs.pop('url', '')
+        url = self._format_url(url)
+        if len(args) > 1:
+            args = (args[0], url) + args[2:]
+        else:
+            kwargs['url'] = url
+
         headers = kwargs.get("headers", {})
         kwargs["headers"] = {**self._inject_headers, **headers}
 
@@ -194,7 +204,7 @@ class XUiSession(Session):
             if self._login_monotonic and not self._needs_refresh():
                 return
             try:
-                login_url = f"{self.base_url}login"
+                login_url = self._format_url("login")
                 login_data = {"username": self.username, "password": self.password}
                 response = super().request(
                     "POST",
