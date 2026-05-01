@@ -41,7 +41,7 @@ __all__ = [
 
 SYNC_MODES = Literal['full', 'data', 'none']
 
-_T = TypeVar('_T', bound=Any)
+_T = TypeVar('_T')
 
 # ---------------------------------------------------------------------------
 # Module-level file primitives (shared by Config and LinesConfig)

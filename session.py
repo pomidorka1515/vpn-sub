@@ -148,19 +148,39 @@ class XUiSession(Session):
     
         headers = kwargs.get("headers", {})
         kwargs["headers"] = {**self._inject_headers, **headers}
+        
         return super().request(*args, **kwargs)
 
+    def _async_request_wrapper(self, log: bool, *args: Any, **kwargs: Any) -> Response:
+        """Executed inside the ThreadPoolExecutor to log failures without blocking."""
+        resp = self.request(*args, **kwargs)
+        
+        if log:
+            if resp.status_code >= 500:
+                self.log.error(f"async request failed: HTTP {resp.status_code} on {args[0] if args else 'unknown'}")
+            elif resp.status_code >= 400:
+                self.log.warning(f"async request failed: HTTP {resp.status_code} on {args[0] if args else 'unknown'}")
+            try:
+                content = resp.json()
+                if not content.get('success'):
+                    self.log.error(f"async request failed: {content.get('msg')} on {args[0] if args else 'unknown'}")
+            except (json.JSONDecodeError, ValueError):
+                pass
+        
+        return resp
+
     def async_request(self, *args: Any, **kwargs: Any) -> Future[Response]:
-        return self._executor.submit(self.request, *args, **kwargs)
+        return self._executor.submit(self._async_request_wrapper, *args, **kwargs)
 
-    def post_async(self, url: str, **kwargs: Any) -> Future[Response]:
-        return self.async_request('POST', url, **kwargs)
+    def post_async(self, url: str, log: bool = False, **kwargs: Any) -> Future[Response]:
+        return self.async_request('POST', url, log=log, **kwargs)
 
-    def get_async(self, url: str, **kwargs: Any) -> Future[Response]:
-        return self.async_request('GET', url, **kwargs)
+    def get_async(self, url: str, log: bool = False, **kwargs: Any) -> Future[Response]:
+        return self.async_request('GET', url, log=log, **kwargs)
+
 
     def login(self) -> None:
-        self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui ")
+        self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui")
         with self._lock:
             if self._login_monotonic and not self._needs_refresh():
                 return
