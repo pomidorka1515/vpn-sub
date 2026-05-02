@@ -3,12 +3,12 @@
     "title": "VPN Config",
     "type": "object",
     "required": [
-        "uri", "api_token", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot", "routing",
-        "json_template",
+        "uri", "api_token", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot", "routing",
+        "json_template", "bypass_packages", "domain", "ping_check_url",
         "publicbot", "codes", "3xui", "sub_name", "description", "flags",
         "users", "tokens", "displaynames", "tgids",
         "bw", "wl_bw", "profiles", "json_profiles", "profileDescriptions", "whitelistProfiles",
-        "masterLinks", "profileNodes", "userFingerprints",
+        "masterLinks", "profileNodes", "shortProfileDescriptions", "userFingerprints",
         "time", "status", "statusTime", "statusWl",
         "_notified", "_wl_notified"
     ],
@@ -17,9 +17,12 @@
         "$schema": { "type": "string", "description": "Schema file." },
         "uri": { "type": "string", "description": "Main URI for the service.", "default": "sub" },
         "api_uri": { "type": "string", "description": "Admin API URI." },
+        "provider_id": { "type": "string" },
+        "fallback_domain": { "type": "string", "description": "Fallback domain to retrieve the subscription from. Only works with Happ and if provider id is present.\nMust host a mirror of this service." },
         "api_token": { "type": "string", "description": "Admin API Access token." },
         "panel_alert_cooldown": { "type": "integer", "description": "Panel alert cooldown in seconds.", "default": 3600 },
         "domain": { "type": "string", "description": "Your domain." },
+        "ping_check_url": { "type": "string", "description": "URL used for checking connectivity in Happ, works with provider id only, must return 204." },
         "salt": { "type": "string", "description": "Salt for passwords, pick something strong." },
         "sub_name": { "type": "string", "description": "Text displayed in VPN clients." },
 
@@ -92,6 +95,13 @@
             },
             "additionalProperties": true
         },
+
+        "bypass_packages": {
+        	"type": "array",
+        	"description": "List of packages (android) to bypass",
+        	"items": { "type": "string" }
+        },
+        
         "webui_passwords": {
             "type": "object",
             "description": "WebUI hashed passwords.",
@@ -256,6 +266,11 @@
         "profileNodes": {
             "type": "object",
             "additionalProperties": { "type": "string" }
+        },
+
+        "shortProfileDescriptions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
         },
 
         "userFingerprints": {

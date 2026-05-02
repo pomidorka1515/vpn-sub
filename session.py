@@ -114,10 +114,14 @@ class XUiSession(Session):
 
     
     def _format_url(self, url: str, /) -> str:
-        if not url.startswith(self.base_url):
-            return self.base_url + url
-        else:
-            return url
+        # Strip /panel/ prefix from base_url since URLs passed are relative to it
+        base = self.base_url.rstrip('/')
+        panel_prefix = '/panel'
+        if base.endswith(panel_prefix):
+            base = base[:-len(panel_prefix)]
+        if not url.startswith(base):
+            return f"{base}/{url.lstrip('/')}"
+        return url
     
     def _start_health_check_thread(self) -> None:
         self._health_check_thread.start()

@@ -958,34 +958,6 @@ class Subscription:
             bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in bandwidths))
             wl_bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in wl_bandwidths))
 
-        # return {
-        #     "_": random.choice(cast(list[str], conf.get('funny_strings', []))),
-        #     "token": conf['tokens'][username],
-        #     "link": f"{domain}/sub?token={conf['tokens'][username]}",
-        #     "displayname": conf['displaynames'][username],
-        #     "uuid": conf['users'][username],
-        #     "fingerprint": conf['userFingerprints'][username],
-        #     "enabled": conf['status'][username],
-        #     "wl_enabled": conf['statusWl'][username],
-        #     "time": conf['time'][username],
-        #     "online": self.is_online(username),
-        #     "bandwidth": {
-        #         "total": {
-        #             "upload": bandwidths.upload,
-        #             "download": bandwidths.download,
-        #             "total": bandwidths.total
-        #         },
-        #         "wl_total": {
-        #             "upload": wl_bandwidths.upload,
-        #             "download": wl_bandwidths.download,
-        #             "total": wl_bandwidths.total
-        #         },
-        #         "monthly": monthly,
-        #         "wl_monthly": wl_monthly,
-        #         "limit": conf['bw'][username][0],
-        #         "wl_limit": conf['wl_bw'][username][0]
-        #     }
-        # }
         return UserInfo(
             _=random.choice(cast(list[str], conf.get('funny_strings', []))),
             token=conf['tokens'][username],
@@ -1156,6 +1128,7 @@ Lang: {lang}""")
         need_dummy_link = "v2rayn" in ua.lower() or "v2rayng" in ua.lower()
         is_happ = ua.startswith("Happ/")
         mimetype = "text/plain" if not browser else "text/html"
+        uri: str = cfg['uri']
         if browser:
             return Response(self.browser_html, mimetype=mimetype)
 
@@ -1204,7 +1177,31 @@ Lang: {lang}""")
             'announce': announce,
             'Content-Type': "text/plain"
         }
-        
+
+        provider_id = cfg['provider_id']
+
+        if provider_id and is_happ:
+            fallback_domain: str | None = cfg.get('fallback_domain', None)
+            provider_id_headers: dict[str, Any] = {
+                'providerid': provider_id,
+                'per-app-proxy-mode': 'bypass',
+                'per-app-proxy-list': ','.join(cfg['bypass_packages']),
+                'no-limit-xhttp-enabled': '1',
+                'check-url-via-proxy': cfg.get('ping_check_url', 'https://google.com/generate_204'),
+                'ping-type': 'proxy',
+                'sniffing-enable': '1', # Routing works better
+                'ping-result': 'time',
+                'dont-use-filter': '1',
+                'manual-block-user-agent': '1',
+                'subscriptions-sort-type': 'without',
+                'proxy-ping-timeout': '5' # NOTE: iOS only for some reason
+            }
+            if fallback_domain is not None:
+                provider_id_headers['fallback-url'] = \
+                    f'{fallback_domain.strip('/')}/{uri.strip('/')}?token={token}&lang={lang}{"&force_json=" + force_json if force_json else ""}'
+                
+            headers.update(provider_id_headers)
+
         user_uuid: str = cfg['users'][username]
 
         ### Content Generation ###
@@ -1233,6 +1230,7 @@ Lang: {lang}""")
             return Response(payload, mimetype=mimetype, headers=headers)
         
         elif mode == 'json':
+            headers['Content-Type'] = 'application/json'
             json_payload = self._build_json(
                 cfg=cfg,
                 user_uuid=user_uuid,
@@ -1387,13 +1385,15 @@ Lang: {lang}""")
         obj: list[dict[str, Any]] = []
         template: dict[str, Any] = cfg['json_template']
         fingerprint: str = cfg['userFingerprints'][username]
+        index: Literal[0, 1] = 0 if lang == "en" else 1 # Language index
 
         for p_key, p_name_list in cfg['profiles'].items():
             flag: str = cfg['flags'][p_key]
-            p_name_raw: str = p_name_list[0 if lang == "en" else 1]
+            p_name_raw: str = p_name_list[index]
             p_name: str = flag + p_name_raw
             node: str = cfg['profileNodes'][p_key]
             domain: str = cfg['nodes'][node]
+            short_desc: str = cfg['shortProfileDescriptions'][p_key][index]
             is_reality: bool = False
             result: dict[str, Any] = copy.deepcopy(template)
             result['remarks'] = p_name
@@ -1420,6 +1420,9 @@ Lang: {lang}""")
             if result['outbounds'][0]['streamSettings'].get('httpupgradeSettings', None) is not None:
                 httpupgradeSettings: dict[str, Any] = result['outbounds'][0]['streamSettings']['httpupgradeSettings']
                 httpupgradeSettings['host'] = domain
+            meta = result.setdefault('meta', {})
+            meta['serverDescription'] = short_desc # NOTE: this only works if you have a providerid,
+                                                   # NOTE: but we set it regardless
             obj.append(result)
         
         return obj
