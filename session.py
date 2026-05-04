@@ -4,7 +4,7 @@ import threading
 import time
 import json
 
-from requests import Session, Response, Timeout
+from requests import Session, Response, Timeout, ConnectionError
 from requests.structures import CaseInsensitiveDict
 from concurrent.futures import ThreadPoolExecutor, Future
 from loggers import Logger
@@ -145,6 +145,10 @@ class XUiSession(Session):
             except Timeout:
                 self.log.error(f"panel {self.name}: timeout of 5 seconds exceeded, panel is down")
                 self.dead = True
+            except ConnectionError as e:
+                self.log.warning(f"Panel {self.name}: connection error: {e}")
+                self.dead = True
+                
             except Exception:
                 self.log.error(f"panel {self.name}: unknown exception. re-raising")
                 self.dead = True
@@ -170,7 +174,15 @@ class XUiSession(Session):
         headers = kwargs.get("headers", {})
         kwargs["headers"] = {**self._inject_headers, **headers}
 
-        return super().request(*args, **kwargs)
+        try:
+            return super().request(*args, **kwargs)
+        except Timeout:
+            self.dead = True
+            raise
+        except ConnectionError as e:
+            self.log.warning(f"Panel {self.name}: connection error: {e}")
+            self.dead = True
+            return _FakeResponse({"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503)
 
     def _async_request_wrapper(self, log: bool, method: str, url: str, *args: Any, **kwargs: Any) -> Response:
         """Executed inside the ThreadPoolExecutor to log failures without blocking."""
