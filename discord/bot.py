@@ -22,7 +22,7 @@ cfg = Config(
     isolate_commits=False
 )
 
-client = commands.InteractionBot(intents=disnake.Intents.default())
+client = commands.InteractionBot(intents=disnake.Intents.all())
 
 api = httpx.AsyncClient(
     base_url=cfg.get('api_base_url', ''),
@@ -32,6 +32,21 @@ api = httpx.AsyncClient(
 @client.event
 async def on_ready():
     log.info(f"Logged in as {client.user} ID {client.user.id}")
+
+    # Register slash commands globally (can take up to 1 hour)
+    # For instant registration, use a guild ID instead of None
+    guild_id = cfg.get('test_guild_id', None)  # Set a guild ID in config for instant registration
+    if guild_id:
+        guild = client.get_guild(guild_id)
+        if guild:
+            await client.sync_commands(guild=guild)
+            log.info(f"Synced commands to guild: {guild.name}")
+        else:
+            await client.sync_commands()  # Fallback to global
+            log.info("Synced commands globally")
+    else:
+        await client.sync_commands()
+        log.info("Synced commands globally (may take up to 1 hour)")
 
 @client.slash_command(description="Multiplies the number by a multiplier")
 async def multiply(inter, number: int, multiplier: int = 7):

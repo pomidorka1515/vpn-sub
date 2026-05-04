@@ -702,7 +702,7 @@ class Config(MutableMapping[str, Any]):
     @staticmethod
     def _detach(value: _T) -> _T:
         if isinstance(value, (dict, list)):
-            return copy.deepcopy(cast(Any, value)) 
+            return copy.deepcopy(cast(_T, value)) 
         return value
 
     def __del__(self) -> None:
@@ -831,6 +831,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                 self.original = None
                 self.owner_thread_id = None
                 cfg._active_transaction = None
+                cfg._context_transaction = None
                 cfg._lock.release()
                 self._cfg_lock_acquired = False
 

@@ -193,7 +193,7 @@ class XUiSession(Session):
         return resp
 
     def async_request(self, method: str, url: str, log: bool, *args: Any, **kwargs: Any) -> Future[Response]:
-        return self._executor.submit(self._async_request_wrapper, log=log, method=method, url=url, *args, **kwargs)
+        return self._executor.submit(self._async_request_wrapper, log, method, url, *args, **kwargs)
 
     def post_async(self, url: str, log: bool = False, **kwargs: Any) -> Future[Response]:
         return self.async_request(method='POST', url=url, log=log, **kwargs)

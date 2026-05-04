@@ -95,14 +95,15 @@ class BandwidthInfo(NamedTuple):
     total: int | float
 
     @staticmethod
-    def format_bytes(b: int) -> float:
+    def format_bytes_mb(b: int) -> float:
         return round(b / 10**6, 2)
-
-    def format_all(self) -> BandwidthInfo:
+    
+    def format_all_mb(self) -> BandwidthInfo:
+        """Format everything into MB."""
         return BandwidthInfo(
-            self.format_bytes(int(self.upload)),
-            self.format_bytes(int(self.download)),
-            self.format_bytes(int(self.total))
+            self.format_bytes_mb(int(self.upload)),
+            self.format_bytes_mb(int(self.download)),
+            self.format_bytes_mb(int(self.total))
         )
 
 class BandwidthUpdate(NamedTuple):
@@ -326,7 +327,7 @@ class Subscription:
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
 
-    def add_users(self, username: str) -> None:
+    def add_users(self, username: str) -> str | None:
         userid = self.cfg['users'][username]
         panels = self.panels
 
@@ -370,12 +371,14 @@ class Subscription:
                     'settings': json.dumps({"clients": [asdict(client)]})
                 }
 
-                panel.post_async(
-                    f"panel/api/inbounds/addClient",
+                resp = panel.post(
+                    url=f"panel/api/inbounds/addClient",
                     data=data,
                     headers={'Accept': 'application/json'}
                 )
-        
+                content = resp.json()
+                if not (resp.status_code in [200, 201] and content.get('success')):
+                    return content.get('msg', 'unknown error')
         self._drop_cache()
         return None
     def delete_user(self,
@@ -534,8 +537,9 @@ class Subscription:
                 d.setdefault('webui_users', {})[ext_username] = username
         
         try:
-            self.add_users(username=username)
-
+            resp = self.add_users(username=username)
+            if isinstance(resp, str):
+                return f"Panel error:{resp}"
             return NewUserInfo(
                 username=username,
                 token=token,
@@ -561,52 +565,56 @@ class Subscription:
         Invalid params return str, None on success."""
         if not self.isuser(username):
             return "Missing username"
-        _pw_already_hashed = False
-        _old_ext_username = None
-        if ext_username is not None:
-            
-            for _ext, _internal in self.cfg.get('webui_users', {}).items():
-                if _internal == username:
-                    _old_ext_username = _ext
-                    break
-            if ext_password is None and _old_ext_username:
-                ext_password = self.cfg['webui_passwords'].get(_old_ext_username)
-                _pw_already_hashed = True
-                    
-        if displayname is None:
-            displayname = self.cfg['displaynames'][username]
-        else:
-            displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
-            if len(displayname) > 16:
-                return "Displayname too long"
-        if token is None:
-            token = self.cfg['tokens'][username]
-        if fingerprint is None:
-            fingerprint = self.cfg['userFingerprints'][username]
-        if limit is None:
-            limit = self.cfg['bw'][username][0]
-        if wl_limit is None:
-            wl_limit = self.cfg['wl_bw'][username][0]
-        if timee is None:
-            timestamp: int = self.cfg['time'][username]
-        else:
-            timestamp = timee
-        if ext_password is not None and not _pw_already_hashed:
-            ext_password = self.hash(ext_password)
-        if ext_username is not None:
-            ext_username = self.sanitize(ext_username)
-            if len(ext_username) > 32:
-                return "Username too long"
-            if ext_username in self.cfg['webui_users'] and self.cfg['webui_users'][ext_username] != username:
-                return "Ext username exists"
-            
-        if fingerprint not in self.cfg['fingerprints']:
-            return "Invalid fingerprint"
-        if timestamp > 2**31:
-            return "Invalid time"
 
         with self.cfg as t:
-            t['displaynames'][username] =  displayname
+            _old_ext_username: str | None = None
+            if ext_username is not None:
+                for _ext, _internal in t.get('webui_users', {}).items():
+                    if _internal == username:
+                        _old_ext_username = _ext
+                        break
+                if ext_password is None and _old_ext_username:
+                    ext_password = t['webui_passwords'].get(_old_ext_username)
+                    # mark as already-hashed so we skip re-hashing below
+                    _already_hashed = True
+                else:
+                    _already_hashed = False
+            else:
+                _already_hashed = False
+
+            if displayname is None:
+                displayname = t['displaynames'][username]
+            else:
+                displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
+                if len(displayname) > 16:
+                    return "Displayname too long"
+            if token is None:
+                token = t['tokens'][username]
+            if fingerprint is None:
+                fingerprint = t['userFingerprints'][username]
+            if limit is None:
+                limit = t['bw'][username][0]
+            if wl_limit is None:
+                wl_limit = t['wl_bw'][username][0]
+            if timee is None:
+                timestamp: int = t['time'][username]
+            else:
+                timestamp = timee
+
+            if ext_username is not None:
+                ext_username = self.sanitize(ext_username)
+                if len(ext_username) > 32:
+                    return "Username too long"
+                if ext_username in t['webui_users'] and t['webui_users'][ext_username] != username:
+                    return "Ext username exists"
+            if ext_password is not None and not _already_hashed:
+                ext_password = self.hash(ext_password)
+            if fingerprint not in self.fps:
+                return "Invalid fingerprint"
+            if timestamp > 2**31:
+                return "Invalid time"
+
+            t['displaynames'][username] = displayname
             t['tokens'][username] = token
             t['userFingerprints'][username] = fingerprint
             t['bw'][username] = [limit, t['bw'][username][1]]
@@ -617,15 +625,52 @@ class Subscription:
                     t.get('webui_passwords', {}).pop(_old_ext_username, None)
                     t.get('webui_users', {}).pop(_old_ext_username, None)
                 t['webui_passwords'][ext_username] = ext_password
-                t['webui_users'][ext_username] = username                
+                t['webui_users'][ext_username] = username
+
         self._drop_cache()
         return None
+
+    def _rollback_user_uuid(
+        self,
+        username: str,
+        old_uid: str,
+        new_uid: str,
+        successful: list[tuple[XUiSession, int, SettingsClient, bool]],
+    ) -> None:
+        """Restore old UUID on panels that were already updated before a failure.
+        Logs but never raises — rollback failures are logged, not propagated."""
+        for panel, inbound_id, settings, had_vision in successful:
+            settings.id = old_uid
+            settings.flow = "xtls-rprx-vision" if had_vision else ""
+            data: dict[str, Any] = {
+                'id': inbound_id,
+                'settings': json.dumps({"clients": [asdict(settings)]})
+            }
+            try:
+                resp = panel.post(
+                    f"panel/api/inbounds/updateClient/{new_uid}",
+                    data=data,
+                    headers={'Accept': 'application/json'}
+                )
+                if not (resp.ok and resp.json().get('success')):
+                    self.log.error(
+                        f"_rollback_user_uuid: panel {panel.name} inbound {inbound_id} "
+                        f"failed to restore UUID {old_uid}: {resp.json().get('msg', 'unknown')}"
+                    )
+            except Exception as e:
+                self.log.error(
+                    f"_rollback_user_uuid: panel {panel.name} inbound {inbound_id} "
+                    f"exception during rollback: {e}"
+                )
+
     def update_uuid(self, username: str, uid: str) -> None | str:
         """Seperate method for updating the UUID. None on success, str on error.
         Potentially dangerous operation, seperate function."""
         if not self.isuser(username):
             return "Unknown username"
         olduid: str = self.cfg['users'][username]
+        successful: list[tuple['XUiSession', int, SettingsClient, bool]] = []
+
         for panel in self.panels:
             inbounds = self.getinbounds(panel)
             l: list[int] = []
@@ -656,13 +701,16 @@ class Subscription:
                     headers={'Accept': 'application/json'}
                 )
                 if not (response.status_code in [200, 201] and response.json().get('success')):
-                    self.log.critical(f"update_uuid failed: {response.json().get('msg')}")
-                    return response.json().get('msg')
-        
+                    err_msg = response.json().get('msg', 'panel rejected update')
+                    self.log.critical(f"update_uuid failed on panel {panel.name}: {err_msg}")
+                    self._rollback_user_uuid(username, olduid, uid, successful)
+                    return err_msg
+
+                successful.append((panel, k, the[str(k)], k in need_vision))
+
         with self.cfg as t: t['users'][username] = uid
         self._drop_cache()
         return None
-    
 
     def register_with_code(
         self,
@@ -945,7 +993,7 @@ class Subscription:
 
     def get_info(self, username: str, pretty: bool = False) -> UserInfo | None:
         """Get all info about a user. None if not found."""
-        if not self.cfg['users'].get(username, None):
+        if not self.isuser(username):
             return None
         
         conf = self.cfg.copy()
@@ -955,9 +1003,8 @@ class Subscription:
         wl_monthly = conf['wl_bw'][username][1]
         domain = self.cfg['domain']
         if pretty:
-            bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in bandwidths))
-            wl_bandwidths = BandwidthInfo(*(round(x / 10**6, 2) for x in wl_bandwidths))
-
+            bandwidths = bandwidths.format_all_mb()
+            wl_bandwidths = wl_bandwidths.format_all_mb()
         return UserInfo(
             _=random.choice(cast(list[str], conf.get('funny_strings', []))),
             token=conf['tokens'][username],
@@ -1042,6 +1089,8 @@ class Subscription:
         new: False = ['username', ...]. True = {'username': ext_username_or_None, ...}"""
         online_users: set[str] = set()
         for panel in self.panels:
+            if panel.dead:
+                continue
             try:
                 res = panel.post(f"panel/api/inbounds/onlines")
                 if res.status_code in [200, 201] and res.json().get('success'):
@@ -1442,9 +1491,8 @@ class BWatch:
         with self.log.loading():
             self.cfg: ConfigLike = cfg
             self.bw_cfg: ConfigLike = bw_cfg
-            self._lock = threading.Lock()
             self._stop_event = threading.Event()
-            self._snapshot_lock = threading.Lock()
+            self._mem_lock = threading.Lock()  # single lock for all mem/wl_mem access
             self.sub: Subscription = sub
             self.bot: PublicBotLike | None = bot
             self.admin_bot: AdminBotLike | None = admin_bot
@@ -1452,7 +1500,7 @@ class BWatch:
             self.wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
             self._panel_alerts: dict[str, Any] = {} # only used by 1 thread, no lock needed yet
-            self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', None) or 3600
+            self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown') or 3600
 
             self._threads: tuple[threading.Thread, ...] = (
                 threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs"),
@@ -1471,15 +1519,25 @@ class BWatch:
                 continue
             initial_mem[i] = self.sub.bandwidth(username=i)
 
-        with self._snapshot_lock:
+        with self._mem_lock:
             self.mem = initial_mem
             self.wl_mem = initial_wl_mem
             self._snapshot_initialized = True
+
+        # Run first snapshot immediately (record_daily_snapshot does its own locking)
+        self.record_daily_snapshot()
+        self.is_first()   # also run the monthly reset check immediately
 
         ### Start Threads ###
 
         for thread in self._threads:
             thread.start()
+
+    def _get_notified(self, key: Literal['_notified', '_wl_notified']) -> set[int]:
+        """Read _notified/_wl_notified from cfg as a set of int (tgid).
+        Persisted as list in JSON; converted to set for O(1) membership."""
+        val: list[int] = self.cfg.get(key)
+        return set(val) if isinstance(val, list) else (val if isinstance(val, set) else set())
     
     def stop(self) -> None:
         self._stop_event.set()
@@ -1491,14 +1549,15 @@ class BWatch:
         if x is not None:
             self.log.critical(f"update_user error: {x}") 
     
-    def prune_old_snapshots(self) -> None: 
-        with self.bw_cfg as d:            
-            retention = d.get("_meta", {}).get("retention_days", 30) # 30-day default
+    def prune_old_snapshots(self) -> None:
+        with self.bw_cfg as d:
+            meta = d.setdefault("_meta", {})
+            retention = meta.get("retention_days", 30)
             cutoff = int(time.time()) - retention * 86400
-            for user in d.get("users", {}):
+            for user in list(d.get("users", {}).keys()):
                 snapshots = d["users"][user]["snapshots"]
-                d["users"][user]["snapshots"] = [s for s in snapshots if s["ts"] >= cutoff]                                                                                                                                                                                                     
-            d["_meta"]["last_prune"] = int(time.time())
+                d["users"][user]["snapshots"] = [s for s in snapshots if s["ts"] >= cutoff]
+            meta["last_prune"] = int(time.time())
 
     def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
@@ -1509,27 +1568,27 @@ class BWatch:
                 if (self.cfg['time'][i] - int(time.time())) >= 0 and not self.cfg['statusTime'][i]:
                     self._update_user(username=i, enable=True, timee=True)
             if self.cfg['bw'].get(i, [0, 0])[0] != 0:
-                if self.cfg['bw'][i][1] < self.cfg['bw'][i][0] * 1000**3 and not self.cfg['status'][i]:
+                if self.cfg['bw'][i][1] < int(self.cfg['bw'][i][0] * 10**9) and not self.cfg['status'][i]:
                     self._update_user(username=i, enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i)
-                    with self._lock:
+                    with self._mem_lock:
                         if i not in self.mem:
                             self.mem[i] = current_bws
                         else:
                             delta = int(current_bws.total - self.mem[i].total)
                             if delta > 0:
                                 updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
-                                
+
                 except Exception as e:
                     self.log.error(f"BW error for {i}: {e}")
             # Whitelist bandwidth
             if self.cfg['wl_bw'].get(i, [0, 0])[0] != 0:
-                if self.cfg['wl_bw'][i][1] < self.cfg['wl_bw'][i][0] * 1000**3 and not self.cfg['statusWl'][i]:
+                if self.cfg['wl_bw'][i][1] < int(self.cfg['wl_bw'][i][0] * 10**9) and not self.cfg['statusWl'][i]:
                     self._update_user(username=i, wl_enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i, whitelist=True)
-                    with self._lock:
+                    with self._mem_lock:
                         if i not in self.wl_mem:
                             self.wl_mem[i] = current_bws
                         else:
@@ -1543,7 +1602,7 @@ class BWatch:
             return
 
         with self.cfg as data:
-            with self._lock:
+            with self._mem_lock:
                 for i, update in updates.items():
                     if i in data['bw']:
                         data['bw'][i][1] += update.delta
@@ -1610,30 +1669,33 @@ class BWatch:
                 else:
                     days = (self.cfg['time'][i] - int(time.time())) // 86400
                     if days <= 2:
-                        if tg_user not in self.cfg['_notified']:
-                            def _u_(t: MutableMapping[str, Any]): t['_notified'].append(tg_user)
+                        if tg_user is not None and tg_user not in self._get_notified('_notified'):
+                            def _u_(t: MutableMapping[str, Any]):
+                                t.setdefault('_notified', []).append(tg_user)
                             self.cfg.mutate(_u_)
                             if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
-            if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3:
+            if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > int(self.cfg['wl_bw'][i][0] * 10**9):
                 if self.cfg['statusWl'].get(i, True):
                     self._update_user(username=i, wl_enable=False)
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=self.cfg['wl_bw'][i][0])
-            elif self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > self.cfg['wl_bw'][i][0] * 1000**3 * 0.95: # 95%
-                if tg_user not in self.cfg['_wl_notified']:
-                    def _up(t: MutableMapping[str, Any]): t['_wl_notified'].append(tg_user)
+            elif self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > int(self.cfg['wl_bw'][i][0] * 10**9 * 0.95): # 95%
+                if tg_user is not None and tg_user not in self._get_notified('_wl_notified'):
+                    def _up(t: MutableMapping[str, Any]):
+                        t.setdefault('_wl_notified', []).append(tg_user)
                     self.cfg.mutate(_up)
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(self.cfg['wl_bw'][i][1] / 10**6, 0)), available=self.cfg['wl_bw'][i][0])
             if not self.cfg['status'][i]:
                 continue
             if self.cfg['bw'][i][0] == 0:
                 continue
-            if self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > self.cfg['bw'][i][0] * 1000**3:
+            if self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > int(self.cfg['bw'][i][0] * 10**9):
                 self._update_user(username=i, enable=False, timee=True)
                 if self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=self.cfg['bw'][i][0])
-            elif self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > self.cfg['bw'][i][0] * 1000**3 * 0.95: # 95%
-                if tg_user not in self.cfg['_notified']:
-                    def _up_(t: MutableMapping[str, Any]): t['_notified'].append(tg_user)
-                    self.cfg.mutate(_up_)                    
+            elif self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > int(self.cfg['bw'][i][0] * 10**9 * 0.95): # 95%
+                if tg_user is not None and tg_user not in self._get_notified('_notified'):
+                    def _up_(t: MutableMapping[str, Any]):
+                        t.setdefault('_notified', []).append(tg_user)
+                    self.cfg.mutate(_up_)
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
 
     def is_first(self) -> None:
@@ -1643,7 +1705,12 @@ class BWatch:
         if now.day != 1:
             return
         today = now.strftime("%Y-%m-%d")
-        if self.cfg.get("_last_reset") == today:
+
+        # Restart-safe: compare against stored month key, not just the date string.
+        # '_last_reset_month' stores "YYYY-MM" so a process restart on day 2
+        # doesn't accidentally re-trigger a reset that already happened.
+        current_month = now.strftime("%Y-%m")
+        if current_month == self.cfg.get("_last_reset_month"):
             return
 
         with self.cfg as t:
@@ -1652,6 +1719,7 @@ class BWatch:
             for k in t['wl_bw']:
                 t['wl_bw'][k][1] = 0
             t['_last_reset'] = today
+            t['_last_reset_month'] = current_month
             t['_notified'] = []
             t['_wl_notified'] = []
     
@@ -1662,65 +1730,65 @@ class BWatch:
 
     def record_daily_snapshot(self) -> None:
         """Record one bandwidth snapshot per user for today (UTC midnight).
-        Reads mem/wl_mem under lock, writes to bw_history.json."""
-        with self._snapshot_lock:
-            midnight = int(time.time()) - (int(time.time()) % 86400)
-            initialized = self._snapshot_initialized
 
-            if not initialized:
-                for username in list(self.cfg['users'].keys()):
-                    current = self.sub.bandwidth(username=username)
-                    wl_current = self.sub.bandwidth(username=username, whitelist=True)
-                    self.mem[username] = current
-                    self.wl_mem[username] = wl_current
-                self._snapshot_initialized = True
-                return
+        Thread-safe: takes a copy of mem under lock, releases it for I/O,
+        then updates mem + writes config under lock."""
 
-            with self.cfg as main:
-                user_limits = {
-                    u: (main['bw'][u][0], main['wl_bw'][u][0])
-                    for u in main['users'].keys()
-                }
+        # 1. Snapshot mem under lock
+        with self._mem_lock:
+            mem_snapshot = dict(self.mem)
+            wl_mem_snapshot = dict(self.wl_mem)
 
-            for username, (limit, wl_limit) in user_limits.items():
-                if limit == 0 and wl_limit == 0:
-                    continue
+        # 2. Fetch bandwidth outside lock (I/O can be slow)
+        midnight = int(time.time()) - (int(time.time()) % 86400)
+        # {username: (current, wl_current, delta_up, delta_down, wl_up, wl_down)}
+        snapshot_data: dict[str, tuple[BandwidthInfo, BandwidthInfo, int, int, int, int]] = {}
 
-                last_mem = self.mem.get(username)
-                last_wl_mem = self.wl_mem.get(username)
+        for username in list(self.cfg['users'].keys()):
+            bw_limit = self.cfg['bw'].get(username, [0, 0])[0]
+            wl_limit = self.cfg['wl_bw'].get(username, [0, 0])[0]
+            if bw_limit == 0 and wl_limit == 0:
+                continue
 
+            try:
                 current = self.sub.bandwidth(username=username)
                 wl_current = self.sub.bandwidth(username=username, whitelist=True)
+            except Exception:
+                continue
 
+            last_mem = mem_snapshot.get(username)
+            last_wl_mem = wl_mem_snapshot.get(username)
+
+            snapshot_data[username] = (
+                current, wl_current,
+                int(current.upload - last_mem.upload) if last_mem else 0,
+                int(current.download - last_mem.download) if last_mem else 0,
+                int(wl_current.upload - last_wl_mem.upload) if last_wl_mem else 0,
+                int(wl_current.download - last_wl_mem.download) if last_wl_mem else 0,
+            )
+
+        # 3. Update mem + write snapshot under lock (atomic)
+        with self._mem_lock:
+            for username, (current, wl_current, up, down, wl_up, wl_down) in snapshot_data.items():
                 self.mem[username] = current
                 self.wl_mem[username] = wl_current
 
-                if last_mem:
-                    daily_up = int(current.upload - last_mem.upload)
-                    daily_down = int(current.download - last_mem.download)
-                else:
-                    daily_up = 0
-                    daily_down = 0
-
-                if last_wl_mem:
-                    wl_up = int(wl_current.upload - last_wl_mem.upload)
-                    wl_down = int(wl_current.download - last_wl_mem.download)
-                else:
-                    wl_up = 0
-                    wl_down = 0
-
-                snap = BandwidthSnapshot(ts=midnight, up=daily_up, down=daily_down, wl_up=wl_up, wl_down=wl_down)
+                snap = BandwidthSnapshot(
+                    ts=midnight, up=up, down=down, wl_up=wl_up, wl_down=wl_down,
+                )
 
                 with self.bw_cfg as d:
                     users = d.setdefault("users", {})
                     user_data = users.setdefault(username, {"snapshots": []})
-                    snaps = user_data["snapshots"]
+                    snaps: list[dict[str, Any]] = user_data["snapshots"]
 
                     existing_idx = next((i for i, s in enumerate(snaps) if s["ts"] == midnight), None)
                     if existing_idx is not None:
                         snaps[existing_idx] = asdict(snap)
                     else:
                         snaps.insert(0, asdict(snap))
+
+        self.prune_old_snapshots()
     
     ### Helper functions ###
     def _every_120s(self) -> None:

@@ -93,7 +93,7 @@ MINIMAL_CONFIG: dict[str, Any] = {
 @pytest.fixture
 def tmp_cfg_path(tmp_path: pytest.TempPathFactory) -> str:
     """Path within a pytest tmp_path fixture."""
-    return str(tmp_path / "config.json")
+    return str(tmp_path / "config.json") # pyright: ignore[reportOperatorIssue, reportUnknownArgumentType]
 
 
 @pytest.fixture

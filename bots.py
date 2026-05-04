@@ -14,6 +14,7 @@ from typing import cast, Any
 from datetime import datetime
 from telebot import types
 from dataclasses import is_dataclass
+from concurrent.futures import ThreadPoolExecutor
 
 from custom_types import ConfigLike
 
@@ -685,6 +686,8 @@ class AdminBot:
         except Exception:
             pass
         self.bot.stop_polling()
+
+
 class PublicBot:
     """Public telegram bot for end users.
     Dependencies: Subscription
@@ -714,8 +717,10 @@ class PublicBot:
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))(self.chart_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this_hhhhh: True)(self.handle_text) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-  
+            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this_hhhhh_yet_another_lambda: True)(self.handle_text) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+
+            self._executor = ThreadPoolExecutor(max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart")
+
     def get_lang(self, uid: int) -> str:
         return self.cfg['publicbot']['tg_lang'].get(str(uid), 'ru')
 
@@ -1281,14 +1286,10 @@ class PublicBot:
         
         self.bot.answer_callback_query(call.id, t['chart_generating'])
 
-        thread = threading.Thread(
-            target=self._render_chart,
-            kwargs={"uid": uid, "username": username, "days": days,
-                    "lang": lang, "chat_id": message.chat.id},
-            daemon=True,
-            name=f"chart-{uid}"
+        self._executor.submit(
+            self._render_chart,
+            uid=uid, username=username, days=days, lang=lang, chat_id=message.chat.id
         )
-        thread.start()
 
     def _render_chart(
         self,

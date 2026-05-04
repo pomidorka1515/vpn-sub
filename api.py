@@ -13,7 +13,7 @@ from abc import ABC
 from typing import cast, Any, Callable, Literal, NamedTuple
 from dataclasses import asdict, is_dataclass
 
-from custom_types import ConfigLike, UserInfo, NewUserInfo
+from custom_types import ConfigLike, NewUserInfo
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
@@ -267,8 +267,10 @@ class WebApi(BaseApi):
         return internal
     def redirect_page(self) -> ResponseType:
         prefix = request.args.get('prefix', '')
-        if not (prefix.startswith('happ://') or prefix.startswith('v2ray') or prefix.startswith('clash')):
+        if not prefix.startswith(('happ://', 'v2ray', 'clash')):
             return _err("Invalid prefix", 400)
+        if len(prefix) > 512:
+            return _err("Prefix too long", 400)
         return Response(self.redirect_html, mimetype='text/html')
 
     def gui_panel(self) -> ResponseType:
@@ -338,8 +340,11 @@ class WebApi(BaseApi):
         return _ok(obj=self.cfg['fingerprints'])
     @requires_webapi_auth
     def delete(self, username: str) -> ResponseType:
-        content = cast(dict[str, Any], request.json) if request.is_json else {}
-        current_password = content.get('current_password') if content else None
+        content = request.get_json(silent=True)
+        if not isinstance(content, dict):
+            return _err("Body must be a JSON object", 400)
+        content = cast(dict[str, Any], content)
+        current_password = content.get('current_password')
         if not current_password or not isinstance(current_password, str):
             return _err("current_password required", 400)
         cur_ext = next(
@@ -467,8 +472,8 @@ class WebApi(BaseApi):
     def stats(self, username: str) -> ResponseType:
         """Get user info from token"""
         x = self.sub.get_info(username)
-        x = cast(UserInfo, x) # NOTE: get_info returns 'None' when the user is not found,
-                              # NOTE: but @requires_webapi_auth guarrantees the user exists.
+        if x is None:
+            return _err("User not found", 404)
         return _ok(obj=asdict(x))
 
     @requires_webapi_auth
@@ -488,23 +493,37 @@ class WebApi(BaseApi):
     def register(self) -> ResponseType:
         """Register a new user via code."""
         content = cast(dict[str, Any], request.json)
+        raw_name: Any = content.get('name')
+        raw_username: Any = content.get('username')
+        raw_password: Any = content.get('password')
+        raw_code: Any = content.get('code')
+
+        if not isinstance(raw_name, str) or len(raw_name) == 0 or len(raw_name) > 16:
+            return _err("'name' must be 1-16 characters")
+        if not isinstance(raw_username, str) or len(raw_username) == 0 or len(raw_username) > 32:
+            return _err("'username' must be 1-32 characters")
+        if not isinstance(raw_password, str) or len(raw_password) == 0 or len(raw_password) > 128:
+            return _err("'password' must be 1-128 characters")
+        if not isinstance(raw_code, str) or len(raw_code) == 0 or len(raw_code) > 64:
+            return _err("'code' must be 1-64 characters")
+
         try:
             result = self.sub.register_with_code(
-                code=cast(str, content['code']),
+                code=raw_code,
                 username=f"web_{uuid.uuid4().hex[:16]}",
-                displayname=cast(str, content['name']),
-                ext_username=cast(str, content['username']),
-                ext_password=cast(str, content['password']),
+                displayname=raw_name,
+                ext_username=raw_username,
+                ext_password=raw_password,
             )
         except Exception as e:
             self.log.critical(f"register failed: {e}")
             return _err("Internal server error", 500)
-    
+
         if isinstance(result, str):
             if result in ["Invalid code", "Username exists", "Ext Username exists"]:
                 return _err(result, 403)
             return _err(result, 400)
-    
+
         return _ok("Created", 201, asdict(result))
 
     @requires_fields('username', 'password')
@@ -571,7 +590,8 @@ class Api(BaseApi):
         username = request.args['user']
         pretty = request.args.get('beautify', '').lower() in ('1', 'true', 'yes')
         x = self.sub.get_info(username=username, pretty=pretty)
-        x = cast(UserInfo, x) # NOTE: see WebApi.stats()
+        if x is None:
+            return _err("Unknown user")
         return _ok(obj=asdict(x))
  
     @requires_admin_auth
