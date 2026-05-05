@@ -9,11 +9,11 @@ from __future__ import annotations
 # mypy: disable-error-code="override"
 # pylint: disable=protected-access
 
-from collections.abc import Callable, Iterable, Iterator, MutableMapping
+from collections.abc import Callable, Iterable, Iterator, MutableMapping, Mapping
 from loggers import Logger
 from typing import (
     Any, Self, Literal,
-    cast, TypeVar
+    cast, TypeVar, NamedTuple
 )
 from types import TracebackType
 from contextlib import contextmanager
@@ -47,6 +47,13 @@ _T = TypeVar('_T')
 # Module-level file primitives (shared by Config and LinesConfig)
 # ---------------------------------------------------------------------------
 
+class FileSignature(NamedTuple):
+    """Unique file identifier after atomic write."""
+    mtime_ns: int
+    size: int
+    inode: int
+    device: int
+
 def _ensure_parent_dir(path: str) -> None:
     dir_path = os.path.dirname(path)
     if dir_path:
@@ -66,19 +73,19 @@ def _locked_file(path: str, *, exclusive: bool) -> Iterator[None]:
         finally:
             fcntl.flock(lock_fp, fcntl.LOCK_UN)
 
-def _stat_signature(path: str) -> tuple[int, int, int, int] | None:
+def _stat_signature(path: str) -> FileSignature | None:
     try:
         stat_result = os.stat(path)
     except FileNotFoundError:
         return None
-    return (
-        stat_result.st_mtime_ns,
-        stat_result.st_size,
-        stat_result.st_ino,
-        stat_result.st_dev,
+    return FileSignature(
+        mtime_ns=stat_result.st_mtime_ns,
+        size=stat_result.st_size,
+        inode=stat_result.st_ino,
+        device=stat_result.st_dev,
     )
 
-def _file_signature(path: str) -> tuple[int, int, int, int] | None:
+def _file_signature(path: str) -> FileSignature | None:
     return _stat_signature(path)
 
 def _fsync_parent_dir(path: str) -> None:
@@ -91,11 +98,11 @@ def _fsync_parent_dir(path: str) -> None:
 
 def _atomic_write_json(
     path: str,
-    data: dict[str, Any],
+    data: Mapping[str, Any],
     *,
     indent: int,
     sync_mode: SYNC_MODES,
-) -> tuple[int, int, int, int] | None:
+) -> FileSignature | None:
     """Write atomically: temp file + os.replace. Returns new file signature."""
     _ensure_parent_dir(path)
     dir_path = os.path.dirname(path) or "."
@@ -317,14 +324,14 @@ class Config(MutableMapping[str, Any]):
         self._isolate_commits: bool = isolate_commits
     
         self._data: dict[str, Any] = {}
-        self._last_signature: tuple[int, int, int, int] | None = None
+        self._last_signature: FileSignature | None = None
     
         self._lock = threading.RLock()
         self._active_transaction: _ConfigTransaction | None = None
         self._context_transaction: _ConfigTransaction | None = None
     
         self._schema_cache_path: str | None = None
-        self._schema_cache_signature: tuple[int, int, int, int] | None = None
+        self._schema_cache_signature: FileSignature | None = None
         self._schema_cache: dict[str, Any] | None = None
     
         self._warned_update_callable: bool = False

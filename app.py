@@ -97,7 +97,7 @@ _line_config_kwargs: dict[str, Any] = {
 cfg = Config(path='../config.json', indent=4, **_config_kwargs)
 bw_cfg = Config(path='../bw_history.json', indent=2, **_config_kwargs)
 line_cfg = LinesConfig(path='../log.jsonl', **_line_config_kwargs)
-
+audit_cfg = LinesConfig(path='../audit.jsonl', **_line_config_kwargs)
 # ------------------------------------------------------------
 # Panels
 # ------------------------------------------------------------
@@ -110,7 +110,10 @@ if not panels and wl is None:
 # ------------------------------------------------------------
 # Wire up components
 # ------------------------------------------------------------
-sub      = Subscription(cfg=cfg, bw_cfg=bw_cfg, app=app, panels=panels, whitelist_panel=wl)
+sub      = Subscription(
+               cfg=cfg, bw_cfg=bw_cfg, audit_cfg=audit_cfg, 
+               app=app, panels=panels, whitelist_panel=wl
+           )
 bw       = BWatch(cfg=cfg, bw_cfg=bw_cfg, sub=sub)
 api      = Api(app=app, cfg=cfg, sub=sub, bw=bw)
 webapi   = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)

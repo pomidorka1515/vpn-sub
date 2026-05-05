@@ -34,10 +34,10 @@ from custom_types import (
     ApplyBonusCodeObject,
     PublicBotLike, AdminBotLike,
     client_stats_to_settings,
-    ConfigLike
+    ConfigLike, LinesConfigLike
 )
 from dataclasses import dataclass, asdict
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Mapping
 
 # pyright: reportUnnecessaryIsInstance=false
 
@@ -127,11 +127,14 @@ class Subscription:
                  bw_cfg: ConfigLike,
                  app: Flask,
                  panels: list[XUiSession],
-                 whitelist_panel: XUiSession | None):
+                 whitelist_panel: XUiSession | None,
+                 audit_cfg: LinesConfigLike | None = None
+    ):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg: ConfigLike = cfg
             self.bw_cfg: ConfigLike = bw_cfg
+            self.audit_cfg: LinesConfigLike | None = audit_cfg
             self.app: Flask = app
             self.whitelist_panel: XUiSession | None  = whitelist_panel
             self.uri: str = cfg['uri']
@@ -143,7 +146,7 @@ class Subscription:
             self.FILTERS: dict[str, str] = {
                 'displayname': ':;"\'?/<>{}[]*&^%$#@\\|',
             }
-            self.panels: list['XUiSession'] = list(panels)
+            self.panels: list[XUiSession] = list(panels)
             self.SALT: str = self.cfg['salt']
             with open('res/browser.html', 'r') as f:
                 self.browser_html: str = f.read()
@@ -165,7 +168,26 @@ class Subscription:
 
     def hash(self, s: str) -> str:
         return hashlib.sha256((self.SALT + s).encode()).hexdigest()
-     
+
+    def audit(
+        self, 
+        *,                                    # EXAMPLES
+        name: str,                            # 'user_delete'
+        info: Mapping[str, object] | None = None # {"username": "foo"}
+    ) -> None:
+        """Call a JSONL config manager to append an action. 
+        Ignores everything if the audit config is not set."""
+        if not self.audit_cfg:
+            return
+        ts = datetime.now(timezone.utc)
+        cur_date = ts.strftime("%d.%m.%Y %H:%M:%S")
+        to_log: dict[str, object] = {
+            "ts": ts.timestamp(),
+            "date": cur_date,
+            "action": name,
+            "info": info
+        }
+        self.audit_cfg.append(record=to_log)
     @staticmethod
     def compare(a: str, b: str) -> bool:
         return hmac.compare_digest(a, b)
@@ -327,7 +349,8 @@ class Subscription:
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
 
-    def add_users(self, username: str) -> str | None:
+    def add_users(self, username: str, _called_internally: bool = False) -> str | None:
+        """Sync users to panels."""
         userid = self.cfg['users'][username]
         panels = self.panels
 
@@ -379,6 +402,7 @@ class Subscription:
                 content = resp.json()
                 if not (resp.status_code in [200, 201] and content.get('success')):
                     return content.get('msg', 'unknown error')
+        if not _called_internally: self.audit(name="user_refresh", info={"username":username})
         self._drop_cache()
         return None
     def delete_user(self,
@@ -416,6 +440,7 @@ class Subscription:
                 for tgid in tgids_to_delete:
                     data.get('tgids', {}).pop(tgid, None)
 
+        self.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
         return None
     def update_user(self, 
@@ -426,6 +451,7 @@ class Subscription:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
         None on success."""
         userid = self.cfg['users'][username]
+        audit_info: dict[str, str | bool] = {"username": username}
         if enable is not None:
             panels = list(self.panels)
             if self.whitelist_panel: panels.remove(self.whitelist_panel)
@@ -450,8 +476,7 @@ class Subscription:
                 data['status'][username] = enable
                 if timee is not None: data['statusTime'][username] = timee
             
-            self.log.info(f"Set main status for {username} to {enable}")
-
+            audit_info['enable'] = enable
         if wl_enable is not None and self.whitelist_panel:
             panel = self.whitelist_panel
             inbounds = self.getinbounds(panel)
@@ -473,7 +498,9 @@ class Subscription:
             with self.cfg as data:
                 data.setdefault('statusWl', {})[username] = wl_enable
             
-            self.log.info(f"Set WL status for {username} to {wl_enable}")
+            audit_info['wl_enable'] = wl_enable
+
+        self.audit(name="user_update", info=audit_info)
         self._drop_cache()
         return None
     def add_new_user(
@@ -537,9 +564,9 @@ class Subscription:
                 d.setdefault('webui_users', {})[ext_username] = username
         
         try:
-            resp = self.add_users(username=username)
+            resp = self.add_users(username=username, _called_internally=True)
             if isinstance(resp, str):
-                return f"Panel error:{resp}"
+                return f"Panel error: {resp}"
             return NewUserInfo(
                 username=username,
                 token=token,
@@ -548,6 +575,10 @@ class Subscription:
                 displayname=displayname
             )
         finally:
+            to_log: dict[str, str] = {"username": username}
+            if ext_username:
+                to_log['ext_username'] = ext_username
+            self.audit(name="user_add", info=to_log)
             self._drop_cache()
     def update_params(
         self,
@@ -565,7 +596,7 @@ class Subscription:
         Invalid params return str, None on success."""
         if not self.isuser(username):
             return "Missing username"
-
+        audit_info: dict[str, str | int] = {"username": username}
         with self.cfg as t:
             _old_ext_username: str | None = None
             if ext_username is not None:
@@ -588,27 +619,37 @@ class Subscription:
                 displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
                 if len(displayname) > 16:
                     return "Displayname too long"
+                audit_info['displayname'] = displayname
             if token is None:
                 token = t['tokens'][username]
             if fingerprint is None:
                 fingerprint = t['userFingerprints'][username]
+            else:
+                audit_info['fingerprint'] = fingerprint
             if limit is None:
                 limit = t['bw'][username][0]
+            else:
+                audit_info['limit'] = limit
             if wl_limit is None:
                 wl_limit = t['wl_bw'][username][0]
+            else:
+                audit_info['wl_limit'] = wl_limit
             if timee is None:
                 timestamp: int = t['time'][username]
             else:
                 timestamp = timee
-
+                audit_info['time'] = timestamp
+            
             if ext_username is not None:
                 ext_username = self.sanitize(ext_username)
                 if len(ext_username) > 32:
                     return "Username too long"
                 if ext_username in t['webui_users'] and t['webui_users'][ext_username] != username:
                     return "Ext username exists"
+                audit_info['ext_username'] = ext_username
             if ext_password is not None and not _already_hashed:
                 ext_password = self.hash(ext_password)
+                # audit_info['Dont even think about it']
             if fingerprint not in self.fps:
                 return "Invalid fingerprint"
             if timestamp > 2**31:
@@ -627,6 +668,7 @@ class Subscription:
                 t['webui_passwords'][ext_username] = ext_password
                 t['webui_users'][ext_username] = username
 
+        self.audit(name="user_update_params", info=audit_info)
         self._drop_cache()
         return None
 
@@ -709,6 +751,7 @@ class Subscription:
                 successful.append((panel, k, the[str(k)], k in need_vision))
 
         with self.cfg as t: t['users'][username] = uid
+        self.audit(name="user_update_uuid", info={"username": username, "uuid": uid})
         self._drop_cache()
         return None
 
@@ -778,18 +821,18 @@ class Subscription:
             except (TypeError, ValueError):
                 return "Invalid code"
     
-            users = d.setdefault("users", {})
-            tokens = d.setdefault("tokens", {})
-            user_fingerprints = d.setdefault("userFingerprints", {})
-            status = d.setdefault("status", {})
-            status_time = d.setdefault("statusTime", {})
-            status_wl = d.setdefault("statusWl", {})
-            displaynames = d.setdefault("displaynames", {})
-            bw = d.setdefault("bw", {})
-            wl_bw = d.setdefault("wl_bw", {})
-            times = d.setdefault("time", {})
-            webui_passwords = d.setdefault("webui_passwords", {})
-            webui_users = d.setdefault("webui_users", {})
+            users: dict[str, str] = d.setdefault("users", {})
+            tokens: dict[str, str] = d.setdefault("tokens", {})
+            user_fingerprints: dict[str, str] = d.setdefault("userFingerprints", {})
+            status: dict[str, bool] = d.setdefault("status", {})
+            status_time: dict[str, bool] = d.setdefault("statusTime", {})
+            status_wl: dict[str, bool] = d.setdefault("statusWl", {})
+            displaynames: dict[str, str] = d.setdefault("displaynames", {})
+            bw: dict[str, list[int]] = d.setdefault("bw", {})
+            wl_bw: dict[str, list[int]] = d.setdefault("wl_bw", {})
+            times: dict[str, int] = d.setdefault("time", {})
+            webui_passwords: dict[str, str] = d.setdefault("webui_passwords", {})
+            webui_users: dict[str, str] = d.setdefault("webui_users", {})
 
             if username in users:
                 return "Username exists"
@@ -831,9 +874,18 @@ class Subscription:
                 wl_limit=wl_gb,
                 time=timee
             )
+            audit_result = {
+                "username": username,
+                "ext_username": ext_username,
+                "uuid": userid,
+                "fingerprint": fingerprint,
+                "limit": gb,
+                "wl_limit": wl_gb,
+                "time": timee
+            }
 
         try:
-            self.add_users(username=username)
+            self.add_users(username=username, _called_internally=True)
         except Exception as e:
             self.log.critical(f"register_with_code backend sync failed for {username}: {e}")
             self._rollback_registered_user(
@@ -842,7 +894,7 @@ class Subscription:
                 consumed_code=consumed_code,
             )
             raise RuntimeError(f"backend sync failed for {username}") from e
-    
+        self.audit(name="user_add", info=audit_result)
         return result
 
     def get_code(self, code: str) -> CodeObject | bool:
@@ -923,7 +975,7 @@ class Subscription:
                 return "Broken user state"
             if not isinstance(current_wl_bw, list) or len(current_wl_bw) < 2:
                 return "Broken user state"
-
+            
             new_time = 0 if current_time == 0 else current_time + delta_days * 86400
             new_limit = 0 if current_bw[0] == 0 else current_bw[0] + delta_gb
             new_wl_limit = 0 if current_wl_bw[0] == 0 else current_wl_bw[0] + delta_wl_gb
@@ -944,7 +996,7 @@ class Subscription:
                 limit=new_limit,
                 wl_limit=new_wl_limit
             )
-    
+        self.audit(name="user_consume_code", info=asdict(result))
         return result
 
     def add_code(self, 
@@ -968,17 +1020,21 @@ class Subscription:
         with self.cfg as t:
             if any(c.get('code') == code for c in t['codes']):
                 return f"code '{code}' already exists"
-            t['codes'].append({
+            res = {
                 "code": code, "action": action, "perma": permanent,
                 "days": days, "gb": gb, "wl_gb": wl_gb
-            })
+            }
+            t['codes'].append(res)
+        self.audit(name="code_add", info=res)
+        
         return None
     def delete_code(self, code: str) -> bool:
         """Returns True if deleted, False if not found."""
-        def _delete(t: MutableMapping[str, Any]):
-            for i, item in enumerate(cast(dict[CodeObject, str], t['codes'])):
-                if item.code == code:
+        def _delete(t: MutableMapping[str, Any]): 
+            for i, item in enumerate(cast(list[dict[str, object]], t['codes'])):
+                if item.get('code') == code:
                     del t['codes'][i]
+                    self.audit(name="code_delete", info={"code": code})
                     return True
             return False
         return self.cfg.mutate(_delete)
@@ -1126,8 +1182,8 @@ class Subscription:
         if xx is not None:
             self.log.critical(f"reset_user: error in update_params: {xx}")
             return xx
-    
 
+        self.audit(name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"})
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)
 
