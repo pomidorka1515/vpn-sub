@@ -135,7 +135,7 @@ Response (success):
 ```  
 Response (error):  
 ```jsonc  
-// HTTP 400  
+// HTTP 404  
 {  
 	"success": false,  
 	"msg": "Unknown username",  
@@ -201,7 +201,7 @@ Response (success):
 ```  
 Response (error):  
 ```jsonc  
-// HTTP 400  
+// HTTP 404  
 {  
 	"success": false,  
 	"msg": "Unknown username",  
@@ -217,7 +217,7 @@ Response (error):
 
 ### GET /api/health
 Description: Lightweight health check. Returns HTTP 204 with no body on success.
-Authentication: header
+Authentication: none
 Body: none
 Response (success):
 ```jsonc
@@ -232,7 +232,7 @@ Use this to verify the API is reachable and the token is valid.
 Description: Get status of one or all panels.  
 Authentication: header  
 Args:  
-    name: (optional) Panel name. If omitted, returns status for all panels (long).  
+    name: (optional) Panel name. If omitted, returns status for all panels (long, blocking).  
 Response (success):  
 ```jsonc  
 // HTTP 200  
@@ -247,7 +247,7 @@ Response (success):
 ```  
 Response (error):  
 ```jsonc  
-// HTTP 400  
+// HTTP 404  
 {  
 	"success": false,  
 	"msg": "panel not found",  
@@ -312,7 +312,7 @@ Body:
 ```jsonc  
 {  
     "code": "",      // str, code string (required)  
-    "action": "",    // str, code action (required)  
+    "action": "",    // str, only 'register' or 'bonus', code action (required)  
     "perma": false,  // OPTIONAL bool-like (true, 'yes', '1', 'on', 'y'), reusable (default: false)  
     "days": 0,       // OPTIONAL int, days to add  
     "gb": 0,         // OPTIONAL int, GB to add to monthly limit  
@@ -370,11 +370,15 @@ Response (error):
 
 ---
 
-### GET /api/health
-Description: Verify connectivity.  
+### GET /api/teapot  
+Description: Verify the server cannot brew coffee because it is a teapot.  
 Auth: None  
 Response (success):  
 ```jsonc  
-// HTTP 204
-// <no content>
+// HTTP 418
+{
+	"teapot": true // Or false if its feeling fancy
+}
 ```  
+
+---  

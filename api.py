@@ -8,7 +8,7 @@ import time
 import uuid
 
 from functools import wraps
-from flask import Flask, Response, jsonify, send_file, redirect, request, make_response
+from flask import Flask, Response, jsonify, send_file, redirect, request, make_response, g
 from abc import ABC
 from typing import cast, Any, Callable, Literal, NamedTuple
 from dataclasses import asdict, is_dataclass
@@ -177,7 +177,7 @@ def rate_limit(max_requests: int) -> Callable[[Callable[..., Any]], Callable[...
 
 # ── Validation decorators ────────────────────────────────────────
 def requires_fields(*fields: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Validate request.json has all named fields. Returns 400 on failure."""
+    """Validate request JSON object, store it on flask.g.json_obj, and require named fields."""
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
         def wrapper(*args: Any, **kwargs: Any):
@@ -186,10 +186,14 @@ def requires_fields(*fields: str) -> Callable[[Callable[..., Any]], Callable[...
                 return _err("Missing JSON data.", 400)
             if not isinstance(content, dict):
                 return _err("Body must be a JSON dict.", 400)
-            
+
             missing = [x for x in fields if x not in content]
             if missing:
                 return _err(f"Missing fields: {', '.join(missing)}", 400)
+
+            content = cast(dict[str, Any], content) # NOTE: g.json_obj will appear
+                                                    # NOTE: as dict[Unknown, Unknown] -> type errors without this
+            g.json_obj = content
             return f(*args, **kwargs)
         return wrapper
     return decorator
@@ -339,8 +343,9 @@ class WebApi(BaseApi):
     def fps(self, username: str) -> ResponseType:
         return _ok(obj=self.cfg['fingerprints'])
     @requires_webapi_auth
+    @requires_fields()
     def delete(self, username: str) -> ResponseType:
-        content = request.get_json(silent=True)
+        content = g.json_obj
         if not isinstance(content, dict):
             return _err("Body must be a JSON object", 400)
         content = cast(dict[str, Any], content)
@@ -392,7 +397,7 @@ class WebApi(BaseApi):
     def settings(self, username: str) -> ResponseType:
         """Update users display name or fingerprint.
         Changing ext_username or ext_password requires `current_password` in body."""
-        content = cast(dict[str, Any], request.json)
+        content = g.json_obj
         displayname = content.get('name', None)
         fingerprint = content.get('fingerprint', None)
         ext_username = content.get('username', None)
@@ -449,7 +454,7 @@ class WebApi(BaseApi):
     @requires_fields('code')
     def bonus(self, username: str) -> ResponseType:
         """Apply bonus code."""
-        content = cast(dict[str, Any], request.json)
+        content = g.json_obj
         
         try:
             result = self.sub.apply_bonus_code(
@@ -492,7 +497,7 @@ class WebApi(BaseApi):
     @requires_fields('username', 'password', 'code', 'name')
     def register(self) -> ResponseType:
         """Register a new user via code."""
-        content = cast(dict[str, Any], request.json)
+        content = g.json_obj
         raw_name: Any = content.get('name')
         raw_username: Any = content.get('username')
         raw_password: Any = content.get('password')
@@ -529,7 +534,7 @@ class WebApi(BaseApi):
     @requires_fields('username', 'password')
     def login(self) -> ResponseType:
         """Get the cookie for auth."""
-        content = cast(dict[str, Any], request.json)
+        content = g.json_obj
         internal = self.validate_credentials(content['username'], content['password'])
         if not internal:
             return _err("Invalid credentials.", 401)
@@ -563,7 +568,8 @@ class Api(BaseApi):
         Route('POST', '/api/code/add', 'code_add'),
         Route('POST', '/api/code/delete', 'code_delete'),
 
-        Route('GET', '/api/health', 'health')
+        Route('GET', '/api/health', 'health'),
+        Route('GET', '/api/teapot', 'teapot')
     ]
 
     def __init__(self,
@@ -598,7 +604,7 @@ class Api(BaseApi):
     @requires_fields('user', 'displayname')
     def user_add(self) -> ResponseType:
         try:
-            content = cast(dict[str, Any], request.json)
+            content = g.json_obj
             raw_data: dict[str, Any] = {
                 "user": content.get('user'),
                 "displayname": content.get('displayname'),
@@ -661,13 +667,13 @@ class Api(BaseApi):
     @requires_fields('user')
     def user_delete(self) -> ResponseType:
         try:
-            content = cast(dict[str, Any], request.json)
+            content = g.json_obj
             username = cast(str, content.get('user'))
             perma = _parse_bool(content.get('perma', 'true'))
             if perma is None:
                 return _err("'perma' must be bool-like")
             if not self.sub.isuser(username):
-                return _err("Unknown username")
+                return _err("Unknown username", 404)
             err = self.sub.delete_user(username, perma)
             if isinstance(err, str):
                 return _err(err, 500)
@@ -691,19 +697,19 @@ class Api(BaseApi):
         new = _parse_bool(request.args.get('keyed', False))
         if new is None:
             return _err("'keyed' must be bool-like")
-        online_users = cast(dict[str, Any], self.sub.get_online_users(new = new))
+        online_users = self.sub.get_online_users(new)
         if not online_users:
-            return _ok(obj=[])
+            return _ok(obj=online_users)
         return _ok(obj=online_users)
 
     @requires_admin_auth
     @requires_fields('user')
     def user_reset(self) -> ResponseType:
         try:
-            content = cast(dict[str, Any], request.json)
+            content = g.json_obj
             username = cast(str, content.get('user'))
             if not self.sub.isuser(username):
-                return _err("Unknown username")
+                return _err("Unknown username", 404)
             x = self.sub.reset_user(username)
             if isinstance(x, str):
                 return _err(x, 500)
@@ -734,7 +740,7 @@ class Api(BaseApi):
                         return _err("getstatus() returned None; panel may be down")
                     return _ok(obj=asdict(res))
 
-            return _err("panel not found")
+            return _err("panel not found", 404)
         except Exception as e:
             self.log.error(f"panel_status fail: {e}")
             return _err(str(e), 500)
@@ -764,7 +770,7 @@ class Api(BaseApi):
     @requires_fields('code', 'action')
     def code_add(self) -> ResponseType: 
         try:
-            content = cast(dict[str, Any], request.json)
+            content = g.json_obj
             raw_data: dict[str, Any] = {
                 "name": content.get('code'),
                 "action": content.get('action'),
@@ -820,7 +826,7 @@ class Api(BaseApi):
     @requires_fields('code')
     def code_delete(self) -> ResponseType:
         try:
-            content = cast(dict[str, Any], request.json)
+            content = g.json_obj
             name = content.get('code')
             if not isinstance(name, str):
                 return _err(f"name must be str")
@@ -832,3 +838,6 @@ class Api(BaseApi):
 
     def health(self) -> ResponseType:
         return Response(), 204
+
+    def teapot(self) -> ResponseType:
+        return _err("I'm a teapot", 418, obj={"teapot": True})
