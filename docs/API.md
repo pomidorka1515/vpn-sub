@@ -1,12 +1,12 @@
 # Public API Documentation  
-
+  
 ## Introduction  
 Authentication: a cookie named 'token'.  
 Cookie is httponly, samesite=lax, secure=True  
-
+  
 ## Root URI (subject to change)  
 `{domain}/sub/webapi` where `domain` is your domain    
-
+  
 ## Response format  
 Every response follows this pattern:  
 ```jsonc  
@@ -21,8 +21,8 @@ Missing authorization:
 ```jsonc  
 // HTTP 401  
 {  
-    "success": false, 
-    "msg": "Invalid token.", 
+    "success": false,  
+    "msg": "Invalid token.",  
     "obj": null  
 }  
 ```  
@@ -32,8 +32,8 @@ Response:
 ```jsonc  
 // HTTP 429  
 {  
-    "success": false, 
-    "msg": "429 Too many requests", 
+    "success": false,  
+    "msg": "429 Too many requests",  
     "obj": null  
 }  
 ```  
@@ -41,16 +41,16 @@ Error:
 ```jsonc  
 // HTTP 500  
 {  
-    "success": false, 
-    "msg": "Internal server error", 
+    "success": false,  
+    "msg": "Internal server error",  
     "obj": null  
 }  
 ```  
-
-## Endpoints
-
+  
+## Endpoints  
+  
 ---  
-
+  
 ### POST /register  
 Description: Register a new account with an invite code.  
 Rate limit: 5  
@@ -87,9 +87,9 @@ Response (error):
 // HTTP 400  
 {"success": false, "msg": "Missing 'username' key in JSON.", "obj": null}  
 ```  
-
+  
 ---  
-
+  
 ### POST /login  
 Description: Log in using username and password. Sets a token cookie (30 days).  
 Rate limit: 10  
@@ -119,9 +119,9 @@ Response (error):
 // HTTP 400  
 {"success": false, "msg": "Missing 'username' key in JSON.", "obj": null}  
 ```  
-
+  
 ---  
-
+  
 ### POST /bonus  
 Description: Apply a bonus code to your account.  
 Rate limit: 15  
@@ -153,9 +153,9 @@ Response (error):
 // HTTP 400  
 {"success": false, "msg": "Missing 'code' key in JSON.", "obj": null}  
 ```  
-
+  
 ---  
-
+  
 ### GET /stats  
 Description: Get full info about yourself.  
 Rate limit: 20  
@@ -195,9 +195,9 @@ Response (success):
     }  
 }  
 ```  
-
+  
 ---  
-
+  
 ### POST /reset  
 Description: Reset your internal UUID and token. You will need to log in again after this!  
 Rate limit: 3  
@@ -215,9 +215,9 @@ Response (success):
     }  
 }  
 ```  
-
+  
 ---  
-
+  
 ### POST /settings  
 Description: Update your settings. All fields are optional, only provided fields are updated.  
 Rate limit: 10  
@@ -243,9 +243,9 @@ Response (error):
 {"success": false, "msg": "Both ext params needed", "obj": null}  
 {"success": false, "msg": "Ext username exists", "obj": null}  
 ```  
-
+  
 ---  
-
+  
 ### POST /logout  
 Description: Log out and delete your cookie.  
 Rate limit: 20  
@@ -255,14 +255,14 @@ Response (success):
 ```jsonc  
 // HTTP 200  
 {  
-    "success": true, 
-    "msg": "Logged out", 
+    "success": true,  
+    "msg": "Logged out",  
     "obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /fingerprints  
 Description: List of available TLS fingerprints.  
 Rate limit: 60  
@@ -272,14 +272,14 @@ Response (success):
 ```jsonc  
 // HTTP 200  
 {  
-    "success": true, 
-    "msg": null, 
+    "success": true,  
+    "msg": null,  
     "obj": [] // ["chrome", "safari", "ios", "edge", "firefox", "qq", "360"]  
 }  
 ```  
-
+  
 ---  
-
+  
 ### DELETE /delete  
 Description: Delete your account. Irreversible.  
 Rate limit: 3  
@@ -289,14 +289,14 @@ Response (success):
 ```jsonc  
 // HTTP 200  
 {  
-    "success": true, 
-    "msg": "Deleted account", 
+    "success": true,  
+    "msg": "Deleted account",  
     "obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /validate  
 Description: Validate a username for illegal characters and availability.  
 Rate limit: 80  
@@ -316,9 +316,9 @@ Response (success):
     }  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /qr  
 Description: Generate a QR code of your subscription link.  
 Rate limit: 80  
@@ -328,54 +328,54 @@ Params:
 Response (success):  
 **Returns an image (PNG)**. Be careful.  
 `HTTP 200`, Mimetype: `image/png`  
-
+  
 ---  
-
-### GET /profiles
-Description: Get all currently available profiles and their descriptions.
-Rate limit: 60
-Authentication: cookie
-Params:
-    lang: language. either 'en' or 'ru'
-Response (success):
-```jsonc
-// HTTP 200
-{
-    "success": true,
-    "msg": null,
-    "obj": {
-        "[ Profile Name ]": "Some long description...",
-        "[ Another Profile ]": "Another description"
-    }
-}
-```
-
----
-
-### GET /history
-Description: Get daily bandwidth history for yourself.
-Rate limit: 30
-Authentication: cookie
-Params:
-    days: (optional) int, number of days to return (default: 30, max: 90).
-Response (success):
-```jsonc
-// HTTP 200
-{
-    "success": true,
-    "msg": null,
-    "obj": [
-        {
-            "ts": 1714000000,   // int, unix timestamp (UTC midnight of the day)
-            "up": 500000000,    // int, upload bytes used this day
-            "down": 1200000000, // int, download bytes used this day
-            "wl_up": 0,         // int, whitelist upload bytes
-            "wl_down": 0        // int, whitelist download bytes
-        },
-        {
-        	// Same object, a day earlier...
-        }
-    ]
-}
-```
-Data is newest-first. Entries older than the retention window (90 days) are not returned.
+  
+### GET /profiles  
+Description: Get all currently available profiles and their descriptions.  
+Rate limit: 60  
+Authentication: cookie  
+Params:  
+    lang: language. either 'en' or 'ru'  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{  
+    "success": true,  
+    "msg": null,  
+    "obj": {  
+        "[ Profile Name ]": "Some long description...",  
+        "[ Another Profile ]": "Another description"  
+    }  
+}  
+```  
+  
+---  
+  
+### GET /history  
+Description: Get daily bandwidth history for yourself.  
+Rate limit: 30  
+Authentication: cookie  
+Params:  
+    days: (optional) int, number of days to return (default: 30, max: 90).  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{  
+    "success": true,  
+    "msg": null,  
+    "obj": [  
+        {  
+            "ts": 1714000000,   // int, unix timestamp (UTC midnight of the day)  
+            "up": 500000000,    // int, upload bytes used this day  
+            "down": 1200000000, // int, download bytes used this day  
+            "wl_up": 0,         // int, whitelist upload bytes  
+            "wl_down": 0        // int, whitelist download bytes  
+        },  
+        {  
+        	// Same object, a day earlier...  
+        }  
+    ]  
+}  
+```  
+Data is newest-first. Entries older than the retention window (90 days) are not returned.  

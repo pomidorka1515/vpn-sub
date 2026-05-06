@@ -1,12 +1,12 @@
 # Admin API Documentation  
-
+  
 ## Introduction  
 Authentication: `Authorization` header with the admin API token.  
 On failure, returns HTTP 401.  
-
+  
 ## Root URI (subject to change)  
 `{domain}/sub/{api_uri}` where `domain` is your domain.  
-
+  
 ## Response format  
 Every response follows this pattern:  
 ```jsonc  
@@ -35,11 +35,11 @@ Error:
     "obj": null  
 }  
 ```  
-
-## Endpoints
-
+  
+## Endpoints  
+  
 ---  
-
+  
 ### GET /api/user/list  
 Description: List all usernames.  
 Authentication: header  
@@ -53,9 +53,9 @@ Response (success):
     "obj": ["username1", "username2"] // list of internal usernames  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /api/user/info  
 Description: Get full info about a user.  
 Authentication: header  
@@ -71,9 +71,9 @@ Response (success):
     "obj": { } // user info object (same shape as /webapi/stats obj)  
 }  
 ```  
-
+  
 ---  
-
+  
 ### POST /api/user/add  
 Description: Add a new user.  
 Authentication: header  
@@ -97,8 +97,8 @@ Response (success):
 ```jsonc  
 // HTTP 201  
 {  
-	"success": true, 
-	"msg": "Created", 
+	"success": true,  
+	"msg": "Created",  
 	"obj": null  
 }  
 ```  
@@ -106,14 +106,14 @@ Response (error):
 ```jsonc  
 // HTTP 400  
 {  
-	"success": false, 
-	"msg": "Username exists", // or type/validation error description
+	"success": false,  
+	"msg": "Username exists", // or type/validation error description  
 	"obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### POST /api/user/delete  
 Description: Delete a user.  
 Authentication: header  
@@ -129,7 +129,7 @@ Response (success):
 // HTTP 200  
 {  
 	"success": true,  
-	"msg": "Deleted", 
+	"msg": "Deleted",  
 	"obj": null  
 }  
 ```  
@@ -142,9 +142,9 @@ Response (error):
 	"obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /api/user/refresh  
 Description: Re-sync all users to all panels. **This can take a lot of time.**  
 Authentication: header  
@@ -153,14 +153,14 @@ Response (success):
 ```jsonc  
 // HTTP 200  
 {  
-	"success": true, 
-	"msg": "Refreshed all users.", 
+	"success": true,  
+	"msg": "Refreshed all users.",  
 	"obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /api/user/onlines  
 Description: Get currently online users.  
 Authentication: header  
@@ -175,9 +175,9 @@ Response (success):
     "obj": [] // list of online usernames, or dict if keyed=1  
 }  
 ```  
-
+  
 ---  
-
+  
 ### POST /api/user/reset  
 Description: Reset a user's token and UUID.  
 Authentication: header  
@@ -208,26 +208,26 @@ Response (error):
 	"obj": null  
 }  
 ```  
-
+  
 ---  
-
-
-
----
-
-### GET /api/health
-Description: Lightweight health check. Returns HTTP 204 with no body on success.
-Authentication: none
-Body: none
-Response (success):
-```jsonc
-// HTTP 204
-(no body)
-```
-Use this to verify the API is reachable and the token is valid.
-
----
-
+  
+  
+  
+---  
+  
+### GET /api/health  
+Description: Lightweight health check. Returns HTTP 204 with no body on success.  
+Authentication: none  
+Body: none  
+Response (success):  
+```jsonc  
+// HTTP 204  
+(no body)  
+```  
+Use this to verify the API is reachable and the token is valid.  
+  
+---  
+  
 ### GET /api/panel/status  
 Description: Get status of one or all panels.  
 Authentication: header  
@@ -254,9 +254,9 @@ Response (error):
 	"obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /api/code/list  
 Description: List all bonus/invite codes.  
 Authentication: header  
@@ -270,9 +270,9 @@ Response (success):
     "obj": { } // dict of codes  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /api/code/info  
 Description: Get info about a specific code.  
 Authentication: header  
@@ -297,14 +297,14 @@ Response (error):
 ```jsonc  
 // HTTP 404  
 {  
-	"success": false, 
-	"msg": "Code not found", 
+	"success": false,  
+	"msg": "Code not found",  
 	"obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### POST /api/code/add  
 Description: Create a new bonus/invite code.  
 Authentication: header  
@@ -323,8 +323,8 @@ Response (success):
 ```jsonc  
 // HTTP 201  
 {  
-	"success": true, 
-	"msg": "Created", 
+	"success": true,  
+	"msg": "Created",  
 	"obj": null  
 }  
 ```  
@@ -332,14 +332,14 @@ Response (error):
 ```jsonc  
 // HTTP 400  
 {  
-	"success": false, 
-	"msg": "...", 
+	"success": false,  
+	"msg": "...",  
 	"obj": null  
 }  
 ```  
-
+  
 ---  
-
+  
 ### POST /api/code/delete  
 Description: Delete a code.  
 Authentication: header  
@@ -353,7 +353,7 @@ Response (success):
 ```jsonc  
 // HTTP 200  
 {  
-	"success": true, 
+	"success": true,  
 	"msg": "Deleted",  
 	"obj": null  
 }  
@@ -362,23 +362,60 @@ Response (error):
 ```jsonc  
 // HTTP 404  
 {  
-	"success": false, 
-	"msg": "Code not found", 
+	"success": false,  
+	"msg": "Code not found",  
 	"obj": null  
 }  
 ```  
-
----
-
+  
+---  
+  
+### GET /api/logs/audit  
+  
+Description: Return the most recent audit records from the server activity log.  
+Authentication: header  
+Params:  
+	n: number of most recent records to retrieve (optional, integer, default 50).  
+       Use 0 to return all records (not recommended for very large logs).  
+  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{  
+	"success": true,  
+	"msg": null,  
+	"obj": [  
+		{  
+			"ts": 1778089999.296969,       // float, precise timestamp  
+			"date": "06.05.2026 15:44:30", // str, string in "%d.%m.%Y %H:%M:%S" format, UTC as always  
+			"action": "sub_hit",           // str, action name  
+			"info": {}                     // dict, information about an action. empty if none (not null)  
+		}  
+		// ...  
+	]  
+}  
+```  
+Response (error):  
+```jsonc  
+// HTTP 400  
+{  
+    "success": false,  
+    "msg": "'n' arg must be a positive integer, or 0 for the whole file",  
+    "obj": null  
+}  
+```  
+  
+---  
+  
 ### GET /api/teapot  
 Description: Verify the server cannot brew coffee because it is a teapot.  
 Auth: None  
 Response (success):  
 ```jsonc  
-// HTTP 418
-{
-	"teapot": true // Or false if its feeling fancy
-}
+// HTTP 418  
+{  
+	"teapot": true // Or false if its feeling fancy  
+}  
 ```  
-
+  
 ---  

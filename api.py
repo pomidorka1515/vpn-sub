@@ -13,7 +13,7 @@ from abc import ABC
 from typing import cast, Any, Callable, Literal, NamedTuple
 from dataclasses import asdict, is_dataclass
 
-from custom_types import ConfigLike, NewUserInfo
+from custom_types import ConfigLike, LinesConfigLike, NewUserInfo
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
@@ -568,6 +568,8 @@ class Api(BaseApi):
         Route('POST', '/api/code/add', 'code_add'),
         Route('POST', '/api/code/delete', 'code_delete'),
 
+        Route('GET', '/api/logs/audit', 'audit'),
+        
         Route('GET', '/api/health', 'health'),
         Route('GET', '/api/teapot', 'teapot')
     ]
@@ -575,11 +577,13 @@ class Api(BaseApi):
     def __init__(self,
                  app: Flask,
                  cfg: ConfigLike,
+                 audit_cfg: LinesConfigLike,
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
         uri = f"/sub/{cfg['api_uri']}"
         self.token = cfg['api_token']
+        self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri)
 
     @requires_admin_auth
@@ -836,8 +840,21 @@ class Api(BaseApi):
         except Exception as e:
             return _err(str(e), 500)
 
+    @requires_admin_auth
+    def audit(self) -> ResponseType:
+        n = request.args.get('n', 50, type=int)
+    
+        if n is None or n < 0:
+            return _err("'n' arg must be a positive integer, or 0 for the whole file")
+    
+        if n == 0:
+            return _ok(obj=self.audit_cfg.read_all())
+    
+        result = list(self.audit_cfg.tail(n))
+        return _ok(obj=result)
+        
     def health(self) -> ResponseType:
-        return Response(), 204
+        return Response(), 204 # intentionally empty body, no _ok() calls
 
     def teapot(self) -> ResponseType:
-        return _err("I'm a teapot", 418, obj={"teapot": True})
+        return _err("I'm a teapot", 418, obj={"teapot": True}) # is it really an error?
