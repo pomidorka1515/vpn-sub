@@ -932,7 +932,7 @@ class Subscription:
             dict: Applied bonus info on success.
             str: Human-readable error on validation/failure.
             """
-        if not isinstance(username, str) or not username: 
+        if not self.isuser(username): 
             return "Unknown user"
         if not isinstance(code, str) or not code:
             return "Unknown code"
@@ -944,7 +944,7 @@ class Subscription:
             bw_map: dict[str, list[int]] = d.setdefault("bw", {})
             wl_bw_map: dict[str, list[int]] = d.setdefault("wl_bw", {})
             time_map: dict[str, int] = d.setdefault("time", {})
-            codes: list[dict[str, Any]] = d.setdefault("codes", [])
+            codes: list[dict[str, str | int | bool]] = d.setdefault("codes", [])
 
             if username not in users:
                 return "Unknown user"
@@ -952,7 +952,7 @@ class Subscription:
                 return "Broken user state"
     
             code_index: int | None = None
-            code_item: dict[str, Any] | None = None
+            code_item: dict[str, str | int | bool] | None = None
     
             for i, item in enumerate(codes):
                 if item.get("code") == code:
@@ -1015,7 +1015,7 @@ class Subscription:
                  gb: int = 0,
                  wl_gb: int = 0) -> None | str:
         """Creates a code. Simple."""
-
+        
         if not isinstance(code, str) or not code: 
             return "code must be a non-empty string"
         if action not in ["register", "bonus"]:

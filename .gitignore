@@ -1,7 +1,11 @@
 config.json
 .claudeignore
-.claude/*
+.claude
+.openclaude
+.pytest_cache
+.mypy_cache
 *.lock
+.*/
 __pycache__/
 *.pyc
 *.pyo
@@ -15,6 +19,7 @@ venv/
 !README.md
 !API.md
 !API_ADMIN.md
+!AUDIT.md
 backup/
 discord/venv
 discord/.venv
