@@ -62,6 +62,14 @@ if sys.platform != 'linux':
     raise RuntimeError("Must be run on Linux.")
 
 SERVER_TZ = timezone(timedelta(hours=3)) # MSK
+AUDIT_VALUES = Literal[
+    'sub_hit',
+    'user_refresh', 'user_delete', 'user_reset',
+    'user_update', 'user_update_params', 'user_add', 
+    'user_update_uuid', 'user_consume_code', 
+    'code_add', 'code_delete',
+
+]
 
 def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
     """
@@ -171,9 +179,9 @@ class Subscription:
 
     def audit(
         self, 
-        *,                                    # EXAMPLES
-        name: str,                            # 'user_delete'
-        info: Mapping[str, object] | None = None # {"username": "foo"}
+        *,
+        name: AUDIT_VALUES,
+        info: Mapping[str, object] | None = None
     ) -> None:
         """Call a JSONL config manager to append an action. 
         Ignores everything if the audit config is not set."""
@@ -1214,11 +1222,7 @@ class Subscription:
         if not token:
             return self.resp
         username = self.usertotoken(token)
-        self.log.info(f"""subscription hit!
-IP: {ip}
-User-Agent: {ua}
-Username: {"none" if not username else username}
-Lang: {lang}""")
+        self.audit(name='sub_hit', info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json})
         
         if not username:
             return self.resp
@@ -1811,7 +1815,7 @@ class BWatch:
                 wl_current = self.sub.bandwidth(username=username, whitelist=True)
             except Exception:
                 continue
-
+            
             last_mem = mem_snapshot.get(username)
             last_wl_mem = wl_mem_snapshot.get(username)
 

@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import (
     Protocol,
     runtime_checkable, Any, Iterable,
-    Callable, Iterator, Self, TypeAlias
+    Callable, Iterator, Self, TypeAlias,
+    Literal
 )
 from types import TracebackType
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Mapping
 
 from dataclasses import dataclass
 
@@ -80,7 +81,7 @@ class ConfigLike(Protocol):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None
-    ) -> bool | None: ...
+    ) -> Literal[False] | None: ...
 
     def __getitem__(self, key: str) -> Any: ...
 
@@ -96,7 +97,7 @@ class ConfigLike(Protocol):
 
     def __iter__(self) -> Iterator[str]: ...
 
-    def keys(self) -> tuple[Any, ...]: ...
+    def keys(self) -> tuple[str, ...]: ...
 
     def values(self) -> tuple[Any, ...]: ...
 
@@ -125,7 +126,7 @@ class _ConfigTransactionLike(Protocol):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None
-    ) -> bool | None: ...
+    ) -> Literal[False] | None: ...
 
     def __getitem__(self, key: str) -> Any: ...
 
@@ -166,12 +167,12 @@ class LinesConfigLike(Protocol):
 
     def append(
         self,
-        record: dict[str, Any]
+        record: Mapping[str, object]
     ) -> None: ...
 
     def append_many(
         self, 
-        records: Iterable[dict[str, Any]]
+        records: Iterable[Mapping[str, object]]
     ) -> None: ...
 
     def __iter__(self) -> Iterator[dict[str, Any]]: ...
@@ -186,7 +187,7 @@ class LinesConfigLike(Protocol):
 
     def clear(self) -> None: ...
 
-    def compact(self, keep: Callable[[dict[str, Any]], bool] | None = None) -> int: ...
+    def compact(self, keep: Callable[[Mapping[str, object]], bool] | None = None) -> int: ...
 
     def backup_now(self) -> None: ...
 
@@ -199,7 +200,7 @@ class LinesConfigLike(Protocol):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> None: ...
+    ) -> Literal[False] | None: ...
 
 
 ### 3x-ui status object ###

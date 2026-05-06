@@ -40,6 +40,7 @@ __all__ = [
 ]
 
 SYNC_MODES = Literal['full', 'data', 'none']
+CONFIG_TYPES = Literal['json', 'jsonl']
 
 _T = TypeVar('_T')
 
@@ -207,13 +208,15 @@ def _do_backup(
 
     log.debug(f"backup saved: {backup_path}")
 
-def _prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
+def _prune_backups(
+    instance_dir: str, 
+    retention: int, 
+    log: Logger, 
+    config_type: CONFIG_TYPES
+) -> None:
     """Keep only the N most recent backups."""
     # Match both .json (Config) and .jsonl (LinesConfig) backup files.
-    files = sorted(
-        glob.glob(os.path.join(instance_dir, "*.json"))
-        + glob.glob(os.path.join(instance_dir, "*.jsonl"))
-    )
+    files = sorted(glob.glob(os.path.join(instance_dir, f"*.{config_type}")))
     to_delete = files[:-retention]
     for f in to_delete:
         try:
@@ -230,7 +233,8 @@ def _make_backup_thread(
     backup_interval: int | float,
     backup_retention: int,
     stop_event: threading.Event,
-    raw: bool = False,
+    config_type: CONFIG_TYPES,
+    raw: bool = False
 ) -> threading.Thread:
     """
     Args:
@@ -247,7 +251,7 @@ def _make_backup_thread(
         while not stop_event.wait(backup_interval):
             try:
                 _do_backup(path, indent, instance_dir, log, raw=raw)
-                _prune_backups(instance_dir, backup_retention, log)
+                _prune_backups(instance_dir, backup_retention, log, config_type=config_type)
                 log.info("backup successful")
             except Exception as e:
                 log.error(f"backup failed: {e}")
@@ -356,7 +360,8 @@ class Config(MutableMapping[str, Any]):
                 backup_dir=backup_dir,
                 backup_interval=backup_interval,
                 backup_retention=backup_retention,
-                stop_event=self._backup_stop
+                stop_event=self._backup_stop,
+                config_type='json'
             )
             self._backup_t.start()
         else:
@@ -388,7 +393,7 @@ class Config(MutableMapping[str, Any]):
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
         instance_dir = _instance_backup_dir(self._path, self._backup_dir)
         _do_backup(self._path, self._indent, instance_dir, self.log)
-        _prune_backups(instance_dir, self._backup_retention, self.log)
+        _prune_backups(instance_dir, self._backup_retention, self.log, config_type='json')
 
     def _raise_if_read_only(self) -> None:
         if self._read_only:
@@ -492,7 +497,7 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return iter(tuple(self._data.keys()))
     
-    def keys(self) -> tuple[Any, ...]:
+    def keys(self) -> tuple[str, ...]:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
@@ -538,11 +543,11 @@ class Config(MutableMapping[str, Any]):
     def update(self, *args: Any, **kwargs: Any) -> None:
         """Atomic mapping-style update."""
         self._raise_if_read_only()
-    
+
         updates = dict(*args, **kwargs)
         self._run_edit(lambda tx: tx.update(updates))
 
-    def _run_edit(self, action: Callable[[_ConfigTransaction], Any]) -> Any:
+    def _run_edit(self, action: Callable[[_ConfigTransaction], object]) -> Any:
         with self.edit() as tx:
             result = action(tx)
         return self._detach(result)
@@ -579,7 +584,7 @@ class Config(MutableMapping[str, Any]):
             )
         return cast(dict[str, Any], data)
 
-    def _load_schema(self, data: dict[str, Any]) -> dict[str, Any] | None:
+    def _load_schema(self, data: dict[str, object]) -> dict[str, Any] | None:
         schema_ref = data.get("$schema")
         if not schema_ref:
             return None
@@ -609,7 +614,7 @@ class Config(MutableMapping[str, Any]):
     
         try:
             with open(schema_path, "r", encoding="utf-8") as handle:
-                schema: dict[str, Any] = json.load(handle)
+                schema: dict[str, object] = json.load(handle)
         except FileNotFoundError as exc:
             if self._strict_schema:
                 raise SchemaValidationError(
@@ -622,7 +627,7 @@ class Config(MutableMapping[str, Any]):
                 f"Schema file '{schema_path}' is not valid JSON: {exc}"
             ) from exc
     
-        if not isinstance(schema, dict):
+        if not isinstance(schema, dict): # NOTE: this is reachable, 'schema' can be just `null` and thats valid JSON
             raise SchemaValidationError(
                 f"Schema file '{schema_path}' must contain a JSON object."
             )
@@ -632,7 +637,7 @@ class Config(MutableMapping[str, Any]):
         self._schema_cache = schema
         return schema
 
-    def _validate_schema(self, data: dict[str, Any]) -> None:
+    def _validate_schema(self, data: dict[str, object]) -> None:
         schema = self._load_schema(data)
         if schema is None:
             return
@@ -656,7 +661,7 @@ class Config(MutableMapping[str, Any]):
                 if not create_if_missing:
                     raise FileNotFoundError(self._path)
 
-                empty: dict[str, Any] = {}
+                empty: dict[str, object] = {}
                 self._validate_schema(empty)
                 new_signature = _atomic_write_json(
                     self._path, empty,
@@ -699,7 +704,7 @@ class Config(MutableMapping[str, Any]):
             self._data = data
             self._last_signature = signature
 
-    def _atomic_write(self, data: dict[str, Any]) -> None:
+    def _atomic_write(self, data: dict[str, object]) -> None:
         self._raise_if_read_only()
         _atomic_write_json(
             self._path, data,
@@ -950,6 +955,7 @@ class LinesConfig:
                     backup_interval=backup_interval,
                     backup_retention=backup_retention,
                     stop_event=self._backup_stop,
+                    config_type='jsonl',
                     raw=True,
                 )
                 self._backup_t.start()
@@ -964,7 +970,7 @@ class LinesConfig:
     def size(self) -> int:
         return os.path.getsize(self.path)
     
-    def append(self, record: dict[str, Any]) -> None:
+    def append(self, record: Mapping[str, object]) -> None:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
         with self._lock:
@@ -977,7 +983,7 @@ class LinesConfig:
                 if self._sync_mode == "full":
                     _fsync_parent_dir(self._path)
 
-    def append_many(self, records: Iterable[dict[str, Any]]) -> None:
+    def append_many(self, records: Iterable[Mapping[str, object]]) -> None:
         """Append multiple records in a single atomic write. Thread-safe."""
         lines = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
         with self._lock:
@@ -1044,7 +1050,7 @@ class LinesConfig:
         Stops reading as soon as n records have been collected, making it
         efficient for large files where only the oldest entries are needed.
         """
-        result: list[dict[str, Any]] = []
+        result: list[dict[str, object]] = []
         with self._lock:
             with _locked_file(self._path, exclusive=False):
                 try:
@@ -1080,7 +1086,7 @@ class LinesConfig:
                 if self._sync_mode == "full":
                     _fsync_parent_dir(self._path)
 
-    def compact(self, keep: Callable[[dict[str, Any]], bool] | None = None) -> int:
+    def compact(self, keep: Callable[[Mapping[str, object]], bool] | None = None) -> int:
         """Rewrite the file keeping only records that satisfy `keep`. Thread-safe.
 
         This is the primary way to delete or deduplicate records, since JSONL
@@ -1138,7 +1144,7 @@ class LinesConfig:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
         instance_dir = _instance_backup_dir(self._path, self._backup_dir)
         _do_backup(self._path, 4, instance_dir, self.log, raw=True)
-        _prune_backups(instance_dir, self._backup_retention, self.log)
+        _prune_backups(instance_dir, self._backup_retention, self.log, config_type='jsonl')
 
     def close(self) -> None:
         """Stop backup thread. Does not affect the data file."""
@@ -1154,7 +1160,7 @@ class LinesConfig:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> None:
+    ) -> Literal[False] | None:
         self.close()
 
     def __del__(self) -> None:
@@ -1164,3 +1170,4 @@ class LinesConfig:
                 self._backup_t.join(timeout=2)
         except Exception:
             pass
+
