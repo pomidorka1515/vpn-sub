@@ -1162,7 +1162,7 @@ class LinesConfig:
         exc_tb: TracebackType | None,
     ) -> Literal[False] | None:
         self.close()
-
+        return False
     def __del__(self) -> None:
         try:
             self._backup_stop.set()

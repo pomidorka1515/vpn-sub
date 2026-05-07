@@ -115,7 +115,7 @@ sub      = Subscription(
                app=app, panels=panels, whitelist_panel=wl
            )
 bw       = BWatch(cfg=cfg, bw_cfg=bw_cfg, sub=sub)
-api      = Api(app=app, cfg=cfg, sub=sub, bw=bw)
+api      = Api(app=app, cfg=cfg, audit_cfg=audit_cfg, sub=sub, bw=bw)
 webapi   = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)
 adminbot = AdminBot(sub=sub, cfg=cfg)
 bot      = PublicBot(sub=sub, cfg=cfg)

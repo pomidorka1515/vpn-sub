@@ -3,7 +3,7 @@
     "title": "VPN Config",
     "type": "object",
     "required": [
-        "uri", "api_token", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot", "routing",
+        "uri", "api_token", "api_admin_ui_auth", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot", "routing",
         "json_template", "bypass_packages", "domain", "ping_check_url",
         "publicbot", "codes", "3xui", "sub_name", "description", "flags",
         "users", "tokens", "displaynames", "tgids",
@@ -17,6 +17,16 @@
         "$schema": { "type": "string", "description": "Schema file." },
         "uri": { "type": "string", "description": "Main URI for the service.", "default": "sub" },
         "api_uri": { "type": "string", "description": "Admin API URI." },
+        "api_admin_ui_auth": {
+        	"type": "array",
+        	"prefixItems": [
+        		{ "type": "string", "description": "Username"},
+        		{ "type": "string", "description": "Password"}
+        	],
+        	"items": false,
+        	"minItems": 2,
+        	"maxItems": 2
+        },
         "provider_id": { "type": "string" },
         "fallback_domain": { "type": "string", "description": "Fallback domain to retrieve the subscription from. Only works with Happ and if provider id is present.\nMust host a mirror of this service." },
         "api_token": { "type": "string", "description": "Admin API Access token." },

@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a0a0b; --surface: #131316; --surface2: #1a1a1f;
+  --border: #252529; --border-h: #35353b;
+  --text: #e4e4e7; --text2: #8e8e96;
+  --accent: #6366f1; --accent-dim: #4f46e5;
+  --green: #22c55e; --red: #ef4444; --orange: #f59e0b;
+  --cyan: #06b6d4; --purple: #a855f7;
+  --radius: 10px;
+}
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; -webkit-font-smoothing: antialiased;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.topbar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.topbar-name { font-size: 14px; font-weight: 500; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.lang-toggle {
+  display: flex; gap: 2px; background: var(--bg);
+  border-radius: 6px; padding: 2px; margin-right: 4px;
+}
+.lang-btn {
+  padding: 4px 10px; border: none; background: none;
+  color: var(--text2); font-family: inherit; font-size: 11px;
+  font-weight: 600; border-radius: 4px; cursor: pointer;
+  transition: all .2s; letter-spacing: .5px;
+}
+.lang-btn.active { background: var(--surface2); color: var(--text); }
+.btn-sm {
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px;
+  background: none; color: var(--text2); font-family: inherit; font-size: 12px;
+  cursor: pointer; transition: all .2s;
+}
+.btn-sm:hover { border-color: var(--border-h); color: var(--text); }
+.btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
+.btn-sm.success:hover { border-color: var(--green); color: var(--green); }
+
+.admin-content { max-width: 900px; margin: 0 auto; padding: 32px 20px; }
+
+.config-bar {
+  display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;
+}
+.config-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  flex: 1; min-width: 200px;
+}
+.config-row label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+.config-row input {
+  flex: 1; background: none; border: none; color: var(--text);
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none; min-width: 0;
+}
+.config-row input::placeholder { color: var(--text2); opacity: .6; }
+.config-actions { display: flex; gap: 8px; }
+
+.section-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text2); margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px; margin-bottom: 16px;
+}
+.card-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text2); margin-bottom: 16px;
+}
+
+.tabs {
+  display: flex; gap: 4px; margin-bottom: 20px;
+  background: var(--bg); border-radius: 8px; padding: 4px;
+}
+.tab {
+  padding: 8px 16px; border: none; background: none;
+  color: var(--text2); font-family: inherit; font-size: 13px;
+  font-weight: 500; border-radius: 6px; cursor: pointer;
+  transition: all .2s; white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--surface2); color: var(--text); }
+.tab.danger { color: var(--red); }
+.tab.danger.active { background: rgba(239,68,68,.15); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.form-grid { display: grid; gap: 14px; }
+.form-row { display: flex; align-items: flex-start; gap: 12px; }
+.form-row label {
+  font-size: 13px; color: var(--text2); width: 140px; flex-shrink: 0;
+  padding-top: 10px;
+}
+.form-row .input-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.form-row input, .form-row select, .form-row textarea {
+  padding: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: inherit; font-size: 13px; outline: none;
+  width: 100%; transition: border-color .2s;
+}
+.form-row textarea { resize: vertical; min-height: 80px; font-family: 'JetBrains Mono', monospace; }
+.form-row select {
+  cursor: pointer; appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238e8e96'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+}
+.form-row select option { background: var(--surface); color: var(--text); }
+.form-row input:focus, .form-row select:focus, .form-row textarea:focus { border-color: var(--accent); }
+.form-row input[type="checkbox"] {
+  width: 18px; height: 18px; padding: 0; cursor: pointer;
+  accent-color: var(--accent);
+}
+.form-hint { font-size: 11px; color: var(--text2); }
+.form-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+
+.btn { border: none; border-radius: 8px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .2s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-dim); }
+.btn-secondary {
+  padding: 10px 18px; background: var(--surface2);
+  border: 1px solid var(--border); color: var(--text2);
+}
+.btn-secondary:hover { border-color: var(--border-h); color: var(--text); }
+.btn-danger {
+  padding: 10px 18px; border: 1px solid rgba(239,68,68,.3); border-radius: 8px;
+  background: none; color: var(--red); font-family: inherit; font-size: 13px;
+  cursor: pointer; transition: all .2s;
+}
+.btn-danger:hover { background: rgba(239,68,68,.1); }
+.btn-success {
+  padding: 10px 18px; border: 1px solid rgba(34,197,94,.3); border-radius: 8px;
+  background: none; color: var(--green); font-family: inherit; font-size: 13px;
+  cursor: pointer; transition: all .2s;
+}
+.btn-success:hover { background: rgba(34,197,94,.1); }
+
+.data-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.data-table th {
+  text-align: left; padding: 10px 12px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--text2);
+  border-bottom: 1px solid var(--border); background: var(--bg);
+}
+.data-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(255,255,255,.02); }
+.data-table .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.data-table .actions { display: flex; gap: 6px; }
+.data-table .btn-tiny {
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
+  background: none; color: var(--text2); font-family: inherit; font-size: 11px;
+  cursor: pointer; transition: all .2s;
+}
+.data-table .btn-tiny:hover { border-color: var(--accent); color: var(--accent); }
+.data-table .btn-tiny.danger:hover { border-color: var(--red); color: var(--red); }
+
+.table-wrap {
+  max-height: 400px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  border: 1px solid var(--border); border-radius: 8px;
+  margin-top: 12px;
+}
+.table-empty {
+  padding: 30px; text-align: center; color: var(--text2); font-size: 13px;
+}
+
+.json-view {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+  max-height: 300px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+
+.status-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge {
+  padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.badge.green { background: rgba(34,197,94,.15); color: var(--green); }
+.badge.red { background: rgba(239,68,68,.15); color: var(--red); }
+.badge.orange { background: rgba(245,158,11,.15); color: var(--orange); }
+.badge.cyan { background: rgba(6,180,212,.15); color: var(--cyan); }
+.badge.purple { background: rgba(168,85,247,.15); color: var(--purple); }
+.badge.gray { background: var(--surface2); color: var(--text2); }
+
+.info-grid { display: grid; gap: 8px; }
+.info-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-label { color: var(--text2); }
+.info-value {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.health-indicator {
+  display: flex; align-items: center; gap: 10px; padding: 16px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+}
+.health-dot { width: 10px; height: 10px; border-radius: 50%; }
+.health-dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,.5); }
+.health-dot.err { background: var(--red); }
+.health-text { font-size: 14px; font-weight: 500; }
+
+.oneline { display: flex; align-items: center; gap: 12px; }
+.oneline span { font-size: 13px; color: var(--text2); }
+.oneline strong { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--text); }
+
+.logs-table .log-ts { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text2); white-space: nowrap; }
+.logs-table .log-action { font-weight: 500; }
+.logs-table .log-action.sub_hit { color: var(--cyan); }
+.logs-table .log-action.auth { color: var(--purple); }
+.logs-table .log-action.admin { color: var(--orange); }
+.logs-table .log-info { font-size: 11px; color: var(--text2); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.code-list { display: grid; gap: 12px; }
+.code-card {
+  padding: 14px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; display: flex; justify-content: space-between; align-items: flex-start;
+}
+.code-info { flex: 1; }
+.code-name { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+.code-meta { display: flex; gap: 12px; flex-wrap: wrap; }
+.code-meta span { font-size: 12px; color: var(--text2); }
+.code-actions { display: flex; gap: 6px; }
+
+.input-group { display: flex; gap: 8px; }
+.input-group input { flex: 1; }
+.input-group select { width: 140px; }
+
+.result-box {
+  margin-top: 16px; padding: 14px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.result-box.success { border-color: rgba(34,197,94,.3); }
+.result-box.error { border-color: rgba(239,68,68,.3); }
+.result-title { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.result-title.ok { color: var(--green); }
+.result-title.err { color: var(--red); }
+.result-msg { font-size: 13px; color: var(--text2); margin-bottom: 8px; }
+
+.teapot-box {
+  text-align: center; padding: 40px 20px;
+}
+.teapot-icon { font-size: 64px; margin-bottom: 16px; }
+.teapot-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+.teapot-sub { font-size: 13px; color: var(--text2); }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.65);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px; animation: fadeIn .2s ease;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px;
+  max-width: 480px; width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  animation: modalIn .25s cubic-bezier(.16,1,.3,1);
+}
+.modal.danger { border-color: rgba(239,68,68,.35); }
+.modal-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+.modal.danger .modal-title { color: var(--red); }
+.modal-msg { font-size: 13px; color: var(--text2); line-height: 1.55; margin-bottom: 22px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-input {
+  width: 100%; padding: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: inherit; font-size: 14px; outline: none;
+  margin-bottom: 16px;
+}
+.modal-input:focus { border-color: var(--accent); }
+.modal-btn {
+  padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+  background: none; color: var(--text2); font-family: inherit;
+  font-size: 13px; cursor: pointer; transition: all .2s;
+}
+.modal-btn:hover { border-color: var(--border-h); color: var(--text); }
+.modal-btn.danger { border-color: rgba(239,68,68,.35); color: var(--red); }
+.modal-btn.danger:hover { background: rgba(239,68,68,.12); border-color: var(--red); }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; z-index: 100; animation: fadeUp .3s ease; pointer-events: none;
+}
+.toast.error { border-color: rgba(239,68,68,.3); color: var(--red); }
+.toast.success { border-color: rgba(34,197,94,.3); color: var(--green); }
+.toast.info { border-color: rgba(99,102,241,.3); color: var(--accent); }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+/* Panel status cards */
+.panel-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.panel-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden; transition: border-color .2s;
+}
+.panel-card:hover { border-color: var(--border-h); }
+.panel-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; cursor: pointer; user-select: none;
+}
+.panel-card-title {
+  font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
+}
+.panel-card-name { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+.panel-card-meta { display: flex; align-items: center; gap: 10px; }
+.panel-card-arrow {
+  width: 16px; height: 16px; transition: transform .25s ease;
+  flex-shrink: 0;
+}
+.panel-card.open .panel-card-arrow { transform: rotate(180deg); }
+.panel-card-body {
+  display: none; padding: 0 16px 16px;
+  border-top: 1px solid var(--border);
+}
+.panel-card.open .panel-card-body { display: block; }
+.panel-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px; padding-top: 16px;
+}
+.panel-section { display: flex; flex-direction: column; gap: 6px; }
+.panel-section-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--text2); margin-bottom: 2px;
+}
+.panel-metric {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.panel-metric:last-child { border-bottom: none; }
+.panel-metric-label { color: var(--text2); }
+.panel-metric-value { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text); text-align: right; }
+.panel-metric-value.ok { color: var(--green); }
+.panel-metric-value.err { color: var(--red); }
+.panel-metric-value.warn { color: var(--orange); }
+.panel-metric-value .unit { font-size: 10px; color: var(--text2); margin-left: 2px; }
+
+/* Custom checkbox */
+.dark-check {
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer; user-select: none;
+}
+.dark-check input { display: none; }
+.dark-check .check-track {
+  width: 36px; height: 20px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 10px;
+  position: relative; transition: all .2s; flex-shrink: 0;
+}
+.dark-check input:checked ~ .check-track {
+  background: var(--accent-dim); border-color: var(--accent);
+}
+.dark-check .check-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text2); transition: all .2s;
+}
+.dark-check input:checked ~ .check-track .check-thumb {
+  left: 18px; background: #fff;
+}
+.dark-check .check-label {
+  font-size: 13px; color: var(--text2); transition: color .2s;
+}
+.dark-check input:checked ~ .check-label { color: var(--text); }
+
+/* Dark number inputs */
+.dark-num-input {
+  width: 72px; padding: 8px 10px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  outline: none; transition: border-color .2s;
+}
+.dark-num-input:focus { border-color: var(--accent); }
+.dark-num-input::-webkit-inner-spin-button,
+.dark-num-input::-webkit-outer-spin-button { opacity: .5; }
+
+@media (max-width: 600px) {
+  .admin-content { padding: 20px 14px; }
+  .form-row { flex-direction: column; }
+  .form-row label { width: auto; padding-top: 0; }
+  .tabs { overflow-x: auto; }
+  .config-row { min-width: 100%; }
+  .oneline { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .code-card { flex-direction: column; gap: 12px; }
+  .code-actions { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-dot"></div>
+    <span class="topbar-name">Admin Panel</span>
+  </div>
+  <div class="topbar-right">
+    <div class="lang-toggle">
+      <button class="lang-btn" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" onclick="setLang('ru')">RU</button>
+    </div>
+    <button class="btn-sm" onclick="runHealthCheck()" id="btnHealth">Health</button>
+    <button class="btn-sm success" onclick="showTab('users')">Users</button>
+    <button class="btn-sm success" onclick="showTab('codes')">Codes</button>
+  </div>
+</div>
+
+<div class="admin-content">
+
+  <div class="config-bar">
+    <div class="config-row">
+      <label data-t="api_key"></label>
+      <input type="text" id="cfgApiKey" placeholder="your-admin-token">
+    </div>
+    <div class="config-actions">
+      <button class="btn btn-primary" style="padding:10px 20px" onclick="saveConfig()" id="btnSaveCfg">Save</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('users')" data-t="users">Users</button>
+    <button class="tab" onclick="showTab('codes')" data-t="codes">Codes</button>
+    <button class="tab" onclick="showTab('logs')" data-t="audit_logs">Audit Logs</button>
+    <button class="tab" onclick="showTab('health')" data-t="health">Health</button>
+    <button class="tab" onclick="showTab('teapot')" data-t="teapot">Teapot</button>
+  </div>
+
+  <div id="tab-users" class="tab-content active">
+    <div class="card">
+      <div class="card-title" data-t="user_list">User List</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn-secondary" onclick="loadUsers()" id="btnLoadUsers">Load Users</button>
+        <button class="btn-secondary" onclick="showAddUser()" id="btnShowAdd">+ Add User</button>
+      </div>
+      <div class="table-wrap" id="usersTableWrap">
+        <div class="table-empty" data-t="load_users_hint">Click "Load Users" to fetch user list</div>
+      </div>
+    </div>
+
+    <div class="card" id="addUserCard" style="display:none">
+      <div class="card-title" data-t="add_user">Add User</div>
+      <div class="form-grid">
+        <div class="form-row">
+          <label data-t="internal_user">Internal User</label>
+          <div class="input-wrap">
+            <input type="text" id="addUser" maxlength="32">
+            <span class="form-hint" data-t="internal_user_hint">Unique internal identifier</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="display_name">Display Name</label>
+          <div class="input-wrap">
+            <input type="text" id="addDisplayName" maxlength="32">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="ext_username">Ext Username</label>
+          <div class="input-wrap">
+            <input type="text" id="addExtUser" maxlength="32">
+            <span class="form-hint" data-t="ext_username_hint">Web UI login (optional)</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="ext_password">Ext Password</label>
+          <div class="input-wrap">
+            <input type="password" id="addExtPass" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="fingerprint">Fingerprint</label>
+          <div class="input-wrap">
+            <input type="text" id="addFp" placeholder="chrome">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="monthly_limit">Monthly Limit (GB)</label>
+          <div class="input-wrap">
+            <input type="number" id="addLimit" value="0" min="0">
+            <span class="form-hint" data-t="limit_hint">0 = unlimited</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="wl_limit">WL Limit (GB)</label>
+          <div class="input-wrap">
+            <input type="number" id="addWlLimit" value="5" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="expires">Expires</label>
+          <div class="input-wrap">
+            <input type="datetime-local" id="addExpiry">
+            <span class="form-hint" data-t="expires_hint">Empty = unlimited</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="custom_token">Custom Token</label>
+          <div class="input-wrap">
+            <input type="text" id="addToken" placeholder="auto">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="custom_uuid">Custom UUID</label>
+          <div class="input-wrap">
+            <input type="text" id="addUuid" placeholder="auto">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="doAddUser()" id="btnDoAdd">Create</button>
+          <button class="btn-secondary" onclick="hideAddUser()" id="btnCancelAdd">Cancel</button>
+        </div>
+        <div class="result-box" id="addUserResult"></div>
+      </div>
+    </div>
+
+    <div class="card" id="userDetailCard" style="display:none">
+      <div class="card-title" data-t="user_details">User Details</div>
+      <div class="info-grid" id="userDetailInfo"></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn-danger" onclick="doResetUser()" id="btnDoReset">Reset</button>
+        <button class="btn-danger" onclick="doDeleteUser()" id="btnDoDelete">Delete</button>
+        <button class="btn-secondary" onclick="hideUserDetail()" id="btnCloseDetail">Close</button>
+      </div>
+      <div class="result-box" id="userDetailResult"></div>
+    </div>
+  </div>
+
+  <div id="tab-codes" class="tab-content">
+    <div class="card">
+      <div class="card-title" data-t="bonus_codes">Bonus Codes</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn-secondary" onclick="loadCodes()" id="btnLoadCodes">Load Codes</button>
+        <button class="btn-secondary" onclick="showAddCode()" id="btnShowAddCode">+ Add Code</button>
+      </div>
+      <div class="code-list" id="codeList">
+        <div class="table-empty" data-t="load_codes_hint">Click "Load Codes" to fetch codes</div>
+      </div>
+    </div>
+
+    <div class="card" id="addCodeCard" style="display:none">
+      <div class="card-title" data-t="add_code">Add Code</div>
+      <div class="form-grid">
+        <div class="form-row">
+          <label data-t="code">Code</label>
+          <div class="input-wrap">
+            <input type="text" id="addCode" maxlength="64" spellcheck="false">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="action_type">Action Type</label>
+          <div class="input-wrap">
+            <select id="addAction">
+              <option value="bonus">Bonus</option>
+              <option value="register">Register</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="days">Days</label>
+          <div class="input-wrap">
+            <input type="number" id="addDays" value="0" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="gb">GB</label>
+          <div class="input-wrap">
+            <input type="number" id="addGb" value="0" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="wl_gb">WL GB</label>
+          <div class="input-wrap">
+            <input type="number" id="addWlGb" value="0" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <label data-t="reusable">Reusable</label>
+          <div class="input-wrap">
+            <input type="checkbox" id="addPerma">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="doAddCode()" id="btnDoAddCode">Create</button>
+          <button class="btn-secondary" onclick="hideAddCode()" id="btnCancelAddCode">Cancel</button>
+        </div>
+        <div class="result-box" id="addCodeResult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-logs" class="tab-content">
+    <div class="card">
+      <div class="card-title" data-t="audit_logs">Audit Logs</div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="logCount" value="50" min="1" class="dark-num-input">
+          <span style="font-size:12px;color:var(--text2)" data-t="log_count_label">rows</span>
+        </div>
+        <button class="btn-secondary" onclick="loadLogs()" id="btnLoadLogs">Load Logs</button>
+        <button class="btn-secondary" onclick="refreshLogs()" id="btnRefreshLogs">Refresh</button>
+      </div>
+      <div class="table-wrap" id="logsTableWrap">
+        <div class="table-empty" data-t="load_logs_hint">Click "Load Logs" to fetch audit logs</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-health" class="tab-content">
+    <div class="card">
+      <div class="card-title" data-t="health_status">Health Status</div>
+      <div class="health-indicator" id="healthIndicator">
+        <div class="health-dot" id="healthDot"></div>
+        <span id="healthText" data-t="not_checked">Not checked</span>
+      </div>
+      <div style="margin-top:20px">
+        <button class="btn-secondary" onclick="runHealthCheck()" id="btnRunHealth">Check Health</button>
+      </div>
+      <div class="form-row" style="margin-top:20px">
+        <label data-t="panel_name">Panel Name</label>
+        <div class="input-wrap">
+          <input type="text" id="panelName" placeholder="optional">
+          <span class="form-hint" data-t="panel_name_hint">Leave empty for all panels</span>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn-secondary" onclick="checkPanelStatus()" id="btnPanelStatus">Check Panel Status</button>
+      </div>
+      <div class="result-box" id="panelStatusResult"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" data-t="online_users">Online Users</div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+        <button class="btn-secondary" onclick="loadOnlineUsers()" id="btnLoadOnline">Load Online</button>
+        <label class="dark-check">
+          <input type="checkbox" id="onlineKeyed" onchange="loadOnlineUsers()">
+          <div class="check-track"><div class="check-thumb"></div></div>
+          <span class="check-label" data-t="keyed">Keyed output</span>
+        </label>
+      </div>
+      <div class="table-wrap" id="onlineUsersWrap">
+        <div class="table-empty" data-t="load_online_hint">Click "Load Online" to fetch online users</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" data-t="refresh_users">Refresh All Users</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">This syncs all users to all panels. May take time.</p>
+      <button class="btn-secondary" onclick="doRefreshUsers()" id="btnDoRefresh">Refresh Users</button>
+      <div class="result-box" id="refreshResult"></div>
+    </div>
+  </div>
+
+  <div id="tab-teapot" class="tab-content">
+    <div class="card">
+      <div class="card-title" data-t="teapot_title">Teapot Status</div>
+      <div class="teapot-box">
+        <div class="teapot-icon">🍵</div>
+        <div class="teapot-text" id="teapotStatus" data-t="teapot_question">Can this server brew coffee?</div>
+        <div class="teapot-sub" data-t="teapot_sub">Spoiler: it cannot.</div>
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn-secondary" onclick="checkTeapot()" id="btnTeapot">Check Teapot</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal danger">
+    <div class="modal-title" id="modalTitle">Confirm</div>
+    <div class="modal-msg" id="modalMsg"></div>
+    <input type="text" id="modalInput" class="modal-input" style="display:none" autocomplete="off">
+    <div class="modal-actions">
+      <button class="modal-btn" id="modalCancel">Cancel</button>
+      <button class="modal-btn danger" id="modalOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const L = {
+  en: {
+    api_key: 'API Key', save: 'Save',
+    users: 'Users', codes: 'Codes', audit_logs: 'Audit Logs', health: 'Health', teapot: 'Teapot',
+    user_list: 'User List', add_user: 'Add User', bonus_codes: 'Bonus Codes', add_code: 'Add Code',
+    user_details: 'User Details', internal_user: 'Internal User', display_name: 'Display Name',
+    ext_username: 'Ext Username', ext_password: 'Ext Password', fingerprint: 'Fingerprint',
+    monthly_limit: 'Monthly Limit (GB)', wl_limit: 'WL Limit (GB)', expires: 'Expires',
+    custom_token: 'Custom Token', custom_uuid: 'Custom UUID', code: 'Code', action_type: 'Action Type',
+    bonus: 'Bonus', register: 'Register', days: 'Days', gb: 'GB', wl_gb: 'WL GB', reusable: 'Reusable',
+    health_status: 'Health Status', not_checked: 'Not checked', panel_name: 'Panel Name',
+    panel_name_hint: 'Leave empty for all panels', online_users: 'Online Users', keyed: 'Keyed output',
+    refresh_users: 'Refresh All Users', refresh_warning: 'This syncs all users to all panels. May take time.',
+    teapot_title: 'Teapot Status',
+    load_users_hint: 'Click "Load Users" to fetch user list', load_codes_hint: 'Click "Load Codes" to fetch codes',
+    load_logs_hint: 'Click "Load Logs" to fetch audit logs',
+    internal_user_hint: 'Unique internal identifier', ext_username_hint: 'Web UI login (optional)',
+    limit_hint: '0 = unlimited', expires_hint: 'Empty = unlimited',
+    health_ok: 'API is healthy', health_err: 'API check failed',
+    network_err: 'Network error', saved: 'Saved', created: 'Created', deleted: 'Deleted', refreshed: 'Refreshed',
+    confirm: 'Confirm', cancel: 'Cancel',
+    confirm_delete_user: 'Delete user permanently?', confirm_reset_user: 'Reset token and UUID?',
+    confirm_delete_code: 'Delete this code?',
+    actions: 'Actions', info: 'Info', reset: 'Reset', delete: 'Delete',
+    copied: 'Copied', copy: 'Copy',
+    teapot_question: 'Can this server brew coffee?', teapot_sub: 'Spoiler: it cannot.',
+    teapot_yes: 'Yes, I am a teapot', teapot_no: 'No, I am not a teapot',
+    // Panel status
+    panel_status: 'Panel Status', no_panels: 'No panels',
+    system: 'System', memory: 'Memory', disk: 'Disk', network: 'Network',
+    connections: 'Connections', uptime_app: 'Uptime & App',
+    public_ip: 'Public IP', xray_error: 'Xray Error',
+    cpu: 'CPU', cores: 'Cores', speed: 'Speed', load_avg: 'Load Avg', processes: 'Processes',
+    used: 'Used', percent: 'Percent', swap: 'Swap',
+    total_in: 'Total In', total_out: 'Total Out',
+    tcp: 'TCP', udp: 'UDP',
+    sys_uptime: 'System Uptime', app_mem: 'App Mem', app_threads: 'App Threads', xray_ver: 'Xray Ver',
+    ipv4: 'IPv4', ipv6: 'IPv6',
+    // Online users
+    no_online: 'No online users',
+    load_online_hint: 'Click "Load Online" to fetch online users',
+    log_count_label: 'rows',
+  },
+  ru: {
+    api_key: 'API Key', save: 'Сохранить',
+    users: 'Пользователи', codes: 'Коды', audit_logs: 'Логи', health: 'Здоровье', teapot: 'Чайник',
+    user_list: 'Список пользователей', add_user: 'Добавить', bonus_codes: 'Бонус-коды', add_code: 'Создать код',
+    user_details: 'Данные пользователя', internal_user: 'Внутр. имя', display_name: 'Отображаемое имя',
+    ext_username: 'Логин', ext_password: 'Пароль', fingerprint: 'Отпечаток',
+    monthly_limit: 'Лимит (ГБ)', wl_limit: 'WL лимит (ГБ)', expires: 'Истекает',
+    custom_token: 'Токен', custom_uuid: 'UUID', code: 'Код', action_type: 'Тип',
+    bonus: 'Бонус', register: 'Регистрация', days: 'Дни', gb: 'ГБ', wl_gb: 'WL ГБ', reusable: 'Многоразовый',
+    health_status: 'Статус', not_checked: 'Не проверено', panel_name: 'Панель',
+    panel_name_hint: 'Пусто = все панели', online_users: 'Онлайн', keyed: 'Ключ',
+    refresh_users: 'Синхронизация', refresh_warning: 'Синхронизирует всех пользователей. Займёт время.',
+    teapot_title: 'Статус чайника',
+    load_users_hint: 'Нажмите "Загрузить" для получения списка', load_codes_hint: 'Нажмите "Загрузить" для кодов',
+    load_logs_hint: 'Нажмите "Загрузить" для логов',
+    internal_user_hint: 'Уникальный внутр. идентификатор', ext_username_hint: 'Веб-логин (опц.)',
+    limit_hint: '0 = безлимит', expires_hint: 'Пусто = безлимит',
+    health_ok: 'API работает', health_err: 'Ошибка API',
+    network_err: 'Ошибка сети', saved: 'Сохранено', created: 'Создано', deleted: 'Удалено', refreshed: 'Обновлено',
+    confirm: 'Подтвердить', cancel: 'Отмена',
+    confirm_delete_user: 'Удалить пользователя навсегда?', confirm_reset_user: 'Сбросить токен и UUID?',
+    confirm_delete_code: 'Удалить этот код?',
+    actions: 'Действия', info: 'Инфо', reset: 'Сброс', delete: 'Удалить',
+    copied: 'Скопировано', copy: 'Копировать',
+    teapot_question: 'Может ли этот сервер сварить кофе?', teapot_sub: 'Спойлер: не может.',
+    teapot_yes: 'Да, я чайник', teapot_no: 'Нет, я не чайник',
+    // Panel status
+    panel_status: 'Статус панелей', no_panels: 'Нет панелей',
+    system: 'Система', memory: 'Память', disk: 'Диск', network: 'Сеть',
+    connections: 'Подключения', uptime_app: 'Аптайм и приложение',
+    public_ip: 'Публичный IP', xray_error: 'Ошибка Xray',
+    cpu: 'CPU', cores: 'Ядра', speed: 'Частота', load_avg: 'Load Avg', processes: 'Процессы',
+    used: 'Использовано', percent: 'Процент', swap: 'Swap',
+    total_in: 'Всего вход.', total_out: 'Всего выход.',
+    tcp: 'TCP', udp: 'UDP',
+    sys_uptime: 'Аптайм системы', app_mem: 'Память прилож.', app_threads: 'Потоки прилож.', xray_ver: 'Версия Xray',
+    ipv4: 'IPv4', ipv6: 'IPv6',
+    // Online users
+    no_online: 'Нет онлайн', load_online_hint: 'Нажмите "Загрузить" для списка',
+    log_count_label: 'строк',
+  }
+};
+
+let lang = localStorage.getItem('admin_lang') || 'en';
+let config = JSON.parse(localStorage.getItem('admin_config') || '{}');
+let baseUrl = '';
+let currentUsers = [];
+let selectedUser = null;
+
+function t(k) { return L[lang]?.[k] || L.en[k] || k; }
+
+function renderLang() {
+  document.querySelectorAll('.lang-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent.toLowerCase() === lang));
+  document.querySelectorAll('[data-t]').forEach(el =>
+    el.textContent = t(el.getAttribute('data-t')));
+}
+
+function setLang(l) { lang = l; localStorage.setItem('admin_lang', l); renderLang(); }
+
+function detectBaseUrl() {
+  const loc = window.location;
+  const path = loc.pathname;
+  // Strip trailing /ui (with or without trailing slash)
+  let base = path.replace(/\/ui\/?$/, '');
+  // If path is /sub/privapi/api → strip the whole /privapi/api part → /sub/
+  if (base.endsWith('/privapi/api')) {
+    base = base.replace('/privapi/api', '');
+  } else {
+    // Otherwise replace /privapi/ with /api/
+    base = base.replace('/privapi/', '/api/');
+  }
+  base = base + '/privapi/'
+  return loc.origin + base;
+}
+
+function loadConfig() {
+  document.getElementById('cfgApiKey').value = config.apiKey || '';
+  baseUrl = detectBaseUrl();
+}
+
+function saveConfig() {
+  config.apiKey = document.getElementById('cfgApiKey').value.trim();
+  localStorage.setItem('admin_config', JSON.stringify(config));
+  toast(t('saved'), 'success');
+}
+
+async function api(path, options = {}) {
+  if (!baseUrl || !config.apiKey) {
+    toast('Configure API key and ensure base URL is detected', 'error');
+    return null;
+  }
+  const url = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) + '/' + path.replace(/^\//, '');
+  const opts = {
+    method: options.method || 'GET',
+    headers: {
+      'Authorization': config.apiKey,
+      'Content-Type': 'application/json'
+    },
+    ...options
+  };
+  if (options.body) opts.body = JSON.stringify(options.body);
+  try {
+    const res = await fetch(url, opts);
+    if (res.status === 204) return { success: true, status: 204 };
+    const data = await res.json();
+    if (res.status === 401) {
+      toast('Unauthorized - check API key', 'error');
+      return null;
+    }
+    return { ...data, status: res.status };
+  } catch (e) {
+    toast(t('network_err'), 'error');
+    return null;
+  }
+}
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.tab[onclick*="${name}"]`)?.classList.add('active');
+  document.getElementById('tab-' + name)?.classList.add('active');
+}
+
+async function loadUsers() {
+  const res = await api('/api/user/list');
+  if (!res || !res.success) return;
+  currentUsers = res.obj || [];
+  renderUsersTable();
+}
+
+function renderUsersTable() {
+  const wrap = document.getElementById('usersTableWrap');
+  if (!currentUsers.length) {
+    wrap.innerHTML = `<div class="table-empty">No users</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>${t('internal_user')}</th>
+        <th>${t('actions')}</th>
+      </tr></thead>
+      <tbody>
+        ${currentUsers.map(u => `
+          <tr>
+            <td class="mono">${u}</td>
+            <td class="actions">
+              <button class="btn-tiny" onclick="viewUser('${u}')">${t('info')}</button>
+              <button class="btn-tiny danger" onclick="deleteUser('${u}')">${t('delete')}</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function viewUser(username) {
+  const res = await api(`/api/user/info?user=${encodeURIComponent(username)}`);
+  if (!res || !res.success) return;
+  selectedUser = username;
+  const s = res.obj;
+  document.getElementById('userDetailCard').style.display = 'block';
+  document.getElementById('userDetailInfo').innerHTML = `
+    <div class="info-row"><span class="info-label">${t('internal_user')}</span><span class="info-value">${s.username || '—'}</span></div>
+    <div class="info-row"><span class="info-label">${t('display_name')}</span><span class="info-value">${s.displayname || '—'}</span></div>
+    <div class="info-row"><span class="info-label">UUID</span><span class="info-value">${s.uuid || '—'}</span></div>
+    <div class="info-row"><span class="info-label">Token</span><span class="info-value">${s.token || '—'}</span></div>
+    <div class="info-row"><span class="info-label">${t('fingerprint')}</span><span class="info-value">${s.fingerprint || '—'}</span></div>
+    <div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${s.bandwidth?.limit || 0} GB</span></div>
+    <div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${s.bandwidth?.wl_limit || 0} GB</span></div>
+    <div class="info-row"><span class="info-label">${t('expires')}</span><span class="info-value">${s.time ? new Date(s.time * 1000).toLocaleString() : '∞'}</span></div>
+    <div class="info-row"><span class="info-label">${t('status')}</span><span class="info-value">
+      <span class="badge ${s.enabled ? 'green' : 'red'}">${s.enabled ? 'Active' : 'Disabled'}</span>
+    </span></div>
+  `;
+  document.getElementById('userDetailResult').innerHTML = '';
+}
+
+function hideUserDetail() {
+  document.getElementById('userDetailCard').style.display = 'none';
+  selectedUser = null;
+}
+
+async function doResetUser() {
+  if (!selectedUser) return;
+  if (!await confirmDialog(t('confirm_reset_user'))) return;
+  const res = await api('/api/user/reset', {
+    method: 'POST',
+    body: { user: selectedUser }
+  });
+  const result = document.getElementById('userDetailResult');
+  if (res && res.success) {
+    result.innerHTML = `<div class="result-title ok">OK</div>
+      <div class="result-msg">UUID: ${res.obj.uuid}<br>Token: ${res.obj.token}</div>`;
+    result.className = 'result-box success';
+  } else {
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.className = 'result-box error';
+  }
+}
+
+async function deleteUser(username) {
+  if (!await confirmDialog(t('confirm_delete_user'))) return;
+  const res = await api('/api/user/delete', {
+    method: 'POST',
+    body: { user: username }
+  });
+  if (res && res.success) {
+    toast(t('deleted'), 'success');
+    loadUsers();
+    hideUserDetail();
+  } else {
+    toast(res?.msg || 'Error', 'error');
+  }
+}
+
+async function doDeleteUser() {
+  if (selectedUser) await deleteUser(selectedUser);
+}
+
+function showAddUser() {
+  document.getElementById('addUserCard').style.display = 'block';
+  document.getElementById('addUser').value = '';
+  document.getElementById('addDisplayName').value = '';
+  document.getElementById('addExtUser').value = '';
+  document.getElementById('addExtPass').value = '';
+  document.getElementById('addFp').value = '';
+  document.getElementById('addLimit').value = '0';
+  document.getElementById('addWlLimit').value = '5';
+  document.getElementById('addExpiry').value = '';
+  document.getElementById('addToken').value = '';
+  document.getElementById('addUuid').value = '';
+  document.getElementById('addUserResult').innerHTML = '';
+}
+
+function hideAddUser() {
+  document.getElementById('addUserCard').style.display = 'none';
+}
+
+async function doAddUser() {
+  const body = {};
+  const user = document.getElementById('addUser').value.trim();
+  const displayname = document.getElementById('addDisplayName').value.trim();
+  if (!user) { toast('Internal user required', 'error'); return; }
+  if (!displayname) { toast('Display name required', 'error'); return; }
+  body.user = user;
+  body.displayname = displayname;
+
+  const extUser = document.getElementById('addExtUser').value.trim();
+  const extPass = document.getElementById('addExtPass').value;
+  if (extUser) body.ext_username = extUser;
+  if (extPass) body.ext_password = extPass;
+
+  const fp = document.getElementById('addFp').value.trim();
+  if (fp) body.fingerprint = fp;
+
+  const limit = parseInt(document.getElementById('addLimit').value) || 0;
+  const wlLimit = parseInt(document.getElementById('addWlLimit').value) || 5;
+  body.limit = limit;
+  body.wl_limit = wlLimit;
+
+  const expiry = document.getElementById('addExpiry').value;
+  if (expiry) {
+    body.time = Math.floor(new Date(expiry).getTime() / 1000);
+  }
+
+  const token = document.getElementById('addToken').value.trim();
+  if (token) body.token = token;
+
+  const uuid = document.getElementById('addUuid').value.trim();
+  if (uuid) body.userid = uuid;
+
+  const result = document.getElementById('addUserResult');
+  const res = await api('/api/user/add', { method: 'POST', body });
+  if (res && res.success) {
+    result.innerHTML = `<div class="result-title ok">${t('created')}</div>`;
+    result.className = 'result-box success';
+    hideAddUser();
+    loadUsers();
+  } else {
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.className = 'result-box error';
+  }
+}
+
+async function loadCodes() {
+  const res = await api('/api/code/list');
+  if (!res || !res.success) return;
+  const codes = res.obj || {};
+  renderCodesList(codes);
+}
+
+function renderCodesList(codes) {
+  const list = document.getElementById('codeList');
+  const keys = Object.keys(codes);
+  if (!keys.length) {
+    list.innerHTML = `<div class="table-empty">No codes</div>`;
+    return;
+  }
+  list.innerHTML = keys.map(name => {
+    const c = codes[name];
+    return `
+      <div class="code-card">
+        <div class="code-info">
+          <div class="code-name">${name}</div>
+          <div class="code-meta">
+            <span class="badge ${c.action === 'register' ? 'purple' : 'cyan'}">${c.action}</span>
+            ${c.perma ? '<span class="badge green">Reusable</span>' : ''}
+            ${c.days ? `<span>${c.days}d</span>` : ''}
+            ${c.gb ? `<span>${c.gb}GB</span>` : ''}
+            ${c.wl_gb ? `<span>${c.wl_gb}GB WL</span>` : ''}
+          </div>
+        </div>
+        <div class="code-actions">
+          <button class="btn-tiny" onclick="copyToClipboard('${name}')">${t('copy')}</button>
+          <button class="btn-tiny danger" onclick="deleteCode('${name}')">${t('delete')}</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => toast(t('copied'), 'success'));
+}
+
+async function deleteCode(code) {
+  if (!await confirmDialog(t('confirm_delete_code'))) return;
+  const res = await api('/api/code/delete', { method: 'POST', body: { code } });
+  if (res && res.success) {
+    toast(t('deleted'), 'success');
+    loadCodes();
+  } else {
+    toast(res?.msg || 'Error', 'error');
+  }
+}
+
+function showAddCode() {
+  document.getElementById('addCodeCard').style.display = 'block';
+  document.getElementById('addCode').value = '';
+  document.getElementById('addAction').value = 'bonus';
+  document.getElementById('addDays').value = '0';
+  document.getElementById('addGb').value = '0';
+  document.getElementById('addWlGb').value = '0';
+  document.getElementById('addPerma').checked = false;
+  document.getElementById('addCodeResult').innerHTML = '';
+}
+
+function hideAddCode() {
+  document.getElementById('addCodeCard').style.display = 'none';
+}
+
+async function doAddCode() {
+  const body = {};
+  const code = document.getElementById('addCode').value.trim();
+  if (!code) { toast('Code required', 'error'); return; }
+  body.code = code;
+  body.action = document.getElementById('addAction').value;
+  body.days = parseInt(document.getElementById('addDays').value) || 0;
+  body.gb = parseInt(document.getElementById('addGb').value) || 0;
+  body.wl_gb = parseInt(document.getElementById('addWlGb').value) || 0;
+  body.perma = document.getElementById('addPerma').checked;
+
+  const result = document.getElementById('addCodeResult');
+  const res = await api('/api/code/add', { method: 'POST', body });
+  if (res && res.success) {
+    result.innerHTML = `<div class="result-title ok">${t('created')}</div>`;
+    result.className = 'result-box success';
+    hideAddCode();
+    loadCodes();
+  } else {
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.className = 'result-box error';
+  }
+}
+
+async function loadLogs() {
+  const count = document.getElementById('logCount').value || 50;
+  const res = await api(`/api/logs/audit?n=${encodeURIComponent(count)}`);
+  if (!res || !res.success) return;
+  renderLogsTable(res.obj || []);
+}
+
+function refreshLogs() {
+  loadLogs();
+}
+
+function renderLogsTable(logs) {
+  const wrap = document.getElementById('logsTableWrap');
+  if (!logs.length) {
+    wrap.innerHTML = `<div class="table-empty">No logs</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="data-table logs-table">
+      <thead><tr>
+        <th>Time</th>
+        <th>Action</th>
+        <th>Info</th>
+      </tr></thead>
+      <tbody>
+        ${logs.map(l => `
+          <tr>
+            <td class="log-ts">${l.date || new Date(l.ts * 1000).toLocaleString()}</td>
+            <td><span class="log-action ${l.action}">${l.action}</span></td>
+            <td class="log-info">${JSON.stringify(l.info || {})}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function runHealthCheck() {
+  const res = await api('/api/health');
+  const dot = document.getElementById('healthDot');
+  const text = document.getElementById('healthText');
+  if (res && res.status === 204) {
+    dot.className = 'health-dot ok';
+    text.textContent = t('health_ok');
+    text.style.color = '';
+  } else {
+    dot.className = 'health-dot err';
+    text.textContent = t('health_err');
+    text.style.color = 'var(--red)';
+  }
+}
+
+async function checkPanelStatus() {
+  const name = document.getElementById('panelName').value.trim();
+  const path = name ? `/api/panel/status?name=${encodeURIComponent(name)}` : '/api/panel/status';
+  const res = await api(path);
+  const result = document.getElementById('panelStatusResult');
+  if (res && res.success) {
+    result.innerHTML = renderPanelCards(res.obj);
+    result.className = 'result-box';
+  } else {
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.className = 'result-box error';
+  }
+}
+
+function renderPanelCards(panels) {
+  if (!panels || !Object.keys(panels).length) {
+    return '<div class="table-empty">No panels</div>';
+  }
+  return `
+    <div class="panel-cards">
+      ${Object.entries(panels).map(([panelName, panel]) => {
+        const s = panel.obj;
+        const cpuPct = s ? Math.round(s.cpu * 100) / 100 : null;
+        const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
+        const xrayState = s?.xray?.state;
+        const xrayClr = xrayState === 'running' ? 'ok' : 'err';
+        const xrayVersion = s?.xray?.version || 'N/A';
+        const xrayErr = s?.xray?.errorMsg;
+
+        const uptimeFmt = s ? fmtUptime(s.uptime) : 'N/A';
+        const memUsed = s ? fmtBytes(s.mem.current) : 'N/A';
+        const memTotal = s ? fmtBytes(s.mem.total) : 'N/A';
+        const memPct = s && s.mem.total > 0 ? Math.round(s.mem.current / s.mem.total * 100) : null;
+        const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
+
+        const swapUsed = s ? fmtBytes(s.swap.current) : 'N/A';
+        const swapTotal = s ? fmtBytes(s.swap.total) : 'N/A';
+
+        const diskUsed = s ? fmtBytes(s.disk.current) : 'N/A';
+        const diskTotal = s ? fmtBytes(s.disk.total) : 'N/A';
+        const diskPct = s && s.disk.total > 0 ? Math.round(s.disk.current / s.disk.total * 100) : null;
+        const diskClr = diskPct !== null ? (diskPct > 90 ? 'err' : diskPct > 75 ? 'warn' : 'ok') : 'ok';
+
+        const appMem = s ? fmtBytes(s.appStats.mem) : 'N/A';
+        const netDown = s ? fmtBytes(s.netIO.down) + '/s' : 'N/A';
+        const netUp = s ? fmtBytes(s.netIO.up) + '/s' : 'N/A';
+        const netRecv = s ? fmtBytes(s.netTraffic.recv) : 'N/A';
+        const netSent = s ? fmtBytes(s.netTraffic.sent) : 'N/A';
+        const ipv4 = s?.publicIP?.ipv4 || 'N/A';
+        const ipv6 = s?.publicIP?.ipv6 || 'N/A';
+        const loads = s?.loads ? s.loads.map(l => l.toFixed(2)).join(', ') : 'N/A';
+        const threads = s?.appStats?.threads ?? 'N/A';
+
+        return `
+          <div class="panel-card" id="pc-${panelName.replace(/\s+/g,'_')}">
+            <div class="panel-card-header" onclick="togglePanelCard('${panelName.replace(/\s+/g,'_')}')">
+              <div class="panel-card-title">
+                <span class="panel-card-name">${panelName}</span>
+                <span class="badge ${xrayClr}">${xrayState || 'unknown'}</span>
+              </div>
+              <div class="panel-card-meta">
+                ${s ? `<span style="font-size:12px;color:var(--text2)">Xray ${xrayVersion}</span>` : ''}
+                <svg class="panel-card-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="4,6 8,10 12,6"/>
+                </svg>
+              </div>
+            </div>
+            <div class="panel-card-body">
+              <div class="panel-grid">
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('system')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${s?.cpuCores ?? 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${s?.cpuSpeedMhz ? Math.round(s.cpuSpeedMhz) + ' MHz' : 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('load_avg')}</span><span class="panel-metric-value">${loads}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${threads}</span></div>
+                </div>
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('memory')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('used')}</span><span class="panel-metric-value ${memClr}">${memUsed} <span class="unit">/ ${memTotal}</span></span></div>
+                  ${memPct !== null ? `<div class="panel-metric"><span class="panel-metric-label">${t('percent')}</span><span class="panel-metric-value">${memPct}%</span></div>` : ''}
+                  <div class="panel-metric"><span class="panel-metric-label">${t('swap')}</span><span class="panel-metric-value">${swapUsed} <span class="unit">/ ${swapTotal}</span></span></div>
+                </div>
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('disk')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('used')}</span><span class="panel-metric-value ${diskClr}">${diskUsed} <span class="unit">/ ${diskTotal}</span></span></div>
+                  ${diskPct !== null ? `<div class="panel-metric"><span class="panel-metric-label">${t('percent')}</span><span class="panel-metric-value">${diskPct}%</span></div>` : ''}
+                </div>
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('network')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label">Down</span><span class="panel-metric-value">${netDown}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">Up</span><span class="panel-metric-value">${netUp}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('total_in')}</span><span class="panel-metric-value">${netRecv}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('total_out')}</span><span class="panel-metric-value">${netSent}</span></div>
+                </div>
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('public_ip')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('ipv4')}</span><span class="panel-metric-value" style="font-size:10px">${ipv4}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('ipv6')}</span><span class="panel-metric-value" style="font-size:10px">${ipv6}</span></div>
+                </div>
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('connections')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${s?.tcpCount ?? 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${s?.udpCount ?? 'N/A'}</span></div>
+                </div>
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('uptime_app')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('sys_uptime')}</span><span class="panel-metric-value">${uptimeFmt}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('app_mem')}</span><span class="panel-metric-value">${appMem}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${s?.appStats?.threads ?? 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('xray_ver')}</span><span class="panel-metric-value">${xrayVersion}</span></div>
+                </div>
+                ${xrayErr && xrayErr !== '' ? `
+                <div class="panel-section">
+                  <div class="panel-section-label">${t('xray_error')}</div>
+                  <div class="panel-metric"><span class="panel-metric-label err">${xrayErr}</span></div>
+                </div>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function togglePanelCard(name) {
+  const card = document.getElementById('pc-' + name);
+  if (!card) return;
+  card.classList.toggle('open');
+}
+
+function fmtBytes(bytes) {
+  if (bytes == null || isNaN(bytes)) return 'N/A';
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2) + ' ' + units[i];
+}
+
+function fmtUptime(seconds) {
+  if (seconds == null || isNaN(seconds)) return 'N/A';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  return `${m}m ${s}s`;
+}
+
+async function loadOnlineUsers() {
+  const keyed = document.getElementById('onlineKeyed').checked;
+  const path = keyed ? '/api/user/onlines?keyed=1' : '/api/user/onlines';
+  const res = await api(path);
+  const wrap = document.getElementById('onlineUsersWrap');
+  if (!res || !res.success) {
+    wrap.innerHTML = `<div class="table-empty">${res?.msg || 'Error'}</div>`;
+    return;
+  }
+  const data = res.obj;
+
+  if (keyed) {
+    // keyed: { internalUsername: "externalUsername" | null }
+    const entries = Object.entries(data);
+    if (!entries.length) {
+      wrap.innerHTML = `<div class="table-empty">${t('no_online')}</div>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>${t('internal_user')}</th>
+          <th style="width:48px;text-align:center"></th>
+          <th>${t('ext_username')}</th>
+        </tr></thead>
+        <tbody>
+          ${entries.map(([intUser, extUser]) => `
+            <tr>
+              <td class="mono">${intUser}</td>
+              <td style="text-align:center;color:var(--text2);font-size:11px"></td>
+              <td class="mono">${extUser ?? t('na')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } else {
+    // array: ["username"]
+    if (!data.length) {
+      wrap.innerHTML = `<div class="table-empty">${t('no_online')}</div>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>${t('internal_user')}</th>
+        </tr></thead>
+        <tbody>
+          ${data.map(user => `
+            <tr>
+              <td class="mono">${user}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+}
+
+async function doRefreshUsers() {
+  const result = document.getElementById('refreshResult');
+  result.innerHTML = '<div class="result-msg">Loading...</div>';
+  result.className = 'result-box';
+  const res = await api('/api/user/refresh');
+  if (res && res.success) {
+    result.innerHTML = `<div class="result-title ok">${t('refreshed')}</div>`;
+    result.className = 'result-box success';
+  } else {
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.className = 'result-box error';
+  }
+}
+
+async function checkTeapot() {
+  const res = await api('/api/teapot');
+  const status = document.getElementById('teapotStatus');
+  if (res && res.teapot) {
+    status.textContent = t('teapot_yes') + ' 🍵';
+    status.style.color = 'var(--orange)';
+  } else {
+    status.textContent = t('teapot_no');
+    status.style.color = 'var(--green)';
+  }
+}
+
+function confirmDialog(message, title) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('modalOverlay');
+    const okBtn = document.getElementById('modalOk');
+    const cancelBtn = document.getElementById('modalCancel');
+    const input = document.getElementById('modalInput');
+    document.getElementById('modalTitle').textContent = title || t('confirm');
+    document.getElementById('modalMsg').textContent = message;
+    input.style.display = 'none';
+
+    const close = (val) => {
+      overlay.classList.remove('show');
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      overlay.onclick = null;
+      document.removeEventListener('keydown', onKey);
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') close(false);
+      else if (e.key === 'Enter') close(true);
+    };
+    okBtn.textContent = t('confirm');
+    cancelBtn.textContent = t('cancel');
+    okBtn.onclick = () => close(true);
+    cancelBtn.onclick = () => close(false);
+    overlay.onclick = (e) => { if (e.target === overlay) close(false); };
+    document.addEventListener('keydown', onKey);
+    overlay.classList.add('show');
+    cancelBtn.focus();
+  });
+}
+
+renderLang();
+loadConfig();
+</script>
+</body>
+</html>

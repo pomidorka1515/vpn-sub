@@ -6,6 +6,7 @@ from loggers import Logger
 import threading
 import time
 import uuid
+import base64
 
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response, g
@@ -123,6 +124,19 @@ def _parse_bool(value: bool | str | int | None) -> bool | None:
         return bool(value)
     return None
 
+def _parse_basic_auth(header: str) -> tuple[str, str] | None:
+    """Parse 'Basic <base64>' header. Returns (user, pass) or None."""
+    if not header.startswith("Basic "):
+        return None
+    try:
+        decoded = base64.b64decode(header[6:]).decode()
+        if ":" not in decoded:
+            return None
+        user, pw = decoded.split(":", 1)
+        return user, pw
+    except Exception:
+        return None
+
 # ── Auth decorators ──────────────────────────────────────────────
 def requires_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     """Admin API auth via Authorization header. Returns 401 on failure."""
@@ -131,6 +145,22 @@ def requires_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
         provided = request.headers.get('Authorization', '')
         if not provided or not self.sub.compare(provided, self.token):
             return _err("Unauthorized", 401)
+        return f(self, *args, **kwargs)
+    return wrapper
+def requires_basic_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+    """Admin API auth via Basic auth header. Returns 401 on failure."""
+    @wraps(f)
+    def wrapper(self: Api, *args: Any, **kwargs: Any):
+        provided = request.headers.get("Authorization", "")
+        creds = _parse_basic_auth(provided)
+        valid: tuple[str, str] = tuple(self.cfg["api_admin_ui_auth"])
+        err = make_response("Unauthorized", 401)
+        err.headers["WWW-Authenticate"] = 'Basic realm="Admin UI"'
+        if not creds:
+            return err
+        user, pw = creds
+        if (not self.sub.compare(user, valid[0])) or (not self.sub.compare(pw, valid[1])):
+            return err
         return f(self, *args, **kwargs)
     return wrapper
 def requires_webapi_auth(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -569,6 +599,8 @@ class Api(BaseApi):
         Route('POST', '/api/code/delete', 'code_delete'),
 
         Route('GET', '/api/logs/audit', 'audit'),
+
+        Route('GET', '/api/ui', 'admin_ui'),
         
         Route('GET', '/api/health', 'health'),
         Route('GET', '/api/teapot', 'teapot')
@@ -852,7 +884,11 @@ class Api(BaseApi):
     
         result = list(self.audit_cfg.tail(n))
         return _ok(obj=result)
-        
+
+    @requires_basic_admin_auth
+    def admin_ui(self) -> ResponseType:
+        return send_file('res/admin.html', etag=False)
+    
     def health(self) -> ResponseType:
         return Response(), 204 # intentionally empty body, no _ok() calls
 
