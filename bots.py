@@ -40,6 +40,7 @@ class AdminBot:
             self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # pyright: ignore[reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self._pending_codes: dict[Any, Any] = {}
+            self._pending_edits: dict[int, dict[str, Any]] = {}
             self._pagination_state: dict[int, dict[str, Any]] = {}
 
     def is_admin(self, user_id: int) -> bool:
@@ -56,7 +57,7 @@ class AdminBot:
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add( # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("👥 Список юзеров", callback_data="list_users"),
-            types.InlineKeyboardButton("ℹ️ Инфо о юзере", callback_data="action_info"),
+            types.InlineKeyboardButton("ℹ️ Инфо о юзере", callback_data="info_user"),
             types.InlineKeyboardButton("➕ Добавить", callback_data="add_user"),
             types.InlineKeyboardButton("❌ Удалить", callback_data="action_del"),
             types.InlineKeyboardButton("🔄 Refresh всех", callback_data="refresh_all"),
@@ -131,6 +132,7 @@ class AdminBot:
 
         try:
             if data == "cancel":
+                self._pending_edits.pop(chat_id, None)
                 self.bot.edit_message_text("Действие отменено. Главное меню:", chat_id, message.message_id, reply_markup=self.get_main_menu())
                 self.bot.clear_step_handler_by_chat_id(chat_id)
 
@@ -158,10 +160,23 @@ class AdminBot:
                 msg = self.bot.send_message(chat_id, "Введите username нового пользователя (или /start для отмены):")
                 self.bot.register_next_step_handler(msg, self._step_add_user_name) # pyright: ignore[reportUnknownMemberType]
  
-            elif data == "action_info":
-                msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_info_user) # pyright: ignore[reportUnknownMemberType]
- 
+            elif data == "info_user":
+                if not self.cfg['users']:
+                    self.bot.send_message(chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu())
+                    return
+                page = self._pagination_state.get(chat_id, {}).get('info_page', 0)
+                self._pagination_state.setdefault(chat_id, {})['info_page'] = page
+                self.bot.edit_message_text("👤 Выберите пользователя для просмотра информации:", chat_id, message.message_id, reply_markup=self.get_users_menu("info", page))
+
+            elif data.startswith("page_info_"):
+                page = int(data.split("_")[-1])
+                self._pagination_state.setdefault(chat_id, {})['info_page'] = page
+                self.bot.edit_message_text("👤 Выберите пользователя для просмотра информации:", chat_id, message.message_id, reply_markup=self.get_users_menu("info", page))
+
+            elif data.startswith("info_") and not data.startswith("info_code"):
+                username = data.split("info_", 1)[1]
+                self._cb_info_user(chat_id, username)
+
             elif data == "action_del":
                 if not self.cfg['users']:
                     self.bot.send_message(chat_id, "Список пуст.", reply_markup=self.get_main_menu())
@@ -210,6 +225,43 @@ class AdminBot:
             elif data == "chart":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
                 self.bot.register_next_step_handler(msg, self._step_chart_username) # pyright: ignore[reportUnknownMemberType]
+
+            elif data.startswith("edit_user_"):
+                username = data.split("edit_user_", 1)[1]
+                self._cb_edit_user_options(chat_id, username)
+
+            elif data.startswith("edit_"):
+                # edit_<action> without username — pulled from _pending_edits
+                action = data.split("_", 1)[1]
+                pending = self._pending_edits.get(chat_id)
+                if not pending:
+                    self.bot.send_message(chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu())
+                    return
+                if action == "fp":
+                    self._cb_edit_fingerprint(chat_id, pending['username'])
+                elif action == "limit":
+                    self._cb_edit_limit(chat_id, pending['username'])
+                elif action == "wl_limit":
+                    self._cb_edit_wl_limit(chat_id, pending['username'])
+                elif action == "time":
+                    self._cb_edit_time(chat_id, pending['username'])
+                elif action == "name":
+                    self._cb_edit_name(chat_id, pending['username'])
+
+            elif data.startswith("fp_save_"):
+                # format: fp_save_<fingerprint> — username from _pending_edits
+                fp = data.split("fp_save_", 1)[1]
+                pending = self._pending_edits.get(chat_id)
+                if not pending:
+                    self.bot.send_message(chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu())
+                    return
+                username = pending['username']
+                result = self.sub.update_params(username=username, fingerprint=fp)
+                if isinstance(result, str):
+                    self.bot.send_message(chat_id, f"❌ Ошибка: {result}", reply_markup=self.get_main_menu())
+                else:
+                    self.bot.send_message(chat_id, f"✅ fingerprint обновлён: <code>{fp}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
+                self._pending_edits.pop(chat_id, None)
         except Exception as e:
             self.log.error(f"Ошибка в боте: {e}", exc_info=True)
             self.bot.send_message(chat_id, f"⚠️ Произошла ошибка: {e}")
@@ -361,7 +413,12 @@ class AdminBot:
                 f"Отпечаток: <code>{fingerprint}</code>\n"
                 f"Ссылка: <code>{domain}/sub?token={token}&lang=ru</code>\n"
             )
-            self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            markup.add( # pyright: ignore[reportUnknownMemberType]
+                types.InlineKeyboardButton("✏️ Изменить пользователя", callback_data=f"edit_user_{username}"),
+                types.InlineKeyboardButton("🔙 В меню", callback_data="cancel")
+            )
+            self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}", reply_markup=self.get_main_menu())
  
@@ -377,6 +434,136 @@ class AdminBot:
             self.bot.send_message(chat_id, f"✅ Пользователь <b>{username}</b> удален.", parse_mode="HTML", reply_markup=self.get_main_menu())
         except Exception as e:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}")
+
+    def _cb_edit_user_options(self, chat_id: int, username: str) -> None:
+        self._pending_edits[chat_id] = {"username": username}
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add( # pyright: ignore[reportUnknownMemberType]
+            types.InlineKeyboardButton("🔐 Отпечаток", callback_data="edit_fp"),
+            types.InlineKeyboardButton("📊 Месячный лимит", callback_data="edit_limit"),
+            types.InlineKeyboardButton("🌍 Мес. лимит WL", callback_data="edit_wl_limit"),
+            types.InlineKeyboardButton("⏰ Срок", callback_data="edit_time"),
+            types.InlineKeyboardButton("🏷 Отображаемое имя", callback_data="edit_name"),
+            types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel")
+        )
+        self.bot.send_message(chat_id, f"✏️ Что изменить для <b>{username}</b>?", parse_mode="HTML", reply_markup=markup)
+
+    def _cb_edit_fingerprint(self, chat_id: int, username: str) -> None:
+        info = self.sub.get_info(username, pretty=False)
+        if not info:
+            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+        current = info.fingerprint
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for fp in self.cfg['fingerprints']:
+            label = f"✅ {fp}" if fp == current else fp
+            markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_save_{fp}")) # pyright: ignore[reportUnknownMemberType]
+        markup.add(types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"))
+        self.bot.send_message(chat_id, f"🔐 Выберите отпечаток для <b>{username}</b> (текущий: <code>{current}</code>):", parse_mode="HTML", reply_markup=markup)
+
+    def _cb_edit_limit(self, chat_id: int, username: str) -> None:
+        info = self.sub.get_info(username, pretty=False)
+        if not info:
+            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+        current = info.bandwidth.limit
+        msg = self.bot.send_message(chat_id, f"📊 Введите новый лимит в GB для <b>{username}</b> (текущий: <code>{current}</code> GB, 0 = безлимит):", parse_mode="HTML")
+        self.bot.register_next_step_handler(msg, self._step_edit_limit, username) # pyright: ignore[reportUnknownMemberType]
+
+    def _step_edit_limit(self, message: types.Message, username: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        try:
+            limit = int(text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu())
+            return
+        result = self.sub.update_params(username=username, limit=limit)
+        self._pending_edits.pop(message.chat.id, None)
+        if isinstance(result, str):
+            self.bot.send_message(message.chat.id, f"❌ Ошибка: {result}", reply_markup=self.get_main_menu())
+        else:
+            self.bot.send_message(message.chat.id, f"✅ Месячный лимит обновлён: <code>{limit}</code> GB", parse_mode="HTML", reply_markup=self.get_main_menu())
+
+    def _cb_edit_wl_limit(self, chat_id: int, username: str) -> None:
+        info = self.sub.get_info(username, pretty=False)
+        if not info:
+            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+        current = info.bandwidth.wl_limit
+        msg = self.bot.send_message(chat_id, f"🌍 Введите новый лимит ВЛ в GB для <b>{username}</b> (текущий: <code>{current}</code> GB, 0 = безлимит):", parse_mode="HTML")
+        self.bot.register_next_step_handler(msg, self._step_edit_wl_limit, username) # pyright: ignore[reportUnknownMemberType]
+
+    def _step_edit_wl_limit(self, message: types.Message, username: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        try:
+            wl_limit = int(text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu())
+            return
+        result = self.sub.update_params(username=username, wl_limit=wl_limit)
+        self._pending_edits.pop(message.chat.id, None)
+        if isinstance(result, str):
+            self.bot.send_message(message.chat.id, f"❌ Ошибка: {result}", reply_markup=self.get_main_menu())
+        else:
+            self.bot.send_message(message.chat.id, f"✅ Лимит обновлён: <code>{wl_limit}</code> GB", parse_mode="HTML", reply_markup=self.get_main_menu())
+
+    def _cb_edit_time(self, chat_id: int, username: str) -> None:
+        info = self.sub.get_info(username, pretty=False)
+        if not info:
+            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+        current_time = info.time
+        if current_time:
+            date = datetime.fromtimestamp(current_time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+        else:
+            date = "N/A"
+        msg = self.bot.send_message(chat_id, f"⏰ Введите новое кол-во дней для <b>{username}</b> (текущая дата: <code>{date}</code>, 0 = безлимит):", parse_mode="HTML")
+        self.bot.register_next_step_handler(msg, self._step_edit_time, username) # pyright: ignore[reportUnknownMemberType]
+
+    def _step_edit_time(self, message: types.Message, username: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        try:
+            days = int(text.strip())
+        except ValueError:
+            self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu())
+            return
+        timee = int(time.time() + (days * 86400)) if days else 0
+        result = self.sub.update_params(username=username, timee=timee)
+        self._pending_edits.pop(message.chat.id, None)
+        if isinstance(result, str):
+            self.bot.send_message(message.chat.id, f"❌ Ошибка: {result}", reply_markup=self.get_main_menu())
+        else:
+            if days:
+                new_date = datetime.fromtimestamp(timee, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+                self.bot.send_message(message.chat.id, f"✅ Срок продлён на <code>{days}</code> дней, новая дата: <code>{new_date}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
+            else:
+                self.bot.send_message(message.chat.id, "✅ Срок установлен в безлимит.", parse_mode="HTML", reply_markup=self.get_main_menu())
+
+    def _cb_edit_name(self, chat_id: int, username: str) -> None:
+        info = self.sub.get_info(username, pretty=False)
+        if not info:
+            self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
+            return
+        current = info.displayname
+        msg = self.bot.send_message(chat_id, f"🏷 Введите новое отображаемое для <b>{username}</b> (текущий: <code>{current}</code>):", parse_mode="HTML")
+        self.bot.register_next_step_handler(msg, self._step_edit_name, username) # pyright: ignore[reportUnknownMemberType]
+
+    def _step_edit_name(self, message: types.Message, username: str) -> None:
+        text = cast(str, message.text)
+        if text.startswith('/'): return
+        new_name = text.strip()
+        if len(new_name) > 16:
+            self.bot.send_message(message.chat.id, "❌ Имя слишком длинное (макс. 16 символов).", reply_markup=self.get_main_menu())
+            return
+        result = self.sub.update_params(username=username, displayname=new_name)
+        self._pending_edits.pop(message.chat.id, None)
+        if isinstance(result, str):
+            self.bot.send_message(message.chat.id, f"❌ Ошибка: {result}", reply_markup=self.get_main_menu())
+        else:
+            self.bot.send_message(message.chat.id, f"✅ Имя обновлено: <code>{new_name}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
  
     def _step_reset_user(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -402,7 +589,7 @@ class AdminBot:
             self.bot.send_message(message.chat.id, "❌ Этот username уже существует.", reply_markup=self.get_main_menu())
             return
         
-        msg = self.bot.send_message(message.chat.id, "Введите DisplayName (Отображаемое имя):")
+        msg = self.bot.send_message(message.chat.id, "Введите отображаемое имя:")
         self.bot.register_next_step_handler(msg, self._step_add_user_display, username)  # pyright: ignore[reportUnknownMemberType]
     def _step_add_user_display(self, message: types.Message, username: str) -> None:
         text = cast(str, message.text)
