@@ -119,7 +119,7 @@ def curl_code(
     path: str,
     *,
     base_url: str = "http://127.0.0.1:5550",
-    headers: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
     data: Any = None,
     timeout: int = 5,
 ) -> int | None:

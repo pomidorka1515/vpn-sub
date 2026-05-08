@@ -26,7 +26,7 @@ _WL_UP    = '#a1a1aa'
 ### NOTE ###
 # Matplotlib typings arent perfect.
 # Having >20 pyright errors with strict type checking 
-#  is normal, its just noise.
+# is normal, its just noise.
 ### NOTE ###
 
 _LANG = {

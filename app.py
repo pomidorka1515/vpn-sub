@@ -6,13 +6,13 @@ import atexit
 import threading
 threading.main_thread().name = 'main'
 
-from typing import Any
+from typing import TypedDict
 
 from core import Subscription, BWatch
 from session import XUiSession
 from api import WebApi, Api
 from bots import PublicBot, AdminBot
-from config import Config, LinesConfig
+from config import Config, LinesConfig, SYNC_MODES
 from loggers import Logger
 
 from flask import Flask
@@ -30,24 +30,22 @@ def _build_panels(cfg: Config) -> tuple[list[XUiSession], XUiSession | None]:
     whitelist: XUiSession | None = None
     
     for name, panel_cfg in cfg['3xui'].items():
-        kwargs: dict[str, Any] = {
-            'name': panel_cfg['name'],
-            'address': panel_cfg['address'],
-            'port': panel_cfg['port'],
-            'uri': panel_cfg['uri'],
-            'username': panel_cfg['username'],
-            'password': panel_cfg['password'],
-            'https': panel_cfg['https'],
-            'nginx_auth': tuple(panel_cfg['nginx_auth']) if panel_cfg.get('nginx_auth') else None,
-            'ignore_inbounds': tuple(panel_cfg.get('ignore_inbounds', [])),
-            'inject_headers': panel_cfg.get('inject_headers'),
-        }
         try:
-            session = XUiSession(**kwargs)
-        except Exception as e:
-            log.critical(f"Failed to initialize panel '{name}': {e}")
-            continue
-        
+            session = XUiSession(
+                name=panel_cfg['name'],
+                address=panel_cfg['address'],
+                port=panel_cfg['port'],
+                uri=panel_cfg['uri'],
+                username=panel_cfg['username'],
+                password=panel_cfg['password'],
+                https=panel_cfg['https'],
+                nginx_auth=tuple(panel_cfg.get('nginx_auth', [])) or None,
+                ignore_inbounds=tuple(panel_cfg.get('ignore_inbounds', [])),
+                inject_headers=panel_cfg.get('inject_headers'),
+            )
+        except Exception:
+            log.critical(f"Failed to initialize panel '{name}':")
+            raise
         if panel_cfg['whitelist']:
             if whitelist is not None:
                 log.warning(f"Multiple whitelist panels configured; using last one ({name})")
@@ -82,7 +80,19 @@ app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 # ------------------------------------------------------------
 # Configs (two separate files)
 # ------------------------------------------------------------
-_config_kwargs: dict[str, Any] = {
+class _BaseConfigKwargs(TypedDict):
+    read_only: bool
+    strict_schema: bool
+    sync_mode: SYNC_MODES
+    isolate_commits: bool
+    backup_dir: str
+
+
+class _LineConfigKwargs(TypedDict):
+    sync_mode: SYNC_MODES
+    backup_dir: str
+
+_config_kwargs: _BaseConfigKwargs = {
     'read_only': False,
     'strict_schema': True,
     'sync_mode': 'data',
@@ -90,7 +100,7 @@ _config_kwargs: dict[str, Any] = {
     'backup_dir': './backup/',
 }
 
-_line_config_kwargs: dict[str, Any] = {
+_line_config_kwargs: _LineConfigKwargs = {
     'sync_mode': 'data',
     'backup_dir': './backup/'
 }

@@ -6,7 +6,6 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any
 
 from custom_types import AdminBotLike, LinesConfigLike
 
@@ -23,7 +22,7 @@ class _TelegramLogger(logging.Handler):
         self.bot = bot
         self.ansi_escape = _ANSI_ESCAPE
 
-    def emit(self, record: logging.LogRecord, **kwargs: Any) -> None:
+    def emit(self, record: logging.LogRecord, **kwargs: str) -> None:
         """
         Args:
             record: The record to broadcast.

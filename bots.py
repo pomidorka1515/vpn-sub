@@ -10,7 +10,7 @@ import time
 import threading
 import urllib.parse
 
-from typing import cast, Any
+from typing import cast
 from datetime import datetime
 from telebot import types
 from dataclasses import is_dataclass
@@ -39,9 +39,9 @@ class AdminBot:
 
             self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) # pyright: ignore[reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self._pending_codes: dict[Any, Any] = {}
-            self._pending_edits: dict[int, dict[str, Any]] = {}
-            self._pagination_state: dict[int, dict[str, Any]] = {}
+            self._pending_codes: dict[str | int, str] = {}
+            self._pending_edits: dict[int, dict[str, str]] = {}
+            self._pagination_state: dict[int, dict[str, int]] = {}
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids
@@ -354,7 +354,7 @@ class AdminBot:
         markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
     def _cb_online_users(self, chat_id: int) -> None:
-        online_users = cast(dict[str, Any], self.sub.get_online_users(new = True))
+        online_users = self.sub.get_online_users(new = True)
         if not online_users:
             self.bot.send_message(chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu())
             return
@@ -914,7 +914,7 @@ class PublicBot:
     def set_lang(self, uid: int, lang: str):
         with self.cfg as data:
             data['publicbot']['tg_lang'][str(uid)] = lang
-    def msg(self, tgid: int | str | None, key: str, **kwargs: Any) -> None:
+    def msg(self, tgid: int | str | None, key: str, **kwargs: str | int | float | bool) -> None:
         if tgid is None or isinstance(tgid, str):
             return
         lang = self.get_lang(tgid)
@@ -1313,7 +1313,7 @@ class PublicBot:
 
         # Need current ext_username to update password (update_params requires both)
         ext_username = None
-        for email, uname in cast(dict[str, Any], self.cfg.get('webui_users', {})).items():
+        for email, uname in cast(dict[str, str], self.cfg.get('webui_users', {})).items():
             if uname == username:
                 ext_username = email
                 break
@@ -1407,8 +1407,8 @@ class PublicBot:
             
         try: self.bot.delete_message(message.chat.id, message.message_id)
         except Exception: pass    
-        users_pw = cast(dict[str, Any], self.cfg.get('webui_passwords', {}))
-        webui_users = cast(dict[str, Any], self.cfg.get('webui_users', {}))
+        users_pw = cast(dict[str, str], self.cfg.get('webui_passwords', {}))
+        webui_users = cast(dict[str, str], self.cfg.get('webui_users', {}))
         
         if email in users_pw and users_pw[email] == self.sub.hash(password):
             internal_username = webui_users.get(email)

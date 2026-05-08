@@ -258,7 +258,7 @@ class Subscription:
         """Get the information about a panel."""
         try:
             x = panel.get(f"panel/api/server/status")
-            data: dict[str, Any] = x.json()
+            data: dict[str, object] = x.json()
             if x.status_code not in [200]:
                 self.log.error(f"getstatus fail: {data['msg']}")
                 return None
@@ -278,11 +278,11 @@ class Subscription:
         
         try:
             response = panel.get(f"panel/api/inbounds/list")
-            data: dict[str, Any] = response.json()
+            data: dict[str, list[dict[str, object]]] = response.json()
             if response.status_code not in [200] or not data.get("success"):
                 self.log.error(f"getinbounds fail: {data.get('msg')}")
                 return []
-            raw_inbounds: list[dict[str, Any]] = data['obj']
+            raw_inbounds: list[dict[str, object]] = data['obj']
             inbounds = [from_dict(Inbound, i) for i in raw_inbounds]
             if panel.ignore_inbounds:
                 inbounds = [i for i in inbounds if i.id not in panel.ignore_inbounds]
@@ -303,7 +303,7 @@ class Subscription:
         *,
         username: str,
         ext_username: str,
-        consumed_code: dict[str, Any] | None,
+        consumed_code: dict[str, int | str | bool] | None,
     ) -> None:
         """Best-effort rollback for register_with_code()."""
         with self.cfg as d:
@@ -397,7 +397,7 @@ class Subscription:
                 client = payload
                 client.email = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
                 client.flow = "xtls-rprx-vision" if j in need_vision else ""
-                data: dict[str, Any] = {
+                data: dict[str, int | str] = {
                     'id': j,
                     'settings': json.dumps({"clients": [asdict(client)]})
                 }
@@ -692,7 +692,7 @@ class Subscription:
         for panel, inbound_id, settings, had_vision in successful:
             settings.id = old_uid
             settings.flow = "xtls-rprx-vision" if had_vision else ""
-            data: dict[str, Any] = {
+            data: dict[str, int | str] = {
                 'id': inbound_id,
                 'settings': json.dumps({"clients": [asdict(settings)]})
             }
@@ -741,7 +741,7 @@ class Subscription:
                 payload = the[str(k)]
                 payload.id = uid
                 payload.flow = "xtls-rprx-vision" if k in need_vision else ""
-                data: dict[str, Any] = {
+                data: dict[str, int | str] = {
                     'id': k,
                     'settings': json.dumps({"clients": [asdict(payload)]})
                 }
@@ -804,7 +804,7 @@ class Subscription:
         fingerprint = random.choice(self.fps)
         hashed_password = self.hash(ext_password)
     
-        consumed_code: dict[str, Any] | None = None
+        consumed_code: dict[str, int | str | bool] | None = None
     
         with self.cfg as d:
             codes = d.setdefault("codes", [])
@@ -1276,7 +1276,7 @@ class Subscription:
             expire=expire
         )
         
-        headers: dict[str, Any] = {
+        headers: dict[str, str] = {
             'Profile-Title': sub_name,
             'Subscription-Userinfo': userinfo,
             'profile-update-interval': "1",
@@ -1291,7 +1291,7 @@ class Subscription:
 
         if provider_id and is_happ:
             fallback_domain: str | None = cfg.get('fallback_domain', None)
-            provider_id_headers: dict[str, Any] = {
+            provider_id_headers: dict[str, str] = {
                 'providerid': provider_id,
                 'per-app-proxy-mode': 'bypass',
                 'per-app-proxy-list': ','.join(cfg['bypass_packages']),
@@ -1489,10 +1489,10 @@ class Subscription:
         user_uuid: str,
         username: str,
         lang: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         """Build an array of profiles for Happ."""
-        obj: list[dict[str, Any]] = []
-        template: dict[str, Any] = cfg['json_template']
+        obj: list[dict[str, object]] = []
+        template: dict[str, object] = cfg['json_template']
         fingerprint: str = cfg['userFingerprints'][username]
         index: Literal[0, 1] = 0 if lang == "en" else 1 # Language index
 
@@ -1527,7 +1527,7 @@ class Subscription:
                 wsSettings['host'] = domain
                 wsSettings['headers']['Host'] = domain
             if result['outbounds'][0]['streamSettings'].get('httpupgradeSettings', None) is not None:
-                httpupgradeSettings: dict[str, Any] = result['outbounds'][0]['streamSettings']['httpupgradeSettings']
+                httpupgradeSettings: dict[str, object] = result['outbounds'][0]['streamSettings']['httpupgradeSettings']
                 httpupgradeSettings['host'] = domain
             meta = result.setdefault('meta', {})
             meta['serverDescription'] = short_desc # NOTE: this only works if you have a providerid,
@@ -1559,7 +1559,7 @@ class BWatch:
             self.mem: dict[str, BandwidthInfo] = {}
             self.wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
-            self._panel_alerts: dict[str, Any] = {} # only used by 1 thread, no lock needed yet
+            self._panel_alerts: dict[str, int | float] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown') or 3600
 
             self._threads: tuple[threading.Thread, ...] = (
@@ -1840,7 +1840,7 @@ class BWatch:
                 with self.bw_cfg as d:
                     users = d.setdefault("users", {})
                     user_data = users.setdefault(username, {"snapshots": []})
-                    snaps: list[dict[str, Any]] = user_data["snapshots"]
+                    snaps: list[dict[str, object]] = user_data["snapshots"]
 
                     existing_idx = next((i for i, s in enumerate(snaps) if s["ts"] == midnight), None)
                     if existing_idx is not None:

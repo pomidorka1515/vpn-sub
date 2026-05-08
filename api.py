@@ -11,16 +11,24 @@ import base64
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response, g
 from abc import ABC
-from typing import cast, Any, Callable, Literal, NamedTuple
+from typing import (
+    cast, Callable, Literal, NamedTuple, TypeAlias,
+    Sequence, Mapping,
+    TypeVar, ParamSpec,
+    Concatenate
+)
 from dataclasses import asdict, is_dataclass
 
-from custom_types import ConfigLike, LinesConfigLike, NewUserInfo
+from custom_types import ConfigLike, LinesConfigLike, NewUserInfo, ServerMetricsResponse
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-JsonifyValue = str | int | float | bool | dict[str, Any] | list[Any] | tuple[Any, ...] | None
+JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Sequence['JsonifyValue'] | tuple['JsonifyValue', ...] | None
 HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 ResponseType = tuple[Response, int] | Response
+
+P = ParamSpec('P')
+R = TypeVar('R')
 
 class Route(NamedTuple):
     """A Flask route, used in BaseApi."""
@@ -35,7 +43,7 @@ class Route(NamedTuple):
         if self.rate_limit is not None and self.rate_limit <= 0:
             raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
 
-    def register(self, api: BaseApi):
+    def register(self, api: BaseApi) -> None:
         try:
             func = getattr(type(api), self.handler)
         except AttributeError:
@@ -64,12 +72,12 @@ class BaseApi(ABC):
             self.sub = sub
             self.bw = bw
             self.uri = uri
-            self.rl_data: dict[Any, Any] = {}
+            self.rl_data: dict[str, list[float]] = {}
             self.rl_lock = threading.Lock()
             self._register_routes()
             self.reg_handles()
 
-    def __init_subclass__(cls, **kwargs: Any):
+    def __init_subclass__(cls, **kwargs: object) -> None:
         """Called when a class inherits from BaseApi. Validates at import time."""
         super().__init_subclass__(**kwargs)
         
@@ -84,7 +92,7 @@ class BaseApi(ABC):
                     f"but no such method exists"
                 )
     
-    def _register_routes(self):
+    def _register_routes(self) -> None:
         for route in self.ROUTES:
             route.register(self)
     
@@ -110,7 +118,7 @@ def _err(
     """Internal helper function to return an error Response."""
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
-def _parse_bool(value: bool | str | int | None) -> bool | None:
+def _parse_bool(value: object) -> bool | None:
     """Convert boolean-like values to actual bool."""
     if isinstance(value, bool):
         return value
@@ -138,19 +146,19 @@ def _parse_basic_auth(header: str) -> tuple[str, str] | None:
         return None
 
 # ── Auth decorators ──────────────────────────────────────────────
-def requires_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+def requires_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concatenate[Api, P], R]:
     """Admin API auth via Authorization header. Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: Api, *args: Any, **kwargs: Any):
+    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs):
         provided = request.headers.get('Authorization', '')
         if not provided or not self.sub.compare(provided, self.token):
             return _err("Unauthorized", 401)
         return f(self, *args, **kwargs)
-    return wrapper
-def requires_basic_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
+def requires_basic_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concatenate[Api, P], R]:
     """Admin API auth via Basic auth header. Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: Api, *args: Any, **kwargs: Any):
+    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs):
         provided = request.headers.get("Authorization", "")
         creds = _parse_basic_auth(provided)
         valid: tuple[str, str] = tuple(self.cfg["api_admin_ui_auth"])
@@ -162,35 +170,42 @@ def requires_basic_admin_auth(f: Callable[..., Any]) -> Callable[..., Any]:
         if (not self.sub.compare(user, valid[0])) or (not self.sub.compare(pw, valid[1])):
             return err
         return f(self, *args, **kwargs)
-    return wrapper
-def requires_webapi_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
+def requires_webapi_auth(f: Callable[Concatenate[WebApi, str, P], R]) -> Callable[Concatenate[WebApi, P], R]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
     Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: Any, **kwargs: Any):
+    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs):
         token = request.cookies.get('token')
         username = self.validate_token(token)
         if not username:
             return _err("Invalid token.", 401)
         return f(self, username, *args, **kwargs)
-    return wrapper
-def requires_no_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
+def requires_no_auth(f: Callable[Concatenate[WebApi, P], R]) -> Callable[Concatenate[WebApi, P], R]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: Any, **kwargs: Any):
+    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs):
         token = request.cookies.get('token')
         if token and self.validate_token(token):
             return _err("Must not be authorized.", 403)
         return f(self, *args, **kwargs)
-    return wrapper
+    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
 
 # ── Rate limiting ────────────────────────────────────────────────
-def rate_limit(max_requests: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def rate_limit(max_requests: int) -> Callable[
+    [Callable[Concatenate[BaseApi, P], R]],
+    Callable[Concatenate[BaseApi, P], R | tuple[Response, int]],
+]:
     """Rate-limit by IP. Reads rl_data and rl_lock from the instance (self)."""
-    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(
+        f: Callable[Concatenate[BaseApi, P], R]
+    ) -> Callable[Concatenate[BaseApi, P], R | tuple[Response, int]]:
         @wraps(f)
-        def wrapper(self: BaseApi, *args: Any, **kwargs: Any):
-            ip = request.headers.get('X-Real-IP', request.remote_addr)
+        def wrapper(
+            self: BaseApi, *args: P.args, **kwargs: P.kwargs
+        ) -> R | tuple[Response, int]:
+            ip = cast(str, request.headers.get("X-Real-IP", request.remote_addr))
             now = time.time()
             with self.rl_lock:
                 stale = [k for k, v in self.rl_data.items() if v and now - v[-1] > 60]
@@ -199,18 +214,17 @@ def rate_limit(max_requests: int) -> Callable[[Callable[..., Any]], Callable[...
                 self.rl_data.setdefault(ip, [])
                 self.rl_data[ip] = [t for t in self.rl_data[ip] if now - t < 60]
                 if len(self.rl_data[ip]) >= max_requests:
-                    return _err(msg="Too many requests.", code=429)
+                    return _err(msg="Too many requests.", code=429) 
                 self.rl_data[ip].append(now)
             return f(self, *args, **kwargs)
-        return wrapper
+        return cast(Callable[Concatenate[BaseApi, P], R | tuple[Response, int]], wrapper)
     return decorator
-
 # ── Validation decorators ────────────────────────────────────────
-def requires_fields(*fields: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def requires_fields(*fields: str) -> Callable[[Callable[P, R]], Callable[P, R | tuple[Response, int]]]:
     """Validate request JSON object, store it on flask.g.json_obj, and require named fields."""
-    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
         @wraps(f)
-        def wrapper(*args: Any, **kwargs: Any):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
             content = request.get_json(silent=True)
             if content is None:
                 return _err("Missing JSON data.", 400)
@@ -221,23 +235,23 @@ def requires_fields(*fields: str) -> Callable[[Callable[..., Any]], Callable[...
             if missing:
                 return _err(f"Missing fields: {', '.join(missing)}", 400)
 
-            content = cast(dict[str, Any], content) # NOTE: g.json_obj will appear
+            content = cast(dict[str, JsonifyValue], content) # NOTE: g.json_obj will appear
                                                     # NOTE: as dict[Unknown, Unknown] -> type errors without this
             g.json_obj = content
             return f(*args, **kwargs)
-        return wrapper
+        return cast(Callable[P, R | tuple[Response, int]], wrapper)
     return decorator
-def requires_args(*arg: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def requires_args(*arg: str) -> Callable[[Callable[P, R]], Callable[P, R | tuple[Response, int]]]:
     """Validate request.args has all named fields. Returns 400 on failure."""
-    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
         @wraps(f)
-        def wrapper(*args: Any, **kwargs: Any):
+        def wrapper(*args: P.args, **kwargs: P.kwargs):
             content = request.args
             missing = [x for x in arg if x not in content]
             if missing:
                 return _err(f"Missing args: {', '.join(missing)}", 400)
             return f(*args, **kwargs)
-        return wrapper
+        return cast(Callable[P, R | tuple[Response, int]], wrapper)
     return decorator
 
 
@@ -289,12 +303,12 @@ class WebApi(BaseApi):
             return _v(request.cookies.get('token'))
     def validate_credentials(self, username: str, password: str) -> str | bool:
         """Validate username+password against config. Returns internal username on success."""
-        users_pw = cast(dict[str, Any], self.cfg.get('webui_passwords', {}))
+        users_pw = cast(dict[str, str], self.cfg.get('webui_passwords', {}))
         if username not in users_pw:
             return False
         if not self.sub.compare(users_pw[username], self.sub.hash(password)):
             return False
-        webui_users = cast(dict[str, Any], self.cfg.get('webui_users', {}))
+        webui_users = cast(dict[str, str], self.cfg.get('webui_users', {}))
         internal = webui_users.get(username)
         if not internal or internal not in self.cfg['users']:
             return False
@@ -349,7 +363,7 @@ class WebApi(BaseApi):
             return _err("'username' field is missing")
         sanitized = self.sub.sanitize(raw)
         valid = raw == sanitized and len(raw) > 0
-        taken = sanitized in cast(dict[str, Any], self.cfg.get('webui_users', {}))
+        taken = sanitized in cast(dict[str, str], self.cfg.get('webui_users', {}))
         return _ok(obj={
             "MAX_LENGTH": 32,
             "valid": valid,
@@ -363,7 +377,7 @@ class WebApi(BaseApi):
             return _err("Unknown language", 400)
 
         index = 0 if lang == 'en' else 1
-        obj: dict[str, Any] = {}
+        obj: dict[str, str] = {}
         for i_name, name in self.cfg['profiles'].items():
             name = name[index]
             desc = self.cfg['profileDescriptions'][i_name][index]
@@ -378,17 +392,17 @@ class WebApi(BaseApi):
         content = g.json_obj
         if not isinstance(content, dict):
             return _err("Body must be a JSON object", 400)
-        content = cast(dict[str, Any], content)
+        # content = cast(dict[str, JsonifyValue], content)
         current_password = content.get('current_password')
         if not current_password or not isinstance(current_password, str):
             return _err("current_password required", 400)
         cur_ext = next(
-            (e for e, u in cast(dict[str, Any], self.cfg.get('webui_users', {})).items() if u == username),
+            (e for e, u in cast(dict[str, str], self.cfg.get('webui_users', {})).items() if u == username),
             None
         )
         if not cur_ext:
             return _err("Account has no credentials set", 400)
-        stored = cast(dict[str, Any], self.cfg.get('webui_passwords', {})).get(cur_ext, '')
+        stored = cast(dict[str, str], self.cfg.get('webui_passwords', {})).get(cur_ext, '')
         if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
             return _err("Invalid current password", 401)
         try:
@@ -447,12 +461,12 @@ class WebApi(BaseApi):
             if not current_password or not isinstance(current_password, str):
                 return _err("current_password required to change credentials", 400)
             cur_ext = next(
-                (e for e, u in cast(dict[str, Any], self.cfg.get('webui_users', {})).items() if u == username),
+                (e for e, u in cast(dict[str, str], self.cfg.get('webui_users', {})).items() if u == username),
                 None,
             )
             if not cur_ext:
                 return _err("Account has no credentials set", 400)
-            stored = cast(dict[str, Any], self.cfg.get('webui_passwords', {})).get(cur_ext, '')
+            stored = cast(dict[str, str], self.cfg.get('webui_passwords', {})).get(cur_ext, '')
             if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
                 return _err("Invalid current password", 401)
         try:
@@ -528,10 +542,10 @@ class WebApi(BaseApi):
     def register(self) -> ResponseType:
         """Register a new user via code."""
         content = g.json_obj
-        raw_name: Any = content.get('name')
-        raw_username: Any = content.get('username')
-        raw_password: Any = content.get('password')
-        raw_code: Any = content.get('code')
+        raw_name = content.get('name')
+        raw_username = content.get('username')
+        raw_password = content.get('password')
+        raw_code = content.get('code')
 
         if not isinstance(raw_name, str) or len(raw_name) == 0 or len(raw_name) > 16:
             return _err("'name' must be 1-16 characters")
@@ -641,7 +655,7 @@ class Api(BaseApi):
     def user_add(self) -> ResponseType:
         try:
             content = g.json_obj
-            raw_data: dict[str, Any] = {
+            raw_data: dict[str, object] = {
                 "user": content.get('user'),
                 "displayname": content.get('displayname'),
                 "ext_username": content.get('ext_username', None),
@@ -654,7 +668,7 @@ class Api(BaseApi):
                 "time": content.get('time', 0),
             }
 
-            data: dict[str, Any] = {}
+            data: dict[str, str | int] = {}
 
             for k, v in raw_data.items():
                 if k in ['user', 'displayname']:
@@ -667,30 +681,30 @@ class Api(BaseApi):
                 elif k in ['ext_username', 'ext_password', 'token', 'userid', 'fingerprint']:
                     if v is not None and not isinstance(v, str):
                         return _err(f"{k} must be a string or null")
-                    data[k] = v
+                    data[k] = cast(str, v)
 
                 elif k in ['limit', 'wl_limit', 'time']:
                     try:
-                        data[k] = int(v)
+                        data[k] = int(cast(str, v))
                     except (ValueError, TypeError):
                         return _err(f"{k} must be an integer, got: {v}")
-                    if data[k] < 0:
+                    if cast(int, data[k]) < 0:
                         return _err(f"{k} must be non-negative")
 
-            if self.sub.isuser(data['user']):
+            if self.sub.isuser(cast(str, data['user'])):
                 return _err("Username exists")
 
             x = self.sub.add_new_user(
-                username=data['user'],
-                displayname=data['displayname'],
-                ext_username=data['ext_username'],
-                ext_password=data['ext_password'],
-                token=data['token'],
-                userid=data['userid'],
-                fingerprint=data['fingerprint'],
-                limit=data['limit'],
-                wl_limit=data['wl_limit'],
-                timee=data['time']
+                username=cast(str, data['user']),
+                displayname=cast(str, data['displayname']),
+                ext_username=cast(str, data['ext_username']),
+                ext_password=cast(str, data['ext_password']),
+                token=cast(str, data['token']),
+                userid=cast(str, data['userid']),
+                fingerprint=cast(str, data['fingerprint']),
+                limit=cast(int, data['limit']),
+                wl_limit=cast(int, data['wl_limit']),
+                timee=cast(int, data['time'])
             )
             if not isinstance(x, NewUserInfo):
                 return _err(msg=x)
@@ -759,7 +773,7 @@ class Api(BaseApi):
         try:
             query = request.args.get('name', None)
             if query is None:
-                result: dict[str, dict[str, Any] | None] = {}
+                result: dict[str, dict[str, dict[str, JsonifyValue]] | None] = {}
                 for panel in self.sub.panels:
                     _ = self.sub.getstatus(panel)
                     if _ is None:
@@ -807,7 +821,7 @@ class Api(BaseApi):
     def code_add(self) -> ResponseType: 
         try:
             content = g.json_obj
-            raw_data: dict[str, Any] = {
+            raw_data: dict[str, object] = {
                 "name": content.get('code'),
                 "action": content.get('action'),
                 "permanent": content.get('perma', 'false'),
@@ -816,7 +830,7 @@ class Api(BaseApi):
                 "wl_gb": content.get('wl_gb', 0)
             }
 
-            data: dict[str, Any] = {}
+            data: dict[str, str | int] = {}
 
             for k, v in raw_data.items():
                 if k in ['name', 'action']:
@@ -834,23 +848,23 @@ class Api(BaseApi):
                 
                 elif k in ['days', 'gb', 'wl_gb']:
                     try:
-                        data[k] = int(v)
+                        data[k] = int(cast(str, v))
                     except (ValueError, TypeError):
                         return _err(f"{k} must be an integer, got: {v}")
 
             if data['action'] not in ['register', 'bonus']:
                 return _err("action must be 'register' or 'bonus'")
 
-            if data['days'] < 0 or data['gb'] < 0 or data['wl_gb'] < 0:
+            if cast(int, data['days']) < 0 or cast(int, data['gb']) < 0 or cast(int, data['wl_gb']) < 0:
                 return _err("days, gb, and wl_gb must be non-negative")
 
             x = self.sub.add_code(
-                code=data['name'],
+                code=cast(str, data['name']),
                 action=data['action'],
-                permanent=data['permanent'], 
-                days=data['days'], 
-                gb=data['gb'], 
-                wl_gb=data['wl_gb']  
+                permanent=cast(bool, data['permanent']), 
+                days=cast(int, data['days']), 
+                gb=cast(int, data['gb']), 
+                wl_gb=cast(int, data['wl_gb'])  
             )
             if isinstance(x, str):
                 return _err(x)

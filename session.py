@@ -7,12 +7,16 @@ import json
 from requests import Session, Response, Timeout, ConnectionError
 from requests.structures import CaseInsensitiveDict
 from concurrent.futures import ThreadPoolExecutor, Future
+from collections.abc import Mapping, MutableMapping
 from loggers import Logger
-from custom_types import Inbound
+from custom_types import Inbound, RequestKwargs
 
-from typing import Any
+from typing import Unpack, cast, Any
 
 __all__ = ['XUiSession']
+
+### ANY COUNTER: two. ###
+# mypy: disable-error-code="override"
 
 class _FakeResponse(Response):
     def __init__(self, json_data: dict[str, object], status_code: int):
@@ -35,7 +39,7 @@ class XUiSession(Session):
             https: bool = False,
             nginx_auth: tuple[str, str] | None = None,  # nginx_auth=('user', 'pass')
             ignore_inbounds: tuple[int, ...] = (),  # Can be empty
-            inject_headers: dict[str, Any] | None = None,
+            inject_headers: dict[str, str | bytes] | None = None,
             maximum_concurrent_executors: int = 15,
             health_check_interval: int = 20
     ):
@@ -77,7 +81,7 @@ class XUiSession(Session):
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
             self.cache_time: float = 0
-            self._inject_headers: dict[str, Any] = inject_headers or {}
+            self._inject_headers: dict[str, str | bytes] = inject_headers or {}
             
             if maximum_concurrent_executors < 1:
                 raise ValueError("maximum_concurrent_executors must be more than 1")
@@ -101,6 +105,8 @@ class XUiSession(Session):
             self._health_check_event = threading.Event()
 
             self.login()
+
+            self._start_health_check_thread()
 
     @property
     def dead(self) -> bool:
@@ -154,42 +160,56 @@ class XUiSession(Session):
                 self.dead = True
                 raise
 
-    def request(self, *args: Any, **kwargs: Any) -> Response:
+    def _request_core(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[RequestKwargs],
+    ) -> Response:
+        """Custom behavior with ParamSpec signature forwarding."""
         with self._lock:
             if self._needs_refresh():
                 self.login()
+    
         if self.dead:
-            return _FakeResponse({"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503)
-
-        if len(args) > 1:
-            url = args[1]
-        else:
-            url = kwargs.pop('url', '')
+            return _FakeResponse(
+                {"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503
+            )
+    
         url = self._format_url(url)
-        if len(args) > 1:
-            args = (args[0], url) + args[2:]
-        else:
-            kwargs['url'] = url
-
-        headers = kwargs.get("headers", {})
-        kwargs["headers"] = {**self._inject_headers, **headers}
-
+        kwargs["headers"] = {**cast(Any, kwargs.get("headers", {})), **self._inject_headers}
+    
         try:
-            return super().request(*args, **kwargs)
+            return super().request(method, url, **cast(Any, kwargs)) # supress protocol mismatches
         except Timeout:
             self.dead = True
             raise
         except ConnectionError as e:
             self.log.warning(f"Panel {self.name}: connection error: {e}")
             self.dead = True
-            return _FakeResponse({"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503)
-
-    def _async_request_wrapper(self, log: bool, method: str, url: str, *args: Any, **kwargs: Any) -> Response:
+            return _FakeResponse(
+                {"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503
+            )
+    
+    def request(self, method: str, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
+        return self._request_core(method, url, **kwargs)
+    
+    def _async_request_wrapper(
+        self,
+        log: bool,
+        method: str,
+        url: str,
+        **kwargs: Unpack[RequestKwargs],
+    ) -> Response:
         """Executed inside the ThreadPoolExecutor to log failures without blocking."""
-
         url_fixed = self._format_url(url)
-        resp = self.request(method=method, url=url_fixed, timeout=kwargs.pop('timeout', 5), *args, **kwargs)
-        
+        resp = self._request_core(
+            method=method,
+            url=url_fixed,
+            timeout=kwargs.pop('timeout', 5),
+            **kwargs, # type: ignore[misc]
+        )
+    
         if log:
             if resp.status_code >= 500:
                 self.log.error(f"async request failed: HTTP {resp.status_code} on {url_fixed}")
@@ -201,18 +221,23 @@ class XUiSession(Session):
                     self.log.error(f"async request failed: {content.get('msg')} on {url_fixed}")
             except (json.JSONDecodeError, ValueError):
                 pass
-        
+    
         return resp
-
-    def async_request(self, method: str, url: str, log: bool, *args: Any, **kwargs: Any) -> Future[Response]:
-        return self._executor.submit(self._async_request_wrapper, log, method, url, *args, **kwargs)
-
-    def post_async(self, url: str, log: bool = False, **kwargs: Any) -> Future[Response]:
+    
+    def async_request(
+        self,
+        method: str,
+        url: str,
+        log: bool,
+        **kwargs: Unpack[RequestKwargs],
+    ) -> Future[Response]:
+        return self._executor.submit(self._async_request_wrapper, log, method, url, **kwargs)
+    
+    def post_async(self, url: str, log: bool = False, **kwargs: Unpack[RequestKwargs]) -> Future[Response]:
         return self.async_request(method='POST', url=url, log=log, **kwargs)
-
-    def get_async(self, url: str, log: bool = False, **kwargs: Any) -> Future[Response]:
-        return self.async_request(method='GET', url=url, log=log, **kwargs) 
-
+    
+    def get_async(self, url: str, log: bool = False, **kwargs: Unpack[RequestKwargs]) -> Future[Response]:
+        return self.async_request(method='GET', url=url, log=log, **kwargs)
 
     def login(self) -> None:
         self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui")

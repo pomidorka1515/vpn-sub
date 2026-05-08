@@ -718,10 +718,14 @@ class Config(MutableMapping[str, Any]):
         return value
 
     def __del__(self) -> None:
+        # don't write on destruction, data loss risk on crashes/exceptions
         try:
-            self.clear()
+            self._backup_stop.set()
+            if self._backup_t is not None and self._backup_t.is_alive():
+                self._backup_t.join(timeout=1)
         except Exception:
             pass
+
 
 class _ConfigTransaction(MutableMapping[str, Any]):
     """A batch edit working copy.

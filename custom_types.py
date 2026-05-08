@@ -4,12 +4,17 @@ from typing import (
     Protocol,
     runtime_checkable, Any, Iterable,
     Callable, Iterator, Self, TypeAlias,
-    Literal
+    Literal, TypeVar, TypedDict
 )
 from types import TracebackType
 from collections.abc import MutableMapping, Mapping
 
 from dataclasses import dataclass
+
+from requests import Response
+from requests.cookies import RequestsCookieJar
+from requests.auth import AuthBase
+from requests.models import PreparedRequest
 
 __all__ = [
     'AdminBotLike', 'PublicBotLike', 
@@ -28,7 +33,9 @@ __all__ = [
 
     'client_stats_to_settings',
 
-    'JsonValue', 'JsonDict'
+    'JsonValue', 'JsonDict',
+
+    'RequestKwargs'
 ]
 JsonValue: TypeAlias = int | float | dict[str, 'JsonValue'] | list['JsonValue'] | str | bool | None
 JsonDict = dict[str, JsonValue]
@@ -202,6 +209,51 @@ class LinesConfigLike(Protocol):
         exc_tb: TracebackType | None,
     ) -> Literal[False] | None: ...
 
+_T_co = TypeVar("_T_co", covariant=True)
+_K = TypeVar("_K", covariant=True)
+_V = TypeVar("_V", covariant=True)
+_KT = TypeVar("_KT", covariant=False)
+_VT = TypeVar("_VT", covariant=True)
+
+class SupportsKeysAndGetItem(Protocol[_KT, _VT]):
+    def keys(self) -> Iterable[_KT]: ...
+    def __getitem__(self, __k: _KT) -> _VT: ...
+class SupportsRead(Protocol[_T_co]):
+    def read(self, __length: int = ...) -> _T_co: ...
+class SupportsItems(Protocol[_K, _V]):
+    def items(self) -> Iterator[tuple[_K, _V]]: ...
+
+### requests-stubs/session.pyi ###
+_FileSpec = SupportsRead[str | bytes] | str | bytes \
+            | tuple[str | None, SupportsRead[str | bytes] | str | bytes] \
+            | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str] \
+            | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str, Mapping[str, str]]
+_Params = (
+    SupportsItems[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
+    | tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
+    | Iterable[tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]]
+    | str
+    | bytes
+)
+class RequestKwargs(TypedDict, total=False):
+    # method: str | bytes
+    # url: str | bytes
+    params: _Params | None
+    data: Iterable[bytes] | str | bytes | SupportsRead[str |  bytes] \
+          | list[tuple[Any, Any]] | tuple[tuple[Any, Any], ...] \
+          | Mapping[Any, Any] | None
+    headers: Mapping[str, str | bytes | None] | SupportsKeysAndGetItem[str, str | bytes | None] | None
+    cookies: None | RequestsCookieJar | MutableMapping[str, str]
+    files: Mapping[str, _FileSpec] | Iterable[tuple[str, _FileSpec]] | None
+    auth: tuple[str, str] | AuthBase | Callable[[PreparedRequest], PreparedRequest] | None 
+    timeout: float | tuple[float | None, float | None] | None 
+    allow_redirects: bool
+    proxies: MutableMapping[str, str] | None 
+    hooks: Mapping[str, Iterable[Callable[[Response], Any]] | Callable[[Response], Any]] | None
+    stream: bool | None
+    verify: bool | str | None
+    cert: str | tuple[str, str] | None
+    json: Any | None 
 
 ### 3x-ui status object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
