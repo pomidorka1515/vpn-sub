@@ -34,7 +34,8 @@ from custom_types import (
     ApplyBonusCodeObject,
     PublicBotLike, AdminBotLike,
     client_stats_to_settings,
-    ConfigLike, LinesConfigLike
+    ConfigLike, LinesConfigLike,
+    JsonValue
 )
 from dataclasses import dataclass, asdict
 from collections.abc import MutableMapping, Mapping
@@ -163,9 +164,9 @@ class Subscription:
 
             self.start()
 
-    def start(self):
+    def start(self) -> None:
         @self.app.route(f"/{self.uri}", strict_slashes=False)
-        def _sub(): # pyright: ignore[reportUnusedFunction]
+        def _sub() -> Response: # pyright: ignore[reportUnusedFunction]
             return self.get_subscription(
                 token=request.args.get('token', ''),
                 lang=request.args.get('lang', ''),
@@ -181,7 +182,7 @@ class Subscription:
         self, 
         *,
         name: AUDIT_VALUES,
-        info: Mapping[str, object] | None = None
+        info: Mapping[str, JsonValue] | None = None
     ) -> None:
         """Call a JSONL config manager to append an action. 
         Ignores everything if the audit config is not set."""
@@ -189,7 +190,7 @@ class Subscription:
             return
         ts = datetime.now(timezone.utc)
         cur_date = ts.strftime("%d.%m.%Y %H:%M:%S")
-        to_log: dict[str, object] = {
+        to_log: Mapping[str, str | int | float | Mapping[str, JsonValue] | None] = {
             "ts": ts.timestamp(),
             "date": cur_date,
             "action": name,
@@ -245,7 +246,7 @@ class Subscription:
     def restart(delay: int | float = 0.1) -> None:
         """Restart gunicorn with a delay (in seconds, defaults to 100ms).
         Redundant already, but i will keep it here."""
-        def _restart():
+        def _restart() -> None:
             try:
                 sig = signal.SIGHUP
             except NameError:
@@ -321,7 +322,7 @@ class Subscription:
             d.get("webui_users", {}).pop(ext_username, None)
     
             if consumed_code is not None:
-                codes = d.setdefault("codes", [])
+                codes: list[dict[str, str | int | bool]] = d.setdefault("codes", [])
                 if not any(item.get("code") == consumed_code["code"] for item in codes):
                     codes.append(consumed_code)
     
@@ -352,7 +353,8 @@ class Subscription:
     def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
         """Return snapshots for a user, clamped to retention window."""
         cutoff = int(time.time()) - days * 86400
-        user_data = self.bw_cfg.get("users", {}).get(username, {})
+        user_table: dict[str, dict[str, list[dict[str, int]]]] = self.bw_cfg.get('snapshots')
+        user_data = user_table.get(username, {})
         raw = user_data.get("snapshots", [])
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
@@ -409,7 +411,8 @@ class Subscription:
                 )
                 content = resp.json()
                 if not (resp.status_code in [200, 201] and content.get('success')):
-                    return content.get('msg', 'unknown error')
+                    err_msg: str = content.get('msg', 'unknown error')
+                    return err_msg
         if not _called_internally: self.audit(name="user_refresh", info={"username":username})
         self._drop_cache()
         return None
@@ -429,8 +432,9 @@ class Subscription:
                     f"panel/api/inbounds/{str(j.id)}/delClient/{userid}",
                     headers={'Accept': 'application/json'}
                 )
-                if not (response.status_code in [200, 201] and response.json().get('success')):
-                    return response.json().get('msg', 'panel rejected update')
+                content = response.json()
+                if not (response.status_code in [200, 201] and content.get('success')):
+                    err_msg: str = content.json().get('msg', 'panel rejected update')
 
 
         if perma:
@@ -477,12 +481,12 @@ class Subscription:
                         data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
                         headers={'Accept': 'application/json'}
                     )
-                    
-                    if not (response.status_code in [200, 201] and response.json().get('success')):
-                        return response.json().get('msg', 'panel rejected update')
-            with self.cfg as data:
-                data['status'][username] = enable
-                if timee is not None: data['statusTime'][username] = timee
+                    content = request.json()
+                    if not (response.status_code in [200, 201] and content.get('success')):
+                        err_msg: str = content.get('msg', 'panel rejected update')
+            with self.cfg as d:
+                d['status'][username] = enable
+                if timee is not None: d['statusTime'][username] = timee
             
             audit_info['enable'] = enable
         if wl_enable is not None and self.whitelist_panel:
@@ -503,8 +507,9 @@ class Subscription:
                     headers={'Accept': 'application/json'}
                 )
                 
-            with self.cfg as data:
-                data.setdefault('statusWl', {})[username] = wl_enable
+            with self.cfg as d:
+                data: dict[str, bool] = d.setdefault('statusWl', {})
+                data[username] = wl_enable
             
             audit_info['wl_enable'] = wl_enable
 
@@ -568,8 +573,10 @@ class Subscription:
             d['wl_bw'][username] = [wl_limit, 0]
             d['time'][username] = timee
             if ext_password and ext_username:
-                d.setdefault('webui_passwords', {})[ext_username] = ext_password
-                d.setdefault('webui_users', {})[ext_username] = username
+                data_pass: dict[str, str] = d.setdefault('webui_passwords', {})
+                data_pass[ext_username] = ext_password
+                data_users: dict[str, str] = d.setdefault('webui_users', {})
+                data_users[ext_username] = username
         
         try:
             resp = self.add_users(username=username, _called_internally=True)
@@ -751,7 +758,7 @@ class Subscription:
                     headers={'Accept': 'application/json'}
                 )
                 if not (response.status_code in [200, 201] and response.json().get('success')):
-                    err_msg = response.json().get('msg', 'panel rejected update')
+                    err_msg: str = response.json().get('msg', 'panel rejected update')
                     self.log.critical(f"update_uuid failed on panel {panel.name}: {err_msg}")
                     self._rollback_user_uuid(username, olduid, uid, successful)
                     return err_msg
@@ -807,7 +814,7 @@ class Subscription:
         consumed_code: dict[str, int | str | bool] | None = None
     
         with self.cfg as d:
-            codes = d.setdefault("codes", [])
+            codes: list[dict[str, str | int | bool]] = d.setdefault("codes", [])
     
             match_index = None
             match_item = None
@@ -828,7 +835,10 @@ class Subscription:
                 wl_gb = int(match_item.get("wl_gb", 0))
             except (TypeError, ValueError):
                 return "Invalid code"
-    
+
+            # 'int | None' causes errors but it cannot be None because of protection above
+            match_index = cast(int, match_index)
+
             users: dict[str, str] = d.setdefault("users", {})
             tokens: dict[str, str] = d.setdefault("tokens", {})
             user_fingerprints: dict[str, str] = d.setdefault("userFingerprints", {})
@@ -882,7 +892,7 @@ class Subscription:
                 wl_limit=wl_gb,
                 time=timee
             )
-            audit_result = {
+            audit_result: Mapping[str, str | int] = {
                 "username": username,
                 "ext_username": ext_username,
                 "uuid": userid,
@@ -1028,7 +1038,7 @@ class Subscription:
         with self.cfg as t:
             if any(c.get('code') == code for c in t['codes']):
                 return f"code '{code}' already exists"
-            res = {
+            res: Mapping[str, str | bool | int] = {
                 "code": code, "action": action, "perma": permanent,
                 "days": days, "gb": gb, "wl_gb": wl_gb
             }
@@ -1038,7 +1048,7 @@ class Subscription:
         return None
     def delete_code(self, code: str) -> bool:
         """Returns True if deleted, False if not found."""
-        def _delete(t: MutableMapping[str, Any]): 
+        def _delete(t: MutableMapping[str, Any]) -> bool: 
             for i, item in enumerate(cast(list[dict[str, object]], t['codes'])):
                 if item.get('code') == code:
                     del t['codes'][i]
@@ -1119,9 +1129,10 @@ class Subscription:
         """Get the internal username for a tgid.
         Parameter reverse: if True, get tg id from username. Otherwise default behaviour."""
 
+        tgids: dict[str, str] = self.cfg['tgids']
         if not reverse:
-            return self.cfg['tgids'].get(str(tgid))
-        for i, v in self.cfg['tgids'].items():
+            return tgids.get(str(tgid))
+        for i, v in tgids.items():
             if v == tgid:
                 return int(i)
         return None
@@ -1363,10 +1374,10 @@ class Subscription:
         statusTime: bool,
         ts: int
     ) -> str:
-
-        desc = cfg['description'][0] if lang == "en" else cfg['description'][1]
+        descTable: list[str] = cfg['description']
+        desc = descTable[0] if lang == "en" else descTable[1]
         if not status:
-            desc = cfg['description'][2] if lang == "en" else cfg['description'][3]
+            desc = descTable[2] if lang == "en" else descTable[3]
         if status:
             v, label = fmt_bytes_tuple(int(bandwidths.upload))
             desc = desc.replace("%s1", v).replace("%u1", label)
@@ -1374,11 +1385,11 @@ class Subscription:
             desc = desc.replace("%s2", v).replace("%u2", label)
 
             if cfg['bw'][username][0] != 0:
-                desc = desc.replace("%x1", cfg['description'][4] if lang == "en" else cfg['description'][5])
+                desc = desc.replace("%x1", descTable[4] if lang == "en" else descTable[5])
             else:
                 desc = desc.replace("%x1", "")
             if cfg['time'][username] != 0:
-                desc = desc.replace("%t1", cfg['description'][6] if lang == "en" else cfg['description'][7])
+                desc = desc.replace("%t1", descTable[6] if lang == "en" else descTable[7])
                 desc = desc.replace(
                     "%t3",
                     datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
@@ -1397,9 +1408,9 @@ class Subscription:
                 desc = desc.replace("%n1", "").replace("%y1", "").replace("%n2", "").replace("%y2", "")
             if cfg['wl_bw'][username][0] != 0:
                 if cfg['wl_bw'][username][1] > cfg['wl_bw'][username][0] * 10**9: 
-                    desc = desc.replace("%l1", cfg['description'][12] if lang == "en" else cfg['description'][13])
+                    desc = desc.replace("%l1", descTable[12] if lang == "en" else descTable[13])
                 else:
-                    desc = desc.replace("%l1", cfg['description'][10] if lang == "en" else cfg['description'][11])
+                    desc = desc.replace("%l1", descTable[10] if lang == "en" else descTable[11])
                 
                 v, label = fmt_bytes_tuple(int(cfg['wl_bw'][username][1]))
                 desc = desc.replace("%w1", v).replace("%i1", label)
@@ -1414,7 +1425,7 @@ class Subscription:
 
                 desc = desc.replace("%n2", str(cfg['bw'][username][0])).replace("%u2", "GB")
             if not statusTime:
-                desc = desc.replace("%t1", cfg['description'][8] if lang == "en" else cfg['description'][9])
+                desc = desc.replace("%t1", descTable[8] if lang == "en" else descTable[9])
                 desc = desc.replace(
                     "%t3",
                     datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
@@ -1611,7 +1622,7 @@ class BWatch:
     
     def prune_old_snapshots(self) -> None:
         with self.bw_cfg as d:
-            meta = d.setdefault("_meta", {})
+            meta: dict[str, int] = d.setdefault("_meta", {})
             retention = meta.get("retention_days", 30)
             cutoff = int(time.time()) - retention * 86400
             for user in list(d.get("users", {}).keys()):
@@ -1730,8 +1741,8 @@ class BWatch:
                     days = (self.cfg['time'][i] - int(time.time())) // 86400
                     if days <= 2:
                         if tg_user is not None and tg_user not in self._get_notified('_notified'):
-                            def _u_(t: MutableMapping[str, Any]):
-                                t.setdefault('_notified', []).append(tg_user)
+                            def _u_(t: MutableMapping[str, JsonValue]) -> None:
+                                cast(list[int], t.setdefault('_notified', [])).append(tg_user) # pyright: ignore[reportArgumentType]
                             self.cfg.mutate(_u_)
                             if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
             if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > int(self.cfg['wl_bw'][i][0] * 10**9):
@@ -1740,8 +1751,8 @@ class BWatch:
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=self.cfg['wl_bw'][i][0])
             elif self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > int(self.cfg['wl_bw'][i][0] * 10**9 * 0.95): # 95%
                 if tg_user is not None and tg_user not in self._get_notified('_wl_notified'):
-                    def _up(t: MutableMapping[str, Any]):
-                        t.setdefault('_wl_notified', []).append(tg_user)
+                    def _up(t: MutableMapping[str, JsonValue]) -> None:
+                        cast(list[int], t.setdefault('_wl_notified', [])).append(tg_user) # pyright: ignore[reportArgumentType]
                     self.cfg.mutate(_up)
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(self.cfg['wl_bw'][i][1] / 10**6, 0)), available=self.cfg['wl_bw'][i][0])
             if not self.cfg['status'][i]:
@@ -1753,8 +1764,8 @@ class BWatch:
                 if self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=self.cfg['bw'][i][0])
             elif self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > int(self.cfg['bw'][i][0] * 10**9 * 0.95): # 95%
                 if tg_user is not None and tg_user not in self._get_notified('_notified'):
-                    def _up_(t: MutableMapping[str, Any]):
-                        t.setdefault('_notified', []).append(tg_user)
+                    def _up_(t: MutableMapping[str, JsonValue]) -> None:
+                        cast(list[int], t.setdefault('_notified', [])).append(tg_user) # pyright: ignore[reportArgumentType]
                     self.cfg.mutate(_up_)
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
 
@@ -1838,9 +1849,9 @@ class BWatch:
                 )
 
                 with self.bw_cfg as d:
-                    users = d.setdefault("users", {})
+                    users: dict[str, dict[str, list[dict[str, int]]]] = d.setdefault("users", {})
                     user_data = users.setdefault(username, {"snapshots": []})
-                    snaps: list[dict[str, object]] = user_data["snapshots"]
+                    snaps: list[dict[str, int]] = user_data["snapshots"]
 
                     existing_idx = next((i for i, s in enumerate(snaps) if s["ts"] == midnight), None)
                     if existing_idx is not None:

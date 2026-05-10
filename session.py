@@ -7,19 +7,20 @@ import json
 from requests import Session, Response, Timeout, ConnectionError
 from requests.structures import CaseInsensitiveDict
 from concurrent.futures import ThreadPoolExecutor, Future
-from collections.abc import Mapping, MutableMapping
 from loggers import Logger
-from custom_types import Inbound, RequestKwargs
+from custom_types import Inbound, JsonValue, RequestKwargs
 
-from typing import Unpack, cast, Any
+from typing import Unpack, cast, Any, Mapping
 
 __all__ = ['XUiSession']
 
 ### ANY COUNTER: two. ###
 # mypy: disable-error-code="override"
+# mypy: disable-error-code="redundant-cast"
+# pyright: reportIncompatibleMethodOverride=false
 
 class _FakeResponse(Response):
-    def __init__(self, json_data: dict[str, object], status_code: int):
+    def __init__(self, json_data: Mapping[str, JsonValue], status_code: int):
         super().__init__()
         self._content = json.dumps(json_data).encode('utf-8')
         self.status_code = status_code
@@ -39,7 +40,7 @@ class XUiSession(Session):
             https: bool = False,
             nginx_auth: tuple[str, str] | None = None,  # nginx_auth=('user', 'pass')
             ignore_inbounds: tuple[int, ...] = (),  # Can be empty
-            inject_headers: dict[str, str | bytes] | None = None,
+            inject_headers: Mapping[str, str | bytes] | None = None,
             maximum_concurrent_executors: int = 15,
             health_check_interval: int = 20
     ):
@@ -81,7 +82,7 @@ class XUiSession(Session):
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
             self.cache_time: float = 0
-            self._inject_headers: dict[str, str | bytes] = inject_headers or {}
+            self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
             
             if maximum_concurrent_executors < 1:
                 raise ValueError("maximum_concurrent_executors must be more than 1")
@@ -154,7 +155,6 @@ class XUiSession(Session):
             except ConnectionError as e:
                 self.log.warning(f"Panel {self.name}: connection error: {e}")
                 self.dead = True
-                
             except Exception:
                 self.log.error(f"panel {self.name}: unknown exception. re-raising")
                 self.dead = True
@@ -203,13 +203,15 @@ class XUiSession(Session):
     ) -> Response:
         """Executed inside the ThreadPoolExecutor to log failures without blocking."""
         url_fixed = self._format_url(url)
-        resp = self._request_core(
+        # son im crine why is pyright blind here, dumb asf
+        # this is intentional tho
+        resp = self._request_core( # pyright: ignore[reportUnknownVariableType]
             method=method,
             url=url_fixed,
             timeout=kwargs.pop('timeout', 5),
             **kwargs, # type: ignore[misc]
         )
-    
+        resp = cast(Response, resp)
         if log:
             if resp.status_code >= 500:
                 self.log.error(f"async request failed: HTTP {resp.status_code} on {url_fixed}")

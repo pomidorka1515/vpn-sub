@@ -9,11 +9,12 @@ from __future__ import annotations
 # mypy: disable-error-code="override"
 # pylint: disable=protected-access
 
-from collections.abc import Callable, Iterable, Iterator, MutableMapping, Mapping
+from collections.abc import Callable, Iterator, Generator, MutableMapping, Mapping, Sequence
 from loggers import Logger
+from custom_types import JsonDict, JsonValue, MISSING, MISSING_TYPE
 from typing import (
-    Any, Self, Literal,
-    cast, TypeVar, NamedTuple
+    Any, Self, Literal, Iterable,
+    cast, overload, TypeVar, NamedTuple
 )
 from types import TracebackType
 from contextlib import contextmanager
@@ -43,6 +44,7 @@ SYNC_MODES = Literal['full', 'data', 'none']
 CONFIG_TYPES = Literal['json', 'jsonl']
 
 _T = TypeVar('_T')
+_TJ = TypeVar('_TJ', bound=JsonValue)
 
 # ---------------------------------------------------------------------------
 # Module-level file primitives (shared by Config and LinesConfig)
@@ -55,6 +57,10 @@ class FileSignature(NamedTuple):
     inode: int
     device: int
 
+class CompactReturn(NamedTuple):
+    kept: int
+    removed: int
+
 def _ensure_parent_dir(path: str) -> None:
     dir_path = os.path.dirname(path)
     if dir_path:
@@ -64,7 +70,7 @@ def _lockfile_path(path: str) -> str:
     return f"{path}.lock"
 
 @contextmanager
-def _locked_file(path: str, *, exclusive: bool) -> Iterator[None]:
+def _locked_file(path: str, *, exclusive: bool) -> Generator[None, None, None]:
     _ensure_parent_dir(path)
     mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
     with open(_lockfile_path(path), "a+b") as lock_fp:
@@ -99,7 +105,7 @@ def _fsync_parent_dir(path: str) -> None:
 
 def _atomic_write_json(
     path: str,
-    data: Mapping[str, Any],
+    data: Mapping[str, JsonValue],
     *,
     indent: int,
     sync_mode: SYNC_MODES,
@@ -271,7 +277,7 @@ class FileCorruptionError(ConfigError):
 class ReadOnlyConfigError(ConfigError):
     """Raised when trying to mutate a read-only config instance."""
 
-class Config(MutableMapping[str, Any]):
+class Config(MutableMapping[str, JsonValue]):
     """
     Thread-safe, process-safe JSON config manager.
 
@@ -327,7 +333,7 @@ class Config(MutableMapping[str, Any]):
         # False = faster but unsafe if refs escape the transaction
         self._isolate_commits: bool = isolate_commits
     
-        self._data: dict[str, Any] = {}
+        self._data: dict[str, JsonValue] = {}
         self._last_signature: FileSignature | None = None
     
         self._lock = threading.RLock()
@@ -336,7 +342,7 @@ class Config(MutableMapping[str, Any]):
     
         self._schema_cache_path: str | None = None
         self._schema_cache_signature: FileSignature | None = None
-        self._schema_cache: dict[str, Any] | None = None
+        self._schema_cache: dict[str, JsonValue] | None = None
     
         self._warned_update_callable: bool = False
 
@@ -420,7 +426,7 @@ class Config(MutableMapping[str, Any]):
         self._raise_if_read_only()
         return _ConfigTransaction(self)
 
-    def mutate(self, callback: Callable[[MutableMapping[str, Any]], Any]) -> Any:
+    def mutate(self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
         """Run a callback inside a transaction and return its result.
 
         Keep callbacks short and non-blocking: they run while holding the
@@ -465,7 +471,7 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return self._detach(self._data[key])
 
-    def __setitem__(self, key: str, value: object) -> None:
+    def __setitem__(self, key: str, value: JsonValue) -> None:
         self._raise_if_read_only()
         self._run_edit(lambda tx: tx.__setitem__(key, value))
 
@@ -473,7 +479,7 @@ class Config(MutableMapping[str, Any]):
         self._raise_if_read_only()
         self._run_edit(lambda tx: tx.__delitem__(key))
 
-    def __contains__(self, key: object) -> bool:
+    def __contains__(self, key: str) -> bool:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
@@ -485,10 +491,12 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return len(self._data)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: JsonValue | MISSING_TYPE = MISSING) -> Any:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
+            if default is MISSING:
+                return self._detach(self._data.get(key))
             return self._detach(self._data.get(key, default))
 
     def __iter__(self) -> Iterator[str]:
@@ -503,13 +511,13 @@ class Config(MutableMapping[str, Any]):
             self._ensure_recent_locked()
             return tuple(self._data.keys())
     
-    def values(self) -> tuple[Any, ...]: 
+    def values(self) -> tuple[JsonValue, ...]: 
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
             return tuple(self._detach(v) for v in self._data.values())
     
-    def items(self) -> tuple[tuple[str, Any], ...]:
+    def items(self) -> tuple[tuple[str, JsonValue], ...]:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
@@ -526,28 +534,61 @@ class Config(MutableMapping[str, Any]):
         self._raise_if_read_only()
         self._run_edit(lambda tx: tx.clear())
 
-    def pop(self, key: str, **kwargs: Any) -> Any:
-        self._raise_if_read_only()
-        if 'default' in kwargs:                         # NOTE: i have zero clue why i need to type kwargs=... for type checker peace
-            return self._run_edit(lambda tx: tx.pop(key, kwargs=kwargs['default'])) # pyright: ignore[reportUnknownLambdaType]
-        return self._run_edit(lambda tx: tx.pop(key))
- 
-    def popitem(self) -> tuple[str, Any]:
-        self._raise_if_read_only()
-        return cast(tuple[str, Any], self._run_edit(lambda tx: tx.popitem())) # _run_edit() returns Any but tx.popitem() is guarranteed to be a tuple[str, Any]
+    @overload
+    def pop(self, key: str) -> JsonValue: ...
 
-    def setdefault(self, key: str, default: Any = None) -> Any:
+    @overload
+    def pop(self, key: str, default: _TJ) -> _TJ: ...
+
+    def pop(self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
+        self._raise_if_read_only()
+        def action(tx: _ConfigTransaction) -> JsonValue:
+            if default is MISSING:
+                return tx.pop(key)
+            d: JsonValue = default  # type: ignore[assignment]
+            return tx.pop(key, d)
+        return self._run_edit(action)
+
+    def popitem(self) -> tuple[str, JsonValue]:
+        self._raise_if_read_only()
+        return self._run_edit(lambda tx: tx.popitem())
+
+    @overload
+    def setdefault(self, key: str, default: _TJ) -> _TJ: ...
+
+    @overload
+    def setdefault(self, key: str, default: None = None) -> JsonValue: ...
+
+    def setdefault(self, key: str, default: JsonValue = None) -> JsonValue:
         self._raise_if_read_only()
         return self._run_edit(lambda tx: tx.setdefault(key, default))
 
-    def update(self, *args: Any, **kwargs: Any) -> None:
+    @overload
+    def update(self, **kwargs: JsonValue) -> None: ...
+    
+    @overload
+    def update(self, __m: Mapping[str, JsonValue], **kwargs: JsonValue) -> None: ...
+    
+    @overload
+    def update(self, __m: Iterable[tuple[str, JsonValue]], **kwargs: JsonValue) -> None: ...
+    
+    def update( # pyright: ignore[reportInconsistentOverload]
+        self,
+        __m: Mapping[str, JsonValue] | Iterable[tuple[str, JsonValue]] | None = None,
+        **kwargs: JsonValue
+    ) -> None:
         """Atomic mapping-style update."""
         self._raise_if_read_only()
 
-        updates = dict(*args, **kwargs)
-        self._run_edit(lambda tx: tx.update(updates))
+        if __m is not None:
+            # dict() handles both mappings and iterables safely
+            updates = dict(__m, **kwargs)
+        else:
+            updates = kwargs
 
-    def _run_edit(self, action: Callable[[_ConfigTransaction], object]) -> Any:
+        self._run_edit(lambda tx: tx.update(updates))
+       
+    def _run_edit(self, action: Callable[[_ConfigTransaction], _TJ]) -> _TJ:
         with self.edit() as tx:
             result = action(tx)
         return self._detach(result)
@@ -567,7 +608,7 @@ class Config(MutableMapping[str, Any]):
                 "while a batch edit is active."
             )
 
-    def _read_json_object(self) -> dict[str, Any]:
+    def _read_json_object(self) -> dict[str, JsonValue]:
         try:
             with open(self._path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
@@ -582,9 +623,9 @@ class Config(MutableMapping[str, Any]):
             raise ConfigError(
                 f"Config file '{self._path}' must contain a JSON object at the top level."
             )
-        return cast(dict[str, Any], data)
+        return cast(dict[str, JsonValue], data)
 
-    def _load_schema(self, data: dict[str, object]) -> dict[str, Any] | None:
+    def _load_schema(self, data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
         schema_ref = data.get("$schema")
         if not schema_ref:
             return None
@@ -614,7 +655,7 @@ class Config(MutableMapping[str, Any]):
     
         try:
             with open(schema_path, "r", encoding="utf-8") as handle:
-                schema: dict[str, object] = json.load(handle)
+                schema: dict[str, JsonValue] = json.load(handle)
         except FileNotFoundError as exc:
             if self._strict_schema:
                 raise SchemaValidationError(
@@ -637,7 +678,7 @@ class Config(MutableMapping[str, Any]):
         self._schema_cache = schema
         return schema
 
-    def _validate_schema(self, data: dict[str, object]) -> None:
+    def _validate_schema(self, data: dict[str, JsonValue]) -> None:
         schema = self._load_schema(data)
         if schema is None:
             return
@@ -661,7 +702,7 @@ class Config(MutableMapping[str, Any]):
                 if not create_if_missing:
                     raise FileNotFoundError(self._path)
 
-                empty: dict[str, object] = {}
+                empty: dict[str, JsonValue] = {}
                 self._validate_schema(empty)
                 new_signature = _atomic_write_json(
                     self._path, empty,
@@ -704,7 +745,7 @@ class Config(MutableMapping[str, Any]):
             self._data = data
             self._last_signature = signature
 
-    def _atomic_write(self, data: dict[str, object]) -> None:
+    def _atomic_write(self, data: dict[str, JsonValue]) -> None:
         self._raise_if_read_only()
         _atomic_write_json(
             self._path, data,
@@ -727,7 +768,7 @@ class Config(MutableMapping[str, Any]):
             pass
 
 
-class _ConfigTransaction(MutableMapping[str, Any]):
+class _ConfigTransaction(MutableMapping[str, JsonValue]):
     """A batch edit working copy.
 
     Values returned here are live within the transaction on purpose, so nested
@@ -738,8 +779,8 @@ class _ConfigTransaction(MutableMapping[str, Any]):
 
     def __init__(self, config: Config) -> None:
         self._config: Config = config
-        self.data: dict[str, Any] | None = None
-        self.original: dict[str, Any] | None = None
+        self.data: dict[str, JsonValue] | None = None
+        self.original: dict[str, JsonValue] | None = None
         self._lock_fp: io.BufferedRandom | None = None
         self.owner_thread_id: int | None = None
         self._cfg_lock_acquired: bool = False
@@ -761,7 +802,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
             signature = _file_signature(cfg._path)
 
             if signature is None:
-                current: dict[str, Any] = {}
+                current: dict[str, JsonValue] = {}
                 cfg._validate_schema(current)
                 signature = _atomic_write_json(
                     cfg._path, current,
@@ -851,7 +892,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
                 cfg._lock.release()
                 self._cfg_lock_acquired = False
 
-    def _require_active(self) -> dict[str, Any]:
+    def _require_active(self) -> JsonDict:
         if self.data is None:
             raise RuntimeError("Transaction is not active.")
         return self.data
@@ -859,7 +900,7 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     def __getitem__(self, key: str) -> Any:
         return self._require_active()[key]
 
-    def __setitem__(self, key: str, value: object) -> None:
+    def __setitem__(self, key: str, value: JsonValue) -> None:
         self._require_active()[key] = value
 
     def __delitem__(self, key: str) -> None:
@@ -871,10 +912,12 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     def __len__(self) -> int:
         return len(self._require_active())
 
-    def __contains__(self, key: object) -> bool:
+    def __contains__(self, key: str) -> bool:
         return key in self._require_active()
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: JsonValue | MISSING_TYPE = MISSING) -> Any:
+        if default is MISSING:
+            return self._require_active().get(key)
         return self._require_active().get(key, default)
 
     def copy(self) -> dict[str, Any]:
@@ -883,20 +926,52 @@ class _ConfigTransaction(MutableMapping[str, Any]):
     def clear(self) -> None:
         self._require_active().clear()
 
-    def pop(self, key: str, **kwargs: Any) -> Any:
-        data = self._require_active()
-        if 'default' in kwargs:
-            return data.pop(key, kwargs['default'])
-        return data.pop(key)
+    @overload
+    def pop(self, key: str) -> JsonValue: ...
 
-    def popitem(self) -> tuple[str, Any]:
+    @overload
+    def pop(self, key: str, default: _TJ) -> _TJ: ...
+
+    def pop(self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
+        data = self._require_active()
+        if default is MISSING:
+            return data.pop(key)
+        d: JsonValue = default  # type: ignore[assignment]
+        return data.pop(key, d)
+
+    def popitem(self) -> tuple[str, JsonValue]:
         return self._require_active().popitem()
 
-    def setdefault(self, key: str, default: Any = None) -> Any:
+    @overload
+    def setdefault(self, key: str, default: _TJ) -> _TJ: ...
+
+    @overload
+    def setdefault(self, key: str, default: None = None) -> JsonValue: ...
+
+    def setdefault(self, key: str, default: JsonValue = None) -> JsonValue:
         return self._require_active().setdefault(key, default)
 
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        self._require_active().update(*args, **kwargs)
+    @overload
+    def update(self, **kwargs: JsonValue) -> None: ...
+
+    @overload
+    def update(self, __m: Mapping[str, JsonValue], **kwargs: JsonValue) -> None: ...
+
+    @overload
+    def update(self, __m: Iterable[tuple[str, JsonValue]], **kwargs: JsonValue) -> None: ...
+
+    # whatever lol
+    def update( # pyright: ignore[reportInconsistentOverload]
+        self,
+        __m: Mapping[str, JsonValue] | Iterable[tuple[str, JsonValue]] | None = None,
+        **kwargs: JsonValue
+    ) -> None:
+        data = self._require_active()
+        
+        if __m is not None:
+            data.update(__m, **kwargs)
+        else:
+            data.update(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -974,7 +1049,7 @@ class LinesConfig:
     def size(self) -> int:
         return os.path.getsize(self.path)
     
-    def append(self, record: Mapping[str, object]) -> None:
+    def append(self, record: Mapping[str, JsonValue]) -> None:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
         with self._lock:
@@ -987,8 +1062,12 @@ class LinesConfig:
                 if self._sync_mode == "full":
                     _fsync_parent_dir(self._path)
 
-    def append_many(self, records: Iterable[Mapping[str, object]]) -> None:
-        """Append multiple records in a single atomic write. Thread-safe."""
+    def append_many(self, records: Sequence[Mapping[str, JsonValue]]) -> None:
+        """Append multiple records in a single atomic write. Thread-safe.
+
+        Note: records must be a Sequence (list/tuple). Iterables are not supported
+        because the entire collection is materialized before writing.
+        """
         lines = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
         with self._lock:
             with _locked_file(self._path, exclusive=True):
@@ -1000,7 +1079,7 @@ class LinesConfig:
                 if self._sync_mode == "full":
                     _fsync_parent_dir(self._path)
 
-    def __iter__(self) -> Iterator[dict[str, Any]]:
+    def __iter__(self) -> Iterator[JsonDict]:
         """Iterate over all lines. Thread-safe at read-time."""
         with self._lock:
             with _locked_file(self._path, exclusive=False):
@@ -1013,7 +1092,7 @@ class LinesConfig:
                 except FileNotFoundError:
                     return
 
-    def tail(self, n: int = 100) -> Iterator[dict[str, Any]]:
+    def tail(self, n: int = 100) -> Iterator[JsonDict]:
         """Iterate over the last n lines. Thread-safe at read-time."""
         raw_lines = b""
         with self._lock:
@@ -1040,7 +1119,7 @@ class LinesConfig:
             if line:
                 yield json.loads(line)
 
-    def read_all(self) -> list[dict[str, Any]]:
+    def read_all(self) -> list[JsonDict]:
         """Return all records as a list. Thread-safe.
 
         Convenience wrapper over list(self), prefer iterating directly when
@@ -1048,13 +1127,13 @@ class LinesConfig:
         """
         return list(self)
 
-    def first(self, n: int = 1) -> list[dict[str, Any]]:
+    def first(self, n: int = 1) -> list[JsonDict]:
         """Return the first n records without reading the whole file. Thread-safe.
 
         Stops reading as soon as n records have been collected, making it
         efficient for large files where only the oldest entries are needed.
         """
-        result: list[dict[str, object]] = []
+        result: list[JsonDict] = []
         with self._lock:
             with _locked_file(self._path, exclusive=False):
                 try:
@@ -1090,7 +1169,7 @@ class LinesConfig:
                 if self._sync_mode == "full":
                     _fsync_parent_dir(self._path)
 
-    def compact(self, keep: Callable[[Mapping[str, object]], bool] | None = None) -> int:
+    def compact(self, keep: Callable[[Mapping[str, JsonValue]], bool] | None = None) -> CompactReturn:
         """Rewrite the file keeping only records that satisfy `keep`. Thread-safe.
 
         This is the primary way to delete or deduplicate records, since JSONL
@@ -1102,7 +1181,7 @@ class LinesConfig:
                 clean rewrite with no lines dropped).
 
         Returns:
-            Number of records retained after compaction.
+            Tuple of (kept, removed) counts after compaction.
         """
         dir_path = os.path.dirname(self._path) or "."
         with self._lock:
@@ -1111,9 +1190,10 @@ class LinesConfig:
                     with open(self._path, "r", encoding="utf-8") as f:
                         records = [json.loads(line) for line in f if line.strip()]
                 except FileNotFoundError:
-                    return 0
+                    return CompactReturn(0, 0)
 
                 kept = [r for r in records if keep(r)] if keep is not None else records
+                removed = len(records) - len(kept)
 
                 fd, tmp = tempfile.mkstemp(dir=dir_path, prefix=".tmp_compact_", suffix=".jsonl")
                 os.close(fd)
@@ -1134,8 +1214,8 @@ class LinesConfig:
                         pass
                     raise
 
-        return len(kept)
-
+        return CompactReturn(len(kept), removed)
+    
     def backup_now(self) -> None:
         """Trigger an immediate backup snapshot, regardless of the schedule.
 
@@ -1168,6 +1248,7 @@ class LinesConfig:
         self.close()
         return False
     def __del__(self) -> None:
+        # NOTE: attribute might not exist yet during interpreter shutdown
         try:
             self._backup_stop.set()
             if self._backup_t is not None and self._backup_t.is_alive():

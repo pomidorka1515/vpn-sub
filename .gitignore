@@ -29,3 +29,5 @@ test_chart.py
 vpn_sub.egg-info/
 # My other project, sorry for cluttering...
 nep_bot.py 
+# TODO typings for telebot
+typings/

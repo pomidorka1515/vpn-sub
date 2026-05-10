@@ -12,14 +12,14 @@ from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response, g
 from abc import ABC
 from typing import (
-    cast, Callable, Literal, NamedTuple, TypeAlias,
+    cast, Callable, Literal, NamedTuple,
     Sequence, Mapping,
     TypeVar, ParamSpec,
     Concatenate
 )
 from dataclasses import asdict, is_dataclass
 
-from custom_types import ConfigLike, LinesConfigLike, NewUserInfo, ServerMetricsResponse
+from custom_types import ConfigLike, LinesConfigLike, NewUserInfo
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
@@ -37,7 +37,7 @@ class Route(NamedTuple):
     handler: str
     rate_limit: int | None = None
 
-    def validate(self):
+    def validate(self) -> None:
         if not self.path.startswith('/'):
             raise ValueError(f"Route path must start with '/', got '{self.path}'")
         if self.rate_limit is not None and self.rate_limit <= 0:
@@ -149,16 +149,16 @@ def _parse_basic_auth(header: str) -> tuple[str, str] | None:
 def requires_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concatenate[Api, P], R]:
     """Admin API auth via Authorization header. Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs):
+    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]: 
         provided = request.headers.get('Authorization', '')
         if not provided or not self.sub.compare(provided, self.token):
             return _err("Unauthorized", 401)
         return f(self, *args, **kwargs)
-    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
+    return cast(Callable[Concatenate[Api, P], R], wrapper)
 def requires_basic_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concatenate[Api, P], R]:
     """Admin API auth via Basic auth header. Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs):
+    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> R | Response:
         provided = request.headers.get("Authorization", "")
         creds = _parse_basic_auth(provided)
         valid: tuple[str, str] = tuple(self.cfg["api_admin_ui_auth"])
@@ -170,22 +170,22 @@ def requires_basic_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[C
         if (not self.sub.compare(user, valid[0])) or (not self.sub.compare(pw, valid[1])):
             return err
         return f(self, *args, **kwargs)
-    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
+    return cast(Callable[Concatenate[Api, P], R], wrapper)
 def requires_webapi_auth(f: Callable[Concatenate[WebApi, str, P], R]) -> Callable[Concatenate[WebApi, P], R]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
     Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs):
+    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
         token = request.cookies.get('token')
         username = self.validate_token(token)
         if not username:
             return _err("Invalid token.", 401)
         return f(self, username, *args, **kwargs)
-    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
+    return cast(Callable[Concatenate[WebApi, P], R], wrapper)
 def requires_no_auth(f: Callable[Concatenate[WebApi, P], R]) -> Callable[Concatenate[WebApi, P], R]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs):
+    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
         token = request.cookies.get('token')
         if token and self.validate_token(token):
             return _err("Must not be authorized.", 403)
@@ -245,7 +245,7 @@ def requires_args(*arg: str) -> Callable[[Callable[P, R]], Callable[P, R | tuple
     """Validate request.args has all named fields. Returns 400 on failure."""
     def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
         @wraps(f)
-        def wrapper(*args: P.args, **kwargs: P.kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | tuple[ResponseType, int]:
             content = request.args
             missing = [x for x in arg if x not in content]
             if missing:
@@ -328,14 +328,14 @@ class WebApi(BaseApi):
         return send_file('res/dashboard.html', etag=False)
     def gui_auth(self) -> ResponseType:
         return send_file('res/auth.html', etag=False)
-    def gui_history(self):
+    def gui_history(self) -> ResponseType:
         token = request.cookies.get('token')
         if not self.validate_token(token):
             return make_response(redirect('/sub/auth'))
         return send_file('res/history.html', etag=False)
     
     @requires_webapi_auth
-    def qr(self, username: str):
+    def qr(self, username: str) -> ResponseType:
         lang = request.args.get('lang', 'en')
         if lang not in ['en', 'ru']:
             lang = 'en'
@@ -392,7 +392,7 @@ class WebApi(BaseApi):
         content = g.json_obj
         if not isinstance(content, dict):
             return _err("Body must be a JSON object", 400)
-        # content = cast(dict[str, JsonifyValue], content)
+        content = cast(dict[str, JsonifyValue], content)
         current_password = content.get('current_password')
         if not current_password or not isinstance(current_password, str):
             return _err("current_password required", 400)
@@ -890,7 +890,7 @@ class Api(BaseApi):
     def audit(self) -> ResponseType:
         n = request.args.get('n', 50, type=int)
     
-        if n is None or n < 0:
+        if n < 0:
             return _err("'n' arg must be a positive integer, or 0 for the whole file")
     
         if n == 0:
