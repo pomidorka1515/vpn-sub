@@ -1316,7 +1316,7 @@ class PublicBot:
 
         # Need current ext_username to update password (update_params requires both)
         ext_username = None
-        for email, uname in cast(dict[str, str], self.cfg.get('webui_users', {})).items():
+        for email, uname in self.cfg.get('webui_users', as_type=dict[str, str]).items():
             if uname == username:
                 ext_username = email
                 break
@@ -1411,8 +1411,8 @@ class PublicBot:
             
         try: self.bot.delete_message(message.chat.id, message.message_id)
         except Exception: pass    
-        users_pw = cast(dict[str, str], self.cfg.get('webui_passwords', {}))
-        webui_users = cast(dict[str, str], self.cfg.get('webui_users', {}))
+        users_pw = self.cfg.get('webui_passwords', as_type=dict[str, str])
+        webui_users = self.cfg.get('webui_users', as_type=dict[str, str])
         
         if email in users_pw and users_pw[email] == self.sub.hash(password):
             internal_username = webui_users.get(email)

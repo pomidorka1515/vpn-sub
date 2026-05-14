@@ -308,18 +308,18 @@ class Subscription:
     ) -> None:
         """Best-effort rollback for register_with_code()."""
         with self.cfg as d:
-            d.get("users", {}).pop(username, None)
-            d.get("tokens", {}).pop(username, None)
-            d.get("userFingerprints", {}).pop(username, None)
-            d.get("status", {}).pop(username, None)
-            d.get("statusTime", {}).pop(username, None)
-            d.get("statusWl", {}).pop(username, None)
-            d.get("displaynames", {}).pop(username, None)
-            d.get("bw", {}).pop(username, None)
-            d.get("wl_bw", {}).pop(username, None)
-            d.get("time", {}).pop(username, None)
-            d.get("webui_passwords", {}).pop(ext_username, None)
-            d.get("webui_users", {}).pop(ext_username, None)
+            d.get("users", as_type=dict[str, str]).pop(username, None)
+            d.get("tokens", as_type=dict[str, str]).pop(username, None)
+            d.get("userFingerprints", as_type=dict[str, str]).pop(username, None)
+            d.get("status", as_type=dict[str, bool]).pop(username, None)
+            d.get("statusTime", as_type=dict[str, bool]).pop(username, None)
+            d.get("statusWl", as_type=dict[str, bool]).pop(username, None)
+            d.get("displaynames", as_type=dict[str, str]).pop(username, None)
+            d.get("bw", as_type=dict[str, list[int]]).pop(username, None)
+            d.get("wl_bw", as_type=dict[str, list[int]]).pop(username, None)
+            d.get("time", as_type=dict[str, int]).pop(username, None)
+            d.get("webui_passwords", as_type=dict[str, str]).pop(ext_username, None)
+            d.get("webui_users", as_type=dict[str, str]).pop(ext_username, None)
     
             if consumed_code is not None:
                 codes: list[dict[str, str | int | bool]] = d.setdefault("codes", [])
@@ -353,7 +353,10 @@ class Subscription:
     def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
         """Return snapshots for a user, clamped to retention window."""
         cutoff = int(time.time()) - days * 86400
-        user_table: dict[str, dict[str, list[dict[str, int]]]] = self.bw_cfg.get('snapshots')
+        user_table = self.bw_cfg.get(
+            'snapshots',
+            as_type=dict[str, dict[str, list[dict[str, int]]]]
+        )
         user_data = user_table.get(username, {})
         raw = user_data.get("snapshots", [])
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
@@ -436,21 +439,21 @@ class Subscription:
                 if not (response.status_code in [200, 201] and content.get('success')):
                     err_msg: str = content.json().get('msg', 'panel rejected update')
 
-
         if perma:
             with self.cfg as data:
                 sections = ['users', 'tokens', 'userFingerprints', 'status', 'statusWl', 'displaynames', 'bw', 'wl_bw', 'statusTime', 'time']
                 for s in sections:
-                    data.get(s, {}).pop(username, None)
+                    data.get(s, as_type=dict[str, object]).pop(username, None)
                 
-                emails_to_delete =[email for email, uname in data.get('webui_users', {}).items() if uname == username]
+                emails_to_delete =[email for email, uname in data.get('webui_users', as_type=dict[str, str]).items() if uname == username]
                 for email in emails_to_delete:
-                    data.get('webui_users', {}).pop(email, None)
-                    data.get('webui_passwords', {}).pop(email, None)
-                
-                tgids_to_delete =[tgid for tgid, uname in data.get('tgids', {}).items() if uname == username]
+                    data.get('webui_users', as_type=dict[str, str]).pop(email, None)
+                    data.get('webui_passwords', as_type=dict[str, str]).pop(email, None)
+
+                tgids_table = data.get('tgids', as_type=dict[str, str])
+                tgids_to_delete =[tgid for tgid, uname in tgids_table.items() if uname == username]
                 for tgid in tgids_to_delete:
-                    data.get('tgids', {}).pop(tgid, None)
+                    tgids_table.pop(tgid, None)
 
         self.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
@@ -484,6 +487,7 @@ class Subscription:
                     content = request.json()
                     if not (response.status_code in [200, 201] and content.get('success')):
                         err_msg: str = content.get('msg', 'panel rejected update')
+
             with self.cfg as d:
                 d['status'][username] = enable
                 if timee is not None: d['statusTime'][username] = timee
@@ -560,7 +564,7 @@ class Subscription:
             # Atomic uniqueness checks under the batch lock (prevents races)
             if username in d['users']:
                 return "Username exists"
-            if ext_username and ext_username in d.get('webui_users', {}):
+            if ext_username and ext_username in d.get('webui_users', as_type=dict[str, str]):
                 return "Ext Username exists"
             d['users'][username] = userid
             d['tokens'][username] = token
@@ -615,12 +619,12 @@ class Subscription:
         with self.cfg as t:
             _old_ext_username: str | None = None
             if ext_username is not None:
-                for _ext, _internal in t.get('webui_users', {}).items():
+                for _ext, _internal in t.get('webui_users', as_type=dict[str, str]).items():
                     if _internal == username:
                         _old_ext_username = _ext
                         break
                 if ext_password is None and _old_ext_username:
-                    ext_password = t['webui_passwords'].get(_old_ext_username)
+                    ext_password = t['webui_passwords'].get(_old_ext_username, as_type=str)
                     # mark as already-hashed so we skip re-hashing below
                     _already_hashed = True
                 else:
@@ -678,8 +682,8 @@ class Subscription:
             t['time'][username] = timestamp
             if ext_password and ext_username:
                 if _old_ext_username and _old_ext_username != ext_username:
-                    t.get('webui_passwords', {}).pop(_old_ext_username, None)
-                    t.get('webui_users', {}).pop(_old_ext_username, None)
+                    t.get('webui_passwords', as_type=dict[str, str]).pop(_old_ext_username, None)
+                    t.get('webui_users', as_type=dict[str, str]).pop(_old_ext_username, None)
                 t['webui_passwords'][ext_username] = ext_password
                 t['webui_users'][ext_username] = username
 
@@ -1178,8 +1182,8 @@ class Subscription:
         
         if not new:
             return list(online_users)
-        
-        internal_to_ext = {v: k for k, v in self.cfg.get('webui_users', {}).items()}
+        webui_users_table = self.cfg.get('webui_users', as_type=dict[str, str])
+        internal_to_ext = {v: k for k, v in webui_users_table.items()}
         return {name: internal_to_ext.get(name) for name in online_users}
     def is_online(self, username: str) -> bool:
         """Simplest method here lol. But useful."""
@@ -1571,7 +1575,7 @@ class BWatch:
             self.wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
             self._panel_alerts: dict[str, int | float] = {} # only used by 1 thread, no lock needed yet
-            self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown') or 3600
+            self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', as_type=int) or 3600
 
             self._threads: tuple[threading.Thread, ...] = (
                 threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs"),
@@ -1607,7 +1611,7 @@ class BWatch:
     def _get_notified(self, key: Literal['_notified', '_wl_notified']) -> set[int]:
         """Read _notified/_wl_notified from cfg as a set of int (tgid).
         Persisted as list in JSON; converted to set for O(1) membership."""
-        val: list[int] = self.cfg.get(key)
+        val = self.cfg.get(key, as_type=list[int])
         return set(val) if isinstance(val, list) else (val if isinstance(val, set) else set())
     
     def stop(self) -> None:
@@ -1625,7 +1629,7 @@ class BWatch:
             meta: dict[str, int] = d.setdefault("_meta", {})
             retention = meta.get("retention_days", 30)
             cutoff = int(time.time()) - retention * 86400
-            for user in list(d.get("users", {}).keys()):
+            for user in list(d.get("users", as_type=dict[str, str]).keys()):
                 snapshots = d["users"][user]["snapshots"]
                 d["users"][user]["snapshots"] = [s for s in snapshots if s["ts"] >= cutoff]
             meta["last_prune"] = int(time.time())

@@ -491,14 +491,45 @@ class Config(MutableMapping[str, JsonValue]):
             self._ensure_recent_locked()
             return len(self._data)
 
-    def get(self, key: str, default: JsonValue | MISSING_TYPE = MISSING) -> Any:
+    @overload
+    def get(self, key: str) -> JsonValue: ...
+
+    @overload
+    def get(self, key: str, default: _TJ) -> _TJ: ...
+
+    @overload
+    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+
+    @overload
+    def get(
+        self,
+        key: str, 
+        default: _TJ | MISSING_TYPE = MISSING,
+        *, 
+        as_type: type[_T] | None = None
+    ) -> _TJ | _T: ...
+
+    def get(
+        self,
+        key: str,
+        default: JsonValue | MISSING_TYPE = MISSING,
+        *,
+        as_type: type[_T] | None = None
+    ) -> Any:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
-            if default is MISSING:
-                return self._detach(self._data.get(key))
-            return self._detach(self._data.get(key, default))
-
+            value = self._data.get(key) if default is MISSING else self._data.get(key, default)
+            if as_type is not None:
+                value = cast(as_type, value)  # type: ignore[valid-type]
+            return self._detach(value) # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+    
     def __iter__(self) -> Iterator[str]:
         with self._lock:
             self._raise_if_used_inside_transaction()
@@ -755,7 +786,7 @@ class Config(MutableMapping[str, JsonValue]):
     @staticmethod
     def _detach(value: _T) -> _T:
         if isinstance(value, (dict, list)):
-            return copy.deepcopy(cast(_T, value)) 
+            return copy.deepcopy(cast(_T, value))
         return value
 
     def __del__(self) -> None:
@@ -915,11 +946,37 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]):
     def __contains__(self, key: str) -> bool:
         return key in self._require_active()
 
-    def get(self, key: str, default: JsonValue | MISSING_TYPE = MISSING) -> Any:
-        if default is MISSING:
-            return self._require_active().get(key)
-        return self._require_active().get(key, default)
+    @overload
+    def get(self, key: str) -> JsonValue: ...
 
+    @overload
+    def get(self, key: str, default: _TJ) -> _TJ: ...
+
+    @overload
+    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+
+    @overload
+    def get(self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
+
+    def get(
+        self,
+        key: str,
+        default: JsonValue | MISSING_TYPE = MISSING,
+        *,
+        as_type: type[_T] | None = None
+    ) -> Any:
+        data = self._require_active()
+        value = data.get(key) if default is MISSING else data.get(key, default)
+        if as_type is not None:
+            value = cast(as_type, value)  # type: ignore[valid-type]
+        return value # pyright: ignore[reportUnknownVariableType]
+    
     def copy(self) -> dict[str, Any]:
         return copy.deepcopy(self._require_active())
 
@@ -1089,12 +1146,12 @@ class LinesConfig:
                             line = line.strip()
                             if line:
                                 yield json.loads(line)
-                except FileNotFoundError:
+                except OSError:
                     return
 
     def tail(self, n: int = 100) -> Iterator[JsonDict]:
         """Iterate over the last n lines. Thread-safe at read-time."""
-        raw_lines = b""
+        raw_lines: bytes = b""
         with self._lock:
             with _locked_file(self._path, exclusive=False):
                 try:
@@ -1109,10 +1166,10 @@ class LinesConfig:
                             chunk = f.read(chunk_size)
                             remaining -= chunk_size
                             raw_lines = chunk + raw_lines
-                except FileNotFoundError:
-                    return
+                except OSError:
+                    if not raw_lines:
+                        return
 
-        # Parse outside the lock — no filesystem I/O, just CPU work
         lines = raw_lines.decode("utf-8").splitlines()
         for line in lines[-n:]:
             line = line.strip()
@@ -1155,14 +1212,25 @@ class LinesConfig:
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         return sum(1 for line in f if line.strip())
-                except FileNotFoundError:
+                except OSError:
                     return 0
 
     def clear(self) -> None:
-        """Truncate the file. Thread-safe."""
+        """Truncate the file. Thread-safe.
+
+        Uses 'r+' mode to acquire only the shared lock needed for truncation,
+        avoiding a deadlock hazard where the lockfile's exclusive lock would
+        block on a process mid-append/compact/clear that holds it.
+        """
         with self._lock:
-            with _locked_file(self._path, exclusive=True):
-                with open(self._path, "w", encoding="utf-8") as f:
+            with _locked_file(self._path, exclusive=False):
+                # 'r+' acquires a shared (advisory) lock on the data fd.
+                # This is the minimum lock level needed for truncation —
+                # unlike 'w' mode, it won't deadlock if another process is
+                # mid-append/compact/clear and holds the lockfile's exclusive
+                # lock while holding the data file's shared lock.
+                with open(self._path, "r+", encoding="utf-8") as f:
+                    f.truncate(0)
                     if self._sync_mode != "none":
                         f.flush()
                         os.fsync(f.fileno())
@@ -1189,7 +1257,7 @@ class LinesConfig:
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         records = [json.loads(line) for line in f if line.strip()]
-                except FileNotFoundError:
+                except OSError:
                     return CompactReturn(0, 0)
 
                 kept = [r for r in records if keep(r)] if keep is not None else records

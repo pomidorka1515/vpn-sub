@@ -303,12 +303,12 @@ class WebApi(BaseApi):
             return _v(request.cookies.get('token'))
     def validate_credentials(self, username: str, password: str) -> str | bool:
         """Validate username+password against config. Returns internal username on success."""
-        users_pw = cast(dict[str, str], self.cfg.get('webui_passwords', {}))
+        users_pw = self.cfg.get('webui_passwords', as_type=dict[str, str])
         if username not in users_pw:
             return False
         if not self.sub.compare(users_pw[username], self.sub.hash(password)):
             return False
-        webui_users = cast(dict[str, str], self.cfg.get('webui_users', {}))
+        webui_users = self.cfg.get('webui_users', as_type=dict[str, str])
         internal = webui_users.get(username)
         if not internal or internal not in self.cfg['users']:
             return False
@@ -363,7 +363,7 @@ class WebApi(BaseApi):
             return _err("'username' field is missing")
         sanitized = self.sub.sanitize(raw)
         valid = raw == sanitized and len(raw) > 0
-        taken = sanitized in cast(dict[str, str], self.cfg.get('webui_users', {}))
+        taken = sanitized in self.cfg.get('webui_users', as_type=dict[str, str])
         return _ok(obj={
             "MAX_LENGTH": 32,
             "valid": valid,
@@ -397,12 +397,12 @@ class WebApi(BaseApi):
         if not current_password or not isinstance(current_password, str):
             return _err("current_password required", 400)
         cur_ext = next(
-            (e for e, u in cast(dict[str, str], self.cfg.get('webui_users', {})).items() if u == username),
+            (e for e, u in self.cfg.get('webui_users', as_type=dict[str, str]).items() if u == username),
             None
         )
         if not cur_ext:
             return _err("Account has no credentials set", 400)
-        stored = cast(dict[str, str], self.cfg.get('webui_passwords', {})).get(cur_ext, '')
+        stored = self.cfg.get('webui_passwords', as_type=dict[str, str]).get(cur_ext, '')
         if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
             return _err("Invalid current password", 401)
         try:
@@ -461,12 +461,12 @@ class WebApi(BaseApi):
             if not current_password or not isinstance(current_password, str):
                 return _err("current_password required to change credentials", 400)
             cur_ext = next(
-                (e for e, u in cast(dict[str, str], self.cfg.get('webui_users', {})).items() if u == username),
+                (e for e, u in self.cfg.get('webui_users', as_type=dict[str, str]).items() if u == username),
                 None,
             )
             if not cur_ext:
                 return _err("Account has no credentials set", 400)
-            stored = cast(dict[str, str], self.cfg.get('webui_passwords', {})).get(cur_ext, '')
+            stored = self.cfg.get('webui_passwords', as_type=dict[str, str]).get(cur_ext, '')
             if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
                 return _err("Invalid current password", 401)
         try:

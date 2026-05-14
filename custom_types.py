@@ -39,14 +39,14 @@ __all__ = [
 ]
 
 type JsonValue = int | float | Mapping[str, 'JsonValue'] | Sequence['JsonValue'] | str | bool | None
-JsonDict = dict[str, JsonValue]
+type JsonDict = dict[str, JsonValue]
 
 class MISSING_TYPE:
     """Sentinel for missing default values."""
     def __repr__(self) -> str:
         return "<MISSING>"
 
-MISSING: Final = MISSING_TYPE()
+MISSING: Final[MISSING_TYPE] = MISSING_TYPE()
 _T = TypeVar("_T")
 _TJ = TypeVar("_TJ", bound=JsonValue)
 _T_C = TypeVar("_T_C", covariant=True)
@@ -115,7 +115,37 @@ class ConfigLike(Protocol):
 
     def __len__(self) -> int: ...
 
-    def get(self, key: str, default: JsonValue | MISSING_TYPE = MISSING) -> Any: ...
+    @overload
+    def get(self, key: str) -> JsonValue: ...
+
+    @overload
+    def get(self, key: str, default: _TJ) -> _TJ: ...
+
+    @overload
+    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+
+    @overload
+    def get(
+        self,
+        key: str,
+        default: _TJ | MISSING_TYPE = MISSING,
+        *,
+        as_type: type[_T] | None = None
+    ) -> _TJ | _T: ...
+
+    def get(
+        self,
+        key: str,
+        default: JsonValue | MISSING_TYPE = MISSING,
+        *,
+        as_type: type[_T] | None = None
+    ) -> Any: ...
     
     def __iter__(self) -> Iterator[str]: ...
 
@@ -126,7 +156,7 @@ class ConfigLike(Protocol):
     def items(self) -> tuple[tuple[str, JsonValue], ...]: ...
 
     def copy(self) -> dict[str, Any]: ...
-
+    
     def clear(self) -> None: ...
 
     @overload
@@ -187,7 +217,31 @@ class _ConfigTransactionLike(Protocol):
 
     def __contains__(self, key: str) -> bool: ...
 
-    def get(self, key: str, default: JsonValue | MISSING_TYPE = MISSING) -> Any: ...
+    @overload
+    def get(self, key: str) -> JsonValue: ...
+
+    @overload
+    def get(self, key: str, default: _TJ) -> _TJ: ...
+
+    @overload
+    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+
+    @overload
+    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+
+    @overload
+    def get(self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
+
+    def get(
+        self,
+        key: str,
+        default: JsonValue | MISSING_TYPE = MISSING,
+        *,
+        as_type: type[_T] | None = None
+    ) -> Any: ...
 
     def copy(self) -> dict[str, Any]: ...
 
