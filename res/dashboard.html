@@ -12,7 +12,7 @@
   --border: #252529; --border-h: #35353b;
   --text: #e4e4e7; --text2: #8e8e96;
   --accent: #6366f1; --accent-dim: #4f46e5;
-  --green: #22c55e; --red: #ef4444; --orange: #f59e0b;
+  --green: #22c55e; --yellow: #eab308; --orange: #f97316; --red: #ef4444; --red-dark: #dc2626;
   --radius: 10px;
 }
 body {
@@ -122,10 +122,8 @@ body {
 .bw-bar-bg { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
 .bw-bar-fill {
   height: 100%; border-radius: 3px;
-  background: linear-gradient(90deg, var(--accent), #818cf8);
-  transition: width .6s ease;
+  transition: width .6s ease, background-color .4s ease;
 }
-.bw-bar-fill.wl { background: linear-gradient(90deg, #0ea5e9, #38bdf8); }
 
 .bonus-row { display: flex; gap: 8px; }
 .bonus-input {
@@ -147,6 +145,21 @@ body {
   border: 1px solid var(--border); border-radius: 8px;
   color: var(--text); font-family: inherit; font-size: 13px; outline: none;
 }
+.settings-row .pass-wrap {
+  flex: 1; position: relative;
+}
+.settings-row .pass-wrap input {
+  width: 100%; padding-right: 36px;
+}
+.settings-row .pass-toggle {
+  position: absolute; right: 8px; top: 50%;
+  transform: translateY(-50%); background: none; border: none;
+  color: var(--text2); cursor: pointer; padding: 4px;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .2s;
+}
+.settings-row .pass-toggle:hover { color: var(--text); }
+.settings-row .pass-toggle svg { width: 16px; height: 16px; }
 .settings-row select {
   cursor: pointer; appearance: none; -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238e8e96'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
@@ -366,8 +379,28 @@ body {
           <div class="username-hint" id="setUserHint"></div>
         </div>
       </div>
-      <div class="settings-row"><label data-t="password"></label><input type="password" id="setPass" autocomplete="new-password"></div>
-      <div class="settings-row"><label data-t="current_password"></label><input type="password" id="setCurPass" autocomplete="current-password"></div>
+      <div class="settings-row"><label data-t="password"></label>
+        <div class="pass-wrap">
+          <input type="password" id="setPass" autocomplete="new-password">
+          <button class="pass-toggle" onclick="togglePass('setPass', this)" type="button" aria-label="Toggle password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="settings-row"><label data-t="current_password"></label>
+        <div class="pass-wrap">
+          <input type="password" id="setCurPass" autocomplete="current-password">
+          <button class="pass-toggle" onclick="togglePass('setCurPass', this)" type="button" aria-label="Toggle password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
     <div class="settings-actions">
       <button class="btn btn-primary" style="width:auto;padding:8px 24px" onclick="saveSettings()" id="btnSave"></button>
@@ -569,11 +602,36 @@ function confirmDialog(message, title, withInput = false) {
   });
 }
 
+function togglePass(id, btn) {
+  const input = document.getElementById(id);
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>`;
+  } else {
+    input.type = 'password';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>`;
+  }
+}
+
 function fmtBytes(b) {
   if (b === 0) return '0 B';
   const u = ['B','KB','MB','GB','TB'];
   const i = Math.floor(Math.log(b) / Math.log(1000));
   return (b / Math.pow(1000, i)).toFixed(i > 1 ? 2 : 0) + ' ' + u[i];
+}
+
+function getBwColor(pct) {
+  if (pct <= 25) return 'var(--green)';
+  if (pct <= 50) return 'var(--yellow)';
+  if (pct <= 75) return 'var(--orange)';
+  if (pct <= 90) return 'var(--red)';
+  return 'var(--red-dark)';
 }
 
 function fmtTime(ts) {
@@ -642,7 +700,9 @@ function renderStats(s) {
   const wlLimitB = bw.wl_limit * 1073741824;
 
   if (limitB > 0) {
-    document.getElementById('bwMonthlyBar').style.width = Math.min(100, (bw.monthly / limitB) * 100) + '%';
+    const pct = (bw.monthly / limitB) * 100;
+    document.getElementById('bwMonthlyBar').style.width = Math.min(100, pct) + '%';
+    document.getElementById('bwMonthlyBar').style.background = getBwColor(pct);
     document.getElementById('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ' + bw.limit + ' GB';
   } else {
     document.getElementById('bwMonthlyBar').style.width = '0%';
@@ -650,7 +710,9 @@ function renderStats(s) {
   }
 
   if (wlLimitB > 0) {
-    document.getElementById('bwWlBar').style.width = Math.min(100, (bw.wl_monthly / wlLimitB) * 100) + '%';
+    const pct = (bw.wl_monthly / wlLimitB) * 100;
+    document.getElementById('bwWlBar').style.width = Math.min(100, pct) + '%';
+    document.getElementById('bwWlBar').style.background = getBwColor(pct);
     document.getElementById('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ' + bw.wl_limit + ' GB';
   } else {
     document.getElementById('bwWlBar').style.width = '0%';

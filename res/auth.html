@@ -52,15 +52,26 @@ body {
   font-weight: 500; border-radius: 6px; cursor: pointer; transition: all .2s;
 }
 .auth-tab.active { background: var(--surface2); color: var(--text); }
-.form-group { margin-bottom: 14px; }
+.form-group { margin-bottom: 14px; position: relative; }
 .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
 .form-group input {
-  width: 100%; padding: 10px 12px; background: var(--bg);
+  width: 100%; padding: 10px 40px 10px 12px; background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px;
   color: var(--text); font-family: inherit; font-size: 14px;
   outline: none; transition: border-color .2s;
 }
 .form-group input:focus { border-color: var(--accent); }
+.pass-wrap { position: relative; }
+.pass-toggle {
+  position: absolute; right: 10px; top: 50%;
+  transform: translateY(-50%); background: none; border: none;
+  color: var(--text2); cursor: pointer; padding: 4px;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .2s;
+}
+.pass-toggle:hover { color: var(--text); }
+.pass-toggle svg { width: 18px; height: 18px; }
+.username-hint-wrap { position: relative; }
 .btn {
   width: 100%; padding: 11px; border: none; border-radius: 8px;
   font-family: inherit; font-size: 14px; font-weight: 500;
@@ -102,7 +113,15 @@ body {
     </div>
     <div class="form-group">
       <label data-t="password"></label>
-      <input type="password" id="loginPass" autocomplete="current-password">
+      <div class="pass-wrap">
+        <input type="password" id="loginPass" autocomplete="current-password">
+        <button class="pass-toggle" onclick="togglePass('loginPass', this)" type="button" aria-label="Toggle password">
+          <svg id="eyeLoginPass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <button class="btn btn-primary" id="loginBtn" onclick="doLogin()"></button>
   </div>
@@ -123,7 +142,27 @@ body {
     </div>
     <div class="form-group">
       <label data-t="password"></label>
-      <input type="password" id="regPass" autocomplete="new-password">
+      <div class="pass-wrap">
+        <input type="password" id="regPass" autocomplete="new-password">
+        <button class="pass-toggle" onclick="togglePass('regPass', this)" type="button" aria-label="Toggle password">
+          <svg id="eyeRegPass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label data-t="confirm_password"></label>
+      <div class="pass-wrap">
+        <input type="password" id="regPass2" autocomplete="new-password">
+        <button class="pass-toggle" onclick="togglePass('regPass2', this)" type="button" aria-label="Toggle password">
+          <svg id="eyeRegPass2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <button class="btn btn-primary" id="regBtn" onclick="doRegister()"></button>
   </div>
@@ -137,18 +176,20 @@ const L = {
   en: {
     sign_in: 'Sign in', create_account: 'Create account',
     login: 'Login', register: 'Register',
-    username: 'Username', password: 'Password',
+    username: 'Username', password: 'Password', confirm_password: 'Confirm password',
     invite_code: 'Invite code', display_name: 'Display name',
     network_err: 'Network error',
     hint_invalid: 'Invalid characters. Try: ', hint_taken: 'Username taken', hint_ok: 'Available',
+    passwords_not_match: 'Passwords do not match',
   },
   ru: {
     sign_in: 'Вход', create_account: 'Регистрация',
     login: 'Вход', register: 'Регистрация',
-    username: 'Логин', password: 'Пароль',
+    username: 'Логин', password: 'Пароль', confirm_password: 'Подтвердите пароль',
     invite_code: 'Код приглашения', display_name: 'Отображаемое имя',
     network_err: 'Ошибка сети',
     hint_invalid: 'Недопустимые символы. Попробуйте: ', hint_taken: 'Логин занят', hint_ok: 'Свободен',
+    passwords_not_match: 'Пароли не совпадают',
   }
 };
 
@@ -193,6 +234,23 @@ function showError(msg) {
   el.textContent = msg; el.classList.add('show');
 }
 
+function togglePass(id, btn) {
+  const input = document.getElementById(id);
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>`;
+  } else {
+    input.type = 'password';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>`;
+  }
+}
+
 async function doLogin() {
   const btn = document.getElementById('loginBtn');
   btn.disabled = true;
@@ -226,19 +284,23 @@ function validateUsername() {
 }
 
 async function doRegister() {
+  const pass = document.getElementById('regPass').value;
+  const pass2 = document.getElementById('regPass2').value;
+  if (pass !== pass2) { showError(t('passwords_not_match')); return; }
+
   const btn = document.getElementById('regBtn');
   btn.disabled = true;
   try {
     const res = await api('POST', '/register', {
       username: document.getElementById('regUser').value,
-      password: document.getElementById('regPass').value,
+      password: pass,
       code: document.getElementById('regCode').value,
       name: document.getElementById('regName').value
     });
     if (res.success) {
       const login = await api('POST', '/login', {
         username: document.getElementById('regUser').value,
-        password: document.getElementById('regPass').value
+        password: pass
       });
       if (login.success) window.location.href = DASHBOARD;
       else switchTab('login');
@@ -257,6 +319,7 @@ async function doRegister() {
 render();
 document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('regPass').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+document.getElementById('regPass2').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
 </script>
 </body>
 </html>
