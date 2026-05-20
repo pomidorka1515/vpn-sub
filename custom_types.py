@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import (
     Protocol,
-    runtime_checkable, overload, Any, Iterable,
+    runtime_checkable, overload, cast,
+    Any, Iterable,
     Callable, Iterator, Self, Final,
     Literal, TypeVar, TypedDict
 )
@@ -17,6 +18,8 @@ from requests.auth import AuthBase
 from requests.models import PreparedRequest
 
 __all__ = [
+    'BaseValidator',
+    
     'AdminBotLike', 'PublicBotLike', 
     'ConfigLike', 'LinesConfigLike',
 
@@ -40,6 +43,62 @@ __all__ = [
 
 type JsonValue = int | float | Mapping[str, 'JsonValue'] | Sequence['JsonValue'] | str | bool | None
 type JsonDict = dict[str, JsonValue]
+
+class ValidatorMeta(type):
+    def __new__(
+        mcs,
+        name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, object],
+        base_type: type | tuple[type, ...] | None = None,
+        validator_name: str = "",
+    ) -> type:
+        if base_type is not None:
+            base_types = base_type if isinstance(base_type, tuple) else (base_type,)
+            new_bases = tuple(bt for bt in base_types if bt not in bases)
+            bases = new_bases + bases
+        cls = super().__new__(mcs, name, bases, namespace)
+        cls.field_name = validator_name
+        cls.__allowed_types__ = base_type or ()
+        cls.has_value_base = base_type is not None
+        return cls
+
+    field_name: str = ""
+    has_value_base: bool
+    __allowed_types__: type | tuple[type, ...] = ()
+
+class BaseValidator(metaclass=ValidatorMeta):
+    field_name: str = ""
+    __allowed_types__: type | tuple[type, ...] = ()
+    has_value_base: bool = False
+    _value: object
+
+    def __new__(cls, value: object) -> Self:
+        if cls.has_value_base:
+            try:
+                instance = super().__new__(cls, value) # type: ignore[call-arg]
+            except TypeError:
+                instance = super().__new__(cls)
+        else:
+            instance = super().__new__(cls)
+        instance._value = value
+        return instance
+
+    def __init__(self, value: object) -> None:
+        self._validate()
+
+    def _validate(self) -> None:
+        if not hasattr(self, "_value"):
+            return
+        allowed = self.__class__.__allowed_types__
+        if allowed and not isinstance(self._value, allowed):
+            raise ValueError(
+                f"expected {allowed}, got {type(self._value)}"
+            )
+        self.validate()
+
+    def validate(self) -> None:
+        raise NotImplementedError
 
 class MISSING_TYPE:
     """Sentinel for missing default values."""

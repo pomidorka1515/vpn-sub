@@ -154,7 +154,7 @@ def requires_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concate
         if not provided or not self.sub.compare(provided, self.token):
             return _err("Unauthorized", 401)
         return f(self, *args, **kwargs)
-    return cast(Callable[Concatenate[Api, P], R], wrapper)
+    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
 def requires_basic_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concatenate[Api, P], R]:
     """Admin API auth via Basic auth header. Returns 401 on failure."""
     @wraps(f)
@@ -170,7 +170,7 @@ def requires_basic_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[C
         if (not self.sub.compare(user, valid[0])) or (not self.sub.compare(pw, valid[1])):
             return err
         return f(self, *args, **kwargs)
-    return cast(Callable[Concatenate[Api, P], R], wrapper)
+    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
 def requires_webapi_auth(f: Callable[Concatenate[WebApi, str, P], R]) -> Callable[Concatenate[WebApi, P], R]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
     Returns 401 on failure."""
@@ -181,7 +181,7 @@ def requires_webapi_auth(f: Callable[Concatenate[WebApi, str, P], R]) -> Callabl
         if not username:
             return _err("Invalid token.", 401)
         return f(self, username, *args, **kwargs)
-    return cast(Callable[Concatenate[WebApi, P], R], wrapper)
+    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
 def requires_no_auth(f: Callable[Concatenate[WebApi, P], R]) -> Callable[Concatenate[WebApi, P], R]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)

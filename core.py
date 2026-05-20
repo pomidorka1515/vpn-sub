@@ -354,7 +354,7 @@ class Subscription:
         """Return snapshots for a user, clamped to retention window."""
         cutoff = int(time.time()) - days * 86400
         user_table = self.bw_cfg.get(
-            'snapshots',
+            'users',
             as_type=dict[str, dict[str, list[dict[str, int]]]]
         )
         user_data = user_table.get(username, {})
