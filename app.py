@@ -6,7 +6,6 @@ import atexit
 import threading
 threading.main_thread().name = 'main'
 
-from typing import TypedDict
 
 from core import Subscription, BWatch
 from session import XUiSession
@@ -16,7 +15,7 @@ from config import Config, LinesConfig, SYNC_MODES
 from loggers import Logger
 
 from flask import Flask
-
+from typing import TypedDict
 ##############################################################
 ### Startup sequence. Do not touch if you dont understand. ###
 ### Order matters. A lot.                                  ###
@@ -134,9 +133,9 @@ bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
 bw.admin_bot = adminbot
 
 # ------------------------------------------------------------
-# Broadcast selected loggers to AdminBot and jsonl file
+# Broadcast selected loggers to AdminBot and jsonl logfile
 # ------------------------------------------------------------
-loggers = (
+for l in (
     log, 
     
     sub.log, bw.log, 
@@ -144,8 +143,7 @@ loggers = (
     api.log, webapi.log,
     
     adminbot.log, bot.log
-)
-for l in loggers:
+):
     l.set_tg_bot(adminbot)
     l.set_jsonl_handler(line_cfg)
 
@@ -161,6 +159,17 @@ if _acquire_primary_lock():
 else:
     log.info("Secondary worker, skipping background tasks.")
     _is_primary = False
+
+# ------------------------------------------------------------
+# Version & GIL checks
+# ------------------------------------------------------------
+if sys._is_gil_enabled(): # type: ignore
+    log.warning("Free-threading disabled. Use a free-threading build for better performance.")
+else:
+    log.info("Free-threading active!")
+if sys.version_info < (3, 14):
+    log.warn(f"Use python >= 3.14 to prevent bugs. (found: {sys.version_info[0]}.{sys.version_info[1]})")
+
 # ------------------------------------------------------------
 # Graceful shutdown
 # ------------------------------------------------------------
