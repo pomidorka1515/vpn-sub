@@ -361,7 +361,46 @@ class Subscription:
         raw = user_data.get("snapshots", [])
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
+    def leaderboard(
+        self,
+        category: Literal["total", "monthly", "wl_monthly"],
+        top_n: int = 0,
+        flip: bool = False
+    ) -> dict[str, int]:
+        """
+        Dict of top-n users by specified bandwidth type, in order.
+        WARNING: polls all users info. this is blocking!
+        
+        Args:
+            category: type of bandwidth to use.
+            top_n: clamp the leaderboard to top-n users.
+                If <= 0, returns a leaderboard with all users.
+            flip: if True, sorted in ascending order, otherwise descending.
 
+        Returns:
+            A dict: {"username": 1293720471, "second_place": 12493630},
+            where key is the username and value is bandwidth in bytes.
+        """
+        raw: dict[str, int] = {}
+        users: list[str] = self.cfg.get('users', as_type=dict[str, str]).keys()
+        # populate the raw data
+        match category:
+            case 'total':
+                for user in users:
+                    raw[user] = self.bandwidth(user).total
+            case 'monthly' | 'wl_monthly':
+                t = self.cfg.get(
+                    'bw' if category == 'monthly' else 'wl_monthly',
+                    as_type=dict[str, list[int]]
+                )
+                for user in users:
+                    raw[user] = t[user][1]
+
+        sorted_items: list[tuple[str, int]] = sorted(raw.items(), key=lambda x: x[1], reverse=not flip)
+        if top_n > 0:
+            sorted_items = sorted_items[:top_n]
+        return dict(sorted_items)
+    
     def add_users(self, username: str, _called_internally: bool = False) -> str | None:
         """Sync users to panels."""
         userid = self.cfg['users'][username]
