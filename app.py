@@ -168,7 +168,7 @@ if sys._is_gil_enabled(): # type: ignore
 else:
     log.info("Free-threading active!")
 if sys.version_info < (3, 14):
-    log.warn(f"Use python >= 3.14 to prevent bugs. (found: {sys.version_info[0]}.{sys.version_info[1]})")
+    log.warning(f"Use python >= 3.14 to prevent bugs. (found: {sys.version_info[0]}.{sys.version_info[1]})")
 
 # ------------------------------------------------------------
 # Graceful shutdown
