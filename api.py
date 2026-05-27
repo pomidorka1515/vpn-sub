@@ -23,9 +23,9 @@ from custom_types import ConfigLike, LinesConfigLike, NewUserInfo
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Sequence['JsonifyValue'] | tuple['JsonifyValue', ...] | None
-HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
-ResponseType = tuple[Response, int] | Response
+type JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Sequence['JsonifyValue'] | tuple['JsonifyValue', ...] | None
+type HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+type ResponseType = tuple[Response, int] | Response
 
 P = ParamSpec('P')
 R = TypeVar('R')
@@ -236,11 +236,41 @@ def requires_fields(*fields: str) -> Callable[[Callable[P, R]], Callable[P, R | 
                 return _err(f"Missing fields: {', '.join(missing)}", 400)
 
             content = cast(dict[str, JsonifyValue], content) # NOTE: g.json_obj will appear
-                                                    # NOTE: as dict[Unknown, Unknown] -> type errors without this
+                                                             # NOTE: as dict[Unknown, Unknown] -> type errors without this
             g.json_obj = content
             return f(*args, **kwargs)
         return cast(Callable[P, R | tuple[Response, int]], wrapper)
     return decorator
+def requires_fields_strict(*fields: tuple[str, type[JsonifyValue]]) -> Callable[[Callable[P, R]], Callable[P, R | tuple[Response, int]]]:
+    """Validate request JSON object, store it on flask.g.json_obj, and require named fields with strict type checking."""
+    def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
+        @wraps(f)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
+            content = request.get_json(silent=True)
+            if content is None:
+                return _err("Missing JSON data.", 400)
+            if not isinstance(content, dict):
+                return _err("Body must be a JSON dict.", 400)
+            content = cast(dict[str, object], content)
+
+            for field, expected_type in fields:
+                if field not in content:
+                    return _err(f"Missing field: {field}", 400)
+                value = content[field]
+                # None is allowed for optional fields
+                if value is not None and not isinstance(value, expected_type):
+                    return _err(
+                        f"Field '{field}' must be {expected_type.__name__}, got {type(value).__name__}",
+                        400
+                    )
+
+            content = cast(dict[str, JsonifyValue], content)
+            g.json_obj = content
+            return f(*args, **kwargs)
+        return cast(Callable[P, R | tuple[Response, int]], wrapper)
+    return decorator
+
+
 def requires_args(*arg: str) -> Callable[[Callable[P, R]], Callable[P, R | tuple[Response, int]]]:
     """Validate request.args has all named fields. Returns 400 on failure."""
     def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
@@ -612,6 +642,8 @@ class Api(BaseApi):
         Route('POST', '/api/code/add', 'code_add'),
         Route('POST', '/api/code/delete', 'code_delete'),
 
+        Route('POST', '/api/leaderboard', 'leaderboard'),
+
         Route('GET', '/api/logs/audit', 'audit'),
 
         Route('GET', '/api/ui', 'admin_ui'),
@@ -899,6 +931,39 @@ class Api(BaseApi):
         result = list(self.audit_cfg.tail(n))
         return _ok(obj=result)
 
+
+    @requires_admin_auth
+    @requires_fields_strict(
+        ('type', str), 
+        ('cutoff', int), 
+        ('displaynames', bool), 
+        ('flip', bool)
+    )
+    def leaderboard(self) -> ResponseType:
+        content = g.json_obj
+
+        category: str = content.get('type')
+        top_n: int = content.get('cutoff')
+        use_displaynames: bool = content.get('displaynames')
+        flip: bool = content.get('flip')
+
+        if category not in ('total', 'monthly', 'wl_monthly'):
+            return _err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
+
+        try:
+            data = self.sub.leaderboard(
+                category=category,
+                top_n=top_n,
+                use_displaynames=use_displaynames,
+                flip=flip
+            )
+            return _ok(obj=[
+                {"place": i, "username": user, "amount": amount} 
+                for i, (user, amount) in enumerate(data.items(), start=1)
+            ])
+        except Exception as e:
+            return _err(str(e), 500)
+    
     @requires_basic_admin_auth
     def admin_ui(self) -> ResponseType:
         return send_file('res/admin.html', etag=False)

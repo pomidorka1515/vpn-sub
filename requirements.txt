@@ -8,3 +8,10 @@ pillow
 matplotlib
 gunicorn
 dacite
+
+# stubs
+
+matplotlib-stubs
+types-requests
+types-qrcode
+types-jsonschema

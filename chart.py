@@ -7,9 +7,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib.axes import Axes
+from matplotlib.patches import Rectangle
 from core import BandwidthSnapshot, fmt_bytes
-from typing import cast, TypedDict
-__all__ = ['bandwidth_chart']
+from typing import cast, TypedDict, Literal
+__all__ = ['bandwidth_chart', 'leaderboard_chart']
 
 _BG       = '#1a1a1d'
 _PANEL    = '#232327'
@@ -39,6 +40,10 @@ _LANG = {
         "download": "Загрузка",
         "upload": "Отдача",
         "no_data": "Нет данных",
+        "leaderboard": "Таблица лидеров",
+        "bw_type_total": "весь трафик",
+        "bw_type_monthly": "трафик за месяц",
+        "bw_type_wl_monthly": "WL-трафик за месяц"
     },
     "en": {
         "bandwidth": "Bandwidth",
@@ -49,6 +54,10 @@ _LANG = {
         "download": "Download",
         "upload": "Upload",
         "no_data": "No data",
+        "leaderboard": "Leaderboard",
+        "bw_type_total": "total bandwidth",
+        "bw_type_monthly": "monthly bandwidth",
+        "bw_type_wl_monthly": "whitelist monthly bandwidth"
     }
 }
 
@@ -118,7 +127,9 @@ def bandwidth_chart(
     fig = result[0]
     ax_reg = cast(Axes, result[1][0])
     ax_wl = cast(Axes, result[1][1])
-    fig.patch.set_facecolor(_BG)
+
+
+    fig.patch.set_facecolor(_BG)  # type: ignore[attr-defined]
 
     header = f'{t["bandwidth"]} — {label}' if label else t["bandwidth"]
     period = f'{len(snaps)} {t["day"]}' if len(snaps) == 1 else f'{len(snaps)} {t["days"]}'
@@ -140,7 +151,7 @@ def bandwidth_chart(
     if len(labels) > 15:
         step = max(1, len(labels) // 10)
         for ax in (ax_reg, ax_wl):
-            for i, lbl in enumerate(ax.get_xticklabels()):
+            for i, lbl in enumerate(ax.get_xticklabels()):  # type: ignore[operator]
                 if i % step != 0:
                     lbl.set_visible(False)
     
@@ -166,6 +177,79 @@ def bandwidth_chart(
     
     fig.subplots_adjust(left=0.09, right=0.97, top=0.89, bottom=0.08)
     
+    buf = io.BytesIO()
+    try:
+        fig.savefig(buf, format='png', facecolor=_BG, edgecolor='none')
+    finally:
+        plt.close(fig)
+    buf.seek(0)
+    return buf
+
+def leaderboard_chart(
+    data: dict[str, int],
+    *,
+    bandwidth_type: Literal["total", "monthly", "wl_monthly"],
+    lang: str = "en"
+) -> io.BytesIO | None:
+    """Render a leaderboard of users by bandwidth.
+
+    Args:
+        data: leaderboard data, usually taken from core.Subscription.leaderboard().
+            structure: {"username": 123456, "second_place": 123123}
+        bandwidth_type: type of bandwidth.
+        lang: language, en or ru (defaults to en)
+    """
+    if not data:
+        return None
+
+    t = _LANG.get(lang, _LANG["en"])
+
+    bw_key = f"bw_type_{bandwidth_type}"
+    bw_label = t.get(bw_key, t["bw_type_total"])
+
+    # sort descending, take top 15
+    sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)[:15]
+    usernames = [u for u, _ in sorted_users]
+    values = [v for _, v in sorted_users]
+
+    fig, ax = plt.subplots(figsize=(9, 6), dpi=140)
+    fig.patch.set_facecolor(_BG)
+    ax.set_facecolor(_PANEL)
+
+    header = f'{t["leaderboard"]} — {bw_label}'
+    fig.suptitle(header, color=_TEXT, fontsize=13, fontweight='500',
+                 x=0.07, y=0.97, ha='left')
+
+    colors = [_REG_DOWN] * len(usernames)
+    bars = ax.barh(usernames, values, color=colors, edgecolor='none', zorder=2)
+
+    ax.invert_yaxis()
+    ax.xaxis.set_major_formatter(FuncFormatter(_format_ticks))
+
+    ax.grid(axis='x', color=_GRID, linewidth=0.8, zorder=0)
+    ax.set_axisbelow(True)
+
+    for side in ('top', 'right'):
+        ax.spines[side].set_visible(False)
+    for side in ('left', 'bottom'):
+        ax.spines[side].set_color(_BORDER)
+        ax.spines[side].set_linewidth(0.8)
+
+    ax.tick_params(colors=_TEXT_DIM, labelsize=9, length=0)
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+
+    # value labels on bars
+    for bar, val in zip(bars, values):
+        bar = cast(Rectangle, bar)
+        ax.text(
+            bar.get_width(), bar.get_y() + bar.get_height() / 2,
+            f' {fmt_bytes(val)}',
+            va='center', ha='left', color=_TEXT_DIM, fontsize=9
+        )
+
+    fig.subplots_adjust(left=0.18, right=0.95, top=0.88, bottom=0.08)
+
     buf = io.BytesIO()
     try:
         fig.savefig(buf, format='png', facecolor=_BG, edgecolor='none')

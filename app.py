@@ -75,7 +75,7 @@ def _acquire_primary_lock() -> bool:
 # ------------------------------------------------------------
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
-
+app.config['JSON_SORT_KEYS'] = False
 # ------------------------------------------------------------
 # Configs (two separate files)
 # ------------------------------------------------------------
@@ -163,7 +163,7 @@ else:
 # ------------------------------------------------------------
 # Version & GIL checks
 # ------------------------------------------------------------
-if sys._is_gil_enabled(): # type: ignore
+if sys._is_gil_enabled(): # pyright: ignore[reportPrivateUsage]
     log.warning("Free-threading disabled. Use a free-threading build for better performance.")
 else:
     log.info("Free-threading active!")

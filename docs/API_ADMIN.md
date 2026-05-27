@@ -407,9 +407,40 @@ Response (error):
   
 ---  
   
+### POST /api/leaderboard  
+Description: Get leaderboard data for a specified bandwidth type.  
+Authorization: header  
+Body:  
+```jsonc  
+{  
+    "type": "total",       // str, type of bandwidth to use  
+                           // allowed values: "total" (all-time), "monthly", "wl_monthly"
+    "cutoff": 0,           // OPTIONAL int, clamp the leaderboard to a certain amount,   
+                           // if <= 0 or omitted, returns a leaderboard with all users  
+    "displaynames": false, // OPTIONAL bool, if True, uses displaynames as dict keys  
+                           // instead of internal usernames  
+    "flip": false,         // OPTIONAL bool, if True, sorted in ascending order  
+                           // instead of descending  
+}  
+```  
+Response (success):  
+```jsonc  
+{  
+    "success": true,  
+    "msg": null,  
+    "obj": [  
+        // starts from 1  
+        {"place": 1, "username": "user", "amount": 745343740637},  
+        {"place": 2, "username": "name123", "amount": 338228869611}  
+    ]  
+}  
+```  
+
+---  
+
 ### GET /api/teapot  
 Description: Verify the server cannot brew coffee because it is a teapot.  
-Auth: None  
+Authorization: None  
 Response (success):  
 ```jsonc  
 // HTTP 418  

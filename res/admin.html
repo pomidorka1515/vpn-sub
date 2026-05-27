@@ -458,6 +458,7 @@ body {
     <button class="tab" onclick="showTab('logs')" data-t="audit_logs">Audit Logs</button>
     <button class="tab" onclick="showTab('health')" data-t="health">Health</button>
     <button class="tab" onclick="showTab('teapot')" data-t="teapot">Teapot</button>
+    <button class="tab" onclick="showTab('leaderboard')" data-t="leaderboard">Leaderboard</button>
   </div>
 
   <div id="tab-users" class="tab-content active">
@@ -699,6 +700,45 @@ body {
     </div>
   </div>
 
+  <div id="tab-leaderboard" class="tab-content">
+    <div class="card">
+      <div class="card-title" data-t="leaderboard">Leaderboard</div>
+      <div class="config-bar" style="gap:10px;align-items:flex-end;margin-bottom:16px">
+        <div class="config-row" style="flex:0 0 auto;min-width:160px">
+          <label data-t="bw_type">Type</label>
+          <select id="lbType" style="flex:1;min-width:0;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:12px;outline:none;cursor:pointer">
+            <option value="total">Total (All-time)</option>
+            <option value="monthly">Monthly</option>
+            <option value="wl_monthly">WL Monthly</option>
+          </select>
+        </div>
+        <div class="config-row" style="flex:0 0 auto;min-width:130px">
+          <label data-t="cutoff">Cutoff</label>
+          <input type="number" id="lbCutoff" placeholder="0 = all" min="0" style="padding:8px 10px">
+        </div>
+        <div class="config-row" style="flex:1;min-width:180px">
+          <label>&nbsp;</label>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <label class="dark-check">
+              <input type="checkbox" id="lbDisplaynames">
+              <div class="check-track"><div class="check-thumb"></div></div>
+              <span class="check-label" data-t="displaynames">Displaynames</span>
+            </label>
+            <label class="dark-check">
+              <input type="checkbox" id="lbFlip">
+              <div class="check-track"><div class="check-thumb"></div></div>
+              <span class="check-label" data-t="ascending">Ascending</span>
+            </label>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="padding:10px 20px" onclick="fetchLeaderboard()" id="btnFetchLb" data-t="fetch">Fetch</button>
+      </div>
+      <div class="table-wrap" id="lbTableWrap">
+        <div class="table-empty" data-t="lb_hint">Configure options and click "Fetch"</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div class="modal-overlay" id="modalOverlay">
@@ -756,6 +796,11 @@ const L = {
     no_online: 'No online users',
     load_online_hint: 'Click "Load Online" to fetch online users',
     log_count_label: 'rows',
+    // Leaderboard
+    leaderboard: 'Leaderboard', bw_type: 'Type', cutoff: 'Cutoff',
+    displaynames: 'Displaynames', ascending: 'Ascending', fetch: 'Fetch',
+    lb_hint: 'Configure options and click "Fetch"', no_entries: 'No entries',
+    lb_rank: '#', lb_user: 'User', lb_bandwidth: 'Bandwidth',
   },
   ru: {
     api_key: 'API Key', save: 'Сохранить',
@@ -797,6 +842,11 @@ const L = {
     // Online users
     no_online: 'Нет онлайн', load_online_hint: 'Нажмите "Загрузить" для списка',
     log_count_label: 'строк',
+    // Leaderboard
+    leaderboard: 'Рейтинг', bw_type: 'Тип', cutoff: 'Лимит',
+    displaynames: 'Имена', ascending: 'По возраст.', fetch: 'Загрузить',
+    lb_hint: 'Настройте параметры и нажмите "Загрузить"', no_entries: 'Нет записей',
+    lb_rank: '#', lb_user: 'Пользователь', lb_bandwidth: 'Трафик',
   }
 };
 
@@ -1428,6 +1478,54 @@ async function checkTeapot() {
     status.textContent = t('teapot_no');
     status.style.color = 'var(--green)';
   }
+}
+
+async function fetchLeaderboard() {
+  const type = document.getElementById('lbType').value;
+  const cutoff = parseInt(document.getElementById('lbCutoff').value) || 0;
+  const displaynames = document.getElementById('lbDisplaynames').checked;
+  const flip = document.getElementById('lbFlip').checked;
+
+  const body = {
+    type,
+    cutoff: cutoff > 0 ? cutoff : 0,
+    displaynames: !!displaynames,
+    flip: !!flip,
+  };
+
+  const wrap = document.getElementById('lbTableWrap');
+  wrap.innerHTML = '<div class="table-empty" style="padding:20px">Loading...</div>';
+
+  const res = await api('/api/leaderboard', { method: 'POST', body });
+  if (!res || !res.success) {
+    wrap.innerHTML = `<div class="table-empty">${res?.msg || 'Error'}</div>`;
+    return;
+  }
+
+  const data = res.obj;
+  if (!Array.isArray(data) || data.length === 0) {
+    wrap.innerHTML = `<div class="table-empty">${t('no_entries')}</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th style="width:50px">${t('lb_rank')}</th>
+        <th>${t('lb_user')}</th>
+        <th style="text-align:right">${t('lb_bandwidth')}</th>
+      </tr></thead>
+      <tbody>
+        ${data.map(entry => `
+          <tr>
+            <td class="mono" style="color:var(--text2)">${entry.place}</td>
+            <td class="mono">${entry.username}</td>
+            <td class="mono" style="text-align:right">${fmtBytes(entry.amount)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 function confirmDialog(message, title) {

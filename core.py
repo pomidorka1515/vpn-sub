@@ -364,7 +364,9 @@ class Subscription:
     def leaderboard(
         self,
         category: Literal["total", "monthly", "wl_monthly"],
+        *,
         top_n: int = 0,
+        use_displaynames: bool = False,
         flip: bool = False
     ) -> dict[str, int]:
         """
@@ -375,6 +377,8 @@ class Subscription:
             category: type of bandwidth to use.
             top_n: clamp the leaderboard to top-n users.
                 If <= 0, returns a leaderboard with all users.
+            use_displaynames: if True, uses display names instead of internal usernames.
+                Useful when passing data into chart.leaderboard_chart().
             flip: if True, sorted in ascending order, otherwise descending.
 
         Returns:
@@ -382,24 +386,30 @@ class Subscription:
             where key is the username and value is bandwidth in bytes.
         """
         raw: dict[str, int] = {}
-        users: list[str] = self.cfg.get('users', as_type=dict[str, str]).keys()
+        users: list[str] = list(self.cfg.get('users', as_type=dict[str, str]))
+        if use_displaynames:
+            display_map = self.cfg.get('displaynames', as_type=dict[str, str])
+            users = [display_map.get(user, user) for user in users]
+
         # populate the raw data
         match category:
             case 'total':
                 for user in users:
-                    raw[user] = self.bandwidth(user).total
+                    total = self.bandwidth(user).total
+                    raw[user] = cast(int, total) or 0
             case 'monthly' | 'wl_monthly':
                 t = self.cfg.get(
                     'bw' if category == 'monthly' else 'wl_monthly',
                     as_type=dict[str, list[int]]
                 )
                 for user in users:
-                    raw[user] = t[user][1]
+                    user_bw = t.get(user)
+                    raw[user] = user_bw[1] if user_bw else 0
 
         sorted_items: list[tuple[str, int]] = sorted(raw.items(), key=lambda x: x[1], reverse=not flip)
         if top_n > 0:
             sorted_items = sorted_items[:top_n]
-        return dict(sorted_items)
+        return {k: v for k, v in sorted_items}
     
     def add_users(self, username: str, _called_internally: bool = False) -> str | None:
         """Sync users to panels."""
@@ -477,7 +487,7 @@ class Subscription:
                 content = response.json()
                 if not (response.status_code in [200, 201] and content.get('success')):
                     err_msg: str = content.json().get('msg', 'panel rejected update')
-
+                    return err_msg
         if perma:
             with self.cfg as data:
                 sections = ['users', 'tokens', 'userFingerprints', 'status', 'statusWl', 'displaynames', 'bw', 'wl_bw', 'statusTime', 'time']
@@ -526,7 +536,8 @@ class Subscription:
                     content = request.json()
                     if not (response.status_code in [200, 201] and content.get('success')):
                         err_msg: str = content.get('msg', 'panel rejected update')
-
+                        return err_msg
+            
             with self.cfg as d:
                 d['status'][username] = enable
                 if timee is not None: d['statusTime'][username] = timee
