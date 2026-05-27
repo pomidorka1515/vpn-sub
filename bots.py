@@ -3,20 +3,21 @@ from __future__ import annotations
 from loggers import Logger
 from core import Subscription, fmt_bytes, SERVER_TZ
 from session import XUiSession
-from chart import bandwidth_chart
+from chart import bandwidth_chart, leaderboard_chart
+from custom_types import ConfigLike
 
 import telebot
 import time
 import threading
 import urllib.parse
 
-from typing import cast
+from typing import cast, Literal
 from datetime import datetime
 from telebot import types
 from dataclasses import is_dataclass
 from concurrent.futures import ThreadPoolExecutor
 
-from custom_types import ConfigLike
+
 
 __all__ = ['AdminBot', 'PublicBot']
 
@@ -40,10 +41,11 @@ class AdminBot:
             self.admin_uids: list[int] = self.cfg['bot']['whitelist']
 
             self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) 
-            self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks) # pyright: ignore[reportUnknownLambdaType]
             self._pending_codes: dict[str | int, str] = {}
             self._pending_edits: dict[int, dict[str, str]] = {}
             self._pagination_state: dict[int, dict[str, int]] = {}
+            self._pending_leaderboard: dict[int, dict[str, str | int]] = {}
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids
@@ -56,31 +58,28 @@ class AdminBot:
                 self.log.error(f"failed to send message to admin ID {uid}: {e}")
     
     def get_main_menu(self) -> types.InlineKeyboardMarkup:
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add( 
+        return types.InlineKeyboardMarkup(row_width=2).add( 
             types.InlineKeyboardButton("👥 Список юзеров", callback_data="list_users"),
             types.InlineKeyboardButton("ℹ️ Инфо о юзере", callback_data="info_user"),
             types.InlineKeyboardButton("➕ Добавить", callback_data="add_user"),
             types.InlineKeyboardButton("❌ Удалить", callback_data="action_del"),
-            types.InlineKeyboardButton("🔄 Refresh всех", callback_data="refresh_all"),
+            types.InlineKeyboardButton("🔄 Обновить всех", callback_data="refresh_all"),
             types.InlineKeyboardButton("🎟 Коды", callback_data="codes_menu"),
-            types.InlineKeyboardButton("🟢Пользователи онлайн", callback_data="online_users"),
+            types.InlineKeyboardButton("🟢 Пользователи онлайн", callback_data="online_users"),
             types.InlineKeyboardButton("⚠ Сбросить пользователя", callback_data="reset_user"),
             types.InlineKeyboardButton("📈 История трафика", callback_data="chart"),
+            types.InlineKeyboardButton("🏆 Таблица лидеров", callback_data="leaderboard"),
             types.InlineKeyboardButton("ℹ️ Статус панелей", callback_data="status_panels")
         )
-        return markup
  
     def get_codes_menu(self) -> types.InlineKeyboardMarkup:
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add( 
+        return types.InlineKeyboardMarkup(row_width=2).add( 
             types.InlineKeyboardButton("➕ Добавить код", callback_data="add_code"),
             types.InlineKeyboardButton("❌ Удалить код", callback_data="del_code"),
             types.InlineKeyboardButton("📋 Список кодов", callback_data="list_codes"),
             types.InlineKeyboardButton("ℹ️ Инфо о коде", callback_data="info_code"),
             types.InlineKeyboardButton("🔙 В меню", callback_data="cancel")
         )
-        return markup
  
     def get_users_menu(self, prefix: str, page: int = 0) -> types.InlineKeyboardMarkup:
         """Get paginated user list with navigation buttons."""
@@ -139,21 +138,21 @@ class AdminBot:
                 self.bot.clear_step_handler_by_chat_id(chat_id)
 
             elif data == "noop":
-                pass  # Page indicator button, do nothing
+                pass  # page indicator button
 
             elif data == "online_users":
                 self._cb_online_users(chat_id)  
             
             elif data == "list_users":
                 self._cb_list_users(chat_id)
-
+            
             elif data.startswith("page_list_users_"):
                 page = int(data.split("_")[-1])
                 self._cb_list_users(chat_id, page)
                 
             elif data == "refresh_all":
                 self._cb_refresh(chat_id)
-
+    
             elif data == "reset_user":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя:")
                 self.bot.register_next_step_handler(msg, self._step_reset_user) 
@@ -226,7 +225,10 @@ class AdminBot:
 
             elif data == "chart":
                 msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
-                self.bot.register_next_step_handler(msg, self._step_chart_username) 
+                self.bot.register_next_step_handler(msg, self._step_chart_username)
+
+            elif data == "leaderboard":
+                self._cb_leaderboard_type(chat_id) 
 
             elif data.startswith("edit_user_"):
                 username = data.split("edit_user_", 1)[1]
@@ -264,11 +266,102 @@ class AdminBot:
                 else:
                     self.bot.send_message(chat_id, f"✅ fingerprint обновлён: <code>{fp}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
                 self._pending_edits.pop(chat_id, None)
+
+            elif data.startswith("lbt_"):
+                # leaderboard type selection: lbt_total | lbt_monthly | lbt_wl_monthly
+                bw_type = data.split("lbt_", 1)[1]
+                self._pending_leaderboard[chat_id] = {'type': bw_type}
+                self._cb_leaderboard_order(chat_id)
+
+            elif data.startswith("lbo_"):
+                # leaderboard order selection: lbo_asc | lbo_desc
+                order = data.split("lbo_", 1)[1]
+                if chat_id in self._pending_leaderboard:
+                    self._pending_leaderboard[chat_id]['order'] = order
+                self._cb_leaderboard_window(chat_id)
+
         except Exception as e:
             self.log.error(f"Ошибка в боте: {e}", exc_info=True)
             self.bot.send_message(chat_id, f"⚠️ Произошла ошибка: {e}")
 
-    def _cb_panel_info(self, 
+    def _cb_leaderboard_type(self, chat_id: int) -> None:
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("📊 Общий (total)", callback_data="lbt_total"),
+            types.InlineKeyboardButton("📅 Месячный (monthly)", callback_data="lbt_monthly"),
+            types.InlineKeyboardButton("🛡 Белый список (wl_monthly)", callback_data="lbt_wl_monthly"),
+        )
+        self.bot.send_message(chat_id, "🏆 <b>Таблица лидеров</b>\n\nВыберите тип трафика:", parse_mode="HTML", reply_markup=markup)
+
+    def _cb_leaderboard_order(self, chat_id: int) -> None:
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("🔽 По убыванию (1st = most)", callback_data="lbo_desc"),
+            types.InlineKeyboardButton("🔼 По возрастанию (1st = least)", callback_data="lbo_asc"),
+        )
+        self.bot.send_message(chat_id, "📋 <b>Сортировка</b>\n\nВыберите порядок:", parse_mode="HTML", reply_markup=markup)
+
+    def _cb_leaderboard_window(self, chat_id: int) -> None:
+        msg = self.bot.send_message(
+            chat_id,
+            "🔢 <b>Количество записей</b>\n\nВведите число (0 = все пользователи, >= 0):",
+            parse_mode="HTML"
+        )
+        self.bot.register_next_step_handler(msg, self._step_leaderboard_window)
+
+    def _step_leaderboard_window(self, message: types.Message) -> None:
+        chat_id = message.chat.id
+        if message.text is None:
+            self.bot.send_message(chat_id, "❌ Введите число.", reply_markup=self.get_main_menu())
+            return
+
+        try:
+            window = int(message.text)
+            if window < 0:
+                raise ValueError
+        except ValueError:
+            self.bot.send_message(chat_id, "❌ Введите неотрицательное целое число.", reply_markup=self.get_main_menu())
+            return
+
+        pending = self._pending_leaderboard.pop(chat_id, {})
+        if pending:
+            bw_type = cast(Literal["total", "monthly", "wl_monthly"], pending.get('type', 'total'))
+            order = cast(Literal["asc", "desc"], pending.get('order', 'desc'))
+            self._handle_leaderboard_result(chat_id, bw_type, order, window)
+        else:
+            self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.", reply_markup=self.get_main_menu())
+
+    def _handle_leaderboard_result(
+        self,
+        chat_id: int,
+        bw_type: Literal["total", "monthly", "wl_monthly"],
+        order: Literal["asc", "desc"],
+        window: int
+    ) -> None:
+        lb_data = self.sub.leaderboard(
+            category=bw_type,
+            top_n=window,
+            use_displaynames=True,
+            flip=True if order == "asc" else False
+        )
+
+        chart = leaderboard_chart(lb_data, bandwidth_type=bw_type, lang="ru")
+        
+        sorted_items = sorted(lb_data.items(), key=lambda x: x[1], reverse=(order == "desc"))
+    
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        lines: list[str] = []
+        for rank, (user, score) in enumerate(sorted_items, start=1):
+            prefix = medals.get(rank, f"{rank}.")
+            lines.append(f"{prefix} <b>{user}</b> - {fmt_bytes(score)}")
+        text = "<b>Список лидеров по трафику:</b>\n\n" + "\n".join(lines)
+
+        if len(text) > 1023:
+            text = text.encode("utf-8")[:1021].decode("utf-8", errors="ignore") + "..."
+        
+        self.bot.send_photo(chat_id, chart, text, parse_mode="HTML")
+    
+    def _cb_panel_info(self,
                        chat_id: int, 
                        panel: XUiSession, 
                        last: bool) -> None:
@@ -852,8 +945,8 @@ class AdminBot:
 └ Процент: {wl_percent_str}"""
 
             if len(text) > 1024:
-                text = text[:1020] + "..."
-
+                text = text.encode("utf-8")[:1021].decode("utf-8", errors="ignore") + "..."
+            
             chart_img = bandwidth_chart(snapshots, label=info.displayname, lang='ru')
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_main_menu())
@@ -865,6 +958,10 @@ class AdminBot:
                 self.bot.send_message(chat_id, f"❌ Произошла ошибка: {e}", reply_markup=self.get_main_menu())
             except Exception:
                 pass
+    
+
+    def _step_lb_order(self, chat_id: int, bw_type: Literal["total", "monthly", "wl_monthly"]) -> None:
+        pass
 
     def start(self) -> None:
         bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Admin TG Bot") # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
@@ -1547,7 +1644,8 @@ class PublicBot:
             )
 
             if len(text) > 1024:
-                text = text[:1020] + "..."
+                text = text.encode("utf-8")[:1021].decode("utf-8", errors="ignore") + "..."
+
             chart_img = bandwidth_chart(snapshots, label=info.displayname, lang=lang)
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))

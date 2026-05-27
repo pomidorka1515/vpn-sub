@@ -77,7 +77,7 @@ def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
     Format bytes into a tuple.
     Returns:
         tuple[amount, label]  
-        Example: tuple["193", "MB"]
+        Example: ("193", "MB")
     """
     for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
         if value >= div:
@@ -86,8 +86,6 @@ def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
 
 def fmt_bytes(b: float) -> str:
     """Format bytes as short human-readable string. Does NOT return a tuple."""
-    if b <= 0:
-        return '0'
     for unit, div in (('TB', 10**12), ('GB', 10**9), ('MB', 10**6), ('KB', 10**3)):
         if b >= div:
             return f'{b / div:.1f} {unit}'
@@ -389,22 +387,28 @@ class Subscription:
         users: list[str] = list(self.cfg.get('users', as_type=dict[str, str]))
         if use_displaynames:
             display_map = self.cfg.get('displaynames', as_type=dict[str, str])
-            users = [display_map.get(user, user) for user in users]
-
+            display_users = [display_map.get(user, user) for user in users]
+        else:
+            display_users = users
+        # display_users is what we use in dict keys
         # populate the raw data
         match category:
             case 'total':
-                for user in users:
+                for user, display in zip(users, display_users):
                     total = self.bandwidth(user).total
-                    raw[user] = cast(int, total) or 0
+                    raw[display] = cast(int, total) or 0
             case 'monthly' | 'wl_monthly':
                 t = self.cfg.get(
                     'bw' if category == 'monthly' else 'wl_monthly',
                     as_type=dict[str, list[int]]
                 )
-                for user in users:
+                for user, display in zip(users, display_users):
                     user_bw = t.get(user)
-                    raw[user] = user_bw[1] if user_bw else 0
+                    if not user_bw:
+                        continue
+                    if user_bw[0] == 0:
+                        continue # skip users who dont have bandwidth
+                    raw[display] = user_bw[1]
 
         sorted_items: list[tuple[str, int]] = sorted(raw.items(), key=lambda x: x[1], reverse=not flip)
         if top_n > 0:
