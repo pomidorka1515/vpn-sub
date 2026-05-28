@@ -417,15 +417,10 @@ class WebApi(BaseApi):
     def fps(self, username: str) -> ResponseType:
         return _ok(obj=self.cfg['fingerprints'])
     @requires_webapi_auth
-    @requires_fields()
+    @requires_fields_strict(('current_password', str))
     def delete(self, username: str) -> ResponseType:
         content = g.json_obj
-        if not isinstance(content, dict):
-            return _err("Body must be a JSON object", 400)
-        content = cast(dict[str, JsonifyValue], content)
-        current_password = content.get('current_password')
-        if not current_password or not isinstance(current_password, str):
-            return _err("current_password required", 400)
+        current_password: str = content.get('current_password')
         cur_ext = next(
             (e for e, u in self.cfg.get('webui_users', as_type=dict[str, str]).items() if u == username),
             None
@@ -472,11 +467,11 @@ class WebApi(BaseApi):
         """Update users display name or fingerprint.
         Changing ext_username or ext_password requires `current_password` in body."""
         content = g.json_obj
-        displayname = content.get('name', None)
-        fingerprint = content.get('fingerprint', None)
-        ext_username = content.get('username', None)
-        ext_password = content.get('password', None)
-        current_password = content.get('current_password', None)
+        displayname: str | None = content.get('name', None)
+        fingerprint: str | None = content.get('fingerprint', None)
+        ext_username: str | None = content.get('username', None)
+        ext_password: str | None = content.get('password', None)
+        current_password: str | None = content.get('current_password', None)
         if fingerprint:
             if fingerprint not in self.cfg['fingerprints']:
                 return _err("Unknown fingerprint")
@@ -486,7 +481,7 @@ class WebApi(BaseApi):
         if ext_username:
             if len(ext_username) > 32:
                 return _err("username exceeds max. length of 32")
-        # Credential changes require the current password (guards stolen cookies)
+        # credential changes require the current password (guards stolen cookies)
         if ext_username or ext_password:
             if not current_password or not isinstance(current_password, str):
                 return _err("current_password required to change credentials", 400)
@@ -525,7 +520,7 @@ class WebApi(BaseApi):
             self.log.critical(e)
             return _err("Internal server error", 500)
     @requires_webapi_auth
-    @requires_fields('code')
+    @requires_fields_strict(('code', str))
     def bonus(self, username: str) -> ResponseType:
         """Apply bonus code."""
         content = g.json_obj
@@ -568,24 +563,29 @@ class WebApi(BaseApi):
 
 
     @requires_no_auth
-    @requires_fields('username', 'password', 'code', 'name')
+    @requires_fields_strict(
+        ('username', str),
+        ('password', str),
+        ('code', str),
+        ('name', str)
+    )
     def register(self) -> ResponseType:
         """Register a new user via code."""
         content = g.json_obj
-        raw_name = content.get('name')
-        raw_username = content.get('username')
-        raw_password = content.get('password')
-        raw_code = content.get('code')
+        raw_name: str = content.get('name')
+        raw_username: str = content.get('username')
+        raw_password: str = content.get('password')
+        raw_code: str = content.get('code')
 
-        if not isinstance(raw_name, str) or len(raw_name) == 0 or len(raw_name) > 16:
+        if not (1 <= len(raw_name) <= 16):
             return _err("'name' must be 1-16 characters")
-        if not isinstance(raw_username, str) or len(raw_username) == 0 or len(raw_username) > 32:
+        if not (1 <= len(raw_username) <= 32):
             return _err("'username' must be 1-32 characters")
-        if not isinstance(raw_password, str) or len(raw_password) == 0 or len(raw_password) > 128:
+        if not (1 <= len(raw_password) <= 128):
             return _err("'password' must be 1-128 characters")
-        if not isinstance(raw_code, str) or len(raw_code) == 0 or len(raw_code) > 64:
+        if not (1 <= len(raw_code) <= 64):
             return _err("'code' must be 1-64 characters")
-
+        
         try:
             result = self.sub.register_with_code(
                 code=raw_code,
@@ -605,7 +605,10 @@ class WebApi(BaseApi):
 
         return _ok("Created", 201, asdict(result))
 
-    @requires_fields('username', 'password')
+    @requires_fields_strict(
+        ('username', str),
+        ('password', str)
+    )
     def login(self) -> ResponseType:
         """Get the cookie for auth."""
         content = g.json_obj
@@ -683,7 +686,10 @@ class Api(BaseApi):
         return _ok(obj=asdict(x))
  
     @requires_admin_auth
-    @requires_fields('user', 'displayname')
+    @requires_fields_strict(
+        ('username', str),
+        ('password', str)
+    )
     def user_add(self) -> ResponseType:
         try:
             content = g.json_obj
@@ -703,14 +709,7 @@ class Api(BaseApi):
             data: dict[str, str | int] = {}
 
             for k, v in raw_data.items():
-                if k in ['user', 'displayname']:
-                    if not isinstance(v, str):
-                        return _err(f"{k} must be a string")
-                    if not v:
-                        return _err(f"{k} cannot be empty")
-                    data[k] = v
-
-                elif k in ['ext_username', 'ext_password', 'token', 'userid', 'fingerprint']:
+                if k in ['ext_username', 'ext_password', 'token', 'userid', 'fingerprint']:
                     if v is not None and not isinstance(v, str):
                         return _err(f"{k} must be a string or null")
                     data[k] = cast(str, v)
@@ -746,11 +745,11 @@ class Api(BaseApi):
             return _err(f"Error: {str(e)}", 500)
 
     @requires_admin_auth
-    @requires_fields('user')
+    @requires_fields_strict(('user', str))
     def user_delete(self) -> ResponseType:
         try:
             content = g.json_obj
-            username = cast(str, content.get('user'))
+            username: str = content.get('user')
             perma = _parse_bool(content.get('perma', 'true'))
             if perma is None:
                 return _err("'perma' must be bool-like")
@@ -785,11 +784,11 @@ class Api(BaseApi):
         return _ok(obj=online_users)
 
     @requires_admin_auth
-    @requires_fields('user')
+    @requires_fields(('user', str))
     def user_reset(self) -> ResponseType:
         try:
             content = g.json_obj
-            username = cast(str, content.get('user'))
+            username: str = content.get('user')
             if not self.sub.isuser(username):
                 return _err("Unknown username", 404)
             x = self.sub.reset_user(username)
@@ -849,7 +848,10 @@ class Api(BaseApi):
             return _err(str(e), 500)
     
     @requires_admin_auth
-    @requires_fields('code', 'action')
+    @requires_fields_strict(
+        ('code', str),
+        ('action', str)
+    )
     def code_add(self) -> ResponseType: 
         try:
             content = g.json_obj
@@ -865,14 +867,7 @@ class Api(BaseApi):
             data: dict[str, str | int] = {}
 
             for k, v in raw_data.items():
-                if k in ['name', 'action']:
-                    if not isinstance(v, str):
-                        return _err(f"{k} must be string")
-                    if not v:
-                        return _err(f"{k} cannot be empty")
-                    data[k] = v
-                
-                elif k == 'permanent':
+                if k == 'permanent':
                     parsed = _parse_bool(v)
                     if parsed is None:
                         return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
@@ -905,13 +900,11 @@ class Api(BaseApi):
             return _err(str(e), 500)
 
     @requires_admin_auth
-    @requires_fields('code')
+    @requires_fields_strict(('code', str))
     def code_delete(self) -> ResponseType:
         try:
             content = g.json_obj
-            name = content.get('code')
-            if not isinstance(name, str):
-                return _err(f"name must be str")
+            name: str = content.get('code')
             if not self.sub.delete_code(name):
                 return _err("Code not found", 404)
             return _ok("Deleted")

@@ -490,7 +490,7 @@ class Subscription:
                 )
                 content = response.json()
                 if not (response.status_code in [200, 201] and content.get('success')):
-                    err_msg: str = content.json().get('msg', 'panel rejected update')
+                    err_msg: str = content.get('msg', 'panel rejected update')
                     return err_msg
         if perma:
             with self.cfg as data:
@@ -537,7 +537,7 @@ class Subscription:
                         data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
                         headers={'Accept': 'application/json'}
                     )
-                    content = request.json()
+                    content = response.json()
                     if not (response.status_code in [200, 201] and content.get('success')):
                         err_msg: str = content.get('msg', 'panel rejected update')
                         return err_msg
@@ -559,11 +559,15 @@ class Subscription:
                 payload.enable = wl_enable
                 payload.id = userid
                 
-                panel.post(
+                response = panel.post(
                     f"panel/api/inbounds/updateClient/{userid}",
                     data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
                     headers={'Accept': 'application/json'}
                 )
+                content = response.json()
+                if not (response.status_code in [200, 201] and content.get('success')):
+                    err_msg: str = content.get('msg')
+                    return err_msg
                 
             with self.cfg as d:
                 data: dict[str, bool] = d.setdefault('statusWl', {})
@@ -976,13 +980,9 @@ class Subscription:
     def get_code(self, code: str) -> CodeObject | bool:
         """Search for a code. Returns a dict if found, False if isnt."""
 
-        result = next((item for item in self.cfg['codes'] if item.get("code") == code), None)
+        result = next((item for item in self.cfg.get('codes', as_type=list[dict[str, str | int | bool]]) if item.get("code") == code), None)
 
         if result:
-            code_type = result.get('action', '')
-            if code_type not in ["register", "bonus"]:
-                self.log.critical(f"code {code} has an action {code_type}, must be either register or bonus")
-                raise ValueError("")
             return CodeObject(
                 code=code,
                 action=code_type,
