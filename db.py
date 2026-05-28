@@ -4,6 +4,14 @@ import sqlite3
 
 __all__ = ["Database"]
 
+"""
+
+WARNING
+this is WIP
+not used anywhere
+prob broken too
+
+"""
 class Database:
     """
     SQLite store for dynamic runtime data (users, codes, reverse lookups).
