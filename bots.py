@@ -346,6 +346,10 @@ class AdminBot:
         )
 
         chart = leaderboard_chart(lb_data, bandwidth_type=bw_type, lang="ru")
+
+        if chart is None:
+            self.bot.send_message(chat_id, "Нет данных!")
+            return
         
         sorted_items = sorted(lb_data.items(), key=lambda x: x[1], reverse=(order == "desc"))
     
@@ -356,9 +360,13 @@ class AdminBot:
             lines.append(f"{prefix} <b>{user}</b> - {fmt_bytes(score)}")
         text = "<b>Список лидеров по трафику:</b>\n\n" + "\n".join(lines)
 
-        if len(text) > 1023:
-            text = text.encode("utf-8")[:1021].decode("utf-8", errors="ignore") + "..."
-        
+        b = text.encode("utf-8")
+        if len(b) > 1024:
+            b = b[:1021]
+            while b and (b[-1] & 0x80):  # back up from a continuation byte
+                b = b[:-1]
+            text = b.decode("utf-8", errors="ignore") + "..."        
+    
         self.bot.send_photo(chat_id, chart, text, parse_mode="HTML")
     
     def _cb_panel_info(self,
@@ -944,9 +952,13 @@ class AdminBot:
 ├ Использовано: {wl_used_str} / {wl_limit_str}
 └ Процент: {wl_percent_str}"""
 
-            if len(text) > 1024:
-                text = text.encode("utf-8")[:1021].decode("utf-8", errors="ignore") + "..."
-            
+
+            b = text.encode("utf-8")
+            if len(b) > 1024:
+                b = b[:1021]
+                while b and (b[-1] & 0x80):  # back up from a continuation byte
+                    b = b[:-1]
+                text = b.decode("utf-8", errors="ignore") + "..."            
             chart_img = bandwidth_chart(snapshots, label=info.displayname, lang='ru')
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_main_menu())
@@ -960,8 +972,6 @@ class AdminBot:
                 pass
     
 
-    def _step_lb_order(self, chat_id: int, bw_type: Literal["total", "monthly", "wl_monthly"]) -> None:
-        pass
 
     def start(self) -> None:
         bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Admin TG Bot") # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
@@ -1643,9 +1653,13 @@ class PublicBot:
                 wl_percent=wl_percent_str
             )
 
-            if len(text) > 1024:
-                text = text.encode("utf-8")[:1021].decode("utf-8", errors="ignore") + "..."
-
+            b = text.encode("utf-8")
+            if len(b) > 1024:
+                b = b[:1021]
+                while b and (b[-1] & 0x80):  # back up from a continuation byte
+                    b = b[:-1]
+                text = b.decode("utf-8", errors="ignore") + "..."
+            
             chart_img = bandwidth_chart(snapshots, label=info.displayname, lang=lang)
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))

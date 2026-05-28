@@ -190,7 +190,7 @@ def leaderboard_chart(
     *,
     bandwidth_type: Literal["total", "monthly", "wl_monthly"],
     lang: str = "en"
-) -> io.BytesIO:
+) -> io.BytesIO | None:
     """Render a leaderboard of users by bandwidth.
 
     Args:
@@ -199,6 +199,9 @@ def leaderboard_chart(
         bandwidth_type: type of bandwidth.
         lang: language, en or ru (defaults to en)
     """
+    if not data:
+        return None
+    
     t = _LANG.get(lang, _LANG["en"])
 
     bw_key = f"bw_type_{bandwidth_type}"
