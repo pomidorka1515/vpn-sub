@@ -234,7 +234,7 @@ Authentication: header
 Args:  
     name: (optional) Panel name. If omitted, returns status for all panels (long, blocking).  
 Response (success):  
-```jsonc  
+```jsonc 
 // HTTP 200  
 {  
     "success": true,  
@@ -287,6 +287,8 @@ Response (success):
     "obj": {  
         "action": "",   // str, code action type  
         "perma": false, // bool, reusable  
+        "uses": 0,      // int, safe to ignore if perma == true  
+                        // NOTE: this is usually omitted or -1 when perma == true  
         "days": 0,      // int  
         "gb": 0,        // int  
         "wl_gb": 0      // int  
@@ -316,7 +318,8 @@ Body:
     "perma": false,  // OPTIONAL bool-like (true, 'yes', '1', 'on', 'y'), reusable (default: false)  
     "days": 0,       // OPTIONAL int, days to add  
     "gb": 0,         // OPTIONAL int, GB to add to monthly limit  
-    "wl_gb": 0       // OPTIONAL int, GB to add to whitelist limit  
+    "wl_gb": 0,      // OPTIONAL int, GB to add to whitelist limit  
+    "uses": 0        // OPTIONAL int, amount of uses. ignored if perma == true, defaults to 1 use  
 }  
 ```  
 Response (success):  
@@ -346,7 +349,7 @@ Authentication: header
 Body:  
 ```jsonc  
 {  
-    "code": "" // str, code string (required)  
+    "code": "" // str, code name
 }  
 ```  
 Response (success):  

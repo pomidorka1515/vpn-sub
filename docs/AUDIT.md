@@ -2,7 +2,7 @@
   
 ## Introduction  
 Audit config location is usually `../audit.jsonl` unless edited.  
-There are currently **1** possible actions in the audit log.  
+There are currently **11** possible actions in the audit log.  
 The base format is:  
 ```json  
 {  
@@ -118,13 +118,15 @@ Description: User's UUID was updated.
 Description: A user consumed a bonus code.  
 ```json  
 {  
-    "days": 0,    // int, days added  
-    "gb": 0,      // int, GB, gigabytes added  
-    "wl_gb": 0,   // int, GB, gigabytes added to whitelist bandwidth limit  
-    "perma": ,    // bool, whether the code used was permanent  
-    "time": 0,    // int, timestamp, new time limit  
-    "limit": 0,   // int, GB, new limit  
-    "wl_limit": 0 // int, GB, new whitelist limit  
+    "days": 0,      // int, days added  
+    "gb": 0,        // int, GB, gigabytes added  
+    "wl_gb": 0,     // int, GB, gigabytes added to whitelist bandwidth limit  
+    "perma": false, // bool, whether the code used was permanent  
+    "uses": 1,      // int, amount of uses  
+                    // NOTE: usually -1 (or omitted) when perma == true  
+    "time": 0,      // int, timestamp, new time limit  
+    "limit": 0,     // int, GB, new limit  
+    "wl_limit": 0   // int, GB, new whitelist limit  
 }  
 ```  
   
@@ -137,6 +139,8 @@ Description: A code was added.
     "code": "",    // str, code name  
     "action": "",  // str, code type, 'register' or 'bonus'  
     "perma": true, // bool, permanent code or no  
+    "uses": 1,     // int, amount of uses  
+                   // NOTE: usually -1 (or omitted) when perma == true  
     "days": 0,     // int, amount of days  
     "gb": 0,       // int, GB  
     "wl_gb": 0     // int, GB  

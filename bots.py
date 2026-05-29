@@ -11,7 +11,7 @@ import time
 import threading
 import urllib.parse
 
-from typing import cast, Literal
+from typing import cast, overload, Literal
 from datetime import datetime
 from telebot import types
 from dataclasses import is_dataclass
@@ -760,6 +760,7 @@ class AdminBot:
                 f"ℹ️ <b>Код: <code>{code}</code></b>\n\n"
                 f"Тип: <code>{info.action}</code>\n"
                 f"Перманентный: <b>{"Да" if info.perma else "Нет"}</b>\n"
+                f"Использований: <code>{info.uses}</code>\n"
                 f"Дней: <code>{info.days}</code>\n"
                 f"Гигабайт: <code>{info.gb}</code>\n"
                 f"ВЛ Гигабайт: <code>{info.wl_gb}</code>\n"
@@ -817,7 +818,14 @@ class AdminBot:
         msg = self.bot.send_message(message.chat.id, "Введите количество гигабайтов для ВЛ локаций (в гб, или 0 для безлимита)")
         self.bot.register_next_step_handler(msg, self._step_add_code_wl_time, code_type, code_name, days, gb) 
     
-    def _step_add_code_wl_time(self, message: types.Message, code_type: str, code_name: str, days: int, gb: int) -> None:
+    def _step_add_code_wl_time(
+        self, 
+        message: types.Message, 
+        code_type: str, 
+        code_name: str, 
+        days: int, 
+        gb: int
+    ) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return
         try:
@@ -827,41 +835,119 @@ class AdminBot:
             return
         msg = self.bot.send_message(message.chat.id, "Перманентный код? Да/Нет:")
         self.bot.register_next_step_handler(msg, self._step_add_code_perma, code_type, code_name, days, gb, wl_gb) 
-    def _step_add_code_perma(self, message: types.Message, code_type: str, code_name: str, days: int, gb: int, wl_gb: int) -> None:
+    def _step_add_code_perma(
+        self, 
+        message: types.Message, 
+        code_type: str, 
+        code_name: str,
+        days: int, 
+        gb: int, 
+        wl_gb: int
+    ) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return
         content = text.strip().lower()
-        perma = False
+        
         if content == "да":
             perma = True
         elif content == "нет":
-            pass
+            perma = False
         else:
             self.bot.send_message(message.chat.id, "❌ Неизвестное значение (только да/нет)", reply_markup=self.get_codes_menu())
             return
+
+        if not perma:
+            msg = self.bot.send_message(message.chat.id, "Кол-во использований? (>= 1)")
+            self.bot.register_next_step_handler(msg, self._step_add_code_uses, code_type, code_name, days, gb, wl_gb, perma)
+        else:
+            self._step_add_code_uses(
+                message=message.chat.id,
+                code_type=code_type,
+                code_name=code_name,
+                days=days,
+                gb=gb,
+                wl_gb=wl_gb,
+                perma=perma
+            )
+    
+    @overload
+    def _step_add_code_uses(
+        self, 
+        message: int, 
+        code_type: str, 
+        code_name: str, 
+        days: int, 
+        gb: int, 
+        wl_gb: int,
+        perma: Literal[True]
+    ) -> None: ...
+
+    @overload
+    def _step_add_code_uses(
+        self, 
+        message: types.Message, 
+        code_type: str, 
+        code_name: str, 
+        days: int, 
+        gb: int, 
+        wl_gb: int,
+        perma: Literal[False]
+    ) -> None: ...
+
+    def _step_add_code_uses(
+        self, 
+        message: types.Message | int, 
+        code_type: str, 
+        code_name: str, 
+        days: int, 
+        gb: int, 
+        wl_gb: int,
+        perma: Literal[True, False]
+    ) -> None:
+        """
+        flow:
+        message = int -> perma = True, generate code directly without uses
+        message = actual message -> perma = False, msg text has uses param
+        """
+        if isinstance(message, types.Message):
+            text = cast(str, message.text)
+            if text.startswith('/'): return
+            try:
+                uses = int(text.strip())
+                if uses < 1:
+                    raise ValueError("aeruioycxvvbseyporfdlhgnvcxhskl;dlkfdlaeeyroufhgkjhgfkgkfjhl")
+            except ValueError:
+                self.bot.send_message(message.chat.id, "❌ Ошибка: кол-во должно быть числом больше 0.")
+                return
+            chat_id = message.chat.id
+        else:
+            uses = -1
+            chat_id = message
+        
         try:
             err = self.sub.add_code(
                 code=code_name, action=code_type, permanent=perma,
-                days=days, gb=gb, wl_gb=wl_gb
+                days=days, gb=gb, wl_gb=wl_gb, uses=uses
             )
             if isinstance(err, str):
-                self.bot.send_message(message.chat.id, f"❌ {err}", reply_markup=self.get_codes_menu())
+                self.bot.send_message(chat_id, f"❌ {err}", reply_markup=self.get_codes_menu())
                 return
             self.bot.send_message(
-                message.chat.id,
+                chat_id,
                 f"""✅ Код создан!
 
 Код: <code>{code_name}</code>
 Тип: <code>{code_type}</code>
 Перманентный: <b>{"Да" if perma else "Нет"}</b>
 Дней: <code>{days}</code>
+Кол-во использований: <code>{uses}</code>
 Гб: <code>{gb}</code>
 ВЛ Гб: <code>{wl_gb}</code>""",
                 parse_mode="HTML",
                 reply_markup=self.get_codes_menu()
             )
         except Exception as e:
-            self.bot.send_message(message.chat.id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
+            self.bot.send_message(chat_id, f"❌ Ошибка: {e}", reply_markup=self.get_codes_menu())
 
     def _step_chart_username(self, message: types.Message) -> None:
         text = cast(str, message.text)

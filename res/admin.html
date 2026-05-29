@@ -614,6 +614,13 @@ body {
             <input type="checkbox" id="addPerma">
           </div>
         </div>
+        <div class="form-row" id="addUsesRow">
+          <label data-t="uses">Uses</label>
+          <div class="input-wrap">
+            <input type="number" id="addUses" value="1" min="1">
+            <span class="form-hint" data-t="uses_hint">Ignored if reusable</span>
+          </div>
+        </div>
         <div class="form-actions">
           <button class="btn btn-primary" onclick="doAddCode()" id="btnDoAddCode">Create</button>
           <button class="btn-secondary" onclick="hideAddCode()" id="btnCancelAddCode">Cancel</button>
@@ -763,7 +770,7 @@ const L = {
     ext_username: 'Ext Username', ext_password: 'Ext Password', fingerprint: 'Fingerprint',
     monthly_limit: 'Monthly Limit (GB)', wl_limit: 'WL Limit (GB)', expires: 'Expires',
     custom_token: 'Custom Token', custom_uuid: 'Custom UUID', code: 'Code', action_type: 'Action Type',
-    bonus: 'Bonus', register: 'Register', days: 'Days', gb: 'GB', wl_gb: 'WL GB', reusable: 'Reusable',
+    bonus: 'Bonus', register: 'Register', days: 'Days', gb: 'GB', wl_gb: 'WL GB', reusable: 'Reusable', uses: 'Uses', uses_hint: 'Ignored if reusable',
     health_status: 'Health Status', not_checked: 'Not checked', panel_name: 'Panel Name',
     panel_name_hint: 'Leave empty for all panels', online_users: 'Online Users', keyed: 'Keyed output',
     refresh_users: 'Refresh All Users', refresh_warning: 'This syncs all users to all panels. May take time.',
@@ -810,7 +817,7 @@ const L = {
     ext_username: 'Логин', ext_password: 'Пароль', fingerprint: 'Отпечаток',
     monthly_limit: 'Лимит (ГБ)', wl_limit: 'WL лимит (ГБ)', expires: 'Истекает',
     custom_token: 'Токен', custom_uuid: 'UUID', code: 'Код', action_type: 'Тип',
-    bonus: 'Бонус', register: 'Регистрация', days: 'Дни', gb: 'ГБ', wl_gb: 'WL ГБ', reusable: 'Многоразовый',
+    bonus: 'Бонус', register: 'Регистрация', days: 'Дни', gb: 'ГБ', wl_gb: 'WL ГБ', reusable: 'Многоразовый', uses: 'Использований', uses_hint: 'Игнорируется если многоразовый',
     health_status: 'Статус', not_checked: 'Не проверено', panel_name: 'Панель',
     panel_name_hint: 'Пусто = все панели', online_users: 'Онлайн', keyed: 'Ключ',
     refresh_users: 'Синхронизация', refresh_warning: 'Синхронизирует всех пользователей. Займёт время.',
@@ -1123,7 +1130,7 @@ function renderCodesList(codes) {
           <div class="code-name">${name}</div>
           <div class="code-meta">
             <span class="badge ${c.action === 'register' ? 'purple' : 'cyan'}">${c.action}</span>
-            ${c.perma ? '<span class="badge green">Reusable</span>' : ''}
+            ${c.perma ? '<span class="badge green">Reusable</span>' : `<span class="badge gray">${c.uses ?? 1} uses</span>`}
             ${c.days ? `<span>${c.days}d</span>` : ''}
             ${c.gb ? `<span>${c.gb}GB</span>` : ''}
             ${c.wl_gb ? `<span>${c.wl_gb}GB WL</span>` : ''}
@@ -1161,6 +1168,7 @@ function showAddCode() {
   document.getElementById('addGb').value = '0';
   document.getElementById('addWlGb').value = '0';
   document.getElementById('addPerma').checked = false;
+  document.getElementById('addUses').value = '1';
   document.getElementById('addCodeResult').innerHTML = '';
 }
 
@@ -1178,6 +1186,12 @@ async function doAddCode() {
   body.gb = parseInt(document.getElementById('addGb').value) || 0;
   body.wl_gb = parseInt(document.getElementById('addWlGb').value) || 0;
   body.perma = document.getElementById('addPerma').checked;
+
+  const uses = parseInt(document.getElementById('addUses').value);
+  if (!body.perma) {
+    if (isNaN(uses) || uses <= 0) { toast('Uses must be greater than 0', 'error'); return; }
+    body.uses = uses;
+  }
 
   const result = document.getElementById('addCodeResult');
   const res = await api('/api/code/add', { method: 'POST', body });

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import (
     Protocol,
-    runtime_checkable, overload, cast,
+    runtime_checkable, overload,
     Any, Iterable,
     Callable, Iterator, Self, Final,
     Literal, TypeVar, TypedDict
@@ -82,7 +82,8 @@ class BaseValidator(metaclass=ValidatorMeta):
         else:
             instance = super().__new__(cls)
         instance._value = value
-        return instance
+        # SONbrero what is this error (i have no idea)
+        return instance # pyright: ignore[reportUnknownVariableType]
 
     def __init__(self, value: object) -> None:
         self._validate()
@@ -593,6 +594,7 @@ class CodeObject:
     code: str
     action: str
     perma: bool
+    uses: int
     days: int
     gb: int
     wl_gb: int
@@ -617,6 +619,7 @@ class ApplyBonusCodeObject:
     gb: int
     wl_gb: int
     perma: bool
+    uses: int
     time: int
     limit: int
     wl_limit: int

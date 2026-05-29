@@ -483,7 +483,7 @@ class WebApi(BaseApi):
                 return _err("username exceeds max. length of 32")
         # credential changes require the current password (guards stolen cookies)
         if ext_username or ext_password:
-            if not current_password or not isinstance(current_password, str):
+            if not current_password:
                 return _err("current_password required to change credentials", 400)
             cur_ext = next(
                 (e for e, u in self.cfg.get('webui_users', as_type=dict[str, str]).items() if u == username),
@@ -784,7 +784,7 @@ class Api(BaseApi):
         return _ok(obj=online_users)
 
     @requires_admin_auth
-    @requires_fields(('user', str))
+    @requires_fields_strict(('user', str))
     def user_reset(self) -> ResponseType:
         try:
             content = g.json_obj
@@ -855,10 +855,11 @@ class Api(BaseApi):
     def code_add(self) -> ResponseType: 
         try:
             content = g.json_obj
-            raw_data: dict[str, object] = {
+            raw_data: dict[str, JsonifyValue] = {
                 "name": content.get('code'),
                 "action": content.get('action'),
                 "permanent": content.get('perma', 'false'),
+                "uses": content.get('uses', 1),
                 "days": content.get('days', 0),
                 "gb": content.get('gb', 0),
                 "wl_gb": content.get('wl_gb', 0)
@@ -873,13 +874,13 @@ class Api(BaseApi):
                         return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
                     data[k] = parsed 
                 
-                elif k in ['days', 'gb', 'wl_gb']:
+                elif k in ('days', 'gb', 'wl_gb', 'uses'):
                     try:
                         data[k] = int(cast(str, v))
                     except (ValueError, TypeError):
                         return _err(f"{k} must be an integer, got: {v}")
 
-            if data['action'] not in ['register', 'bonus']:
+            if data['action'] not in ('register', 'bonus'):
                 return _err("action must be 'register' or 'bonus'")
 
             if cast(int, data['days']) < 0 or cast(int, data['gb']) < 0 or cast(int, data['wl_gb']) < 0:
@@ -891,7 +892,8 @@ class Api(BaseApi):
                 permanent=cast(bool, data['permanent']), 
                 days=cast(int, data['days']), 
                 gb=cast(int, data['gb']), 
-                wl_gb=cast(int, data['wl_gb'])  
+                wl_gb=cast(int, data['wl_gb']),
+                uses=cast(int, data['uses'])
             )
             if isinstance(x, str):
                 return _err(x)

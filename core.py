@@ -892,6 +892,7 @@ class Subscription:
                 return "Invalid code"
     
             try:
+                uses = int(match_item.get('uses' ,0))
                 days = int(match_item.get("days", 0))
                 gb = int(match_item.get("gb", 0))
                 wl_gb = int(match_item.get("wl_gb", 0))
@@ -922,15 +923,33 @@ class Subscription:
             timee = int(time.time() + days * 86400) if days else 0
     
             if not match_item.get("perma", False):
+                if uses < 1:
+                    return "Invalid code"
+                
+                uses -= 1
+
                 consumed_code = {
                     "code": code,
                     "action": "register",
                     "perma": False,
+                    "uses": uses,
                     "days": days,
                     "gb": gb,
                     "wl_gb": wl_gb
                 }
-                del codes[match_index]
+
+                if uses < 1:
+                    del codes[match_index]
+            else:
+                consumed_code = {
+                    "code": code,
+                    "action": "register",
+                    "perma": True,
+                    "uses": -1,
+                    "days": days,
+                    "gb": gb,
+                    "wl_gb": wl_gb
+                }
     
             users[username] = userid
             tokens[username] = token
@@ -985,14 +1004,16 @@ class Subscription:
         if result:
             return CodeObject(
                 code=code,
-                action=code_type,
-                perma=result.get('perma', False),
-                days=result.get('days', 0),
-                gb=result.get('gb', 0),
-                wl_gb=result.get('wl_gb', 0)
+                action=cast(str, result.get('action')),
+                perma=cast(bool, result.get('perma', False)),
+                uses=cast(int, result.get('uses', -1 if result.get('perma', False) else 1)),
+                days=cast(int, result.get('days', 0)),
+                gb=cast(int, result.get('gb', 0)),
+                wl_gb=cast(int, result.get('wl_gb', 0))
             )
         else:
             return False
+        
     def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject | str:
         """Atomically validate/consume a bonus code and apply it to a user.
     
@@ -1055,9 +1076,19 @@ class Subscription:
             new_time = 0 if current_time == 0 else current_time + delta_days * 86400
             new_limit = 0 if current_bw[0] == 0 else current_bw[0] + delta_gb
             new_wl_limit = 0 if current_wl_bw[0] == 0 else current_wl_bw[0] + delta_wl_gb
-    
+            
+            uses = int(code_item.get('uses', 0))
+
             if not code_item.get("perma", False):
-                del codes[code_index]
+                if uses < 1:
+                    return "Invalid code"
+
+                uses -= 1
+
+                if uses < 1:
+                    del codes[code_index]
+            else:
+                uses = -1
 
             current_bw[0] = new_limit
             current_wl_bw[0] = new_wl_limit
@@ -1067,6 +1098,7 @@ class Subscription:
                 days=delta_days,
                 gb=delta_gb,
                 wl_gb=delta_wl_gb,
+                uses=uses,
                 perma=bool(code_item.get('perma', False)),
                 time=new_time,
                 limit=new_limit,
@@ -1076,29 +1108,36 @@ class Subscription:
         return result
 
     def add_code(self, 
-                 code: str, 
-                 action: str, 
-                 permanent: bool = False, 
-                 days: int = 0, 
-                 gb: int = 0,
-                 wl_gb: int = 0) -> None | str:
-        """Creates a code. Simple."""
+        code: str, 
+        action: str, 
+        permanent: bool = False, 
+        days: int = 0, 
+        gb: int = 0,
+        wl_gb: int = 0,
+        uses: int = 1
+    ) -> None | str:
+        """
+        Creates a code.
+        If permanent is True, 'uses' param is ignored."""
         
         if not isinstance(code, str) or not code: 
             return "code must be a non-empty string"
-        if action not in ["register", "bonus"]:
+        if action not in ("register", "bonus"):
             return f"action must be 'register' or 'bonus', got '{action}'"
-        if not all(isinstance(x, int) for x in (days, gb, wl_gb)): 
+        if not all(isinstance(x, int) for x in (days, gb, wl_gb, uses)): 
             return "days, gb, wl_gb must be integers"
         if days < 0 or gb < 0 or wl_gb < 0:
             return "days, gb, wl_gb must be non-negative"
+        if not permanent:
+            if uses < 1:
+                return "uses must be >= 1"
         
         with self.cfg as t:
             if any(c.get('code') == code for c in t['codes']):
                 return f"code '{code}' already exists"
-            res: Mapping[str, str | bool | int] = {
+            res: dict[str, str | bool | int] = {
                 "code": code, "action": action, "perma": permanent,
-                "days": days, "gb": gb, "wl_gb": wl_gb
+                "days": days, "gb": gb, "wl_gb": wl_gb, "uses": uses if not permanent else -1
             }
             t['codes'].append(res)
         self.audit(name="code_add", info=res)
@@ -1115,7 +1154,7 @@ class Subscription:
             return False
         return self.cfg.mutate(_delete)
     def list_code(self) -> list[str]:
-        return [c['code'] for c in self.cfg['codes'] if 'code' in c]
+        return [cast(str, c['code']) for c in self.cfg.get('codes', as_type=list[dict[str, str | int | bool]]) if 'code' in c]
     def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject | str:
         """Apply a bonus code for a Telegram user."""
         username = self.get_username_telegram(value)

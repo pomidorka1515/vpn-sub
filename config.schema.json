@@ -163,6 +163,7 @@
                     "code": { "type": "string" },
                     "action": { "type": "string", "enum": ["register", "bonus"] },
                     "perma": { "type": "boolean" },
+                    "uses": { "type": "integer", "$comment": "-1 = perma == true" },
                     "days": { "type": "integer", "minimum": 0 },
                     "gb": { "type": "integer", "minimum": 0 },
                     "wl_gb": { "type": "integer", "minimum": 0 }
