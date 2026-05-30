@@ -137,8 +137,8 @@ class XUiSession(Session):
         while not self._health_check_event.wait(self._health_check_interval):
             try:
                 resp = super().request("GET", f"{self.base_url}panel/api/inbounds/list")
-                if resp.status_code not in [200]:
-                    if resp.status_code in [500, 502]:
+                if resp.status_code not in (200,):
+                    if resp.status_code in (500, 502):
                         self.dead = True # NOTE: its probably dead
                     else:
                         self.log.error(f"panel {self.name}: HTTP code {resp.status_code}")

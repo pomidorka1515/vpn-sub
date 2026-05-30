@@ -27,8 +27,6 @@ type JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Se
 type HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 type ResponseType = tuple[Response, int] | Response
 
-P = ParamSpec('P')
-R = TypeVar('R')
 
 class Route(NamedTuple):
     """A Flask route, used in BaseApi."""
@@ -101,6 +99,8 @@ class BaseApi(ABC):
         pass
 
 
+P = ParamSpec('P')
+R = TypeVar('R')
 
 def _ok(
     msg: str | None = None,
@@ -367,7 +367,7 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     def qr(self, username: str) -> ResponseType:
         lang = request.args.get('lang', 'en')
-        if lang not in ['en', 'ru']:
+        if lang not in ('en', 'ru'):
             lang = 'en'
         
         token = self.cfg['tokens'][username]
@@ -403,7 +403,7 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     def profiles(self, username: str) -> ResponseType:
         lang = request.args.get('lang')
-        if lang not in ['ru', 'en']:
+        if lang not in ('ru', 'en'):
             return _err("Unknown language", 400)
 
         index = 0 if lang == 'en' else 1
@@ -599,7 +599,7 @@ class WebApi(BaseApi):
             return _err("Internal server error", 500)
 
         if isinstance(result, str):
-            if result in ["Invalid code", "Username exists", "Ext Username exists"]:
+            if result in ("Invalid code", "Username exists", "Ext Username exists"):
                 return _err(result, 403)
             return _err(result, 400)
 
@@ -709,12 +709,12 @@ class Api(BaseApi):
             data: dict[str, str | int] = {}
 
             for k, v in raw_data.items():
-                if k in ['ext_username', 'ext_password', 'token', 'userid', 'fingerprint']:
+                if k in ('ext_username', 'ext_password', 'token', 'userid', 'fingerprint'):
                     if v is not None and not isinstance(v, str):
                         return _err(f"{k} must be a string or null")
                     data[k] = cast(str, v)
 
-                elif k in ['limit', 'wl_limit', 'time']:
+                elif k in ('limit', 'wl_limit', 'time'):
                     try:
                         data[k] = int(cast(str, v))
                     except (ValueError, TypeError):

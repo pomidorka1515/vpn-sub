@@ -15,7 +15,7 @@ snaps = [
 ]
 
 lang = input("Enter lang, defualts to en\n")
-if lang not in ['ru', 'en']:
+if lang not in ('ru', 'en'):
     lang = "en"
 path = input("Enter path\n")
 if not path:

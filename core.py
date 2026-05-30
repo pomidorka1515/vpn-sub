@@ -258,7 +258,7 @@ class Subscription:
         try:
             x = panel.get(f"panel/api/server/status")
             data: dict[str, object] = x.json()
-            if x.status_code not in [200]:
+            if x.status_code not in (200,):
                 self.log.error(f"getstatus fail: {data['msg']}")
                 return None
             return from_dict(ServerMetricsResponse, data)
@@ -278,7 +278,7 @@ class Subscription:
         try:
             response = panel.get(f"panel/api/inbounds/list")
             data: dict[str, list[dict[str, object]]] = response.json()
-            if response.status_code not in [200] or not data.get("success"):
+            if response.status_code not in (200,) or not data.get("success"):
                 self.log.error(f"getinbounds fail: {data.get('msg')}")
                 return []
             raw_inbounds: list[dict[str, object]] = data['obj']
@@ -447,7 +447,7 @@ class Subscription:
                     continue
                 list_2_add.append(i.id)
                 streamsettings = json.loads(i.streamSettings)
-                if streamsettings['network'] in ['tcp', 'raw']:
+                if streamsettings['network'] in ('tcp', 'raw'):
                     need_vision.append(i.id)
             
             
@@ -466,7 +466,7 @@ class Subscription:
                     headers={'Accept': 'application/json'}
                 )
                 content = resp.json()
-                if not (resp.status_code in [200, 201] and content.get('success')):
+                if not (resp.status_code in (200, 201) and content.get('success')):
                     err_msg: str = content.get('msg', 'unknown error')
                     return err_msg
         if not _called_internally: self.audit(name="user_refresh", info={"username":username})
@@ -489,7 +489,7 @@ class Subscription:
                     headers={'Accept': 'application/json'}
                 )
                 content = response.json()
-                if not (response.status_code in [200, 201] and content.get('success')):
+                if not (response.status_code in (200, 201) and content.get('success')):
                     err_msg: str = content.get('msg', 'panel rejected update')
                     return err_msg
         if perma:
@@ -538,7 +538,7 @@ class Subscription:
                         headers={'Accept': 'application/json'}
                     )
                     content = response.json()
-                    if not (response.status_code in [200, 201] and content.get('success')):
+                    if not (response.status_code in (200, 201) and content.get('success')):
                         err_msg: str = content.get('msg', 'panel rejected update')
                         return err_msg
             
@@ -565,7 +565,7 @@ class Subscription:
                     headers={'Accept': 'application/json'}
                 )
                 content = response.json()
-                if not (response.status_code in [200, 201] and content.get('success')):
+                if not (response.status_code in (200, 201) and content.get('success')):
                     err_msg: str = content.get('msg')
                     return err_msg
                 
@@ -801,7 +801,7 @@ class Subscription:
                 for vx in vi.clientStats:
                     if vx.uuid == olduid:
                         the[str(vi.id)] = client_stats_to_settings(vx)
-                        if json.loads(vi.streamSettings)['network'] in ["tcp", "raw"]:
+                        if json.loads(vi.streamSettings)['network'] in ("tcp", "raw"):
                             need_vision.append(vi.id)
                         break
             for k in l:
@@ -819,7 +819,7 @@ class Subscription:
                     data=data,
                     headers={'Accept': 'application/json'}
                 )
-                if not (response.status_code in [200, 201] and response.json().get('success')):
+                if not (response.status_code in (200, 201) and response.json().get('success')):
                     err_msg: str = response.json().get('msg', 'panel rejected update')
                     self.log.critical(f"update_uuid failed on panel {panel.name}: {err_msg}")
                     self._rollback_user_uuid(username, olduid, uid, successful)
@@ -1265,7 +1265,7 @@ class Subscription:
                 continue
             try:
                 res = panel.post(f"panel/api/inbounds/onlines")
-                if res.status_code in [200, 201] and res.json().get('success'):
+                if res.status_code in (200, 201) and res.json().get('success'):
                     for email in res.json().get('obj', []):
                         name_candidate = email.rsplit('-', 1)[0]
                         if name_candidate in self.cfg['users']:
@@ -1334,7 +1334,7 @@ class Subscription:
         
         if not username:
             return self.resp
-        if lang not in ["ru", "en"]:
+        if lang not in ("ru", "en"):
             return self.resp
         bandwidths = self.bandwidth(username)
 

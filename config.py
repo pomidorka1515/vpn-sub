@@ -325,7 +325,7 @@ class Config(MutableMapping[str, JsonValue]):
         self._indent: int = indent
         self._strict_schema: bool = strict_schema
     
-        if sync_mode not in ["full", "data", "none"]:
+        if sync_mode not in ("full", "data", "none"):
             raise ValueError("sync_mode must be 'full', 'data', or 'none'")
         self._sync_mode: SYNC_MODES = sync_mode
     

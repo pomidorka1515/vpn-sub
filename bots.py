@@ -1232,23 +1232,23 @@ class PublicBot:
         text = message.text
 
         
-        if text in [self.TEXTS['ru']['btn_info'], self.TEXTS['en']['btn_info']]:
+        if text in (self.TEXTS['ru']['btn_info'], self.TEXTS['en']['btn_info']):
             if not self.sub.is_registered(uid): return
             self.send_info(message.chat.id, uid, lang)
             
-        elif text in [self.TEXTS['ru']['btn_bonus'], self.TEXTS['en']['btn_bonus']]:
+        elif text in (self.TEXTS['ru']['btn_bonus'], self.TEXTS['en']['btn_bonus']):
             if not self.sub.is_registered(uid): return
             msg = self.bot.send_message(message.chat.id, t['enter_bonus'], reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_bonus) 
             
-        elif text in [self.TEXTS['ru']['btn_lang'], self.TEXTS['en']['btn_lang']]:
+        elif text in (self.TEXTS['ru']['btn_lang'], self.TEXTS['en']['btn_lang']):
             markup = types.InlineKeyboardMarkup()
             markup.add( 
                 types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
                 types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
             )
             self.bot.send_message(message.chat.id, t['choose_lang'], reply_markup=markup)
-        elif text in [self.TEXTS['ru']['btn_login'], self.TEXTS['en']['btn_login']]:
+        elif text in (self.TEXTS['ru']['btn_login'], self.TEXTS['en']['btn_login']):
             if self.sub.is_registered(uid): return
             markup = types.InlineKeyboardMarkup(row_width=1)
             markup.add( 
@@ -1258,7 +1258,7 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['choose_login'], reply_markup=markup)
             # msg = self.bot.send_message(message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())
             # self.bot.register_next_step_handler(msg, self.step_login_email)
-        elif text in [self.TEXTS['ru']['btn_main_sub'], self.TEXTS['en']['btn_main_sub']]:
+        elif text in (self.TEXTS['ru']['btn_main_sub'], self.TEXTS['en']['btn_main_sub']):
             if not self.sub.is_registered(uid): return
             reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
             reply_markup.add( 
@@ -1276,7 +1276,7 @@ class PublicBot:
 
             self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=reply_markup)
 
-        elif text in [self.TEXTS['ru']['btn_main_account'], self.TEXTS['en']['btn_main_account']]:
+        elif text in (self.TEXTS['ru']['btn_main_account'], self.TEXTS['en']['btn_main_account']):
             if not self.sub.is_registered(uid): return
             reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
             reply_markup.add( 
@@ -1293,25 +1293,25 @@ class PublicBot:
 
             self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=reply_markup)
 
-        elif text in [self.TEXTS['ru']['btn_main_back'], self.TEXTS['en']['btn_main_back']]:
+        elif text in (self.TEXTS['ru']['btn_main_back'], self.TEXTS['en']['btn_main_back']):
             if not self.sub.is_registered(uid): return
             self.bot.send_message(message.chat.id, t['welcome_reg'], reply_markup=self.get_menu(uid))
 
-        elif text in [self.TEXTS['ru']['btn_reset'], self.TEXTS['en']['btn_reset']]:
+        elif text in (self.TEXTS['ru']['btn_reset'], self.TEXTS['en']['btn_reset']):
             if not self.sub.is_registered(uid): return
             msg = self.bot.send_message(message.chat.id, t['confirm_reset'], reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_reset) 
         
-        elif text in [self.TEXTS['ru']['btn_support'], self.TEXTS['en']['btn_support']]:
+        elif text in (self.TEXTS['ru']['btn_support'], self.TEXTS['en']['btn_support']):
             self.bot.send_message(message.chat.id, t['support_text'], parse_mode="HTML")
         
-        elif text in [self.TEXTS['ru']['btn_logout'], self.TEXTS['en']['btn_logout']]:
+        elif text in (self.TEXTS['ru']['btn_logout'], self.TEXTS['en']['btn_logout']):
             if not self.sub.is_registered(uid): return
             with self.cfg as d:
                 d['tgids'].pop(str(uid), None)
             self.bot.send_message(message.chat.id, t['logout_success'], reply_markup=self.get_menu(uid))
 
-        elif text in [self.TEXTS['ru']['btn_help'], self.TEXTS['en']['btn_help']]:
+        elif text in (self.TEXTS['ru']['btn_help'], self.TEXTS['en']['btn_help']):
             if not self.sub.is_registered(uid): return
             t = self.TEXTS[lang]
             text = ""
@@ -1324,7 +1324,7 @@ class PublicBot:
             )
             self.bot.send_message(message.chat.id, final_text, parse_mode="HTML")
 
-        elif text in [self.TEXTS['ru']['btn_settings'], self.TEXTS['en']['btn_settings']]:
+        elif text in (self.TEXTS['ru']['btn_settings'], self.TEXTS['en']['btn_settings']):
             if not self.sub.is_registered(uid): return
             t = self.TEXTS[lang]
             markup = types.InlineKeyboardMarkup(row_width=2)
@@ -1340,16 +1340,16 @@ class PublicBot:
             )
             self.bot.send_message(message.chat.id, t['settings_menu'], parse_mode="HTML", reply_markup=markup)
 
-        elif text in [self.TEXTS['ru']['btn_delete'], self.TEXTS['en']['btn_delete']]:
+        elif text in (self.TEXTS['ru']['btn_delete'], self.TEXTS['en']['btn_delete']):
             if not self.sub.is_registered(uid): return
             msg = self.bot.send_message(message.chat.id, t['confirm_delete'], parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
             self.bot.register_next_step_handler(msg, self.step_delete) 
 
-        elif text in [self.TEXTS['ru']['btn_get_sub'], self.TEXTS['en']['btn_get_sub']]:
+        elif text in (self.TEXTS['ru']['btn_get_sub'], self.TEXTS['en']['btn_get_sub']):
             if not self.sub.is_registered(uid): return
             self.send_link(message.chat.id, uid, lang)
 
-        elif text in [self.TEXTS['ru']['btn_chart'], self.TEXTS['en']['btn_chart']]:
+        elif text in (self.TEXTS['ru']['btn_chart'], self.TEXTS['en']['btn_chart']):
             if not self.sub.is_registered(uid): return
             markup = types.InlineKeyboardMarkup(row_width=2)
             markup.add( 
