@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import (
     Protocol,
     runtime_checkable, overload,
-    Any, Iterable,
-    Callable, Iterator, Self, Final,
-    Literal, TypeVar, TypedDict
+    Any,
+    Callable, Self, Final,
+    Literal, TypedDict
 )
 from types import TracebackType
-from collections.abc import MutableMapping, Mapping, Sequence
+from collections.abc import MutableMapping, Mapping, Sequence, Iterator, Iterable
 
 from dataclasses import dataclass
 
@@ -18,8 +18,6 @@ from requests.auth import AuthBase
 from requests.models import PreparedRequest
 
 __all__ = [
-    'BaseValidator',
-    
     'AdminBotLike', 'PublicBotLike', 
     'ConfigLike', 'LinesConfigLike',
 
@@ -44,76 +42,13 @@ __all__ = [
 type JsonValue = int | float | Mapping[str, 'JsonValue'] | Sequence['JsonValue'] | str | bool | None
 type JsonDict = dict[str, JsonValue]
 
-class ValidatorMeta(type):
-    def __new__(
-        mcs,
-        name: str,
-        bases: tuple[type, ...],
-        namespace: dict[str, object],
-        base_type: type | tuple[type, ...] | None = None,
-        validator_name: str = "",
-    ) -> type:
-        if base_type is not None:
-            base_types = base_type if isinstance(base_type, tuple) else (base_type,)
-            new_bases = tuple(bt for bt in base_types if bt not in bases)
-            bases = new_bases + bases
-        cls = super().__new__(mcs, name, bases, namespace)
-        cls.field_name = validator_name
-        cls.__allowed_types__ = base_type or ()
-        cls.has_value_base = base_type is not None
-        return cls
-
-    field_name: str = ""
-    has_value_base: bool
-    __allowed_types__: type | tuple[type, ...] = ()
-
-class BaseValidator(metaclass=ValidatorMeta):
-    field_name: str = ""
-    __allowed_types__: type | tuple[type, ...] = ()
-    has_value_base: bool = False
-    _value: object
-
-    def __new__(cls, value: object) -> Self:
-        if cls.has_value_base:
-            try:
-                instance = super().__new__(cls, value) # type: ignore[call-arg]
-            except TypeError:
-                instance = super().__new__(cls)
-        else:
-            instance = super().__new__(cls)
-        instance._value = value
-        # SONbrero what is this error (i have no idea)
-        return instance # pyright: ignore[reportUnknownVariableType]
-
-    def __init__(self, value: object) -> None:
-        self._validate()
-
-    def _validate(self) -> None:
-        if not hasattr(self, "_value"):
-            return
-        allowed = self.__class__.__allowed_types__
-        if allowed and not isinstance(self._value, allowed):
-            raise ValueError(
-                f"expected {allowed}, got {type(self._value)}"
-            )
-        self.validate()
-
-    def validate(self) -> None:
-        raise NotImplementedError
-
 class MISSING_TYPE:
     """Sentinel for missing default values."""
     def __repr__(self) -> str:
         return "<MISSING>"
 
 MISSING: Final[MISSING_TYPE] = MISSING_TYPE()
-_T = TypeVar("_T")
-_TJ = TypeVar("_TJ", bound=JsonValue)
-_T_C = TypeVar("_T_C", covariant=True)
-_K = TypeVar("_K", covariant=True)
-_V = TypeVar("_V", covariant=True)
-_KT = TypeVar("_KT", covariant=False)
-_VT = TypeVar("_VT", covariant=True)
+
 
 ### Stub Protocols ###
 
@@ -154,7 +89,7 @@ class ConfigLike(Protocol):
 
     def edit(self) -> _ConfigTransactionLike: ...
 
-    def mutate(self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T: ...
+    def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T: ...
 
     def __enter__(self) -> _ConfigTransactionLike: ...
 
@@ -179,19 +114,19 @@ class ConfigLike(Protocol):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get(self, key: str, default: _TJ) -> _TJ: ...
+    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
-    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
 
     @overload
-    def get(
+    def get[_T, _TJ: JsonValue](
         self,
         key: str,
         default: _TJ | MISSING_TYPE = MISSING,
@@ -199,7 +134,7 @@ class ConfigLike(Protocol):
         as_type: type[_T] | None = None
     ) -> _TJ | _T: ...
 
-    def get(
+    def get[_T](
         self,
         key: str,
         default: JsonValue | MISSING_TYPE = MISSING,
@@ -223,14 +158,14 @@ class ConfigLike(Protocol):
     def pop(self, key: str) -> JsonValue: ...
 
     @overload
-    def pop(self, key: str, default: _TJ) -> _TJ: ...
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
-    def pop(self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ: ...
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ: ...
 
     def popitem(self) -> tuple[str, JsonValue]: ...
 
     @overload
-    def setdefault(self, key: str, default: _TJ) -> _TJ: ...
+    def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...
@@ -281,21 +216,21 @@ class _ConfigTransactionLike(Protocol):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get(self, key: str, default: _TJ) -> _TJ: ...
+    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
-    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
 
     @overload
-    def get(self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
+    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
 
-    def get(
+    def get[_T](
         self,
         key: str,
         default: JsonValue | MISSING_TYPE = MISSING,
@@ -311,14 +246,14 @@ class _ConfigTransactionLike(Protocol):
     def pop(self, key: str) -> JsonValue: ...
 
     @overload
-    def pop(self, key: str, default: _TJ) -> _TJ: ...
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
-    def pop(self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ: ...
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ: ...
 
     def popitem(self) -> tuple[str, JsonValue]: ...
 
     @overload
-    def setdefault(self, key: str, default: _TJ) -> _TJ: ...
+    def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...
@@ -387,30 +322,32 @@ class LinesConfigLike(Protocol):
         exc_tb: TracebackType | None,
     ) -> Literal[False] | None: ...
 
-class SupportsKeysAndGetItem(Protocol[_KT, _VT]):
-    def keys(self) -> Iterable[_KT]: ...
-    def __getitem__(self, __k: _KT) -> _VT: ...
-class SupportsRead(Protocol[_T_C]):
-    def read(self, __length: int = ...) -> _T_C: ...
-class SupportsItems(Protocol[_K, _V]):
-    def items(self) -> Iterator[tuple[_K, _V]]: ...
+class SupportsKeysAndGetItem[KT, VT](Protocol):
+    def keys(self) -> Iterable[KT]: ...
+    def __getitem__(self, __k: KT) -> VT: ...
+class SupportsRead[T_C](Protocol):
+    def read(self, __length: int = ...) -> T_C: ...
+class SupportsItems[K, V](Protocol):
+    def items(self) -> Iterator[tuple[K, V]]: ...
 
 ### requests-stubs/session.pyi ###
-_FileSpec = SupportsRead[str | bytes] | str | bytes \
-            | tuple[str | None, SupportsRead[str | bytes] | str | bytes] \
-            | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str] \
-            | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str, Mapping[str, str]]
-_Params = (
-    SupportsItems[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
-    | tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
-    | Iterable[tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]]
-    | str
-    | bytes
+_FileSpec = (
+    SupportsRead[str | bytes] | str | bytes
+    | tuple[str | None, SupportsRead[str | bytes] | str | bytes] 
+    | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str] 
+    | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str, Mapping[str, str]]
 )
+
 class RequestKwargs(TypedDict, total=False):
     # method: str | bytes
     # url: str | bytes
-    params: _Params | None
+    params: (
+        SupportsItems[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
+        | tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
+        | Iterable[tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]]
+        | str
+        | bytes
+    ) | None
     data: Iterable[bytes] | str | bytes | SupportsRead[str |  bytes] \
           | list[tuple[Any, Any]] | tuple[tuple[Any, Any], ...] \
           | Mapping[Any, Any] | None

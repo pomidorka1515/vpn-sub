@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import dacite
 from typing import (
-    TypeVar, ClassVar, Protocol,
+    ClassVar, Protocol,
     Literal, Callable, Mapping,
     Any,
     cast, get_args, get_origin,
@@ -34,10 +34,6 @@ class SlottedDataclassInstance(Protocol):
     __slots__: ClassVar[tuple[str, ...]]
 
 
-_T = TypeVar("_T", bound=object)
-_TV = TypeVar("_TV", bound=SlottedDataclassInstance)
-_TJ = TypeVar("_TJ", bound=SlottedDataclassInstance)
-
 # sentinel class to mark values that should be treated as Literals
 # dacite type_hooks can use this class to trigger special handling
 class LiteralValue:
@@ -59,7 +55,7 @@ def _get_literal_values(tp: type) -> tuple[object, ...]:
     return get_args(tp)
 
 
-def _coerce_to_literal(value: _T, literal_type: type) -> _T | LiteralValue:
+def _coerce_to_literal[_T](value: _T, literal_type: type) -> _T | LiteralValue:
     """Coerce a value to a Literal type if it matches allowed values."""
     allowed = _get_literal_values(literal_type)
     if value in allowed:
@@ -262,7 +258,7 @@ def _strip_list(items: list[object]) -> list[object]:
 
 
 
-def _strip_dataclass_none(data_class: _TJ) -> _TJ: # SlottedDataclassInstance
+def _strip_dataclass_none[_TJ: SlottedDataclassInstance](data_class: _TJ) -> _TJ: # SlottedDataclassInstance
     """Remove fields equal to None recursively from a slotted dataclass.
 
     Returns a new instance without modifying the original.
@@ -314,7 +310,7 @@ def _strip_nested_in_list(item: object) -> object:
 
 
 
-def from_dict(data_class: type[_TV], data: Mapping[str, object]) -> _TV:
+def from_dict[_TV: SlottedDataclassInstance](data_class: type[_TV], data: Mapping[str, object]) -> _TV:
     """Deserialize a dataclass from a dict, with special handling for discriminated unions.
 
     For XrayConfig (and nested configs containing inbounds/outbounds), pre-processes

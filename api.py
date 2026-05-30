@@ -14,7 +14,6 @@ from abc import ABC
 from typing import (
     cast, Callable, Literal, NamedTuple,
     Sequence, Mapping,
-    TypeVar, ParamSpec,
     Concatenate
 )
 from dataclasses import asdict, is_dataclass
@@ -99,9 +98,6 @@ class BaseApi(ABC):
         pass
 
 
-P = ParamSpec('P')
-R = TypeVar('R')
-
 def _ok(
     msg: str | None = None,
     code: int = 200,
@@ -132,8 +128,33 @@ def _parse_bool(value: object) -> bool | None:
         return bool(value)
     return None
 
+
+
+type Decorated[
+    API_T: BaseApi, 
+    **P = ..., 
+    R = object
+] = Callable[Concatenate[API_T, P], R]
+type DecoratedInject[
+    API_T: BaseApi, 
+    I: object,
+    **P = ..., 
+    R = object
+] = Callable[Concatenate[API_T, I, P], R]
+type DecoratedReturn[
+    API_T: BaseApi,
+    **P = ...,
+    R = object
+] = Callable[Concatenate[API_T, P], _WrappedReturn[R]]
+type _WrappedReturn[
+    R
+] = R | tuple[Response, int]
 def _parse_basic_auth(header: str) -> tuple[str, str] | None:
-    """Parse 'Basic <base64>' header. Returns (user, pass) or None."""
+    """Parse 'Basic <base64>' header. 
+    
+    Returns:
+        (username, password) or None
+    """
     if not header.startswith("Basic "):
         return None
     try:
@@ -146,65 +167,62 @@ def _parse_basic_auth(header: str) -> tuple[str, str] | None:
         return None
 
 # ── Auth decorators ──────────────────────────────────────────────
-def requires_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concatenate[Api, P], R]:
+def requires_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]:
     """Admin API auth via Authorization header. Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]: 
+    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]: 
         provided = request.headers.get('Authorization', '')
         if not provided or not self.sub.compare(provided, self.token):
             return _err("Unauthorized", 401)
         return f(self, *args, **kwargs)
-    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
-def requires_basic_admin_auth(f: Callable[Concatenate[Api, P], R]) -> Callable[Concatenate[Api, P], R]:
+    return cast(Decorated[Api, P, R], wrapper)
+def requires_basic_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]:
     """Admin API auth via Basic auth header. Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> R | Response:
+    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]:
         provided = request.headers.get("Authorization", "")
         creds = _parse_basic_auth(provided)
         valid: tuple[str, str] = tuple(self.cfg["api_admin_ui_auth"])
-        err = make_response("Unauthorized", 401)
+        err = Response("Unauthorized")
         err.headers["WWW-Authenticate"] = 'Basic realm="Admin UI"'
         if not creds:
-            return err
+            return err, 401
         user, pw = creds
         if (not self.sub.compare(user, valid[0])) or (not self.sub.compare(pw, valid[1])):
-            return err
+            return err, 401
         return f(self, *args, **kwargs)
-    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
-def requires_webapi_auth(f: Callable[Concatenate[WebApi, str, P], R]) -> Callable[Concatenate[WebApi, P], R]:
+    return cast(Decorated[Api, P, R], wrapper)
+def requires_webapi_auth[**P, R](f: DecoratedInject[WebApi, str, P, R]) -> Decorated[WebApi, P, R]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
     Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
+    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]:
         token = request.cookies.get('token')
         username = self.validate_token(token)
         if not username:
             return _err("Invalid token.", 401)
         return f(self, username, *args, **kwargs)
-    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
-def requires_no_auth(f: Callable[Concatenate[WebApi, P], R]) -> Callable[Concatenate[WebApi, P], R]:
+    return cast(Decorated[WebApi, P, R], wrapper)
+def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P, R]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
+    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]:
         token = request.cookies.get('token')
         if token and self.validate_token(token):
             return _err("Must not be authorized.", 403)
         return f(self, *args, **kwargs)
-    return cast(Callable[Concatenate[BaseApi, P], R], wrapper)
-
+    return cast(Decorated[WebApi, P, R], wrapper)
 # ── Rate limiting ────────────────────────────────────────────────
-def rate_limit(max_requests: int) -> Callable[
-    [Callable[Concatenate[BaseApi, P], R]],
-    Callable[Concatenate[BaseApi, P], R | tuple[Response, int]],
+def rate_limit[**P, R](max_requests: int) -> Callable[
+    [Decorated[BaseApi, P, R]],
+    DecoratedReturn[BaseApi, P, R],
 ]:
     """Rate-limit by IP. Reads rl_data and rl_lock from the instance (self)."""
     def decorator(
-        f: Callable[Concatenate[BaseApi, P], R]
-    ) -> Callable[Concatenate[BaseApi, P], R | tuple[Response, int]]:
+        f: Decorated[BaseApi, P, R]
+    ) -> DecoratedReturn[BaseApi, P, R]:
         @wraps(f)
-        def wrapper(
-            self: BaseApi, *args: P.args, **kwargs: P.kwargs
-        ) -> R | tuple[Response, int]:
+        def wrapper(self: BaseApi, *args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]:
             ip = cast(str, request.headers.get("X-Real-IP", request.remote_addr))
             now = time.time()
             with self.rl_lock:
@@ -217,14 +235,14 @@ def rate_limit(max_requests: int) -> Callable[
                     return _err(msg="Too many requests.", code=429) 
                 self.rl_data[ip].append(now)
             return f(self, *args, **kwargs)
-        return cast(Callable[Concatenate[BaseApi, P], R | tuple[Response, int]], wrapper)
+        return cast(DecoratedReturn[BaseApi, P, R], wrapper)
     return decorator
 # ── Validation decorators ────────────────────────────────────────
-def requires_fields(*fields: str) -> Callable[[Callable[P, R]], Callable[P, R | tuple[Response, int]]]:
+def requires_fields[**P, R](*fields: str) -> Callable[[Callable[P, R]], Callable[P, _WrappedReturn[R]]]:
     """Validate request JSON object, store it on flask.g.json_obj, and require named fields."""
-    def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
+    def decorator(f: Callable[P, R]) -> Callable[P, _WrappedReturn[R]]:
         @wraps(f)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]:
             content = request.get_json(silent=True)
             if content is None:
                 return _err("Missing JSON data.", 400)
@@ -239,13 +257,16 @@ def requires_fields(*fields: str) -> Callable[[Callable[P, R]], Callable[P, R | 
                                                              # NOTE: as dict[Unknown, Unknown] -> type errors without this
             g.json_obj = content
             return f(*args, **kwargs)
-        return cast(Callable[P, R | tuple[Response, int]], wrapper)
+        return cast(Callable[P, _WrappedReturn[R]], wrapper)
     return decorator
-def requires_fields_strict(*fields: tuple[str, type[JsonifyValue]]) -> Callable[[Callable[P, R]], Callable[P, R | tuple[Response, int]]]:
+def requires_fields_strict[**P, R](*fields: tuple[str, type[JsonifyValue]]) -> Callable[
+    [Callable[P, R]], 
+    Callable[P, _WrappedReturn[R]]
+]:
     """Validate request JSON object, store it on flask.g.json_obj, and require named fields with strict type checking."""
-    def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
+    def decorator(f: Callable[P, R]) -> Callable[P, _WrappedReturn[R]]:
         @wraps(f)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | tuple[Response, int]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]:
             content = request.get_json(silent=True)
             if content is None:
                 return _err("Missing JSON data.", 400)
@@ -267,21 +288,19 @@ def requires_fields_strict(*fields: tuple[str, type[JsonifyValue]]) -> Callable[
             content = cast(dict[str, JsonifyValue], content)
             g.json_obj = content
             return f(*args, **kwargs)
-        return cast(Callable[P, R | tuple[Response, int]], wrapper)
+        return cast(Callable[P, _WrappedReturn[R]], wrapper)
     return decorator
-
-
-def requires_args(*arg: str) -> Callable[[Callable[P, R]], Callable[P, R | tuple[Response, int]]]:
+def requires_args[**P, R](*arg: str) -> Callable[[Callable[P, R]], Callable[P, _WrappedReturn[R]]]:
     """Validate request.args has all named fields. Returns 400 on failure."""
-    def decorator(f: Callable[P, R]) -> Callable[P, R | tuple[Response, int]]:
+    def decorator(f: Callable[P, R]) -> Callable[P, _WrappedReturn[R]]:
         @wraps(f)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | tuple[ResponseType, int]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> _WrappedReturn[R]:
             content = request.args
             missing = [x for x in arg if x not in content]
             if missing:
                 return _err(f"Missing args: {', '.join(missing)}", 400)
             return f(*args, **kwargs)
-        return cast(Callable[P, R | tuple[Response, int]], wrapper)
+        return cast(Callable[P, _WrappedReturn[R]], wrapper)
     return decorator
 
 

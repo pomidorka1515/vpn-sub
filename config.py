@@ -14,7 +14,7 @@ from loggers import Logger
 from custom_types import JsonDict, JsonValue, MISSING, MISSING_TYPE
 from typing import (
     Any, Self, Literal, Iterable,
-    cast, overload, TypeVar, NamedTuple
+    cast, overload, NamedTuple
 )
 from types import TracebackType
 from contextlib import contextmanager
@@ -43,8 +43,6 @@ __all__ = [
 SYNC_MODES = Literal['full', 'data', 'none']
 CONFIG_TYPES = Literal['json', 'jsonl']
 
-_T = TypeVar('_T')
-_TJ = TypeVar('_TJ', bound=JsonValue)
 
 # ---------------------------------------------------------------------------
 # Module-level file primitives (shared by Config and LinesConfig)
@@ -426,7 +424,7 @@ class Config(MutableMapping[str, JsonValue]):
         self._raise_if_read_only()
         return _ConfigTransaction(self)
 
-    def mutate(self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
+    def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
         """Run a callback inside a transaction and return its result.
 
         Keep callbacks short and non-blocking: they run while holding the
@@ -495,19 +493,19 @@ class Config(MutableMapping[str, JsonValue]):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get(self, key: str, default: _TJ) -> _TJ: ...
+    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
-    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
 
     @overload
-    def get(
+    def get[_T, _TJ: JsonValue](
         self,
         key: str, 
         default: _TJ | MISSING_TYPE = MISSING,
@@ -515,7 +513,7 @@ class Config(MutableMapping[str, JsonValue]):
         as_type: type[_T] | None = None
     ) -> _TJ | _T: ...
 
-    def get(
+    def get[_T](
         self,
         key: str,
         default: JsonValue | MISSING_TYPE = MISSING,
@@ -569,9 +567,9 @@ class Config(MutableMapping[str, JsonValue]):
     def pop(self, key: str) -> JsonValue: ...
 
     @overload
-    def pop(self, key: str, default: _TJ) -> _TJ: ...
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
-    def pop(self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
         self._raise_if_read_only()
         def action(tx: _ConfigTransaction) -> JsonValue:
             if default is MISSING:
@@ -585,7 +583,7 @@ class Config(MutableMapping[str, JsonValue]):
         return self._run_edit(lambda tx: tx.popitem())
 
     @overload
-    def setdefault(self, key: str, default: _TJ) -> _TJ: ...
+    def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...
@@ -619,7 +617,7 @@ class Config(MutableMapping[str, JsonValue]):
 
         self._run_edit(lambda tx: tx.update(updates))
        
-    def _run_edit(self, action: Callable[[_ConfigTransaction], _TJ]) -> _TJ:
+    def _run_edit[_TJ: JsonValue](self, action: Callable[[_ConfigTransaction], _TJ]) -> _TJ:
         with self.edit() as tx:
             result = action(tx)
         return self._detach(result)
@@ -784,7 +782,7 @@ class Config(MutableMapping[str, JsonValue]):
         )
 
     @staticmethod
-    def _detach(value: _T) -> _T:
+    def _detach[_T](value: _T) -> _T:
         if isinstance(value, (dict, list)):
             return copy.deepcopy(cast(_T, value))
         return value
@@ -950,21 +948,21 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get(self, key: str, default: _TJ) -> _TJ: ...
+    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
-    def get(self, key: str, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
+    def get[_T](self, key: str, default: MISSING_TYPE, *, as_type: type[_T]) -> _T: ...
 
     @overload
-    def get(self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
+    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
 
     @overload
-    def get(self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
+    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
 
-    def get(
+    def get[_T](
         self,
         key: str,
         default: JsonValue | MISSING_TYPE = MISSING,
@@ -987,9 +985,9 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]):
     def pop(self, key: str) -> JsonValue: ...
 
     @overload
-    def pop(self, key: str, default: _TJ) -> _TJ: ...
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
-    def pop(self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
+    def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
         data = self._require_active()
         if default is MISSING:
             return data.pop(key)
@@ -1000,7 +998,7 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]):
         return self._require_active().popitem()
 
     @overload
-    def setdefault(self, key: str, default: _TJ) -> _TJ: ...
+    def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
 
     @overload
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...

@@ -1,0 +1,301 @@
+{
+    "$schema": "../config.schema.json",
+    "uri": "sub",
+    "api_uri": "",
+    "provider_id": "",
+    "api_token": "",
+    "api_admin_ui_auth": [
+        "username",
+        "password"
+    ],
+    "panel_alert_cooldown": 3600,
+    "domain": "",
+    "fallback_domain": "",
+    "ping_check_url": "",
+    "salt": "",
+    "fingerprints": [
+        "safari",
+        "chrome",
+        "edge",
+        "firefox"
+    ],
+    "nodes": {
+        "n1": ""
+    },
+    "bot": {
+        "token": "",
+        "whitelist": []
+    },
+    "routing": {
+        "Name": "",
+        "GlobalProxy": true,
+        "DomainStrategy": "IPIfNonMatch",
+        "DirectSites": [],
+        "DirectPackages": [],
+        "DirectIp": [
+            "geoip:private"
+        ]
+    },
+    "json_template": {
+        "dns": {
+            "servers": [
+                "8.8.8.8",
+                {
+                    "address": "77.88.8.8",
+                    "domains": [
+                        "geosite:category-ru"
+                    ]
+                }
+            ],
+            "queryStrategy": "UseIPv4"
+        },
+        "routing": {
+            "rules": {},
+            "domainStrategy": "AsIs"
+        },
+        "inbounds": [],
+        "outbounds": [],
+        "remarks": ""
+    },
+    "bypass_packages": [],
+    "webui_passwords": {},
+    "webui_users": {},
+    "funny_strings": ["fill this please"],
+    "publicbot": {
+        "token": "",
+        "tg_lang": {},
+        "lang": {
+            "ru": {
+                "btn_get_sub": "🔗 Получить подписку",
+                "btn_info": "ℹ️ Информация",
+                "btn_bonus": "🎁 Ввести бонусный код",
+                "btn_lang": "🌐 Сменить язык",
+                "btn_reset": "⚠ Сбросить подписку",
+                "btn_support": "💬 Поддержка",
+                "btn_logout": "⚠ Выйти",
+                "btn_help": "ℹ Справка",
+                "btn_delete": "❌ Удалить аккаунт",
+                "btn_delete_confirm": "✅ Удалить аккаунт",
+                "btn_cancel": "🔙 Отменить",
+                "btn_settings": "⚙ Настройки",
+                "btn_chart": "📊 Мой трафик",
+                "btn_main_account": "⚙ Управление аккаунтом",
+                "btn_main_sub": "⚙ Управление подпиской",
+                "btn_main_back": "🔙 В главное меню",
+                "btn_chart_days": "{days} дн.",
+                "settings_menu": "⚙ <b>Настройки</b>\nВыберите что хотите изменить:",
+                "settings_name_prompt": "✏ Введите новое отображаемое имя:",
+                "settings_name_success": "✅ Имя успешно изменено.",
+                "settings_fp_prompt": "🔒 Выберите отпечаток:",
+                "settings_fp_success": "✅ Отпечаток изменён.",
+                "settings_pass_prompt": "🔒 Введите новый пароль:",
+                "settings_pass_success": "✅ Пароль изменён.",
+                "settings_login_prompt": "📧 Введите новый логин:",
+                "settings_login_success": "✅ Логин изменён.",
+                "no_account": "⚠ У вас нету зарегистрированного аккаунта.",
+                "confirm_delete": "⚠ <b>Вы уверены, что хотите удалить аккаунт?</b>\nЭто действие необратимо. Все данные будут удалены.\n\nНапишите \"удалить\" для подтверждения.",
+                "delete_confirm_input": "удалить",
+                "name_label": "✏ Имя",
+                "fp_label": "🔒 Отпечаток",
+                "pass_label": "🔑 Пароль",
+                "login_label": "📧 Логин",
+                "welcome_new": "👋 Добро пожаловать!\nЧтобы начать пользоваться интернетом без ограничений, нажмите «Получить подписку» и введите код приглашения.",
+                "welcome_reg": "👋 С возвращением! Выберите нужное действие в меню ниже.",
+                "enter_invite": "🔑 Пожалуйста, отправьте мне ваш код приглашения:",
+                "invalid_code": "❌ Неверный код, либо он уже был использован.",
+                "reg_success": "✅ Подписка успешно активирована!",
+                "chart_text": "📊 График: последние <b>{days}</b> дней\n\n<b>За всё время</b>\n<b>Обычный трафик</b>\n⬆️ {upload} выгружено (Up)\n⬇️ {download} загружено (Down)\nЭтот месяц:\n📦 {used} / {limit} GB <i>({percent})</i>\n\n<b>Whitelist</b>\n⬆️ {upload} выгружено\n⬇️ {download} загружено\nЭтот месяц:\n📦 {wl_used} / {wl_limit} GB <i>({wl_percent})</i>",
+                "reset_success": "✅ Ссылка сброшена. Не забудьте обновить в приложении!",
+                "info_text": "ℹ️ <b>Ваш профиль:</b> <code>{username}</code>\nВключен: {status}\nДоступ к WL-локациям: {wl_status}\nВ сети: {online}\n\n📊 <b>Трафик:</b>\nСкачано за всё время: {total} MB\nВ этом месяце: {monthly} MB / {limit}\nWL за всё время: {wl_total} MB\nWL в этом месяце: {wl_monthly} MB / {wl_limit}\nПодробная информация:\nUp {up} MB | Down {down} MB\nWL Up {wl_up} MB | Down {wl_down} MB\n<i>wl — whitelist-локации</i>\n⏳ <b>Осталось времени:</b>\n{days}\nОтпечаток: {fingerprint}",
+                "help_text": "ℹ️ <b>Описания профилей</b>\n\n{text}",
+                "enter_bonus": "🎁 Отправьте бонусный код для пополнения времени/трафика:",
+                "bonus_success": "✅ Бонусный код успешно применен! Ваш тариф обновлен.",
+                "logout_success": "✅ Вы вышли из аккаунта.",
+                "enter_token": "🔑 Введите вашу ссылку или токен.",
+                "support_text": "💬 По всем вопросам обращайтесь: @pomidorka_1515",
+                "confirm_reset": "⚠ Вы уверены что хотите сбросить ссылку и айди подписки? Напишите \"согласен\" чтобы продолжить.",
+                "choose_lang": "🌐 Выберите язык / Choose language:",
+                "choose_chart_days": "Выберите кол-во дней.",
+                "lang_set": "🇷🇺 Язык изменен на Русский.",
+                "chart_generating": "⌛ Генерация графика...",
+                "unlimited": "Безлимит",
+                "lifetime": "Навсегда",
+                "reset_confirm_input": "согласен",
+                "cancelled": "🔙 Действие отменено. Главное меню:",
+                "btn_login": "🔑 Войти",
+                "btn_login_credentials": "По логину и паролю",
+                "btn_login_token": "По ссылке",
+                "enter_email": "📧 Введите ваш логин",
+                "enter_pass": "🔒 Введите пароль:",
+                "login_success": "✅ Успешный вход!",
+                "delete_success": "✅ Аккаунт удален.",
+                "login_fail": "❌ Неверный логин, пароль или токен.",
+                "choose_login": "🔒 Как бы вы хотели войти?",
+                "warning_disabled": "⚠ Ваша подписка истекла.",
+                "warning_traffic": "⚠ Вы использовали <b>{used}</b> ГБ из <b>{available}</b> ГБ доступных вам.",
+                "warning_traffic_disabled": "⚠ Вы использовали весь доступный вам трафик ({available} ГБ). Подписка была отключена.",
+                "warning_traffic_whitelist": "⚠ Вы использовали <b>{used}</b> MB из <b>{available}</b> GB на БС локациях.",
+                "warning_traffic_whitelist_disabled": "⚠ Вы использовали весь доступный Вам трафик на БС локациях ({available} ГБ). Они были отключены для вас.",
+                "warning_days": "⚠ Осталось <b>{days}</b> дней до конца подписки.",
+                "length_username": "❌ Слишком длинное имя пользователя. Максимальная длина: {ln} символов.",
+                "length_displayname": "❌ Слишком длинное отображаемое имя. Максимальная длина: {ln} символов.",
+                "get_sub_text": "**🚀 Ваша подписка готова!**\nОтсканируйте QR-код для получения ссылки или выберите способ подключения ниже.\n*⚠️ Никому не пересылайте это сообщение, оно содержит ваш личный ключ доступа.*",
+                "get_sub_btn_link": "🌐 Открыть ссылку",
+                "get_sub_btn_happ": "⚡ Добавить в Happ"
+            },
+            "en": {
+                "btn_get_sub": "🔗 Get subscription",
+                "btn_info": "ℹ️ Information",
+                "btn_bonus": "🎁 Enter Bonus Code",
+                "btn_lang": "🌐 Change Language",
+                "btn_reset": "⚠ Reset subscription",
+                "btn_support": "💬 Support",
+                "btn_logout": "⚠ Logout",
+                "btn_help": "ℹ Reference",
+                "btn_delete": "❌ Delete account",
+                "btn_delete_confirm": "✅ Yes, delete my account",
+                "btn_cancel": "🔙 Cancel",
+                "btn_settings": "⚙ Settings",
+                "btn_chart": "📊 My usage",
+                "btn_main_account": "⚙ Account management",
+                "btn_main_sub": "⚙ Subscription management",
+                "btn_main_back": "🔙 Go back",
+                "btn_chart_days": "{days} d",
+                "settings_menu": "⚙ <b>Settings</b>\nChoose what to change:",
+                "settings_name_prompt": "✏ Enter your new display name:",
+                "settings_name_success": "✅ Display name changed.",
+                "settings_fp_prompt": "🔒 Choose a fingerprint:",
+                "settings_fp_success": "✅ Fingerprint changed.",
+                "settings_pass_prompt": "🔒 Enter your new password:",
+                "settings_pass_success": "✅ Password changed.",
+                "settings_login_prompt": "📧 Enter your new login:",
+                "settings_login_success": "✅ Login changed.",
+                "confirm_delete": "⚠ <b>Are you sure you want to delete your account?</b>\nThis action is irreversible. All data will be permanently removed.\n\nType \"delete\" to confirm.",
+                "no_account": "⚠ You do not have a registered account.",
+                "enter_token": "🔑 Enter your link or token.",
+                "delete_confirm_input": "delete",
+                "chart_generating": "⌛ Generating chart...",
+                "name_label": "✏ Name",
+                "fp_label": "🔒 Fingerprint",
+                "pass_label": "🔑 Password",
+                "login_label": "📧 Login",
+                "btn_login_credentials": "With login and password",
+                "btn_login_token": "With subscription link",
+                "choose_login": "🔒 How would you like to log in?",
+                "choose_chart_days": "Choose a day amount.",
+                "welcome_new": "👋 Welcome!\nTo start using the internet, click «Get Subscription» and enter your invite code.",
+                "welcome_reg": "👋 Welcome back! Choose an action below.",
+                "enter_invite": "🔑 Please send me your invite code:",
+                "invalid_code": "❌ Invalid code or already used.",
+                "reg_success": "✅ Subscription successfully activated!",
+                "reset_success": "✅ Link successfully reset. Make sure to update it in your app!",
+                "logout_success": "✅ Logged out successfully!",
+                "chart_text": "📊 Chart: last <b>{days}</b> days\n\n<b>All-Time</b>\n<b>Regular traffic</b>\n⬆️ {upload} uploaded\n⬇️ {download} downloaded\nThis month:\n📦 {used} / {limit} GB <i>({percent})</i>\n\n<b>Whitelist</b>\n⬆️ {upload} uploaded\n⬇️ {download} downloaded\nThis month:\n📦 {wl_used} / {wl_limit} GB <i>({wl_percent})</i>",
+                "info_text": "ℹ️ <b>Your Profile:</b> <code>{username}</code>\nEnabled: {status}\nAccess to WL locations: {wl_status}\nOnline: {online}\n\n📊 <b>Traffic:</b>\nTotal downloaded: {total} MB\nThis month: {monthly} MB / {limit}\nWL traffic total: {wl_total} MB\nWL traffic this month: {wl_monthly} MB / {wl_limit}\nDetailed info:\nUp {up} MB | Down {down} MB\nWL Up {wl_up} MB | Down {wl_down} MB\n<i>WL — whitelist locations</i>\n\n⏳ <b>Time remaining:</b>\n{days}\nFingerprint: {fingerprint}",
+                "help_text": "ℹ️ <b>VPN Profile descriptions</b>\n\n{text}",
+                "enter_bonus": "🎁 Send your bonus code:",
+                "bonus_success": "✅ Bonus code successfully applied!",
+                "delete_success": "✅ Account deleted successfully.",
+                "confirm_reset": "⚠ Are you sure you want to reset your link and UUID? Say \"confirm\" to confirm.",
+                "support_text": "💬 For any questions contact: @pomidorka_1515",
+                "choose_lang": "🌐 Выберите язык / Choose language:",
+                "lang_set": "🇬🇧 Language changed to English.",
+                "unlimited": "Unlimited",
+                "lifetime": "Lifetime",
+                "reset_confirm_input": "confirm",
+                "cancelled": "🔙 Action cancelled. Main menu:",
+                "btn_login": "🔑 Login",
+                "enter_email": "📧 Enter your Email (login):",
+                "enter_pass": "🔒 Enter your password:",
+                "login_success": "✅ Successfully logged in!",
+                "login_fail": "❌ Invalid login, password or token.",
+                "warning_disabled": "⚠ Your subscripiton has expired.",
+                "warning_traffic": "⚠ You have used <b>{used}</b> GB out of <b>{available}</b> GB available to you.",
+                "warning_traffic_disabled": "⚠ You have used all bandwidth available to you ({available} ГБ). Subscription has been disabled.",
+                "warning_traffic_whitelist": "⚠ You have used <b>{used}</b> MB out of <b>{available}</b> GB on whitelist locations.",
+                "warning_traffic_whitelist_disabled": "⚠ You have used all bandwidth available to you on whitelist locations ({available} ГБ). Whitelist locations have been disabled for you.",
+                "warning_days": "⚠ There are <b>{days}</b> days left until your subscription expires.",
+                "length_username": "❌ Username too long. Maximum length: {ln} symbols.",
+                "length_displayname": "❌ Display name too long. Maximum length: {ln} symbols.",
+                "get_sub_text": "**🚀 Your subscription is ready!**\nScan the QR code to set it up, or choose a connection method below.\n*Do not forward this message to anyone, as it contains your personal access key.*",
+                "get_sub_btn_link": "🌐 Open Link",
+                "get_sub_btn_happ": "⚡ Add to Happ"
+            }
+        }
+    },
+    "codes": [],
+    "3xui": {
+        "local_panel": {
+            "name": "x",
+            "address": "127.0.0.1",
+            "port": "x",
+            "uri": "/backend/dashboard",
+            "username": "root",
+            "password": "123",
+            "https": false,
+            "whitelist": false,
+            "ignore_inbounds": [],
+            "inject_headers": {}
+        }
+    },
+    "sub_name": "pomi's VPN",
+    "description": [
+        "👋Welcome, %s3!\n%t1%x1%l1Bandwidth used (all-time): ↑ %s1%u1 / ↓ %s2%u2",
+        "👋Привет, %s3!\n%t1%x1%l1Трафика использовано за все время: ↑ %s1%u1 / ↓ %s2%u2",
+        "👋Welcome, %s3!\n⛔Monthly quota exceeded! %n1%u1 > %n2%u2",
+        "👋Привет, %s3!\n⛔Месячный лимит истек! %n1%u1 > %n2%u2",
+        "Bandwidth used (this month): %n1%y1 / %n2%y2\n",
+        "Трафик за этот месяц: %n1%y1 / %n2%y2\n",
+        "Subscription expires at: %t3 (days left: %t2)\n",
+        "Подписка до: %t3 (осталось дней: %t2)\n",
+        "Subscription expired at: %t3, %t2 days ago\n",
+        "Подписка закончилась: %t3!, %t2 дней назад\n",
+        "🏳️ WL Bandwidth: %w1%i1 / %w2%i2\n",
+        "🏳️ Трафик WL: %w1%i1 / %w2%i2\n",
+        "🏳️⛔ WL Bandwidth exceeded! %w1%i1 > %w2%i2",
+        "🏳️⛔ Трафик WL кончился! %w1%i1 > %w2%i2"
+    ],
+    "flags": {
+        "profile1": "🇫🇮"
+    },
+    "users": {},
+    "tokens": {},
+    "displaynames": {},
+    "tgids": {},
+    "wl_bw": {},
+    "bw": {},
+    "profiles": {
+        "profile1": ["English", "Russian"]
+    },
+    "json_profiles": {
+        "wstls": {
+            "tag": "proxy",
+            "protocol": "vless",
+            "settings": {},
+            "streamSettings": {}
+        }
+    },
+    "profileDescriptions": {
+        "profile1": ["English", "Russian"]
+    },
+    "whitelistProfiles": [
+        "profile1"
+    ],
+    "xhttpExtra": {},
+    "masterLinks": {
+        "profile1": "vless://..."
+    },
+    "profileNodes": {
+        "profile1": "n1"
+    },
+    "shortProfileDescriptions": {
+        "profile1": ["English", "Russian"]
+    },
+    "userFingerprints": {},
+    "time": {},
+    "status": {},
+    "statusTime": {},
+    "statusWl": {},
+    "_notified": [],
+    "_wl_notified": []
+}

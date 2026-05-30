@@ -23,7 +23,7 @@ import qrcode
 
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
-from typing import Any, cast, NamedTuple, overload, Literal
+from typing import Any, cast, NamedTuple, overload, Literal, Callable
 from dacite import from_dict
 from custom_types import (
     ServerMetricsResponse, Inbound, 
@@ -90,6 +90,7 @@ def fmt_bytes(b: float) -> str:
         if b >= div:
             return f'{b / div:.1f} {unit}'
     return f'{int(b)} B'
+
 
 class BandwidthInfo(NamedTuple):
     """
@@ -1118,7 +1119,8 @@ class Subscription:
     ) -> None | str:
         """
         Creates a code.
-        If permanent is True, 'uses' param is ignored."""
+        If permanent is True, 'uses' param is ignored.
+        """
         
         if not isinstance(code, str) or not code: 
             return "code must be a non-empty string"
@@ -1670,14 +1672,20 @@ class BWatch:
             self._panel_alerts: dict[str, int | float] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', as_type=int) or 3600
 
-            self._threads: tuple[threading.Thread, ...] = (
-                threading.Thread(target=self._every_120s, daemon=True, name="Quota & Notifs"),
-                threading.Thread(target=self._every_2h, daemon=True, name="Date check"),
-                threading.Thread(target=self._every_15s, daemon=True, name="Bandwidth"),
-                threading.Thread(target=self._every_24h, daemon=True, name="Reset notifs & Prune BW Info"),
-                threading.Thread(target=self._every_5m, daemon=True, name="Panels check"),
-                threading.Thread(target=self._every_24h_snapshot, daemon=True, name="Daily BW Snapshot")
+            
+            _threads: tuple[tuple[Callable[..., object], str], ...] = (
+                (self._every_120s, "Quota & Notifs"),
+                (self._every_2h, "Date check"),
+                (self._every_15s, "Bandwidth"),
+                (self._every_24h, "Reset notifs & Prune BW Info"),
+                (self._every_5m, "Panels check"),
+                (self._every_24h_snapshot, "Daily BW Snapshot"),
             )
+            self._threads: tuple[threading.Thread, ...] = tuple(
+                threading.Thread(target=target, name=name, daemon=True)
+                for target, name in _threads
+            )
+
     def start(self) -> None:
         initial_mem: dict[str, BandwidthInfo] = {}
         initial_wl_mem: dict[str, BandwidthInfo] = {}

@@ -25,10 +25,45 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 ```bash
 pip install -r requirements.txt
 cp config.example.json config.json  # fill in panel credentials, bot tokens, etc
-gunicorn --threads 4 -b 127.0.0.1:5550 --graceful-timeout 30 app:app
+gunicorn --threads 4 -b 127.0.0.1:5550 --graceful-timeout 30 app:app # or run as a systemd service
 ```
 
-**Note:** Use `--threads` (not `-w`/`--workers`) — the app uses file locking to elect a primary worker for background tasks (BWatch bandwidth monitor, bots). Multiple *processes* will each try to start background threads, which is wasteful; multiple *threads* within one process works correctly.
+### Systemd service
+
+```systemd
+[Unit]
+Description=subscription backend
+After=network.target
+Wants=network.target
+
+[Service]
+User=root
+WorkingDirectory=X
+Environment=PYTHONUNBUFFERED=1
+ExecStart=X/venv/bin/gunicorn \
+    --bind 127.0.0.1:X \
+    --capture-output \
+    --access-logfile - \
+    --error-logfile - \
+    --limit-request-line 0 \
+    --threads 3 \
+    --config gunicorn.conf.py \
+    --graceful-timeout 30 \
+    app:app
+TimeoutStopSec=35
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
+```
+*(replace `X` with your path/port/etc)*
+
+### Example Config
+**See [example config](docs/EXAMPLE.config.json)**
+
+## Notes
+Use `--threads` (not `-w`/`--workers`) — the app uses file locking to elect a primary worker for background tasks (BWatch bandwidth monitor, bots). Multiple *processes* will each try to start background threads, which is wasteful; multiple *threads* within one process works correctly.
 
 Config is validated against `config.schema.json` (pointed to by `"$schema"` in the config file) on every load and commit. Remote schemas are rejected; the schema is cached and only re-read when the file changes.
 
@@ -38,7 +73,7 @@ Config is validated against `config.schema.json` (pointed to by `"$schema"` in t
 - Startup order matters: panels → Subscription → BWatch + bots (handled automatically by `app.py`)
 
 ## Status
-Personal project. Works in production for my small user base. Not stable..
+Personal project. Works in production for my small user base.
 
 ## License
 GPL v3
