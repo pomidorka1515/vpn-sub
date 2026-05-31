@@ -66,6 +66,11 @@ class _BarKwargs(TypedDict):
     edgecolor: str
     zorder: int
 
+def _calc_bar_width(n_bars: int, *, min_w: float = 0.4, max_w: float = 0.9) -> float:
+    """Calculate bar width based on number of bars for stacked bar charts."""
+    width = 1.0 - (n_bars - 1) * 0.03
+    return max(min_w, min(max_w, width))
+
 def _format_ticks(v: float, pos: float | None) -> str:
     return fmt_bytes(v) 
 
@@ -93,6 +98,7 @@ def bandwidth_chart(
     *,
     label: str | None = None,
     lang: str = "en",
+    bar_width: float | None = None,
 ) -> io.BytesIO | None:
     """Render two stacked bar charts (regular + whitelist) into a single PNG.
 
@@ -100,6 +106,8 @@ def bandwidth_chart(
         snapshots: daily bandwidth records, will be sorted ascending by ts
         label: optional, included in the suptitle if provided
         lang: language code ("ru" or "en"), defaults to "en"
+        bar_width: optional, bar width override. Defaults to auto-calculated
+            based on number of data points to maintain good visual density.
 
     Returns:
         BytesIO containing PNG bytes, positioned at start. None if no data.
@@ -137,7 +145,9 @@ def bandwidth_chart(
                  x=0.07, y=0.97, ha='left')
     fig.text(0.07, 0.935, period, color=_TEXT_DIM, fontsize=10, ha='left')
     
-    bar_kwargs = _BarKwargs(width=0.75, edgecolor='none',zorder=2)
+    n = len(labels)
+    calculated_width = _calc_bar_width(n) if bar_width is None else bar_width
+    bar_kwargs = _BarKwargs(width=calculated_width, edgecolor='none', zorder=2)
     _style_axes(ax_reg, t["regular_traffic"])
     ax_reg.bar(labels, reg_down, color=_REG_DOWN, label=t["download"], **bar_kwargs)
     ax_reg.bar(labels, reg_up, bottom=reg_down, color=_REG_UP,

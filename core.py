@@ -567,8 +567,8 @@ class Subscription:
                 )
                 content = response.json()
                 if not (response.status_code in (200, 201) and content.get('success')):
-                    err_msg: str = content.get('msg')
-                    return err_msg
+                    _err_msg: str = content.get('msg')
+                    return _err_msg
                 
             with self.cfg as d:
                 data: dict[str, bool] = d.setdefault('statusWl', {})
