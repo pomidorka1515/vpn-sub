@@ -23,7 +23,7 @@ import qrcode
 
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
-from typing import Any, cast, NamedTuple, overload, Literal, Callable
+from typing import Any, cast, NamedTuple, overload, Literal, Callable, Sequence
 from dacite import from_dict
 from custom_types import (
     ServerMetricsResponse, Inbound, 
@@ -1620,16 +1620,20 @@ class BWatch:
     """Class for monitoring bandwidth.
     Dependencies: Subscription
     Classes depending on this: Api, WebApi"""
-    def __init__(self, 
-                 cfg: ConfigLike, 
-                 bw_cfg: ConfigLike,
-                 sub: Subscription, 
-                 bot: PublicBotLike | None = None,
-                 admin_bot: AdminBotLike | None = None):
+    def __init__(
+        self, 
+        cfg: ConfigLike, 
+        bw_cfg: ConfigLike,
+        snap_cfg: ConfigLike,
+        sub: Subscription, 
+        bot: PublicBotLike | None = None,
+        admin_bot: AdminBotLike | None = None
+    ):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg: ConfigLike = cfg
             self.bw_cfg: ConfigLike = bw_cfg
+            self.snap_cfg: ConfigLike = snap_cfg
             self._stop_event = threading.Event()
             self._mem_lock = threading.Lock()  # single lock for all mem/wl_mem access
             self.sub: Subscription = sub
@@ -1694,7 +1698,9 @@ class BWatch:
         if x is not None:
             self.log.critical(f"update_user error: {x}") 
     
-    def prune_old_snapshots(self) -> None:
+    # prune_old_<cfg name>_snapshots
+
+    def prune_old_bw_snapshots(self) -> None:
         with self.bw_cfg as d:
             meta: dict[str, int] = d.setdefault("_meta", {})
             retention = meta.get("retention_days", 30)
@@ -1703,7 +1709,16 @@ class BWatch:
                 snapshots = d["users"][user]["snapshots"]
                 d["users"][user]["snapshots"] = [s for s in snapshots if s["ts"] >= cutoff]
             meta["last_prune"] = int(time.time())
-
+    
+    def prune_old_snap_snapshots(self) -> None:
+        with self.snap_cfg as d:
+            meta: dict[str, int] = d.setdefault("_meta", {})
+            snapshots: Sequence[dict[str, int | dict[str, object]]] = d.setdefault("snapshots", [])
+            retention = meta.get("retention_days", 30)
+            cutoff = int(time.time()) - retention * 86400
+            d["snapshots"] = [s for s in snapshots if cast(int, s["ts"]) >= cutoff]
+            meta["last_prune"] = int(time.time())
+    
     def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
         wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
@@ -1873,6 +1888,20 @@ class BWatch:
             t['_notified'] = []
             t['_wl_notified'] = []
 
+    def record_snap_snapshot(self) -> None:
+        """Record one state snapshot (`SysUtil` + panels) for today."""
+        data: dict[str, int | dict[str, object]] = {
+            "ts": int(time.time()) - (int(time.time()) % 86400),
+            "host": asdict(SysUtil.full_info()),
+            "panels": {}
+        }
+        for panel in self.sub.panels:
+            status = self.sub.getstatus(panel)
+            if status is not None:
+                data[panel.name] = asdict(status.obj)
+
+        with self.snap_cfg as d:
+            d.get("snapshots", as_type=list[dict[str, object]])
     def record_daily_snapshot(self) -> None:
         """Record one bandwidth snapshot per user for today (UTC midnight).
 
@@ -1933,7 +1962,7 @@ class BWatch:
                     else:
                         snaps.insert(0, asdict(snap))
 
-        self.prune_old_snapshots()
+        self.prune_old_bw_snapshots()
     
     ### Helper functions ###
     def _every_120s(self) -> None:
@@ -1948,7 +1977,7 @@ class BWatch:
     def _every_24h(self) -> None:
         while not self._stop_event.wait(86400):
             self.reset()
-            self.prune_old_snapshots()
+            self.prune_old_bw_snapshots()
     def _every_24h_snapshot(self) -> None:
         while not self._stop_event.wait(86400):
             self.record_daily_snapshot()

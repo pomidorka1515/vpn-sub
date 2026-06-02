@@ -675,6 +675,7 @@ class FullSystemInfo:
     app_threads: tuple[ThreadInfo, ...]
     app_gc_stats: GCStats
 
+
 ### Helper functions ###
 def client_stats_to_settings(
     stats: ClientStats, 
