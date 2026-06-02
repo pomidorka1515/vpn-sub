@@ -19,6 +19,7 @@ from typing import (
 from dataclasses import asdict, is_dataclass
 
 from custom_types import ConfigLike, LinesConfigLike, NewUserInfo
+from util import parse_bool
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
@@ -114,19 +115,6 @@ def _err(
     """Internal helper function to return an error Response."""
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
-def _parse_bool(value: object) -> bool | None:
-    """Convert boolean-like values to actual bool."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        value = value.lower().strip()
-        if value in ('true', 'yes', '1', 'on', 'y'):
-            return True
-        if value in ('false', 'no', '0', 'off', 'n'):
-            return False
-    if isinstance(value, int):
-        return bool(value)
-    return None
 
 
 
@@ -172,7 +160,8 @@ def _parse_basic_auth(header: str) -> tuple[str, str] | None:
 
 # ── Auth decorators ──────────────────────────────────────────────
 def requires_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]:
-    """Admin API auth via Authorization header. Returns 401 on failure."""
+    """
+    Admin API auth via Authorization header. Returns 401 on failure."""
     @wraps(f)
     def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]: 
         provided = request.headers.get('Authorization', '')
@@ -206,7 +195,7 @@ def requires_webapi_auth[**P, R](f: DecoratedInject[WebApi, str, P, R]) -> Decor
         if not username:
             return _err("Invalid token.", 401)
         return f(self, username, *args, **kwargs)
-    return cast(Decorated[WebApi, P, R], wrapper)
+    return cast(Decorated[BaseApi, P, R], wrapper)
 def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P, R]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)
@@ -215,7 +204,7 @@ def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P,
         if token and self.validate_token(token):
             return _err("Must not be authorized.", 403)
         return f(self, *args, **kwargs)
-    return cast(Decorated[WebApi, P, R], wrapper)
+    return cast(Decorated[BaseApi, P, R], wrapper)
 # ── Rate limiting ────────────────────────────────────────────────
 def rate_limit[**P, R](max_requests: int) -> Callable[
     [Decorated[BaseApi, P, R]],
@@ -397,7 +386,7 @@ class WebApi(BaseApi):
         domain = self.cfg['domain']
         link = f"{domain}/sub?token={token}&lang={lang}"
         
-        if _parse_bool(request.args.get('happ')):
+        if parse_bool(request.args.get('happ')):
             link = f"happ://add/{link}"
         
         try:
@@ -773,7 +762,7 @@ class Api(BaseApi):
         try:
             content = g.json_obj
             username: str = content.get('user')
-            perma = _parse_bool(content.get('perma', 'true'))
+            perma = parse_bool(content.get('perma', 'true'))
             if perma is None:
                 return _err("'perma' must be bool-like")
             if not self.sub.isuser(username):
@@ -798,7 +787,7 @@ class Api(BaseApi):
     
     @requires_admin_auth
     def user_onlines(self) -> ResponseType:
-        new = _parse_bool(request.args.get('keyed', False))
+        new = parse_bool(request.args.get('keyed', False))
         if new is None:
             return _err("'keyed' must be bool-like")
         online_users = self.sub.get_online_users(new)
@@ -892,7 +881,7 @@ class Api(BaseApi):
 
             for k, v in raw_data.items():
                 if k == 'permanent':
-                    parsed = _parse_bool(v)
+                    parsed = parse_bool(v)
                     if parsed is None:
                         return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
                     data[k] = parsed 

@@ -16,6 +16,9 @@ from loggers import Logger
 
 from flask import Flask
 from typing import TypedDict
+
+# mypy: disable-error-code="arg-type"
+
 ##############################################################
 ### Startup sequence. Do not touch if you dont understand. ###
 ### Order matters. A lot.                                  ###

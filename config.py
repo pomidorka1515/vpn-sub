@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Generator, MutableMapping, Mapping, Sequence
 from loggers import Logger
-from custom_types import JsonDict, JsonValue, MISSING, MISSING_TYPE
+from custom_types import JsonDict, JsonValue, MISSING, MISSING_TYPE, _ConfigTransactionLike
 from typing import (
     Any, Self, Literal, Iterable,
     cast, overload, NamedTuple
@@ -413,7 +413,7 @@ class Config(MutableMapping[str, JsonValue]):
             self._raise_if_used_inside_transaction()
             return self._reload_locked(create_if_missing=True, exclusive=True)
 
-    def edit(self) -> _ConfigTransaction:
+    def edit(self) -> _ConfigTransactionLike:
         """Open an explicit transaction.
 
         Usage:
@@ -438,13 +438,13 @@ class Config(MutableMapping[str, JsonValue]):
         """
         self._raise_if_read_only()
         with self.edit() as tx:
-            result = callback(tx)
+            result = callback(cast(_ConfigTransaction, tx))
         return self._detach(result)
 
-    def __enter__(self) -> _ConfigTransaction:
+    def __enter__(self) -> _ConfigTransactionLike:
         self._raise_if_read_only()
         tx = self.edit()
-        self._context_transaction = tx
+        self._context_transaction = cast(_ConfigTransaction, tx)
         try:
             return tx.__enter__()
         except Exception:
@@ -619,7 +619,7 @@ class Config(MutableMapping[str, JsonValue]):
        
     def _run_edit[_TJ: JsonValue](self, action: Callable[[_ConfigTransaction], _TJ]) -> _TJ:
         with self.edit() as tx:
-            result = action(tx)
+            result = action(cast(_ConfigTransaction, tx))
         return self._detach(result)
 
     def _raise_if_used_inside_transaction(self) -> None:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from loggers import Logger
-from core import Subscription, fmt_bytes, SERVER_TZ
+from core import Subscription, SERVER_TZ
 from session import XUiSession
 from chart import bandwidth_chart, leaderboard_chart
 from custom_types import ConfigLike
+from util import fmt_bytes, fmt_time
 
 import telebot
 import time
@@ -379,11 +380,10 @@ class AdminBot:
             return
         obj = info.obj
         obj.format()
-        sys_up = self.sub.fmt_time(obj.uptime)
-        app_up = self.sub.fmt_time(obj.appStats.uptime)
+        sys_up = fmt_time(obj.uptime)
+        app_up = fmt_time(obj.appStats.uptime)
         xr = obj.xray
-        xr_state = xr.state
-        xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xr.errorMsg}"        
+        xr_status = "🟢 Работает" if xr.state == "running" else f"🔴 {xr.errorMsg}"        
         GB = 1024 ** 3
         MB = 1024 ** 2
         text = f"""📊 <b>Статус сервера {panel.name}</b>

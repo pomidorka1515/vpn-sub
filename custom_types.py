@@ -32,6 +32,9 @@ __all__ = [
 
     'UserInfoBandwidthTotal', 'UserInfoBandwidth', 'UserInfo',
 
+    'CPUInfo', 'LoadAverage', 'RamInfo', 'SwapInfo', 'SystemMemory',
+    'IPList', 'ConnCount', 'AppMemory', 'GCGenStats', 'GCStats',
+    'ThreadInfo', 'FullSystemInfo',
     'client_stats_to_settings',
 
     'JsonValue', 'JsonDict', 'MISSING_TYPE',
@@ -39,7 +42,7 @@ __all__ = [
     'RequestKwargs'
 ]
 
-type JsonValue = int | float | Mapping[str, 'JsonValue'] | Sequence['JsonValue'] | str | bool | None
+type JsonValue = int | float | Mapping[str, JsonValue] | Sequence[JsonValue] | str | bool | None
 type JsonDict = dict[str, JsonValue]
 
 class MISSING_TYPE:
@@ -49,6 +52,12 @@ class MISSING_TYPE:
 
 MISSING: Final[MISSING_TYPE] = MISSING_TYPE()
 
+# pyright: reportPrivateUsage=false
+# pyright: reportUnnecessaryIsInstance=false
+# pyright: reportIncompatibleMethodOverride=false
+# mypy: disable-error-code="attr-defined"
+# mypy: disable-error-code="override"
+# pylint: disable=protected-access
 
 ### Stub Protocols ###
 
@@ -584,6 +593,87 @@ class UserInfo:
     time: int
     online: bool
     bandwidth: UserInfoBandwidth
+
+### SysUtil ###
+@dataclass(slots=True, frozen=True, kw_only=True)
+class CPUInfo:
+    cores: int | None
+    name: str
+    mhz_max: float | int
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class LoadAverage:
+    load_1m: float
+    load_5m: float
+    load_15m: float
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class RamInfo:
+    total: int
+    available: int
+    used: int
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class SwapInfo:
+    total: int
+    free: int
+    used: int
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class SystemMemory:
+    ram: RamInfo
+    swap: SwapInfo
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class IPList:
+    ipv4: tuple[str, ...] | None
+    ipv6: tuple[str, ...] | None
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ConnCount:
+    tcp: int
+    udp: int
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class AppMemory:
+    ram: float
+    swap: float
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GCGenStats:
+    collections: int
+    collected: int
+    uncollectable: int
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GCStats:
+    gc_counts: tuple[int, int, int]
+    gc_thresholds: tuple[int, int, int]
+    gc_stats: tuple[GCGenStats, ...]
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ThreadInfo:
+    name: str
+    ident: int | None
+    daemon: bool
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class FullSystemInfo:
+    cpu: float
+    process_count: int
+    uptime: float
+    cpu_info: CPUInfo
+    loadavg: LoadAverage
+    network: NetTrafficStats
+    memory: SystemMemory
+    ip: IPList
+    connections: ConnCount
+
+    app_memory: AppMemory
+    app_uptime: float
+    app_thread_amount: int
+    app_threads: tuple[ThreadInfo, ...]
+    app_gc_stats: GCStats
 
 ### Helper functions ###
 def client_stats_to_settings(

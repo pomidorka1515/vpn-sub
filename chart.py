@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
-from core import BandwidthSnapshot, fmt_bytes
+from core import BandwidthSnapshot
+from util import fmt_bytes
 from typing import cast, TypedDict, Literal
 __all__ = ['bandwidth_chart', 'leaderboard_chart']
 
@@ -24,11 +25,7 @@ _REG_UP   = '#d1d5db'
 _WL_DOWN  = '#6b7280'
 _WL_UP    = '#a1a1aa'
 
-### NOTE ###
-# Matplotlib typings arent perfect.
-# Having >20 pyright errors with strict type checking 
-# is normal, its just noise.
-### NOTE ###
+# pyright: reportUnknownMemberType=false
 
 _LANG = {
     "ru": {

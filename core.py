@@ -30,13 +30,14 @@ from custom_types import (
     SettingsClient, NewUserInfo,
     RegisterWithCodeInfo, CodeObject,
     UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal, 
-    ResetUserObject, 
+    ResetUserObject,
     ApplyBonusCodeObject,
-    PublicBotLike, AdminBotLike,
+    PublicBotLike, AdminBotLike, 
     client_stats_to_settings,
     ConfigLike, LinesConfigLike,
     JsonValue
 )
+from util import fmt_bytes_tuple, SysUtil
 from dataclasses import dataclass, asdict
 from collections.abc import MutableMapping, Mapping
 
@@ -44,8 +45,7 @@ from collections.abc import MutableMapping, Mapping
 
 __all__ = [
     "Subscription", "BWatch", 
-    "BandwidthInfo", "BandwidthSnapshot", 
-    "fmt_bytes", "fmt_bytes_tuple",
+    "BandwidthInfo", "BandwidthSnapshot",
     "SERVER_TZ"
 ]
 
@@ -72,24 +72,6 @@ AUDIT_VALUES = Literal[
 
 ]
 
-def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
-    """
-    Format bytes into a tuple.
-    Returns:
-        tuple[amount, label]  
-        Example: ("193", "MB")
-    """
-    for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
-        if value >= div:
-            return str(round(value / div, 2)), unit
-    return str(round(value / 10**6, 2)), "MB"
-
-def fmt_bytes(b: float) -> str:
-    """Format bytes as short human-readable string. Does NOT return a tuple."""
-    for unit, div in (('TB', 10**12), ('GB', 10**9), ('MB', 10**6), ('KB', 10**3)):
-        if b >= div:
-            return f'{b / div:.1f} {unit}'
-    return f'{int(b)} B'
 
 
 class BandwidthInfo(NamedTuple):
@@ -126,17 +108,16 @@ class BandwidthSnapshot:
     wl_up: int = 0
     wl_down: int = 0
 
+
 class Subscription:
-    """Core class.  
-    Dependencies: XUiSession, Config.  
-    Classes depending on this: Literally all except Logger, Config, XUiSession"""
-    def __init__(self, 
-                 cfg: ConfigLike,
-                 bw_cfg: ConfigLike,
-                 app: Flask,
-                 panels: list[XUiSession],
-                 whitelist_panel: XUiSession | None,
-                 audit_cfg: LinesConfigLike | None = None
+    def __init__(
+        self, 
+        cfg: ConfigLike,
+        bw_cfg: ConfigLike,
+        app: Flask,
+        panels: list[XUiSession],
+        whitelist_panel: XUiSession | None,
+        audit_cfg: LinesConfigLike | None = None
     ):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -1305,20 +1286,8 @@ class Subscription:
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)
 
-    @staticmethod
-    def fmt_time(seconds: int) -> str:
-        if seconds < 60:
-            return f"{seconds}с"
-        m, s = divmod(seconds, 60)
-        h, m = divmod(m, 60)
-        d, h = divmod(h, 24)
-        _ = s # Type checkers, just shut up already.
-        if d > 0:
-            return f"{d}д {h}ч {m}м"
-        if h > 0:
-            return f"{h}ч {m}м"
-        return f"{m}м"
-    
+
+
     def get_subscription(
         self, 
         *,
