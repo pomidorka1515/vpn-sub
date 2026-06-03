@@ -31,21 +31,23 @@ from custom_types import (
     RegisterWithCodeInfo, CodeObject,
     UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal, 
     ResetUserObject,
-    ApplyBonusCodeObject,
+    ApplyBonusCodeObject, 
+    BandwidthSnapshot, StateSnapshot,
     PublicBotLike, AdminBotLike, 
     client_stats_to_settings,
     ConfigLike, LinesConfigLike,
     JsonValue
 )
 from util import fmt_bytes_tuple, SysUtil
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from collections.abc import MutableMapping, Mapping
+from collections import deque
 
 # pyright: reportUnnecessaryIsInstance=false
 
 __all__ = [
     "Subscription", "BWatch", 
-    "BandwidthInfo", "BandwidthSnapshot",
+    "BandwidthInfo",
     "SERVER_TZ"
 ]
 
@@ -100,20 +102,13 @@ class BandwidthUpdate(NamedTuple):
     delta: int
     current: BandwidthInfo
 
-@dataclass
-class BandwidthSnapshot:
-    ts: int
-    up: int = 0
-    down: int = 0
-    wl_up: int = 0
-    wl_down: int = 0
-
 
 class Subscription:
     def __init__(
         self, 
         cfg: ConfigLike,
         bw_cfg: ConfigLike,
+        snap_cfg: ConfigLike,
         app: Flask,
         panels: list[XUiSession],
         whitelist_panel: XUiSession | None,
@@ -123,6 +118,7 @@ class Subscription:
         with self.log.loading():
             self.cfg: ConfigLike = cfg
             self.bw_cfg: ConfigLike = bw_cfg
+            self.snap_cfg: ConfigLike = snap_cfg
             self.audit_cfg: LinesConfigLike | None = audit_cfg
             self.app: Flask = app
             self.whitelist_panel: XUiSession | None  = whitelist_panel
@@ -341,6 +337,16 @@ class Subscription:
         raw = user_data.get("snapshots", [])
         return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
 
+    def get_snapshots(self, days: int = 30) -> list[StateSnapshot]:
+        """Return state snapshots, clamped to a retention window."""
+        cutoff = int(time.time()) - days * 86400
+        snapshots = self.snap_cfg.get(
+            'snapshots',
+            as_type=list[dict[str, object]]
+        )
+        return [from_dict(StateSnapshot, s) for s in snapshots 
+                if cast(int, s.get("ts", 0)) >= cutoff]
+        
     def leaderboard(
         self,
         category: Literal["total", "monthly", "wl_monthly"],
@@ -1520,7 +1526,7 @@ class Subscription:
         need_dummy_link: bool
     ) -> str:
         """Build a base64-encoded link array."""
-        generated_links: list[str] = []
+        generated_links: deque[str] = deque()
 
         for p_key, p_name in cfg['profiles'].items():
             if p_key in cfg['whitelistProfiles'] and not statusWl:
@@ -1556,7 +1562,7 @@ class Subscription:
         dt = urllib.parse.quote(dt)
         dummy = f"vless://0@localhost:1?type=tcp&security=none#" + dt
         if need_dummy_link:
-            generated_links = [dummy] + generated_links
+            generated_links.appendleft(dummy)
         raw_text = "\n".join(generated_links)
         payload = base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
 
@@ -1645,14 +1651,13 @@ class BWatch:
             self._panel_alerts: dict[str, int | float] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', as_type=int) or 3600
 
-            
             _threads: tuple[tuple[Callable[..., object], str], ...] = (
                 (self._every_120s, "Quota & Notifs"),
                 (self._every_2h, "Date check"),
                 (self._every_15s, "Bandwidth"),
-                (self._every_24h, "Reset notifs & Prune BW Info"),
+                (self._every_24h, "Reset notifs & Prune old snapshots"),
                 (self._every_5m, "Panels check"),
-                (self._every_24h_snapshot, "Daily BW Snapshot"),
+                (self._every_24h_snapshot, "Daily snapshots"),
             )
             self._threads: tuple[threading.Thread, ...] = tuple(
                 threading.Thread(target=target, name=name, daemon=True)
@@ -1901,7 +1906,10 @@ class BWatch:
                 data[panel.name] = asdict(status.obj)
 
         with self.snap_cfg as d:
-            d.get("snapshots", as_type=list[dict[str, object]])
+            d.get("snapshots", as_type=list[Mapping[str, object]]).insert(0, data)
+        
+        self.prune_old_snap_snapshots()
+
     def record_daily_snapshot(self) -> None:
         """Record one bandwidth snapshot per user for today (UTC midnight).
 
@@ -1978,9 +1986,17 @@ class BWatch:
         while not self._stop_event.wait(86400):
             self.reset()
             self.prune_old_bw_snapshots()
+            self.prune_old_snap_snapshots()
     def _every_24h_snapshot(self) -> None:
         while not self._stop_event.wait(86400):
-            self.record_daily_snapshot()
+            try:
+                self.record_daily_snapshot()
+            except Exception:
+                self.log.exception("Daily bw snapshot failed: ")
+            try:
+                self.record_snap_snapshot()
+            except Exception:
+                self.log.exception("Daily state snapshot failed: ")
     def _every_5m(self) -> None:
         while not self._stop_event.wait(300):
             self.panel_health_check()

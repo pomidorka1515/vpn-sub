@@ -35,6 +35,8 @@ __all__ = [
     'CPUInfo', 'LoadAverage', 'RamInfo', 'SwapInfo', 'SystemMemory',
     'IPList', 'ConnCount', 'AppMemory', 'GCGenStats', 'GCStats',
     'ThreadInfo', 'FullSystemInfo',
+    'BandwidthSnapshot', 'StateSnapshot',
+    
     'client_stats_to_settings',
 
     'JsonValue', 'JsonDict', 'MISSING_TYPE',
@@ -63,7 +65,7 @@ MISSING: Final[MISSING_TYPE] = MISSING_TYPE()
 
 @runtime_checkable
 class AdminBotLike(Protocol):
-    """Stub protocol for AdminBot class to avoid circular imports."""
+    """Stub protocol for AdminBot."""
 
     def msg(self, text: str, parse_mode: str = "HTML") -> None: ...
 
@@ -675,6 +677,20 @@ class FullSystemInfo:
     app_threads: tuple[ThreadInfo, ...]
     app_gc_stats: GCStats
 
+### Snapshots ###
+@dataclass(slots=True, frozen=True)
+class BandwidthSnapshot:
+    ts: int
+    up: int = 0
+    down: int = 0
+    wl_up: int = 0
+    wl_down: int = 0
+
+@dataclass(slots=True, frozen=True)
+class StateSnapshot:
+    ts: int
+    host: FullSystemInfo
+    panels: dict[str, ServerMetricsObj]
 
 ### Helper functions ###
 def client_stats_to_settings(

@@ -277,7 +277,6 @@ def requires_fields_strict[**P, R](*fields: tuple[str, type[JsonifyValue]]) -> C
                         f"Field '{field}' must be {expected_type.__name__}, got {type(value).__name__}",
                         400
                     )
-
             content = cast(dict[str, JsonifyValue], content)
             g.json_obj = content
             return f(*args, **kwargs)

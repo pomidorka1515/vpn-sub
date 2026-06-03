@@ -105,6 +105,7 @@ def _atomic_write_json(
     path: str,
     data: Mapping[str, JsonValue],
     *,
+    minify: bool,
     indent: int,
     sync_mode: SYNC_MODES,
 ) -> FileSignature | None:
@@ -125,7 +126,10 @@ def _atomic_write_json(
                 pass
 
         with open(temp_path, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=indent, ensure_ascii=False)
+            if minify:
+                json.dump(data, handle, indent=None, separators=(',', ':'), ensure_ascii=False)
+            else:
+                json.dump(data, handle, indent=indent, ensure_ascii=False)
             handle.write("\n")
 
             if sync_mode != "none":
@@ -156,6 +160,7 @@ def _do_backup(
     instance_dir: str,
     log: Logger,
     *,
+    minify: bool = False,
     raw: bool = False,
 ) -> None:
     """Take a snapshot and write it to a per-instance subdirectory.
@@ -201,7 +206,10 @@ def _do_backup(
         os.close(fd)
         try:
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=indent, ensure_ascii=False)
+                if minify:
+                    json.dump(data, f, indent=None, separators=(',', ':'), ensure_ascii=False)
+                else:
+                    json.dump(data, f, indent=indent, ensure_ascii=False)
             os.replace(tmp, backup_path)
         except Exception:
             try:
@@ -291,8 +299,8 @@ class Config(MutableMapping[str, JsonValue]):
         *,
         path: str,
         indent: int = 4,
+        minify: bool = False,
         read_only: bool = False,
-        # read_only_jsonc: bool = False, TODO
         strict_schema: bool = True,
         sync_mode: SYNC_MODES = 'data',
         isolate_commits: bool = True,
@@ -304,6 +312,8 @@ class Config(MutableMapping[str, JsonValue]):
         Args:
             path: Path to the JSON config file (created if missing).
             indent: JSON indentation width for writes.
+            minify: If True, minify JSON instead of beautifying it. 
+                indent param is skipped if this is set.
             read_only: Read-only, raises on writes. Handle with caution.
                 WARNING: This arg is also immutable.
                 You cannot make a Config() instance read-only past __init__ and vise versa.
@@ -321,6 +331,7 @@ class Config(MutableMapping[str, JsonValue]):
             self.log.warning("path doesnt end with .json, did you specify the correct path?")
         self._path: str = path
         self._indent: int = indent
+        self._minify: bool = minify
         self._strict_schema: bool = strict_schema
     
         if sync_mode not in ("full", "data", "none"):
@@ -371,6 +382,8 @@ class Config(MutableMapping[str, JsonValue]):
         else:
             self._backup_t = None
 
+    # properties for the sake of immutability
+
     @property
     def path(self) -> str:
         return self._path
@@ -378,6 +391,42 @@ class Config(MutableMapping[str, JsonValue]):
     @property
     def size(self) -> int:
         return os.path.getsize(self.path)
+    
+    @property
+    def indent(self) -> int:
+        return self._indent
+
+    @property
+    def minify(self) -> bool:
+        return self._minify
+    
+    @property
+    def read_only(self) -> bool:
+        return self._read_only
+    
+    @property
+    def strict_schema(self) -> bool:
+        return self._strict_schema
+    
+    @property
+    def sync_mode(self) -> SYNC_MODES:
+        return self._sync_mode
+    
+    @property
+    def isolate_commits(self) -> bool:
+        return self._isolate_commits
+    
+    @property
+    def backup_dir(self) -> str | None:
+        return self._backup_dir
+    
+    @property
+    def backup_interval(self) -> int | float:
+        return self._backup_interval
+    
+    @property
+    def backup_retention(self) -> int:
+        return self._backup_retention
     
     def close(self) -> None:
         """Stop the backup thread if one is running. Does not affect the data file."""
@@ -735,7 +784,7 @@ class Config(MutableMapping[str, JsonValue]):
                 self._validate_schema(empty)
                 new_signature = _atomic_write_json(
                     self._path, empty,
-                    indent=self._indent, sync_mode=self._sync_mode,
+                    indent=self._indent, minify=self._minify, sync_mode=self._sync_mode,
                 )
                 if new_signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
@@ -778,11 +827,11 @@ class Config(MutableMapping[str, JsonValue]):
         self._raise_if_read_only()
         _atomic_write_json(
             self._path, data,
-            indent=self._indent, sync_mode=self._sync_mode,
+            indent=self._indent, minify=self._minify, sync_mode=self._sync_mode,
         )
 
     @staticmethod
-    def _detach[_T](value: _T) -> _T:
+    def _detach[_T: object](value: _T) -> _T:
         if isinstance(value, (dict, list)):
             return copy.deepcopy(cast(_T, value))
         return value
@@ -835,7 +884,7 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]):
                 cfg._validate_schema(current)
                 signature = _atomic_write_json(
                     cfg._path, current,
-                    indent=cfg._indent, sync_mode=cfg._sync_mode,
+                    indent=cfg._indent, minify=cfg._minify, sync_mode=cfg._sync_mode,
                 )
                 if signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")

@@ -79,6 +79,7 @@ def _acquire_primary_lock() -> bool:
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 app.config['JSON_SORT_KEYS'] = False
+
 # ------------------------------------------------------------
 # Configs (two separate files)
 # ------------------------------------------------------------
@@ -108,6 +109,7 @@ _line_config_kwargs: _LineConfigKwargs = {
 }
 cfg = Config(path='../config.json', indent=4, **_config_kwargs)
 bw_cfg = Config(path='../bw_history.json', indent=2, **_config_kwargs)
+snap_cfg = Config(path='../snaps.json', minify=True, **_config_kwargs)
 line_cfg = LinesConfig(path='../log.jsonl', **_line_config_kwargs)
 audit_cfg = LinesConfig(path='../audit.jsonl', **_line_config_kwargs)
 # ------------------------------------------------------------
@@ -123,10 +125,10 @@ if not panels and wl is None:
 # Wire up components
 # ------------------------------------------------------------
 sub      = Subscription(
-               cfg=cfg, bw_cfg=bw_cfg, audit_cfg=audit_cfg, 
+               cfg=cfg, bw_cfg=bw_cfg, audit_cfg=audit_cfg, snap_cfg=snap_cfg,
                app=app, panels=panels, whitelist_panel=wl
            )
-bw       = BWatch(cfg=cfg, bw_cfg=bw_cfg, sub=sub)
+bw       = BWatch(cfg=cfg, bw_cfg=bw_cfg, snap_cfg=snap_cfg, sub=sub)
 api      = Api(app=app, cfg=cfg, audit_cfg=audit_cfg, sub=sub, bw=bw)
 webapi   = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)
 adminbot = AdminBot(sub=sub, cfg=cfg)
