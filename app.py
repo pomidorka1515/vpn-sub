@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fcntl
 import sys
+import os
 import atexit
 import threading
 threading.main_thread().name = 'main'
@@ -17,7 +18,6 @@ from loggers import Logger
 from flask import Flask
 from typing import TypedDict
 
-# mypy: disable-error-code="arg-type"
 
 ##############################################################
 ### Startup sequence. Do not touch if you dont understand. ###
@@ -66,7 +66,7 @@ def _acquire_primary_lock() -> bool:
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         _primary_lock_fd = fd
-        log.info(f"I am the primary worker (pid={__import__('os').getpid()})")
+        log.info(f"I am the primary worker (pid={os.getpid()})")
         return True
     except OSError:
         fd.close()
@@ -180,15 +180,21 @@ if sys.version_info < (3, 14):
 # ------------------------------------------------------------
 def _shutdown() -> None:
     log.info("Shutting down...")
-    if _is_primary:
-        bw.stop()
-        adminbot.stop()
-        bot.stop()
-    for panel in panels:
-        panel.close()
-    if wl:
-        wl.close()
-    log.info("Shutdown complete.")
+
+    def _do_cleanup() -> None:
+        if _is_primary:
+            bw.stop()
+            adminbot.stop()
+            bot.stop()
+        for panel in panels:
+            panel.close()
+        if wl:
+            wl.close()
+        log.info("Shutdown complete.")
+
+    # fork cleanup into a background thread so systemctl sees exit immediately
+    t = threading.Thread(target=_do_cleanup, name='cleanup', daemon=True)
+    t.start()
 atexit.register(_shutdown)
 
 

@@ -168,7 +168,7 @@ def requires_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]
         if not provided or not self.sub.compare(provided, self.token):
             return _err("Unauthorized", 401)
         return f(self, *args, **kwargs)
-    return cast(Decorated[Api, P, R], wrapper)
+    return cast(Decorated[BaseApi, P, R], wrapper)
 def requires_basic_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]:
     """Admin API auth via Basic auth header. Returns 401 on failure."""
     @wraps(f)
@@ -184,7 +184,7 @@ def requires_basic_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api,
         if (not self.sub.compare(user, valid[0])) or (not self.sub.compare(pw, valid[1])):
             return err, 401
         return f(self, *args, **kwargs)
-    return cast(Decorated[Api, P, R], wrapper)
+    return cast(Decorated[BaseApi, P, R], wrapper)
 def requires_webapi_auth[**P, R](f: DecoratedInject[WebApi, str, P, R]) -> Decorated[WebApi, P, R]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
     Returns 401 on failure."""
@@ -945,7 +945,7 @@ class Api(BaseApi):
         cutoff: int = content.get('cutoff')
 
         if cutoff < 0:
-            return _err("cutoff param must be higher than 0")
+            return _err("cutoff param must be higher than 0", 400)
         
         try:
             obj = self.sub.get_snapshots(cutoff)
