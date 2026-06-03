@@ -410,6 +410,152 @@ Response (error):
   
 ---  
   
+### POST /api/snapshots
+Description: Get state snapshots (system + panels)  
+Authorization: header  
+Body:  
+```jsonc  
+{  
+    "cutoff": 0, // int, clamp the data to a certain amount  
+                 // must be > 0  
+}  
+```  
+Response (success):  
+```jsonc
+{
+  "success": true,
+  "msg": null,
+  "obj": {  
+
+  // sorry for broken indentation  
+
+  "ts": 1717200000, // int, unix timestamp at start of day (midnight UTC)  
+  "host": {  
+    "cpu": 23.5,           // float, current CPU usage percentage  
+    "process_count": 187,  // int, total number of running processes  
+    "uptime": 864000.0,    // float, system uptime in seconds (~10 days)  
+    "cpu_info": {  
+      "cores": 4,                       // int, number of CPU cores  
+      "name": "Intel Xeon E5-2680 v4",  // str, CPU model name  
+      "mhz_max": 3400.0                 // float, maximum CPU frequency in MHz  
+    },  
+    "loadavg": {  
+      "load_1m": 0.42,  // float, load average over 1 minute  
+      "load_5m": 0.38,  // float, load average over 5 minutes  
+      "load_15m": 0.31  // float, load average over 15 minutes  
+    },  
+    "network": {  
+      "sent": 1073741824,  // int, total bytes sent since boot  
+      "recv": 2147483648   // int, total bytes received since boot  
+    },  
+    "memory": {  
+      "ram": {  
+        "total": 8589934592,     // int, total RAM in bytes  
+        "available": 4294967296, // int, available RAM in bytes  
+        "used": 4294967296       // int, used RAM in bytes  
+      },  
+      "swap": {  
+        "total": 4294967296, // int, total swap space in bytes  
+        "free": 3221225472,  // int, free swap space in bytes  
+        "used": 1073741824   // int, used swap space in bytes  
+      }  
+    },  
+    "ip": {  
+      "ipv4": ["192.168.1.100", "10.0.0.5"], // array[str], IPv4 addresses  
+      "ipv6": ["fe80::1", "2001:db8::1"]     // array[str], IPv6 addresses  
+    },  
+    "connections": {  
+      "tcp": 142, // int, number of active TCP connections  
+      "udp": 18   // int, number of active UDP connections  
+    },  
+    "app_memory": {  
+      "ram": 524288000.0, // float, application RAM usage in bytes (500 MB)  
+      "swap": 0.0         // float, application swap usage in bytes  
+    },  
+    "app_uptime": 432000.0,  // float, application uptime in seconds (~5 days)  
+    "app_thread_amount": 12, // int, total number of application threads  
+    "app_threads": [  
+      {  
+        "name": "MainThread",  // str, thread name  
+        "ident": 140234567890, // int, thread identifier  
+        "daemon": false        // bool, whether thread is a daemon thread  
+      }  
+      // ...  
+    ],  
+    "app_gc_stats": {  
+      "gc_counts": [42, 8, 1],                        // array[int], GC collection counts per generation (gen0, gen1, gen2)  
+      "gc_thresholds": [700000, 10000000, 100000000], // array[int], GC thresholds per generation in bytes  
+      "gc_stats": [  
+        {  
+          "collections": 42,  // int, number of collections for gen0  
+          "collected": 1337,  // int, objects collected in gen0  
+          "uncollectable": 0  // int, uncollectable objects in gen0  
+        }
+        // ...  
+      ]  
+    }  
+  },  
+  "panels": {  
+    "server-node-1": {  
+      "cpu": 15.7,           // float, panel server CPU usage percentage  
+      "cpuCores": 4,         // int, number of CPU cores on panel server  
+      "logicalPro": 8,       // int, number of logical processors  
+      "cpuSpeedMhz": 3100.5, // float, current CPU speed in MHz  
+      "mem": {  
+        "current": 536870912, // int, current memory usage in bytes (512 MB)  
+        "total": 2147483648   // int, total memory in bytes (2 GB)  
+      },  
+      "swap": {  
+        "current": 0,       // int, current swap usage in bytes  
+        "total": 1073741824 // int, total swap space in bytes (1 GB)  
+      },  
+      "disk": {  
+        "current": 53687091200, // int, Current disk usage in bytes (50 GB)  
+        "total": 107374182400   // int, Total disk space in bytes (100 GB)  
+      },  
+      "xray": {  
+        "state": "running", // str, xray service state (running/stopped/error)  
+        "errorMsg": "",     // str, error message if state is error (empty if ok)  
+        "version": "v1.8.4" // str, xray core version  
+      },  
+      "uptime": 172800,            // int, panel server uptime in seconds (~2 days)  
+      "loads": [0.25, 0.30, 0.28], // array[float], Load averages (1m, 5m, 15m)  
+      "tcpCount": 87,              // int, number of TCP connections  
+      "udpCount": 12,              // int, number of UDP connections  
+      "netIO": {  
+        "up": 1048576,  // int, upload bytes in current period  
+        "down": 2097152 // int, download bytes in current period  
+      },  
+      "netTraffic": {  
+        "sent": 107374182400,  // int, total bytes sent (100 GB)  
+        "recv": 536870912000   // int, total bytes received (500 GB)  
+      },  
+      "publicIP": {  
+        "ipv4": "203.0.113.50",  // str, public IPv4 address  
+        "ipv6": "2001:db8::100"  // str, public IPv6 address  
+      },  
+      "appStats": {  
+        "threads": 24,    // int, number of application threads  
+        "mem": 268435456, // int, application memory usage in bytes (256 MB)  
+        "uptime": 432000  // int, application uptime in seconds (~5 days)  
+      }  
+    }  
+    // ...  
+  }  
+}  
+  
+}  
+```  
+Response (error):  
+```jsonc  
+{  
+    "success": false,  
+    "msg": "cutoff param must be higher than 0",  
+    "obj": null  
+}  
+```  
+  
+---  
 ### POST /api/leaderboard  
 Description: Get leaderboard data for a specified bandwidth type.  
 Authorization: header  

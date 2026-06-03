@@ -296,7 +296,6 @@ def requires_args[**P, R](*arg: str) -> Callable[[Callable[P, R]], Callable[P, W
     return decorator
 
 
-
 class WebApi(BaseApi):
 
     ROUTES: list[Route] = [
@@ -657,6 +656,7 @@ class Api(BaseApi):
         Route('POST', '/api/code/delete', 'code_delete'),
 
         Route('POST', '/api/leaderboard', 'leaderboard'),
+        Route('POST', '/api/snapshots', 'snapshots'),
 
         Route('GET', '/api/logs/audit', 'audit'),
 
@@ -936,8 +936,23 @@ class Api(BaseApi):
     
         result = list(self.audit_cfg.tail(n))
         return _ok(obj=result)
+    
+    @requires_admin_auth
+    @requires_fields_strict(('cutoff', int))
+    def snapshots(self) -> ResponseType:
+        content = g.json_obj
 
+        cutoff: int = content.get('cutoff')
 
+        if cutoff < 0:
+            return _err("cutoff param must be higher than 0")
+        
+        try:
+            obj = self.sub.get_snapshots(cutoff)
+        except Exception as e:
+            return _err(str(e), 500)
+        return _ok(obj=[asdict(s) for s in obj])
+    
     @requires_admin_auth
     @requires_fields_strict(
         ('type', str), 
