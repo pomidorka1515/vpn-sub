@@ -365,12 +365,12 @@ body {
   width: 16px; height: 16px; transition: transform .25s ease;
   flex-shrink: 0;
 }
-.panel-card.open .panel-card-arrow { transform: rotate(180deg); }
+.panel-card.open > .panel-card-header .panel-card-arrow { transform: rotate(180deg); }
 .panel-card-body {
   display: none; padding: 0 16px 16px;
   border-top: 1px solid var(--border);
 }
-.panel-card.open .panel-card-body { display: block; }
+.panel-card.open > .panel-card-body { display: block; }
 .panel-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px; padding-top: 16px;
@@ -488,8 +488,9 @@ body {
     <button class="tab active" onclick="showTab('users')" data-t="users">Users</button>
     <button class="tab" onclick="showTab('codes')" data-t="codes">Codes</button>
     <button class="tab" onclick="showTab('logs')" data-t="audit_logs">Audit Logs</button>
+    <button class="tab" onclick="showTab('state')" data-t="state">State</button>
+    <button class="tab" onclick="showTab('snapshots')" data-t="snapshots">Snapshots</button>
     <button class="tab" onclick="showTab('health')" data-t="health">Health</button>
-    <button class="tab" onclick="showTab('teapot')" data-t="teapot">Teapot</button>
     <button class="tab" onclick="showTab('leaderboard')" data-t="leaderboard">Leaderboard</button>
   </div>
 
@@ -684,6 +685,47 @@ body {
     </div>
   </div>
 
+  <div id="tab-state" class="tab-content">
+    <div class="card">
+      <div class="card-title" data-t="panel_status">Panel Status</div>
+      <div class="form-row">
+        <label data-t="panel_name">Panel Name</label>
+        <div class="input-wrap">
+          <input type="text" id="panelName" placeholder="optional">
+          <span class="form-hint" data-t="panel_name_hint">Leave empty for all panels</span>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn-secondary" onclick="checkPanelStatus()" id="btnPanelStatus" data-t="check_panel_status">Check Panel Status</button>
+      </div>
+      <div class="result-box" id="panelStatusResult"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" data-t="host_system_status">Host System Status</div>
+      <div style="margin-top:4px">
+        <button class="btn-secondary" onclick="loadSystemStatus()" id="btnSystemStatus" data-t="load_system_status">Load System Status</button>
+      </div>
+      <div class="result-box" id="systemStatusResult"></div>
+    </div>
+  </div>
+
+  <div id="tab-snapshots" class="tab-content">
+    <div class="card">
+      <div class="card-title" data-t="snapshots">Snapshots</div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--text2)" data-t="cutoff_days">Cutoff (days)</span>
+          <input type="number" id="snapCutoff" value="7" min="1" class="dark-num-input">
+        </div>
+        <button class="btn-secondary" onclick="loadSnapshots()" id="btnLoadSnapshots" data-t="load_snapshots">Load Snapshots</button>
+      </div>
+      <div id="snapshotsList">
+        <div class="table-empty" data-t="load_snapshots_hint">Configure cutoff and click "Load Snapshots"</div>
+      </div>
+    </div>
+  </div>
+
   <div id="tab-health" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="health_status">Health Status</div>
@@ -694,17 +736,6 @@ body {
       <div style="margin-top:20px">
         <button class="btn-secondary" onclick="runHealthCheck()" id="btnRunHealth">Check Health</button>
       </div>
-      <div class="form-row" style="margin-top:20px">
-        <label data-t="panel_name">Panel Name</label>
-        <div class="input-wrap">
-          <input type="text" id="panelName" placeholder="optional">
-          <span class="form-hint" data-t="panel_name_hint">Leave empty for all panels</span>
-        </div>
-      </div>
-      <div style="margin-top:12px">
-        <button class="btn-secondary" onclick="checkPanelStatus()" id="btnPanelStatus">Check Panel Status</button>
-      </div>
-      <div class="result-box" id="panelStatusResult"></div>
     </div>
 
     <div class="card">
@@ -728,9 +759,7 @@ body {
       <button class="btn-secondary" onclick="doRefreshUsers()" id="btnDoRefresh">Refresh Users</button>
       <div class="result-box" id="refreshResult"></div>
     </div>
-  </div>
 
-  <div id="tab-teapot" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="teapot_title">Teapot Status</div>
       <div class="teapot-box">
@@ -801,7 +830,7 @@ body {
 const L = {
   en: {
     api_key: 'API Key', save: 'Save',
-    users: 'Users', codes: 'Codes', audit_logs: 'Audit Logs', health: 'Health', teapot: 'Teapot',
+    users: 'Users', codes: 'Codes', audit_logs: 'Audit Logs', state: 'State', snapshots: 'Snapshots', health: 'Health',
     user_list: 'User List', add_user: 'Add User', bonus_codes: 'Bonus Codes', add_code: 'Add Code',
     user_details: 'User Details', internal_user: 'Internal User', display_name: 'Display Name',
     ext_username: 'Ext Username', ext_password: 'Ext Password', fingerprint: 'Fingerprint',
@@ -830,6 +859,16 @@ const L = {
     teapot_yes: 'Yes, I am a teapot', teapot_no: 'No, I am not a teapot',
     // Panel status
     panel_status: 'Panel Status', no_panels: 'No panels',
+    check_panel_status: 'Check Panel Status',
+    // Host system status
+    host_system_status: 'Host System Status', load_system_status: 'Load System Status',
+    no_data: 'No data', cpu_model: 'Model', available: 'Available',
+    app_uptime: 'App Uptime', app_swap: 'App Swap',
+    // Snapshots
+    load_snapshots: 'Load Snapshots',
+    load_snapshots_hint: 'Configure cutoff and click "Load Snapshots"',
+    no_snapshots: 'No snapshots', cutoff_days: 'Cutoff (days)',
+    cutoff_invalid: 'Cutoff must be greater than 0', panels_label: 'panels',
     system: 'System', memory: 'Memory', disk: 'Disk', network: 'Network',
     connections: 'Connections', uptime_app: 'Uptime & App',
     public_ip: 'Public IP', xray_error: 'Xray Error',
@@ -851,7 +890,7 @@ const L = {
   },
   ru: {
     api_key: 'API Key', save: 'Сохранить',
-    users: 'Пользователи', codes: 'Коды', audit_logs: 'Логи', health: 'Здоровье', teapot: 'Чайник',
+    users: 'Пользователи', codes: 'Коды', audit_logs: 'Логи', state: 'Состояние', snapshots: 'Снимки', health: 'Здоровье',
     user_list: 'Список пользователей', add_user: 'Добавить', bonus_codes: 'Бонус-коды', add_code: 'Создать код',
     user_details: 'Данные пользователя', internal_user: 'Внутр. имя', display_name: 'Отображаемое имя',
     ext_username: 'Логин', ext_password: 'Пароль', fingerprint: 'Отпечаток',
@@ -880,6 +919,16 @@ const L = {
     teapot_yes: 'Да, я чайник', teapot_no: 'Нет, я не чайник',
     // Panel status
     panel_status: 'Статус панелей', no_panels: 'Нет панелей',
+    check_panel_status: 'Проверить панели',
+    // Host system status
+    host_system_status: 'Статус хост-системы', load_system_status: 'Загрузить статус',
+    no_data: 'Нет данных', cpu_model: 'Модель', available: 'Доступно',
+    app_uptime: 'Аптайм прилож.', app_swap: 'Swap прилож.',
+    // Snapshots
+    load_snapshots: 'Загрузить снимки',
+    load_snapshots_hint: 'Укажите cutoff и нажмите "Загрузить снимки"',
+    no_snapshots: 'Нет снимков', cutoff_days: 'Cutoff (дни)',
+    cutoff_invalid: 'Cutoff должен быть больше 0', panels_label: 'панелей',
     system: 'Система', memory: 'Память', disk: 'Диск', network: 'Сеть',
     connections: 'Подключения', uptime_app: 'Аптайм и приложение',
     public_ip: 'Публичный IP', xray_error: 'Ошибка Xray',
@@ -1379,9 +1428,9 @@ async function checkPanelStatus() {
   }
 }
 
-function renderPanelCards(panels) {
+function renderPanelCards(panels, idPrefix = '') {
   if (!panels || !Object.keys(panels).length) {
-    return '<div class="table-empty">No panels</div>';
+    return `<div class="table-empty">${t('no_panels')}</div>`;
   }
   return `
     <div class="panel-cards">
@@ -1418,9 +1467,10 @@ function renderPanelCards(panels) {
         const loads = s?.loads ? s.loads.map(l => l.toFixed(2)).join(', ') : 'N/A';
         const threads = s?.appStats?.threads ?? 'N/A';
 
+        const cardKey = idPrefix + panelName.replace(/\s+/g,'_');
         return `
-          <div class="panel-card" id="pc-${panelName.replace(/\s+/g,'_')}">
-            <div class="panel-card-header" onclick="togglePanelCard('${panelName.replace(/\s+/g,'_')}')">
+          <div class="panel-card" id="pc-${cardKey}">
+            <div class="panel-card-header" onclick="togglePanelCard('${cardKey}')">
               <div class="panel-card-title">
                 <span class="panel-card-name">${panelName}</span>
                 <span class="badge ${xrayClr}">${xrayState || 'unknown'}</span>
@@ -1497,6 +1547,166 @@ function togglePanelCard(name) {
   card.classList.toggle('open');
 }
 
+async function loadSystemStatus() {
+  const result = document.getElementById('systemStatusResult');
+  result.innerHTML = `<div class="result-msg">${t('loading')}</div>`;
+  result.className = 'result-box';
+  const res = await api('/api/state/system');
+  if (res && res.success) {
+    result.innerHTML = renderSystemStatus(res.obj);
+    result.className = 'result-box';
+  } else {
+    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
+    result.className = 'result-box error';
+  }
+}
+
+function renderSystemStatus(s) {
+  if (!s) return `<div class="table-empty">${t('no_data')}</div>`;
+
+  const cpuPct = s.cpu != null ? Math.round(s.cpu * 100) / 100 : null;
+  const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
+  const cpuName = s.cpu_info?.name || 'N/A';
+  const cpuCores = s.cpu_info?.cores ?? 'N/A';
+  const cpuSpeed = s.cpu_info?.mhz_max ? Math.round(s.cpu_info.mhz_max) + ' MHz' : 'N/A';
+  const loads = s.loadavg
+    ? [s.loadavg.load_1m, s.loadavg.load_5m, s.loadavg.load_15m].map(l => (l ?? 0).toFixed(2)).join(', ')
+    : 'N/A';
+
+  const ram = s.memory?.ram;
+  const memUsed = ram ? fmtBytes(ram.used) : 'N/A';
+  const memTotal = ram ? fmtBytes(ram.total) : 'N/A';
+  const memAvail = ram ? fmtBytes(ram.available) : 'N/A';
+  const memPct = ram && ram.total > 0 ? Math.round(ram.used / ram.total * 100) : null;
+  const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
+
+  const swap = s.memory?.swap;
+  const swapUsed = swap ? fmtBytes(swap.used) : 'N/A';
+  const swapTotal = swap ? fmtBytes(swap.total) : 'N/A';
+
+  const netRecv = s.network ? fmtBytes(s.network.recv) : 'N/A';
+  const netSent = s.network ? fmtBytes(s.network.sent) : 'N/A';
+
+  const appMem = s.app_memory ? fmtBytes(s.app_memory.ram) : 'N/A';
+  const appSwap = s.app_memory ? fmtBytes(s.app_memory.swap) : 'N/A';
+  const sysUptime = fmtUptime(s.uptime);
+  const appUptime = fmtUptime(s.app_uptime);
+  const threads = s.app_thread_amount ?? 'N/A';
+  const procs = s.process_count ?? 'N/A';
+
+  const ipRows = (label, list) => {
+    const arr = Array.isArray(list) ? list.filter(Boolean) : [];
+    if (!arr.length) return `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value">N/A</span></div>`;
+    return arr.map((ip, i) => {
+      const lbl = arr.length > 1 ? `${label} ${i + 1}` : label;
+      const fs = ip.length > 28 ? '8px' : ip.length > 22 ? '9px' : ip.length > 15 ? '10px' : '11px';
+      return `<div class="panel-metric"><span class="panel-metric-label">${lbl}</span><span class="panel-metric-value" style="font-size:${fs}">${escapeHtml(ip)}</span></div>`;
+    }).join('');
+  };
+
+  return `
+    <div class="panel-grid" style="padding-top:0">
+      <div class="panel-section">
+        <div class="panel-section-label">${t('system')}</div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : 'N/A'}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('cpu_model')}</span><span class="panel-metric-value" style="font-size:${cpuName.length > 20 ? '9px' : '11px'}">${escapeHtml(cpuName)}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${cpuCores}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${cpuSpeed}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('load_avg')}</span><span class="panel-metric-value">${loads}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${procs}</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-label">${t('memory')}</div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('used')}</span><span class="panel-metric-value ${memClr}">${memUsed} <span class="unit">/ ${memTotal}</span></span></div>
+        ${memPct !== null ? `<div class="panel-metric"><span class="panel-metric-label">${t('percent')}</span><span class="panel-metric-value">${memPct}%</span></div>` : ''}
+        <div class="panel-metric"><span class="panel-metric-label">${t('available')}</span><span class="panel-metric-value">${memAvail}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('swap')}</span><span class="panel-metric-value">${swapUsed} <span class="unit">/ ${swapTotal}</span></span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-label">${t('network')}</div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('total_in')}</span><span class="panel-metric-value">${netRecv}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('total_out')}</span><span class="panel-metric-value">${netSent}</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-label">${t('connections')}</div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${s.connections?.tcp ?? 'N/A'}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${s.connections?.udp ?? 'N/A'}</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-label">${t('public_ip')}</div>
+        ${ipRows(t('ipv4'), s.ip?.ipv4)}
+        ${ipRows(t('ipv6'), s.ip?.ipv6)}
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-label">${t('uptime_app')}</div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('sys_uptime')}</span><span class="panel-metric-value">${sysUptime}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('app_uptime')}</span><span class="panel-metric-value">${appUptime}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('app_mem')}</span><span class="panel-metric-value">${appMem}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('app_swap')}</span><span class="panel-metric-value">${appSwap}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${threads}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadSnapshots() {
+  const list = document.getElementById('snapshotsList');
+  const cutoff = parseInt(document.getElementById('snapCutoff').value, 10);
+  if (isNaN(cutoff) || cutoff <= 0) { toast(t('cutoff_invalid'), 'error'); return; }
+  list.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
+  const res = await api('/api/state/snapshots', { method: 'POST', body: { cutoff } });
+  if (!res || !res.success) {
+    list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
+    return;
+  }
+  list.innerHTML = renderSnapshots(res.obj || []);
+}
+
+function fmtSnapDate(ts) {
+  if (ts == null || isNaN(ts)) return 'N/A';
+  return new Date(ts * 1000).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', {
+    timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  }) + ' UTC';
+}
+
+function renderSnapshots(snaps) {
+  if (!Array.isArray(snaps) || !snaps.length) {
+    return `<div class="table-empty">${t('no_snapshots')}</div>`;
+  }
+  return `
+    <div class="panel-cards">
+      ${snaps.map(snap => {
+        const key = 'snap-' + snap.ts;
+        const panelNames = snap.panels ? Object.keys(snap.panels) : [];
+        // Snapshot panels are ServerMetricsObj directly; renderPanelCards() expects { obj: status }.
+        const wrappedPanels = Object.fromEntries(panelNames.map(n => [n, { obj: snap.panels[n] }]));
+        return `
+          <div class="panel-card" id="pc-${key}">
+            <div class="panel-card-header" onclick="togglePanelCard('${key}')">
+              <div class="panel-card-title">
+                <span class="panel-card-name">${escapeHtml(fmtSnapDate(snap.ts))}</span>
+              </div>
+              <div class="panel-card-meta">
+                <span style="font-size:12px;color:var(--text2)">${panelNames.length} ${t('panels_label')}</span>
+                <svg class="panel-card-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="4,6 8,10 12,6"/>
+                </svg>
+              </div>
+            </div>
+            <div class="panel-card-body">
+              <div class="panel-section-label" style="margin:16px 0 4px">${t('host_system_status')}</div>
+              ${snap.host ? renderSystemStatus(snap.host) : `<div class="table-empty">${t('no_data')}</div>`}
+              <div class="panel-section-label" style="margin:20px 0 4px">${t('panel_status')}</div>
+              ${renderPanelCards(wrappedPanels, key + '-')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
 function fmtBytes(bytes) {
   if (bytes == null || isNaN(bytes)) return 'N/A';
   if (bytes === 0) return '0 B';
@@ -1507,6 +1717,7 @@ function fmtBytes(bytes) {
 
 function fmtUptime(seconds) {
   if (seconds == null || isNaN(seconds)) return 'N/A';
+  seconds = Math.floor(seconds);
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);

@@ -24,7 +24,7 @@ import qrcode
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
 from typing import Any, cast, NamedTuple, overload, Literal, Callable, Sequence
-from dacite import from_dict
+from dacite import from_dict, Config as DConfig
 from custom_types import (
     ServerMetricsResponse, Inbound, 
     SettingsClient, NewUserInfo,
@@ -73,7 +73,9 @@ AUDIT_VALUES = Literal[
     'code_add', 'code_delete',
 
 ]
-
+SNAP_DACITE_CFG = DConfig(
+    cast=[tuple]
+)
 
 
 class BandwidthInfo(NamedTuple):
@@ -344,7 +346,7 @@ class Subscription:
             'snapshots',
             as_type=list[dict[str, object]]
         )
-        return [from_dict(StateSnapshot, s) for s in snapshots 
+        return [from_dict(StateSnapshot, s, config=SNAP_DACITE_CFG) for s in snapshots 
                 if cast(int, s.get("ts", 0)) >= cutoff]
         
     def leaderboard(
@@ -1896,20 +1898,29 @@ class BWatch:
 
     def record_snap_snapshot(self) -> None:
         """Record one state snapshot (`SysUtil` + panels) for today."""
-        data: dict[str, int | dict[str, object]] = {
-            "ts": int(time.time()) - (int(time.time()) % 86400),
-            "host": asdict(SysUtil.full_info()),
-            "panels": {}
-        }
+        panels_data: dict[str, object] = {}
         for panel in self.sub.panels:
             status = self.sub.getstatus(panel)
             if status is not None:
-                data[panel.name] = asdict(status.obj)
+                panels_data[panel.name] = asdict(status.obj)
+
+        data: dict[str, int | dict[str, object]] = {
+            "ts": int(time.time()) - (int(time.time()) % 86400),
+            "host": asdict(SysUtil.full_info()),
+            "panels": panels_data
+        }
 
         with self.snap_cfg as d:
             snapshots: list[Mapping[str, object]] = d.setdefault('snapshots', [])
 
-            snapshots.insert(0, data)
+            existing_idx = next(
+                (i for i, s in enumerate(snapshots) if s.get("ts") == data["ts"]),
+                None
+            )
+            if existing_idx is not None:
+                snapshots[existing_idx] = data
+            else:
+                snapshots.insert(0, data)
         
         self.prune_old_snap_snapshots()
 

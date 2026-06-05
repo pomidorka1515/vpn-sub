@@ -15,6 +15,11 @@ from custom_types import (
     GCStats, GCGenStats, ThreadInfo, FullSystemInfo
 )
 
+def tuple_hook(value: object) -> object:
+    if isinstance(value, list):
+        return tuple(value)
+    return value
+
 def parse_bool(value: object) -> bool | None:
     """Convert boolean-like values to actual bool."""
     if isinstance(value, bool):
