@@ -2,6 +2,8 @@ config.json
 .claudeignore
 .claude
 .openclaude
+.python-version
+
 .pytest_cache
 .mypy_cache
 *.lock
@@ -11,6 +13,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+out/
 *.log
 .vscode/
 .idea/

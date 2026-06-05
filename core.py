@@ -1680,6 +1680,7 @@ class BWatch:
 
         # Run first snapshot immediately (record_daily_snapshot does its own locking)
         self.record_daily_snapshot()
+        self.record_snap_snapshot()
         self.is_first()   # also run the monthly reset check immediately
 
         ### Start Threads ###
@@ -1906,7 +1907,9 @@ class BWatch:
                 data[panel.name] = asdict(status.obj)
 
         with self.snap_cfg as d:
-            d.get("snapshots", as_type=list[Mapping[str, object]]).insert(0, data)
+            snapshots: list[Mapping[str, object]] = d.setdefault('snapshots', [])
+
+            snapshots.insert(0, data)
         
         self.prune_old_snap_snapshots()
 

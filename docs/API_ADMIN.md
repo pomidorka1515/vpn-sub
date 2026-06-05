@@ -258,7 +258,7 @@ Response (error):
 ---  
   
 ### GET /api/code/list  
-Description: List all bonus/invite codes.  
+Description: List all bonus/invite code names. Returns names only, with no metadata.  
 Authentication: header  
 Body: none  
 Response (success):  
@@ -267,7 +267,7 @@ Response (success):
 {  
     "success": true,  
     "msg": null,  
-    "obj": { } // dict of codes  
+    "obj": ["code1", "code2"] // list of code-name strings  
 }  
 ```  
   
@@ -410,8 +410,8 @@ Response (error):
   
 ---  
   
-### POST /api/snapshots
-Description: Get state snapshots (system + panels)  
+### POST /api/state/snapshots
+Description: Get state snapshots (system + panels).  
 Authorization: header  
 Body:  
 ```jsonc  
@@ -425,7 +425,9 @@ Response (success):
 {
   "success": true,
   "msg": null,
-  "obj": {  
+  "obj": [
+  // object list
+  {  
 
   // sorry for broken indentation  
 
@@ -542,7 +544,7 @@ Response (success):
     }  
     // ...  
   }  
-}  
+}]  
   
 }  
 ```  
@@ -555,7 +557,48 @@ Response (error):
 }  
 ```  
   
+---
+
+### GET /api/state/all
+Description: Latest system + per-panel info, combines 2 endpoints.
+Authorization: header
+Response (success):
+```jsonc
+{
+    "success": true,
+    "msg": null,
+    "obj": {
+        "host": {
+            // SysUtil.full_info() object, as a dict
+        },
+        "panels": {
+            "node-1": {
+                // state object, as a dict
+            }
+            // ...
+        }
+    }
+}
+```
+
 ---  
+
+### GET /api/state/system
+Description: Get system info from SysUtil.
+Authorization: header
+Response (success):
+```jsonc
+{
+    "success": true,
+    "msg": null,
+    "obj": {
+        // SysUtil.full_info() as a dict
+    }
+}
+```
+
+---
+
 ### POST /api/leaderboard  
 Description: Get leaderboard data for a specified bandwidth type.  
 Authorization: header  

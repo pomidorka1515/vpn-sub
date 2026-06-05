@@ -19,7 +19,7 @@ from typing import (
 from dataclasses import asdict, is_dataclass
 
 from custom_types import ConfigLike, LinesConfigLike, NewUserInfo
-from util import parse_bool
+from util import SysUtil, parse_bool
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
@@ -656,8 +656,11 @@ class Api(BaseApi):
         Route('POST', '/api/code/delete', 'code_delete'),
 
         Route('POST', '/api/leaderboard', 'leaderboard'),
-        Route('POST', '/api/snapshots', 'snapshots'),
 
+        Route('POST', '/api/state/snapshots', 'snapshots'),
+        Route('GET', '/api/state/all', 'full_info'),
+        Route('GET', '/api/state/system', 'system_status'),
+        
         Route('GET', '/api/logs/audit', 'audit'),
 
         Route('GET', '/api/ui', 'admin_ui'),
@@ -838,6 +841,30 @@ class Api(BaseApi):
             return _err(str(e), 500)
     
     @requires_admin_auth
+    def system_status(self) -> ResponseType:
+        try:
+            return _ok(obj=asdict(SysUtil.full_info()))
+        except Exception as e:
+            return _err(str(e), 500)
+    
+    @requires_admin_auth
+    def full_info(self) -> ResponseType:
+        try:
+            obj = {"host": asdict(SysUtil.full_info()), "panels": {}}
+            for panel in self.sub.panels:
+                res = self.sub.getstatus(panel)
+                if res is None:
+                    continue
+                obj['panels'][panel.name] = asdict(res)
+
+            obj = cast(Mapping[str, Mapping[str, JsonifyValue]], obj)
+            return _ok(
+                obj=obj
+            )
+        except Exception as e:
+            return _err(str(e), 500)
+        
+    @requires_admin_auth
     def code_list(self) -> ResponseType: 
         try:
             return _ok(obj=self.sub.list_code())
@@ -866,7 +893,10 @@ class Api(BaseApi):
     def code_add(self) -> ResponseType: 
         try:
             content = g.json_obj
-            raw_data: dict[str, JsonifyValue] = {
+            raw_data: dict[
+                Literal["name", "action", "permanent", "uses", "days", "gb", "wl_gb"], 
+                JsonifyValue
+            ] = {
                 "name": content.get('code'),
                 "action": content.get('action'),
                 "permanent": content.get('perma', 'false'),
@@ -879,17 +909,24 @@ class Api(BaseApi):
             data: dict[str, str | int] = {}
 
             for k, v in raw_data.items():
-                if k == 'permanent':
-                    parsed = parse_bool(v)
-                    if parsed is None:
-                        return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
-                    data[k] = parsed 
-                
-                elif k in ('days', 'gb', 'wl_gb', 'uses'):
-                    try:
-                        data[k] = int(cast(str, v))
-                    except (ValueError, TypeError):
-                        return _err(f"{k} must be an integer, got: {v}")
+                match k:
+                    case 'permanent':
+                        parsed = parse_bool(v)
+                        if parsed is None:
+                            return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
+                        data[k] = parsed 
+                    
+                    case 'days' | 'gb' | 'wl_gb' | 'uses':
+                        try:
+                            data[k] = int(cast(str, v))
+                        except (ValueError, TypeError):
+                            return _err(f"{k} must be an integer, got: {v}")
+
+                    case 'name' | 'action':
+                        try:
+                            data[k] = str(v)
+                        except Exception:
+                            return _err(f"{k} must be a string, got: {v}")
 
             if data['action'] not in ('register', 'bonus'):
                 return _err("action must be 'register' or 'bonus'")

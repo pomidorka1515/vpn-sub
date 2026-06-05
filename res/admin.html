@@ -263,7 +263,14 @@ body {
 .code-name { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
 .code-meta { display: flex; gap: 12px; flex-wrap: wrap; }
 .code-meta span { font-size: 12px; color: var(--text2); }
-.code-actions { display: flex; gap: 6px; }
+.code-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.code-actions .btn-tiny {
+  padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: none; color: var(--text2); font-family: inherit; font-size: 12px;
+  cursor: pointer; transition: all .2s; white-space: nowrap;
+}
+.code-actions .btn-tiny:hover { border-color: var(--accent); color: var(--accent); }
+.code-actions .btn-tiny.danger:hover { border-color: var(--red); color: var(--red); }
 
 .input-group { display: flex; gap: 8px; }
 .input-group input { flex: 1; }
@@ -589,8 +596,8 @@ body {
     <div class="card">
       <div class="card-title" data-t="bonus_codes">Bonus Codes</div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn-secondary" onclick="loadCodes()" id="btnLoadCodes">Load Codes</button>
-        <button class="btn-secondary" onclick="showAddCode()" id="btnShowAddCode">+ Add Code</button>
+        <button class="btn-secondary" onclick="loadCodes()" id="btnLoadCodes" data-t="load_codes">Load Codes</button>
+        <button class="btn-secondary" onclick="showAddCode()" id="btnShowAddCode" data-t="add_code_btn">+ Add Code</button>
       </div>
       <div class="code-list" id="codeList">
         <div class="table-empty" data-t="load_codes_hint">Click "Load Codes" to fetch codes</div>
@@ -603,15 +610,16 @@ body {
         <div class="form-row">
           <label data-t="code">Code</label>
           <div class="input-wrap">
-            <input type="text" id="addCode" maxlength="64" spellcheck="false">
+            <input type="text" id="addCode" maxlength="64" spellcheck="false" autocomplete="off">
+            <span class="form-hint" data-t="code_hint">Unique code string</span>
           </div>
         </div>
         <div class="form-row">
           <label data-t="action_type">Action Type</label>
           <div class="input-wrap">
             <select id="addAction">
-              <option value="bonus">Bonus</option>
-              <option value="register">Register</option>
+              <option value="bonus" data-t="bonus">Bonus</option>
+              <option value="register" data-t="register">Register</option>
             </select>
           </div>
         </div>
@@ -636,7 +644,11 @@ body {
         <div class="form-row">
           <label data-t="reusable">Reusable</label>
           <div class="input-wrap">
-            <input type="checkbox" id="addPerma">
+            <label class="dark-check">
+              <input type="checkbox" id="addPerma" onchange="toggleUsesRow()">
+              <div class="check-track"><div class="check-thumb"></div></div>
+              <span class="check-label" data-t="reusable_label">Unlimited uses</span>
+            </label>
           </div>
         </div>
         <div class="form-row" id="addUsesRow">
@@ -647,10 +659,10 @@ body {
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="doAddCode()" id="btnDoAddCode">Create</button>
-          <button class="btn-secondary" onclick="hideAddCode()" id="btnCancelAddCode">Cancel</button>
+          <button class="btn btn-primary" onclick="doAddCode()" id="btnDoAddCode" data-t="create">Create</button>
+          <button class="btn-secondary" onclick="hideAddCode()" id="btnCancelAddCode" data-t="cancel">Cancel</button>
         </div>
-        <div class="result-box" id="addCodeResult"></div>
+        <div class="result-box" id="addCodeResult" style="display:none"></div>
       </div>
     </div>
   </div>
@@ -796,6 +808,9 @@ const L = {
     monthly_limit: 'Monthly Limit (GB)', wl_limit: 'WL Limit (GB)', expires: 'Expires',
     custom_token: 'Custom Token', custom_uuid: 'Custom UUID', code: 'Code', action_type: 'Action Type',
     bonus: 'Bonus', register: 'Register', days: 'Days', gb: 'GB', wl_gb: 'WL GB', reusable: 'Reusable', uses: 'Uses', uses_hint: 'Ignored if reusable',
+    load_codes: 'Load Codes', add_code_btn: '+ Add Code', create: 'Create', code_hint: 'Unique code string',
+    reusable_label: 'Unlimited uses', no_codes: 'No codes', loading: 'Loading…', error: 'Error',
+    code_required: 'Code is required', uses_invalid: 'Uses must be greater than 0', copy_failed: 'Copy failed',
     health_status: 'Health Status', not_checked: 'Not checked', panel_name: 'Panel Name',
     panel_name_hint: 'Leave empty for all panels', online_users: 'Online Users', keyed: 'Keyed output',
     refresh_users: 'Refresh All Users', refresh_warning: 'This syncs all users to all panels. May take time.',
@@ -843,6 +858,9 @@ const L = {
     monthly_limit: 'Лимит (ГБ)', wl_limit: 'WL лимит (ГБ)', expires: 'Истекает',
     custom_token: 'Токен', custom_uuid: 'UUID', code: 'Код', action_type: 'Тип',
     bonus: 'Бонус', register: 'Регистрация', days: 'Дни', gb: 'ГБ', wl_gb: 'WL ГБ', reusable: 'Многоразовый', uses: 'Использований', uses_hint: 'Игнорируется если многоразовый',
+    load_codes: 'Загрузить', add_code_btn: '+ Создать код', create: 'Создать', code_hint: 'Уникальная строка кода',
+    reusable_label: 'Безлимит. использований', no_codes: 'Нет кодов', loading: 'Загрузка…', error: 'Ошибка',
+    code_required: 'Введите код', uses_invalid: 'Использований должно быть больше 0', copy_failed: 'Не удалось скопировать',
     health_status: 'Статус', not_checked: 'Не проверено', panel_name: 'Панель',
     panel_name_hint: 'Пусто = все панели', online_users: 'Онлайн', keyed: 'Ключ',
     refresh_users: 'Синхронизация', refresh_warning: 'Синхронизирует всех пользователей. Займёт время.',
@@ -1150,45 +1168,80 @@ async function doAddUser() {
   }
 }
 
-async function loadCodes() {
-  const res = await api('/api/code/list');
-  if (!res || !res.success) return;
-  const codes = res.obj || {};
-  renderCodesList(codes);
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 }
 
-function renderCodesList(codes) {
+async function loadCodes() {
   const list = document.getElementById('codeList');
-  const keys = Object.keys(codes);
-  if (!keys.length) {
-    list.innerHTML = `<div class="table-empty">No codes</div>`;
+  list.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
+  const res = await api('/api/code/list');
+  if (!res || !res.success) {
+    list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
     return;
   }
-  list.innerHTML = keys.map(name => {
-    const c = codes[name];
+  const names = Array.isArray(res.obj) ? res.obj : [];
+  if (!names.length) {
+    list.innerHTML = `<div class="table-empty">${t('no_codes')}</div>`;
+    return;
+  }
+  const entries = await Promise.all(names.map(async name => {
+    const info = await api(`/api/code/info?code=${encodeURIComponent(name)}`);
+    return [name, info && info.success ? info.obj : null];
+  }));
+  renderCodesList(entries);
+}
+
+function renderCodesList(entries) {
+  const list = document.getElementById('codeList');
+  if (!entries.length) {
+    list.innerHTML = `<div class="table-empty">${t('no_codes')}</div>`;
+    return;
+  }
+  list.innerHTML = entries.map(([name, c]) => {
+    let badges = '';
+    const meta = [];
+    if (c) {
+      const isRegister = c.action === 'register';
+      badges += `<span class="badge ${isRegister ? 'purple' : 'cyan'}">${escapeHtml(c.action || '—')}</span>`;
+      badges += c.perma
+        ? `<span class="badge green">${t('reusable')}</span>`
+        : `<span class="badge gray">${c.uses ?? 1} ${t('uses').toLowerCase()}</span>`;
+      if (c.days) meta.push(`<span>${c.days} ${t('days').toLowerCase()}</span>`);
+      if (c.gb) meta.push(`<span>${c.gb} ${t('gb')}</span>`);
+      if (c.wl_gb) meta.push(`<span>${c.wl_gb} ${t('gb')} WL</span>`);
+    }
     return `
       <div class="code-card">
         <div class="code-info">
-          <div class="code-name">${name}</div>
-          <div class="code-meta">
-            <span class="badge ${c.action === 'register' ? 'purple' : 'cyan'}">${c.action}</span>
-            ${c.perma ? '<span class="badge green">Reusable</span>' : `<span class="badge gray">${c.uses ?? 1} uses</span>`}
-            ${c.days ? `<span>${c.days}d</span>` : ''}
-            ${c.gb ? `<span>${c.gb}GB</span>` : ''}
-            ${c.wl_gb ? `<span>${c.wl_gb}GB WL</span>` : ''}
-          </div>
+          <div class="code-name">${escapeHtml(name)}</div>
+          <div class="code-meta">${badges}${meta.join('')}</div>
         </div>
         <div class="code-actions">
-          <button class="btn-tiny" onclick="copyToClipboard('${name}')">${t('copy')}</button>
-          <button class="btn-tiny danger" onclick="deleteCode('${name}')">${t('delete')}</button>
+          <button class="btn-tiny" data-code-action="copy" data-code="${escapeHtml(name)}">${t('copy')}</button>
+          <button class="btn-tiny danger" data-code-action="delete" data-code="${escapeHtml(name)}">${t('delete')}</button>
         </div>
       </div>
     `;
   }).join('');
 }
 
-function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).then(() => toast(t('copied'), 'success'));
+// Event delegation so code names with special characters can't break handlers.
+function onCodeListClick(e) {
+  const btn = e.target.closest('button[data-code-action]');
+  if (!btn) return;
+  const code = btn.getAttribute('data-code');
+  const action = btn.getAttribute('data-code-action');
+  if (action === 'copy') copyCode(code);
+  else if (action === 'delete') deleteCode(code);
+}
+
+function copyCode(code) {
+  navigator.clipboard.writeText(code)
+    .then(() => toast(t('copied'), 'success'))
+    .catch(() => toast(t('copy_failed'), 'error'));
 }
 
 async function deleteCode(code) {
@@ -1198,8 +1251,13 @@ async function deleteCode(code) {
     toast(t('deleted'), 'success');
     loadCodes();
   } else {
-    toast(res?.msg || 'Error', 'error');
+    toast(res?.msg || t('error'), 'error');
   }
+}
+
+function toggleUsesRow() {
+  const perma = document.getElementById('addPerma').checked;
+  document.getElementById('addUsesRow').style.display = perma ? 'none' : 'flex';
 }
 
 function showAddCode() {
@@ -1211,7 +1269,11 @@ function showAddCode() {
   document.getElementById('addWlGb').value = '0';
   document.getElementById('addPerma').checked = false;
   document.getElementById('addUses').value = '1';
-  document.getElementById('addCodeResult').innerHTML = '';
+  toggleUsesRow();
+  const result = document.getElementById('addCodeResult');
+  result.style.display = 'none';
+  result.innerHTML = '';
+  document.getElementById('addCode').focus();
 }
 
 function hideAddCode() {
@@ -1219,32 +1281,35 @@ function hideAddCode() {
 }
 
 async function doAddCode() {
-  const body = {};
   const code = document.getElementById('addCode').value.trim();
-  if (!code) { toast('Code required', 'error'); return; }
-  body.code = code;
-  body.action = document.getElementById('addAction').value;
-  body.days = parseInt(document.getElementById('addDays').value) || 0;
-  body.gb = parseInt(document.getElementById('addGb').value) || 0;
-  body.wl_gb = parseInt(document.getElementById('addWlGb').value) || 0;
-  body.perma = document.getElementById('addPerma').checked;
+  if (!code) { toast(t('code_required'), 'error'); return; }
 
-  const uses = parseInt(document.getElementById('addUses').value);
-  if (!body.perma) {
-    if (isNaN(uses) || uses <= 0) { toast('Uses must be greater than 0', 'error'); return; }
+  const perma = document.getElementById('addPerma').checked;
+  const body = {
+    code,
+    action: document.getElementById('addAction').value,
+    perma,
+    days: parseInt(document.getElementById('addDays').value, 10) || 0,
+    gb: parseInt(document.getElementById('addGb').value, 10) || 0,
+    wl_gb: parseInt(document.getElementById('addWlGb').value, 10) || 0,
+  };
+  // `uses` is ignored by the API when perma is true, so only send it otherwise.
+  if (!perma) {
+    const uses = parseInt(document.getElementById('addUses').value, 10);
+    if (isNaN(uses) || uses <= 0) { toast(t('uses_invalid'), 'error'); return; }
     body.uses = uses;
   }
 
-  const result = document.getElementById('addCodeResult');
   const res = await api('/api/code/add', { method: 'POST', body });
   if (res && res.success) {
-    result.innerHTML = `<div class="result-title ok">${t('created')}</div>`;
-    result.className = 'result-box success';
+    toast(t('created'), 'success');
     hideAddCode();
     loadCodes();
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    const result = document.getElementById('addCodeResult');
+    result.style.display = 'block';
     result.className = 'result-box error';
+    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
   }
 }
 
@@ -1620,6 +1685,7 @@ function confirmDialog(message, title) {
 applyTheme();
 renderLang();
 loadConfig();
+document.getElementById('codeList').addEventListener('click', onCodeListClick);
 </script>
 </body>
 </html>
