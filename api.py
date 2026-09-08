@@ -342,17 +342,8 @@ class WebApi(BaseApi):
         else:
             return _v(request.cookies.get('token'))
     def validate_credentials(self, username: str, password: str) -> str | bool:
-        """Validate username+password against config. Returns internal username on success."""
-        users_pw = self.cfg.get('webui_passwords', as_type=dict[str, str])
-        if username not in users_pw:
-            return False
-        if not self.sub.compare(users_pw[username], self.sub.hash(password)):
-            return False
-        webui_users = self.cfg.get('webui_users', as_type=dict[str, str])
-        internal = webui_users.get(username)
-        if not internal or internal not in self.cfg['users']:
-            return False
-        return internal
+        """Validate username+password. Returns internal username on success."""
+        return self.sub.validate_credentials(username, password) or False
     def redirect_page(self) -> ResponseType:
         prefix = request.args.get('prefix', '')
         if not prefix.startswith(('happ://', 'v2ray', 'clash')):
@@ -380,7 +371,7 @@ class WebApi(BaseApi):
         if lang not in ('en', 'ru'):
             lang = 'en'
         
-        token = self.cfg['tokens'][username]
+        token = self.sub.get_token(username)
         domain = self.cfg['domain']
         link = f"{domain}/sub?token={token}&lang={lang}"
         
@@ -403,7 +394,7 @@ class WebApi(BaseApi):
             return _err("'username' field is missing")
         sanitized = self.sub.sanitize(raw)
         valid = raw == sanitized and len(raw) > 0
-        taken = sanitized in self.cfg.get('webui_users', as_type=dict[str, str])
+        taken = self.sub.external_username_exists(sanitized)
         return _ok(obj={
             "MAX_LENGTH": 32,
             "valid": valid,
@@ -431,14 +422,10 @@ class WebApi(BaseApi):
     def delete(self, username: str) -> ResponseType:
         content = g.json_obj
         current_password: str = content.get('current_password')
-        cur_ext = next(
-            (e for e, u in self.cfg.get('webui_users', as_type=dict[str, str]).items() if u == username),
-            None
-        )
+        cur_ext = self.sub.get_external_username(username)
         if not cur_ext:
             return _err("Account has no credentials set", 400)
-        stored = self.cfg.get('webui_passwords', as_type=dict[str, str]).get(cur_ext, '')
-        if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
+        if self.sub.validate_credentials(cur_ext, current_password) != username:
             return _err("Invalid current password", 401)
         try:
             self.sub.delete_user(
@@ -495,14 +482,10 @@ class WebApi(BaseApi):
         if ext_username or ext_password:
             if not current_password:
                 return _err("current_password required to change credentials", 400)
-            cur_ext = next(
-                (e for e, u in self.cfg.get('webui_users', as_type=dict[str, str]).items() if u == username),
-                None,
-            )
+            cur_ext = self.sub.get_external_username(username)
             if not cur_ext:
                 return _err("Account has no credentials set", 400)
-            stored = self.cfg.get('webui_passwords', as_type=dict[str, str]).get(cur_ext, '')
-            if not stored or not self.sub.compare(stored, self.sub.hash(current_password)):
+            if self.sub.validate_credentials(cur_ext, current_password) != username:
                 return _err("Invalid current password", 401)
         try:
             x = self.sub.update_params(
@@ -623,9 +606,9 @@ class WebApi(BaseApi):
         """Get the cookie for auth."""
         content = g.json_obj
         internal = self.validate_credentials(content['username'], content['password'])
-        if not internal:
+        if not isinstance(internal, str):
             return _err("Invalid credentials.", 401)
-        token = self.cfg['tokens'][internal]
+        token = self.sub.get_token(internal)
         r, code = _ok(msg="Successful login", obj={"username": content['username']})
         r.set_cookie(
             key='token',
@@ -683,7 +666,7 @@ class Api(BaseApi):
 
     @requires_admin_auth
     def user_list(self) -> ResponseType: 
-        users = list(self.cfg['users'].keys())
+        users = self.sub.list_users()
         if not users:
             return _ok(obj=[])
         return _ok(obj=users)
@@ -780,7 +763,7 @@ class Api(BaseApi):
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
         try:
-            for cc in self.cfg['users'].keys():
+            for cc in self.sub.list_users():
                 self.sub.add_users(cc)
             return _ok("Refreshed all users.")
         except Exception as e:
@@ -850,14 +833,17 @@ class Api(BaseApi):
     @requires_admin_auth
     def full_info(self) -> ResponseType:
         try:
-            obj = {"host": asdict(SysUtil.full_info()), "panels": {}}
+            panels_data: dict[str, JsonifyValue] = {}
             for panel in self.sub.panels:
                 res = self.sub.getstatus(panel)
                 if res is None:
                     continue
-                obj['panels'][panel.name] = asdict(res)
+                panels_data[panel.name] = asdict(res)
 
-            obj = cast(Mapping[str, Mapping[str, JsonifyValue]], obj)
+            obj: dict[str, JsonifyValue] = {
+                "host": asdict(SysUtil.full_info()),
+                "panels": panels_data
+            }
             return _ok(
                 obj=obj
             )

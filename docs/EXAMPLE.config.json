@@ -58,12 +58,9 @@
         "remarks": ""
     },
     "bypass_packages": [],
-    "webui_passwords": {},
-    "webui_users": {},
     "funny_strings": ["fill this please"],
     "publicbot": {
         "token": "",
-        "tg_lang": {},
         "lang": {
             "ru": {
                 "btn_get_sub": "🔗 Получить подписку",
@@ -223,7 +220,6 @@
             }
         }
     },
-    "codes": [],
     "3xui": {
         "local_panel": {
             "name": "x",
@@ -258,12 +254,6 @@
     "flags": {
         "profile1": "🇫🇮"
     },
-    "users": {},
-    "tokens": {},
-    "displaynames": {},
-    "tgids": {},
-    "wl_bw": {},
-    "bw": {},
     "profiles": {
         "profile1": ["English", "Russian"]
     },
@@ -291,11 +281,5 @@
     "shortProfileDescriptions": {
         "profile1": ["English", "Russian"]
     },
-    "userFingerprints": {},
-    "time": {},
-    "status": {},
-    "statusTime": {},
-    "statusWl": {},
-    "_notified": [],
-    "_wl_notified": []
+    "database_path": "../state.sqlite3"
 }

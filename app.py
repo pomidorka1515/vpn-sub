@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import sys
 import os
 import atexit
@@ -13,10 +14,13 @@ from session import XUiSession
 from api import WebApi, Api
 from bots import PublicBot, AdminBot
 from config import Config, LinesConfig, SYNC_MODES
+from db import Database, DatabaseError, migrate_legacy
 from loggers import Logger
 
 from flask import Flask
-from typing import TypedDict
+from typing import cast, TypedDict
+from custom_types import ConfigLike
+from collections.abc import Mapping
 
 
 ##############################################################
@@ -80,6 +84,42 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 app.config['JSON_SORT_KEYS'] = False
 
+# Import legacy mutable JSON state before strict config loading. The importer
+# is idempotent and leaves timestamped source backups in place.
+def _database_path() -> str:
+    """Read the optional static database path without loading Config twice."""
+    environment_path = os.environ.get('SUB_DB_PATH')
+    if environment_path:
+        return environment_path
+    try:
+        with open('../config.json', encoding='utf-8') as handle:
+            raw: object = json.load(handle)
+        raw_config = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else None
+        configured_path = raw_config.get('database_path') if raw_config is not None else None
+        if isinstance(configured_path, str) and configured_path:
+            return configured_path
+    except (OSError, json.JSONDecodeError):
+        pass
+    return '../state.sqlite3'
+
+
+_db_path = _database_path()
+try:
+    _migration = migrate_legacy(
+        db_path=_db_path,
+        config_path='../config.json',
+        bandwidth_path='../bw_history.json',
+        snapshots_path='../snaps.json',
+        backup_dir='../backup/migration',
+    )
+    if not _migration.already_migrated:
+        log.info(f"SQLite migration imported {_migration.users} users and {_migration.codes} codes")
+        if _migration.skipped_orphans:
+            log.warning(f"SQLite migration skipped {_migration.skipped_orphans} orphaned or duplicate legacy records")
+except DatabaseError:
+    log.critical("SQLite migration failed; refusing to start with mixed JSON/SQLite state.")
+    raise
+
 # ------------------------------------------------------------
 # Configs (two separate files)
 # ------------------------------------------------------------
@@ -108,8 +148,8 @@ _line_config_kwargs: _LineConfigKwargs = {
     'backup_dir': './backup/'
 }
 cfg = Config(path='../config.json', indent=4, **_config_kwargs)
-bw_cfg = Config(path='../bw_history.json', indent=2, **_config_kwargs)
-snap_cfg = Config(path='../snaps.json', minify=True, **_config_kwargs)
+runtime_cfg = cast(ConfigLike, cfg)
+db = Database(_db_path)
 line_cfg = LinesConfig(path='../log.jsonl', **_line_config_kwargs)
 audit_cfg = LinesConfig(path='../audit.jsonl', **_line_config_kwargs)
 # ------------------------------------------------------------
@@ -125,14 +165,14 @@ if not panels and wl is None:
 # Wire up components
 # ------------------------------------------------------------
 sub      = Subscription(
-               cfg=cfg, bw_cfg=bw_cfg, audit_cfg=audit_cfg, snap_cfg=snap_cfg,
+               cfg=runtime_cfg, db=db, audit_cfg=audit_cfg,
                app=app, panels=panels, whitelist_panel=wl
            )
-bw       = BWatch(cfg=cfg, bw_cfg=bw_cfg, snap_cfg=snap_cfg, sub=sub)
-api      = Api(app=app, cfg=cfg, audit_cfg=audit_cfg, sub=sub, bw=bw)
-webapi   = WebApi(app=app, cfg=cfg, sub=sub, bw=bw)
-adminbot = AdminBot(sub=sub, cfg=cfg)
-bot      = PublicBot(sub=sub, cfg=cfg)
+bw       = BWatch(cfg=runtime_cfg, db=db, sub=sub)
+api      = Api(app=app, cfg=runtime_cfg, audit_cfg=audit_cfg, sub=sub, bw=bw)
+webapi   = WebApi(app=app, cfg=runtime_cfg, sub=sub, bw=bw)
+adminbot = AdminBot(sub=sub, cfg=runtime_cfg)
+bot      = PublicBot(sub=sub, cfg=runtime_cfg)
 
 bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
 bw.admin_bot = adminbot
@@ -190,6 +230,7 @@ def _shutdown() -> None:
             panel.close()
         if wl:
             wl.close()
+        db.close()
         log.info("Shutdown complete.")
 
     # fork cleanup into a background thread so systemctl sees exit immediately

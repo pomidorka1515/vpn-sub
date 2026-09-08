@@ -31,6 +31,6 @@ test_chart.py
 .python-version
 vpn_sub.egg-info/
 # My other project, sorry for cluttering...
-nep_bot.py 
+nep_bot*
 # TODO typings for telebot
 typings/

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from loggers import Logger
 from session import XUiSession
+from db import Database, CodeError, DuplicateError, UserRecord
 
 import threading
 import hashlib
@@ -23,7 +24,7 @@ import qrcode
 
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
-from typing import Any, cast, NamedTuple, overload, Literal, Callable, Sequence
+from typing import Any, cast, NamedTuple, overload, Literal, Callable
 from dacite import from_dict, Config as DConfig
 from custom_types import (
     ServerMetricsResponse, Inbound, 
@@ -40,7 +41,7 @@ from custom_types import (
 )
 from util import fmt_bytes_tuple, SysUtil
 from dataclasses import asdict
-from collections.abc import MutableMapping, Mapping
+from collections.abc import Mapping
 from collections import deque
 
 # pyright: reportUnnecessaryIsInstance=false
@@ -109,8 +110,7 @@ class Subscription:
     def __init__(
         self, 
         cfg: ConfigLike,
-        bw_cfg: ConfigLike,
-        snap_cfg: ConfigLike,
+        db: Database,
         app: Flask,
         panels: list[XUiSession],
         whitelist_panel: XUiSession | None,
@@ -119,8 +119,7 @@ class Subscription:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg: ConfigLike = cfg
-            self.bw_cfg: ConfigLike = bw_cfg
-            self.snap_cfg: ConfigLike = snap_cfg
+            self.db = db
             self.audit_cfg: LinesConfigLike | None = audit_cfg
             self.app: Flask = app
             self.whitelist_panel: XUiSession | None  = whitelist_panel
@@ -202,14 +201,61 @@ class Subscription:
         """Get a username from a token, None if doesnt exist."""
         if len(token) < 30:
             return None
-        reversed_tokens = {t: u for u, t in self.cfg["tokens"].items()}
-        return reversed_tokens.get(token, None)
+        return self.db.token_to_user(token)
 
     def isuser(self, username: str) -> bool:
         """Know if a username exists."""
-        if username and username in self.cfg['users']:
-            return True
-        return False
+        return bool(username) and self.db.user_exists(username)
+
+    def _user(self, username: str) -> UserRecord:
+        user = self.db.get_user(username)
+        if user is None:
+            raise KeyError(username)
+        return user
+
+    def get_user_state(self, username: str) -> UserRecord:
+        """Return a typed copy of the user's persisted state."""
+        return self._user(username)
+
+    def list_users(self) -> list[str]:
+        """Return users in deterministic username order."""
+        return self.db.list_users()
+
+    def get_token(self, username: str) -> str:
+        return str(self._user(username)["token"])
+
+    def get_fingerprint(self, username: str) -> str:
+        return str(self._user(username)["fingerprint"])
+
+    def get_external_username(self, username: str) -> str | None:
+        return self.db.user_to_ext(username)
+
+    def external_username_exists(self, ext_username: str) -> bool:
+        return self.db.ext_to_user(ext_username) is not None
+
+    def validate_credentials(self, ext_username: str, password: str) -> str | None:
+        stored = self.db.ext_password(ext_username)
+        username = self.db.ext_to_user(ext_username)
+        if stored is None or username is None or not self.compare(stored, self.hash(password)):
+            return None
+        return username
+
+    def set_telegram_user(self, tgid: int | str, username: str | None) -> None:
+        if username is None:
+            existing = self.db.tgid_to_user(tgid)
+            if existing is not None:
+                self.db.set_telegram(existing, None)
+            return
+        self.db.set_telegram(username, str(tgid))
+
+    def get_telegram_language(self, tgid: int | str) -> str:
+        return self.db.get_telegram_language(tgid)
+
+    def has_telegram_language(self, tgid: int | str) -> bool:
+        return self.db.has_telegram_language(tgid)
+
+    def set_telegram_language(self, tgid: int | str, language: str) -> None:
+        self.db.set_telegram_language(tgid, language)
     
     @staticmethod
     def make_qr(text: str) -> io.BytesIO:
@@ -281,42 +327,35 @@ class Subscription:
         self,
         *,
         username: str,
-        ext_username: str,
-        consumed_code: dict[str, int | str | bool] | None,
     ) -> None:
         """Best-effort rollback for register_with_code()."""
-        with self.cfg as d:
-            d.get("users", as_type=dict[str, str]).pop(username, None)
-            d.get("tokens", as_type=dict[str, str]).pop(username, None)
-            d.get("userFingerprints", as_type=dict[str, str]).pop(username, None)
-            d.get("status", as_type=dict[str, bool]).pop(username, None)
-            d.get("statusTime", as_type=dict[str, bool]).pop(username, None)
-            d.get("statusWl", as_type=dict[str, bool]).pop(username, None)
-            d.get("displaynames", as_type=dict[str, str]).pop(username, None)
-            d.get("bw", as_type=dict[str, list[int]]).pop(username, None)
-            d.get("wl_bw", as_type=dict[str, list[int]]).pop(username, None)
-            d.get("time", as_type=dict[str, int]).pop(username, None)
-            d.get("webui_passwords", as_type=dict[str, str]).pop(ext_username, None)
-            d.get("webui_users", as_type=dict[str, str]).pop(ext_username, None)
-    
-            if consumed_code is not None:
-                codes: list[dict[str, str | int | bool]] = d.setdefault("codes", [])
-                if not any(item.get("code") == consumed_code["code"] for item in codes):
-                    codes.append(consumed_code)
+        # Registration is committed before the panel request so panel I/O is
+        # never inside a SQLite transaction. The pending record makes removal
+        # plus a finite-code refund one short local transaction.
+        self.db.rollback_registration_sync(username)
     
     def bandwidth(self, 
                   username: str,
                   whitelist: bool = False
     ) -> BandwidthInfo:
         """Get bandwidth info about a user. Returns BandwidthInfo(upload, download, total). In bytes."""
-        userid = self.cfg["users"][username]
-        panels = [self.whitelist_panel] if whitelist else list(self.panels)
-        if not whitelist and self.whitelist_panel: 
-            panels.remove(self.whitelist_panel)
-        
+        userid = str(self._user(username)["uuid"])
+
+        if whitelist:
+            # No whitelist panel configured -> there is nothing to report.
+            # NOTE: don't fall through to the loop below with a bare `[None]` list,
+            # `getinbounds()` dereferences attributes on `panel` immediately and
+            # would raise an AttributeError on a None panel.
+            if not self.whitelist_panel:
+                return BandwidthInfo(0, 0, 0)
+            panels: list[XUiSession] = [self.whitelist_panel]
+        else:
+            panels = list(self.panels)
+            if self.whitelist_panel:
+                panels.remove(self.whitelist_panel)
+
         if not panels:
             return BandwidthInfo(0, 0, 0)
-        panels = cast(list[XUiSession], panels)
         up_total = 0
         down_total = 0
         for panel in panels:
@@ -331,23 +370,13 @@ class Subscription:
     def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
         """Return snapshots for a user, clamped to retention window."""
         cutoff = int(time.time()) - days * 86400
-        user_table = self.bw_cfg.get(
-            'users',
-            as_type=dict[str, dict[str, list[dict[str, int]]]]
-        )
-        user_data = user_table.get(username, {})
-        raw = user_data.get("snapshots", [])
-        return [BandwidthSnapshot(**s) for s in raw if s.get("ts", 0) >= cutoff]
+        return [BandwidthSnapshot(**row) for row in self.db.get_bandwidth_snapshots(username, cutoff)]
 
     def get_snapshots(self, days: int = 30) -> list[StateSnapshot]:
         """Return state snapshots, clamped to a retention window."""
         cutoff = int(time.time()) - days * 86400
-        snapshots = self.snap_cfg.get(
-            'snapshots',
-            as_type=list[dict[str, object]]
-        )
-        return [from_dict(StateSnapshot, s, config=SNAP_DACITE_CFG) for s in snapshots 
-                if cast(int, s.get("ts", 0)) >= cutoff]
+        return [from_dict(StateSnapshot, row, config=SNAP_DACITE_CFG)
+                for row in self.db.get_state_snapshots(cutoff)]
         
     def leaderboard(
         self,
@@ -374,10 +403,9 @@ class Subscription:
             where key is the username and value is bandwidth in bytes.
         """
         raw: dict[str, int] = {}
-        users: list[str] = list(self.cfg.get('users', as_type=dict[str, str]))
+        users = self.list_users()
         if use_displaynames:
-            display_map = self.cfg.get('displaynames', as_type=dict[str, str])
-            display_users = [display_map.get(user, user) for user in users]
+            display_users = [str(self._user(user)["displayname"]) for user in users]
         else:
             display_users = users
         # display_users is what we use in dict keys
@@ -388,17 +416,17 @@ class Subscription:
                     total = self.bandwidth(user).total
                     raw[display] = cast(int, total) or 0
             case 'monthly' | 'wl_monthly':
-                t = self.cfg.get(
-                    'bw' if category == 'monthly' else 'wl_monthly',
-                    as_type=dict[str, list[int]]
-                )
                 for user, display in zip(users, display_users):
-                    user_bw = t.get(user)
-                    if not user_bw:
-                        continue
-                    if user_bw[0] == 0:
+                    state = self._user(user)
+                    if category == "monthly":
+                        limit = state["bw_limit_gb"]
+                        used = state["bw_used"]
+                    else:
+                        limit = state["wl_limit_gb"]
+                        used = state["wl_used"]
+                    if limit == 0:
                         continue # skip users who dont have bandwidth
-                    raw[display] = user_bw[1]
+                    raw[display] = used
 
         sorted_items: list[tuple[str, int]] = sorted(raw.items(), key=lambda x: x[1], reverse=not flip)
         if top_n > 0:
@@ -407,7 +435,7 @@ class Subscription:
     
     def add_users(self, username: str, _called_internally: bool = False) -> str | None:
         """Sync users to panels."""
-        userid = self.cfg['users'][username]
+        userid = str(self._user(username)["uuid"])
         panels = self.panels
 
         payload = SettingsClient(
@@ -467,7 +495,7 @@ class Subscription:
                     perma: bool = False
     ) -> None | str:
         """Delete a user, either from panels or from storage too."""
-        userid = self.cfg['users'][username]
+        userid = str(self._user(username)["uuid"])
         panels = self.panels
 
         for panel in panels:
@@ -483,20 +511,7 @@ class Subscription:
                     err_msg: str = content.get('msg', 'panel rejected update')
                     return err_msg
         if perma:
-            with self.cfg as data:
-                sections = ['users', 'tokens', 'userFingerprints', 'status', 'statusWl', 'displaynames', 'bw', 'wl_bw', 'statusTime', 'time']
-                for s in sections:
-                    data.get(s, as_type=dict[str, object]).pop(username, None)
-                
-                emails_to_delete =[email for email, uname in data.get('webui_users', as_type=dict[str, str]).items() if uname == username]
-                for email in emails_to_delete:
-                    data.get('webui_users', as_type=dict[str, str]).pop(email, None)
-                    data.get('webui_passwords', as_type=dict[str, str]).pop(email, None)
-
-                tgids_table = data.get('tgids', as_type=dict[str, str])
-                tgids_to_delete =[tgid for tgid, uname in tgids_table.items() if uname == username]
-                for tgid in tgids_to_delete:
-                    tgids_table.pop(tgid, None)
+            self.db.delete_user(username)
 
         self.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
@@ -508,7 +523,7 @@ class Subscription:
                     wl_enable: bool | None = None) -> None | str:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
         None on success."""
-        userid = self.cfg['users'][username]
+        userid = str(self._user(username)["uuid"])
         audit_info: dict[str, str | bool] = {"username": username}
         if enable is not None:
             panels = list(self.panels)
@@ -532,37 +547,44 @@ class Subscription:
                         err_msg: str = content.get('msg', 'panel rejected update')
                         return err_msg
             
-            with self.cfg as d:
-                d['status'][username] = enable
-                if timee is not None: d['statusTime'][username] = timee
+            fields: dict[str, object] = {"status": enable}
+            if timee is not None:
+                fields["status_time"] = timee
+            self.db.update_user(username, **fields)
             
             audit_info['enable'] = enable
-        if wl_enable is not None and self.whitelist_panel:
-            panel = self.whitelist_panel
-            inbounds = self.getinbounds(panel)
-            l = [i.id for i in inbounds if i.protocol == "vless"]
-            the = {str(vi.id): vx for vi in inbounds for vx in vi.clientStats if vx.uuid == userid}
-            
-            for k in l:
-                if str(k) not in the: continue
-                payload = client_stats_to_settings(the[str(k)])
-                payload.enable = wl_enable
-                payload.id = userid
-                
-                response = panel.post(
-                    f"panel/api/inbounds/updateClient/{userid}",
-                    data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
-                    headers={'Accept': 'application/json'}
-                )
-                content = response.json()
-                if not (response.status_code in (200, 201) and content.get('success')):
-                    _err_msg: str = content.get('msg')
-                    return _err_msg
-                
-            with self.cfg as d:
-                data: dict[str, bool] = d.setdefault('statusWl', {})
-                data[username] = wl_enable
-            
+        if wl_enable is not None:
+            # Only push the change to the whitelist panel if one is actually
+            # configured. Regardless of that, the local `statusWl` bookkeeping
+            # below must still be updated -- otherwise (see the `enable` branch
+            # above, which always writes to cfg) callers silently get a "success"
+            # (None) return value while the requested state never gets recorded,
+            # and BWatch.check() would keep re-triggering the same disable/enable
+            # every cycle since `statusWl` never flips.
+            if self.whitelist_panel:
+                panel = self.whitelist_panel
+                inbounds = self.getinbounds(panel)
+                l = [i.id for i in inbounds if i.protocol == "vless"]
+                the = {str(vi.id): vx for vi in inbounds for vx in vi.clientStats if vx.uuid == userid}
+
+                for k in l:
+                    if str(k) not in the: continue
+                    payload = client_stats_to_settings(the[str(k)])
+                    payload.enable = wl_enable
+                    payload.id = userid
+
+                    response = panel.post(
+                        f"panel/api/inbounds/updateClient/{userid}",
+                        data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
+                        headers={'Accept': 'application/json'}
+                    )
+                    content = response.json()
+                    if not (response.status_code in (200, 201) and content.get('success')):
+                        _err_msg: str = content.get('msg', 'panel rejected update')
+                        return _err_msg
+
+            self.db.update_user(username, status_wl=wl_enable)
+
             audit_info['wl_enable'] = wl_enable
 
         self.audit(name="user_update", info=audit_info)
@@ -603,36 +625,27 @@ class Subscription:
             return "Invalid timestamp"
         if ext_password is not None:
             ext_password = self.hash(ext_password)
+        else:
+            ext_username = None
 
 
         displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
         if len(displayname) > 16:
             return "Displayname too long"
-        with self.cfg as d:
-            # Atomic uniqueness checks under the batch lock (prevents races)
-            if username in d['users']:
-                return "Username exists"
-            if ext_username and ext_username in d.get('webui_users', as_type=dict[str, str]):
-                return "Ext Username exists"
-            d['users'][username] = userid
-            d['tokens'][username] = token
-            d['userFingerprints'][username] = fingerprint
-            d['status'][username] = True
-            d['statusTime'][username] = True
-            d['statusWl'][username] = True
-            d['displaynames'][username] = displayname
-            d['bw'][username] = [limit, 0]
-            d['wl_bw'][username] = [wl_limit, 0]
-            d['time'][username] = timee
-            if ext_password and ext_username:
-                data_pass: dict[str, str] = d.setdefault('webui_passwords', {})
-                data_pass[ext_username] = ext_password
-                data_users: dict[str, str] = d.setdefault('webui_users', {})
-                data_users[ext_username] = username
+        try:
+            self.db.create_user(
+                username=username, uuid=userid, token=token, fingerprint=fingerprint,
+                displayname=displayname, expires_at=timee, bw_limit_gb=limit,
+                wl_limit_gb=wl_limit, ext_username=ext_username,
+                ext_password_hash=ext_password,
+            )
+        except DuplicateError:
+            return "Username or external username exists"
         
         try:
             resp = self.add_users(username=username, _called_internally=True)
             if isinstance(resp, str):
+                self.db.delete_user(username)
                 return f"Panel error: {resp}"
             return NewUserInfo(
                 username=username,
@@ -641,6 +654,9 @@ class Subscription:
                 fingerprint=fingerprint,
                 displayname=displayname
             )
+        except Exception:
+            self.db.delete_user(username)
+            raise
         finally:
             to_log: dict[str, str] = {"username": username}
             if ext_username:
@@ -663,77 +679,47 @@ class Subscription:
         Invalid params return str, None on success."""
         if not self.isuser(username):
             return "Missing username"
+        current = self._user(username)
         audit_info: dict[str, str | int] = {"username": username}
-        with self.cfg as t:
-            _old_ext_username: str | None = None
-            if ext_username is not None:
-                for _ext, _internal in t.get('webui_users', as_type=dict[str, str]).items():
-                    if _internal == username:
-                        _old_ext_username = _ext
-                        break
-                if ext_password is None and _old_ext_username:
-                    ext_password = t['webui_passwords'].get(_old_ext_username, as_type=str)
-                    # mark as already-hashed so we skip re-hashing below
-                    _already_hashed = True
-                else:
-                    _already_hashed = False
-            else:
-                _already_hashed = False
-
-            if displayname is None:
-                displayname = t['displaynames'][username]
-            else:
-                displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
-                if len(displayname) > 16:
-                    return "Displayname too long"
-                audit_info['displayname'] = displayname
-            if token is None:
-                token = t['tokens'][username]
-            if fingerprint is None:
-                fingerprint = t['userFingerprints'][username]
-            else:
-                audit_info['fingerprint'] = fingerprint
-            if limit is None:
-                limit = t['bw'][username][0]
-            else:
-                audit_info['limit'] = limit
-            if wl_limit is None:
-                wl_limit = t['wl_bw'][username][0]
-            else:
-                audit_info['wl_limit'] = wl_limit
-            if timee is None:
-                timestamp: int = t['time'][username]
-            else:
-                timestamp = timee
-                audit_info['time'] = timestamp
-            
-            if ext_username is not None:
-                ext_username = self.sanitize(ext_username)
-                if len(ext_username) > 32:
-                    return "Username too long"
-                if ext_username in t['webui_users'] and t['webui_users'][ext_username] != username:
-                    return "Ext username exists"
-                audit_info['ext_username'] = ext_username
-            if ext_password is not None and not _already_hashed:
-                ext_password = self.hash(ext_password)
-                # audit_info['Dont even think about it']
-            if fingerprint not in self.fps:
-                return "Invalid fingerprint"
-            if timestamp > 2**31:
-                return "Invalid time"
-
-            t['displaynames'][username] = displayname
-            t['tokens'][username] = token
-            t['userFingerprints'][username] = fingerprint
-            t['bw'][username] = [limit, t['bw'][username][1]]
-            t['wl_bw'][username] = [wl_limit, t['wl_bw'][username][1]]
-            t['time'][username] = timestamp
-            if ext_password and ext_username:
-                if _old_ext_username and _old_ext_username != ext_username:
-                    t.get('webui_passwords', as_type=dict[str, str]).pop(_old_ext_username, None)
-                    t.get('webui_users', as_type=dict[str, str]).pop(_old_ext_username, None)
-                t['webui_passwords'][ext_username] = ext_password
-                t['webui_users'][ext_username] = username
+        if displayname is None:
+            displayname = str(current["displayname"])
+        else:
+            displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
+            if len(displayname) > 16:
+                return "Displayname too long"
+            audit_info['displayname'] = displayname
+        token = token if token is not None else str(current["token"])
+        if fingerprint is None:
+            fingerprint = str(current["fingerprint"])
+        else:
+            audit_info['fingerprint'] = fingerprint
+        if fingerprint not in self.fps:
+            return "Invalid fingerprint"
+        limit = int(current["bw_limit_gb"]) if limit is None else limit
+        wl_limit = int(current["wl_limit_gb"]) if wl_limit is None else wl_limit
+        timestamp = int(current["expires_at"]) if timee is None else timee
+        if timestamp > 2**31:
+            return "Invalid time"
+        old_ext = current["ext_username"]
+        if ext_username is None:
+            ext_username = str(old_ext) if old_ext is not None else None
+        else:
+            ext_username = self.sanitize(ext_username)
+            if len(ext_username) > 32:
+                return "Username too long"
+            audit_info['ext_username'] = ext_username
+        if ext_password is None:
+            password_hash = current["ext_password_hash"]
+        else:
+            password_hash = self.hash(ext_password)
+        try:
+            self.db.update_user(
+                username, displayname=displayname, token=token, fingerprint=fingerprint,
+                bw_limit=limit, wl_bw_limit=wl_limit, expiry_time=timestamp,
+                ext_username=ext_username, ext_password=password_hash,
+            )
+        except DuplicateError:
+            return "Ext username exists"
 
         self.audit(name="user_update_params", info=audit_info)
         self._drop_cache()
@@ -777,7 +763,9 @@ class Subscription:
         Potentially dangerous operation, seperate function."""
         if not self.isuser(username):
             return "Unknown username"
-        olduid: str = self.cfg['users'][username]
+        if not self.isuuid(uid):
+            return "Invalid UUID"
+        olduid = str(self._user(username)["uuid"])
         successful: list[tuple['XUiSession', int, SettingsClient, bool]] = []
 
         for panel in self.panels:
@@ -817,7 +805,11 @@ class Subscription:
 
                 successful.append((panel, k, the[str(k)], k in need_vision))
 
-        with self.cfg as t: t['users'][username] = uid
+        try:
+            self.db.update_user(username, uuid=uid)
+        except DuplicateError:
+            self._rollback_user_uuid(username, olduid, uid, successful)
+            return "UUID exists"
         self.audit(name="user_update_uuid", info={"username": username, "uuid": uid})
         self._drop_cache()
         return None
@@ -863,143 +855,51 @@ class Subscription:
         fingerprint = random.choice(self.fps)
         hashed_password = self.hash(ext_password)
     
-        consumed_code: dict[str, int | str | bool] | None = None
-    
-        with self.cfg as d:
-            codes: list[dict[str, str | int | bool]] = d.setdefault("codes", [])
-    
-            match_index = None
-            match_item = None
-            for i, item in enumerate(codes):
-                if item.get("code") == code:
-                    match_index = i
-                    match_item = item
-                    break
-
-            if match_item is None:
-                return "Invalid code"
-            if match_item.get("action") != "register":
-                return "Invalid code"
-    
-            try:
-                uses = int(match_item.get('uses' ,0))
-                days = int(match_item.get("days", 0))
-                gb = int(match_item.get("gb", 0))
-                wl_gb = int(match_item.get("wl_gb", 0))
-            except (TypeError, ValueError):
-                return "Invalid code"
-
-            # 'int | None' causes errors but it cannot be None because of protection above
-            match_index = cast(int, match_index)
-
-            users: dict[str, str] = d.setdefault("users", {})
-            tokens: dict[str, str] = d.setdefault("tokens", {})
-            user_fingerprints: dict[str, str] = d.setdefault("userFingerprints", {})
-            status: dict[str, bool] = d.setdefault("status", {})
-            status_time: dict[str, bool] = d.setdefault("statusTime", {})
-            status_wl: dict[str, bool] = d.setdefault("statusWl", {})
-            displaynames: dict[str, str] = d.setdefault("displaynames", {})
-            bw: dict[str, list[int]] = d.setdefault("bw", {})
-            wl_bw: dict[str, list[int]] = d.setdefault("wl_bw", {})
-            times: dict[str, int] = d.setdefault("time", {})
-            webui_passwords: dict[str, str] = d.setdefault("webui_passwords", {})
-            webui_users: dict[str, str] = d.setdefault("webui_users", {})
-
-            if username in users:
-                return "Username exists"
-            if ext_username in webui_users:
-                return "Ext Username exists"
-
-            timee = int(time.time() + days * 86400) if days else 0
-    
-            if not match_item.get("perma", False):
-                if uses < 1:
-                    return "Invalid code"
-                
-                uses -= 1
-
-                consumed_code = {
-                    "code": code,
-                    "action": "register",
-                    "perma": False,
-                    "uses": uses,
-                    "days": days,
-                    "gb": gb,
-                    "wl_gb": wl_gb
-                }
-
-                if uses < 1:
-                    del codes[match_index]
-            else:
-                consumed_code = {
-                    "code": code,
-                    "action": "register",
-                    "perma": True,
-                    "uses": -1,
-                    "days": days,
-                    "gb": gb,
-                    "wl_gb": wl_gb
-                }
-    
-            users[username] = userid
-            tokens[username] = token
-            user_fingerprints[username] = fingerprint
-            status[username] = True
-            status_time[username] = True
-            status_wl[username] = True
-            displaynames[username] = displayname
-            bw[username] = [gb, 0]
-            wl_bw[username] = [wl_gb, 0]
-            times[username] = timee
-            webui_passwords[ext_username] = hashed_password
-            webui_users[ext_username] = username
-
-            result = RegisterWithCodeInfo(
-                username=username,
-                token=token,
-                uuid=userid,
-                fingerprint=fingerprint,
-                limit=gb,
-                wl_limit=wl_gb,
-                time=timee
-            )
-            audit_result: Mapping[str, str | int] = {
-                "username": username,
-                "ext_username": ext_username,
-                "uuid": userid,
-                "fingerprint": fingerprint,
-                "limit": gb,
-                "wl_limit": wl_gb,
-                "time": timee
-            }
-
         try:
-            self.add_users(username=username, _called_internally=True)
+            result_data = self.db.register_with_code(
+                code=code, username=username, uuid=userid, token=token,
+                fingerprint=fingerprint, displayname=displayname,
+                ext_username=ext_username, ext_password_hash=hashed_password,
+            )
+        except (CodeError, DuplicateError) as exc:
+            return "Username exists" if isinstance(exc, DuplicateError) else "Invalid code"
+        result = RegisterWithCodeInfo(
+            username=username, token=token, uuid=userid, fingerprint=fingerprint,
+            limit=int(result_data["gb"]), wl_limit=int(result_data["wl_gb"]),
+            time=int(result_data["time"]),
+        )
+        audit_result: Mapping[str, str | int] = {
+            "username": username, "ext_username": ext_username, "uuid": userid,
+            "fingerprint": fingerprint, "limit": int(result_data["gb"]),
+            "wl_limit": int(result_data["wl_gb"]), "time": int(result_data["time"]),
+        }
+        try:
+            panel_error = self.add_users(username=username, _called_internally=True)
+            if panel_error is not None:
+                self._rollback_registered_user(username=username)
+                return f"Panel error: {panel_error}"
         except Exception as e:
             self.log.critical(f"register_with_code backend sync failed for {username}: {e}")
-            self._rollback_registered_user(
-                username=username,
-                ext_username=ext_username,
-                consumed_code=consumed_code,
-            )
+            self._rollback_registered_user(username=username)
             raise RuntimeError(f"backend sync failed for {username}") from e
+        self.db.confirm_registration_sync(username)
         self.audit(name="user_add", info=audit_result)
         return result
 
     def get_code(self, code: str) -> CodeObject | bool:
         """Search for a code. Returns a dict if found, False if isnt."""
 
-        result = next((item for item in self.cfg.get('codes', as_type=list[dict[str, str | int | bool]]) if item.get("code") == code), None)
+        result = self.db.get_code(code)
 
         if result:
             return CodeObject(
                 code=code,
-                action=cast(str, result.get('action')),
-                perma=cast(bool, result.get('perma', False)),
-                uses=cast(int, result.get('uses', -1 if result.get('perma', False) else 1)),
-                days=cast(int, result.get('days', 0)),
-                gb=cast(int, result.get('gb', 0)),
-                wl_gb=cast(int, result.get('wl_gb', 0))
+                action=result['action'],
+                perma=result['perma'],
+                uses=result['uses'],
+                days=result['days'],
+                gb=result['gb'],
+                wl_gb=result['wl_gb']
             )
         else:
             return False
@@ -1011,89 +911,18 @@ class Subscription:
             dict: Applied bonus info on success.
             str: Human-readable error on validation/failure.
             """
-        if not self.isuser(username): 
-            return "Unknown user"
         if not isinstance(code, str) or not code:
             return "Unknown code"
-    
-        result: ApplyBonusCodeObject | None = None
-    
-        with self.cfg as d:
-            users: dict[str, str] = d.setdefault("users", {})
-            bw_map: dict[str, list[int]] = d.setdefault("bw", {})
-            wl_bw_map: dict[str, list[int]] = d.setdefault("wl_bw", {})
-            time_map: dict[str, int] = d.setdefault("time", {})
-            codes: list[dict[str, str | int | bool]] = d.setdefault("codes", [])
-
-            if username not in users:
-                return "Unknown user"
-            if username not in bw_map or username not in wl_bw_map or username not in time_map:
-                return "Broken user state"
-    
-            code_index: int | None = None
-            code_item: dict[str, str | int | bool] | None = None
-    
-            for i, item in enumerate(codes):
-                if item.get("code") == code:
-                    code_index = i
-                    code_item = item
-                    break
-    
-            if code_item is None or code_item.get("action") != "bonus":
-                return "Unknown code"
-
-            code_index = cast(int, code_index)
-
-            try:
-                delta_days = int(code_item.get("days", 0))
-                delta_gb = int(code_item.get("gb", 0))
-                delta_wl_gb = int(code_item.get("wl_gb", 0))
-            except (TypeError, ValueError):
-                return "Invalid code"
-    
-            if delta_days < 0 or delta_gb < 0 or delta_wl_gb < 0:
-                return "Invalid code"
-    
-            current_time = time_map[username]
-            current_bw = bw_map[username]
-            current_wl_bw = wl_bw_map[username]
-    
-            if not isinstance(current_bw, list) or len(current_bw) < 2:
-                return "Broken user state"
-            if not isinstance(current_wl_bw, list) or len(current_wl_bw) < 2:
-                return "Broken user state"
-            
-            new_time = 0 if current_time == 0 else current_time + delta_days * 86400
-            new_limit = 0 if current_bw[0] == 0 else current_bw[0] + delta_gb
-            new_wl_limit = 0 if current_wl_bw[0] == 0 else current_wl_bw[0] + delta_wl_gb
-            
-            uses = int(code_item.get('uses', 0))
-
-            if not code_item.get("perma", False):
-                if uses < 1:
-                    return "Invalid code"
-
-                uses -= 1
-
-                if uses < 1:
-                    del codes[code_index]
-            else:
-                uses = -1
-
-            current_bw[0] = new_limit
-            current_wl_bw[0] = new_wl_limit
-            time_map[username] = new_time
-    
-            result = ApplyBonusCodeObject(
-                days=delta_days,
-                gb=delta_gb,
-                wl_gb=delta_wl_gb,
-                uses=uses,
-                perma=bool(code_item.get('perma', False)),
-                time=new_time,
-                limit=new_limit,
-                wl_limit=new_wl_limit
-            )
+        try:
+            result_data = self.db.adjust_bonus(username, code)
+        except CodeError as exc:
+            return str(exc).capitalize()
+        result = ApplyBonusCodeObject(
+            days=int(result_data["days"]), gb=int(result_data["gb"]),
+            wl_gb=int(result_data["wl_gb"]), uses=int(result_data["uses"]),
+            perma=bool(result_data["perma"]), time=int(result_data["time"]),
+            limit=int(result_data["limit"]), wl_limit=int(result_data["wl_limit"]),
+        )
         self.audit(name="user_consume_code", info=asdict(result))
         return result
 
@@ -1123,29 +952,25 @@ class Subscription:
             if uses < 1:
                 return "uses must be >= 1"
         
-        with self.cfg as t:
-            if any(c.get('code') == code for c in t['codes']):
-                return f"code '{code}' already exists"
-            res: dict[str, str | bool | int] = {
-                "code": code, "action": action, "perma": permanent,
-                "days": days, "gb": gb, "wl_gb": wl_gb, "uses": uses if not permanent else -1
-            }
-            t['codes'].append(res)
+        res: dict[str, str | bool | int] = {
+            "code": code, "action": action, "perma": permanent,
+            "days": days, "gb": gb, "wl_gb": wl_gb, "uses": uses if not permanent else -1
+        }
+        try:
+            self.db.add_code(code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses)
+        except DuplicateError:
+            return f"code '{code}' already exists"
         self.audit(name="code_add", info=res)
         
         return None
     def delete_code(self, code: str) -> bool:
         """Returns True if deleted, False if not found."""
-        def _delete(t: MutableMapping[str, Any]) -> bool: 
-            for i, item in enumerate(cast(list[dict[str, object]], t['codes'])):
-                if item.get('code') == code:
-                    del t['codes'][i]
-                    self.audit(name="code_delete", info={"code": code})
-                    return True
-            return False
-        return self.cfg.mutate(_delete)
+        deleted = self.db.delete_code(code)
+        if deleted:
+            self.audit(name="code_delete", info={"code": code})
+        return deleted
     def list_code(self) -> list[str]:
-        return [cast(str, c['code']) for c in self.cfg.get('codes', as_type=list[dict[str, str | int | bool]]) if 'code' in c]
+        return [str(c['code']) for c in self.db.all_codes() if 'code' in c]
     def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject | str:
         """Apply a bonus code for a Telegram user."""
         username = self.get_username_telegram(value)
@@ -1159,24 +984,25 @@ class Subscription:
             return None
         
         conf = self.cfg.copy()
+        user = self._user(username)
         bandwidths = self.bandwidth(username=username)
         wl_bandwidths = self.bandwidth(username=username, whitelist=True)
-        monthly = conf['bw'][username][1]
-        wl_monthly = conf['wl_bw'][username][1]
+        monthly = int(user['bw_used'])
+        wl_monthly = int(user['wl_used'])
         domain = self.cfg['domain']
         if pretty:
             bandwidths = bandwidths.format_all_mb()
             wl_bandwidths = wl_bandwidths.format_all_mb()
         return UserInfo(
             _=random.choice(cast(list[str], conf.get('funny_strings', []))),
-            token=conf['tokens'][username],
-            link=f"{domain}/sub?token={conf['tokens'][username]}",
-            displayname=conf['displaynames'][username],
-            uuid=conf['users'][username],
-            fingerprint=conf['userFingerprints'][username],
-            enabled=conf['status'][username],
-            wl_enabled=conf['statusWl'][username],
-            time=conf['time'][username],
+            token=str(user['token']),
+            link=f"{domain}/sub?token={user['token']}",
+            displayname=str(user['displayname']),
+            uuid=str(user['uuid']),
+            fingerprint=str(user['fingerprint']),
+            enabled=bool(user['enabled']),
+            wl_enabled=bool(user['enabled_wl']),
+            time=int(user['expires_at']),
             online=self.is_online(username),
             bandwidth=UserInfoBandwidth(
                 total=UserInfoBandwidthTotal(
@@ -1191,21 +1017,21 @@ class Subscription:
                 ),
                 monthly=monthly,
                 wl_monthly=wl_monthly,
-                limit=conf['bw'][username][0],
-                wl_limit=conf['wl_bw'][username][0]
+                limit=int(user['bw_limit_gb']),
+                wl_limit=int(user['wl_limit_gb'])
             )
 
         )
     def get_info_telegram(self, tgid: int) -> UserInfo | None:
         """Returns all user info by telegram ID. None if target uid wasnt found."""
-        username = cast(str, self.cfg['tgids'].get(str(tgid), None))
+        username = self.db.tgid_to_user(tgid)
         if not username:
             return None
         return self.get_info(username, True)
     
     def is_registered(self, tgid: int) -> bool:
         """Check if a telegram user is already registered."""
-        return str(tgid) in self.cfg['tgids']
+        return self.db.tgid_to_user(tgid) is not None
 
     @overload
     def get_username_telegram(self, tgid: int | str, reverse: Literal[False] = False) -> str | None: ...
@@ -1217,13 +1043,10 @@ class Subscription:
         """Get the internal username for a tgid.
         Parameter reverse: if True, get tg id from username. Otherwise default behaviour."""
 
-        tgids: dict[str, str] = self.cfg['tgids']
         if not reverse:
-            return tgids.get(str(tgid))
-        for i, v in tgids.items():
-            if v == tgid:
-                return int(i)
-        return None
+            return self.db.tgid_to_user(tgid)
+        mapped = self.db.user_to_tgid(str(tgid))
+        return int(mapped) if mapped is not None else None
 
     def get_emails(self, username: str, panel: XUiSession) -> dict[str, str]:
         """Get the panel emails. {'inboundId': 'actual_panel_email', ...}"""
@@ -1259,16 +1082,14 @@ class Subscription:
                 if res.status_code in (200, 201) and res.json().get('success'):
                     for email in res.json().get('obj', []):
                         name_candidate = email.rsplit('-', 1)[0]
-                        if name_candidate in self.cfg['users']:
+                        if self.db.user_exists(name_candidate):
                             online_users.add(name_candidate)
             except Exception as e:
                 self.log.error(f"Online check error: {e}")
         
         if not new:
             return list(online_users)
-        webui_users_table = self.cfg.get('webui_users', as_type=dict[str, str])
-        internal_to_ext = {v: k for k, v in webui_users_table.items()}
-        return {name: internal_to_ext.get(name) for name in online_users}
+        return {name: self.db.user_to_ext(name) for name in online_users}
     def is_online(self, username: str) -> bool:
         """Simplest method here lol. But useful."""
         return username in self.get_online_users()
@@ -1318,9 +1139,10 @@ class Subscription:
         bandwidths = self.bandwidth(username)
 
         cfg = self.cfg.copy()
+        user = self._user(username)
         
         browser = self.isbrowser(ua=ua)
-        displayname = cfg['displaynames'][username]
+        displayname = str(user['displayname'])
         need_dummy_link = "v2rayn" in ua.lower() or "v2rayng" in ua.lower()
         is_happ = ua.startswith("Happ/")
         mimetype = "text/plain" if not browser else "text/html"
@@ -1328,10 +1150,10 @@ class Subscription:
         if browser:
             return Response(self.browser_html, mimetype=mimetype)
 
-        status: bool = cfg['status'][username]
-        statusTime: bool = cfg['statusTime'][username]
-        statusWl: bool = cfg['statusWl'][username]
-        times: int = cfg['time'][username]
+        status = bool(user['enabled'])
+        statusTime = bool(user['enabled_time'])
+        statusWl = bool(user['enabled_wl'])
+        times = int(user['expires_at'])
         sub_name: str = cfg['sub_name']
         userinfo = "upload={upload};download={download};total={total};expire={expire}"
 
@@ -1343,17 +1165,21 @@ class Subscription:
             bandwidths=bandwidths,
             status=status,
             statusTime=statusTime,
-            ts=times
+            ts=times,
+            bw_limit=int(user['bw_limit_gb']),
+            bw_used=int(user['bw_used']),
+            wl_limit=int(user['wl_limit_gb']),
+            wl_used=int(user['wl_used']),
         )
         announce = f"base64:{base64.b64encode(desc.encode('utf-8')).decode('utf-8')}"
         if status:
-            upload = str(bandwidths[0]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO))
-            download = str(bandwidths[1]) if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][1] / 2 * self.RATIO))
-            total = "0" if cfg['bw'][username][0] == 0 else str(int(cfg['bw'][username][0] * 10**9 * self.RATIO))
+            upload = str(bandwidths[0]) if int(user['bw_limit_gb']) == 0 else str(int(int(user['bw_used']) / 2 * self.RATIO))
+            download = str(bandwidths[1]) if int(user['bw_limit_gb']) == 0 else str(int(int(user['bw_used']) / 2 * self.RATIO))
+            total = "0" if int(user['bw_limit_gb']) == 0 else str(int(int(user['bw_limit_gb']) * 10**9 * self.RATIO))
         else:
-            upload = str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO))
-            download = str(int(cfg['bw'][username][0] * 10**9 / 2 * self.RATIO))
-            total = str(int(cfg['bw'][username][0] * 10**9 * self.RATIO))
+            upload = str(int(int(user['bw_limit_gb']) * 10**9 / 2 * self.RATIO))
+            download = str(int(int(user['bw_limit_gb']) * 10**9 / 2 * self.RATIO))
+            total = str(int(int(user['bw_limit_gb']) * 10**9 * self.RATIO))
         expire = str(times)
 
         userinfo = userinfo.format(
@@ -1398,7 +1224,7 @@ class Subscription:
                 
             headers.update(provider_id_headers)
 
-        user_uuid: str = cfg['users'][username]
+        user_uuid = str(user['uuid'])
 
         ### Content Generation ###
 
@@ -1421,7 +1247,8 @@ class Subscription:
                 bandwidths=bandwidths,
                 user_uuid=user_uuid,
                 is_happ=is_happ,
-                need_dummy_link=need_dummy_link
+                need_dummy_link=need_dummy_link,
+                fingerprint=str(user['fingerprint'])
             )
             return Response(payload, mimetype=mimetype, headers=headers)
         
@@ -1431,7 +1258,8 @@ class Subscription:
                 cfg=cfg,
                 user_uuid=user_uuid,
                 username=username,
-                lang=lang
+                lang=lang,
+                fingerprint=str(user['fingerprint'])
             )
             return Response(
                 response=json.dumps(json_payload, ensure_ascii=False),
@@ -1448,7 +1276,11 @@ class Subscription:
         bandwidths: BandwidthInfo, 
         status: bool,
         statusTime: bool,
-        ts: int
+        ts: int,
+        bw_limit: int,
+        bw_used: int,
+        wl_limit: int,
+        wl_used: int,
     ) -> str:
         descTable: list[str] = cfg['description']
         desc = descTable[0] if lang == "en" else descTable[1]
@@ -1460,11 +1292,11 @@ class Subscription:
             v, label = fmt_bytes_tuple(int(bandwidths.download))
             desc = desc.replace("%s2", v).replace("%u2", label)
 
-            if cfg['bw'][username][0] != 0:
+            if bw_limit != 0:
                 desc = desc.replace("%x1", descTable[4] if lang == "en" else descTable[5])
             else:
                 desc = desc.replace("%x1", "")
-            if cfg['time'][username] != 0:
+            if ts != 0:
                 desc = desc.replace("%t1", descTable[6] if lang == "en" else descTable[7])
                 desc = desc.replace(
                     "%t3",
@@ -1476,30 +1308,30 @@ class Subscription:
                 )
             else:
                 desc = desc.replace("%t1", "").replace("%t2", "").replace("%t3", "")
-            if cfg['bw'][username][0] != 0:
-                v, label = fmt_bytes_tuple(int(cfg['bw'][username][1]))
+            if bw_limit != 0:
+                v, label = fmt_bytes_tuple(bw_used)
                 desc = desc.replace("%n1", v).replace("%y1", label)
-                desc = desc.replace("%n2", str(cfg['bw'][username][0])).replace("%y2", "GB")
+                desc = desc.replace("%n2", str(bw_limit)).replace("%y2", "GB")
             else:
                 desc = desc.replace("%n1", "").replace("%y1", "").replace("%n2", "").replace("%y2", "")
-            if cfg['wl_bw'][username][0] != 0:
-                if cfg['wl_bw'][username][1] > cfg['wl_bw'][username][0] * 10**9: 
+            if wl_limit != 0:
+                if wl_used > wl_limit * 10**9:
                     desc = desc.replace("%l1", descTable[12] if lang == "en" else descTable[13])
                 else:
                     desc = desc.replace("%l1", descTable[10] if lang == "en" else descTable[11])
                 
-                v, label = fmt_bytes_tuple(int(cfg['wl_bw'][username][1]))
+                v, label = fmt_bytes_tuple(wl_used)
                 desc = desc.replace("%w1", v).replace("%i1", label)
 
-                desc = desc.replace("%w2", str(cfg['wl_bw'][username][0])).replace("%i2", "GB")
+                desc = desc.replace("%w2", str(wl_limit)).replace("%i2", "GB")
             else:
                 desc = desc.replace("%l1", "").replace("%w1", "").replace("%i1", "").replace("%w2", "").replace("%i2", "")
         else:
-            if cfg['bw'][username][0] != 0:
-                v, label = fmt_bytes_tuple(int(cfg['bw'][username][1]))
+            if bw_limit != 0:
+                v, label = fmt_bytes_tuple(bw_used)
                 desc = desc.replace("%n1", v).replace("%u1", label)
 
-                desc = desc.replace("%n2", str(cfg['bw'][username][0])).replace("%u2", "GB")
+                desc = desc.replace("%n2", str(bw_limit)).replace("%u2", "GB")
             if not statusTime:
                 desc = desc.replace("%t1", descTable[8] if lang == "en" else descTable[9])
                 desc = desc.replace(
@@ -1525,7 +1357,8 @@ class Subscription:
         is_happ: bool,
         user_uuid: str,
         bandwidths: BandwidthInfo,
-        need_dummy_link: bool
+        need_dummy_link: bool,
+        fingerprint: str,
     ) -> str:
         """Build a base64-encoded link array."""
         generated_links: deque[str] = deque()
@@ -1541,7 +1374,7 @@ class Subscription:
             domain: str = cfg['nodes'][node]
             name: str = flag + p_name[0 if lang == "en" else 1]
             link = link.replace("DOMAIN", domain)
-            link = link.replace("FINGERPRINT", cfg['userFingerprints'][username])
+            link = link.replace("FINGERPRINT", fingerprint)
             link = link.replace("UUID", user_uuid)
             link = link.replace("NAME", name)
             if "EXTRA" in link:
@@ -1575,12 +1408,12 @@ class Subscription:
         cfg: dict[str, Any],
         user_uuid: str,
         username: str,
-        lang: str
+        lang: str,
+        fingerprint: str,
     ) -> list[dict[str, object]]:
         """Build an array of profiles for Happ."""
         obj: list[dict[str, object]] = []
         template: dict[str, object] = cfg['json_template']
-        fingerprint: str = cfg['userFingerprints'][username]
         index: Literal[0, 1] = 0 if lang == "en" else 1 # Language index
 
         for p_key, p_name_list in cfg['profiles'].items():
@@ -1631,8 +1464,7 @@ class BWatch:
     def __init__(
         self, 
         cfg: ConfigLike, 
-        bw_cfg: ConfigLike,
-        snap_cfg: ConfigLike,
+        db: Database,
         sub: Subscription, 
         bot: PublicBotLike | None = None,
         admin_bot: AdminBotLike | None = None
@@ -1640,8 +1472,7 @@ class BWatch:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg: ConfigLike = cfg
-            self.bw_cfg: ConfigLike = bw_cfg
-            self.snap_cfg: ConfigLike = snap_cfg
+            self.db = db
             self._stop_event = threading.Event()
             self._mem_lock = threading.Lock()  # single lock for all mem/wl_mem access
             self.sub: Subscription = sub
@@ -1669,9 +1500,9 @@ class BWatch:
     def start(self) -> None:
         initial_mem: dict[str, BandwidthInfo] = {}
         initial_wl_mem: dict[str, BandwidthInfo] = {}
-        for i in list(self.cfg['users'].keys()):
+        for i in self.sub.list_users():
             initial_wl_mem[i] = self.sub.bandwidth(username=i, whitelist=True)
-            if self.cfg['bw'][i][0] == 0:
+            if self.sub.get_user_state(i)['bw_limit_gb'] == 0:
                 continue
             initial_mem[i] = self.sub.bandwidth(username=i)
 
@@ -1690,12 +1521,6 @@ class BWatch:
         for thread in self._threads:
             thread.start()
 
-    def _get_notified(self, key: Literal['_notified', '_wl_notified']) -> set[int]:
-        """Read _notified/_wl_notified from cfg as a set of int (tgid).
-        Persisted as list in JSON; converted to set for O(1) membership."""
-        val = self.cfg.get(key, as_type=list[int])
-        return set(val) if isinstance(val, list) else (val if isinstance(val, set) else set())
-    
     def stop(self) -> None:
         self._stop_event.set()
         for thread in self._threads:
@@ -1709,34 +1534,26 @@ class BWatch:
     # prune_old_<cfg name>_snapshots
 
     def prune_old_bw_snapshots(self) -> None:
-        with self.bw_cfg as d:
-            meta: dict[str, int] = d.setdefault("_meta", {})
-            retention = meta.get("retention_days", 30)
-            cutoff = int(time.time()) - retention * 86400
-            for user in list(d.get("users", as_type=dict[str, str]).keys()):
-                snapshots = d["users"][user]["snapshots"]
-                d["users"][user]["snapshots"] = [s for s in snapshots if s["ts"] >= cutoff]
-            meta["last_prune"] = int(time.time())
+        retention = int(self.db.get_metadata("bw_retention_days", "30") or 30)
+        cutoff = int(time.time()) - retention * 86400
+        self.db.prune_bandwidth_snapshots(cutoff)
     
     def prune_old_snap_snapshots(self) -> None:
-        with self.snap_cfg as d:
-            meta: dict[str, int] = d.setdefault("_meta", {})
-            snapshots: Sequence[dict[str, int | dict[str, object]]] = d.setdefault("snapshots", [])
-            retention = meta.get("retention_days", 30)
-            cutoff = int(time.time()) - retention * 86400
-            d["snapshots"] = [s for s in snapshots if cast(int, s["ts"]) >= cutoff]
-            meta["last_prune"] = int(time.time())
+        retention = int(self.db.get_metadata("state_retention_days", "30") or 30)
+        cutoff = int(time.time()) - retention * 86400
+        self.db.prune_state_snapshots(cutoff)
     
     def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
         wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
-        for i in list(self.cfg['users'].keys()):
+        for i in self.sub.list_users():
+            state = self.sub.get_user_state(i)
             # Main bandwidth
-            if self.cfg['time'].get(i, 0) != 0:
-                if (self.cfg['time'][i] - int(time.time())) >= 0 and not self.cfg['statusTime'][i]:
+            if int(state['expires_at']) != 0:
+                if (int(state['expires_at']) - int(time.time())) >= 0 and not bool(state['enabled_time']):
                     self._update_user(username=i, enable=True, timee=True)
-            if self.cfg['bw'].get(i, [0, 0])[0] != 0:
-                if self.cfg['bw'][i][1] < int(self.cfg['bw'][i][0] * 10**9) and not self.cfg['status'][i]:
+            if int(state['bw_limit_gb']) != 0:
+                if int(state['bw_used']) < int(int(state['bw_limit_gb']) * 10**9) and not bool(state['enabled']):
                     self._update_user(username=i, enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i)
@@ -1751,8 +1568,8 @@ class BWatch:
                 except Exception as e:
                     self.log.error(f"BW error for {i}: {e}")
             # Whitelist bandwidth
-            if self.cfg['wl_bw'].get(i, [0, 0])[0] != 0:
-                if self.cfg['wl_bw'][i][1] < int(self.cfg['wl_bw'][i][0] * 10**9) and not self.cfg['statusWl'][i]:
+            if int(state['wl_limit_gb']) != 0:
+                if int(state['wl_used']) < int(int(state['wl_limit_gb']) * 10**9) and not bool(state['enabled_wl']):
                     self._update_user(username=i, wl_enable=True)
                 try:
                     current_bws = self.sub.bandwidth(username=i, whitelist=True)
@@ -1769,16 +1586,13 @@ class BWatch:
         if not updates and not wl_updates:
             return
 
-        with self.cfg as data:
-            with self._mem_lock:
-                for i, update in updates.items():
-                    if i in data['bw']:
-                        data['bw'][i][1] += update.delta
-                        self.mem[i] = update.current
-                for i, update in wl_updates.items():
-                    if i in data['wl_bw']:
-                        data['wl_bw'][i][1] += update.delta
-                        self.wl_mem[i] = update.current
+        with self._mem_lock:
+            for i, update in updates.items():
+                self.db.increment_usage(i, regular=update.delta)
+                self.mem[i] = update.current
+            for i, update in wl_updates.items():
+                self.db.increment_usage(i, whitelist=update.delta)
+                self.wl_mem[i] = update.current
 
     def panel_health_check(self) -> None:
         """Check each panel's Xray status and resource usage. Alert on issues."""
@@ -1826,45 +1640,39 @@ class BWatch:
                 self.log.error(f"health check {panel.address}: {e}")
 
     def check(self) -> None:
-        for i in list(self.cfg['users'].keys()):
+        for i in self.sub.list_users():
+            state = self.sub.get_user_state(i)
             tg_user = self.sub.get_username_telegram(tgid=i, reverse=True)
-            if self.cfg['time'][i] != 0:
-                if (self.cfg['time'][i] - int(time.time())) <= 0:
-                    if self.cfg['statusTime'][i]:
+            expires_at = int(state['expires_at'])
+            bw_limit = int(state['bw_limit_gb'])
+            bw_used = int(state['bw_used'])
+            wl_limit = int(state['wl_limit_gb'])
+            wl_used = int(state['wl_used'])
+            if expires_at != 0:
+                if (expires_at - int(time.time())) <= 0:
+                    if bool(state['enabled_time']):
                         self._update_user(username=i, enable=False, timee=False)
                         if self.bot: self.bot.msg(tg_user, 'warning_disabled') # sub expired
                     continue
                 else:
-                    days = (self.cfg['time'][i] - int(time.time())) // 86400
-                    if days <= 2:
-                        if tg_user is not None and tg_user not in self._get_notified('_notified'):
-                            def _u_(t: MutableMapping[str, JsonValue]) -> None:
-                                cast(list[int], t.setdefault('_notified', [])).append(tg_user) # pyright: ignore[reportArgumentType]
-                            self.cfg.mutate(_u_)
+                    days = (expires_at - int(time.time())) // 86400
+                    if days <= 2 and tg_user is not None and self.db.mark_notification("regular", tg_user):
                             if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
-            if self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > int(self.cfg['wl_bw'][i][0] * 10**9):
-                if self.cfg['statusWl'].get(i, True):
+            if wl_limit != 0 and wl_used > int(wl_limit * 10**9):
+                if bool(state['enabled_wl']):
                     self._update_user(username=i, wl_enable=False)
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=self.cfg['wl_bw'][i][0])
-            elif self.cfg['wl_bw'][i][0] != 0 and self.cfg['wl_bw'][i][1] > int(self.cfg['wl_bw'][i][0] * 10**9 * 0.95): # 95%
-                if tg_user is not None and tg_user not in self._get_notified('_wl_notified'):
-                    def _up(t: MutableMapping[str, JsonValue]) -> None:
-                        cast(list[int], t.setdefault('_wl_notified', [])).append(tg_user) # pyright: ignore[reportArgumentType]
-                    self.cfg.mutate(_up)
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(self.cfg['wl_bw'][i][1] / 10**6, 0)), available=self.cfg['wl_bw'][i][0])
-            if not self.cfg['status'][i]:
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=wl_limit)
+            elif wl_limit != 0 and wl_used > int(wl_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("whitelist", tg_user):
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(wl_used / 10**6, 0)), available=wl_limit)
+            if not bool(state['enabled']):
                 continue
-            if self.cfg['bw'][i][0] == 0:
+            if bw_limit == 0:
                 continue
-            if self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > int(self.cfg['bw'][i][0] * 10**9):
+            if bw_used > int(bw_limit * 10**9):
                 self._update_user(username=i, enable=False, timee=True)
-                if self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=self.cfg['bw'][i][0])
-            elif self.cfg['bw'][i][0] != 0 and self.cfg['bw'][i][1] > int(self.cfg['bw'][i][0] * 10**9 * 0.95): # 95%
-                if tg_user is not None and tg_user not in self._get_notified('_notified'):
-                    def _up_(t: MutableMapping[str, JsonValue]) -> None:
-                        cast(list[int], t.setdefault('_notified', [])).append(tg_user) # pyright: ignore[reportArgumentType]
-                    self.cfg.mutate(_up_)
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(self.cfg['bw'][i][1] / 10**6, 0)), available=self.cfg['bw'][i][0])
+                if self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=bw_limit)
+            elif bw_used > int(bw_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("regular", tg_user):
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(bw_used / 10**6, 0)), available=bw_limit)
 
     def is_first(self) -> None:
         # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
@@ -1878,23 +1686,10 @@ class BWatch:
         # '_last_reset_month' stores "YYYY-MM" so a process restart on day 2
         # doesn't accidentally re-trigger a reset that already happened.
         current_month = now.strftime("%Y-%m")
-        if current_month == self.cfg.get("_last_reset_month"):
-            return
-
-        with self.cfg as t:
-            for k in t['bw']:
-                t['bw'][k][1] = 0
-            for k in t['wl_bw']:
-                t['wl_bw'][k][1] = 0
-            t['_last_reset'] = today
-            t['_last_reset_month'] = current_month
-            t['_notified'] = []
-            t['_wl_notified'] = []
+        self.db.reset_monthly(current_month, today)
     
     def reset(self) -> None:
-        with self.cfg as t:
-            t['_notified'] = []
-            t['_wl_notified'] = []
+        self.db.clear_notifications()
 
     def record_snap_snapshot(self) -> None:
         """Record one state snapshot (`SysUtil` + panels) for today."""
@@ -1904,23 +1699,14 @@ class BWatch:
             if status is not None:
                 panels_data[panel.name] = asdict(status.obj)
 
-        data: dict[str, int | dict[str, object]] = {
-            "ts": int(time.time()) - (int(time.time()) % 86400),
+        midnight = int(time.time()) - (int(time.time()) % 86400)
+        data: dict[str, object] = {
+            "ts": midnight,
             "host": asdict(SysUtil.full_info()),
             "panels": panels_data
         }
 
-        with self.snap_cfg as d:
-            snapshots: list[Mapping[str, object]] = d.setdefault('snapshots', [])
-
-            existing_idx = next(
-                (i for i, s in enumerate(snapshots) if s.get("ts") == data["ts"]),
-                None
-            )
-            if existing_idx is not None:
-                snapshots[existing_idx] = data
-            else:
-                snapshots.insert(0, data)
+        self.db.upsert_state_snapshot(midnight, data)
         
         self.prune_old_snap_snapshots()
 
@@ -1940,9 +1726,10 @@ class BWatch:
         # {username: (current, wl_current, delta_up, delta_down, wl_up, wl_down)}
         snapshot_data: dict[str, tuple[BandwidthInfo, BandwidthInfo, int, int, int, int]] = {}
 
-        for username in list(self.cfg['users'].keys()):
-            bw_limit = self.cfg['bw'].get(username, [0, 0])[0]
-            wl_limit = self.cfg['wl_bw'].get(username, [0, 0])[0]
+        for username in self.sub.list_users():
+            state = self.sub.get_user_state(username)
+            bw_limit = int(state['bw_limit_gb'])
+            wl_limit = int(state['wl_limit_gb'])
             if bw_limit == 0 and wl_limit == 0:
                 continue
 
@@ -1969,20 +1756,7 @@ class BWatch:
                 self.mem[username] = current
                 self.wl_mem[username] = wl_current
 
-                snap = BandwidthSnapshot(
-                    ts=midnight, up=up, down=down, wl_up=wl_up, wl_down=wl_down,
-                )
-
-                with self.bw_cfg as d:
-                    users: dict[str, dict[str, list[dict[str, int]]]] = d.setdefault("users", {})
-                    user_data = users.setdefault(username, {"snapshots": []})
-                    snaps: list[dict[str, int]] = user_data["snapshots"]
-
-                    existing_idx = next((i for i, s in enumerate(snaps) if s["ts"] == midnight), None)
-                    if existing_idx is not None:
-                        snaps[existing_idx] = asdict(snap)
-                    else:
-                        snaps.insert(0, asdict(snap))
+                self.db.upsert_bandwidth_snapshot(username, midnight, up, down, wl_up, wl_down)
 
         self.prune_old_bw_snapshots()
     

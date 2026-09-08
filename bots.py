@@ -84,7 +84,7 @@ class AdminBot:
  
     def get_users_menu(self, prefix: str, page: int = 0) -> types.InlineKeyboardMarkup:
         """Get paginated user list with navigation buttons."""
-        all_users = list(self.cfg['users'].keys())
+        all_users = self.sub.list_users()
         total_users = len(all_users)
         total_pages = max(1, (total_users - 1) // self.USERS_PER_PAGE + 1)
 
@@ -163,7 +163,7 @@ class AdminBot:
                 self.bot.register_next_step_handler(msg, self._step_add_user_name) 
  
             elif data == "info_user":
-                if not self.cfg['users']:
+                if not self.sub.list_users():
                     self.bot.send_message(chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu())
                     return
                 page = self._pagination_state.get(chat_id, {}).get('info_page', 0)
@@ -180,7 +180,7 @@ class AdminBot:
                 self._cb_info_user(chat_id, username)
 
             elif data == "action_del":
-                if not self.cfg['users']:
+                if not self.sub.list_users():
                     self.bot.send_message(chat_id, "Список пуст.", reply_markup=self.get_main_menu())
                     return
                 page = self._pagination_state.get(chat_id, {}).get('del_page', 0)
@@ -428,7 +428,7 @@ class AdminBot:
         except Exception:
             pass
     def _cb_list_users(self, chat_id: int, page: int = 0) -> None:
-        all_users = list(self.cfg['users'].keys())
+        all_users = self.sub.list_users()
         total_users = len(all_users)
 
         if not all_users:
@@ -465,7 +465,7 @@ class AdminBot:
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
     def _cb_refresh(self, chat_id: int) -> None:
         try:
-            for cc in self.cfg['users'].keys():
+            for cc in self.sub.list_users():
                 self.sub.add_users(cc)
             self.bot.send_message(chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu())
         except Exception as e:
@@ -526,7 +526,7 @@ class AdminBot:
             self.bot.send_message(chat_id, f"❌ Ошибка: {e}", reply_markup=self.get_main_menu())
  
     def _cb_del_user(self, chat_id: int, username: str) -> None:
-        if username not in self.cfg['users']:
+        if not self.sub.isuser(username):
             self.bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=self.get_main_menu())
             return
         try:
@@ -688,7 +688,7 @@ class AdminBot:
         text = cast(str, message.text)
         if text.startswith('/'): return 
         username = text.strip()
-        if username in self.cfg['users']:
+        if self.sub.isuser(username):
             self.bot.send_message(message.chat.id, "❌ Этот username уже существует.", reply_markup=self.get_main_menu())
             return
         
@@ -1079,10 +1079,6 @@ class PublicBot:
         with self.log.loading():        
             self.cfg = cfg
             self.sub = sub
-            if 'tg_lang' not in self.cfg['publicbot']:
-                with self.cfg as data:
-                    data['publicbot']['tg_lang'] = {}
-    
             token = self.cfg['publicbot'].get('token')
             if not token:
                 self.log.critical("public_bot_token not found in config.json! Public bot will not start.")
@@ -1104,12 +1100,10 @@ class PublicBot:
             self._executor = ThreadPoolExecutor(max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart")
 
     def get_lang(self, uid: int) -> str:
-        lang_table: dict[str, str] = self.cfg['publicbot']['tg_lang']
-        return lang_table.get(str(uid), 'ru')
+        return self.sub.get_telegram_language(uid)
 
     def set_lang(self, uid: int, lang: str) -> None:
-        with self.cfg as data:
-            data['publicbot']['tg_lang'][str(uid)] = lang
+        self.sub.set_telegram_language(uid, lang)
     def msg(self, tgid: int | str | None, key: str, **kwargs: str | int | float | bool) -> None:
         if tgid is None or isinstance(tgid, str):
             return
@@ -1197,7 +1191,7 @@ class PublicBot:
         uid = cast(types.User, message.from_user).id
         self.bot.clear_step_handler_by_chat_id(message.chat.id)
         
-        if str(uid) not in self.cfg['publicbot']['tg_lang']:
+        if not self.sub.has_telegram_language(uid):
             markup = types.InlineKeyboardMarkup()
             markup.add( 
                 types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
@@ -1307,8 +1301,7 @@ class PublicBot:
         
         elif text in (self.TEXTS['ru']['btn_logout'], self.TEXTS['en']['btn_logout']):
             if not self.sub.is_registered(uid): return
-            with self.cfg as d:
-                d['tgids'].pop(str(uid), None)
+            self.sub.set_telegram_user(uid, None)
             self.bot.send_message(message.chat.id, t['logout_success'], reply_markup=self.get_menu(uid))
 
         elif text in (self.TEXTS['ru']['btn_help'], self.TEXTS['en']['btn_help']):
@@ -1416,7 +1409,7 @@ class PublicBot:
         elif action == "set_fp":
             markup = types.InlineKeyboardMarkup(row_width=2)
             username = self.sub.get_username_telegram(uid)
-            current_fp = self.cfg['userFingerprints'].get(username, '')
+            current_fp = self.sub.get_fingerprint(username) if isinstance(username, str) else ''
             for fp in self.cfg['fingerprints']:
                 label = f"✅ {fp}" if fp == current_fp else fp
                 markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}")) 
@@ -1500,7 +1493,7 @@ class PublicBot:
         t = self.TEXTS[lang]
         username = self.sub.get_username_telegram(uid)
         if not isinstance(username, str): return
-        if not self.cfg['webui_users'].get(username, None):
+        if not self.sub.get_external_username(username):
             self.bot.send_message(message.chat.id, t['no_account'], reply_markup=self.get_menu(uid))
             return
         new_pass = text.strip()
@@ -1508,11 +1501,7 @@ class PublicBot:
         except Exception: pass
 
         # Need current ext_username to update password (update_params requires both)
-        ext_username = None
-        for email, uname in self.cfg.get('webui_users', as_type=dict[str, str]).items():
-            if uname == username:
-                ext_username = email
-                break
+        ext_username = self.sub.get_external_username(username)
         if not ext_username:
             self.bot.send_message(message.chat.id, "❌ No login found", reply_markup=self.get_menu(uid))
             return
@@ -1576,9 +1565,7 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
             return
 
-        with self.cfg as d:
-            data: dict[str, str] = d.setdefault('tgids', {})
-            data[str(uid)] = internal_username
+        self.sub.set_telegram_user(uid, internal_username)
 
         self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
         self.send_info(message.chat.id, uid, lang)
@@ -1604,19 +1591,12 @@ class PublicBot:
             
         try: self.bot.delete_message(message.chat.id, message.message_id)
         except Exception: pass    
-        users_pw = self.cfg.get('webui_passwords', as_type=dict[str, str])
-        webui_users = self.cfg.get('webui_users', as_type=dict[str, str])
-        
-        if email in users_pw and users_pw[email] == self.sub.hash(password):
-            internal_username = webui_users.get(email)
-            if internal_username and internal_username in self.cfg['users']:
-                with self.cfg as d:
-                    data: dict[str, str] = d.setdefault('tgids', {})
-                    data[str(uid)] = internal_username
-                
-                self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
-                self.send_info(message.chat.id, uid, lang)
-                return
+        internal_username = self.sub.validate_credentials(email, password)
+        if internal_username:
+            self.sub.set_telegram_user(uid, internal_username)
+            self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
+            self.send_info(message.chat.id, uid, lang)
+            return
                     
         self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
 

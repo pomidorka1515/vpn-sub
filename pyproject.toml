@@ -34,7 +34,7 @@ build-backend = "setuptools.build_meta"
 # Flat layout — no packages, only top-level modules.
 py-modules = [
     "app", "api", "bots", "chart",
-    "config", "core", "custom_types",
+    "config", "core", "custom_types", "db",
     "loggers", "session",
 ]
 
@@ -48,6 +48,7 @@ python_version = "3.14"
 # Explicit list — new modules must be consciously opted in to type-checking.
 files = [
     "config.py",
+    "db.py",
     "custom_types.py",
     "loggers.py",
     "session.py",

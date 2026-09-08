@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
-from core import BandwidthSnapshot
+from custom_types import BandwidthSnapshot
 from util import fmt_bytes
 from typing import cast, TypedDict, Literal
 __all__ = ['bandwidth_chart', 'leaderboard_chart']
@@ -220,7 +220,7 @@ def leaderboard_chart(
     values = [v for _, v in sorted_users]
 
     fig, ax = plt.subplots(figsize=(9, 6), dpi=140)
-    fig.patch.set_facecolor(_BG)
+    fig.patch.set_facecolor(_BG)  # type: ignore[attr-defined]
     ax.set_facecolor(_PANEL)
 
     header = f'{t["leaderboard"]} — {bw_label}'
