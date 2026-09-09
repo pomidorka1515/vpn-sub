@@ -10,12 +10,13 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 - Serves VLESS subscription links with custom per-user traffic/expiry info
 - Tracks bandwidth and auto-disables users who exceed quota or expire
 - Two Telegram bots: admin panel and public user-facing bot
-- JSON config as the source of truth (no database)
+- SQLite database as a source of truth
 
 ## Architecture
 
 - `core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
 - `config.py` — atomic JSON config with thread + cross-process locking
+- `db.py` — core database logic
 - `api.py` — Flask routes (`Api` for admin, `WebApi` for end users)
 - `bots.py` — `AdminBot` (management), `PublicBot` (user self-service)
 - `app.py` — wiring
