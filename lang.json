@@ -1,23 +1,23 @@
 {
     "description": {
         "ru": {
-            "welcome": "👋Привет, %s3!\n%t1%x1%l1Трафика использовано за все время: ↑ %s1%u1 / ↓ %s2%u2",
-            "welcome_exceeded": "👋Привет, %s3!\n⛔Месячный лимит истек! %n1%u1 > %n2%u2",
-            "bw": "Трафик за этот месяц: %n1%y1 / %n2%y2\n",
-            "date": "Подписка до: %t3 (осталось дней: %t2)\n",
-            "date_expired": "Подписка закончилась: %t3!, %t2 дней назад\n",
-            "wl_bw": "🏳️ Трафик WL: %w1%i1 / %w2%i2\n",
-            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! %w1%i1 > %w2%i2"
+            "main": "👋Привет, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Трафика использовано за все время: ↑ {up}{unit} / ↓ {down}{unit}",
+            "main_exceeded": "👋Привет, {username}!\n⛔Месячный лимит истек! {used}{unit} > {limit}{unit}",
+            "bw": "Трафик за этот месяц: {used}{unit} / {limit}{unit}\n",
+            "date": "Подписка до: {date} (осталось дней: {days_left})\n",
+            "date_expired": "Подписка закончилась: {date}!, {days} дней назад\n",
+            "wl_bw": "🏳️ Трафик WL: {used}{unit} / {limit}{unit}\n",
+            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used}{unit} / {limit}{unit}"
         },
-        "en": {
-            "welcome": "👋Welcome, %s3!\n%t1%x1%l1Bandwidth used (all-time): ↑ %s1%u1 / ↓ %s2%u2",
-            "welcome_exceeded": "👋Welcome, %s3!\n⛔Monthly quota exceeded! %n1%u1 > %n2%u2",
-            "bw": "Bandwidth used (this month): %n1%y1 / %n2%y2\n",
-            "date": "Subscription expires at: %t3 (days left: %t2)\n",
-            "date_expired": "Subscription expired at: %t3, %t2 days ago\n",
-            "wl_bw": "🏳️ WL Bandwidth: %w1%i1 / %w2%i2\n",
-            "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! %w1%i1 > %w2%i2"
-        }
+		"en": {
+		    "main": "👋Welcome, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Bandwidth used (all-time): ↑ {up}{unit} / ↓ {down}{unit}",
+		    "main_exceeded": "👋Welcome, {username}!\n⛔Monthly quota exceeded! {used}{unit} > {limit}{unit}",
+		    "bw": "Bandwidth used (this month): {used}{unit} / {limit}{unit}\n",
+		    "date": "Subscription expires at: {date} (days left: {days_left})\n",
+		    "date_expired": "Subscription expired at: {date}, {days} days ago\n",
+		    "wl_bw": "🏳️ WL Bandwidth: {used}{unit} / {limit}{unit}\n",
+		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used}{unit} > {limit}{unit}"
+		}
     },
     "publicbot": {
         "ru": {
