@@ -130,7 +130,6 @@ class _BaseConfigKwargs(TypedDict):
     isolate_commits: bool
     backup_dir: str
 
-
 class _LineConfigKwargs(TypedDict):
     sync_mode: SYNC_MODES
     backup_dir: str
@@ -147,8 +146,11 @@ _line_config_kwargs: _LineConfigKwargs = {
     'sync_mode': 'data',
     'backup_dir': './backup/'
 }
+
 cfg = Config(path='../config.json', indent=4, **_config_kwargs)
+lang_cfg = Config(path='./lang.json', indent=4, read_only=True, strict_schema=True)
 runtime_cfg = cast(ConfigLike, cfg)
+runtime_lang_cfg = cast(ConfigLike, lang_cfg)
 db = Database(_db_path)
 line_cfg = LinesConfig(path='../log.jsonl', **_line_config_kwargs)
 audit_cfg = LinesConfig(path='../audit.jsonl', **_line_config_kwargs)
@@ -165,14 +167,14 @@ if not panels and wl is None:
 # Wire up components
 # ------------------------------------------------------------
 sub      = Subscription(
-               cfg=runtime_cfg, db=db, audit_cfg=audit_cfg,
+               cfg=runtime_cfg, db=db, lang_cfg=runtime_lang_cfg, audit_cfg=audit_cfg,
                app=app, panels=panels, whitelist_panel=wl
            )
 bw       = BWatch(cfg=runtime_cfg, db=db, sub=sub)
 api      = Api(app=app, cfg=runtime_cfg, audit_cfg=audit_cfg, sub=sub, bw=bw)
 webapi   = WebApi(app=app, cfg=runtime_cfg, sub=sub, bw=bw)
 adminbot = AdminBot(sub=sub, cfg=runtime_cfg)
-bot      = PublicBot(sub=sub, cfg=runtime_cfg)
+bot      = PublicBot(sub=sub, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
 
 bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
 bw.admin_bot = adminbot
@@ -237,7 +239,3 @@ def _shutdown() -> None:
     t = threading.Thread(target=_do_cleanup, name='cleanup', daemon=True)
     t.start()
 atexit.register(_shutdown)
-
-
-if __name__ == '__main__':  # Dev only; gunicorn doesnt gaf
-    app.run(port=5550)    

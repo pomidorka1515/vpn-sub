@@ -22,7 +22,7 @@ class SubscriptionDatabaseWorkflowTests(unittest.TestCase):
                 "funny_strings": ["test"],
             }
             subscription = Subscription(
-                cfg=cast(ConfigLike, config), db=database, app=Flask(__name__),
+                cfg=cast(ConfigLike, config), lang_cfg=cast(ConfigLike, {}), db=database, app=Flask(__name__),
                 panels=[], whitelist_panel=None,
             )
             created = subscription.add_new_user(

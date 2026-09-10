@@ -39,7 +39,7 @@ from custom_types import (
     ConfigLike, LinesConfigLike,
     JsonValue
 )
-from util import fmt_bytes_tuple, SysUtil
+from util import format, fmt_bytes, SysUtil
 from dataclasses import asdict
 from collections.abc import Mapping
 from collections import deque
@@ -110,6 +110,7 @@ class Subscription:
     def __init__(
         self, 
         cfg: ConfigLike,
+        lang_cfg: ConfigLike, # ro
         db: Database,
         app: Flask,
         panels: list[XUiSession],
@@ -119,7 +120,8 @@ class Subscription:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg: ConfigLike = cfg
-            self.db = db
+            self.lang_cfg: ConfigLike = lang_cfg
+            self.db: Database = db
             self.audit_cfg: LinesConfigLike | None = audit_cfg
             self.app: Flask = app
             self.whitelist_panel: XUiSession | None  = whitelist_panel
@@ -1139,6 +1141,7 @@ class Subscription:
         bandwidths = self.bandwidth(username)
 
         cfg = self.cfg.copy()
+        lang_cfg = self.lang_cfg.copy()
         user = self._user(username)
         
         browser = self.isbrowser(ua=ua)
@@ -1158,7 +1161,7 @@ class Subscription:
         userinfo = "upload={upload};download={download};total={total};expire={expire}"
 
         desc = self._build_description(
-            cfg=cfg,
+            lang_cfg=lang_cfg,
             username=username,
             name=displayname,
             lang=lang,
@@ -1193,9 +1196,7 @@ class Subscription:
             'Profile-Title': sub_name,
             'Subscription-Userinfo': userinfo,
             'profile-update-interval': "1",
-            # funny
-            'x-stop-looking-here': 'please',
-            'x-pomidorka': '1515',
+            'X-If-Youre-Reading-This': 'Your-Subscription-Has-Been-Revoked',
             'announce': announce,
             'Content-Type': "text/plain"
         }
@@ -1269,7 +1270,7 @@ class Subscription:
 
     @staticmethod
     def _build_description(
-        cfg: dict[str, Any],
+        lang_cfg: dict[str, Any],
         username: str,
         name: str,
         lang: str,
@@ -1282,70 +1283,117 @@ class Subscription:
         wl_limit: int,
         wl_used: int,
     ) -> str:
-        descTable: list[str] = cfg['description']
-        desc = descTable[0] if lang == "en" else descTable[1]
-        if not status:
-            desc = descTable[2] if lang == "en" else descTable[3]
-        if status:
-            v, label = fmt_bytes_tuple(int(bandwidths.upload))
-            desc = desc.replace("%s1", v).replace("%u1", label)
-            v, label = fmt_bytes_tuple(int(bandwidths.download))
-            desc = desc.replace("%s2", v).replace("%u2", label)
+        descTable: dict[str, str] = lang_cfg['description'][lang]
 
-            if bw_limit != 0:
-                desc = desc.replace("%x1", descTable[4] if lang == "en" else descTable[5])
-            else:
-                desc = desc.replace("%x1", "")
+        if status:
+            desc = descTable["main"]
+
+            desc = format(
+                desc,
+                up=fmt_bytes(int(bandwidths.upload)),
+                down=fmt_bytes(int(bandwidths.download))
+            )
+            
             if ts != 0:
-                desc = desc.replace("%t1", descTable[6] if lang == "en" else descTable[7])
-                desc = desc.replace(
-                    "%t3",
-                    datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+                ts_str = descTable["date"]
+                ts_str = format(
+                    ts_str,
+                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M"),
+                    days=str((ts - int(time.time())) // 86400)
                 )
-                desc = desc.replace(
-                    "%t2",
-                    str((ts - int(time.time())) // 86400)
+
+                desc = format(
+                    desc,
+                    slot_time=ts_str
                 )
             else:
-                desc = desc.replace("%t1", "").replace("%t2", "").replace("%t3", "")
+                desc = format(
+                    desc,
+                    slot_time=""
+                )
+            
             if bw_limit != 0:
-                v, label = fmt_bytes_tuple(bw_used)
-                desc = desc.replace("%n1", v).replace("%y1", label)
-                desc = desc.replace("%n2", str(bw_limit)).replace("%y2", "GB")
+                bw_limit_str = descTable["bw"]
+                bw_limit_str = format(
+                    bw_limit_str,
+                    used=fmt_bytes(bw_used),
+                    limit=f"{str(bw_limit)}GB"
+                )
+                desc = format(
+                    desc,
+                    slot_bw=bw_limit_str
+                )
             else:
-                desc = desc.replace("%n1", "").replace("%y1", "").replace("%n2", "").replace("%y2", "")
+                desc = format(
+                    desc,
+                    slot_bw=""
+                )
+
             if wl_limit != 0:
                 if wl_used > wl_limit * 10**9:
-                    desc = desc.replace("%l1", descTable[12] if lang == "en" else descTable[13])
+                    wl_bw_str = descTable["wl_bw_exceeded"]
                 else:
-                    desc = desc.replace("%l1", descTable[10] if lang == "en" else descTable[11])
+                    wl_bw_str = descTable["wl_bw"]
                 
-                v, label = fmt_bytes_tuple(wl_used)
-                desc = desc.replace("%w1", v).replace("%i1", label)
-
-                desc = desc.replace("%w2", str(wl_limit)).replace("%i2", "GB")
+                wl_bw_str = format(
+                    wl_bw_str,
+                    used=fmt_bytes(wl_used),
+                    limit=f"{str(wl_limit)}GB"
+                )
+                desc = format(
+                    desc,
+                    slot_wl_bw=wl_bw_str
+                )
             else:
-                desc = desc.replace("%l1", "").replace("%w1", "").replace("%i1", "").replace("%w2", "").replace("%i2", "")
+                desc = format(
+                    desc,
+                    slot_wl_bw=""
+                )
+                 
         else:
-            if bw_limit != 0:
-                v, label = fmt_bytes_tuple(bw_used)
-                desc = desc.replace("%n1", v).replace("%u1", label)
+            if bw_limit == 0:
+                desc = descTable["main"]
 
-                desc = desc.replace("%n2", str(bw_limit)).replace("%u2", "GB")
-            if not statusTime:
-                desc = desc.replace("%t1", descTable[8] if lang == "en" else descTable[9])
-                desc = desc.replace(
-                    "%t3",
-                    datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
-                )
-                desc = desc.replace(
-                    "%t2",
-                    str(-(ts - int(time.time())) // 86400)
+                desc = format(
+                    desc,
+                    up=fmt_bytes(int(bandwidths.upload)),
+                    down=fmt_bytes(int(bandwidths.download)),
+
+                    # aren't needed here
+                    slot_bw="",
+                    slot_wl_bw=""
                 )
             else:
-                desc = desc.replace("%t1", "").replace("%t2", "").replace("%t3", "")
-        desc = desc.replace("%s3", name)
-        return desc
+                desc = descTable["main_exceeded"]
+                desc = format(
+                    desc,
+                    used=fmt_bytes(bw_used),
+                    limit=f"{str(bw_limit)}GB"
+                )
+            
+            if not statusTime:
+                time_str = descTable["date_expired"]
+                time_str = format(
+                    time_str,
+                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M"),
+                    days=str(-(ts - int(time.time())) // 86400)
+                )
+
+                desc = format(
+                    desc,
+                    slot_time=time_str
+                )
+            else:
+                desc = format(
+                    desc,
+                    slot_time=""
+                )
+
+        final = format(desc, username=name)
+        if "{" in final:
+            raise ValueError("formatted description contains unformatted placeholders")
+
+        return final
 
     @staticmethod
     def _build_link_array(
@@ -1386,22 +1434,22 @@ class Subscription:
                 else:
                     link = link.replace("extra=EXTRA&", "").replace("&extra=EXTRA", "").replace("extra=EXTRA", "")
             generated_links.append(link)
-        dt = "Bandwidth: " if lang == "en" else "Трафик: "
-        dt = dt + "↑ %s1%u1 / ↓ %s2%u2"
-        if need_dummy_link:
-            v, label = fmt_bytes_tuple(bandwidths.upload)
-            dt = dt.replace("%s1", v).replace("%u1", label)
-            v, label = fmt_bytes_tuple(bandwidths.download)
-            dt = dt.replace("%s2", v).replace("%u2", label)
 
-        dt = urllib.parse.quote(dt)
-        dummy = f"vless://0@localhost:1?type=tcp&security=none#" + dt
         if need_dummy_link:
-            generated_links.appendleft(dummy)
+            dt = "Bandwidth: " if lang == "en" else "Трафик: "
+            dt = urllib.parse.quote(
+                dt + "↑ {up} / ↓ {down}".format(
+                    up=fmt_bytes(bandwidths.upload),
+                    down=fmt_bytes(bandwidths.download)
+                )
+            )
+            generated_links.appendleft(
+                f"vless://0@localhost:1?type=tcp&security=none#{dt}"
+            )
+
         raw_text = "\n".join(generated_links)
-        payload = base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
 
-        return payload
+        return base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
     
     @staticmethod
     def _build_json(

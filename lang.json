@@ -1,22 +1,22 @@
 {
     "description": {
         "ru": {
-            "main": "👋Привет, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Трафика использовано за все время: ↑ {up}{unit} / ↓ {down}{unit}",
-            "main_exceeded": "👋Привет, {username}!\n⛔Месячный лимит истек! {used}{unit} > {limit}{unit}",
-            "bw": "Трафик за этот месяц: {used}{unit} / {limit}{unit}\n",
-            "date": "Подписка до: {date} (осталось дней: {days_left})\n",
+            "main": "👋Привет, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Трафика использовано за все время: ↑ {up} / ↓ {down}",
+            "main_exceeded": "👋Привет, {username}!\n{slot_time}⛔Месячный лимит истек! {used} > {limit}",
+            "bw": "Трафик за этот месяц: {used} / {limit}\n",
+            "date": "Подписка до: {date} (осталось дней: {days})\n",
             "date_expired": "Подписка закончилась: {date}!, {days} дней назад\n",
-            "wl_bw": "🏳️ Трафик WL: {used}{unit} / {limit}{unit}\n",
-            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used}{unit} / {limit}{unit}"
+            "wl_bw": "🏳️ Трафик WL: {used} / {limit}\n",
+            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used} / {limit}"
         },
 		"en": {
-		    "main": "👋Welcome, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Bandwidth used (all-time): ↑ {up}{unit} / ↓ {down}{unit}",
-		    "main_exceeded": "👋Welcome, {username}!\n⛔Monthly quota exceeded! {used}{unit} > {limit}{unit}",
-		    "bw": "Bandwidth used (this month): {used}{unit} / {limit}{unit}\n",
-		    "date": "Subscription expires at: {date} (days left: {days_left})\n",
+		    "main": "👋Welcome, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Bandwidth used (all-time): ↑ {up} / ↓ {down}",
+		    "main_exceeded": "👋Welcome, {username}!\n{slot_time}⛔Monthly quota exceeded! {used} > {limit}",
+		    "bw": "Bandwidth used (this month): {used} / {limit}\n",
+		    "date": "Subscription expires at: {date} (days left: {days})\n",
 		    "date_expired": "Subscription expired at: {date}, {days} days ago\n",
-		    "wl_bw": "🏳️ WL Bandwidth: {used}{unit} / {limit}{unit}\n",
-		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used}{unit} > {limit}{unit}"
+		    "wl_bw": "🏳️ WL Bandwidth: {used} / {limit}\n",
+		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used} > {limit}"
 		}
     },
     "publicbot": {

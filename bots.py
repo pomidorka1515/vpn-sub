@@ -1074,19 +1074,19 @@ class PublicBot:
     """Public telegram bot for end users.
     Dependencies: Subscription
     Classes depending on this: none"""
-    def __init__(self, sub: Subscription, cfg: ConfigLike):
+    def __init__(self, sub: Subscription, cfg: ConfigLike, lang_cfg: ConfigLike):
         self.log = Logger(type(self).__name__)
         with self.log.loading():        
-            self.cfg = cfg
-            self.sub = sub
-            token = self.cfg['publicbot'].get('token')
+            self.cfg: ConfigLike = cfg
+            self.sub: Subscription= sub
+            token: str = self.cfg['publicbot'].get('token')
             if not token:
-                self.log.critical("public_bot_token not found in config.json! Public bot will not start.")
+                self.log.critical("public bot token not found in config.json! Public bot will not start.")
                 return
 
             self.bot = telebot.TeleBot(token)
 
-            self.TEXTS: dict[str, dict[str, str]] = self.cfg['publicbot']['lang']
+            self.TEXTS: dict[str, dict[str, str]] = lang_cfg['publicbot']
 
             # NOTE: dumbass telebot has trash typing
             self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start) 
@@ -1095,7 +1095,7 @@ class PublicBot:
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))(self.chart_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this_hhhhh_yet_another_lambda: True)(self.handle_text) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this_hhhhh_yet_another_lambda__imagine_thinking_this_is_a_serious_codebase_lmao: True)(self.handle_text) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
 
             self._executor = ThreadPoolExecutor(max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart")
 
@@ -1104,6 +1104,7 @@ class PublicBot:
 
     def set_lang(self, uid: int, lang: str) -> None:
         self.sub.set_telegram_language(uid, lang)
+    
     def msg(self, tgid: int | str | None, key: str, **kwargs: str | int | float | bool) -> None:
         if tgid is None or isinstance(tgid, str):
             return
@@ -1116,6 +1117,7 @@ class PublicBot:
             text = text.format(**kwargs)
         try: self.bot.send_message(tgid, text, parse_mode="HTML")
         except Exception: pass
+    
     def get_menu(self, uid: int) -> types.ReplyKeyboardMarkup:
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]

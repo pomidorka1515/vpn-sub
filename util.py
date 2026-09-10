@@ -15,9 +15,28 @@ from custom_types import (
     GCStats, GCGenStats, ThreadInfo, FullSystemInfo
 )
 
+from typing import cast
+
+__all__ = [
+    "format", "tuple_hook", "parse_bool",
+    "fmt_bytes_tuple", "fmt_bytes", "fmt_time",
+    "SysUtil"
+]
+
+class _PartialFormatter(dict[str, object]):
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+# intentionally shadows `builtins.format`
+def format(template: str, **values: object) -> str:
+    return template.format_map(
+        _PartialFormatter(values)
+    )
+    
+
 def tuple_hook(value: object) -> object:
     if isinstance(value, list):
-        return tuple(value)
+        return tuple(cast(list[object], value))
     return value
 
 def parse_bool(value: object) -> bool | None:
@@ -41,17 +60,24 @@ def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
         tuple[amount, label]  
         Example: ("193", "MB")
     """
-    for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6)):
+    for unit, div in (
+        ("TB", 10**12), ("GB", 10**9),
+        ("MB", 10**6), ("KB", 10**3)
+    ):
         if value >= div:
             return str(round(value / div, 2)), unit
     return str(round(value / 10**6, 2)), "MB"
 
-def fmt_bytes(b: float) -> str:
-    """Format bytes as short human-readable string. Does NOT return a tuple."""
-    for unit, div in (('TB', 10**12), ('GB', 10**9), ('MB', 10**6), ('KB', 10**3)):
-        if b >= div:
-            return f'{b / div:.1f} {unit}'
-    return f'{int(b)} B'
+
+def fmt_bytes(value: int | float) -> str:
+    """Format bytes as short human-readable string."""
+    for unit, div in (
+        ('TB', 10**12), ('GB', 10**9),
+        ('MB', 10**6), ('KB', 10**3)
+    ):
+        if value >= div:
+            return f'{value / div:.2f} {unit}'
+    return f'{int(value)} B'
 
 
 def fmt_time(seconds: int, lang: str = "ru") -> str:
@@ -76,7 +102,7 @@ def fmt_time(seconds: int, lang: str = "ru") -> str:
 
 class SysUtil:
     """
-    Fetch info about current state of the app and system. Linux-onlyю
+    Fetch info about current state of the app and system. Linux-only.
     Most methods are static and should be called like `SysUtil.method()`.
     """
     def __init__(self) -> None:
