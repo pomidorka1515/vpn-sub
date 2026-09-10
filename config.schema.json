@@ -6,7 +6,7 @@
     "required": [
         "uri", "api_token", "api_admin_ui_auth", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot", "routing",
         "json_template", "bypass_packages", "domain", "ping_check_url",
-        "publicbot", "3xui", "sub_name", "description", "flags",
+        "publicbot", "3xui", "sub_name", "flags",
         "profiles", "json_profiles", "profileDescriptions", "whitelistProfiles",
         "masterLinks", "profileNodes", "shortProfileDescriptions"
     ],
@@ -119,19 +119,10 @@
         "publicbot": {
             "type": "object",
             "description": "Object for the public bot.",
-            "required": ["token", "lang"],
+            "required": ["token"],
             "additionalProperties": false,
             "properties": {
                 "token": { "type": "string" },
-                "lang": {
-                    "type": "object",
-                    "required": ["ru", "en"],
-                    "additionalProperties": false,
-                    "properties": {
-                        "ru": { "$ref": "#/$defs/langStrings" },
-                        "en": { "$ref": "#/$defs/langStrings" }
-                    }
-                }
             }
         },
 
@@ -164,13 +155,6 @@
                     "inject_headers": { "type": "object" }
                 }
             }
-        },
-
-        "description": {
-            "type": "array",
-            "items": { "type": "string" },
-            "minItems": 14,
-            "maxItems": 14
         },
 
         "flags": {
