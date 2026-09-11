@@ -12,6 +12,13 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 - Two Telegram bots: admin panel and public user-facing bot
 - SQLite database as a source of truth
 
+## Core principles
+- **"No tag on commit = don't expect stability."**
+  - Untagged commits on `main` are rolling development. If you want stability, only check out released tags.
+- **"Works fine on my machine"**
+  - Self-explanatory. This is primarily built and tested for my own setup.
+  - Doesn't start? Something broke? Feel free to open an issue and I'll likely look into it when I can.
+
 ## Architecture
 
 - `core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
