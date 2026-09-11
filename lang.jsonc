@@ -19,6 +19,36 @@
 		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used} > {limit}"
 		}
     },
+    "chart": {
+        "ru": {
+            "bandwidth": "Использование трафика",
+            "days": "дн.",
+            "day": "день",
+            "regular_traffic": "Обычный трафик",
+            "whitelist_traffic": "Белый список",
+            "download": "Загрузка",
+            "upload": "Отдача",
+            "no_data": "Нет данных",
+            "leaderboard": "Таблица лидеров",
+            "bw_type_total": "весь трафик",
+            "bw_type_monthly": "трафик за месяц",
+            "bw_type_wl_monthly": "WL-трафик за месяц"
+        },
+        "en": {
+            "bandwidth": "Bandwidth",
+            "days": "days",
+            "day": "day",
+            "regular_traffic": "Regular traffic",
+            "whitelist_traffic": "Whitelist traffic",
+            "download": "Download",
+            "upload": "Upload",
+            "no_data": "No data",
+            "leaderboard": "Leaderboard",
+            "bw_type_total": "total bandwidth",
+            "bw_type_monthly": "monthly bandwidth",
+            "bw_type_wl_monthly": "whitelist monthly bandwidth"
+        }
+    },
     "publicbot": {
         "ru": {
             // main navigation buttons

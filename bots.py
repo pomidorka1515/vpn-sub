@@ -12,7 +12,7 @@ import time
 import threading
 import urllib.parse
 
-from typing import cast, overload, Literal
+from typing import cast, overload, Literal, Mapping
 from datetime import datetime
 from telebot import types
 from dataclasses import is_dataclass
@@ -33,11 +33,13 @@ class AdminBot:
 
     def __init__(self,
                  sub: Subscription,
+                 lang_cfg: ConfigLike,
                  cfg: ConfigLike):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.cfg = cfg
-            self.sub = sub
+            self.cfg: ConfigLike = cfg
+            self.sub: Subscription = sub
+            self.lang_cfg: ConfigLike = lang_cfg
             self.bot = telebot.TeleBot(self.cfg['bot']['token'])
             self.admin_uids: list[int] = self.cfg['bot']['whitelist']
 
@@ -346,7 +348,12 @@ class AdminBot:
             flip=True if order == "asc" else False
         )
 
-        chart = leaderboard_chart(lb_data, bandwidth_type=bw_type, lang="ru")
+        chart = leaderboard_chart(
+            lb_data, bandwidth_type=bw_type, 
+            lang=self.lang_cfg.get('chart', 
+                as_type=Mapping[str, Mapping[str, str]]
+            )['ru']
+        )
 
         if chart is None:
             self.bot.send_message(chat_id, "Нет данных!")
@@ -1045,7 +1052,13 @@ class AdminBot:
                 while b and (b[-1] & 0x80):  # back up from a continuation byte
                     b = b[:-1]
                 text = b.decode("utf-8", errors="ignore") + "..."            
-            chart_img = bandwidth_chart(snapshots, label=info.displayname, lang='ru')
+            chart_img = bandwidth_chart(
+                snapshots, 
+                label=info.displayname, 
+                lang=self.lang_cfg.get('chart', 
+                    as_type=Mapping[str, Mapping[str, str]]
+                )['ru']
+            )
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_main_menu())
             else:
@@ -1078,6 +1091,7 @@ class PublicBot:
         self.log = Logger(type(self).__name__)
         with self.log.loading():        
             self.cfg: ConfigLike = cfg
+            self.lang_cfg: ConfigLike = lang_cfg
             self.sub: Subscription= sub
             token: str = self.cfg['publicbot'].get('token')
             if not token:
@@ -1728,7 +1742,13 @@ class PublicBot:
                     b = b[:-1]
                 text = b.decode("utf-8", errors="ignore") + "..."
             
-            chart_img = bandwidth_chart(snapshots, label=info.displayname, lang=lang)
+            chart_img = bandwidth_chart(
+                snapshots, 
+                label=info.displayname, 
+                lang=self.lang_cfg.get('chart', 
+                    as_type=Mapping[str, Mapping[str, str]]
+                )[lang]
+            )
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
             else:
