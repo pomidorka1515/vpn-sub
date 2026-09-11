@@ -32,13 +32,28 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 
 ```bash
 pip install -r requirements.txt
-cp config.example.json config.json  # fill in panel credentials, bot tokens, etc
+mkdir -p data && cp config.example.json data/config.json  # fill in panel credentials, bot tokens, etc
 gunicorn --threads 4 -b 127.0.0.1:5550 --graceful-timeout 30 app:app # or run as a systemd service
 ```
 
+### Environment Variables
+
+All path variables are **optional**. If omitted, runtime data defaults to the `./data/` folder inside the project directory.
+
+| Variable      | Default                  | Description                                         |
+| :---          | :---                     | :---                                                |
+| `DIR_DATA`    | `./data/`                | Base directory for runtime data (DB, logs, config)  |
+| `DIR_BACKUPS` | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored |
+| `PATH_CONFIG` | `<DIR_DATA>/config.json` | Path to the main application configuration          |
+| `PATH_DB`     | `<DIR_DATA>/state.db`    | Path to the SQLite database                         |
+| `PATH_LOG`    | `<DIR_DATA>/log.jsonl`   | Path to application event logs (JSONL)              |
+| `PATH_AUDIT`  | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                    |
+| `PATH_LANG`   | `./lang.jsonc`           | Path to the static UI language strings              |
+
+
 ### Systemd service
 
-```systemd
+```ini
 [Unit]
 Description=subscription backend
 After=network.target
@@ -48,6 +63,16 @@ Wants=network.target
 User=root
 WorkingDirectory=X
 Environment=PYTHONUNBUFFERED=1
+
+# --- optional path overrides ---
+# Environment="DIR_DATA=/var/lib/vpn-sub"
+# Environment="DIR_BACKUPS=/var/backups/vpn-sub"
+# Environment="PATH_CONFIG=/etc/vpn-sub/config.json"
+# Environment="PATH_DB=/var/lib/vpn-sub/state.db"
+# Environment="PATH_LOG=/var/log/vpn-sub/log.jsonl"
+# Environment="PATH_AUDIT=/var/log/vpn-sub/audit.jsonl"
+# Environment="PATH_LANG=/path/to/vpn-sub/lang.jsonc"
+
 ExecStart=X/venv/bin/gunicorn \
     --bind 127.0.0.1:X \
     --capture-output \
@@ -58,9 +83,14 @@ ExecStart=X/venv/bin/gunicorn \
     --config gunicorn.conf.py \
     --graceful-timeout 30 \
     app:app
+
 TimeoutStopSec=35
 KillMode=mixed
 KillSignal=SIGTERM
+
+LimitNOFILE=65535
+PrivateTmp=true
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
