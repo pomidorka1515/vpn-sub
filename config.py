@@ -27,9 +27,10 @@ import tempfile
 import threading
 import io
 from datetime import datetime
-
+from pathlib import Path
 import jsonschema
 
+from util import strip_jsonc_comments, strip_jsonc_trailing_commas
 try:
     import fcntl
 except ModuleNotFoundError as exc:
@@ -162,6 +163,7 @@ def _do_backup(
     *,
     minify: bool = False,
     raw: bool = False,
+    jsonc: bool = False,
 ) -> None:
     """Take a snapshot and write it to a per-instance subdirectory.
 
@@ -170,6 +172,8 @@ def _do_backup(
              instead of being parsed and re-serialised as JSON.  This is required
              because JSONL files are not valid single-document JSON and
              json.load() would raise JSONDecodeError on them.
+        jsonc: When True, parse JSONC comments and trailing commas before
+               writing the normalized backup.
     """
     os.makedirs(instance_dir, exist_ok=True)
 
@@ -198,10 +202,17 @@ def _do_backup(
         backup_path = os.path.join(instance_dir, f"{timestamp}.json")
         try:
             with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+                content = f.read()
+            if jsonc:
+                content = strip_jsonc_comments(content)
+                content = strip_jsonc_trailing_commas(content)
+            data = json.loads(content)
+        except FileNotFoundError:
             return
-
+        except json.JSONDecodeError as e:
+            if jsonc:
+                log.warning(f"skipping backup: failed to parse JSONC in {path}: {e}")
+            return
         fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
         os.close(fd)
         try:
@@ -246,7 +257,8 @@ def _make_backup_thread(
     backup_retention: int,
     stop_event: threading.Event,
     config_type: CONFIG_TYPES,
-    raw: bool = False
+    raw: bool = False,
+    jsonc: bool = False,
 ) -> threading.Thread:
     """
     Args:
@@ -256,13 +268,14 @@ def _make_backup_thread(
         backup_interval: Time in seconds between backups.
         stop_event: Threading event to use.
         raw: see _do_backup raw kwarg.
+        jsonc: see _do_backup jsonc kwarg.
     """
     def loop() -> None:
         log = Logger("Backup")
         instance_dir = _instance_backup_dir(path, backup_dir)
         while not stop_event.wait(backup_interval):
             try:
-                _do_backup(path, indent, instance_dir, log, raw=raw)
+                _do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
                 _prune_backups(instance_dir, backup_retention, log, config_type=config_type)
                 log.info("backup successful")
             except Exception as e:
@@ -297,10 +310,11 @@ class Config(MutableMapping[str, JsonValue]):
     def __init__(
         self,
         *,
-        path: str,
+        path: str | Path,
         indent: int = 4,
         minify: bool = False,
         read_only: bool = False,
+        read_only_jsonc: bool = False,
         strict_schema: bool = True,
         sync_mode: SYNC_MODES = 'data',
         isolate_commits: bool = True,
@@ -317,6 +331,8 @@ class Config(MutableMapping[str, JsonValue]):
             read_only: Read-only, raises on writes. Handle with caution.
                 WARNING: This arg is also immutable.
                 You cannot make a Config() instance read-only past __init__ and vise versa.
+            read_only_jsonc: Parse JSONC comments and trailing commas. This is only
+                supported for read-only configs so the source file is never reformatted.
             strict_schema: If True, schema errors raise; if False, they log a warning.
             sync_mode: 'full' fsyncs file + parent directory, 'data' fsyncs file only,
                 'none' skips fsync entirely.
@@ -327,9 +343,14 @@ class Config(MutableMapping[str, JsonValue]):
             backup_retention: Amount of concurrent backups kept on disk.
         """
         self.log = Logger(type(self).__name__)
-        if not path.endswith('.json'):
-            self.log.warning("path doesnt end with .json, did you specify the correct path?")
-        self._path: str = path
+        path_str = str(path)
+
+        valid_exts: tuple[str] | tuple[str, str] = ('.jsonc', '.json') if read_only else ('.json',)
+        if read_only_jsonc and not read_only:
+            raise ConfigError("read_only_jsonc requires read_only=True")
+        if not path_str.endswith(valid_exts):
+            self.log.warning(f"path doesnt end with .json{"c" if read_only else ""}, did you specify the correct path?")
+        self._path: str = path_str
         self._indent: int = indent
         self._minify: bool = minify
         self._strict_schema: bool = strict_schema
@@ -356,9 +377,7 @@ class Config(MutableMapping[str, JsonValue]):
         self._warned_update_callable: bool = False
 
         self._read_only: bool = read_only
-        # self._read_only_jsonc: bool = read_only_jsonc TODO
-        # if self._read_only_jsonc and not self._read_only:
-        #         raise ConfigError("read_only_jsonc cannot be True when read-only mode is not enabled")
+        self._read_only_jsonc: bool = read_only_jsonc or (path_str.endswith('.jsonc') and read_only)
         
         self._backup_dir: str | None = backup_dir
         self._backup_interval: int | float = backup_interval
@@ -376,7 +395,8 @@ class Config(MutableMapping[str, JsonValue]):
                 backup_interval=backup_interval,
                 backup_retention=backup_retention,
                 stop_event=self._backup_stop,
-                config_type='json'
+                config_type='json',
+                jsonc=self._read_only_jsonc,
             )
             self._backup_t.start()
         else:
@@ -403,6 +423,10 @@ class Config(MutableMapping[str, JsonValue]):
     @property
     def read_only(self) -> bool:
         return self._read_only
+
+    @property
+    def read_only_jsonc(self) -> bool:
+        return self._read_only_jsonc
     
     @property
     def strict_schema(self) -> bool:
@@ -445,7 +469,14 @@ class Config(MutableMapping[str, JsonValue]):
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
         instance_dir = _instance_backup_dir(self._path, self._backup_dir)
-        _do_backup(self._path, self._indent, instance_dir, self.log)
+        _do_backup(
+            self._path,
+            self._indent,
+            instance_dir,
+            self.log,
+            minify=self._minify,
+            jsonc=self._read_only_jsonc,
+        )
         _prune_backups(instance_dir, self._backup_retention, self.log, config_type='json')
 
     def _raise_if_read_only(self) -> None:
@@ -460,7 +491,10 @@ class Config(MutableMapping[str, JsonValue]):
         """
         with self._lock:
             self._raise_if_used_inside_transaction()
-            return self._reload_locked(create_if_missing=True, exclusive=True)
+            return self._reload_locked(
+                create_if_missing=not self._read_only_jsonc,
+                exclusive=True,
+            )
 
     def edit(self) -> _ConfigTransactionLike:
         """Open an explicit transaction.
@@ -689,7 +723,11 @@ class Config(MutableMapping[str, JsonValue]):
     def _read_json_object(self) -> dict[str, JsonValue]:
         try:
             with open(self._path, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
+                content = handle.read()
+            if self._read_only_jsonc:
+                content = strip_jsonc_comments(content)
+                content = strip_jsonc_trailing_commas(content)
+            data = json.loads(content)
         except FileNotFoundError:
             raise
         except json.JSONDecodeError as exc:
@@ -1097,7 +1135,7 @@ class LinesConfig:
 
     def __init__(
         self,
-        path: str,
+        path: str | Path,
         sync_mode: SYNC_MODES = 'data',
         backup_dir: str | None = None,
         backup_interval: int | float = 7200,
@@ -1114,10 +1152,11 @@ class LinesConfig:
             backup_retention: Amount of concurrent backups kept on disk.
         """
         self.log = Logger(type(self).__name__)
+        path_str = str(path)
         with self.log.loading():
-            if not path.endswith('.jsonl'):
+            if not path_str.endswith('.jsonl'):
                 self.log.warning("path doesnt end with .jsonl, did you specify the correct path?")
-            self._path: str = path
+            self._path: str = path_str
             self._sync_mode: SYNC_MODES = sync_mode
             self._lock = threading.RLock()
 
@@ -1126,7 +1165,7 @@ class LinesConfig:
             self._backup_retention: int = backup_retention
             self._backup_stop = threading.Event()
 
-            _ensure_parent_dir(path)
+            _ensure_parent_dir(path_str)
             if not os.path.exists(self._path):
                 with open(self._path, "a", encoding="utf-8"):
                     pass
@@ -1370,4 +1409,3 @@ class LinesConfig:
                 self._backup_t.join(timeout=2)
         except Exception:
             pass
-

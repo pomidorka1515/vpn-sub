@@ -148,7 +148,7 @@ _line_config_kwargs: _LineConfigKwargs = {
 }
 
 cfg = Config(path='../config.json', indent=4, **_config_kwargs)
-lang_cfg = Config(path='./lang.json', indent=4, read_only=True, strict_schema=True)
+lang_cfg = Config(path='./lang.jsonc', indent=4, read_only=True, read_only_jsonc=True, strict_schema=True)
 runtime_cfg = cast(ConfigLike, cfg)
 runtime_lang_cfg = cast(ConfigLike, lang_cfg)
 db = Database(_db_path)

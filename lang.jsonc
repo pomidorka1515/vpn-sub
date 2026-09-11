@@ -1,0 +1,230 @@
+{
+    "description": {
+        "ru": {
+            "main": "👋Привет, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Трафика использовано за все время: ↑ {up} / ↓ {down}",
+            "main_exceeded": "👋Привет, {username}!\n{slot_time}⛔Месячный лимит истек! {used} > {limit}",
+            "bw": "Трафик за этот месяц: {used} / {limit}\n",
+            "date": "Подписка до: {date} (осталось дней: {days})\n",
+            "date_expired": "Подписка закончилась: {date}!, {days} дней назад\n",
+            "wl_bw": "🏳️ Трафик WL: {used} / {limit}\n",
+            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used} / {limit}"
+        },
+		"en": {
+		    "main": "👋Welcome, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Bandwidth used (all-time): ↑ {up} / ↓ {down}",
+		    "main_exceeded": "👋Welcome, {username}!\n{slot_time}⛔Monthly quota exceeded! {used} > {limit}",
+		    "bw": "Bandwidth used (this month): {used} / {limit}\n",
+		    "date": "Subscription expires at: {date} (days left: {days})\n",
+		    "date_expired": "Subscription expired at: {date}, {days} days ago\n",
+		    "wl_bw": "🏳️ WL Bandwidth: {used} / {limit}\n",
+		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used} > {limit}"
+		}
+    },
+    "publicbot": {
+        "ru": {
+            // main navigation buttons
+            "btn_main_account": "⚙ Управление аккаунтом",
+            "btn_main_sub": "⚙ Управление подпиской",
+            "btn_main_back": "🔙 В главное меню",
+            "btn_login": "🔑 Войти",
+            "btn_lang": "🌐 Сменить язык",
+            "btn_support": "💬 Поддержка",
+
+            // subscription menu buttons
+            "btn_info": "ℹ️ Информация",
+            "btn_get_sub": "🔗 Получить подписку",
+            "btn_bonus": "🎁 Ввести бонусный код",
+            "btn_reset": "⚠ Сбросить подписку",
+            "btn_chart": "📊 Мой трафик",
+            "btn_chart_days": "{days} дн.",
+
+            // account menu buttons
+            "btn_settings": "⚙ Настройки",
+            "btn_logout": "⚠ Выйти",
+            "btn_help": "ℹ Справка",
+            "btn_delete": "❌ Удалить аккаунт",
+
+            // common action buttons
+            "btn_cancel": "🔙 Отменить",
+            "btn_delete_confirm": "✅ Удалить аккаунт",
+
+            // welcome and language selection
+            "welcome_new": "👋 Добро пожаловать!\nЧтобы начать пользоваться интернетом без ограничений, нажмите «Получить подписку» и введите код приглашения.",
+            "welcome_reg": "👋 С возвращением! Выберите нужное действие в меню ниже.",
+            "choose_lang": "🌐 Выберите язык / Choose language:",
+            "lang_set": "🇷🇺 Язык изменен на Русский.",
+            "cancelled": "🔙 Действие отменено. Главное меню:",
+
+            // login and registration flow
+            "choose_login": "🔒 Как бы вы хотели войти?",
+            "btn_login_credentials": "По логину и паролю",
+            "btn_login_token": "По ссылке",
+            "enter_invite": "🔑 Пожалуйста, отправьте мне ваш код приглашения:",
+            "enter_email": "📧 Введите ваш логин",
+            "enter_pass": "🔒 Введите пароль:",
+            "enter_token": "🔑 Введите вашу ссылку или токен.",
+            "invalid_code": "❌ Неверный код, либо он уже был использован.",
+            "no_account": "⚠ У вас нету зарегистрированного аккаунта.",
+            "reg_success": "✅ Подписка успешно активирована!",
+            "login_success": "✅ Успешный вход!",
+            "login_fail": "❌ Неверный логин, пароль или токен.",
+
+            // account settings
+            "settings_menu": "⚙ <b>Настройки</b>\nВыберите что хотите изменить:",
+            "name_label": "✏ Имя",
+            "settings_name_prompt": "✏ Введите новое отображаемое имя:",
+            "settings_name_success": "✅ Имя успешно изменено.",
+            "fp_label": "🔒 Отпечаток",
+            "settings_fp_prompt": "🔒 Выберите отпечаток:",
+            "settings_fp_success": "✅ Отпечаток изменён.",
+            "pass_label": "🔑 Пароль",
+            "settings_pass_prompt": "🔒 Введите новый пароль:",
+            "settings_pass_success": "✅ Пароль изменён.",
+            "login_label": "📧 Логин",
+            "settings_login_prompt": "📧 Введите новый логин:",
+            "settings_login_success": "✅ Логин изменён.",
+            "length_username": "❌ Слишком длинное имя пользователя. Максимальная длина: {ln} символов.",
+            "length_displayname": "❌ Слишком длинное отображаемое имя. Максимальная длина: {ln} символов.",
+
+            // subscription details and connection links
+            "get_sub_text": "**🚀 Ваша подписка готова!**\nОтсканируйте QR-код для получения ссылки или выберите способ подключения ниже.\n*⚠️ Никому не пересылайте это сообщение, оно содержит ваш личный ключ доступа.*",
+            "get_sub_btn_link": "🌐 Открыть ссылку",
+            "get_sub_btn_happ": "⚡ Добавить в Happ",
+            "info_text": "ℹ️ <b>Ваш профиль:</b> <code>{username}</code>\nВключен: {status}\nДоступ к WL-локациям: {wl_status}\nВ сети: {online}\n\n📊 <b>Трафик:</b>\nСкачано за всё время: {total} MB\nВ этом месяце: {monthly} MB / {limit}\nWL за всё время: {wl_total} MB\nWL в этом месяце: {wl_monthly} MB / {wl_limit}\nПодробная информация:\nUp {up} MB | Down {down} MB\nWL Up {wl_up} MB | Down {wl_down} MB\n<i>wl — whitelist-локации</i>\n⏳ <b>Осталось времени:</b>\n{days}\nОтпечаток: {fingerprint}",
+            "unlimited": "Безлимит",
+            "lifetime": "Навсегда",
+
+            // traffic chart
+            "choose_chart_days": "Выберите кол-во дней.",
+            "chart_generating": "⌛ Генерация графика...",
+            "chart_text": "📊 График: последние <b>{days}</b> дней\n\n<b>За всё время</b>\n<b>Обычный трафик</b>\n⬆️ {upload} выгружено (Up)\n⬇️ {download} загружено (Down)\nЭтот месяц:\n📦 {used} / {limit} GB <i>({percent})</i>\n\n<b>Whitelist</b>\n⬆️ {upload} выгружено\n⬇️ {download} загружено\nЭтот месяц:\n📦 {wl_used} / {wl_limit} GB <i>({wl_percent})</i>",
+
+            // bonus code flow
+            "enter_bonus": "🎁 Отправьте бонусный код для пополнения времени/трафика:",
+            "bonus_success": "✅ Бонусный код успешно применен! Ваш тариф обновлен.",
+
+            // reset and deletion flows
+            "confirm_reset": "⚠ Вы уверены что хотите сбросить ссылку и айди подписки? Напишите \"согласен\" чтобы продолжить.",
+            "reset_confirm_input": "согласен",
+            "reset_success": "✅ Ссылка сброшена. Не забудьте обновить в приложении!",
+            "confirm_delete": "⚠ <b>Вы уверены, что хотите удалить аккаунт?</b>\nЭто действие необратимо. Все данные будут удалены.\n\nНапишите \"удалить\" для подтверждения.",
+            "delete_confirm_input": "удалить",
+            "delete_success": "✅ Аккаунт удален.",
+            "logout_success": "✅ Вы вышли из аккаунта.",
+
+            // help and support
+            "help_text": "ℹ️ <b>Описания профилей</b>\n\n{text}",
+            "support_text": "💬 По всем вопросам обращайтесь: @pomidorka_1515",
+
+            // subscription warnings
+            "warning_disabled": "⚠ Ваша подписка истекла.",
+            "warning_days": "⚠ Осталось <b>{days}</b> дней до конца подписки.",
+            "warning_traffic": "⚠ Вы использовали <b>{used}</b> ГБ из <b>{available}</b> ГБ доступных вам.",
+            "warning_traffic_disabled": "⚠ Вы использовали весь доступный вам трафик ({available} ГБ). Подписка была отключена.",
+            "warning_traffic_whitelist": "⚠ Вы использовали <b>{used}</b> MB из <b>{available}</b> GB на БС локациях.",
+            "warning_traffic_whitelist_disabled": "⚠ Вы использовали весь доступный Вам трафик на БС локациях ({available} ГБ). Они были отключены для вас."
+        },
+        "en": {
+            // main navigation buttons
+            "btn_main_account": "⚙ Account management",
+            "btn_main_sub": "⚙ Subscription management",
+            "btn_main_back": "🔙 Go back",
+            "btn_login": "🔑 Login",
+            "btn_lang": "🌐 Change Language",
+            "btn_support": "💬 Support",
+
+            // subscription menu buttons
+            "btn_info": "ℹ️ Information",
+            "btn_get_sub": "🔗 Get subscription",
+            "btn_bonus": "🎁 Enter Bonus Code",
+            "btn_reset": "⚠ Reset subscription",
+            "btn_chart": "📊 My usage",
+            "btn_chart_days": "{days} d",
+
+            // account menu buttons
+            "btn_settings": "⚙ Settings",
+            "btn_logout": "⚠ Logout",
+            "btn_help": "ℹ Reference",
+            "btn_delete": "❌ Delete account",
+
+            // common action buttons
+            "btn_cancel": "🔙 Cancel",
+            "btn_delete_confirm": "✅ Yes, delete my account",
+
+            // welcome and language selection
+            "welcome_new": "👋 Welcome!\nTo start using the internet, click «Get Subscription» and enter your invite code.",
+            "welcome_reg": "👋 Welcome back! Choose an action below.",
+            "choose_lang": "🌐 Выберите язык / Choose language:",
+            "lang_set": "🇬🇧 Language changed to English.",
+            "cancelled": "🔙 Action cancelled. Main menu:",
+
+            // login and registration flow
+            "choose_login": "🔒 How would you like to log in?",
+            "btn_login_credentials": "With login and password",
+            "btn_login_token": "With subscription link",
+            "enter_invite": "🔑 Please send me your invite code:",
+            "enter_email": "📧 Enter your Email (login):",
+            "enter_pass": "🔒 Enter your password:",
+            "enter_token": "🔑 Enter your link or token.",
+            "invalid_code": "❌ Invalid code or already used.",
+            "no_account": "⚠ You do not have a registered account.",
+            "reg_success": "✅ Subscription successfully activated!",
+            "login_success": "✅ Successfully logged in!",
+            "login_fail": "❌ Invalid login, password or token.",
+
+            // account settings
+            "settings_menu": "⚙ <b>Settings</b>\nChoose what to change:",
+            "name_label": "✏ Name",
+            "settings_name_prompt": "✏ Enter your new display name:",
+            "settings_name_success": "✅ Display name changed.",
+            "fp_label": "🔒 Fingerprint",
+            "settings_fp_prompt": "🔒 Choose a fingerprint:",
+            "settings_fp_success": "✅ Fingerprint changed.",
+            "pass_label": "🔑 Password",
+            "settings_pass_prompt": "🔒 Enter your new password:",
+            "settings_pass_success": "✅ Password changed.",
+            "login_label": "📧 Login",
+            "settings_login_prompt": "📧 Enter your new login:",
+            "settings_login_success": "✅ Login changed.",
+            "length_username": "❌ Username too long. Maximum length: {ln} symbols.",
+            "length_displayname": "❌ Display name too long. Maximum length: {ln} symbols.",
+
+            // subscription details and connection links
+            "get_sub_text": "**🚀 Your subscription is ready!**\nScan the QR code to set it up, or choose a connection method below.\n*Do not forward this message to anyone, as it contains your personal access key.*",
+            "get_sub_btn_link": "🌐 Open Link",
+            "get_sub_btn_happ": "⚡ Add to Happ",
+            "info_text": "ℹ️ <b>Your Profile:</b> <code>{username}</code>\nEnabled: {status}\nAccess to WL locations: {wl_status}\nOnline: {online}\n\n📊 <b>Traffic:</b>\nTotal downloaded: {total} MB\nThis month: {monthly} MB / {limit}\nWL traffic total: {wl_total} MB\nWL traffic this month: {wl_monthly} MB / {wl_limit}\nDetailed info:\nUp {up} MB | Down {down} MB\nWL Up {wl_up} MB | Down {wl_down} MB\n<i>WL — whitelist locations</i>\n\n⏳ <b>Time remaining:</b>\n{days}\nFingerprint: {fingerprint}",
+            "unlimited": "Unlimited",
+            "lifetime": "Lifetime",
+
+            // traffic chart
+            "choose_chart_days": "Choose a day amount.",
+            "chart_generating": "⌛ Generating chart...",
+            "chart_text": "📊 Chart: last <b>{days}</b> days\n\n<b>All-Time</b>\n<b>Regular traffic</b>\n⬆️ {upload} uploaded\n⬇️ {download} downloaded\nThis month:\n📦 {used} / {limit} GB <i>({percent})</i>\n\n<b>Whitelist</b>\n⬆️ {upload} uploaded\n⬇️ {download} downloaded\nThis month:\n📦 {wl_used} / {wl_limit} GB <i>({wl_percent})</i>",
+
+            // bonus code flow
+            "enter_bonus": "🎁 Send your bonus code:",
+            "bonus_success": "✅ Bonus code successfully applied!",
+
+            // reset and deletion flows
+            "confirm_reset": "⚠ Are you sure you want to reset your link and UUID? Say \"confirm\" to confirm.",
+            "reset_confirm_input": "confirm",
+            "reset_success": "✅ Link successfully reset. Make sure to update it in your app!",
+            "confirm_delete": "⚠ <b>Are you sure you want to delete your account?</b>\nThis action is irreversible. All data will be permanently removed.\n\nType \"delete\" to confirm.",
+            "delete_confirm_input": "delete",
+            "delete_success": "✅ Account deleted successfully.",
+            "logout_success": "✅ Logged out successfully!",
+
+            // help and support
+            "help_text": "ℹ️ <b>VPN Profile descriptions</b>\n\n{text}",
+            "support_text": "💬 For any questions contact: @pomidorka_1515",
+
+            // subscription warnings
+            "warning_disabled": "⚠ Your subscripiton has expired.",
+            "warning_days": "⚠ There are <b>{days}</b> days left until your subscription expires.",
+            "warning_traffic": "⚠ You have used <b>{used}</b> GB out of <b>{available}</b> GB available to you.",
+            "warning_traffic_disabled": "⚠ You have used all bandwidth available to you ({available} ГБ). Subscription has been disabled.",
+            "warning_traffic_whitelist": "⚠ You have used <b>{used}</b> MB out of <b>{available}</b> GB on whitelist locations.",
+            "warning_traffic_whitelist_disabled": "⚠ You have used all bandwidth available to you on whitelist locations ({available} ГБ). Whitelist locations have been disabled for you."
+        }
+    }
+}
