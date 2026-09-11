@@ -318,7 +318,7 @@ class Config(MutableMapping[str, JsonValue]):
         strict_schema: bool = True,
         sync_mode: SYNC_MODES = 'data',
         isolate_commits: bool = True,
-        backup_dir: str | None = None,
+        backup_dir: str | Path | None = None,
         backup_interval: int | float = 7200,
         backup_retention: int = 3
     ) -> None:
@@ -379,7 +379,7 @@ class Config(MutableMapping[str, JsonValue]):
         self._read_only: bool = read_only
         self._read_only_jsonc: bool = read_only_jsonc or (path_str.endswith('.jsonc') and read_only)
         
-        self._backup_dir: str | None = backup_dir
+        self._backup_dir: str | None = str(backup_dir) if backup_dir else None
         self._backup_interval: int | float = backup_interval
         self._backup_retention: int = backup_retention
         self._backup_stop = threading.Event()
@@ -387,11 +387,11 @@ class Config(MutableMapping[str, JsonValue]):
         with self.log.loading():
             self.reload()
 
-        if backup_dir:
+        if self._backup_dir:
             self._backup_t: threading.Thread | None = _make_backup_thread(
                 path=self._path,
                 indent=self._indent,
-                backup_dir=backup_dir,
+                backup_dir=self._backup_dir,
                 backup_interval=backup_interval,
                 backup_retention=backup_retention,
                 stop_event=self._backup_stop,
@@ -1137,7 +1137,7 @@ class LinesConfig:
         self,
         path: str | Path,
         sync_mode: SYNC_MODES = 'data',
-        backup_dir: str | None = None,
+        backup_dir: str | Path | None = None,
         backup_interval: int | float = 7200,
         backup_retention: int = 3,
     ) -> None:
@@ -1160,7 +1160,7 @@ class LinesConfig:
             self._sync_mode: SYNC_MODES = sync_mode
             self._lock = threading.RLock()
 
-            self._backup_dir: str | None = backup_dir
+            self._backup_dir: str | None = str(backup_dir) if backup_dir else None
             self._backup_interval: int | float = backup_interval
             self._backup_retention: int = backup_retention
             self._backup_stop = threading.Event()
@@ -1169,11 +1169,11 @@ class LinesConfig:
             if not os.path.exists(self._path):
                 with open(self._path, "a", encoding="utf-8"):
                     pass
-            if backup_dir:
+            if self._backup_dir:
                 self._backup_t: threading.Thread | None  = _make_backup_thread(
                     path=self._path,
                     indent=4,
-                    backup_dir=backup_dir,
+                    backup_dir=self._backup_dir,
                     backup_interval=backup_interval,
                     backup_retention=backup_retention,
                     stop_event=self._backup_stop,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import fcntl
-import json
 import sys
 import os
 import atexit
@@ -14,14 +13,13 @@ from session import XUiSession
 from api import WebApi, Api
 from bots import PublicBot, AdminBot
 from config import Config, LinesConfig, SYNC_MODES
-from db import Database, DatabaseError, migrate_legacy
+from db import Database
 from loggers import Logger
+from custom_types import ConfigLike
 
 from flask import Flask
 from typing import cast, TypedDict
-from custom_types import ConfigLike
-from collections.abc import Mapping
-
+from pathlib import Path
 
 ##############################################################
 ### Startup sequence. Do not touch if you dont understand. ###
@@ -84,76 +82,57 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 app.config['JSON_SORT_KEYS'] = False
 
-# Import legacy mutable JSON state before strict config loading. The importer
-# is idempotent and leaves timestamped source backups in place.
-def _database_path() -> str:
-    """Read the optional static database path without loading Config twice."""
-    environment_path = os.environ.get('SUB_DB_PATH')
-    if environment_path:
-        return environment_path
-    try:
-        with open('../config.json', encoding='utf-8') as handle:
-            raw: object = json.load(handle)
-        raw_config = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else None
-        configured_path = raw_config.get('database_path') if raw_config is not None else None
-        if isinstance(configured_path, str) and configured_path:
-            return configured_path
-    except (OSError, json.JSONDecodeError):
-        pass
-    return '../state.sqlite3'
-
-
-_db_path = _database_path()
-try:
-    _migration = migrate_legacy(
-        db_path=_db_path,
-        config_path='../config.json',
-        bandwidth_path='../bw_history.json',
-        snapshots_path='../snaps.json',
-        backup_dir='../backup/migration',
-    )
-    if not _migration.already_migrated:
-        log.info(f"SQLite migration imported {_migration.users} users and {_migration.codes} codes")
-        if _migration.skipped_orphans:
-            log.warning(f"SQLite migration skipped {_migration.skipped_orphans} orphaned or duplicate legacy records")
-except DatabaseError:
-    log.critical("SQLite migration failed; refusing to start with mixed JSON/SQLite state.")
-    raise
 
 # ------------------------------------------------------------
-# Configs (two separate files)
+# Path configuration
+# ------------------------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+DATA_DIR = Path(os.getenv("DIR_DATA", PROJECT_ROOT / "data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+BACKUP_DIR = Path(os.getenv("DIR_BACKUPS", DATA_DIR / "backup"))
+
+CONFIG_PATH = Path(os.getenv("PATH_CONFIG", DATA_DIR / "config.json"))
+LANG_PATH = Path(os.getenv("PATH_LANG", PROJECT_ROOT / "lang.jsonc"))
+DB_PATH = Path(os.getenv("PATH_DB", DATA_DIR / "state.db"))
+LOG_PATH = Path(os.getenv("PATH_LOG", DATA_DIR / "log.jsonl"))
+AUDIT_PATH = Path(os.getenv("PATH_AUDIT", DATA_DIR / "audit.jsonl"))
+
+# ------------------------------------------------------------
+# Configs & databases
 # ------------------------------------------------------------
 class _BaseConfigKwargs(TypedDict):
     read_only: bool
     strict_schema: bool
     sync_mode: SYNC_MODES
     isolate_commits: bool
-    backup_dir: str
+    backup_dir: str | Path
 
 class _LineConfigKwargs(TypedDict):
     sync_mode: SYNC_MODES
-    backup_dir: str
+    backup_dir: str | Path
 
 _config_kwargs: _BaseConfigKwargs = {
     'read_only': False,
     'strict_schema': True,
     'sync_mode': 'data',
     'isolate_commits': True,
-    'backup_dir': './backup/',
+    'backup_dir': BACKUP_DIR
 }
 
 _line_config_kwargs: _LineConfigKwargs = {
     'sync_mode': 'data',
-    'backup_dir': './backup/'
+    'backup_dir': BACKUP_DIR
 }
 
-cfg = Config(path='../config.json', indent=4, **_config_kwargs)
-lang_cfg = Config(path='./lang.jsonc', indent=4, read_only=True, read_only_jsonc=True, strict_schema=True)
+cfg = Config(path=CONFIG_PATH, indent=4, **_config_kwargs)
+lang_cfg = Config(path=LANG_PATH, indent=4, read_only=True, read_only_jsonc=True, strict_schema=True)
 runtime_cfg = cast(ConfigLike, cfg)
 runtime_lang_cfg = cast(ConfigLike, lang_cfg)
-db = Database(_db_path)
-line_cfg = LinesConfig(path='../log.jsonl', **_line_config_kwargs)
-audit_cfg = LinesConfig(path='../audit.jsonl', **_line_config_kwargs)
+db = Database(DB_PATH)
+log_cfg = LinesConfig(path=LOG_PATH, **_line_config_kwargs)
+audit_cfg = LinesConfig(path=AUDIT_PATH, **_line_config_kwargs)
 # ------------------------------------------------------------
 # Panels
 # ------------------------------------------------------------
@@ -192,7 +171,7 @@ for l in (
     adminbot.log, bot.log
 ):
     l.set_tg_bot(adminbot)
-    l.set_jsonl_handler(line_cfg)
+    l.set_jsonl_handler(log_cfg)
 
 # ------------------------------------------------------------
 # Single-primary-worker startup
