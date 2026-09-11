@@ -173,7 +173,7 @@ sub      = Subscription(
 bw       = BWatch(cfg=runtime_cfg, db=db, sub=sub)
 api      = Api(app=app, cfg=runtime_cfg, audit_cfg=audit_cfg, sub=sub, bw=bw)
 webapi   = WebApi(app=app, cfg=runtime_cfg, sub=sub, bw=bw)
-adminbot = AdminBot(sub=sub, cfg=runtime_cfg)
+adminbot = AdminBot(sub=sub, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
 bot      = PublicBot(sub=sub, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
 
 bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
