@@ -95,7 +95,7 @@ BACKUP_DIR = Path(os.getenv("DIR_BACKUPS", DATA_DIR / "backup"))
 
 CONFIG_PATH = Path(os.getenv("PATH_CONFIG", DATA_DIR / "config.json"))
 LANG_PATH = Path(os.getenv("PATH_LANG", PROJECT_ROOT / "lang.jsonc"))
-DB_PATH = Path(os.getenv("PATH_DB", DATA_DIR / "state.db"))
+DB_PATH = Path(os.getenv("PATH_DB", DATA_DIR / "state.sqlite3"))
 LOG_PATH = Path(os.getenv("PATH_LOG", DATA_DIR / "log.jsonl"))
 AUDIT_PATH = Path(os.getenv("PATH_AUDIT", DATA_DIR / "audit.jsonl"))
 
