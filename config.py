@@ -26,7 +26,7 @@ import shutil
 import tempfile
 import threading
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import jsonschema
 
@@ -177,7 +177,7 @@ def _do_backup(
     """
     os.makedirs(instance_dir, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
     if raw:
         backup_path = os.path.join(instance_dir, f"{timestamp}.jsonl")

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import glob
 import json
 import os
@@ -117,7 +117,7 @@ def _instance_backup_dir(path: str, backup_dir: str) -> str:
 def _do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None:
     """Take an atomic SQLite snapshot in a per-instance backup directory."""
     os.makedirs(instance_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(instance_dir, f"{timestamp}.sqlite3")
     fd, temporary = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".sqlite3")
     os.close(fd)

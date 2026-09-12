@@ -14,7 +14,8 @@ dependencies = [
     "Pillow>=10.0.0",
     "matplotlib>=3.8.0",
     "gunicorn>=21.0.0",
-    "semble>=0.1.1",
+    "dacite",
+    "psutil"
 ]
 
 [project.optional-dependencies]
@@ -34,7 +35,7 @@ build-backend = "setuptools.build_meta"
 py-modules = [
     "app", "api", "bots", "chart",
     "config", "core", "custom_types", "db",
-    "loggers", "session",
+    "loggers", "session", "util"
 ]
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,7 @@ files = [
     "api.py",
     "bots.py",
     "app.py",
+    "util.py",
     "tests/",
 ]
 
@@ -106,6 +108,7 @@ include = [
     "api.py",
     "bots.py",
     "app.py",
+    "util.py",
     "tests/",
 ]
 typeCheckingMode = "strict"

@@ -2,13 +2,13 @@ jsonschema>=4.20.0
 mypy
 requests>=2.31.0
 pyTelegramBotAPI>=4.15.0
-Flask>=2.3.0
+Flask
 qrcode
 pillow
 matplotlib
 gunicorn
-dacite
 psutil
+dacite
 
 # stubs
 matplotlib-stubs

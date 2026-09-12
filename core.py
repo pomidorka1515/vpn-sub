@@ -21,6 +21,7 @@ import os
 import sys
 import io
 import qrcode
+import secrets
 
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
@@ -65,7 +66,7 @@ nginx_404 = (
 if sys.platform != 'linux':
     raise RuntimeError("Must be run on Linux.")
 
-SERVER_TZ = timezone(timedelta(hours=3)) # MSK
+SERVER_TZ = timezone.utc
 AUDIT_VALUES = Literal[
     'sub_hit',
     'user_refresh', 'user_delete', 'user_reset',
@@ -307,6 +308,8 @@ class Subscription:
             response = panel.get(f"panel/api/inbounds/list")
             data: dict[str, list[dict[str, object]]] = response.json()
             if response.status_code not in (200,) or not data.get("success"):
+                if panel.dead:
+                    return []
                 self.log.error(f"getinbounds fail: {data.get('msg')}")
                 return []
             raw_inbounds: list[dict[str, object]] = data['obj']
@@ -316,6 +319,8 @@ class Subscription:
             panel.cache = inbounds
             return inbounds
         except Exception as e:
+            if panel.dead:
+                return []
             self.log.warning(f"getinbounds fail: {e}")
             return []
     
@@ -612,7 +617,7 @@ class Subscription:
             if len(ext_username) > 32:
                 return "Ext Username too long"
         if token is None:
-            token = ''.join(random.choices(string.ascii_letters + string.digits + '_-', k=40))
+            token = secrets.token_urlsafe(40)
         if userid is None:
             userid = str(uuid.uuid4())
         else:
@@ -852,7 +857,7 @@ class Subscription:
         if len(displayname) > 16:
             return "Displayname too long"
     
-        token = ''.join(random.choices(string.ascii_letters + string.digits + '_-', k=40))
+        token = secrets.token_urlsafe(40)
         userid = str(uuid.uuid4())
         fingerprint = random.choice(self.fps)
         hashed_password = self.hash(ext_password)
@@ -1100,7 +1105,7 @@ class Subscription:
         if not self.isuser(username):
             return "Unknown user"
         newid = str(uuid.uuid4())
-        newt = ''.join(random.choices(string.ascii_lowercase + string.ascii_uppercase + string.digits, k=40))
+        newt = secrets.token_urlsafe(40)
         x = self.update_uuid(username, newid)
         if x is not None:
             self.log.critical(f"reset_user: error in update_uuid: {x}")
@@ -1298,7 +1303,7 @@ class Subscription:
                 ts_str = descTable["date"]
                 ts_str = format(
                     ts_str,
-                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M"),
+                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)"),
                     days=str((ts - int(time.time())) // 86400)
                 )
 
@@ -1375,7 +1380,7 @@ class Subscription:
                 time_str = descTable["date_expired"]
                 time_str = format(
                     time_str,
-                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M"),
+                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)"),
                     days=str(-(ts - int(time.time())) // 86400)
                 )
 
@@ -1645,6 +1650,8 @@ class BWatch:
     def panel_health_check(self) -> None:
         """Check each panel's Xray status and resource usage. Alert on issues."""
         for panel in self.sub.panels:
+            if panel.dead:
+                continue
             try:
                 status = self.sub.getstatus(panel)
                 if not status:
@@ -1725,7 +1732,7 @@ class BWatch:
     def is_first(self) -> None:
         # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
         # NOTE: Exclusive to one thread only.
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         if now.day != 1:
             return
         today = now.strftime("%Y-%m-%d")

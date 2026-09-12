@@ -35,7 +35,7 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 
 ```bash
 pip install -r requirements.txt
-mkdir -p data && cp config.example.json data/config.json  # fill in panel credentials, bot tokens, etc
+mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel credentials, bot tokens, etc
 gunicorn --threads 4 -b 127.0.0.1:5550 --graceful-timeout 30 app:app # or run as a systemd service
 ```
 

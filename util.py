@@ -21,6 +21,7 @@ from typing import cast
 __all__ = [
     "format", "tuple_hook", "parse_bool",
     "fmt_bytes_tuple", "fmt_bytes", "fmt_time",
+    "format_usage", "is_cancel_command", "truncate_utf8",
     "strip_jsonc_comments", "strip_jsonc_trailing_commas",
     "SysUtil"
 ]
@@ -101,6 +102,33 @@ def fmt_time(seconds: int, lang: str = "ru") -> str:
     if h > 0:
         return f"{h}{t_h} {m}{t_m}"
     return f"{m}{t_m}"
+
+
+def format_usage(used: int | float, limit: int | float,
+                 unlimited: str = "Безлимит") -> tuple[str, str, str]:
+    """Format used bytes, a GB limit, and the corresponding percentage."""
+    if limit == 0:
+        return unlimited, unlimited, "N/A"
+    used_text = fmt_bytes(used)
+    limit_text = f"{limit} GB"
+    percent = f"{int((used / (limit * 10**9)) * 100)}%" if used > 0 else "0%"
+    return used_text, limit_text, percent
+
+
+def is_cancel_command(text: str | None) -> bool:
+    """Return whether input is a slash command used to cancel a flow."""
+    return bool(text and text.startswith("/"))
+
+
+def truncate_utf8(text: str, max_bytes: int, suffix: str = "...") -> str:
+    """Truncate text to a byte limit without splitting UTF-8 characters."""
+    if len(text.encode("utf-8")) <= max_bytes:
+        return text
+    suffix_bytes = len(suffix.encode("utf-8"))
+    if suffix_bytes >= max_bytes:
+        return suffix.encode("utf-8")[:max_bytes].decode("utf-8", errors="ignore")
+    raw = text.encode("utf-8")[:max_bytes - suffix_bytes]
+    return raw.decode("utf-8", errors="ignore") + suffix
 
 
 def strip_jsonc_comments(content: str) -> str:
@@ -235,6 +263,8 @@ class SysUtil:
         
         total = cpu2 - cpu1
         idle = idle2 - idle1
+        if total == 0:
+            return 0.0
         return round((total - idle) / total * 100, 1)
 
     @staticmethod

@@ -5,7 +5,7 @@ from core import Subscription, SERVER_TZ
 from session import XUiSession
 from chart import bandwidth_chart, leaderboard_chart
 from custom_types import ConfigLike
-from util import fmt_bytes, fmt_time
+from util import fmt_bytes, fmt_time, format_usage, truncate_utf8
 
 import telebot
 import time
@@ -504,7 +504,7 @@ class AdminBot:
             domain: str = self.cfg['domain']
             if times:
                 days_left = str((times - int(time.time())) // 86400)
-                date = datetime.fromtimestamp(times, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+                date = datetime.fromtimestamp(times, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
             else:
                 days_left = "N/A"
                 date = "N/A"
@@ -626,7 +626,7 @@ class AdminBot:
             return
         current_time = info.time
         if current_time:
-            date = datetime.fromtimestamp(current_time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+                date = datetime.fromtimestamp(current_time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
         else:
             date = "N/A"
         msg = self.bot.send_message(chat_id, f"⏰ Введите новое кол-во дней для <b>{username}</b> (текущая дата: <code>{date}</code>, 0 = безлимит):", parse_mode="HTML")
@@ -647,7 +647,7 @@ class AdminBot:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {result}", reply_markup=self.get_main_menu())
         else:
             if days:
-                new_date = datetime.fromtimestamp(timee, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+                new_date = datetime.fromtimestamp(timee, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
                 self.bot.send_message(message.chat.id, f"✅ Срок продлён на <code>{days}</code> дней, новая дата: <code>{new_date}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
             else:
                 self.bot.send_message(message.chat.id, "✅ Срок установлен в безлимит.", parse_mode="HTML", reply_markup=self.get_main_menu())
@@ -1008,26 +1008,12 @@ class AdminBot:
             limit = bandwidths.limit
             monthly = bandwidths.monthly
 
-            if limit == 0:
-                limit_str = "Безлимит"
-                used_str = "Безлимит"
-                percent_str = "N/A"
-            else:
-                limit_str = f"{limit} GB"
-                used_str = fmt_bytes(monthly)
-                percent_str = f"{int((monthly / (limit * 10**9)) * 100)}%" if monthly > 0 else "0%"
+            used_str, limit_str, percent_str = format_usage(monthly, limit)
 
             wl_limit = bandwidths.wl_limit
             wl_monthly = bandwidths.wl_monthly
 
-            if wl_limit == 0:
-                wl_limit_str = "Безлимит"
-                wl_used_str = "Безлимит"
-                wl_percent_str = "N/A"
-            else:
-                wl_limit_str = f"{wl_limit} GB"
-                wl_used_str = fmt_bytes(wl_monthly)
-                wl_percent_str = f"{int((wl_monthly / (wl_limit * 10**9)) * 100)}%" if wl_monthly > 0 else "0%"
+            wl_used_str, wl_limit_str, wl_percent_str = format_usage(wl_monthly, wl_limit)
 
             text = f"""📈 <b>График трафика за {days} дней</b>
 
@@ -1046,12 +1032,7 @@ class AdminBot:
 └ Процент: {wl_percent_str}"""
 
 
-            b = text.encode("utf-8")
-            if len(b) > 1024:
-                b = b[:1021]
-                while b and (b[-1] & 0x80):  # back up from a continuation byte
-                    b = b[:-1]
-                text = b.decode("utf-8", errors="ignore") + "..."            
+            text = truncate_utf8(text, 1024)
             chart_img = bandwidth_chart(
                 snapshots, 
                 label=info.displayname, 
@@ -1095,8 +1076,7 @@ class PublicBot:
             self.sub: Subscription= sub
             token: str = self.cfg['publicbot'].get('token')
             if not token:
-                self.log.critical("public bot token not found in config.json! Public bot will not start.")
-                return
+                raise RuntimeError("public bot token not found in config.json")
 
             self.bot = telebot.TeleBot(token)
 
@@ -1173,7 +1153,7 @@ class PublicBot:
         
         if info.time:
             days_left = str((info.time - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(info.time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M")
+            date_end = datetime.fromtimestamp(info.time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t['lifetime']
@@ -1700,26 +1680,12 @@ class PublicBot:
             limit = bandwidths.limit
             monthly = bandwidths.monthly
 
-            if limit == 0:
-                limit_str = t['unlimited']
-                used_str = t['unlimited']
-                percent_str = "N/A"
-            else:
-                limit_str = f"{limit} GB"
-                used_str = fmt_bytes(monthly)
-                percent_str = f"{int((monthly / (limit * 10**9)) * 100)}%" if monthly > 0 else "0%"
+            used_str, limit_str, percent_str = format_usage(monthly, limit, t['unlimited'])
 
             wl_limit = bandwidths.wl_limit
             wl_monthly = bandwidths.wl_monthly
 
-            if wl_limit == 0:
-                wl_limit_str = t['unlimited']
-                wl_used_str = t['unlimited']
-                wl_percent_str = "N/A"
-            else:
-                wl_limit_str = f"{wl_limit} GB"
-                wl_used_str = fmt_bytes(wl_monthly)
-                wl_percent_str = f"{int((wl_monthly / (wl_limit * 10**9)) * 100)}%" if wl_monthly > 0 else "0%"
+            wl_used_str, wl_limit_str, wl_percent_str = format_usage(wl_monthly, wl_limit, t['unlimited'])
 
             text = t['chart_text'].format(
                 days=days,
@@ -1735,12 +1701,7 @@ class PublicBot:
                 wl_percent=wl_percent_str
             )
 
-            b = text.encode("utf-8")
-            if len(b) > 1024:
-                b = b[:1021]
-                while b and (b[-1] & 0x80):  # back up from a continuation byte
-                    b = b[:-1]
-                text = b.decode("utf-8", errors="ignore") + "..."
+            text = truncate_utf8(text, 1024)
             
             chart_img = bandwidth_chart(
                 snapshots, 
@@ -1793,3 +1754,4 @@ class PublicBot:
 
     def stop(self) -> None:
         self.bot.stop_polling()
+        self._executor.shutdown(wait=True)

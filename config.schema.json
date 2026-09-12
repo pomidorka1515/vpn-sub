@@ -197,11 +197,6 @@
         "shortProfileDescriptions": {
             "type": "object",
             "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
-        },
-
-        "database_path": {
-            "type": "string",
-            "description": "Optional SQLite state path; SUB_DB_PATH takes precedence."
         }
     },
 

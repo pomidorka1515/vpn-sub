@@ -106,6 +106,5 @@
     },
     "shortProfileDescriptions": {
         "profile1": ["English", "Russian"]
-    },
-    "database_path": "../state.sqlite3"
+    }
 }

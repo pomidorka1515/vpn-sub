@@ -215,7 +215,5 @@ def _shutdown() -> None:
         db.close()
         log.info("Shutdown complete.")
 
-    # fork cleanup into a background thread so systemctl sees exit immediately
-    t = threading.Thread(target=_do_cleanup, name='cleanup', daemon=True)
-    t.start()
+    _do_cleanup()
 atexit.register(_shutdown)
