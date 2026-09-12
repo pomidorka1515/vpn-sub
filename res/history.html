@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="common.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>History</title>
@@ -276,21 +277,9 @@ let lang = resolveLang();
 let theme = localStorage.getItem('theme') || 'dark';
 function t(k) { return L[lang]?.[k] || L.en[k] || k; }
 
-function applyTheme() {
-  document.documentElement.setAttribute('data-theme', theme);
-  const darkIcon = document.getElementById('themeIconDark');
-  const lightIcon = document.getElementById('themeIconLight');
-  if (darkIcon && lightIcon) {
-    darkIcon.style.display = theme === 'dark' ? 'block' : 'none';
-    lightIcon.style.display = theme === 'light' ? 'block' : 'none';
-  }
-}
 
-function toggleTheme() {
-  theme = theme === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('theme', theme);
-  applyTheme();
-}
+
+
 
 function renderLang() {
   document.querySelectorAll('.lang-btn').forEach(b =>
@@ -333,26 +322,9 @@ async function api(method, path) {
   }
 }
 
-function toast(msg, type = 'success') {
-  const existing = document.querySelector('.toast');
-  if (existing) existing.remove();
-  const el = document.createElement('div');
-  el.className = 'toast ' + type;
-  el.textContent = msg;
-  el.setAttribute('role', 'alert');
-  el.setAttribute('aria-live', 'polite');
-  el.style.cursor = 'pointer';
-  el.onclick = () => el.remove();
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 2500);
-}
 
-function fmtBytes(b) {
-  if (!b) return '0 B';
-  const u = ['B','KB','MB','GB','TB'];
-  const i = Math.floor(Math.log(b) / Math.log(1000));
-  return (b / Math.pow(1000, i)).toFixed(i > 1 ? 2 : 0) + ' ' + u[i];
-}
+
+
 
 function fmtDay(ts) {
   const d = new Date(ts * 1000);
@@ -600,4 +572,3 @@ loadHistory();
 </script>
 </body>
 </html>
-

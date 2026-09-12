@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="common.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Panel</title>
@@ -958,21 +959,9 @@ let selectedUser = null;
 
 function t(k) { return L[lang]?.[k] || L.en[k] || k; }
 
-function applyTheme() {
-  document.documentElement.setAttribute('data-theme', theme);
-  const darkIcon = document.getElementById('themeIconDark');
-  const lightIcon = document.getElementById('themeIconLight');
-  if (darkIcon && lightIcon) {
-    darkIcon.style.display = theme === 'dark' ? 'block' : 'none';
-    lightIcon.style.display = theme === 'light' ? 'block' : 'none';
-  }
-}
 
-function toggleTheme() {
-  theme = theme === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('theme', theme);
-  applyTheme();
-}
+
+
 
 function renderLang() {
   document.querySelectorAll('.lang-btn').forEach(b =>
@@ -1040,12 +1029,7 @@ async function api(path, options = {}) {
   }
 }
 
-function toast(msg, type = 'info') {
-  const el = document.createElement('div');
-  el.className = 'toast ' + type; el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
-}
+
 
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1076,10 +1060,10 @@ function renderUsersTable() {
       <tbody>
         ${currentUsers.map(u => `
           <tr>
-            <td class="mono">${u}</td>
+            <td class="mono">${escapeHtml(u)}</td>
             <td class="actions">
-              <button class="btn-tiny" onclick="viewUser('${u}')">${t('info')}</button>
-              <button class="btn-tiny danger" onclick="deleteUser('${u}')">${t('delete')}</button>
+              <button class="btn-tiny" data-user="${escapeHtml(u)}" data-user-action="view">${t('info')}</button>
+              <button class="btn-tiny danger" data-user="${escapeHtml(u)}" data-user-action="delete">${t('delete')}</button>
             </td>
           </tr>
         `).join('')}
@@ -1088,6 +1072,8 @@ function renderUsersTable() {
   `;
 }
 
+document.getElementById('usersTableWrap').addEventListener('click', e => { const b=e.target.closest('[data-user-action]'); if(!b)return; const u=b.getAttribute('data-user'); b.dataset.userAction==='view'?viewUser(u):deleteUser(u); });
+
 async function viewUser(username) {
   const res = await api(`/api/user/info?user=${encodeURIComponent(username)}`);
   if (!res || !res.success) return;
@@ -1095,11 +1081,11 @@ async function viewUser(username) {
   const s = res.obj;
   document.getElementById('userDetailCard').style.display = 'block';
   document.getElementById('userDetailInfo').innerHTML = `
-    <div class="info-row"><span class="info-label">${t('internal_user')}</span><span class="info-value">${s.username || '—'}</span></div>
-    <div class="info-row"><span class="info-label">${t('display_name')}</span><span class="info-value">${s.displayname || '—'}</span></div>
-    <div class="info-row"><span class="info-label">UUID</span><span class="info-value">${s.uuid || '—'}</span></div>
-    <div class="info-row"><span class="info-label">Token</span><span class="info-value">${s.token || '—'}</span></div>
-    <div class="info-row"><span class="info-label">${t('fingerprint')}</span><span class="info-value">${s.fingerprint || '—'}</span></div>
+    <div class="info-row"><span class="info-label">${t('internal_user')}</span><span class="info-value">${escapeHtml(s.username || '—')}</span></div>
+    <div class="info-row"><span class="info-label">${t('display_name')}</span><span class="info-value">${escapeHtml(s.displayname || '—')}</span></div>
+    <div class="info-row"><span class="info-label">UUID</span><span class="info-value">${escapeHtml(s.uuid || '—')}</span></div>
+    <div class="info-row"><span class="info-label">Token</span><span class="info-value">${escapeHtml(s.token || '—')}</span></div>
+    <div class="info-row"><span class="info-label">${t('fingerprint')}</span><span class="info-value">${escapeHtml(s.fingerprint || '—')}</span></div>
     <div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${s.bandwidth?.limit || 0} GB</span></div>
     <div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${s.bandwidth?.wl_limit || 0} GB</span></div>
     <div class="info-row"><span class="info-label">${t('expires')}</span><span class="info-value">${s.time ? new Date(s.time * 1000).toLocaleString() : '∞'}</span></div>
@@ -1125,10 +1111,10 @@ async function doResetUser() {
   const result = document.getElementById('userDetailResult');
   if (res && res.success) {
     result.innerHTML = `<div class="result-title ok">OK</div>
-      <div class="result-msg">UUID: ${res.obj.uuid}<br>Token: ${res.obj.token}</div>`;
+      <div class="result-msg">UUID: ${escapeHtml(res.obj.uuid)}<br>Token: ${escapeHtml(res.obj.token)}</div>`;
     result.className = 'result-box success';
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1212,7 +1198,7 @@ async function doAddUser() {
     hideAddUser();
     loadUsers();
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1389,9 +1375,9 @@ function renderLogsTable(logs) {
       <tbody>
         ${logs.map(l => `
           <tr>
-            <td class="log-ts">${l.date || new Date(l.ts * 1000).toLocaleString()}</td>
-            <td><span class="log-action ${l.action}">${l.action}</span></td>
-            <td class="log-info">${JSON.stringify(l.info || {})}</td>
+            <td class="log-ts">${escapeHtml(l.date || new Date(l.ts * 1000).toLocaleString())}</td>
+            <td><span class="log-action ${l.action}">${escapeHtml(l.action)}</span></td>
+            <td class="log-info">${escapeHtml(JSON.stringify(l.info || {}))}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -1423,7 +1409,7 @@ async function checkPanelStatus() {
     result.innerHTML = renderPanelCards(res.obj);
     result.className = 'result-box';
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1434,7 +1420,7 @@ function renderPanelCards(panels, idPrefix = '') {
   }
   return `
     <div class="panel-cards">
-      ${Object.entries(panels).map(([panelName, panel]) => {
+      ${Object.entries(panels).map(([panelName, panel], panelIndex) => {
         const s = panel.obj;
         const cpuPct = s ? Math.round(s.cpu * 100) / 100 : null;
         const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
@@ -1467,16 +1453,16 @@ function renderPanelCards(panels, idPrefix = '') {
         const loads = s?.loads ? s.loads.map(l => l.toFixed(2)).join(', ') : 'N/A';
         const threads = s?.appStats?.threads ?? 'N/A';
 
-        const cardKey = idPrefix + panelName.replace(/\s+/g,'_');
+        const cardKey = idPrefix + 'panel-' + panelIndex;
         return `
           <div class="panel-card" id="pc-${cardKey}">
             <div class="panel-card-header" onclick="togglePanelCard('${cardKey}')">
               <div class="panel-card-title">
-                <span class="panel-card-name">${panelName}</span>
-                <span class="badge ${xrayClr}">${xrayState || 'unknown'}</span>
+                <span class="panel-card-name">${escapeHtml(panelName)}</span>
+                <span class="badge ${xrayClr}">${escapeHtml(xrayState || 'unknown')}</span>
               </div>
               <div class="panel-card-meta">
-                ${s ? `<span style="font-size:12px;color:var(--text2)">Xray ${xrayVersion}</span>` : ''}
+                ${s ? `<span style="font-size:12px;color:var(--text2)">Xray ${escapeHtml(xrayVersion)}</span>` : ''}
                 <svg class="panel-card-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="4,6 8,10 12,6"/>
                 </svg>
@@ -1489,8 +1475,8 @@ function renderPanelCards(panels, idPrefix = '') {
                   <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : 'N/A'}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${s?.cpuCores ?? 'N/A'}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${s?.cpuSpeedMhz ? Math.round(s.cpuSpeedMhz) + ' MHz' : 'N/A'}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('load_avg')}</span><span class="panel-metric-value">${loads}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${threads}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('load_avg')}</span><span class="panel-metric-value">${escapeHtml(loads)}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${escapeHtml(threads)}</span></div>
                 </div>
                 <div class="panel-section">
                   <div class="panel-section-label">${t('memory')}</div>
@@ -1512,8 +1498,8 @@ function renderPanelCards(panels, idPrefix = '') {
                 </div>
                 <div class="panel-section">
                   <div class="panel-section-label">${t('public_ip')}</div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('ipv4')}</span><span class="panel-metric-value" style="font-size:${ipv4.length > 20 ? '9px' : ipv4.length > 15 ? '10px' : '11px'}">${ipv4}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('ipv6')}</span><span class="panel-metric-value" style="font-size:${ipv6.length > 28 ? '8px' : ipv6.length > 22 ? '9px' : '10px'}">${ipv6}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('ipv4')}</span><span class="panel-metric-value" style="font-size:${ipv4.length > 20 ? '9px' : ipv4.length > 15 ? '10px' : '11px'}">${escapeHtml(ipv4)}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('ipv6')}</span><span class="panel-metric-value" style="font-size:${ipv6.length > 28 ? '8px' : ipv6.length > 22 ? '9px' : '10px'}">${escapeHtml(ipv6)}</span></div>
                 </div>
                 <div class="panel-section">
                   <div class="panel-section-label">${t('connections')}</div>
@@ -1525,12 +1511,12 @@ function renderPanelCards(panels, idPrefix = '') {
                   <div class="panel-metric"><span class="panel-metric-label">${t('sys_uptime')}</span><span class="panel-metric-value">${uptimeFmt}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('app_mem')}</span><span class="panel-metric-value">${appMem}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${s?.appStats?.threads ?? 'N/A'}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('xray_ver')}</span><span class="panel-metric-value">${xrayVersion}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('xray_ver')}</span><span class="panel-metric-value">${escapeHtml(xrayVersion)}</span></div>
                 </div>
                 ${xrayErr && xrayErr !== '' ? `
                 <div class="panel-section">
                   <div class="panel-section-label">${t('xray_error')}</div>
-                  <div class="panel-metric"><span class="panel-metric-label err">${xrayErr}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label err">${escapeHtml(xrayErr)}</span></div>
                 </div>` : ''}
               </div>
             </div>
@@ -1676,8 +1662,8 @@ function renderSnapshots(snaps) {
   }
   return `
     <div class="panel-cards">
-      ${snaps.map(snap => {
-        const key = 'snap-' + snap.ts;
+      ${snaps.map((snap, snapIndex) => {
+        const key = 'snap-' + snapIndex;
         const panelNames = snap.panels ? Object.keys(snap.panels) : [];
         // Snapshot panels are ServerMetricsObj directly; renderPanelCards() expects { obj: status }.
         const wrappedPanels = Object.fromEntries(panelNames.map(n => [n, { obj: snap.panels[n] }]));
@@ -1707,13 +1693,7 @@ function renderSnapshots(snaps) {
   `;
 }
 
-function fmtBytes(bytes) {
-  if (bytes == null || isNaN(bytes)) return 'N/A';
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2) + ' ' + units[i];
-}
+
 
 function fmtUptime(seconds) {
   if (seconds == null || isNaN(seconds)) return 'N/A';
@@ -1733,7 +1713,7 @@ async function loadOnlineUsers() {
   const res = await api(path);
   const wrap = document.getElementById('onlineUsersWrap');
   if (!res || !res.success) {
-    wrap.innerHTML = `<div class="table-empty">${res?.msg || 'Error'}</div>`;
+    wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || 'Error')}</div>`;
     return;
   }
   const data = res.obj;
@@ -1755,9 +1735,9 @@ async function loadOnlineUsers() {
         <tbody>
           ${entries.map(([intUser, extUser]) => `
             <tr>
-              <td class="mono">${intUser}</td>
+              <td class="mono">${escapeHtml(intUser)}</td>
               <td style="text-align:center;color:var(--text2);font-size:11px"></td>
-              <td class="mono">${extUser ?? t('na')}</td>
+              <td class="mono">${escapeHtml(extUser ?? t('na'))}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -1777,7 +1757,7 @@ async function loadOnlineUsers() {
         <tbody>
           ${data.map(user => `
             <tr>
-              <td class="mono">${user}</td>
+              <td class="mono">${escapeHtml(user)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -1795,7 +1775,7 @@ async function doRefreshUsers() {
     result.innerHTML = `<div class="result-title ok">${t('refreshed')}</div>`;
     result.className = 'result-box success';
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${res?.msg || 'Error'}</div>`;
+    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1830,7 +1810,7 @@ async function fetchLeaderboard() {
 
   const res = await api('/api/leaderboard', { method: 'POST', body });
   if (!res || !res.success) {
-    wrap.innerHTML = `<div class="table-empty">${res?.msg || 'Error'}</div>`;
+    wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || 'Error')}</div>`;
     return;
   }
 
@@ -1851,7 +1831,7 @@ async function fetchLeaderboard() {
         ${data.map(entry => `
           <tr>
             <td class="mono" style="color:var(--text2)">${entry.place}</td>
-            <td class="mono">${entry.username}</td>
+            <td class="mono">${escapeHtml(entry.username)}</td>
             <td class="mono" style="text-align:right">${fmtBytes(entry.amount)}</td>
           </tr>
         `).join('')}
