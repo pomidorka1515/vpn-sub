@@ -505,7 +505,7 @@ class Config(MutableMapping[str, JsonValue]):
                 tx["count"] += 1
         """
         self._raise_if_read_only()
-        return _ConfigTransaction(self)
+        return cast(_ConfigTransactionLike, _ConfigTransaction(self))
 
     def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
         """Run a callback inside a transaction and return its result.

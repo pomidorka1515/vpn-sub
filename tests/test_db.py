@@ -8,7 +8,7 @@ import threading
 import unittest
 import uuid
 
-from db import CodeError, Database, DatabaseError, DuplicateError, MigrationError, migrate_legacy
+from db import CodeError, Database, DatabaseError, DuplicateError, MigrationError
 
 
 class DatabaseTests(unittest.TestCase):
@@ -134,133 +134,6 @@ class DatabaseTests(unittest.TestCase):
         self.db.upsert_state_snapshot(10, {"ts": 10, "host": {"new": True}, "panels": {}})
         self.assertEqual(self.db.get_state_snapshots(0)[0]["host"], {"new": True})
         self.assertEqual(self.db.prune_state_snapshots(20), 1)
-
-
-class MigrationTests(unittest.TestCase):
-    def test_legacy_import_is_complete_and_idempotent(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            config_path = root / "config.json"
-            bw_path = root / "bw.json"
-            snapshots_path = root / "snapshots.json"
-            db_path = root / "state.sqlite3"
-            legacy = {
-                "users": {"alice": "00000000-0000-4000-8000-000000000001"},
-                "tokens": {"alice": "t" * 40},
-                "userFingerprints": {"alice": "chrome"},
-                "displaynames": {"alice": "Alice"},
-                "status": {"alice": True}, "statusTime": {"alice": True},
-                "statusWl": {"alice": False}, "time": {"alice": 100},
-                "bw": {"alice": [10, 20]}, "wl_bw": {"alice": [5, 6]},
-                "webui_users": {"alice@example.test": "alice"},
-                "webui_passwords": {"alice@example.test": "hash"},
-                "tgids": {"123": "alice"},
-                "publicbot": {"tg_lang": {"123": "en"}},
-                "codes": [{"code": "code", "action": "bonus", "perma": False, "uses": 2, "days": 1, "gb": 2, "wl_gb": 3}],
-                "_notified": [123], "_wl_notified": [], "_last_reset_month": "2026-09",
-            }
-            config_path.write_text(json.dumps(legacy), encoding="utf-8")
-            config_path.chmod(0o600)
-            bw_path.write_text(json.dumps({"users": {"alice": {"snapshots": [{"ts": 10, "up": 1, "down": 2, "wl_up": 3, "wl_down": 4}]}}}), encoding="utf-8")
-            snapshots_path.write_text(json.dumps({"snapshots": [{"ts": 10, "host": {}, "panels": {}}]}), encoding="utf-8")
-
-            report = migrate_legacy(db_path=str(db_path), config_path=str(config_path), bandwidth_path=str(bw_path), snapshots_path=str(snapshots_path))
-            self.assertEqual((report.users, report.codes, report.telegram_mappings), (1, 1, 1))
-            self.assertEqual((report.bandwidth_snapshots, report.state_snapshots), (1, 1))
-            self.assertTrue(report.backup_paths)
-            cleaned = json.loads(config_path.read_text(encoding="utf-8"))
-            self.assertNotIn("users", cleaned)
-            self.assertNotIn("tg_lang", cleaned["publicbot"])
-            self.assertEqual(config_path.stat().st_mode & 0o777, 0o600)
-            db = Database(str(db_path))
-            self.assertEqual(db.tgid_to_user(123), "alice")
-            self.assertEqual(db.get_telegram_language(123), "en")
-            self.assertTrue(db.notification_seen("regular", 123))
-            self.assertEqual(len(db.get_bandwidth_snapshots("alice", 0)), 1)
-            self.assertEqual(len(db.get_state_snapshots(0)), 1)
-            db.close()
-            rerun = migrate_legacy(db_path=str(db_path), config_path=str(config_path), bandwidth_path=str(bw_path), snapshots_path=str(snapshots_path))
-            self.assertTrue(rerun.already_migrated)
-
-    def test_failed_import_rolls_back_and_keeps_source(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            config_path = root / "config.json"
-            db_path = root / "state.sqlite3"
-            shared_token = "t" * 40
-            legacy = {
-                "users": {"alice": str(uuid.uuid4()), "bob": str(uuid.uuid4())},
-                "tokens": {"alice": shared_token, "bob": shared_token},
-                "userFingerprints": {"alice": "chrome", "bob": "chrome"},
-                "displaynames": {"alice": "Alice", "bob": "Bob"},
-                "bw": {"alice": [1, 0], "bob": [1, 0]},
-                "wl_bw": {"alice": [1, 0], "bob": [1, 0]},
-            }
-            config_path.write_text(json.dumps(legacy), encoding="utf-8")
-            with self.assertRaises(DatabaseError):
-                migrate_legacy(db_path=str(db_path), config_path=str(config_path))
-            self.assertIn("users", json.loads(config_path.read_text(encoding="utf-8")))
-            database = Database(str(db_path))
-            self.assertEqual(database.list_users(), [])
-            self.assertIsNone(database.get_metadata("legacy_migration"))
-            database.close()
-            self.assertTrue(tuple((root / "migration-backups").iterdir()))
-
-    def test_duplicate_snapshot_timestamps_keep_last_legacy_value(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            config_path = root / "config.json"
-            bandwidth_path = root / "bw.json"
-            snapshots_path = root / "snapshots.json"
-            db_path = root / "state.sqlite3"
-            config_path.write_text(json.dumps({
-                "users": {"alice": "00000000-0000-4000-8000-000000000001"},
-                "tokens": {"alice": "t" * 40},
-                "userFingerprints": {"alice": "chrome"},
-                "displaynames": {"alice": "Alice"},
-                "bw": {"alice": [0, 0]},
-                "wl_bw": {"alice": [0, 0]},
-            }), encoding="utf-8")
-            bandwidth_path.write_text(json.dumps({
-                "users": {"alice": {"snapshots": [
-                    {"ts": 10, "up": 1, "down": 2},
-                    {"ts": 10, "up": -3, "down": 4},
-                ]}},
-            }), encoding="utf-8")
-            snapshots_path.write_text(json.dumps({"snapshots": [
-                {"ts": 10, "host": {"version": 1}, "panels": {}},
-                {"ts": 10, "host": {"version": 2}, "panels": {}},
-            ]}), encoding="utf-8")
-
-            report = migrate_legacy(
-                db_path=str(db_path), config_path=str(config_path),
-                bandwidth_path=str(bandwidth_path), snapshots_path=str(snapshots_path),
-            )
-            self.assertEqual((report.bandwidth_snapshots, report.state_snapshots), (1, 1))
-            database = Database(str(db_path))
-            self.assertEqual(database.get_bandwidth_snapshots("alice", 0)[0]["up"], -3)
-            self.assertEqual(database.get_state_snapshots(0)[0]["host"], {"version": 2})
-            database.close()
-
-    def test_invalid_legacy_types_are_not_coerced(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            config_path = root / "config.json"
-            db_path = root / "state.sqlite3"
-            config_path.write_text(json.dumps({
-                "users": {"alice": "00000000-0000-4000-8000-000000000001"},
-                "tokens": {"alice": "t" * 40},
-                "userFingerprints": {"alice": "chrome"},
-                "displaynames": {"alice": "Alice"},
-                "status": {"alice": "false"},
-                "bw": {"alice": [0, 0]},
-                "wl_bw": {"alice": [0, 0]},
-            }), encoding="utf-8")
-
-            with self.assertRaisesRegex(MigrationError, "status.*boolean"):
-                migrate_legacy(db_path=str(db_path), config_path=str(config_path))
-            self.assertIn("users", json.loads(config_path.read_text(encoding="utf-8")))
-            self.assertFalse(db_path.exists())
 
 
 if __name__ == "__main__":

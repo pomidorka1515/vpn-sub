@@ -13,11 +13,14 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 - SQLite database as a source of truth
 
 ## Core principles
+
 - **"No tag on commit = don't expect stability."**
   - Untagged commits on `main` are rolling development. If you want stability, only check out released tags.
 - **"Works fine on my machine"**
   - Self-explanatory. This is primarily built and tested for my own setup.
   - Doesn't start? Something broke? Feel free to open an issue and I'll likely look into it when I can.
+- **Tests are intended only for me.**
+  - They contain hardcoded paths, etc. That's intentional.
 
 ## Architecture
 
@@ -104,6 +107,11 @@ WantedBy=multi-user.target
 Use `--threads` (not `-w`/`--workers`) — the app uses file locking to elect a primary worker for background tasks (BWatch bandwidth monitor, bots). Multiple *processes* will each try to start background threads, which is wasteful; multiple *threads* within one process works correctly.
 
 Config is validated against `config.schema.json` (pointed to by `"$schema"` in the config file) on every load and commit. Remote schemas are rejected; the schema is cached and only re-read when the file changes.
+
+### Seemingly useless casts to protocols
+All protocols in `custom_types.py` are fully compatible with their runtime classes.
+However, mypy cannot reliably validate that: the overloads are too complex.
+That's why casting is required.
 
 ## Deployment
 - Meant to run under gunicorn behind nginx
