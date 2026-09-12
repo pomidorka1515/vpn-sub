@@ -55,6 +55,7 @@ files = [
     "api.py",
     "bots.py",
     "app.py",
+    "tests/",
 ]
 
 # -- strict mode --------------------------------------------------------
@@ -105,6 +106,7 @@ include = [
     "api.py",
     "bots.py",
     "app.py",
+    "tests/",
 ]
 typeCheckingMode = "strict"
 reportDeprecated = false

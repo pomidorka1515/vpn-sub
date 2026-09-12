@@ -13,7 +13,7 @@ from db import Database
 class SubscriptionDatabaseWorkflowTests(unittest.TestCase):
     def test_user_workflow_without_live_panels(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            database = Database(f"{directory}/state.sqlite3")
+            database = Database(path=f"{directory}/state.sqlite3")
             config: dict[str, Any] = {
                 "uri": "sub",
                 "fingerprints": ["chrome", "firefox"],

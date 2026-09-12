@@ -15,7 +15,7 @@ class DatabaseTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / "state.sqlite3"
-        self.db = Database(str(self.path), timeout=2)
+        self.db = Database(path=str(self.path), timeout=2)
 
     def tearDown(self) -> None:
         self.db.close()
@@ -34,7 +34,7 @@ class DatabaseTests(unittest.TestCase):
 
     def test_schema_initialization_is_idempotent(self) -> None:
         self.db.close()
-        self.db = Database(str(self.path))
+        self.db = Database(path=str(self.path))
         self.assertEqual(self.db.list_users(), [])
         self.assertEqual(self.db.get_metadata("missing"), None)
 
@@ -44,7 +44,7 @@ class DatabaseTests(unittest.TestCase):
         connection.execute("CREATE TABLE users(username TEXT PRIMARY KEY)")
         connection.close()
         with self.assertRaises(MigrationError):
-            Database(str(path))
+            Database(path=str(path))
 
     def test_user_constraints_reverse_lookups_and_deletion(self) -> None:
         token = "t" * 40

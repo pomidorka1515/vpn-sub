@@ -8,14 +8,19 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
+import glob
 import json
 import os
 import sqlite3
+import tempfile
 import threading
 import time
 from collections.abc import Generator, Mapping
 from typing import Any, cast, TypedDict
 from pathlib import Path
+
+from loggers import Logger
 
 __all__ = [
     "Database", "DatabaseError", "DuplicateError", "CodeError",
@@ -104,24 +109,131 @@ LegacyUserRow = tuple[
 ]
 
 
+def _instance_backup_dir(path: str, backup_dir: str) -> str:
+    name = os.path.splitext(os.path.basename(path))[0]
+    return os.path.join(backup_dir, name)
+
+
+def _do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None:
+    """Take an atomic SQLite snapshot in a per-instance backup directory."""
+    os.makedirs(instance_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = os.path.join(instance_dir, f"{timestamp}.sqlite3")
+    fd, temporary = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".sqlite3")
+    os.close(fd)
+
+    source: sqlite3.Connection | None = None
+    destination: sqlite3.Connection | None = None
+    try:
+        source = sqlite3.connect(path, timeout=timeout)
+        destination = sqlite3.connect(temporary)
+        source.backup(destination)
+        destination.commit()
+        destination.close()
+        destination = None
+        source.close()
+        source = None
+        os.replace(temporary, backup_path)
+    except Exception:
+        if destination is not None:
+            destination.close()
+        if source is not None:
+            source.close()
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+
+    log.debug(f"backup saved: {backup_path}")
+
+
+def _prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
+    """Keep only the N most recent database backups."""
+    files = sorted(glob.glob(os.path.join(instance_dir, "*.sqlite3")))
+    to_delete = files[:-retention]
+    for path in to_delete:
+        try:
+            os.unlink(path)
+            log.debug(f"pruned old backup: {path}")
+        except OSError as exc:
+            log.error(f"prune failed for {path}: {exc}")
+
+
+def _make_backup_thread(
+    *,
+    path: str,
+    timeout: float,
+    backup_dir: str,
+    backup_interval: int | float,
+    backup_retention: int,
+    stop_event: threading.Event,
+) -> threading.Thread:
+    def loop() -> None:
+        log = Logger("Backup")
+        instance_dir = _instance_backup_dir(path, backup_dir)
+        while not stop_event.wait(backup_interval):
+            try:
+                _do_backup(path, timeout, instance_dir, log)
+                _prune_backups(instance_dir, backup_retention, log)
+                log.info("backup successful")
+            except Exception as exc:
+                log.error(f"backup failed: {exc}")
+
+    return threading.Thread(target=loop, daemon=True, name="Backup")
+
+
 
 class Database:
     """Thread-safe SQLite repository for dynamic application state."""
 
     SCHEMA_VERSION = 1
 
-    def __init__(self, path: str | Path, timeout: float = 5.0) -> None:
-        self.path = os.path.abspath(path)
-        self.timeout = timeout
-        self._connections: set[sqlite3.Connection] = set()
-        self._connections_lock = threading.Lock()
-        parent = os.path.dirname(self.path)
-        try:
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-        except OSError as exc:
-            raise DatabaseError(f"unable to create database directory {parent}: {exc}") from exc
-        self.initialize()
+    def __init__(
+        self,
+        *,
+        path: str | Path,
+        timeout: float = 5.0,
+        backup_dir: str | Path | None = None,
+        backup_interval: int | float = 7200,
+        backup_retention: int = 3,
+    ) -> None:
+        """
+        Args:
+            path: Path to the SQLite database.
+            timeout: Connection timeout in seconds.
+            backup_dir: Backup directory. Backups are disabled if set to None.
+            backup_interval: Interval in seconds for the backups.
+            backup_retention: Amount of concurrent backups kept on disk.
+        """
+        self.log = Logger(type(self).__name__)
+        with self.log.loading():
+            self.path = os.path.abspath(path)
+            self.timeout = timeout
+            self._connections: set[sqlite3.Connection] = set()
+            self._connections_lock = threading.Lock()
+            self._backup_dir: str | None = str(backup_dir) if backup_dir else None
+            self._backup_interval: int | float = backup_interval
+            self._backup_retention: int = backup_retention
+            self._backup_stop = threading.Event()
+            self._backup_t: threading.Thread | None = None
+            parent = os.path.dirname(self.path)
+            try:
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
+            except OSError as exc:
+                raise DatabaseError(f"unable to create database directory {parent}: {exc}") from exc
+            self.initialize()
+            if self._backup_dir:
+                self._backup_t = _make_backup_thread(
+                    path=self.path,
+                    timeout=self.timeout,
+                    backup_dir=self._backup_dir,
+                    backup_interval=self._backup_interval,
+                    backup_retention=self._backup_retention,
+                    stop_event=self._backup_stop,
+                )
+                self._backup_t.start()
 
     def _connect(self) -> sqlite3.Connection:
         conn: sqlite3.Connection | None = None
@@ -648,7 +760,36 @@ class Database:
             cur = conn.execute("DELETE FROM state_snapshots WHERE ts < ?", (cutoff,))
             return cur.rowcount
 
+    @property
+    def backup_dir(self) -> str | None:
+        return self._backup_dir
+
+    @property
+    def backup_interval(self) -> int | float:
+        return self._backup_interval
+
+    @property
+    def backup_retention(self) -> int:
+        return self._backup_retention
+
+    def backup_now(self) -> None:
+        """Trigger an immediate backup snapshot, regardless of the schedule.
+
+        Obeys the same retention limit as the scheduled backup thread.
+
+        Raises:
+            DatabaseError: If no backup_dir was configured on this instance.
+        """
+        if self._backup_dir is None:
+            raise DatabaseError("backup_now() requires a backup_dir to be configured.")
+        instance_dir = _instance_backup_dir(self.path, self._backup_dir)
+        _do_backup(self.path, self.timeout, instance_dir, self.log)
+        _prune_backups(instance_dir, self._backup_retention, self.log)
+
     def close(self) -> None:
+        self._backup_stop.set()
+        if self._backup_t is not None:
+            self._backup_t.join(timeout=5)
         with self._connections_lock:
             connections = tuple(self._connections)
             self._connections.clear()

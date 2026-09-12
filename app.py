@@ -130,9 +130,10 @@ cfg = Config(path=CONFIG_PATH, indent=4, **_config_kwargs)
 lang_cfg = Config(path=LANG_PATH, indent=4, read_only=True, read_only_jsonc=True, strict_schema=True)
 runtime_cfg = cast(ConfigLike, cfg)
 runtime_lang_cfg = cast(ConfigLike, lang_cfg)
-db = Database(DB_PATH)
 log_cfg = LinesConfig(path=LOG_PATH, **_line_config_kwargs)
 audit_cfg = LinesConfig(path=AUDIT_PATH, **_line_config_kwargs)
+
+db = Database(path=DB_PATH, backup_dir=BACKUP_DIR)
 # ------------------------------------------------------------
 # Panels
 # ------------------------------------------------------------
@@ -143,7 +144,7 @@ if not panels and wl is None:
     sys.exit(1)
 
 # ------------------------------------------------------------
-# Wire up components
+# Create core classes
 # ------------------------------------------------------------
 sub      = Subscription(
                cfg=runtime_cfg, db=db, lang_cfg=runtime_lang_cfg, audit_cfg=audit_cfg,
