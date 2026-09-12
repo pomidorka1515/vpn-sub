@@ -9,6 +9,7 @@ matplotlib
 gunicorn
 psutil
 dacite
+argon2-cffi>=23.1.0
 
 # stubs
 matplotlib-stubs

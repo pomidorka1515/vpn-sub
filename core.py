@@ -22,6 +22,8 @@ import sys
 import io
 import qrcode
 import secrets
+from argon2 import PasswordHasher
+from argon2.exceptions import Argon2Error
 
 from flask import Flask, Response, request
 from datetime import timedelta, datetime, timezone
@@ -137,6 +139,7 @@ class Subscription:
             }
             self.panels: list[XUiSession] = list(panels)
             self.SALT: str = self.cfg['salt']
+            self.password_hasher = PasswordHasher()
             with open('res/browser.html', 'r') as f:
                 self.browser_html: str = f.read()
             if self.whitelist_panel:
@@ -156,6 +159,9 @@ class Subscription:
             )
 
     def hash(self, s: str) -> str:
+        return self.password_hasher.hash(s)
+
+    def legacy_hash(self, s: str) -> str:
         return hashlib.sha256((self.SALT + s).encode()).hexdigest()
 
     def audit(
@@ -239,7 +245,19 @@ class Subscription:
     def validate_credentials(self, ext_username: str, password: str) -> str | None:
         stored = self.db.ext_password(ext_username)
         username = self.db.ext_to_user(ext_username)
-        if stored is None or username is None or not self.compare(stored, self.hash(password)):
+        if stored is None or username is None:
+            return None
+        valid: bool
+        if stored.startswith("$argon2id$"):
+            try:
+                valid = self.password_hasher.verify(stored, password)
+            except Argon2Error:
+                return None
+        else:
+            valid = self.compare(stored, self.legacy_hash(password))
+            if valid:
+                self.db.set_user(username, ext_password=self.hash(password))
+        if not valid:
             return None
         return username
 

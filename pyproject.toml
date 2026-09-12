@@ -15,7 +15,8 @@ dependencies = [
     "matplotlib>=3.8.0",
     "gunicorn>=21.0.0",
     "dacite",
-    "psutil"
+    "psutil",
+    "argon2-cffi>=23.1.0"
 ]
 
 [project.optional-dependencies]
