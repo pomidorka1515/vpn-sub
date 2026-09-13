@@ -4,7 +4,6 @@ from errors import (
     AppError,
     ConflictError,
     NotFoundError,
-    PanelUnavailableError,
     PanelRejectedError,
     ValidationError,
     DuplicateError,
@@ -32,7 +31,7 @@ import io
 import qrcode
 import secrets
 from argon2 import PasswordHasher
-from argon2.exceptions import Argon2Error
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 from flask import Flask, Response, request
 from datetime import datetime, timezone
@@ -256,17 +255,22 @@ class Subscription:
         username = self.db.ext_to_user(ext_username)
         if stored is None or username is None:
             return None
-        valid: bool
         if stored.startswith("$argon2id$"):
             try:
-                valid = self.password_hasher.verify(stored, password)
-            except Argon2Error:
+                self.password_hasher.verify(stored, password)
+            except VerifyMismatchError:
+                return None
+            except (InvalidHashError, VerificationError):
+                self.log.error(
+                    "Corrupt or tampered argon2 password hash for %s",
+                    ext_username,
+                    exc_info=True,
+                )
                 return None
         else:
-            valid = self.compare(stored, self.legacy_hash(password))
-            if valid:
+            if self.compare(stored, self.legacy_hash(password)):
                 self.db.set_user(username, ext_password=self.hash(password))
-        if not valid:
+                return username
             return None
         return username
 
@@ -506,7 +510,7 @@ class Subscription:
                 )
                 content = resp.json()
                 if not (resp.status_code in (200, 201) and content.get('success')):
-                    raise PanelUnavailableError("Panel rejected user update")
+                    raise PanelRejectedError("Panel rejected user update")
         if not _called_internally: self.audit(name="user_refresh", info={"username":username})
         self._drop_cache()
     def delete_user(self,
@@ -527,7 +531,7 @@ class Subscription:
                 )
                 content = response.json()
                 if not (response.status_code in (200, 201) and content.get('success')):
-                    raise PanelUnavailableError("Panel rejected user deletion")
+                    raise PanelRejectedError("Panel rejected user deletion")
         if perma:
             self.db.delete_user(username)
 
@@ -561,7 +565,7 @@ class Subscription:
                     )
                     content = response.json()
                     if not (response.status_code in (200, 201) and content.get('success')):
-                        raise PanelUnavailableError("Panel rejected user update")
+                        raise PanelRejectedError("Panel rejected user update")
             
             fields: dict[str, object] = {"status": enable}
             if timee is not None:
@@ -596,7 +600,7 @@ class Subscription:
                     )
                     content = response.json()
                     if not (response.status_code in (200, 201) and content.get('success')):
-                        raise PanelUnavailableError("Panel rejected whitelist user update")
+                        raise PanelRejectedError("Panel rejected whitelist user update")
 
             self.db.update_user(username, status_wl=wl_enable)
 
@@ -809,7 +813,7 @@ class Subscription:
                     err_msg: str = response.json().get('msg', 'panel rejected update')
                     self.log.critical(f"update_uuid failed on panel {panel.name}: {err_msg}")
                     self._rollback_user_uuid(username, olduid, uid, successful)
-                    raise PanelUnavailableError("Panel rejected UUID update")
+                    raise PanelRejectedError("Panel rejected UUID update")
 
                 successful.append((panel, k, the[str(k)], k in need_vision))
 
