@@ -12,7 +12,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Generator, MutableMapping, Mapping, Sequence
 from loggers import Logger
 from custom_types import JsonDict, JsonValue, MISSING, MISSING_TYPE, _ConfigTransactionLike
-from errors import ConfigError, SchemaValidationError, FileCorruptionError, ReadOnlyConfigError
+from errors import (
+    ConfigError, SchemaValidationError,
+    FileCorruptionError, ReadOnlyConfigError,
+    UnsupportedPlatformError
+)
 from typing import (
     Any, Self, Literal, Iterable,
     cast, overload, NamedTuple
@@ -36,7 +40,7 @@ from util import strip_jsonc_comments, strip_jsonc_trailing_commas
 try:
     import fcntl
 except ModuleNotFoundError as exc:
-    raise RuntimeError("Run this on linux.") from exc
+    raise UnsupportedPlatformError("This module relies on `fcntl`, a linux-only flock module. Other platforms are not supported.")
 
 __all__ = [
     'ConfigError', 'SchemaValidationError', 'FileCorruptionError',

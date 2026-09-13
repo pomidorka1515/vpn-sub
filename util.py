@@ -1,7 +1,6 @@
 import psutil
 import gc
 import socket
-import sys
 import os
 import time
 import threading
@@ -236,12 +235,13 @@ def strip_jsonc_trailing_commas(content: str) -> str:
 class SysUtil:
     """
     Fetch info about current state of the app and system. Linux-only.
-    Most methods are static and should be called like `SysUtil.method()`.
+    Grouped under `SysUtil` to keep system-monitoring helpers visually
+        separate from the string/formatting utilities in this module.
+    Not meant to be instantiated.
     """
     def __init__(self) -> None:
-        if sys.platform != "linux":
-            raise RuntimeError("Linux-only utility class")
-
+        raise NotImplementedError("SysUtil is a namespace, not an instance")
+    
     @staticmethod
     def cpu(sleep: int | float = 0.3) -> float:
         """CPU % over interval. Needs two reads

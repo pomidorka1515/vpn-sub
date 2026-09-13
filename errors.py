@@ -14,9 +14,14 @@ __all__ = (
     "ReadOnlyConfigError",
     "SchemaValidationError",
     "ValidationError",
-    "XUiSessionError"
+    "XUiSessionError",
+    "PanelRejectedError",
+    "UnsupportedPlatformError"
 )
 
+# ------------------------------------------------------------
+# Main exceptions
+# ------------------------------------------------------------
 class AppError(Exception):
     """Base app exception class."""
     def __init__(self, message: str, *, status: int = 400) -> None:
@@ -32,11 +37,18 @@ class NotFoundError(AppError):
 class ConflictError(AppError):
     def __init__(self, message: str = "Already exists") -> None: super().__init__(message, status=409)
 
-class PanelUnavailableError(AppError):
-    def __init__(self, message: str = "Panel operation failed") -> None: super().__init__(message, status=502)
 
-# --------
+# ------------------------------------------------------------
+# Misc
+# ------------------------------------------------------------
 
+class UnsupportedPlatformError(AppError):
+    def __init__(self, message: str = "Unsupported platform; run this app on Linux.") -> None: super().__init__(message, status=501)
+
+
+# ------------------------------------------------------------
+# `config.py`
+# ------------------------------------------------------------
 class ConfigError(AppError): pass
 
 class SchemaValidationError(ConfigError):
@@ -48,8 +60,9 @@ class FileCorruptionError(ConfigError):
 class ReadOnlyConfigError(ConfigError):
     def __init__(self, message: str = "Attempted to mutate read-only config.") -> None: super().__init__(message, status=400)
 
-# --------
-
+# ------------------------------------------------------------
+# `db.py`
+# ------------------------------------------------------------
 class DatabaseError(AppError): pass
 
 class DuplicateError(DatabaseError):
@@ -61,6 +74,14 @@ class CodeError(DatabaseError):
 class MigrationError(DatabaseError):
     def __init__(self, message: str = "Legacy data could not be parsed or imported.") -> None: super().__init__(message, status=500)
 
-# -------
+# ------------------------------------------------------------
+# `session.py` / 3X-UI related
+# ------------------------------------------------------------
 
 class XUiSessionError(AppError): pass
+
+class PanelUnavailableError(XUiSessionError):
+    def __init__(self, message: str = "Panel operation failed") -> None: super().__init__(message, status=502)
+
+class PanelRejectedError(PanelUnavailableError):
+    def __init__(self, message: str = "Panel rejected operation") -> None: super().__init__(message)

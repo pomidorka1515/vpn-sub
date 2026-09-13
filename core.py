@@ -1,16 +1,19 @@
 from __future__ import annotations
+
 from errors import (
     AppError,
     ConflictError,
     NotFoundError,
     PanelUnavailableError,
+    PanelRejectedError,
     ValidationError,
+    DuplicateError,
+    CodeError,
+    UnsupportedPlatformError
 )
-
 from loggers import Logger
 from session import XUiSession
 from db import Database, UserRecord
-from errors import CodeError, DuplicateError
 
 import threading
 import hashlib
@@ -23,9 +26,7 @@ import uuid
 import time
 import copy
 import base64
-import signal
 import urllib.parse
-import os
 import sys
 import io
 import qrcode
@@ -34,7 +35,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error
 
 from flask import Flask, Response, request
-from datetime import timedelta, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, cast, NamedTuple, overload, Literal, Callable
 from dacite import from_dict, Config as DConfig
 from custom_types import (
@@ -74,7 +75,7 @@ nginx_404 = (
 )
 
 if sys.platform != 'linux':
-    raise RuntimeError("Must be run on Linux.")
+    raise UnsupportedPlatformError()
 
 SERVER_TZ = timezone.utc
 AUDIT_VALUES = Literal[
@@ -294,19 +295,6 @@ class Subscription:
         bio.seek(0)
         bio.name = "qr.png"
         return bio
-    
-    @staticmethod
-    def restart(delay: int | float = 0.1) -> None:
-        """Restart gunicorn with a delay (in seconds, defaults to 100ms).
-        Redundant already, but i will keep it here."""
-        def _restart() -> None:
-            try:
-                sig = signal.SIGHUP
-            except NameError:
-                raise RuntimeError("Must be ran on Linux.")
-            time.sleep(delay)
-            os.kill(os.getppid(), sig)
-        threading.Thread(target=_restart, daemon=True).start()
     
     def getstatus(self, panel: XUiSession) -> ServerMetricsResponse | None:
         """Get the information about a panel."""
