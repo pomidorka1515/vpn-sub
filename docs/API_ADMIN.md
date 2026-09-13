@@ -30,11 +30,13 @@ Error:
 ```jsonc  
 // HTTP 500  
 {  
-    "success": false,  
-    "msg": "Internal server error", // Or exception as a str  
-    "obj": null  
+	"success": false,  
+	"msg": "Internal server error",  
+	"obj": null  
 }  
 ```  
+  
+Errors preserve the response format above and use semantic HTTP status codes. Validation failures return HTTP 400, missing resources return HTTP 404, conflicts return HTTP 409, and panel failures return HTTP 502.
   
 ## Endpoints  
   
@@ -107,7 +109,19 @@ Response (error):
 // HTTP 400  
 {  
 	"success": false,  
-	"msg": "Username exists", // or type/validation error description  
+	"msg": "Ext Username too long", // or another validation error  
+	"obj": null  
+}  
+// HTTP 409  
+{  
+	"success": false,  
+	"msg": "Username or external username exists",  
+	"obj": null  
+}  
+// HTTP 502  
+{  
+	"success": false,  
+	"msg": "Panel rejected user update",  
 	"obj": null  
 }  
 ```  
@@ -141,6 +155,12 @@ Response (error):
 	"msg": "Unknown username",  
 	"obj": null  
 }  
+// HTTP 502  
+{  
+	"success": false,  
+	"msg": "Panel rejected user deletion",  
+	"obj": null  
+}  
 ```  
   
 ---  
@@ -154,7 +174,7 @@ Response (success):
 // HTTP 200  
 {  
 	"success": true,  
-	"msg": "Refreshed all users.",  
+	"msg": "Refreshed all users.", // or "Refreshed users; failed: <usernames>"  
 	"obj": null  
 }  
 ```  
@@ -205,6 +225,12 @@ Response (error):
 {  
 	"success": false,  
 	"msg": "Unknown username",  
+	"obj": null  
+}  
+// HTTP 502  
+{  
+	"success": false,  
+	"msg": "Panel rejected UUID update",  
 	"obj": null  
 }  
 ```  
@@ -300,7 +326,7 @@ Response (error):
 // HTTP 404  
 {  
 	"success": false,  
-	"msg": "Code not found",  
+	"msg": "Unknown code",  
 	"obj": null  
 }  
 ```  
@@ -336,7 +362,13 @@ Response (error):
 // HTTP 400  
 {  
 	"success": false,  
-	"msg": "...",  
+	"msg": "code must be a non-empty string", // or another validation error  
+	"obj": null  
+}  
+// HTTP 409  
+{  
+	"success": false,  
+	"msg": "code '<code>' already exists",  
 	"obj": null  
 }  
 ```  
@@ -366,7 +398,7 @@ Response (error):
 // HTTP 404  
 {  
 	"success": false,  
-	"msg": "Code not found",  
+	"msg": "Unknown code",  
 	"obj": null  
 }  
 ```  

@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Generator, MutableMapping, Mapping, Sequence
 from loggers import Logger
 from custom_types import JsonDict, JsonValue, MISSING, MISSING_TYPE, _ConfigTransactionLike
+from errors import ConfigError, SchemaValidationError, FileCorruptionError, ReadOnlyConfigError
 from typing import (
     Any, Self, Literal, Iterable,
     cast, overload, NamedTuple
@@ -31,6 +32,7 @@ from pathlib import Path
 import jsonschema
 
 from util import strip_jsonc_comments, strip_jsonc_trailing_commas
+
 try:
     import fcntl
 except ModuleNotFoundError as exc:
@@ -281,20 +283,6 @@ def _make_backup_thread(
             except Exception as e:
                 log.error(f"backup failed: {e}")
     return threading.Thread(target=loop, daemon=True, name="Backup")
-
-class ConfigError(RuntimeError):
-    """Base config manager error."""
-
-
-class SchemaValidationError(ConfigError):
-    """Raised when config data violates its JSON schema."""
-
-
-class FileCorruptionError(ConfigError):
-    """Raised when config JSON cannot be decoded."""
-
-class ReadOnlyConfigError(ConfigError):
-    """Raised when trying to mutate a read-only config instance."""
 
 class Config(MutableMapping[str, JsonValue]):
     """

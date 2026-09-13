@@ -9,6 +9,7 @@ from requests.structures import CaseInsensitiveDict
 from concurrent.futures import ThreadPoolExecutor, Future
 from loggers import Logger
 from custom_types import Inbound, JsonValue, RequestKwargs
+from errors import XUiSessionError
 
 from typing import Unpack, cast, Any, Mapping
 
@@ -21,8 +22,6 @@ _AUTH_BACKOFF_INITIAL = 30.0
 _AUTH_BACKOFF_MAX = 15 * 60.0
 
 
-class XUiSessionError(Exception):
-    """Base error raised when the panel rejects a session operation."""
 
 ### ANY COUNTER: two. ###
 # mypy: disable-error-code="override"
@@ -342,9 +341,9 @@ class XUiSession(Session):
                     delay = min(_AUTH_BACKOFF_INITIAL * (2 ** (self._login_failures - 1)), _AUTH_BACKOFF_MAX)
                     self._login_retry_at = time.monotonic() + delay
                 if self.dead:
-                    self.log.debug(f"{self.address}:{self.port} > login failed: {str(e)}")
+                    self.log.debug(f"{self.address}:{self.port} > login failed", exc_info=True)
                 else:
-                    self.log.critical(f"{self.address}:{self.port} > login failed: {str(e)}")
+                    self.log.critical(f"{self.address}:{self.port} > login failed", exc_info=True)
                 raise
                 
     def _start_refresh_thread(self) -> None:

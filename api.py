@@ -16,9 +16,9 @@ from typing import (
     Sequence, Mapping,
     Concatenate
 )
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict
 
-from custom_types import ConfigLike, LinesConfigLike, NewUserInfo
+from custom_types import ConfigLike, LinesConfigLike
 from util import SysUtil, parse_bool
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
@@ -381,7 +381,7 @@ class WebApi(BaseApi):
         try:
             buf = self.sub.make_qr(link)
         except ValueError as e:
-            return _err(str(e), 400)
+            return _err("Invalid request", 400)
 
         response = make_response(send_file(buf, mimetype='image/png'))
         response.headers['Cache-Control'] = 'private, max-age=300'
@@ -427,25 +427,18 @@ class WebApi(BaseApi):
             return _err("Account has no credentials set", 400)
         if self.sub.validate_credentials(cur_ext, current_password) != username:
             return _err("Invalid current password", 401)
-        try:
-            self.sub.delete_user(
-                username=username,
-                perma=True
-            )
-            
-            resp, code = _ok(msg="Deleted account")
-            resp.set_cookie(
-                'token',
-                '',
-                max_age=0,
-                httponly=True,
-                secure=True,
-                samesite='Lax'
-            )
-            return resp, code
-        except Exception as e:
-            self.log.error(f"/delete {username}: {str(e)}")
-            return _err("Internal server error", 500)
+        self.sub.delete_user(username=username, perma=True)
+
+        resp, code = _ok(msg="Deleted account")
+        resp.set_cookie(
+            'token',
+            '',
+            max_age=0,
+            httponly=True,
+            secure=True,
+            samesite='Lax'
+        )
+        return resp, code
     @requires_webapi_auth
     def logout(self, username: str) -> ResponseType:
         resp, code = _ok(msg="Logged out")
@@ -487,60 +480,34 @@ class WebApi(BaseApi):
                 return _err("Account has no credentials set", 400)
             if self.sub.validate_credentials(cur_ext, current_password) != username:
                 return _err("Invalid current password", 401)
-        try:
-            x = self.sub.update_params(
-                username=username,
-                ext_username=ext_username,
-                ext_password=ext_password,
-                displayname=displayname,
-                fingerprint=fingerprint
-            )
-            if isinstance(x, str):
-                return _err(x, 400)
-            return _ok()
-        except Exception as e:
-            self.log.critical(e)
-            return _err("Internal server error", 500)
+        self.sub.update_params(
+            username=username,
+            ext_username=ext_username,
+            ext_password=ext_password,
+            displayname=displayname,
+            fingerprint=fingerprint
+        )
+        return _ok()
     @requires_webapi_auth
     def reset(self, username: str) -> ResponseType:
         """Reset token and UUID (api wrapper)"""
-        try:
-            x = self.sub.reset_user(username)
-            if not is_dataclass(x):
-                return _err("Internal server error", 500)
-            return _ok(obj=asdict(x))
-        except Exception as e:
-            self.log.critical(e)
-            return _err("Internal server error", 500)
+        x = self.sub.reset_user(username)
+        return _ok(obj=asdict(x))
     @requires_webapi_auth
     @requires_fields_strict(('code', str))
     def bonus(self, username: str) -> ResponseType:
         """Apply bonus code."""
         content = g.json_obj
         
-        try:
-            result = self.sub.apply_bonus_code(
-                username=username,
-                code=cast(str, content["code"]),
-            )
-        except Exception as e:
-            self.log.critical(f"bonus failed: {e}")
-            return _err("Internal server error", 500)
-    
-        if isinstance(result, str):
-            if result == "Unknown code":
-                return _err(result, 404)
-            if result == "Unknown user":
-                return _err(result, 404)
-            return _err(result, 400)
-    
+        result = self.sub.apply_bonus_code(
+            username=username,
+            code=cast(str, content["code"]),
+        )
         return _ok(obj=asdict(result))
     @requires_webapi_auth
     def stats(self, username: str) -> ResponseType:
         """Get user info from token"""
         x = self.sub.get_info(username)
-        if x is None:
-            return _err("User not found", 404)
         return _ok(obj=asdict(x))
 
     @requires_webapi_auth
@@ -579,24 +546,14 @@ class WebApi(BaseApi):
         if not (1 <= len(raw_code) <= 64):
             return _err("'code' must be 1-64 characters")
         
-        try:
-            result = self.sub.register_with_code(
-                code=raw_code,
-                username=f"web_{uuid.uuid4().hex[:16]}",
-                displayname=raw_name,
-                ext_username=raw_username,
-                ext_password=raw_password,
-            )
-        except Exception as e:
-            self.log.critical(f"register failed: {e}")
-            return _err("Internal server error", 500)
-
-        if isinstance(result, str):
-            if result in ("Invalid code", "Username exists", "Ext Username exists"):
-                return _err(result, 403)
-            return _err(result, 400)
-
-        return _ok("Created", 201, asdict(result))
+        result = self.sub.register_with_code(
+            code=raw_code,
+            username=f"web_{uuid.uuid4().hex[:16]}",
+            displayname=raw_name,
+            ext_username=raw_username,
+            ext_password=raw_password,
+        )
+        return _ok("Created", 201, obj=asdict(result))
 
     @requires_fields_strict(
         ('username', str),
@@ -678,8 +635,6 @@ class Api(BaseApi):
         username = request.args['user']
         pretty = request.args.get('beautify', '').lower() in ('1', 'true', 'yes')
         x = self.sub.get_info(username=username, pretty=pretty)
-        if x is None:
-            return _err("Unknown user")
         return _ok(obj=asdict(x))
  
     @requires_admin_auth
@@ -688,87 +643,73 @@ class Api(BaseApi):
         ('password', str)
     )
     def user_add(self) -> ResponseType:
-        try:
-            content = g.json_obj
-            raw_data: dict[str, object] = {
-                "user": content.get('user'),
-                "displayname": content.get('displayname'),
-                "ext_username": content.get('ext_username', None),
-                "ext_password": content.get('ext_password', None),
-                "token": content.get('token', None),
-                "userid": content.get('userid', None),
-                "fingerprint": content.get('fingerprint', None),
-                "limit": content.get('limit', 0),
-                "wl_limit": content.get('wl_limit', 5),
-                "time": content.get('time', 0),
-            }
+        content = g.json_obj
+        raw_data: dict[str, object] = {
+            "user": content.get('user'),
+            "displayname": content.get('displayname'),
+            "ext_username": content.get('ext_username', None),
+            "ext_password": content.get('ext_password', None),
+            "token": content.get('token', None),
+            "userid": content.get('userid', None),
+            "fingerprint": content.get('fingerprint', None),
+            "limit": content.get('limit', 0),
+            "wl_limit": content.get('wl_limit', 5),
+            "time": content.get('time', 0),
+        }
 
-            data: dict[str, str | int] = {}
+        data: dict[str, str | int] = {}
 
-            for k, v in raw_data.items():
-                if k in ('ext_username', 'ext_password', 'token', 'userid', 'fingerprint'):
-                    if v is not None and not isinstance(v, str):
-                        return _err(f"{k} must be a string or null")
-                    data[k] = cast(str, v)
+        for k, v in raw_data.items():
+            if k in ('ext_username', 'ext_password', 'token', 'userid', 'fingerprint'):
+                if v is not None and not isinstance(v, str):
+                    return _err(f"{k} must be a string or null")
+                data[k] = cast(str, v)
 
-                elif k in ('limit', 'wl_limit', 'time'):
-                    try:
-                        data[k] = int(cast(str, v))
-                    except (ValueError, TypeError):
-                        return _err(f"{k} must be an integer, got: {v}")
-                    if cast(int, data[k]) < 0:
-                        return _err(f"{k} must be non-negative")
+            elif k in ('limit', 'wl_limit', 'time'):
+                try:
+                    data[k] = int(cast(str, v))
+                except (ValueError, TypeError):
+                    return _err(f"{k} must be an integer, got: {v}")
+                if cast(int, data[k]) < 0:
+                    return _err(f"{k} must be non-negative")
 
-            if self.sub.isuser(cast(str, data['user'])):
-                return _err("Username exists")
-
-            x = self.sub.add_new_user(
-                username=cast(str, data['user']),
-                displayname=cast(str, data['displayname']),
-                ext_username=cast(str, data['ext_username']),
-                ext_password=cast(str, data['ext_password']),
-                token=cast(str, data['token']),
-                userid=cast(str, data['userid']),
-                fingerprint=cast(str, data['fingerprint']),
-                limit=cast(int, data['limit']),
-                wl_limit=cast(int, data['wl_limit']),
-                timee=cast(int, data['time'])
-            )
-            if not isinstance(x, NewUserInfo):
-                return _err(msg=x)
-            return _ok("Created", 201)
-        except Exception as e:
-            self.log.error(f"user_add: {e}")
-            return _err(f"Error: {str(e)}", 500)
+        self.sub.add_new_user(
+            username=cast(str, data['user']),
+            displayname=cast(str, data['displayname']),
+            ext_username=cast(str, data['ext_username']),
+            ext_password=cast(str, data['ext_password']),
+            token=cast(str, data['token']),
+            userid=cast(str, data['userid']),
+            fingerprint=cast(str, data['fingerprint']),
+            limit=cast(int, data['limit']),
+            wl_limit=cast(int, data['wl_limit']),
+            timee=cast(int, data['time'])
+        )
+        return _ok("Created", 201)
 
     @requires_admin_auth
     @requires_fields_strict(('user', str))
     def user_delete(self) -> ResponseType:
-        try:
-            content = g.json_obj
-            username: str = content.get('user')
-            perma = parse_bool(content.get('perma', 'true'))
-            if perma is None:
-                return _err("'perma' must be bool-like")
-            if not self.sub.isuser(username):
-                return _err("Unknown username", 404)
-            err = self.sub.delete_user(username, perma)
-            if isinstance(err, str):
-                return _err(err, 500)
-            return _ok("Deleted")
-        except Exception as e:
-            self.log.error(f"user_delete: {e}")
-            return _err(f"Error: {str(e)}", 500)
+        content = g.json_obj
+        username: str = content.get('user')
+        perma = parse_bool(content.get('perma', 'true'))
+        if perma is None:
+            return _err("'perma' must be bool-like")
+        self.sub.delete_user(username, perma)
+        return _ok("Deleted")
 
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
-        try:
-            for cc in self.sub.list_users():
+        failures: list[str] = []
+        for cc in self.sub.list_users():
+            try:
                 self.sub.add_users(cc)
-            return _ok("Refreshed all users.")
-        except Exception as e:
-            self.log.error(f"user_refresh: {e}")
-            return _err(f"Error: {str(e)}", 500)
+            except Exception:
+                failures.append(cc)
+                self.log.error("user refresh failed for %s", cc, exc_info=True)
+        if failures:
+            return _ok(f"Refreshed users; failed: {', '.join(failures)}")
+        return _ok("Refreshed all users.")
     
     @requires_admin_auth
     def user_onlines(self) -> ResponseType:
@@ -783,93 +724,65 @@ class Api(BaseApi):
     @requires_admin_auth
     @requires_fields_strict(('user', str))
     def user_reset(self) -> ResponseType:
-        try:
-            content = g.json_obj
-            username: str = content.get('user')
-            if not self.sub.isuser(username):
-                return _err("Unknown username", 404)
-            x = self.sub.reset_user(username)
-            if isinstance(x, str):
-                return _err(x, 500)
-            return _ok(obj=asdict(x))
-        except Exception as e:
-            self.log.error(f"user_reset fail: {e}")
-            return _err(str(e), 500)
+        content = g.json_obj
+        username: str = content.get('user')
+        x = self.sub.reset_user(username)
+        return _ok(obj=asdict(x))
             
     @requires_admin_auth
     def panel_status(self) -> ResponseType: 
-        try:
-            query = request.args.get('name', None)
-            if query is None:
-                result: dict[str, dict[str, dict[str, JsonifyValue]] | None] = {}
-                for panel in self.sub.panels:
-                    _ = self.sub.getstatus(panel)
-                    if _ is None:
-                        self.log.error(f"getstatus: {panel.name} returned None")
-                    else:
-                        _ = asdict(_)
-                    result[panel.name] = _
-                return _ok(obj=result)
-
+        query = request.args.get('name', None)
+        if query is None:
+            result: dict[str, dict[str, dict[str, JsonifyValue]] | None] = {}
             for panel in self.sub.panels:
-                if panel.name == query:
-                    res = self.sub.getstatus(panel)
-                    if res is None:
-                        return _err("getstatus() returned None; panel may be down")
-                    return _ok(obj=asdict(res))
+                _ = self.sub.getstatus(panel)
+                if _ is None:
+                    self.log.error(f"getstatus: {panel.name} returned None")
+                else:
+                    _ = asdict(_)
+                result[panel.name] = _
+            return _ok(obj=result)
 
-            return _err("panel not found", 404)
-        except Exception as e:
-            self.log.error(f"panel_status fail: {e}")
-            return _err(str(e), 500)
+        for panel in self.sub.panels:
+            if panel.name == query:
+                res = self.sub.getstatus(panel)
+                if res is None:
+                    return _err("getstatus() returned None; panel may be down")
+                return _ok(obj=asdict(res))
+
+        return _err("panel not found", 404)
     
     @requires_admin_auth
     def system_status(self) -> ResponseType:
-        try:
-            return _ok(obj=asdict(SysUtil.full_info()))
-        except Exception as e:
-            return _err(str(e), 500)
+        return _ok(obj=asdict(SysUtil.full_info()))
     
     @requires_admin_auth
     def full_info(self) -> ResponseType:
-        try:
-            panels_data: dict[str, JsonifyValue] = {}
-            for panel in self.sub.panels:
-                res = self.sub.getstatus(panel)
-                if res is None:
-                    continue
-                panels_data[panel.name] = asdict(res)
+        panels_data: dict[str, JsonifyValue] = {}
+        for panel in self.sub.panels:
+            res = self.sub.getstatus(panel)
+            if res is None:
+                continue
+            panels_data[panel.name] = asdict(res)
 
-            obj: dict[str, JsonifyValue] = {
-                "host": asdict(SysUtil.full_info()),
-                "panels": panels_data
-            }
-            return _ok(
-                obj=obj
-            )
-        except Exception as e:
-            return _err(str(e), 500)
+        obj: dict[str, JsonifyValue] = {
+            "host": asdict(SysUtil.full_info()),
+            "panels": panels_data
+        }
+        return _ok(obj=obj)
         
     @requires_admin_auth
     def code_list(self) -> ResponseType: 
-        try:
-            return _ok(obj=self.sub.list_code())
-        except Exception as e:
-            return _err(str(e), 500)
+        return _ok(obj=self.sub.list_code())
     
     @requires_admin_auth
     @requires_args('code')
     def code_info(self) -> ResponseType:
-        try:
-            code = request.args.get('code')
-            if not isinstance(code, str):
-                return _err("'code' must be a str")
-            x = self.sub.get_code(code)
-            if not is_dataclass(x):
-                return _err("Code not found", 404)
-            return _ok(obj=asdict(x))
-        except Exception as e:
-            return _err(str(e), 500)
+        code = request.args.get('code')
+        if not isinstance(code, str):
+            return _err("'code' must be a str")
+        x = self.sub.get_code(code)
+        return _ok(obj=asdict(x))
     
     @requires_admin_auth
     @requires_fields_strict(
@@ -877,75 +790,66 @@ class Api(BaseApi):
         ('action', str)
     )
     def code_add(self) -> ResponseType: 
-        try:
-            content = g.json_obj
-            raw_data: dict[
-                Literal["name", "action", "permanent", "uses", "days", "gb", "wl_gb"], 
-                JsonifyValue
-            ] = {
-                "name": content.get('code'),
-                "action": content.get('action'),
-                "permanent": content.get('perma', 'false'),
-                "uses": content.get('uses', 1),
-                "days": content.get('days', 0),
-                "gb": content.get('gb', 0),
-                "wl_gb": content.get('wl_gb', 0)
-            }
+        content = g.json_obj
+        raw_data: dict[
+            Literal["name", "action", "permanent", "uses", "days", "gb", "wl_gb"],
+            JsonifyValue
+        ] = {
+            "name": content.get('code'),
+            "action": content.get('action'),
+            "permanent": content.get('perma', 'false'),
+            "uses": content.get('uses', 1),
+            "days": content.get('days', 0),
+            "gb": content.get('gb', 0),
+            "wl_gb": content.get('wl_gb', 0)
+        }
 
-            data: dict[str, str | int] = {}
+        data: dict[str, str | int] = {}
 
-            for k, v in raw_data.items():
-                match k:
-                    case 'permanent':
-                        parsed = parse_bool(v)
-                        if parsed is None:
-                            return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
-                        data[k] = parsed 
-                    
-                    case 'days' | 'gb' | 'wl_gb' | 'uses':
-                        try:
-                            data[k] = int(cast(str, v))
-                        except (ValueError, TypeError):
-                            return _err(f"{k} must be an integer, got: {v}")
+        for k, v in raw_data.items():
+            match k:
+                case 'permanent':
+                    parsed = parse_bool(v)
+                    if parsed is None:
+                        return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
+                    data[k] = parsed
 
-                    case 'name' | 'action':
-                        try:
-                            data[k] = str(v)
-                        except Exception:
-                            return _err(f"{k} must be a string, got: {v}")
+                case 'days' | 'gb' | 'wl_gb' | 'uses':
+                    try:
+                        data[k] = int(cast(str, v))
+                    except (ValueError, TypeError):
+                        return _err(f"{k} must be an integer, got: {v}")
 
-            if data['action'] not in ('register', 'bonus'):
-                return _err("action must be 'register' or 'bonus'")
+                case 'name' | 'action':
+                    try:
+                        data[k] = str(v)
+                    except Exception:
+                        return _err(f"{k} must be a string, got: {v}")
 
-            if cast(int, data['days']) < 0 or cast(int, data['gb']) < 0 or cast(int, data['wl_gb']) < 0:
-                return _err("days, gb, and wl_gb must be non-negative")
+        if data['action'] not in ('register', 'bonus'):
+            return _err("action must be 'register' or 'bonus'")
 
-            x = self.sub.add_code(
-                code=cast(str, data['name']),
-                action=data['action'],
-                permanent=cast(bool, data['permanent']), 
-                days=cast(int, data['days']), 
-                gb=cast(int, data['gb']), 
-                wl_gb=cast(int, data['wl_gb']),
-                uses=cast(int, data['uses'])
-            )
-            if isinstance(x, str):
-                return _err(x)
-            return _ok("Created", 201)
-        except Exception as e:
-            return _err(str(e), 500)
+        if cast(int, data['days']) < 0 or cast(int, data['gb']) < 0 or cast(int, data['wl_gb']) < 0:
+            return _err("days, gb, and wl_gb must be non-negative")
+
+        self.sub.add_code(
+            code=cast(str, data['name']),
+            action=data['action'],
+                permanent=cast(bool, data['permanent']),
+                days=cast(int, data['days']),
+                gb=cast(int, data['gb']),
+            wl_gb=cast(int, data['wl_gb']),
+            uses=cast(int, data['uses'])
+        )
+        return _ok("Created", 201)
 
     @requires_admin_auth
     @requires_fields_strict(('code', str))
     def code_delete(self) -> ResponseType:
-        try:
-            content = g.json_obj
-            name: str = content.get('code')
-            if not self.sub.delete_code(name):
-                return _err("Code not found", 404)
-            return _ok("Deleted")
-        except Exception as e:
-            return _err(str(e), 500)
+        content = g.json_obj
+        name: str = content.get('code')
+        self.sub.delete_code(name)
+        return _ok("Deleted")
 
     @requires_admin_auth
     def audit(self) -> ResponseType:
@@ -970,10 +874,7 @@ class Api(BaseApi):
         if cutoff < 0:
             return _err("cutoff param must be higher than 0", 400)
         
-        try:
-            obj = self.sub.get_snapshots(cutoff)
-        except Exception as e:
-            return _err(str(e), 500)
+        obj = self.sub.get_snapshots(cutoff)
         return _ok(obj=[asdict(s) for s in obj])
     
     @requires_admin_auth
@@ -994,19 +895,16 @@ class Api(BaseApi):
         if category not in ('total', 'monthly', 'wl_monthly'):
             return _err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
 
-        try:
-            data = self.sub.leaderboard(
-                category=category,
-                top_n=top_n,
-                use_displaynames=use_displaynames,
-                flip=flip
-            )
-            return _ok(obj=[
-                {"place": i, "username": user, "amount": amount} 
-                for i, (user, amount) in enumerate(data.items(), start=1)
-            ])
-        except Exception as e:
-            return _err(str(e), 500)
+        data = self.sub.leaderboard(
+            category=category,
+            top_n=top_n,
+            use_displaynames=use_displaynames,
+            flip=flip
+        )
+        return _ok(obj=[
+            {"place": i, "username": user, "amount": amount}
+            for i, (user, amount) in enumerate(data.items(), start=1)
+        ])
     
     @requires_basic_admin_auth
     def admin_ui(self) -> ResponseType:

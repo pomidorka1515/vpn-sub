@@ -13,7 +13,7 @@ Every response follows this pattern:
 // HTTP x  
 {  
     "success": true, // boolean  
-    "msg": null, // str on error/success (varies), null on success // use HTTP codes to detect faliures  
+    "msg": null, // str on error/success (varies), null on success  
     "obj": null // any object or null  
 }  
 ```  
@@ -46,6 +46,8 @@ Error:
     "obj": null  
 }  
 ```  
+  
+Errors use the same response shape and semantic HTTP status codes. Validation failures return HTTP 400, missing resources return HTTP 404, conflicts return HTTP 409, and panel failures return HTTP 502. Unexpected failures always return the fixed message above.
   
 ## Endpoints  
   
@@ -81,9 +83,10 @@ Response (success):
 ```  
 Response (error):  
 ```jsonc  
-// HTTP 403  
+// HTTP 404  
 {"success": false, "msg": "Invalid code", "obj": null}  
-{"success": false, "msg": "Username already exists", "obj": null}  
+// HTTP 409  
+{"success": false, "msg": "Username exists", "obj": null}  
 // HTTP 400  
 {"success": false, "msg": "Missing 'username' key in JSON.", "obj": null}  
 ```  
@@ -148,8 +151,9 @@ Response (success):
 ```  
 Response (error):  
 ```jsonc  
-// HTTP 200 (code not found)  
+// HTTP 404  
 {"success": false, "msg": "Unknown code", "obj": null}  
+{"success": false, "msg": "Unknown user", "obj": null}  
 // HTTP 400  
 {"success": false, "msg": "Missing 'code' key in JSON.", "obj": null}  
 ```  
@@ -195,6 +199,11 @@ Response (success):
     }  
 }  
 ```  
+Response (error):  
+```jsonc  
+// HTTP 404  
+{"success": false, "msg": "Unknown username", "obj": null}  
+```  
   
 ---  
   
@@ -215,6 +224,13 @@ Response (success):
     }  
 }  
 ```  
+Response (error):  
+```jsonc  
+// HTTP 404  
+{"success": false, "msg": "Unknown username", "obj": null}  
+// HTTP 502  
+{"success": false, "msg": "Panel rejected UUID update", "obj": null}  
+```  
   
 ---  
   
@@ -227,8 +243,9 @@ Body:
 {  
     "name": "", // OPTIONAL str, display name  
     "fingerprint": "", // OPTIONAL str, TLS fingerprint  
-    "username": "", // OPTIONAL str, requires password too  
-    "password": "" // OPTIONAL str, requires username too  
+    "username": "", // OPTIONAL str  
+    "password": "", // OPTIONAL str  
+    "current_password": "" // OPTIONAL str, required when changing username or password  
 }  
 ```  
 Response (success):  
@@ -240,7 +257,8 @@ Response (error):
 ```jsonc  
 // HTTP 400  
 {"success": false, "msg": "Unknown fingerprint", "obj": null}  
-{"success": false, "msg": "Both ext params needed", "obj": null}  
+{"success": false, "msg": "current_password required to change credentials", "obj": null}  
+// HTTP 409  
 {"success": false, "msg": "Ext username exists", "obj": null}  
 ```  
   
@@ -293,6 +311,13 @@ Response (success):
     "msg": "Deleted account",  
     "obj": null  
 }  
+```  
+Response (error):  
+```jsonc  
+// HTTP 404  
+{"success": false, "msg": "Unknown username", "obj": null}  
+// HTTP 502  
+{"success": false, "msg": "Panel rejected user deletion", "obj": null}  
 ```  
   
 ---  

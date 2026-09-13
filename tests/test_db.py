@@ -8,8 +8,8 @@ import threading
 import unittest
 import uuid
 
-from db import CodeError, Database, DatabaseError, DuplicateError, MigrationError
-
+from errors import CodeError, DatabaseError, DuplicateError, MigrationError
+from db import Database
 
 class DatabaseTests(unittest.TestCase):
     def setUp(self) -> None:

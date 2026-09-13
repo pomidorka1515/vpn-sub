@@ -1,8 +1,16 @@
 from __future__ import annotations
+from errors import (
+    AppError,
+    ConflictError,
+    NotFoundError,
+    PanelUnavailableError,
+    ValidationError,
+)
 
 from loggers import Logger
 from session import XUiSession
-from db import Database, CodeError, DuplicateError, UserRecord
+from db import Database, UserRecord
+from errors import CodeError, DuplicateError
 
 import threading
 import hashlib
@@ -219,7 +227,7 @@ class Subscription:
     def _user(self, username: str) -> UserRecord:
         user = self.db.get_user(username)
         if user is None:
-            raise KeyError(username)
+            raise NotFoundError("Unknown username")
         return user
 
     def get_user_state(self, username: str) -> UserRecord:
@@ -309,8 +317,8 @@ class Subscription:
                 self.log.error(f"getstatus fail: {data['msg']}")
                 return None
             return from_dict(ServerMetricsResponse, data)
-        except Exception as e:
-            self.log.error(f"getstatus fail: {e}")
+        except Exception:
+            self.log.error("getstatus failed", exc_info=True)
             return None
 
     def getinbounds(self, panel: XUiSession) -> list[Inbound]:
@@ -336,10 +344,10 @@ class Subscription:
                 inbounds = [i for i in inbounds if i.id not in panel.ignore_inbounds]
             panel.cache = inbounds
             return inbounds
-        except Exception as e:
+        except Exception:
             if panel.dead:
                 return []
-            self.log.warning(f"getinbounds fail: {e}")
+            self.log.warning("getinbounds failed", exc_info=True)
             return []
     
     def _drop_cache(self, panel: XUiSession | None = None) -> None:
@@ -458,7 +466,7 @@ class Subscription:
             sorted_items = sorted_items[:top_n]
         return {k: v for k, v in sorted_items}
     
-    def add_users(self, username: str, _called_internally: bool = False) -> str | None:
+    def add_users(self, username: str, _called_internally: bool = False) -> None:
         """Sync users to panels."""
         userid = str(self._user(username)["uuid"])
         panels = self.panels
@@ -510,15 +518,13 @@ class Subscription:
                 )
                 content = resp.json()
                 if not (resp.status_code in (200, 201) and content.get('success')):
-                    err_msg: str = content.get('msg', 'unknown error')
-                    return err_msg
+                    raise PanelUnavailableError("Panel rejected user update")
         if not _called_internally: self.audit(name="user_refresh", info={"username":username})
         self._drop_cache()
-        return None
     def delete_user(self,
                     username: str,
                     perma: bool = False
-    ) -> None | str:
+    ) -> None:
         """Delete a user, either from panels or from storage too."""
         userid = str(self._user(username)["uuid"])
         panels = self.panels
@@ -533,21 +539,19 @@ class Subscription:
                 )
                 content = response.json()
                 if not (response.status_code in (200, 201) and content.get('success')):
-                    err_msg: str = content.get('msg', 'panel rejected update')
-                    return err_msg
+                    raise PanelUnavailableError("Panel rejected user deletion")
         if perma:
             self.db.delete_user(username)
 
         self.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
-        return None
     def update_user(self, 
                     username: str, 
                     enable: bool | None = None, 
                     timee: bool | None = None, 
-                    wl_enable: bool | None = None) -> None | str:
+                    wl_enable: bool | None = None) -> None:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
-        None on success."""
+        Raises a domain error if the user is absent or a panel update fails."""
         userid = str(self._user(username)["uuid"])
         audit_info: dict[str, str | bool] = {"username": username}
         if enable is not None:
@@ -569,8 +573,7 @@ class Subscription:
                     )
                     content = response.json()
                     if not (response.status_code in (200, 201) and content.get('success')):
-                        err_msg: str = content.get('msg', 'panel rejected update')
-                        return err_msg
+                        raise PanelUnavailableError("Panel rejected user update")
             
             fields: dict[str, object] = {"status": enable}
             if timee is not None:
@@ -605,8 +608,7 @@ class Subscription:
                     )
                     content = response.json()
                     if not (response.status_code in (200, 201) and content.get('success')):
-                        _err_msg: str = content.get('msg', 'panel rejected update')
-                        return _err_msg
+                        raise PanelUnavailableError("Panel rejected whitelist user update")
 
             self.db.update_user(username, status_wl=wl_enable)
 
@@ -614,7 +616,6 @@ class Subscription:
 
         self.audit(name="user_update", info=audit_info)
         self._drop_cache()
-        return None
     def add_new_user(
         self,
         username: str,
@@ -627,27 +628,27 @@ class Subscription:
         limit: int = 0,
         wl_limit: int = 5,
         timee: int = 0
-    ) -> NewUserInfo | str:
-        """Adds a new user. Returns string with error if any argument is incorrect.
+    ) -> NewUserInfo:
+        """Adds a new user. Raises a domain error if any argument is incorrect.
         Now also suppports ext username and password (optional)"""
         if ext_username:
             ext_username = self.sanitize(ext_username)
             if len(ext_username) > 32:
-                return "Ext Username too long"
+                raise ValidationError("Ext Username too long")
         if token is None:
             token = secrets.token_urlsafe(40)
         if userid is None:
             userid = str(uuid.uuid4())
         else:
             if not self.isuuid(userid):
-                return "Invalid UUID"
+                raise ValidationError("Invalid UUID")
         if fingerprint is None:
             fingerprint = random.choice(self.fps)
         else:
             if fingerprint not in self.cfg['fingerprints']:
-                return "Invalid fingerprint"
+                raise ValidationError("Invalid fingerprint")
         if timee > 2**31:
-            return "Invalid timestamp"
+            raise ValidationError("Invalid timestamp")
         if ext_password is not None:
             ext_password = self.hash(ext_password)
         else:
@@ -656,7 +657,7 @@ class Subscription:
 
         displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
         if len(displayname) > 16:
-            return "Displayname too long"
+            raise ValidationError("Displayname too long")
         try:
             self.db.create_user(
                 username=username, uuid=userid, token=token, fingerprint=fingerprint,
@@ -665,13 +666,10 @@ class Subscription:
                 ext_password_hash=ext_password,
             )
         except DuplicateError:
-            return "Username or external username exists"
+            raise ConflictError("Username or external username exists")
         
         try:
-            resp = self.add_users(username=username, _called_internally=True)
-            if isinstance(resp, str):
-                self.db.delete_user(username)
-                return f"Panel error: {resp}"
+            self.add_users(username=username, _called_internally=True)
             return NewUserInfo(
                 username=username,
                 token=token,
@@ -680,7 +678,10 @@ class Subscription:
                 displayname=displayname
             )
         except Exception:
-            self.db.delete_user(username)
+            try:
+                self.db.delete_user(username)
+            except Exception:
+                self.log.error("failed to roll back user %s", username, exc_info=True)
             raise
         finally:
             to_log: dict[str, str] = {"username": username}
@@ -699,11 +700,8 @@ class Subscription:
         limit: int | None = None,
         wl_limit: int | None = None,
         timee: int | None = None
-    ) -> str | None:
-        """Updates certain fields for any user. Changing UUIDs isnt supported.
-        Invalid params return str, None on success."""
-        if not self.isuser(username):
-            return "Missing username"
+    ) -> None:
+        """Updates certain fields for any user. Changing UUIDs isnt supported."""
         current = self._user(username)
         audit_info: dict[str, str | int] = {"username": username}
         if displayname is None:
@@ -711,7 +709,7 @@ class Subscription:
         else:
             displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
             if len(displayname) > 16:
-                return "Displayname too long"
+                raise ValidationError("Displayname too long")
             audit_info['displayname'] = displayname
         token = token if token is not None else str(current["token"])
         if fingerprint is None:
@@ -719,19 +717,19 @@ class Subscription:
         else:
             audit_info['fingerprint'] = fingerprint
         if fingerprint not in self.fps:
-            return "Invalid fingerprint"
+            raise ValidationError("Invalid fingerprint")
         limit = int(current["bw_limit_gb"]) if limit is None else limit
         wl_limit = int(current["wl_limit_gb"]) if wl_limit is None else wl_limit
         timestamp = int(current["expires_at"]) if timee is None else timee
         if timestamp > 2**31:
-            return "Invalid time"
+            raise ValidationError("Invalid time")
         old_ext = current["ext_username"]
         if ext_username is None:
             ext_username = str(old_ext) if old_ext is not None else None
         else:
             ext_username = self.sanitize(ext_username)
             if len(ext_username) > 32:
-                return "Username too long"
+                raise ValidationError("Username too long")
             audit_info['ext_username'] = ext_username
         if ext_password is None:
             password_hash = current["ext_password_hash"]
@@ -744,11 +742,10 @@ class Subscription:
                 ext_username=ext_username, ext_password=password_hash,
             )
         except DuplicateError:
-            return "Ext username exists"
+            raise ConflictError("Ext username exists")
 
         self.audit(name="user_update_params", info=audit_info)
         self._drop_cache()
-        return None
 
     def _rollback_user_uuid(
         self,
@@ -783,13 +780,11 @@ class Subscription:
                     f"exception during rollback: {e}"
                 )
 
-    def update_uuid(self, username: str, uid: str) -> None | str:
-        """Seperate method for updating the UUID. None on success, str on error.
+    def update_uuid(self, username: str, uid: str) -> None:
+        """Seperate method for updating the UUID.
         Potentially dangerous operation, seperate function."""
-        if not self.isuser(username):
-            return "Unknown username"
         if not self.isuuid(uid):
-            return "Invalid UUID"
+            raise ValidationError("Invalid UUID")
         olduid = str(self._user(username)["uuid"])
         successful: list[tuple['XUiSession', int, SettingsClient, bool]] = []
 
@@ -826,7 +821,7 @@ class Subscription:
                     err_msg: str = response.json().get('msg', 'panel rejected update')
                     self.log.critical(f"update_uuid failed on panel {panel.name}: {err_msg}")
                     self._rollback_user_uuid(username, olduid, uid, successful)
-                    return err_msg
+                    raise PanelUnavailableError("Panel rejected UUID update")
 
                 successful.append((panel, k, the[str(k)], k in need_vision))
 
@@ -834,10 +829,9 @@ class Subscription:
             self.db.update_user(username, uuid=uid)
         except DuplicateError:
             self._rollback_user_uuid(username, olduid, uid, successful)
-            return "UUID exists"
+            raise ConflictError("UUID exists")
         self.audit(name="user_update_uuid", info={"username": username, "uuid": uid})
         self._drop_cache()
-        return None
 
     def register_with_code(
         self,
@@ -847,33 +841,32 @@ class Subscription:
         displayname: str,
         ext_username: str,
         ext_password: str,
-    ) -> RegisterWithCodeInfo | str:
+    ) -> RegisterWithCodeInfo:
         """Create a new web user from a register code.
     
-        Returns a user dict on success, or a human-readable error string on
-        validation/business-rule failure.
+        Raises a domain error on validation or business-rule failure.
     
         """
         if not code or not isinstance(code, str):
-            return "Invalid code"
+            raise ValidationError("Invalid code")
         if not username or not isinstance(username, str):
-            return "Invalid username"
+            raise ValidationError("Invalid username")
         if not ext_username or not isinstance(ext_username, str): 
-            return "Invalid username"
+            raise ValidationError("Invalid username")
         if not ext_password or not isinstance(ext_password, str):
-            return "Invalid password"
+            raise ValidationError("Invalid password")
     
         ext_username = self.sanitize(ext_username)
         if not ext_username:
-            return "Invalid username"
+            raise ValidationError("Invalid username")
         if len(ext_username) > 32:
-            return "Ext Username too long"
+            raise ValidationError("Ext Username too long")
     
         displayname = displayname.translate(
             str.maketrans("", "", self.FILTERS.get("displayname", ""))
         )
         if len(displayname) > 16:
-            return "Displayname too long"
+            raise ValidationError("Displayname too long")
     
         token = secrets.token_urlsafe(40)
         userid = str(uuid.uuid4())
@@ -886,8 +879,10 @@ class Subscription:
                 fingerprint=fingerprint, displayname=displayname,
                 ext_username=ext_username, ext_password_hash=hashed_password,
             )
-        except (CodeError, DuplicateError) as exc:
-            return "Username exists" if isinstance(exc, DuplicateError) else "Invalid code"
+        except CodeError as exc:
+            raise NotFoundError("Invalid code") from exc
+        except DuplicateError as exc:
+            raise ConflictError("Username exists") from exc
         result = RegisterWithCodeInfo(
             username=username, token=token, uuid=userid, fingerprint=fingerprint,
             limit=int(result_data["gb"]), wl_limit=int(result_data["wl_gb"]),
@@ -899,49 +894,46 @@ class Subscription:
             "wl_limit": int(result_data["wl_gb"]), "time": int(result_data["time"]),
         }
         try:
-            panel_error = self.add_users(username=username, _called_internally=True)
-            if panel_error is not None:
-                self._rollback_registered_user(username=username)
-                return f"Panel error: {panel_error}"
-        except Exception as e:
-            self.log.critical(f"register_with_code backend sync failed for {username}: {e}")
+            self.add_users(username=username, _called_internally=True)
+        except Exception:
+            self.log.critical(f"register_with_code backend sync failed for {username}", exc_info=True)
             self._rollback_registered_user(username=username)
-            raise RuntimeError(f"backend sync failed for {username}") from e
+            raise
         self.db.confirm_registration_sync(username)
         self.audit(name="user_add", info=audit_result)
         return result
 
-    def get_code(self, code: str) -> CodeObject | bool:
-        """Search for a code. Returns a dict if found, False if isnt."""
+    def get_code(self, code: str) -> CodeObject:
+        """Search for a code. Raises NotFoundError if it does not exist."""
 
         result = self.db.get_code(code)
 
-        if result:
-            return CodeObject(
-                code=code,
-                action=result['action'],
-                perma=result['perma'],
-                uses=result['uses'],
-                days=result['days'],
-                gb=result['gb'],
-                wl_gb=result['wl_gb']
-            )
-        else:
-            return False
+        if result is None:
+            raise NotFoundError("Unknown code")
+        return CodeObject(
+            code=code,
+            action=result['action'],
+            perma=result['perma'],
+            uses=result['uses'],
+            days=result['days'],
+            gb=result['gb'],
+            wl_gb=result['wl_gb']
+        )
         
-    def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject | str:
+    def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject:
         """Atomically validate/consume a bonus code and apply it to a user.
     
         Returns:
-            dict: Applied bonus info on success.
-            str: Human-readable error on validation/failure.
+            ApplyBonusCodeObject: Applied bonus info on success.
             """
         if not isinstance(code, str) or not code:
-            return "Unknown code"
+            raise ValidationError("Unknown code")
         try:
             result_data = self.db.adjust_bonus(username, code)
         except CodeError as exc:
-            return str(exc).capitalize()
+            if str(exc) == "unknown user":
+                raise NotFoundError("Unknown user") from exc
+            raise NotFoundError("Unknown code") from exc
         result = ApplyBonusCodeObject(
             days=int(result_data["days"]), gb=int(result_data["gb"]),
             wl_gb=int(result_data["wl_gb"]), uses=int(result_data["uses"]),
@@ -951,7 +943,7 @@ class Subscription:
         self.audit(name="user_consume_code", info=asdict(result))
         return result
 
-    def add_code(self, 
+    def add_code(self,
         code: str, 
         action: str, 
         permanent: bool = False, 
@@ -959,23 +951,23 @@ class Subscription:
         gb: int = 0,
         wl_gb: int = 0,
         uses: int = 1
-    ) -> None | str:
+    ) -> None:
         """
         Creates a code.
         If permanent is True, 'uses' param is ignored.
         """
         
         if not isinstance(code, str) or not code: 
-            return "code must be a non-empty string"
+            raise ValidationError("code must be a non-empty string")
         if action not in ("register", "bonus"):
-            return f"action must be 'register' or 'bonus', got '{action}'"
+            raise ValidationError(f"action must be 'register' or 'bonus', got '{action}'")
         if not all(isinstance(x, int) for x in (days, gb, wl_gb, uses)): 
-            return "days, gb, wl_gb must be integers"
+            raise ValidationError("days, gb, wl_gb must be integers")
         if days < 0 or gb < 0 or wl_gb < 0:
-            return "days, gb, wl_gb must be non-negative"
+            raise ValidationError("days, gb, wl_gb must be non-negative")
         if not permanent:
             if uses < 1:
-                return "uses must be >= 1"
+                raise ValidationError("uses must be >= 1")
         
         res: dict[str, str | bool | int] = {
             "code": code, "action": action, "perma": permanent,
@@ -984,29 +976,25 @@ class Subscription:
         try:
             self.db.add_code(code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses)
         except DuplicateError:
-            return f"code '{code}' already exists"
+            raise ConflictError(f"code '{code}' already exists")
         self.audit(name="code_add", info=res)
-        
-        return None
-    def delete_code(self, code: str) -> bool:
-        """Returns True if deleted, False if not found."""
+    def delete_code(self, code: str) -> None:
+        """Delete a code. Raises NotFoundError if it does not exist."""
         deleted = self.db.delete_code(code)
-        if deleted:
-            self.audit(name="code_delete", info={"code": code})
-        return deleted
+        if not deleted:
+            raise NotFoundError("Unknown code")
+        self.audit(name="code_delete", info={"code": code})
     def list_code(self) -> list[str]:
         return [str(c['code']) for c in self.db.all_codes() if 'code' in c]
-    def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject | str:
+    def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
         """Apply a bonus code for a Telegram user."""
         username = self.get_username_telegram(value)
         if not isinstance(username, str) or not username:
-            return "Unknown Telegram user"
+            raise NotFoundError("Unknown Telegram user")
         return self.apply_bonus_code(username=username, code=code)
 
-    def get_info(self, username: str, pretty: bool = False) -> UserInfo | None:
-        """Get all info about a user. None if not found."""
-        if not self.isuser(username):
-            return None
+    def get_info(self, username: str, pretty: bool = False) -> UserInfo:
+        """Get all info about a user. Raises NotFoundError if it does not exist."""
         
         conf = self.cfg.copy()
         user = self._user(username)
@@ -1047,11 +1035,11 @@ class Subscription:
             )
 
         )
-    def get_info_telegram(self, tgid: int) -> UserInfo | None:
-        """Returns all user info by telegram ID. None if target uid wasnt found."""
+    def get_info_telegram(self, tgid: int) -> UserInfo:
+        """Returns all user info by telegram ID. Raises NotFoundError if absent."""
         username = self.db.tgid_to_user(tgid)
-        if not username:
-            return None
+        if username is None:
+            raise NotFoundError("Unknown Telegram user")
         return self.get_info(username, True)
     
     def is_registered(self, tgid: int) -> bool:
@@ -1118,24 +1106,15 @@ class Subscription:
     def is_online(self, username: str) -> bool:
         """Simplest method here lol. But useful."""
         return username in self.get_online_users()
-    def reset_user(self, username: str) -> ResetUserObject | str:
+    def reset_user(self, username: str) -> ResetUserObject:
         """Resets token and uuid to randomness. Dict with new values on success."""
-        if not self.isuser(username):
-            return "Unknown user"
         newid = str(uuid.uuid4())
         newt = secrets.token_urlsafe(40)
-        x = self.update_uuid(username, newid)
-        if x is not None:
-            self.log.critical(f"reset_user: error in update_uuid: {x}")
-            return x
-        xx = self.update_params(
+        self.update_uuid(username, newid)
+        self.update_params(
             username=username,
             token=newt
         )
-        if xx is not None:
-            self.log.critical(f"reset_user: error in update_params: {xx}")
-            return xx
-
         self.audit(name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"})
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)
@@ -1598,9 +1577,10 @@ class BWatch:
             thread.join(timeout=5)
         
     def _update_user(self, *args: Any, **kwargs: Any) -> None:
-        x = self.sub.update_user(*args, **kwargs)
-        if x is not None:
-            self.log.critical(f"update_user error: {x}") 
+        try:
+            self.sub.update_user(*args, **kwargs)
+        except AppError:
+            self.log.error("background user update failed", exc_info=True)
     
     # prune_old_<cfg name>_snapshots
 

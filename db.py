@@ -21,7 +21,7 @@ from typing import Any, cast, TypedDict
 from pathlib import Path
 
 from loggers import Logger
-
+from errors import DatabaseError, CodeError, MigrationError, DuplicateError
 __all__ = [
     "Database", "DatabaseError", "DuplicateError", "CodeError",
     "MigrationError", "MigrationReport", "UserRecord", "CodeRecord",
@@ -72,21 +72,6 @@ class BonusResult(RegisterCodeResult):
     limit: int
     wl_limit: int
 
-
-class DatabaseError(RuntimeError):
-    """A storage failure, distinct from an expected business-rule failure."""
-
-
-class DuplicateError(DatabaseError):
-    """A unique user or credential value is already in use."""
-
-
-class CodeError(DatabaseError):
-    """An invalid, expired or exhausted registration/bonus code."""
-
-
-class MigrationError(DatabaseError):
-    """Legacy data could not be validated or imported."""
 
 
 @dataclass(frozen=True, slots=True)

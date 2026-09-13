@@ -17,7 +17,9 @@ from db import Database
 from loggers import Logger
 from custom_types import ConfigLike
 
-from flask import Flask
+from flask import Flask, Response, jsonify, request
+from errors import AppError
+from werkzeug.exceptions import HTTPException
 from typing import cast, TypedDict
 from pathlib import Path
 
@@ -76,11 +78,26 @@ def _acquire_primary_lock() -> bool:
 
 
 # ------------------------------------------------------------
-# Flask app
+# Flask app & handlers
 # ------------------------------------------------------------
-app = Flask(__name__)
+app = Flask(__name__) # the entry point
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 app.config['JSON_SORT_KEYS'] = False
+
+@app.errorhandler(AppError)
+def _handle_app_error(error: AppError) -> tuple[Response, int]:
+    return jsonify({"success": False, "msg": error.message, "obj": None}), error.status
+
+
+@app.errorhandler(HTTPException)
+def _handle_http_error(error: HTTPException) -> tuple[Response, int]:
+    return jsonify({"success": False, "msg": error.description, "obj": None}), error.code or 500
+
+
+@app.errorhandler(Exception)
+def _handle_unexpected_error(error: Exception) -> tuple[Response, int]:
+    log.error("unhandled error on %s %s", request.method, request.path, exc_info=True)
+    return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
 
 
 # ------------------------------------------------------------
