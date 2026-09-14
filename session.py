@@ -180,7 +180,7 @@ class XUiSession(Session):
                     return
                 try:
                     self.login()
-                except Exception as error:
+                except (RequestException, XUiSessionError) as error:
                     self._mark_dead(f"login failed: {error}")
                     return
                 response = super().request(
@@ -320,12 +320,14 @@ class XUiSession(Session):
                     timeout=_LOGIN_TIMEOUT
                 )
 
+                if response.status_code in (401, 403):
+                    raise XUiSessionError(f"authentication failed: HTTP {response.status_code}")
                 if response.status_code != 200:
-                    raise XUiSessionError(f"HTTP {response.status_code}")
+                    raise XUiSessionError(f"panel protocol error: HTTP {response.status_code}")
 
                 json_res = response.json()
                 if not json_res.get("success"):
-                    raise XUiSessionError(f"{json_res.get('msg')}")
+                    raise XUiSessionError(f"panel protocol error: {json_res.get('msg')}")
 
                 self._login_monotonic = time.monotonic()
                 self._login_failures = 0
@@ -336,7 +338,7 @@ class XUiSession(Session):
                     self._start_refresh_thread()
 
             except Exception as e:
-                if isinstance(e, XUiSessionError):
+                if isinstance(e, XUiSessionError) and str(e).startswith("authentication failed:"):
                     self._login_failures += 1
                     delay = min(_AUTH_BACKOFF_INITIAL * (2 ** (self._login_failures - 1)), _AUTH_BACKOFF_MAX)
                     self._login_retry_at = time.monotonic() + delay
@@ -354,8 +356,12 @@ class XUiSession(Session):
                     try:
                         self.log.info(f"{self.address}:{self.port} > refreshing session")
                         self.login()
-                    except Exception:
-                        pass
+                    except Exception as error:
+                        self._mark_dead(f"refresh login failed: {error}")
+                        self.log.error(
+                            f"{self.address}:{self.port} > session refresh failed",
+                            exc_info=True,
+                        )
         thread = threading.Thread(target=refresh_loop, daemon=True, name="3x-ui")
         self._refresh_thread = thread
         thread.start()

@@ -1,4 +1,5 @@
 import logging
+import sys
 import re
 import html
 import time
@@ -10,6 +11,13 @@ from datetime import datetime
 from custom_types import AdminBotLike, LinesConfigLike
 
 _ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+
+def _safe_handle_error(handler: logging.Handler, record: logging.LogRecord) -> None:
+    try:
+        handler.handleError(record)
+    except Exception:
+        print(f"logging handler {handler!r} failed while handling {record!r}", file=sys.stderr)
 
 __all__ = ['Logger']
 
@@ -34,7 +42,7 @@ class _TelegramLogger(logging.Handler):
             safe_text = html.escape(clean_text)
             self.bot.msg(f"<code>{safe_text}</code>", **kwargs)
         except Exception:
-            self.handleError(record)
+            _safe_handle_error(self, record)
 
 class _JSONLinesLogger(logging.Handler):
     def __init__(self, config: LinesConfigLike):
@@ -70,7 +78,7 @@ class _JSONLinesLogger(logging.Handler):
             
             self.cfg.append(record=to_log)
         except Exception:
-            self.handleError(record)
+            _safe_handle_error(self, record)
 
 class Logger(logging.Logger):
     COLORS = {

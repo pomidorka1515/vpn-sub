@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from loggers import Logger
 from core import Subscription, SERVER_TZ
-from errors import AppError
+from errors import AppError, PanelUnavailableError
 from session import XUiSession
 from chart import bandwidth_chart, leaderboard_chart
 from custom_types import ConfigLike
 from util import fmt_bytes, fmt_time, format_usage, truncate_utf8
 
 import telebot
+import logging
 import time
 import threading
 import urllib.parse
 
-from typing import cast, overload, Literal, Mapping
+from typing import Any, cast, overload, Literal, Mapping
 from datetime import datetime
 from telebot import types
-from dataclasses import is_dataclass
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -60,6 +60,26 @@ class AdminBot:
                 self.bot.send_message(uid, text, parse_mode=parse_mode)
             except Exception as e:
                 self.log.error(f"failed to send message to admin ID {uid}: {e}")
+
+    def _send_message(self, chat_id: int, text: str, **kwargs: object) -> None:
+        try:
+            self.bot.send_message(chat_id, text, **cast(Any, kwargs))
+        except Exception as error:
+            self.log.error(f"failed to send message to chat {chat_id}: {error}", exc_info=True)
+
+    def _delete_message(self, chat_id: int, message_id: int, *, secret: bool = False) -> None:
+        try:
+            self.bot.delete_message(chat_id, message_id)
+        except Exception as error:
+            level = logging.CRITICAL if secret else logging.ERROR
+            prefix = "secret" if secret else "message"
+            self.log.log(
+                level,
+                f"failed to delete {prefix} {message_id} in chat {chat_id}: {error}",
+                exc_info=True,
+            )
+            if secret:
+                self._send_message(chat_id, "⚠️ Не удалось удалить ваше сообщение с секретом.")
 
     def get_main_menu(self) -> types.InlineKeyboardMarkup:
         return types.InlineKeyboardMarkup(row_width=2).add(
@@ -266,9 +286,10 @@ class AdminBot:
                 username = pending['username']
                 try:
                     self.sub.update_params(username=username, fingerprint=fp)
-                    self.bot.send_message(chat_id, f"✅ fingerprint обновлён: <code>{fp}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
                 except AppError as error:
-                    self.bot.send_message(chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
+                    self._send_message(chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
+                else:
+                    self._send_message(chat_id, f"✅ fingerprint обновлён: <code>{fp}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
                 self._pending_edits.pop(chat_id, None)
 
             elif data.startswith("lbt_"):
@@ -286,7 +307,7 @@ class AdminBot:
 
         except Exception as e:
             self.log.error(f"Ошибка в боте: {e}", exc_info=True)
-            self.bot.send_message(chat_id, "⚠️ Внутренняя ошибка")
+            self._send_message(chat_id, "⚠️ Внутренняя ошибка")
 
     def _cb_leaderboard_type(self, chat_id: int) -> None:
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -384,7 +405,7 @@ class AdminBot:
                        last: bool) -> None:
         info = self.sub.getstatus(panel)
         if info is None:
-            self.bot.send_message(chat_id, "Произошла ошибка: getstatus() вернул None", reply_markup=self.get_main_menu())
+            self._send_message(chat_id, f"❌ Статус панели {panel.name} неизвестен", reply_markup=self.get_main_menu())
             return
         obj = info.obj
         obj.format()
@@ -429,13 +450,11 @@ class AdminBot:
             last = i == len(panels) - 1
             try:
                 self._cb_panel_info(chat_id, panel, last)
-            except Exception as e:
+            except Exception:
                 self.log.error("panel operation failed for %s", panel.name, exc_info=True)
-                self.bot.send_message(chat_id, "❌ Внутренняя ошибка", parse_mode="HTML")
-        try:
-            self.bot.delete_message(chat_id, msg.message_id)
-        except Exception:
-            pass
+                self._send_message(chat_id, "❌ Внутренняя ошибка", parse_mode="HTML")
+        self._delete_message(chat_id, msg.message_id)
+
     def _cb_list_users(self, chat_id: int, page: int = 0) -> None:
         all_users = self.sub.list_users()
         total_users = len(all_users)
@@ -464,30 +483,40 @@ class AdminBot:
             markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))
 
         markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))
-        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+        self._send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
     def _cb_online_users(self, chat_id: int) -> None:
-        online_users = self.sub.get_online_users(new = True)
+        online_users = self.sub.get_online_users(new=True)
         if not online_users:
-            self.bot.send_message(chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu())
+            self._send_message(chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu())
             return
         text = "👥 <b>Список пользователей онлайн:</b>\n\n" + "\n".join([f"- <code>{u}</code>{", логин: "+v if v else ""}" for u, v in online_users.items()])
-        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
+        self._send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
     def _cb_refresh(self, chat_id: int) -> None:
         failures: list[str] = []
-        for cc in self.sub.list_users():
+        users = self.sub.list_users()
+        for cc in users:
             try:
                 self.sub.add_users(cc)
-            except Exception:
+            except PanelUnavailableError:
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)
+            except Exception:
+                self.log.critical("bulk user refresh aborted for %s", cc, exc_info=True)
+                self._send_message(
+                    chat_id,
+                    f"❌ Обновление прервано. Успешно: {len(users) - len(failures)}; "
+                    f"панель недоступна: {len(failures)}; всего: {len(users)}.",
+                    reply_markup=self.get_main_menu(),
+                )
+                return
         if failures:
-            self.bot.send_message(
+            self._send_message(
                 chat_id,
                 "⚠️ Обновление завершено с ошибками: " + ", ".join(failures),
                 reply_markup=self.get_main_menu(),
             )
         else:
-            self.bot.send_message(chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu())
+            self._send_message(chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu())
 
     def _cb_info_user(self, chat_id: int, username: str) -> None:
         try:
@@ -538,20 +567,22 @@ class AdminBot:
             )
             self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         except AppError as error:
-            self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
         except Exception:
             self.log.error("Telegram handler failed", exc_info=True)
-            self.bot.send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
+            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
 
     def _cb_del_user(self, chat_id: int, username: str) -> None:
         try:
             self.sub.delete_user(username=username, perma=True)
-            self.bot.send_message(chat_id, f"✅ Пользователь <b>{username}</b> удален.", parse_mode="HTML", reply_markup=self.get_main_menu())
         except AppError as error:
-            self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            return
         except Exception:
             self.log.error("Telegram handler failed", exc_info=True)
-            self.bot.send_message(chat_id, "❌ Внутренняя ошибка")
+            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
+            return
+        self._send_message(chat_id, f"✅ Пользователь <b>{username}</b> удален.", parse_mode="HTML", reply_markup=self.get_main_menu())
 
     def _cb_edit_user_options(self, chat_id: int, username: str) -> None:
         self._pending_edits[chat_id] = {"username": username}
@@ -744,12 +775,12 @@ class AdminBot:
         timee = int(time.time() + (timee * 86400)) if timee else 0
         try:
             self.sub.add_new_user(username=username, displayname=displayname, limit=limit, timee=timee)
-            self.bot.send_message(message.chat.id, f"✅ Пользователь <b>{username}</b> успешно добавлен!", parse_mode="HTML", reply_markup=self.get_main_menu())
+            self._send_message(message.chat.id, f"✅ Пользователь <b>{username}</b> успешно добавлен!", parse_mode="HTML", reply_markup=self.get_main_menu())
         except AppError as error:
-            self.bot.send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
+            self._send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
         except Exception:
             self.log.error("Telegram handler failed", exc_info=True)
-            self.bot.send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
+            self._send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
     def _step_info_user(self, message: types.Message) -> None:
         text = cast(str, message.text)
         if text.startswith('/'): return
@@ -760,13 +791,13 @@ class AdminBot:
         try:
             codes = self.sub.list_code()
             if not codes:
-                self.bot.send_message(chat_id, "Список кодов пуст.", reply_markup=self.get_codes_menu())
+                self._send_message(chat_id, "Список кодов пуст.", reply_markup=self.get_codes_menu())
                 return
             text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{c}</code>" for c in codes])
-            self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
+            self._send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
         except Exception:
             self.log.error("Telegram handler failed", exc_info=True)
-            self.bot.send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
+            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
 
     def _step_info_code(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -783,12 +814,12 @@ class AdminBot:
                 f"Гигабайт: <code>{info.gb}</code>\n"
                 f"ВЛ Гигабайт: <code>{info.wl_gb}</code>\n"
             )
-            self.bot.send_message(message.chat.id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
+            self._send_message(message.chat.id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
         except AppError as error:
-            self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
+            self._send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
         except Exception:
             self.log.error("Telegram handler failed", exc_info=True)
-            self.bot.send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
+            self._send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
 
     def _step_del_code(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -796,12 +827,14 @@ class AdminBot:
         code = text.strip()
         try:
             self.sub.delete_code(code)
-            self.bot.send_message(message.chat.id, f"✅ Код <code>{code}</code> удалён.", parse_mode="HTML", reply_markup=self.get_codes_menu())
         except AppError as error:
-            self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
+            self._send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
+            return
         except Exception:
             self.log.error("Telegram handler failed", exc_info=True)
-            self.bot.send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
+            self._send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
+            return
+        self._send_message(message.chat.id, f"✅ Код <code>{code}</code> удалён.", parse_mode="HTML", reply_markup=self.get_codes_menu())
 
     def _step_add_code_name(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -950,7 +983,7 @@ class AdminBot:
                 code=code_name, action=code_type, permanent=perma,
                 days=days, gb=gb, wl_gb=wl_gb, uses=uses
             )
-            self.bot.send_message(
+            self._send_message(
                 chat_id,
                 f"""✅ Код создан!
 
@@ -965,10 +998,10 @@ class AdminBot:
                 reply_markup=self.get_codes_menu()
             )
         except AppError as error:
-            self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
+            self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
         except Exception:
             self.log.error("Telegram handler failed", exc_info=True)
-            self.bot.send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
+            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
 
     def _step_chart_username(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -1058,16 +1091,10 @@ class AdminBot:
             else:
                 self.bot.send_message(chat_id, text + "\n\n❌ Нет данных для графика", parse_mode="HTML", reply_markup=self.get_main_menu())
         except AppError as error:
-            try:
-                self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
-            except Exception:
-                pass
+            self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
         except Exception as e:
             self.log.error(f"Chart error for username {username}: {e}", exc_info=True)
-            try:
-                self.bot.send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
-            except Exception:
-                pass
+            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
 
 
 
@@ -1111,6 +1138,26 @@ class PublicBot:
 
             self._executor = ThreadPoolExecutor(max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart")
 
+    def _send_message(self, chat_id: int, text: str, **kwargs: object) -> None:
+        try:
+            self.bot.send_message(chat_id, text, **cast(Any, kwargs))
+        except Exception as error:
+            self.log.error(f"failed to send message to chat {chat_id}: {error}", exc_info=True)
+
+    def _delete_message(self, chat_id: int, message_id: int, *, secret: bool = False) -> None:
+        try:
+            self.bot.delete_message(chat_id, message_id)
+        except Exception as error:
+            level = logging.CRITICAL if secret else logging.ERROR
+            prefix = "secret" if secret else "message"
+            self.log.log(
+                level,
+                f"failed to delete {prefix} {message_id} in chat {chat_id}: {error}",
+                exc_info=True,
+            )
+            if secret:
+                self._send_message(chat_id, "⚠️ Не удалось удалить ваше сообщение с секретом.")
+
     def get_lang(self, uid: int) -> str:
         return self.sub.get_telegram_language(uid)
 
@@ -1129,8 +1176,11 @@ class PublicBot:
             text = text.format(**kwargs)
         try:
             self.bot.send_message(tgid, text, parse_mode="HTML")
-        except Exception:
-            pass
+        except Exception as error:
+            self.log.error(
+                f"failed to send notification {key!r} to user {tgid}: {error}",
+                exc_info=True,
+            )
     def get_menu(self, uid: int) -> types.ReplyKeyboardMarkup:
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
@@ -1230,10 +1280,7 @@ class PublicBot:
         t = self.TEXTS[new_lang]
         self.bot.send_message(message.chat.id, t['lang_set'], reply_markup=self.get_menu(uid))
 
-        try:
-            self.bot.delete_message(message.chat.id, message.message_id)
-        except Exception:
-            pass
+        self._delete_message(message.chat.id, message.message_id)
 
 
     def handle_text(self, message: types.Message) -> None:
@@ -1418,10 +1465,7 @@ class PublicBot:
         action = call.data  # set_name, set_fp, set_pass, set_login
 
         self.bot.answer_callback_query(call.id)
-        try:
-            self.bot.delete_message(message.chat.id, message.message_id)
-        except Exception:
-            pass
+        self._delete_message(message.chat.id, message.message_id)
 
         if action == "set_name":
             msg = self.bot.send_message(message.chat.id, t['settings_name_prompt'], reply_markup=types.ReplyKeyboardRemove())
@@ -1460,10 +1504,7 @@ class PublicBot:
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid))
         else:
             self.bot.send_message(message.chat.id, t['settings_fp_success'], reply_markup=self.get_menu(uid))
-        try:
-            self.bot.delete_message(message.chat.id, message.message_id)
-        except Exception:
-            pass
+        self._delete_message(message.chat.id, message.message_id)
 
     def step_settings_name(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -1522,10 +1563,7 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['no_account'], reply_markup=self.get_menu(uid))
             return
         new_pass = text.strip()
-        try:
-            self.bot.delete_message(message.chat.id, message.message_id)
-        except Exception:
-            pass
+        self._delete_message(message.chat.id, message.message_id, secret=True)
 
         # Need current ext_username to update password (update_params requires both)
         ext_username = self.sub.get_external_username(username)
@@ -1562,11 +1600,11 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['delete_success'], reply_markup=self.get_menu(uid))
 
         except AppError as error:
-            self.bot.send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
+            self._send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
             return
-        except Exception as e:
-            self.log.error(f"Delete error for uid {uid}: {e}")
-            self.bot.send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
+        except Exception as error:
+            self.log.error(f"Delete error for uid {uid}: {error}", exc_info=True)
+            self._send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
 
     def step_login_token(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -1616,10 +1654,7 @@ class PublicBot:
         t = self.TEXTS[lang]
         password = text.strip()
 
-        try:
-            self.bot.delete_message(message.chat.id, message.message_id)
-        except Exception:
-            pass
+        self._delete_message(message.chat.id, message.message_id, secret=True)
 
         internal_username = self.sub.validate_credentials(email, password)
         if internal_username:
@@ -1647,10 +1682,10 @@ class PublicBot:
                 self.sub.reset_user(username)
                 self.bot.send_message(message.chat.id, t['reset_success'], reply_markup=self.get_menu(uid))
             except AppError as error:
-                self.bot.send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
+                self._send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
             except Exception:
                 self.log.critical("reset_user failed", exc_info=True)
-                self.bot.send_message(message.chat.id, t.get("error_generic", "⚠️ Error"), reply_markup=self.get_menu(uid))
+                self._send_message(message.chat.id, t.get("error_generic", "⚠️ Error"), reply_markup=self.get_menu(uid))
         else:
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
             return
@@ -1680,10 +1715,14 @@ class PublicBot:
 
         self.bot.answer_callback_query(call.id, t['chart_generating'])
 
-        self._executor.submit(
-            self._render_chart,
-            uid=uid, username=username, days=days, lang=lang, chat_id=message.chat.id
-        )
+        try:
+            self._executor.submit(
+                self._render_chart,
+                uid=uid, username=username, days=days, lang=lang, chat_id=message.chat.id
+            )
+        except Exception:
+            self.log.error("chart submission failed", exc_info=True)
+            self._send_message(message.chat.id, t.get("error_generic", "⚠️ Error"))
 
     def _render_chart(
         self,
@@ -1744,16 +1783,10 @@ class PublicBot:
             else:
                 self.bot.send_message(chat_id, text + "\n\n" + t.get('no_data', 'No chart data available'), parse_mode="HTML", reply_markup=self.get_menu(uid))
         except AppError as error:
-            try:
-                self.bot.send_message(chat_id, error.message, reply_markup=self.get_menu(uid))
-            except Exception:
-                pass
+            self._send_message(chat_id, error.message, reply_markup=self.get_menu(uid))
         except Exception:
             self.log.error(f"Chart error for uid {uid}", exc_info=True)
-            try:
-                self.bot.send_message(chat_id, "Error occurred", reply_markup=self.get_menu(uid))
-            except Exception:
-                pass
+            self._send_message(chat_id, "Error occurred", reply_markup=self.get_menu(uid))
 
     def step_bonus(self, message: types.Message) -> None:
         text = cast(str, message.text)
@@ -1771,10 +1804,10 @@ class PublicBot:
             self.bot.send_message(message.chat.id, t['bonus_success'], reply_markup=self.get_menu(uid))
             self.send_info(message.chat.id, uid, lang)
         except AppError:
-            self.bot.send_message(message.chat.id, t['invalid_code'], reply_markup=self.get_menu(uid))
+            self._send_message(message.chat.id, t['invalid_code'], reply_markup=self.get_menu(uid))
         except Exception:
             self.log.error(f"Bonus error for uid {uid}", exc_info=True)
-            self.bot.send_message(message.chat.id, "⚠️ Error occurred", reply_markup=self.get_menu(uid))
+            self._send_message(message.chat.id, "⚠️ Error occurred", reply_markup=self.get_menu(uid))
 
     def start(self) -> None:
         if hasattr(self, 'bot'):

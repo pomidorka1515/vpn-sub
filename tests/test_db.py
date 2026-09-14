@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -8,7 +7,7 @@ import threading
 import unittest
 import uuid
 
-from errors import CodeError, DatabaseError, DuplicateError, MigrationError
+from errors import CodeError, DuplicateError, MigrationError
 from db import Database
 
 class DatabaseTests(unittest.TestCase):
@@ -96,6 +95,19 @@ class DatabaseTests(unittest.TestCase):
         assert user is not None
         self.assertEqual(user["bw_limit_gb"], 5)
         self.assertEqual(user["wl_limit_gb"], 5)
+
+    def test_metadata_prefix_listing_and_deletion(self) -> None:
+        self.db.set_metadata("prefix_one", "1")
+        self.db.set_metadata("prefix_two", "2")
+        self.db.set_metadata("prefix_100%", "3")
+        self.db.set_metadata("other", "4")
+        self.assertEqual(
+            self.db.list_metadata("prefix_"),
+            {"prefix_one": "1", "prefix_two": "2", "prefix_100%": "3"},
+        )
+        self.db.delete_metadata("prefix_one")
+        self.assertIsNone(self.db.get_metadata("prefix_one"))
+        self.assertEqual(self.db.get_metadata("prefix_two"), "2")
 
     def test_registration_sync_rollback_refunds_finite_code(self) -> None:
         self.db.add_code("invite", "register", uses=1)

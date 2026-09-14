@@ -276,16 +276,42 @@ def _make_backup_thread(
         raw: see _do_backup raw kwarg.
         jsonc: see _do_backup jsonc kwarg.
     """
+    def log_failure(log: Logger, failures: int, exc: Exception) -> None:
+        if failures == 1:
+            log.error(f"backup failed for {path}", exc_info=exc)
+        elif failures % 3 == 0:
+            log.critical(
+                f"backup still failing for {path} after {failures} consecutive attempts",
+                exc_info=exc,
+            )
+
     def loop() -> None:
         log = Logger("Backup")
         instance_dir = _instance_backup_dir(path, backup_dir)
+        failures = 0
         while not stop_event.wait(backup_interval):
             try:
                 _do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
                 _prune_backups(instance_dir, backup_retention, log, config_type=config_type)
                 log.info("backup successful")
-            except Exception as e:
-                log.error(f"backup failed: {e}")
+                failures = 0
+                continue
+            except Exception as exc:
+                failures += 1
+                log_failure(log, failures, exc)
+
+            retry_interval = min(backup_interval, 60 * failures)
+            if stop_event.wait(retry_interval):
+                break
+            try:
+                _do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
+                _prune_backups(instance_dir, backup_retention, log, config_type=config_type)
+                log.info("backup retry successful")
+                failures = 0
+                continue
+            except Exception as retry_exc:
+                failures += 1
+                log_failure(log, failures, retry_exc)
     return threading.Thread(target=loop, daemon=True, name="Backup")
 
 class Config(MutableMapping[str, JsonValue]):
@@ -866,14 +892,6 @@ class Config(MutableMapping[str, JsonValue]):
             return copy.deepcopy(cast(_T, value))
         return value
 
-    def __del__(self) -> None:
-        # don't write on destruction, data loss risk on crashes/exceptions
-        try:
-            self._backup_stop.set()
-            if self._backup_t is not None and self._backup_t.is_alive():
-                self._backup_t.join(timeout=1)
-        except Exception:
-            pass
 
 
 class _ConfigTransaction(MutableMapping[str, JsonValue]):
@@ -1393,11 +1411,3 @@ class LinesConfig:
     ) -> Literal[False] | None:
         self.close()
         return False
-    def __del__(self) -> None:
-        # NOTE: attribute might not exist yet during interpreter shutdown
-        try:
-            self._backup_stop.set()
-            if self._backup_t is not None and self._backup_t.is_alive():
-                self._backup_t.join(timeout=2)
-        except Exception:
-            pass

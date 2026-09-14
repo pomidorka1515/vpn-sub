@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from core import Subscription, BWatch
+from errors import PanelUnavailableError
 from loggers import Logger
 
 import threading
 import time
 import uuid
 import base64
+import binascii
 
 from functools import wraps
 from flask import Flask, Response, jsonify, send_file, redirect, request, make_response, g
@@ -155,7 +157,7 @@ def _parse_basic_auth(header: str) -> tuple[str, str] | None:
             return None
         user, pw = decoded.split(":", 1)
         return user, pw
-    except Exception:
+    except (ValueError, UnicodeError, binascii.Error):
         return None
 
 # ── Auth decorators ──────────────────────────────────────────────
@@ -380,7 +382,7 @@ class WebApi(BaseApi):
         
         try:
             buf = self.sub.make_qr(link)
-        except ValueError as e:
+        except ValueError:
             return _err("Invalid request", 400)
 
         response = make_response(send_file(buf, mimetype='image/png'))
@@ -606,6 +608,8 @@ class Api(BaseApi):
         Route('GET', '/api/ui', 'admin_ui'),
         
         Route('GET', '/api/health', 'health'),
+        Route('GET', '/api/operations/status', 'operation_status'),
+        Route('POST', '/api/operations/rollback/resolve', 'operation_rollback_resolve'),
         Route('GET', '/api/teapot', 'teapot')
     ]
 
@@ -700,15 +704,25 @@ class Api(BaseApi):
 
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
+        users = self.sub.list_users()
         failures: list[str] = []
-        for cc in self.sub.list_users():
+        for cc in users:
             try:
                 self.sub.add_users(cc)
-            except Exception:
+            except PanelUnavailableError:
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)
+        if failures and len(failures) == len(users):
+            return _err(
+                "Panel refresh failed for all users",
+                502,
+                {"failed": failures, "total": len(users)},
+            )
         if failures:
-            return _ok(f"Refreshed users; failed: {', '.join(failures)}")
+            return _ok(
+                "Refresh completed with panel failures",
+                obj={"failed": failures, "succeeded": len(users) - len(failures), "total": len(users)},
+            )
         return _ok("Refreshed all users.")
     
     @requires_admin_auth
@@ -716,10 +730,8 @@ class Api(BaseApi):
         new = parse_bool(request.args.get('keyed', False))
         if new is None:
             return _err("'keyed' must be bool-like")
-        online_users = self.sub.get_online_users(new)
-        if not online_users:
-            return _ok(obj=online_users)
-        return _ok(obj=online_users)
+        status = self.sub.get_online_status(new)
+        return _ok(obj={"users": status.users, "panel_health": status.panel_health})
 
     @requires_admin_auth
     @requires_fields_strict(('user', str))
@@ -733,14 +745,14 @@ class Api(BaseApi):
     def panel_status(self) -> ResponseType: 
         query = request.args.get('name', None)
         if query is None:
-            result: dict[str, dict[str, dict[str, JsonifyValue]] | None] = {}
+            result: dict[str, dict[str, JsonifyValue] | None] = {}
             for panel in self.sub.panels:
                 _ = self.sub.getstatus(panel)
                 if _ is None:
                     self.log.error(f"getstatus: {panel.name} returned None")
                 else:
                     _ = asdict(_)
-                result[panel.name] = _
+                result[panel.name] = _ if _ is not None else {"status": "unknown"}
             return _ok(obj=result)
 
         for panel in self.sub.panels:
@@ -762,8 +774,9 @@ class Api(BaseApi):
         for panel in self.sub.panels:
             res = self.sub.getstatus(panel)
             if res is None:
-                continue
-            panels_data[panel.name] = asdict(res)
+                panels_data[panel.name] = {"status": "unknown"}
+            else:
+                panels_data[panel.name] = asdict(res)
 
         obj: dict[str, JsonifyValue] = {
             "host": asdict(SysUtil.full_info()),
@@ -821,10 +834,9 @@ class Api(BaseApi):
                         return _err(f"{k} must be an integer, got: {v}")
 
                 case 'name' | 'action':
-                    try:
-                        data[k] = str(v)
-                    except Exception:
+                    if not isinstance(v, str):
                         return _err(f"{k} must be a string, got: {v}")
+                    data[k] = v
 
         if data['action'] not in ('register', 'bonus'):
             return _err("action must be 'register' or 'bonus'")
@@ -911,7 +923,28 @@ class Api(BaseApi):
         return send_file('res/admin.html', etag=False)
     
     def health(self) -> ResponseType:
-        return Response(), 204 # intentionally empty body, no _ok() calls
+        return _ok()
+
+    @requires_admin_auth
+    def operation_status(self) -> ResponseType:
+        return _ok(obj={
+            "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
+            "rollback_failures": self.sub.get_rollback_failures(),
+        })
+
+    @requires_admin_auth
+    @requires_fields_strict(('kind', str), ('user', str))
+    def operation_rollback_resolve(self) -> ResponseType:
+        content = g.json_obj
+        kind_value: str = content.get('kind')
+        username: str = content.get('user')
+        if kind_value == 'uuid':
+            self.sub.clear_rollback_failure('uuid', username)
+        elif kind_value == 'registration':
+            self.sub.clear_rollback_failure('registration', username)
+        else:
+            return _err("kind must be 'uuid' or 'registration'")
+        return _ok("Resolved")
 
     def teapot(self) -> ResponseType:
         return _err("I'm a teapot", 418, obj={"teapot": True}) # is it really an error?

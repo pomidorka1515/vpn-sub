@@ -154,16 +154,42 @@ def _make_backup_thread(
     backup_retention: int,
     stop_event: threading.Event,
 ) -> threading.Thread:
+    def log_failure(log: Logger, failures: int, exc: Exception) -> None:
+        if failures == 1:
+            log.error(f"backup failed for {path}", exc_info=exc)
+        elif failures % 3 == 0:
+            log.critical(
+                f"backup still failing for {path} after {failures} consecutive attempts",
+                exc_info=exc,
+            )
+
     def loop() -> None:
         log = Logger("Backup")
         instance_dir = _instance_backup_dir(path, backup_dir)
+        failures = 0
         while not stop_event.wait(backup_interval):
             try:
                 _do_backup(path, timeout, instance_dir, log)
                 _prune_backups(instance_dir, backup_retention, log)
                 log.info("backup successful")
+                failures = 0
+                continue
             except Exception as exc:
-                log.error(f"backup failed: {exc}")
+                failures += 1
+                log_failure(log, failures, exc)
+
+            retry_interval = min(backup_interval, 60 * failures)
+            if stop_event.wait(retry_interval):
+                break
+            try:
+                _do_backup(path, timeout, instance_dir, log)
+                _prune_backups(instance_dir, backup_retention, log)
+                log.info("backup retry successful")
+                failures = 0
+                continue
+            except Exception as retry_exc:
+                failures += 1
+                log_failure(log, failures, retry_exc)
 
     return threading.Thread(target=loop, daemon=True, name="Backup")
 
@@ -710,6 +736,27 @@ class Database:
         with self.connection() as conn:
             row = conn.execute("SELECT value FROM app_metadata WHERE key = ?", (key,)).fetchone()
             return str(row[0]) if row else default
+
+    def set_metadata(self, key: str, value: str) -> None:
+        with self.transaction(immediate=True) as conn:
+            conn.execute(
+                "INSERT INTO app_metadata(key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def list_metadata(self, prefix: str) -> dict[str, str]:
+        escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        with self.connection() as conn:
+            rows = conn.execute(
+                "SELECT key, value FROM app_metadata WHERE key LIKE ? ESCAPE '\\' ORDER BY key",
+                (f"{escaped}%",),
+            )
+            return {str(row["key"]): str(row["value"]) for row in rows}
+
+    def delete_metadata(self, key: str) -> None:
+        with self.transaction(immediate=True) as conn:
+            conn.execute("DELETE FROM app_metadata WHERE key = ?", (key,))
 
     def upsert_bandwidth_snapshot(self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int) -> None:
         with self.transaction(immediate=True) as conn:

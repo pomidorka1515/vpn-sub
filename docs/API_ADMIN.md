@@ -174,13 +174,56 @@ Response (success):
 // HTTP 200  
 {  
 	"success": true,  
-	"msg": "Refreshed all users.", // or "Refreshed users; failed: <usernames>"  
-	"obj": null  
+	"msg": "Refreshed all users.", // or "Refresh completed with panel failures"  
+	"obj": null, // or {"failed": ["user"], "succeeded": 1, "total": 2}  
+}  
+```  
+  
+Response (error):  
+```jsonc  
+// HTTP 502, when every user failed  
+{  
+	"success": false,  
+	"msg": "Panel refresh failed for all users",  
+	"obj": {"failed": ["user"], "total": 1}  
 }  
 ```  
   
 ---  
   
+### GET /api/operations/status
+
+Description: Return operational recovery metadata, including rollback markers and partial snapshot failures.  
+Authentication: header  
+Body: none  
+Response (success):  
+```jsonc
+// HTTP 200
+{
+	"success": true,
+	"msg": null,
+	"obj": {
+		"daily_snapshot_failure": null, // or {"ts": 0, "failed": 0, "eligible": 0}
+		"rollback_failures": {"uuid": {}, "registration": {}}
+	}
+}
+```
+
+### POST /api/operations/rollback/resolve
+
+Description: Clear a rollback marker after manual repair.  
+Authentication: header  
+Body:  
+```json
+{"kind": "uuid|registration", "user": "<username>"}
+```
+Response (success):  
+```jsonc
+// HTTP 200
+{"success": true, "msg": "Resolved", "obj": null}
+```
+
+---
 ### GET /api/user/onlines  
 Description: Get currently online users.  
 Authentication: header  
@@ -192,7 +235,10 @@ Response (success):
 {  
     "success": true,  
     "msg": null,  
-    "obj": [] // list of online usernames, or dict if keyed=1  
+    "obj": {  
+        "users": [], // list, or dict if keyed=1  
+        "panel_health": {"node-1": "ok"} // ok, invalid, or unavailable  
+    }  
 }  
 ```  
   
@@ -242,13 +288,13 @@ Response (error):
 ---  
   
 ### GET /api/health  
-Description: Lightweight health check. Returns HTTP 204 with no body on success.  
+Description: Lightweight health check. Returns the standard success envelope on success.  
 Authentication: none  
 Body: none  
 Response (success):  
 ```jsonc  
-// HTTP 204  
-(no body)  
+// HTTP 200  
+{"success": true, "msg": null, "obj": null}  
 ```  
 Use this to verify the API is reachable and the token is valid.  
   

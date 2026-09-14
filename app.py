@@ -85,17 +85,17 @@ app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
 app.config['JSON_SORT_KEYS'] = False
 
 @app.errorhandler(AppError)
-def _handle_app_error(error: AppError) -> tuple[Response, int]:
+def _handle_app_error(error: AppError) -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
     return jsonify({"success": False, "msg": error.message, "obj": None}), error.status
 
 
 @app.errorhandler(HTTPException)
-def _handle_http_error(error: HTTPException) -> tuple[Response, int]:
+def _handle_http_error(error: HTTPException) -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
     return jsonify({"success": False, "msg": error.description, "obj": None}), error.code or 500
 
 
 @app.errorhandler(Exception)
-def _handle_unexpected_error(error: Exception) -> tuple[Response, int]:
+def _handle_unexpected_error(error: Exception) -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
     log.error("unhandled error on %s %s", request.method, request.path, exc_info=True)
     return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
 
@@ -186,7 +186,8 @@ for l in (
     
     api.log, webapi.log,
     
-    adminbot.log, bot.log
+    adminbot.log, bot.log,
+    cfg.log, lang_cfg.log, log_cfg.log, audit_cfg.log, db.log
 ):
     l.set_tg_bot(adminbot)
     l.set_jsonl_handler(log_cfg)
@@ -230,6 +231,10 @@ def _shutdown() -> None:
         if wl:
             wl.close()
         db.close()
+        cfg.close()
+        lang_cfg.close()
+        log_cfg.close()
+        audit_cfg.close()
         log.info("Shutdown complete.")
 
     _do_cleanup()

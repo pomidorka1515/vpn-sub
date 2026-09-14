@@ -4,6 +4,7 @@ from errors import (
     AppError,
     ConflictError,
     NotFoundError,
+    PanelUnavailableError,
     PanelRejectedError,
     ValidationError,
     DuplicateError,
@@ -60,6 +61,7 @@ from collections import deque
 __all__ = [
     "Subscription", "BWatch", 
     "BandwidthInfo",
+    "OnlineStatus",
     "SERVER_TZ"
 ]
 
@@ -117,6 +119,11 @@ class BandwidthUpdate(NamedTuple):
     current: BandwidthInfo
 
 
+class OnlineStatus(NamedTuple):
+    users: list[str] | dict[str, str | None]
+    panel_health: dict[str, Literal["ok", "unavailable", "invalid"]]
+
+
 class Subscription:
     def __init__(
         self, 
@@ -156,6 +163,7 @@ class Subscription:
             self.start()
 
     def start(self) -> None:
+        self._recover_registration_rollback_failures()
         @self.app.route(f"/{self.uri}", strict_slashes=False)
         def _sub() -> Response: # pyright: ignore[reportUnusedFunction]
             return self.get_subscription(
@@ -301,16 +309,16 @@ class Subscription:
         return bio
     
     def getstatus(self, panel: XUiSession) -> ServerMetricsResponse | None:
-        """Get the information about a panel."""
+        """Get panel status, or ``None`` when the panel status is unknown."""
         try:
-            x = panel.get(f"panel/api/server/status")
-            data: dict[str, object] = x.json()
-            if x.status_code not in (200,):
-                self.log.error(f"getstatus fail: {data['msg']}")
-                return None
+            response = panel.get("panel/api/server/status")
+            data: dict[str, object] = response.json()
+            if response.status_code != 200:
+                message = data.get("msg") or response.status_code
+                raise PanelUnavailableError(f"Panel {panel.name} status query failed: {message}")
             return from_dict(ServerMetricsResponse, data)
         except Exception:
-            self.log.error("getstatus failed", exc_info=True)
+            self.log.error("panel status is unknown for %s", panel.name, exc_info=True)
             return None
 
     def getinbounds(self, panel: XUiSession) -> list[Inbound]:
@@ -326,21 +334,22 @@ class Subscription:
             response = panel.get(f"panel/api/inbounds/list")
             data: dict[str, list[dict[str, object]]] = response.json()
             if response.status_code not in (200,) or not data.get("success"):
-                if panel.dead:
-                    return []
-                self.log.error(f"getinbounds fail: {data.get('msg')}")
-                return []
+                raise PanelUnavailableError(
+                    f"Panel {panel.name} inbound query failed: "
+                    f"{data.get('msg') or response.status_code}"
+                )
             raw_inbounds: list[dict[str, object]] = data['obj']
             inbounds = [from_dict(Inbound, i) for i in raw_inbounds]
             if panel.ignore_inbounds:
                 inbounds = [i for i in inbounds if i.id not in panel.ignore_inbounds]
             panel.cache = inbounds
             return inbounds
-        except Exception:
-            if panel.dead:
-                return []
-            self.log.warning("getinbounds failed", exc_info=True)
-            return []
+        except AppError:
+            raise
+        except Exception as exc:
+            raise PanelUnavailableError(
+                f"Panel {panel.name} inbound query failed: {exc}"
+            ) from exc
     
     def _drop_cache(self, panel: XUiSession | None = None) -> None:
         """Drop cached inbounds. Call after mutations."""
@@ -357,8 +366,61 @@ class Subscription:
         # Registration is committed before the panel request so panel I/O is
         # never inside a SQLite transaction. The pending record makes removal
         # plus a finite-code refund one short local transaction.
-        self.db.rollback_registration_sync(username)
-    
+        try:
+            self.db.rollback_registration_sync(username)
+        except Exception:
+            self.log.critical(
+                "register rollback failed for user %s; pending registration may remain",
+                username,
+                exc_info=True,
+            )
+            try:
+                self.db.set_metadata(f"registration_rollback_failed:{username}", str(int(time.time())))
+            except Exception:
+                self.log.critical(
+                    "failed to persist registration rollback failure marker for user %s",
+                    username,
+                    exc_info=True,
+                )
+
+    def _recover_registration_rollback_failures(self) -> None:
+        """Retry persisted registration rollbacks at startup."""
+        prefix = "registration_rollback_failed:"
+        for key in tuple(self.db.list_metadata(prefix)):
+            username = key.removeprefix(prefix)
+            try:
+                self.db.rollback_registration_sync(username)
+                self.db.delete_metadata(key)
+                self.log.warning("recovered registration rollback marker for user %s", username)
+            except Exception:
+                self.log.critical(
+                    "registration rollback recovery failed for user %s; marker retained",
+                    username,
+                    exc_info=True,
+                )
+
+    def get_rollback_failures(self) -> dict[str, dict[str, dict[str, str]]]:
+        """Return persisted rollback markers for admin reconciliation."""
+        result: dict[str, dict[str, dict[str, str]]] = {"uuid": {}, "registration": {}}
+        for key, value in self.db.list_metadata("uuid_rollback_failed:").items():
+            timestamp, separator, reason = value.partition(":")
+            result["uuid"][key.removeprefix("uuid_rollback_failed:")] = {
+                "ts": timestamp,
+                "reason": reason if separator else "",
+            }
+        for key, value in self.db.list_metadata("registration_rollback_failed:").items():
+            result["registration"][key.removeprefix("registration_rollback_failed:")] = {
+                "ts": value,
+                "reason": "",
+            }
+        return result
+
+    def clear_rollback_failure(self, kind: Literal["uuid", "registration"], username: str) -> None:
+        """Clear a rollback marker after an administrator repairs the user."""
+        if kind not in ("uuid", "registration"):
+            raise ValidationError("Invalid rollback marker kind")
+        self.db.delete_metadata(f"{kind}_rollback_failed:{username}")
+
     def bandwidth(self, 
                   username: str,
                   whitelist: bool = False
@@ -674,6 +736,14 @@ class Subscription:
                 self.db.delete_user(username)
             except Exception:
                 self.log.error("failed to roll back user %s", username, exc_info=True)
+                try:
+                    self.delete_user(username=username, perma=True)
+                except Exception:
+                    self.log.critical(
+                        "user %s may be inconsistent after failed DB rollback",
+                        username,
+                        exc_info=True,
+                    )
             raise
         finally:
             to_log: dict[str, str] = {"username": username}
@@ -739,6 +809,19 @@ class Subscription:
         self.audit(name="user_update_params", info=audit_info)
         self._drop_cache()
 
+    def _mark_rollback_failure(self, username: str, reason: str) -> None:
+        try:
+            self.db.set_metadata(
+                f"uuid_rollback_failed:{username}",
+                f"{int(time.time())}:{reason}",
+            )
+        except Exception:
+            self.log.critical(
+                "failed to persist UUID rollback failure marker for user %s",
+                username,
+                exc_info=True,
+            )
+
     def _rollback_user_uuid(
         self,
         username: str,
@@ -748,6 +831,7 @@ class Subscription:
     ) -> None:
         """Restore old UUID on panels that were already updated before a failure.
         Logs but never raises — rollback failures are logged, not propagated."""
+        failures: list[str] = []
         for panel, inbound_id, settings, had_vision in successful:
             settings.id = old_uid
             settings.flow = "xtls-rprx-vision" if had_vision else ""
@@ -762,15 +846,20 @@ class Subscription:
                     headers={'Accept': 'application/json'}
                 )
                 if not (resp.ok and resp.json().get('success')):
-                    self.log.error(
+                    failures.append(f"{panel.name}:{inbound_id}:panel rejected rollback")
+                    self.log.critical(
                         f"_rollback_user_uuid: panel {panel.name} inbound {inbound_id} "
                         f"failed to restore UUID {old_uid}: {resp.json().get('msg', 'unknown')}"
                     )
             except Exception as e:
-                self.log.error(
+                failures.append(f"{panel.name}:{inbound_id}:exception")
+                self.log.critical(
                     f"_rollback_user_uuid: panel {panel.name} inbound {inbound_id} "
-                    f"exception during rollback: {e}"
+                    f"exception during rollback: {e}",
+                    exc_info=True,
                 )
+        if failures:
+            self._mark_rollback_failure(username, ",".join(failures))
 
     def update_uuid(self, username: str, uid: str) -> None:
         """Seperate method for updating the UUID.
@@ -1067,37 +1156,106 @@ class Subscription:
         return emails
 
     @overload
-    def get_online_users(self, new: Literal[False] = False) -> list[str]: ...
+    def get_online_status(self, new: Literal[False] = False) -> OnlineStatus: ...
     
     @overload
-    def get_online_users(self, new: Literal[True]) -> dict[str, str | None]: ...
+    def get_online_status(self, new: Literal[True]) -> OnlineStatus: ...
     
+    @overload
+    def get_online_status(self, new: bool) -> OnlineStatus: ...
+
+    def get_online_status(self, new: bool = False) -> OnlineStatus:
+        """Get online users and per-panel query health.
+
+        An empty result is valid only when every configured panel reports
+        a successful empty response.
+        """
+        online_users: set[str] = set()
+        panel_health: dict[str, Literal["ok", "unavailable", "invalid"]] = {}
+
+        if not self.panels:
+            if new:
+                return OnlineStatus({}, panel_health)
+            return OnlineStatus([], panel_health)
+
+        for panel in self.panels:
+            if panel.dead:
+                panel_health[panel.name] = "unavailable"
+                continue
+            try:
+                response = panel.post("panel/api/inbounds/onlines")
+                data: dict[str, object] = response.json()
+                if response.status_code not in (200, 201) or not data.get('success'):
+                    panel_health[panel.name] = "unavailable"
+                    self.log.error(
+                        "Online check failed for panel %s: %s",
+                        panel.name,
+                        data.get('msg') or response.status_code,
+                    )
+                    continue
+                raw_online = data.get('obj', [])
+                if not isinstance(raw_online, list):
+                    panel_health[panel.name] = "invalid"
+                    self.log.error(
+                        "Online check returned invalid payload for panel %s",
+                        panel.name,
+                    )
+                    continue
+                raw_emails: list[object] = cast(list[object], raw_online)
+                for raw_email in raw_emails:
+                    if not isinstance(raw_email, str):
+                        panel_health[panel.name] = "invalid"
+                        self.log.error(
+                            "Online check returned a non-string email for panel %s",
+                            panel.name,
+                        )
+                        break
+                    name_candidate = raw_email.rsplit('-', 1)[0]
+                    if self.db.user_exists(name_candidate):
+                        online_users.add(name_candidate)
+                else:
+                    panel_health[panel.name] = "ok"
+            except Exception as exc:
+                panel_health[panel.name] = "unavailable"
+                self.log.error("Online check failed for panel %s", panel.name, exc_info=exc)
+
+        if all(health == "unavailable" for health in panel_health.values()):
+            raise PanelUnavailableError("No panel could be queried for online users")
+
+        users: list[str] | dict[str, str | None]
+        if not new:
+            users = list(online_users)
+        else:
+            users = {name: self.db.user_to_ext(name) for name in online_users}
+        return OnlineStatus(users, panel_health)
+
+    @overload
+    def get_online_users(self, new: Literal[False] = False) -> list[str]: ...
+
+    @overload
+    def get_online_users(self, new: Literal[True]) -> dict[str, str | None]: ...
+
     @overload
     def get_online_users(self, new: bool) -> list[str] | dict[str, str | None]: ...
 
     def get_online_users(self, new: bool = False) -> list[str] | dict[str, str | None]:
-        """Get the list of currently online users.
-        new: False = ['username', ...]. True = {'username': ext_username_or_None, ...}"""
-        online_users: set[str] = set()
-        for panel in self.panels:
-            if panel.dead:
-                continue
-            try:
-                res = panel.post(f"panel/api/inbounds/onlines")
-                if res.status_code in (200, 201) and res.json().get('success'):
-                    for email in res.json().get('obj', []):
-                        name_candidate = email.rsplit('-', 1)[0]
-                        if self.db.user_exists(name_candidate):
-                            online_users.add(name_candidate)
-            except Exception as e:
-                self.log.error(f"Online check error: {e}")
-        
-        if not new:
-            return list(online_users)
-        return {name: self.db.user_to_ext(name) for name in online_users}
+        """Compatibility wrapper for callers that do not need panel health."""
+        return self.get_online_status(new).users
+
     def is_online(self, username: str) -> bool:
-        """Simplest method here lol. But useful."""
-        return username in self.get_online_users()
+        """Return True only when the user is online and every panel is healthy.
+
+        No configured panels is an explicit known-empty state rather than an
+        availability failure.
+        """
+        if not self.panels:
+            return False
+        status = self.get_online_status()
+        return (
+            all(health == "ok" for health in status.panel_health.values())
+            and username in status.users
+        )
+
     def reset_user(self, username: str) -> ResetUserObject:
         """Resets token and uuid to randomness. Dict with new values on success."""
         newid = str(uuid.uuid4())
@@ -1503,6 +1661,10 @@ class BWatch:
     """Class for monitoring bandwidth.
     Dependencies: Subscription
     Classes depending on this: Api, WebApi"""
+    def _alert_admin(self, message: str) -> None:
+        if self.admin_bot:
+            self.admin_bot.msg(message)
+
     def __init__(
         self, 
         cfg: ConfigLike, 
@@ -1525,6 +1687,11 @@ class BWatch:
             self._snapshot_initialized: bool = False
             self._panel_alerts: dict[str, int | float] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', as_type=int) or 3600
+            self._snapshot_failures: dict[Literal["bandwidth", "state"], int] = {}
+            self._snapshot_due_at: dict[Literal["bandwidth", "state"], float] = {
+                "bandwidth": 0.0,
+                "state": 0.0,
+            }
 
             _threads: tuple[tuple[Callable[..., object], str], ...] = (
                 (self._every_120s, "Quota & Notifs"),
@@ -1553,9 +1720,15 @@ class BWatch:
             self.wl_mem = initial_wl_mem
             self._snapshot_initialized = True
 
-        # Run first snapshot immediately (record_daily_snapshot does its own locking)
-        self.record_daily_snapshot()
-        self.record_snap_snapshot()
+        # Run first snapshot immediately; the scheduler tracks retries per kind.
+        initial_snapshots: tuple[tuple[Literal["bandwidth", "state"], Callable[[], object]], ...] = (
+            ("bandwidth", self.record_daily_snapshot),
+            ("state", self.record_snap_snapshot),
+        )
+        now = time.monotonic()
+        for kind, operation in initial_snapshots:
+            delay = self._run_daily_snapshot(kind, operation)
+            self._snapshot_due_at[kind] = now + delay
         self.is_first()   # also run the monthly reset check immediately
 
         ### Start Threads ###
@@ -1595,37 +1768,41 @@ class BWatch:
             if int(state['expires_at']) != 0:
                 if (int(state['expires_at']) - int(time.time())) >= 0 and not bool(state['enabled_time']):
                     self._update_user(username=i, enable=True, timee=True)
-            if int(state['bw_limit_gb']) != 0:
-                if int(state['bw_used']) < int(int(state['bw_limit_gb']) * 10**9) and not bool(state['enabled']):
-                    self._update_user(username=i, enable=True)
-                try:
-                    current_bws = self.sub.bandwidth(username=i)
-                    with self._mem_lock:
-                        if i not in self.mem:
-                            self.mem[i] = current_bws
-                        else:
-                            delta = int(current_bws.total - self.mem[i].total)
-                            if delta > 0:
-                                updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
 
-                except Exception as e:
-                    self.log.error(f"BW error for {i}: {e}")
-            # Whitelist bandwidth
-            if int(state['wl_limit_gb']) != 0:
-                if int(state['wl_used']) < int(int(state['wl_limit_gb']) * 10**9) and not bool(state['enabled_wl']):
-                    self._update_user(username=i, wl_enable=True)
-                try:
-                    current_bws = self.sub.bandwidth(username=i, whitelist=True)
-                    with self._mem_lock:
-                        if i not in self.wl_mem:
-                            self.wl_mem[i] = current_bws
-                        else:
-                            delta = int(current_bws.total - self.wl_mem[i].total)
-                            if delta > 0:
-                                wl_updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
-                                
-                except Exception as e:
-                    self.log.critical(f"BW wl error for {i}: {e}")
+            main_required = int(state['bw_limit_gb']) != 0
+            wl_required = int(state['wl_limit_gb']) != 0
+            if main_required and int(state['bw_used']) < int(int(state['bw_limit_gb']) * 10**9) and not bool(state['enabled']):
+                self._update_user(username=i, enable=True)
+            if wl_required and int(state['wl_used']) < int(int(state['wl_limit_gb']) * 10**9) and not bool(state['enabled_wl']):
+                self._update_user(username=i, wl_enable=True)
+
+            # Read both counters before advancing either baseline. If either required
+            # read fails, do not commit a partial delta for this user.
+            try:
+                current_bws = self.sub.bandwidth(username=i) if main_required else None
+                current_wl_bws = self.sub.bandwidth(username=i, whitelist=True) if wl_required else None
+            except Exception:
+                self.log.error("bandwidth poll failed for user %s", i, exc_info=True)
+                continue
+
+            with self._mem_lock:
+                if main_required:
+                    assert current_bws is not None
+                    if i not in self.mem:
+                        self.mem[i] = current_bws
+                    else:
+                        delta = int(current_bws.total - self.mem[i].total)
+                        if delta > 0:
+                            updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
+                if wl_required:
+                    assert current_wl_bws is not None
+                    if i not in self.wl_mem:
+                        self.wl_mem[i] = current_wl_bws
+                    else:
+                        delta = int(current_wl_bws.total - self.wl_mem[i].total)
+                        if delta > 0:
+                            wl_updates[i] = BandwidthUpdate(delta=delta, current=current_wl_bws)
+
         if not updates and not wl_updates:
             return
 
@@ -1681,8 +1858,8 @@ class BWatch:
                             self.admin_bot.msg(msg)
                 else:
                     self._panel_alerts.pop(key, None)
-            except Exception as e:
-                self.log.error(f"health check {panel.address}: {e}")
+            except Exception:
+                self.log.error("health check failed for panel %s (%s)", panel.name, panel.address, exc_info=True)
 
     def check(self) -> None:
         for i in self.sub.list_users():
@@ -1739,10 +1916,17 @@ class BWatch:
     def record_snap_snapshot(self) -> None:
         """Record one state snapshot (`SysUtil` + panels) for today."""
         panels_data: dict[str, object] = {}
+        panel_errors: list[str] = []
         for panel in self.sub.panels:
             status = self.sub.getstatus(panel)
-            if status is not None:
+            if status is None:
+                panel_errors.append(panel.name)
+            else:
                 panels_data[panel.name] = asdict(status.obj)
+        if panel_errors:
+            raise PanelUnavailableError(
+                "state snapshot could not read panel status: " + ", ".join(panel_errors)
+            )
 
         midnight = int(time.time()) - (int(time.time()) % 86400)
         data: dict[str, object] = {
@@ -1770,6 +1954,8 @@ class BWatch:
         midnight = int(time.time()) - (int(time.time()) % 86400)
         # {username: (current, wl_current, delta_up, delta_down, wl_up, wl_down)}
         snapshot_data: dict[str, tuple[BandwidthInfo, BandwidthInfo, int, int, int, int]] = {}
+        eligible_users: list[str] = []
+        failed_users: list[str] = []
 
         for username in self.sub.list_users():
             state = self.sub.get_user_state(username)
@@ -1777,11 +1963,18 @@ class BWatch:
             wl_limit = int(state['wl_limit_gb'])
             if bw_limit == 0 and wl_limit == 0:
                 continue
+            eligible_users.append(username)
 
             try:
                 current = self.sub.bandwidth(username=username)
                 wl_current = self.sub.bandwidth(username=username, whitelist=True)
             except Exception:
+                failed_users.append(username)
+                self.log.error(
+                    "failed to record daily bandwidth snapshot for user %s",
+                    username,
+                    exc_info=True,
+                )
                 continue
             
             last_mem = mem_snapshot.get(username)
@@ -1804,7 +1997,39 @@ class BWatch:
                 self.db.upsert_bandwidth_snapshot(username, midnight, up, down, wl_up, wl_down)
 
         self.prune_old_bw_snapshots()
-    
+
+        if eligible_users and failed_users:
+            self.db.set_metadata(
+                "daily_bw_snapshot_failures",
+                f"{int(time.time())}:{len(failed_users)}:{len(eligible_users)}",
+            )
+        else:
+            self.db.delete_metadata("daily_bw_snapshot_failures")
+        if eligible_users and len(failed_users) == len(eligible_users):
+            raise PanelUnavailableError(
+                f"Daily bandwidth snapshot failed for all {len(eligible_users)} eligible user(s)"
+            )
+
+    def get_daily_snapshot_failure(self) -> dict[str, int] | None:
+        """Return metadata from the latest bandwidth snapshot attempt."""
+        raw = self.db.get_metadata("daily_bw_snapshot_failures")
+        if raw is None:
+            return None
+        timestamp, separator, counts = raw.partition(":")
+        if not separator or ":" not in counts:
+            return None
+        failed, separator, eligible = counts.partition(":")
+        if not separator:
+            return None
+        try:
+            return {
+                "ts": int(timestamp),
+                "failed": int(failed),
+                "eligible": int(eligible),
+            }
+        except ValueError:
+            return None
+
     ### Helper functions ###
     def _every_120s(self) -> None:
         while not self._stop_event.wait(120):
@@ -1820,16 +2045,53 @@ class BWatch:
             self.reset()
             self.prune_old_bw_snapshots()
             self.prune_old_snap_snapshots()
+    def _run_daily_snapshot(
+        self,
+        kind: Literal["bandwidth", "state"],
+        operation: Callable[[], object],
+    ) -> float:
+        try:
+            operation()
+            failures = self._snapshot_failures.pop(kind, 0)
+            if failures:
+                self.log.info("Daily %s snapshot recovered after %d failed attempts", kind, failures)
+            return 86400.0
+        except Exception as exc:
+            failures = self._snapshot_failures.get(kind, 0) + 1
+            self._snapshot_failures[kind] = failures
+            self.log.error("Daily %s snapshot failed", kind, exc_info=exc)
+            if failures == 1 or failures % 3 == 0:
+                self._alert_admin(
+                    f"⚠️ Daily {kind} snapshot failed ({failures} consecutive attempt(s)): {exc}"
+                )
+            return min(3600.0 * failures, 86400.0)
+
     def _every_24h_snapshot(self) -> None:
-        while not self._stop_event.wait(86400):
-            try:
-                self.record_daily_snapshot()
-            except Exception:
-                self.log.exception("Daily bw snapshot failed: ")
-            try:
-                self.record_snap_snapshot()
-            except Exception:
-                self.log.exception("Daily state snapshot failed: ")
+        while True:
+            now = time.monotonic()
+            self._run_due_daily_snapshots(now)
+            due_snapshots = tuple(
+                kind for kind, due_at in self._snapshot_due_at.items() if due_at <= now
+            )
+            if not due_snapshots:
+                next_delay = min(self._snapshot_due_at.values()) - now
+                if self._stop_event.wait(next_delay):
+                    return
+                continue
+
+    def _run_due_daily_snapshots(self, now: float) -> None:
+        due_snapshots: tuple[Literal["bandwidth", "state"], ...] = tuple(
+            kind for kind, due_at in self._snapshot_due_at.items() if due_at <= now
+        )
+        for kind in due_snapshots:
+            operation = (
+                self.record_daily_snapshot
+                if kind == "bandwidth"
+                else self.record_snap_snapshot
+            )
+            delay = self._run_daily_snapshot(kind, operation)
+            self._snapshot_due_at[kind] = now + delay
+
     def _every_5m(self) -> None:
         while not self._stop_event.wait(300):
             self.panel_health_check()
