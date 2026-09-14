@@ -1,7 +1,7 @@
 # vpn-sub
 
 VPN subscription management service. Flask + Telegram bots + 3x-ui panel glue.
-Fully synchronous, file-backed config, designed to run on a single small VPS.
+Fully synchronous, database-backed config, designed to run on a single small VPS.
 
 ## What it does
 
@@ -36,7 +36,7 @@ Fully synchronous, file-backed config, designed to run on a single small VPS.
 ```bash
 pip install -r requirements.txt
 mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel credentials, bot tokens, etc
-gunicorn --threads 4 -b 127.0.0.1:5550 --graceful-timeout 30 app:app # or run as a systemd service
+# run a systemd service; explained below
 ```
 
 ### Environment Variables
@@ -78,14 +78,7 @@ Environment=PYTHONUNBUFFERED=1
 
 ExecStart=X/venv/bin/gunicorn \
     --bind 127.0.0.1:X \
-    --capture-output \
-    --access-logfile - \
-    --error-logfile - \
-    --limit-request-line 0 \
-    --threads 3 \
-    --config gunicorn.conf.py \
-    --graceful-timeout 30 \
-    app:app
+    --config gunicorn.conf.py
 
 TimeoutStopSec=35
 KillMode=mixed
@@ -102,11 +95,6 @@ WantedBy=multi-user.target
 
 ### Example Config
 **See [example config](docs/EXAMPLE.config.json)**
-
-## Notes
-Use `--threads` (not `-w`/`--workers`) — the app uses file locking to elect a primary worker for background tasks (BWatch bandwidth monitor, bots). Multiple *processes* will each try to start background threads, which is wasteful; multiple *threads* within one process works correctly.
-
-Config is validated against `config.schema.json` (pointed to by `"$schema"` in the config file) on every load and commit. Remote schemas are rejected; the schema is cached and only re-read when the file changes.
 
 ### Seemingly useless casts to protocols
 All protocols in `custom_types.py` are fully compatible with their runtime classes.

@@ -1,6 +1,8 @@
 from gunicorn.workers.gthread import ThreadWorker
 from concurrent import futures
 
+from loggers import GunicornLogger
+
 class NamedThreadWorker(ThreadWorker):
     def get_thread_pool(self) -> futures.ThreadPoolExecutor:
         return futures.ThreadPoolExecutor(
@@ -9,3 +11,12 @@ class NamedThreadWorker(ThreadWorker):
         )
 
 worker_class = NamedThreadWorker
+
+threads = 3
+workers = 1
+limit_request_line = 0
+capture_output = True
+accesslog="-"
+errorlog="-"
+logger_class = GunicornLogger
+wsgi_app="app:app"

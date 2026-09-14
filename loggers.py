@@ -3,11 +3,14 @@ import sys
 import re
 import html
 import time
+from urllib.parse import parse_qsl, urlsplit
 
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Any
 
+from gunicorn.glogging import Logger as GunicornBaseLogger  # type: ignore[import-untyped]
 from protocols import AdminBotLike, LinesConfigLike
 
 _ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -150,3 +153,72 @@ class Logger(logging.Logger):
         except Exception as e:
             self.error(f"Fail when executing {name}: {e}")
             raise
+
+
+def _safe_request_target(raw_uri: str) -> str:
+    """Return a request target without leaking query-string credentials.
+
+    Subscription URLs carry a secret token in the query string.  Keep the
+    route and a redacted token marker for useful diagnostics, while dropping
+    every other parameter (for example ``lang``).
+    """
+    try:
+        parsed = urlsplit(raw_uri)
+    except ValueError:
+        return raw_uri.split("?", 1)[0] or "/"
+
+    path = parsed.path or "/"
+    if any(key == "token" for key, _ in parse_qsl(parsed.query, keep_blank_values=True)):
+        return f"{path}?token=..."
+    return path
+
+
+def _client_address(environ: dict[str, object]) -> str:
+    """Use the original client address when the app is behind a proxy."""
+    forwarded = environ.get("HTTP_X_FORWARDED_FOR")
+    if isinstance(forwarded, str) and forwarded.strip():
+        return forwarded.split(",", 1)[0].strip()
+    real_ip = environ.get("HTTP_X_REAL_IP")
+    if isinstance(real_ip, str) and real_ip.strip():
+        return real_ip.strip()
+    address = environ.get("REMOTE_ADDR")
+    return str(address) if address else "-"
+
+
+class GunicornLogger(GunicornBaseLogger):  # type: ignore[misc]
+    """Compact, privacy-preserving access logs for the systemd journal."""
+
+    def setup(self, cfg: Any) -> None:
+        super().setup(cfg)
+        class AccessFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                original_level = record.levelname
+                color = Logger.COLORS.get(original_level, Logger.RESET)
+                record.levelname = f"{color}{original_level}{Logger.RESET}"
+                try:
+                    return super().format(record)
+                finally:
+                    record.levelname = original_level
+
+        formatter = AccessFormatter(
+            "%(asctime)s %(levelname)s [HTTP] [main] %(message)s", # [main] = "thread name", not relevant in this context
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        for handler in self.access_log.handlers:
+            handler.setFormatter(formatter)
+
+    def access(self, resp: Any, req: Any, environ: Any, request_time: Any) -> None:
+        if not self.access_log_enabled:
+            return
+
+        atoms = self.atoms(resp, req, environ, request_time)
+        method = str(atoms.get("m") or environ.get("REQUEST_METHOD") or "-")
+        raw_uri = str(environ.get("RAW_URI") or environ.get("PATH_INFO") or "/")
+        protocol = str(atoms.get("H") or environ.get("SERVER_PROTOCOL") or "HTTP/1.1")
+        target = _safe_request_target(raw_uri)
+        status = str(atoms.get("s") or "-")
+        sent = atoms.get("B")
+        size = f"{sent}b" if sent is not None else "-"
+        user_agent = str(environ.get("HTTP_USER_AGENT") or "-").replace('"', "\\\"")
+        message = f'{_client_address(environ)} > "{method} {target} {protocol}" {status} {size} "{user_agent}"'
+        self.access_log.info(message)

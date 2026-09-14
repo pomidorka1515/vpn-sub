@@ -1493,6 +1493,8 @@ class Subscription:
                 desc = descTable["main_exceeded"]
                 desc = format(
                     desc,
+                    up=fmt_bytes(int(bandwidths.upload)),
+                    down=fmt_bytes(int(bandwidths.download)),
                     used=fmt_bytes(bw_used),
                     limit=f"{str(bw_limit)}GB"
                 )

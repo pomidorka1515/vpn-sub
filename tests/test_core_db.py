@@ -17,6 +17,7 @@ from protocols import ConfigLike
 from custom_types import BandwidthInfo, Inbound
 from session import XUiSession
 from db import Database
+from util import strip_jsonc_comments, strip_jsonc_trailing_commas
 from errors import (
     ConflictError, NotFoundError, PanelRejectedError, PanelUnavailableError, ValidationError
 )

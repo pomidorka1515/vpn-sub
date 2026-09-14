@@ -1,22 +1,23 @@
 {
     "description": {
+    	// everything must contain a newline at the end here, except `main` and `main_exceeded`
         "ru": {
-            "main": "👋Привет, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Трафика использовано за все время: ↑ {up} / ↓ {down}",
-            "main_exceeded": "👋Привет, {username}!\n{slot_time}⛔Месячный лимит истек! {used} > {limit}",
-            "bw": "Трафик за этот месяц: {used} / {limit}\n",
+            "main": "👋Привет, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}За всё время: ↑ {up} / ↓ {down}",
+            "main_exceeded": "👋Привет, {username}!\n{slot_time}⛔Месячный лимит истек! {used} > {limit}\nЗа всё время: ↑ {up} / ↓ {down}",
+            "bw": "В этом месяце: {used} / {limit}\n",
             "date": "Подписка до: {date} (осталось дней: {days})\n",
             "date_expired": "Подписка закончилась: {date}!, {days} дней назад\n",
-            "wl_bw": "🏳️ Трафик WL: {used} / {limit}\n",
-            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used} / {limit}"
+            "wl_bw": "🏳️ WL: {used} / {limit}\n",
+            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used} / {limit}\n"
         },
 		"en": {
-		    "main": "👋Welcome, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}Bandwidth used (all-time): ↑ {up} / ↓ {down}",
-		    "main_exceeded": "👋Welcome, {username}!\n{slot_time}⛔Monthly quota exceeded! {used} > {limit}",
-		    "bw": "Bandwidth used (this month): {used} / {limit}\n",
-		    "date": "Subscription expires at: {date} (days left: {days})\n",
-		    "date_expired": "Subscription expired at: {date}, {days} days ago\n",
-		    "wl_bw": "🏳️ WL Bandwidth: {used} / {limit}\n",
-		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used} > {limit}"
+		    "main": "👋Hi, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}All-time: ↑ {up} / ↓ {down}",
+		    "main_exceeded": "👋Hi, {username}!\n{slot_time}⛔Monthly quota exceeded! {used} > {limit}\nAll-time: ↑ {up} / ↓ {down}",
+		    "bw": "This month: {used} / {limit}\n",
+		    "date": "Expires at: {date} (days left: {days})\n",
+		    "date_expired": "⛔Expired at: {date}, {days} days ago\n",
+		    "wl_bw": "🏳️ WL: {used} / {limit}\n",
+		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used} > {limit}\n"
 		}
     },
     "chart": {
