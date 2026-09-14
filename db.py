@@ -7,7 +7,6 @@ Connections are deliberately short lived: every operation obtains a connection f
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime, timezone
 import glob
 import json
@@ -17,73 +16,16 @@ import tempfile
 import threading
 import time
 from collections.abc import Generator, Mapping
-from typing import Any, cast, TypedDict
+from typing import Any, cast
 from pathlib import Path
-
+from custom_types import CodeRecord, UserRecord, RegisterCodeResult, BonusResult
 from loggers import Logger
 from errors import DatabaseError, CodeError, MigrationError, DuplicateError
 __all__ = [
     "Database", "DatabaseError", "DuplicateError", "CodeError",
-    "MigrationError", "MigrationReport", "UserRecord", "CodeRecord",
-    "RegisterCodeResult", "BonusResult"
+    "MigrationError",
 ]
 
-
-class UserRecord(TypedDict):
-    username: str
-    uuid: str
-    token: str
-    fingerprint: str
-    displayname: str
-    enabled: int
-    enabled_time: int
-    enabled_wl: int
-    expires_at: int
-    bw_limit_gb: int
-    bw_used: int
-    wl_limit_gb: int
-    wl_used: int
-    ext_username: str | None
-    ext_password_hash: str | None
-    created_at: int
-
-
-class CodeRecord(TypedDict):
-    code: str
-    action: str
-    perma: bool
-    uses: int
-    days: int
-    gb: int
-    wl_gb: int
-    created_at: int
-
-
-class RegisterCodeResult(TypedDict):
-    days: int
-    gb: int
-    wl_gb: int
-    uses: int
-    perma: bool
-    time: int
-
-
-class BonusResult(RegisterCodeResult):
-    limit: int
-    wl_limit: int
-
-
-
-@dataclass(frozen=True, slots=True)
-class MigrationReport:
-    users: int
-    codes: int
-    telegram_mappings: int
-    bandwidth_snapshots: int
-    state_snapshots: int
-    backup_paths: tuple[str, ...]
-    skipped_orphans: int = 0
-    already_migrated: bool = False
 
 
 # ``json.load`` returns ``Any``.  keep the migration boundary explicit so a malformed legacy document is rejected instead of leaking ``Any`` through

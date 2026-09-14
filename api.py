@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from core import Subscription, BWatch
+from core import Subscription
+from bwatch import BWatch
 from errors import PanelUnavailableError
 from loggers import Logger
 
@@ -20,7 +21,7 @@ from typing import (
 )
 from dataclasses import asdict
 
-from custom_types import ConfigLike, LinesConfigLike
+from protocols import ConfigLike, LinesConfigLike
 from util import SysUtil, parse_bool
 
 __all__ = ['WebApi', 'Api', 'BaseApi']

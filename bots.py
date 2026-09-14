@@ -5,7 +5,7 @@ from core import Subscription, SERVER_TZ
 from errors import AppError, PanelUnavailableError
 from session import XUiSession
 from chart import bandwidth_chart, leaderboard_chart
-from custom_types import ConfigLike
+from protocols import ConfigLike
 from util import fmt_bytes, fmt_time, format_usage, truncate_utf8
 
 import telebot

@@ -8,7 +8,6 @@ import json
 
 from pathlib import Path
 from dacite import from_dict
-
 from custom_types import (
     CPUInfo, LoadAverage, NetTrafficStats, SystemMemory,
     RamInfo, SwapInfo, IPList, ConnCount, AppMemory,
@@ -24,6 +23,7 @@ __all__ = [
     "strip_jsonc_comments", "strip_jsonc_trailing_commas",
     "SysUtil"
 ]
+
 
 class _PartialFormatter(dict[str, object]):
     def __missing__(self, key: str) -> str:

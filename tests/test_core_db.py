@@ -11,8 +11,10 @@ from argon2 import PasswordHasher
 from dataclasses import asdict
 from requests import Response
 
-from core import BandwidthInfo, BWatch, Subscription
-from custom_types import ConfigLike, Inbound
+from core import Subscription
+from bwatch import BWatch
+from protocols import ConfigLike
+from custom_types import BandwidthInfo, Inbound
 from session import XUiSession
 from db import Database
 from errors import (

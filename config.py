@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Generator, MutableMapping, Mapping, Sequence
 from loggers import Logger
-from custom_types import JsonDict, JsonValue, MISSING, MISSING_TYPE, _ConfigTransactionLike
+from protocols import JsonDict, JsonValue, MISSING, MISSING_TYPE, _ConfigTransactionLike
 from errors import (
     ConfigError, SchemaValidationError,
     FileCorruptionError, ReadOnlyConfigError,

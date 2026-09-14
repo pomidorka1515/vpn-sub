@@ -8,7 +8,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 
-from custom_types import AdminBotLike, LinesConfigLike
+from protocols import AdminBotLike, LinesConfigLike
 
 _ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 

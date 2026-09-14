@@ -8,14 +8,15 @@ import threading
 threading.main_thread().name = 'main'
 
 
-from core import Subscription, BWatch
+from core import Subscription
+from bwatch import BWatch
 from session import XUiSession
 from api import WebApi, Api
 from bots import PublicBot, AdminBot
 from config import Config, LinesConfig, SYNC_MODES
 from db import Database
 from loggers import Logger
-from custom_types import ConfigLike
+from protocols import ConfigLike
 
 from flask import Flask, Response, jsonify, request
 from errors import AppError

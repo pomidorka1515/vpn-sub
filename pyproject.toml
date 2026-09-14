@@ -35,8 +35,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 py-modules = [
     "app", "api", "bots", "chart",
-    "config", "core", "custom_types", "db",
-    "loggers", "session", "util", "errors"
+    "config", "core", "bwatch", "custom_types", "db",
+    "loggers", "session", "util", "errors", "protocols"
 ]
 
 # ---------------------------------------------------------------------------
@@ -54,11 +54,13 @@ files = [
     "session.py",
     "chart.py",
     "core.py",
+    "bwatch.py",
     "api.py",
     "bots.py",
     "app.py",
     "util.py",
     "errors.py",
+    "protocols.py",
     "tests/",
 ]
 
@@ -107,11 +109,13 @@ include = [
     "session.py",
     "chart.py",
     "core.py",
+    "bwatch.py",
     "api.py",
     "bots.py",
     "app.py",
     "util.py",
     "errors.py",
+    "protocols.py",
     "tests/",
 ]
 typeCheckingMode = "strict"

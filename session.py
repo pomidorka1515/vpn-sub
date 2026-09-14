@@ -8,7 +8,8 @@ from requests import Session, Response, Timeout, ConnectionError, RequestExcepti
 from requests.structures import CaseInsensitiveDict
 from concurrent.futures import ThreadPoolExecutor, Future
 from loggers import Logger
-from custom_types import Inbound, JsonValue, RequestKwargs
+from custom_types import Inbound, RequestKwargs
+from protocols import JsonValue
 from errors import XUiSessionError
 
 from typing import Unpack, cast, Any, Mapping
