@@ -25,7 +25,55 @@ __all__ = ['AdminBot', 'PublicBot']
 
 # pyright: reportUnknownMemberType=false
 
-class AdminBot:
+
+_POLLING_CONNECT_TIMEOUT = 5
+_POLLING_LONG_TIMEOUT = 5
+_POLLING_STOP_TIMEOUT = 6
+
+
+class TelegramPollingMixin:
+    polling_thread: threading.Thread | None = None
+    bot: telebot.TeleBot
+    log: Logger
+
+    def start_polling(self) -> None:
+        if self.polling_thread is not None and self.polling_thread.is_alive():
+            return
+
+        self.polling_thread = threading.Thread(
+            target=self._poll_forever,
+            daemon=True,
+            name=f"{type(self).__name__} Polling"
+        )
+        self.polling_thread.start()
+
+    def _poll_forever(self) -> None:
+        self.bot.infinity_polling(
+            timeout=_POLLING_CONNECT_TIMEOUT,
+            long_polling_timeout=_POLLING_LONG_TIMEOUT,
+            logger_level=logging.CRITICAL,
+        )
+
+    def stop_polling(self) -> None:
+        thread = self.polling_thread
+        self.bot.stop_polling()
+        if thread is None:
+            return
+
+        deadline = time.monotonic() + _POLLING_STOP_TIMEOUT
+        while thread.is_alive() and time.monotonic() < deadline:
+            thread.join(timeout=0.1)
+            self.bot.stop_polling()
+
+        self.polling_thread = None
+        if thread.is_alive():
+            self.log.error(
+                f"polling thread did not stop within {_POLLING_STOP_TIMEOUT} seconds"
+            )
+
+
+
+class AdminBot(TelegramPollingMixin):
     """Administrator bot for management purposes.
     Dependencies: Subscription
     Classes depending on this: none"""
@@ -50,6 +98,8 @@ class AdminBot:
             self._pending_edits: dict[int, dict[str, str]] = {}
             self._pagination_state: dict[int, dict[str, int]] = {}
             self._pending_leaderboard: dict[int, dict[str, str | int]] = {}
+
+            self.polling_thread = None
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids
@@ -1099,17 +1149,13 @@ class AdminBot:
 
 
     def start(self) -> None:
-        bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Admin TG Bot") # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
-        bot_thread.start()
+        self.start_polling()
+
     def stop(self) -> None:
-        try:
-            self.msg("⚠️ Shutdown")
-        except Exception:
-            pass
-        self.bot.stop_polling()
+        self.stop_polling()
 
 
-class PublicBot:
+class PublicBot(TelegramPollingMixin):
     """Public telegram bot for end users.
     Dependencies: Subscription
     Classes depending on this: none"""
@@ -1137,6 +1183,8 @@ class PublicBot:
             self.bot.message_handler(func=lambda thisIsAVeryUsefulFunction_pleaseBelieveMe_Hello__whatamidoimg_pleasehelp_iAmGoingToMakeThisLongerEveryCommit_owo_whats_this_hhhhh_yet_another_lambda__imagine_thinking_this_is_a_serious_codebase_lmao__thisisTRUEi18nBTW: not False)(self.handle_text) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
 
             self._executor = ThreadPoolExecutor(max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart")
+
+            self.polling_thread = None
 
     def _send_message(self, chat_id: int, text: str, **kwargs: object) -> None:
         try:
@@ -1810,10 +1858,8 @@ class PublicBot:
             self._send_message(message.chat.id, "⚠️ Error occurred", reply_markup=self.get_menu(uid))
 
     def start(self) -> None:
-        if hasattr(self, 'bot'):
-            bot_thread = threading.Thread(target=self.bot.infinity_polling, daemon=True, name="Public TG Bot") # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
-            bot_thread.start()
+        self.start_polling()
 
     def stop(self) -> None:
-        self.bot.stop_polling()
-        self._executor.shutdown(wait=True)
+        self.stop_polling()
+        self._executor.shutdown(wait=False, cancel_futures=True)

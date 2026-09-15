@@ -20,3 +20,4 @@ accesslog="-"
 errorlog="-"
 logger_class = GunicornLogger
 wsgi_app="app:app"
+graceful_timeout = 10

@@ -224,9 +224,15 @@ def _shutdown() -> None:
 
     def _do_cleanup() -> None:
         if _is_primary:
-            bw.stop()
-            adminbot.stop()
-            bot.stop()
+            shutdown_threads = (
+                threading.Thread(target=bw.stop, name="BWatch Shutdown", daemon=True),
+                threading.Thread(target=adminbot.stop, name="Admin TG Shutdown", daemon=True),
+                threading.Thread(target=bot.stop, name="Public TG Shutdown", daemon=True),
+            )
+            for thread in shutdown_threads:
+                thread.start()
+            for thread in shutdown_threads:
+                thread.join(timeout=6)
         for panel in panels:
             panel.close()
         if wl:
