@@ -146,7 +146,7 @@ class XUiSession:
             self._login_retry_at: float = 0
             self._login_failures: int = 0
             self._refresh_started = False
-            self._running = threading.Event()
+            self._stop_event = threading.Event()
             self._refresh_thread: threading.Thread | None = None
 
             self._cache_lock = threading.Lock()
@@ -365,11 +365,10 @@ class XUiSession:
                 raise
 
     def _start_refresh_thread(self) -> None:
-        self._running.set()
         self._refresh_started = True
 
         def refresh_loop() -> None:
-            while self._running.wait(60):
+            while not self._stop_event.wait(60):
                 if self._needs_refresh():
                     try:
                         self.log.info(f"{self.address}:{self.port} > refreshing session")
@@ -409,7 +408,7 @@ class XUiSession:
 
     def close(self) -> None:
         with self._state_lock:
-            self._running.clear()
+            self._stop_event.set()
             self._health_check_event.set()
             refresh_thread = self._refresh_thread
         if self._health_check_thread is not threading.current_thread():
