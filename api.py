@@ -219,7 +219,7 @@ def rate_limit[**P, R](max_requests: int) -> Callable[
     ) -> DecoratedReturn[BaseApi, P, R]:
         @wraps(f)
         def wrapper(self: BaseApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
-            ip = cast(str, request.headers.get("X-Real-IP", request.remote_addr))
+            ip = cast(str, request.remote_addr)
             now = time.time()
             with self.rl_lock:
                 stale = [k for k, v in self.rl_data.items() if v and now - v[-1] > 60]

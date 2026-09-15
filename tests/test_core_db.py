@@ -383,7 +383,8 @@ class RollbackTests(unittest.TestCase):
                 ext_username="alice-login", ext_password_hash="hash",
             )
             database.set_metadata("registration_rollback_failed:alice", "123")
-            self._subscription(database)
+            subscription = self._subscription(database)
+            subscription.recover_rollback_failures()
             self.assertIsNone(database.get_metadata("registration_rollback_failed:alice"))
             self.assertFalse(database.user_exists("alice"))
             database.close()

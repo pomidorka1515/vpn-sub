@@ -24,12 +24,13 @@ Fully synchronous, database-backed config, designed to run on a single small VPS
 
 ## Architecture
 
+- `app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, bots, Flask app) and wires everything together
+- `wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application and registers shutdown at exit
 - `core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
 - `config.py` — atomic JSON config with thread + cross-process locking
 - `db.py` — core database logic
 - `api.py` — Flask routes (`Api` for admin, `WebApi` for end users)
 - `bots.py` — `AdminBot` (management), `PublicBot` (user self-service)
-- `app.py` — wiring
 
 ## Setup
 
@@ -93,6 +94,11 @@ WantedBy=multi-user.target
 ```
 *(replace `X` with your path/port/etc)*
 
+`gunicorn.conf.py` loads `wsgi:app` (module `wsgi.py`, which calls
+`create_application()` and registers shutdown at exit). `app.py` no longer runs
+anything at import time, so `venv/bin/python wsgi.py` also works for a quick
+local run.
+
 ### Example Config
 **See [example config](docs/EXAMPLE.config.json)**
 
@@ -102,9 +108,9 @@ However, mypy cannot reliably validate that: the overloads are too complex.
 That's why casting is required.
 
 ## Deployment
-- Meant to run under gunicorn behind nginx
+- Meant to run under gunicorn behind nginx (in front of the service, rate-limiting and TLS)
 - Systemd unit recommended for persistence
-- Startup order matters: panels → Subscription → BWatch + bots (handled automatically by `app.py`)
+- Startup order matters: configs → DB → panels → Subscription → BWatch + bots (handled automatically by `create_application()`)
 
 ## Status
 Personal project. Works in production for my small user base.

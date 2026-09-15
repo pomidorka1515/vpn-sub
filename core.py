@@ -134,10 +134,9 @@ class Subscription:
             if self.whitelist_panel:
                 self.panels.append(self.whitelist_panel)
 
-            self.start()
+            self.register_routes()
 
-    def start(self) -> None:
-        self._recover_registration_rollback_failures()
+    def register_routes(self) -> None:
         @self.app.route(f"/{self.uri}", strict_slashes=False)
         def _sub() -> Response: # pyright: ignore[reportUnusedFunction]
             return self.get_subscription(
@@ -357,7 +356,7 @@ class Subscription:
                     exc_info=True,
                 )
 
-    def _recover_registration_rollback_failures(self) -> None:
+    def recover_rollback_failures(self) -> None:
         """Retry persisted registration rollbacks at startup."""
         prefix = "registration_rollback_failed:"
         for key in tuple(self.db.list_metadata(prefix)):

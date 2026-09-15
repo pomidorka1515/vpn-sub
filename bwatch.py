@@ -101,7 +101,8 @@ class BWatch:
     def stop(self) -> None:
         self._stop_event.set()
         for thread in self._threads:
-            thread.join(timeout=5)
+            if thread.is_alive():
+                thread.join(timeout=5)
         
     def _update_user(self, *args: Any, **kwargs: Any) -> None:
         try:

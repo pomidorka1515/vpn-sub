@@ -1,248 +1,435 @@
 from __future__ import annotations
 
 import fcntl
-import sys
 import os
-import atexit
+import sys
 import threading
-threading.main_thread().name = 'main'
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, BinaryIO, Self, cast
 
-
-from core import Subscription
+from api import Api, WebApi
+from bots import AdminBot, PublicBot
 from bwatch import BWatch
-from session import XUiSession
-from api import WebApi, Api
-from bots import PublicBot, AdminBot
-from config import Config, LinesConfig, SYNC_MODES
+from config import Config, LinesConfig
+from core import Subscription
 from db import Database
+from errors import AppError
+from flask import Flask, Response, jsonify, request
 from loggers import Logger
 from protocols import ConfigLike
-
-from flask import Flask, Response, jsonify, request
-from errors import AppError
+from session import XUiSession, XUiPanelTransport
 from werkzeug.exceptions import HTTPException
-from typing import cast, TypedDict
-from pathlib import Path
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-##############################################################
-### Startup sequence. Do not touch if you dont understand. ###
-### Order matters. A lot.                                  ###
-##############################################################
+threading.main_thread().name = "main"
 
 log = Logger("app")
 
-def _build_panels(cfg: Config) -> tuple[list[XUiSession], XUiSession | None]:
-    """Initialize all 3x-ui panel sessions from config."""
-    panels: list[XUiSession] = []
-    whitelist: XUiSession | None = None
-    
-    for name, panel_cfg in cfg['3xui'].items():
-        try:
-            session = XUiSession(
-                name=panel_cfg['name'],
-                address=panel_cfg['address'],
-                port=panel_cfg['port'],
-                uri=panel_cfg['uri'],
-                username=panel_cfg['username'],
-                password=panel_cfg['password'],
-                https=panel_cfg['https'],
-                nginx_auth=tuple(panel_cfg.get('nginx_auth', [])) or None,
-                ignore_inbounds=tuple(panel_cfg.get('ignore_inbounds', [])),
-                inject_headers=panel_cfg.get('inject_headers'),
+type PanelTransportFactory = Callable[[], XUiPanelTransport]
+
+__all__ = [
+    "AppOptions",
+    "AppPaths",
+    "Application",
+    "PanelTransportFactory",
+    "create_application",
+]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AppPaths:
+    data: Path
+    backups: Path
+    config: Path
+    language: Path
+    database: Path
+    log: Path
+    audit: Path
+    primary_lock: Path
+
+    @classmethod
+    def from_env(cls) -> AppPaths:
+        root = Path(__file__).resolve().parent
+        data = Path(os.getenv("DIR_DATA", root / "data"))
+        return cls(
+            data=data,
+            backups=Path(os.getenv("DIR_BACKUPS", data / "backup")),
+            config=Path(os.getenv("PATH_CONFIG", data / "config.json")),
+            language=Path(os.getenv("PATH_LANG", root / "lang.jsonc")),
+            database=Path(os.getenv("PATH_DB", data / "state.sqlite3")),
+            log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
+            audit=Path(os.getenv("PATH_AUDIT", data / "audit.jsonl")),
+            primary_lock=data / ".primary.lock",
+        )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AppOptions:
+    start_background: bool = True
+    start_bots: bool = True
+    proxy_hops: int = 1
+    panel_transport_factory: PanelTransportFactory | None = None
+
+
+@dataclass(slots=True, kw_only=True)
+class Application:
+    app: Flask
+    cfg: Config
+    lang_cfg: Config
+    log_cfg: LinesConfig
+    audit_cfg: LinesConfig
+    db: Database
+    panels: list[XUiSession]
+    whitelist_panel: XUiSession | None
+    subscription: Subscription
+    bandwidth_watcher: BWatch
+    admin_bot: AdminBot
+    public_bot: PublicBot
+    primary: bool
+
+    _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
+    _primary_lock_file: BinaryIO | None = None
+    _start_background: bool = field(default=True, init=False)
+    _start_bots: bool = field(default=True, init=False)
+    _started: bool = field(default=False, init=False)
+
+    def start(self) -> None:
+        if (
+            not self.primary
+            or not self._start_background
+            or self._started
+            or self._stop_event.is_set()
+        ):
+            return
+        self._started = True
+
+        self.subscription.recover_rollback_failures()
+        self.bandwidth_watcher.start()
+        if self._start_bots:
+            self.admin_bot.start()
+            self.public_bot.start()
+
+        if sys.version_info < (3, 14):
+            log.warning(
+                "Use python >= 3.14 to prevent bugs (found: %s.%s.%s)",
+                sys.version_info.major,
+                sys.version_info.minor,
+                sys.version_info.patch
             )
-        except Exception:
-            log.critical(f"Failed to initialize panel '{name}':")
-            raise
-        if panel_cfg['whitelist']:
-            if whitelist is not None:
-                log.warning(f"Multiple whitelist panels configured; using last one ({name})")
-            whitelist = session
+
+        # actually way safer than a direct call
+        if getattr(sys, "_is_gil_enabled", lambda: True)():
+            log.warning("Free-threading disabled. Use a free-threading build for better performance.")
         else:
-            panels.append(session)
+            log.info("Free-threading active!")
+
+        log.info("Launch successful!")
     
-    return panels, whitelist
+    def stop(self) -> None:
+        if self._stop_event.is_set():
+            return
+        self._stop_event.set()
 
-_primary_lock_fd = None
-
-def _acquire_primary_lock() -> bool:
-    """Try to acquire the single-primary-worker lock. Returns True on success."""
-    global _primary_lock_fd
-    fd = open('/tmp/sub_primary.lock', 'w')
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        _primary_lock_fd = fd
-        log.info(f"I am the primary worker (pid={os.getpid()})")
-        return True
-    except OSError:
-        fd.close()
-        return False
-
-
-# ------------------------------------------------------------
-# Flask app & handlers
-# ------------------------------------------------------------
-app = Flask(__name__) # the entry point
-app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # 64KB is plenty
-app.config['JSON_SORT_KEYS'] = False
-
-@app.errorhandler(AppError)
-def _handle_app_error(error: AppError) -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
-    return jsonify({"success": False, "msg": error.message, "obj": None}), error.status
-
-
-@app.errorhandler(HTTPException)
-def _handle_http_error(error: HTTPException) -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
-    return jsonify({"success": False, "msg": error.description, "obj": None}), error.code or 500
-
-
-@app.errorhandler(Exception)
-def _handle_unexpected_error(error: Exception) -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
-    log.error("unhandled error on %s %s", request.method, request.path, exc_info=True)
-    return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
-
-
-# ------------------------------------------------------------
-# Path configuration
-# ------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parent
-
-DATA_DIR = Path(os.getenv("DIR_DATA", PROJECT_ROOT / "data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-BACKUP_DIR = Path(os.getenv("DIR_BACKUPS", DATA_DIR / "backup"))
-
-CONFIG_PATH = Path(os.getenv("PATH_CONFIG", DATA_DIR / "config.json"))
-LANG_PATH = Path(os.getenv("PATH_LANG", PROJECT_ROOT / "lang.jsonc"))
-DB_PATH = Path(os.getenv("PATH_DB", DATA_DIR / "state.sqlite3"))
-LOG_PATH = Path(os.getenv("PATH_LOG", DATA_DIR / "log.jsonl"))
-AUDIT_PATH = Path(os.getenv("PATH_AUDIT", DATA_DIR / "audit.jsonl"))
-
-# ------------------------------------------------------------
-# Configs & databases
-# ------------------------------------------------------------
-class _BaseConfigKwargs(TypedDict):
-    read_only: bool
-    strict_schema: bool
-    sync_mode: SYNC_MODES
-    isolate_commits: bool
-    backup_dir: str | Path
-
-class _LineConfigKwargs(TypedDict):
-    sync_mode: SYNC_MODES
-    backup_dir: str | Path
-
-_config_kwargs: _BaseConfigKwargs = {
-    'read_only': False,
-    'strict_schema': True,
-    'sync_mode': 'data',
-    'isolate_commits': True,
-    'backup_dir': BACKUP_DIR
-}
-
-_line_config_kwargs: _LineConfigKwargs = {
-    'sync_mode': 'data',
-    'backup_dir': BACKUP_DIR
-}
-
-cfg = Config(path=CONFIG_PATH, indent=4, **_config_kwargs)
-lang_cfg = Config(path=LANG_PATH, indent=4, read_only=True, read_only_jsonc=True, strict_schema=True)
-runtime_cfg = cast(ConfigLike, cfg)
-runtime_lang_cfg = cast(ConfigLike, lang_cfg)
-log_cfg = LinesConfig(path=LOG_PATH, **_line_config_kwargs)
-audit_cfg = LinesConfig(path=AUDIT_PATH, **_line_config_kwargs)
-
-db = Database(path=DB_PATH, backup_dir=BACKUP_DIR)
-# ------------------------------------------------------------
-# Panels
-# ------------------------------------------------------------
-panels, wl = _build_panels(cfg)
-
-if not panels and wl is None:
-    log.critical("No panels initialized. Cannot start.")
-    sys.exit(1)
-
-# ------------------------------------------------------------
-# Create core classes
-# ------------------------------------------------------------
-sub      = Subscription(
-               cfg=runtime_cfg, db=db, lang_cfg=runtime_lang_cfg, audit_cfg=audit_cfg,
-               app=app, panels=panels, whitelist_panel=wl
-           )
-bw       = BWatch(cfg=runtime_cfg, db=db, sub=sub)
-api      = Api(app=app, cfg=runtime_cfg, audit_cfg=audit_cfg, sub=sub, bw=bw)
-webapi   = WebApi(app=app, cfg=runtime_cfg, sub=sub, bw=bw)
-adminbot = AdminBot(sub=sub, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
-bot      = PublicBot(sub=sub, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
-
-bw.bot   = bot  # can't do in BWatch.__init__ because PublicBot needs sub first
-bw.admin_bot = adminbot
-
-# ------------------------------------------------------------
-# Broadcast selected loggers to AdminBot and jsonl logfile
-# ------------------------------------------------------------
-for l in (
-    log, 
-    
-    sub.log, bw.log, 
-    
-    api.log, webapi.log,
-    
-    adminbot.log, bot.log,
-    cfg.log, lang_cfg.log, log_cfg.log, audit_cfg.log, db.log
-):
-    l.set_tg_bot(adminbot)
-    l.set_jsonl_handler(log_cfg)
-
-# ------------------------------------------------------------
-# Single-primary-worker startup
-# ------------------------------------------------------------
-if _acquire_primary_lock():
-    bw.start()
-    adminbot.start()
-    bot.start()
-    log.info("Launch successful!")
-    _is_primary = True
-else:
-    log.info("Secondary worker, skipping background tasks.")
-    _is_primary = False
-
-# ------------------------------------------------------------
-# Version & GIL checks
-# ------------------------------------------------------------
-if sys._is_gil_enabled(): # pyright: ignore[reportPrivateUsage]
-    log.warning("Free-threading disabled. Use a free-threading build for better performance.")
-else:
-    log.info("Free-threading active!")
-if sys.version_info < (3, 14):
-    log.warning(f"Use python >= 3.14 to prevent bugs. (found: {sys.version_info[0]}.{sys.version_info[1]})")
-
-# ------------------------------------------------------------
-# Graceful shutdown
-# ------------------------------------------------------------
-def _shutdown() -> None:
-    log.info("Shutting down...")
-
-    def _do_cleanup() -> None:
-        if _is_primary:
-            shutdown_threads = (
-                threading.Thread(target=bw.stop, name="BWatch Shutdown", daemon=True),
-                threading.Thread(target=adminbot.stop, name="Admin TG Shutdown", daemon=True),
-                threading.Thread(target=bot.stop, name="Public TG Shutdown", daemon=True),
+        if self.primary:
+            shutdown_threads = tuple(
+                threading.Thread(
+                    target=component.stop,
+                    name=f"{type(component).__name__} shutdown",
+                    daemon=True,
+                )
+                for component in (
+                    self.bandwidth_watcher,
+                    self.admin_bot,
+                    self.public_bot,
+                )
             )
             for thread in shutdown_threads:
                 thread.start()
             for thread in shutdown_threads:
                 thread.join(timeout=6)
-        for panel in panels:
-            panel.close()
-        if wl:
-            wl.close()
-        db.close()
-        cfg.close()
-        lang_cfg.close()
-        log_cfg.close()
-        audit_cfg.close()
-        log.info("Shutdown complete.")
 
-    _do_cleanup()
-atexit.register(_shutdown)
+        self._close_all()
+
+    def _close_all(self) -> None:
+        resources: tuple[object, ...] = (
+            *self.panels,
+            self.whitelist_panel,
+            self.db,
+            self.cfg,
+            self.lang_cfg,
+            self.log_cfg,
+            self.audit_cfg,
+        )
+        for resource in resources:
+            if resource is None:
+                continue
+            close = cast(Callable[[], None], getattr(resource, "close", None))
+            try:
+                close()
+            except Exception:
+                log.error("resource cleanup failed", exc_info=True)
+        if self._primary_lock_file is not None:
+            self._primary_lock_file.close()
+            self._primary_lock_file = None
+
+    def __enter__(self) -> Self:
+        self.start()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.stop()
+
+
+def _build_flask_app(options: AppOptions) -> Flask:
+    flask_app = Flask(__name__)
+    # should not be changed, 64KB is also plenty
+    flask_app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+    flask_app.config["JSON_SORT_KEYS"] = False
+    if options.proxy_hops > 0:
+        flask_app.wsgi_app = cast(  # type: ignore[method-assign]
+            Any,
+            ProxyFix(
+                flask_app.wsgi_app,
+                x_for=options.proxy_hops,
+                x_proto=1,
+                x_host=1,
+            ),
+        )
+
+    @flask_app.errorhandler(AppError)
+    def handle_app_error(error: AppError) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
+        return (
+            jsonify({"success": False, "msg": error.message, "obj": None}),
+            error.status,
+        )
+
+    @flask_app.errorhandler(HTTPException)
+    def handle_http_error(error: HTTPException) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
+        return (
+            jsonify({"success": False, "msg": error.description, "obj": None}),
+            error.code or 500,
+        )
+
+    @flask_app.errorhandler(Exception)
+    def handle_unexpected_error(error: Exception) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
+        log.error(
+            "unhandled error on %s %s",
+            request.method,
+            request.path,
+            exc_info=error,
+        )
+        return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
+
+    return flask_app
+
+
+def _acquire_primary_lock(path: Path) -> tuple[bool, BinaryIO | None]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("a+b")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return False, None
+    log.info("I am the primary worker (pid=%d)", os.getpid())
+    return True, handle
+
+
+def _build_configs(paths: AppPaths) -> tuple[
+    Config, # main 
+    Config, # lang
+    LinesConfig, # log
+    LinesConfig # audit
+]:
+    paths.data.mkdir(parents=True, exist_ok=True)
+    cfg = Config(
+        path=paths.config,
+        indent=4,
+        read_only=False,
+        strict_schema=True,
+        sync_mode="data",
+        isolate_commits=True,
+        backup_dir=paths.backups,
+    )
+    lang_cfg = Config(
+        path=paths.language,
+        indent=4,
+        read_only=True,
+        read_only_jsonc=True,
+        strict_schema=True,
+    )
+    log_cfg = LinesConfig(path=paths.log, sync_mode="data", backup_dir=paths.backups)
+    audit_cfg = LinesConfig(path=paths.audit, sync_mode="data", backup_dir=paths.backups)
+    return cfg, lang_cfg, log_cfg, audit_cfg
+
+
+def _build_panels(
+    cfg: Config,
+    *,
+    transport_factory: PanelTransportFactory | None,
+) -> tuple[list[XUiSession], XUiSession | None]:
+    panels: list[XUiSession] = []
+    whitelist: XUiSession | None = None
+
+    for name, panel_cfg in cfg["3xui"].items():
+        transport = transport_factory() if transport_factory is not None else None
+        session = XUiSession(
+            name=panel_cfg["name"],
+            address=panel_cfg["address"],
+            port=panel_cfg["port"],
+            uri=panel_cfg["uri"],
+            username=panel_cfg["username"],
+            password=panel_cfg["password"],
+            https=panel_cfg["https"],
+            nginx_auth=tuple(panel_cfg.get("nginx_auth", [])) or None,
+            ignore_inbounds=tuple(panel_cfg.get("ignore_inbounds", [])),
+            inject_headers=panel_cfg.get("inject_headers"),
+            transport=transport,
+        )
+        if panel_cfg["whitelist"]:
+            if whitelist is not None:
+                log.warning("multiple whitelist panels configured; using last one (%s)", name)
+            whitelist = session
+        else:
+            panels.append(session)
+
+    return panels, whitelist
+
+
+def _wire_loggers(
+    runtime: Application,
+    api: Api,
+    webapi: WebApi,
+) -> None:
+    for logger in (
+        log,
+        runtime.subscription.log,
+        runtime.bandwidth_watcher.log,
+        api.log,
+        webapi.log,
+        runtime.admin_bot.log,
+        runtime.public_bot.log,
+        runtime.cfg.log,
+        runtime.lang_cfg.log,
+        runtime.log_cfg.log,
+        runtime.audit_cfg.log,
+        runtime.db.log,
+    ):
+        logger.set_tg_bot(runtime.admin_bot)
+        logger.set_jsonl_handler(runtime.log_cfg)
+
+
+def create_application(
+    paths: AppPaths | None = None,
+    options: AppOptions | None = None,
+) -> Application:
+    paths = paths or AppPaths.from_env()
+    options = options or AppOptions()
+
+    flask_app = _build_flask_app(options)
+    cfg, lang_cfg, log_cfg, audit_cfg = _build_configs(paths)
+    runtime_cfg = cast(ConfigLike, cfg)
+    runtime_lang_cfg = cast(ConfigLike, lang_cfg)
+
+    primary = False
+    lock_file: BinaryIO | None = None
+    db: Database | None = None
+    panels: list[XUiSession] = []
+    whitelist: XUiSession | None = None
+    subscription: Subscription | None = None
+    admin_bot: AdminBot | None = None
+    public_bot: PublicBot | None = None
+    bandwidth_watcher: BWatch | None = None
+
+    def close_created() -> None:
+        for component in (bandwidth_watcher, admin_bot, public_bot):
+            if component is not None:
+                try:
+                    component.stop()
+                except Exception:
+                    log.error("startup component cleanup failed", exc_info=True)
+        resources: tuple[object, ...] = ( # arbitrary length due to panels
+            *panels,
+            whitelist,
+            db,
+            cfg,
+            lang_cfg,
+            log_cfg,
+            audit_cfg,
+        )
+        for resource in resources:
+            if resource is None:
+                continue
+            close = cast(Callable[[], None], getattr(resource, "close", None))
+            if close is not None:
+                try:
+                    close()
+                except Exception:
+                    log.error("startup cleanup failed", exc_info=True)
+        if lock_file is not None:
+            lock_file.close()
+
+    try:
+        primary, lock_file = _acquire_primary_lock(paths.primary_lock)
+        db = Database(path=paths.database, backup_dir=paths.backups)
+        panels, whitelist = _build_panels(
+            cfg,
+            transport_factory=options.panel_transport_factory,
+        )
+        if not panels and whitelist is None:
+            raise RuntimeError("No panels initialized")
+
+        subscription = Subscription(
+            cfg=runtime_cfg,
+            db=db,
+            lang_cfg=runtime_lang_cfg,
+            audit_cfg=audit_cfg,
+            app=flask_app,
+            panels=panels,
+            whitelist_panel=whitelist,
+        )
+        admin_bot = AdminBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
+        public_bot = PublicBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
+        bandwidth_watcher = BWatch(
+            cfg=runtime_cfg,
+            db=db,
+            sub=subscription,
+            bot=public_bot,
+            admin_bot=admin_bot,
+        )
+        api = Api(
+            app=flask_app,
+            cfg=runtime_cfg,
+            audit_cfg=audit_cfg,
+            sub=subscription,
+            bw=bandwidth_watcher,
+        )
+        webapi = WebApi(app=flask_app, cfg=runtime_cfg, sub=subscription, bw=bandwidth_watcher)
+
+        runtime = Application(
+            app=flask_app,
+            cfg=cfg,
+            lang_cfg=lang_cfg,
+            log_cfg=log_cfg,
+            audit_cfg=audit_cfg,
+            db=db,
+            panels=panels,
+            whitelist_panel=whitelist,
+            subscription=subscription,
+            bandwidth_watcher=bandwidth_watcher,
+            admin_bot=admin_bot,
+            public_bot=public_bot,
+            primary=primary,
+        )
+        runtime._primary_lock_file = lock_file  # pyright: ignore[reportPrivateUsage]
+        runtime._start_background = options.start_background  # pyright: ignore[reportPrivateUsage]
+        runtime._start_bots = options.start_bots  # pyright: ignore[reportPrivateUsage]
+        _wire_loggers(runtime, api, webapi)
+        if options.start_background:
+            runtime.start()
+        return runtime
+    except Exception:
+        close_created()
+        raise
