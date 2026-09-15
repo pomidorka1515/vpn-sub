@@ -344,10 +344,10 @@ class BWatch:
 
             snapshot_data[username] = (
                 current, wl_current,
-                int(current.upload - last_mem.upload) if last_mem else 0,
-                int(current.download - last_mem.download) if last_mem else 0,
-                int(wl_current.upload - last_wl_mem.upload) if last_wl_mem else 0,
-                int(wl_current.download - last_wl_mem.download) if last_wl_mem else 0,
+                max(int(current.upload - last_mem.upload), 0) if last_mem else 0,
+                max(int(current.download - last_mem.download), 0) if last_mem else 0,
+                max(int(wl_current.upload - last_wl_mem.upload), 0) if last_wl_mem else 0,
+                max(int(wl_current.download - last_wl_mem.download), 0) if last_wl_mem else 0,
             )
 
         # 3. Update mem + write snapshot under lock (atomic)
@@ -356,7 +356,7 @@ class BWatch:
                 self.mem[username] = current
                 self.wl_mem[username] = wl_current
 
-                self.db.upsert_bandwidth_snapshot(username, midnight, up, down, wl_up, wl_down)
+                self.db.add_bandwidth_snapshot(username, midnight, up, down, wl_up, wl_down)
 
         self.prune_old_bw_snapshots()
 

@@ -17,11 +17,6 @@ out/
 !API.md
 !API_ADMIN.md
 !AUDIT.md
-backup/
-discord/venv
-discord/.venv
-discord/config.json
-.python-version
 vpn_sub.egg-info/
 # My other project, sorry for cluttering...
 nep_bot*

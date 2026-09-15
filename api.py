@@ -303,6 +303,7 @@ class WebApi(BaseApi):
 
     ROUTES: list[Route] = [
         Route('GET', '/redirect', 'redirect_page'),
+        Route('GET', '/common.js', 'common_js'),
         Route('POST', '/webapi/register', 'register', 5),
         Route('POST', '/webapi/login', 'login', 10),
         Route('POST', '/webapi/bonus', 'bonus', 15),
@@ -354,6 +355,11 @@ class WebApi(BaseApi):
         if len(prefix) > 512:
             return _err("Prefix too long", 400)
         return Response(self.redirect_html, mimetype='text/html')
+
+    def common_js(self) -> ResponseType:
+        response = make_response(send_file('res/common.js', etag=False))
+        response.headers['Cache-Control'] = 'no-cache'
+        return response
 
     def gui_panel(self) -> ResponseType:
         token = request.cookies.get('token')

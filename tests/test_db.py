@@ -45,6 +45,31 @@ class DatabaseTests(unittest.TestCase):
         with self.assertRaises(MigrationError):
             Database(path=str(path))
 
+    def test_migration_repairs_negative_bandwidth_snapshot_values(self) -> None:
+        self.db.close()
+        connection = sqlite3.connect(self.path)
+        connection.execute("UPDATE schema_version SET version = 1")
+        connection.execute(
+            """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
+            VALUES ('alice', 20, -1, 2, -3, 4)"""
+        )
+        connection.execute(
+            """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
+            VALUES ('alice', 30, 5, -6, 7, 8)"""
+        )
+        connection.commit()
+        connection.close()
+
+        self.db = Database(path=str(self.path))
+        rows = self.db.get_bandwidth_snapshots("alice", 0)
+        self.assertEqual(
+            [row["up"] for row in rows],
+            [5, 0],
+        )
+        self.assertEqual([row["down"] for row in rows], [0, 2])
+        self.assertEqual([row["wl_up"] for row in rows], [7, 0])
+        self.assertEqual([row["wl_down"] for row in rows], [8, 4])
+
     def test_user_constraints_reverse_lookups_and_deletion(self) -> None:
         token = "t" * 40
         self.create_user(token=token)
@@ -135,12 +160,12 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual((user["bw_used"], user["wl_used"]), (0, 0))
         self.assertFalse(self.db.notification_seen("regular", 123))
 
-        self.db.upsert_bandwidth_snapshot("alice", 10, 1, 2, 3, 4)
-        self.db.upsert_bandwidth_snapshot("alice", 10, 5, 6, 7, 8)
-        self.db.upsert_bandwidth_snapshot("alice", 20, 9, 10, 11, 12)
+        self.db.add_bandwidth_snapshot("alice", 10, 1, 2, 3, 4)
+        self.db.add_bandwidth_snapshot("alice", 10, 5, 6, 7, 8)
+        self.db.add_bandwidth_snapshot("alice", 20, 9, 10, 11, 12)
         bandwidth_rows = self.db.get_bandwidth_snapshots("alice", 0)
         self.assertEqual([row["ts"] for row in bandwidth_rows], [20, 10])
-        self.assertEqual(bandwidth_rows[1]["up"], 5)
+        self.assertEqual(bandwidth_rows[1]["up"], 6)
         self.assertEqual(self.db.prune_bandwidth_snapshots(20), 1)
         self.db.upsert_state_snapshot(10, {"ts": 10, "host": {}, "panels": {}})
         self.db.upsert_state_snapshot(10, {"ts": 10, "host": {"new": True}, "panels": {}})

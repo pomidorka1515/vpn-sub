@@ -14,5 +14,11 @@
     el.setAttribute('role', 'alert'); el.setAttribute('aria-live', 'polite'); el.onclick = () => el.remove(); document.body.appendChild(el);
     setTimeout(() => el.remove(), 2500);
   };
-  w.fmtBytes = function (b) { if (!b) return '0 B'; const u = ['B','KB','MB','GB','TB']; const i = Math.floor(Math.log(b) / Math.log(1000)); return (b / Math.pow(1000, i)).toFixed(i > 1 ? 2 : 0) + ' ' + u[i]; };
+  w.fmtBytes = function (b) {
+    if (!Number.isFinite(b)) return 'N/A';
+    if (b <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(b) / Math.log(1000)), units.length - 1);
+    return (b / Math.pow(1000, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
+  };
 })(window);

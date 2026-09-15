@@ -140,7 +140,7 @@ def _make_backup_thread(
 class Database:
     """Thread-safe SQLite repository for dynamic application state."""
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(
         self,
@@ -347,7 +347,14 @@ class Database:
                     )
                     for statement in schema_statements:
                         conn.execute(statement)
-                    conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,))
+                    version = 1
+                if version == 1:
+                    conn.execute(
+                        """UPDATE bandwidth_snapshots
+                        SET up = max(up, 0), down = max(down, 0),
+                            wl_up = max(wl_up, 0), wl_down = max(wl_down, 0)"""
+                    )
+                conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,))
                 conn.execute("COMMIT")
             except sqlite3.Error:
                 if conn.in_transaction:
@@ -700,11 +707,12 @@ class Database:
         with self.transaction(immediate=True) as conn:
             conn.execute("DELETE FROM app_metadata WHERE key = ?", (key,))
 
-    def upsert_bandwidth_snapshot(self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int) -> None:
+    def add_bandwidth_snapshot(self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int) -> None:
         with self.transaction(immediate=True) as conn:
             conn.execute("""INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
                 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(username, ts) DO UPDATE SET
-                up=excluded.up, down=excluded.down, wl_up=excluded.wl_up, wl_down=excluded.wl_down""",
+                up=up + excluded.up, down=down + excluded.down,
+                wl_up=wl_up + excluded.wl_up, wl_down=wl_down + excluded.wl_down""",
                          (username, ts, up, down, wl_up, wl_down))
 
     def get_bandwidth_snapshots(self, username: str, cutoff: int) -> list[dict[str, int]]:

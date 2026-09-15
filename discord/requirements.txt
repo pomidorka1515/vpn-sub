@@ -1,3 +1,0 @@
-disnake
-httpx
-jsonschema
