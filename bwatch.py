@@ -59,7 +59,7 @@ class BWatch:
                 (self._every_120s, "Quota & Notifs"),
                 (self._every_2h, "Date check"),
                 (self._every_15s, "Bandwidth"),
-                (self._every_24h, "Reset notifs & Prune old snapshots"),
+                (self._every_24h, "Snapshots"),
                 (self._every_5m, "Panels check"),
                 (self._every_24h_snapshot, "Daily snapshots"),
             )

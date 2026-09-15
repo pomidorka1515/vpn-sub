@@ -106,7 +106,8 @@ class XUiSession:
         session: Session | None = None,
         clock: Callable[[], float] = time.monotonic,
     ):
-        """Initialize the panel client.
+        """
+        Initialize the panel client.
 
         Args:
             name: The display name for a panel.
@@ -173,7 +174,7 @@ class XUiSession:
             self._health_check_lock = threading.Lock()
             self._health_check_thread = threading.Thread(
                 target=self._health_check,
-                name="3x-ui health check",
+                name="XUi healthcheck", # NOTE: intended, <= 15 chars
                 daemon=True,
             )
             self._health_check_event = threading.Event()

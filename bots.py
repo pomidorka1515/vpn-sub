@@ -43,7 +43,7 @@ class TelegramPollingMixin:
         self.polling_thread = threading.Thread(
             target=self._poll_forever,
             daemon=True,
-            name=f"{type(self).__name__} Polling"
+            name=f"{type(self).__name__}" # 15-char comm limit
         )
         self.polling_thread.start()
 
