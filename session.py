@@ -6,15 +6,14 @@ import json
 
 from requests import Session, Response, Timeout, ConnectionError, RequestException
 from requests.structures import CaseInsensitiveDict
-from concurrent.futures import ThreadPoolExecutor, Future
 from loggers import Logger
 from custom_types import Inbound, RequestKwargs
 from protocols import JsonValue
 from errors import XUiSessionError
 
-from typing import Unpack, cast, Any, Mapping
+from typing import Unpack, cast, Any, Mapping, Protocol, Callable
 
-__all__ = ['XUiSession', 'XUiSessionError']
+__all__ = ['XUiSession', 'XUiPanelTransport', 'RequestsPanelTransport', 'XUiSessionError']
 
 _HEALTH_CHECK_TIMEOUT = 5.0
 _LOGIN_TIMEOUT = 10.0
@@ -24,57 +23,111 @@ _AUTH_BACKOFF_MAX = 15 * 60.0
 
 
 
-### ANY COUNTER: two. ###
-# mypy: disable-error-code="override"
-# mypy: disable-error-code="redundant-cast"
-# pyright: reportIncompatibleMethodOverride=false
-
 class _FakeResponse(Response):
     def __init__(self, json_data: Mapping[str, JsonValue], status_code: int):
         super().__init__()
         self._content = json.dumps(json_data).encode('utf-8')
         self.status_code = status_code
         self.headers = CaseInsensitiveDict({'Content-Type': 'application/json'})
-    
-class XUiSession(Session):
-    """Persistent X-UI Session. Supports basic auth, https, and more.
-    Please note that this should only be used in Subscripiton, nowhere else."""
-    def __init__(self,
-            name: str,
-            address: str,
-            port: int | str,
-            uri: str,
-            username: str,
-            password: str,
-            refresh_interval: int | float = 60,
-            https: bool = False,
-            nginx_auth: tuple[str, str] | None = None,  # nginx_auth=('user', 'pass')
-            ignore_inbounds: tuple[int, ...] = (),  # Can be empty
-            inject_headers: Mapping[str, str | bytes] | None = None,
-            maximum_concurrent_executors: int = 15,
-            health_check_interval: int = 20
+
+
+class XUiPanelTransport(Protocol):
+    """Transport used to communicate with a 3x-ui panel.
+
+    Implementations must support concurrent calls from client-managed threads.
+    """
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[RequestKwargs],
+    ) -> Response:
+        """Send a request and return the raw panel response."""
+        ...
+
+
+class RequestsPanelTransport:
+    """Transport around a wrapped ``requests.Session``.
+
+    The session is not modified or closed by this transport. ``requests.Session``
+    can generally be used concurrently for request submission, but callers sharing
+    a session remain responsible for its lifecycle and connection-pool limits.
+    """
+
+    def __init__(self, session: Session, auth: tuple[str, str] | None = None):
+        self._session: Session = session
+        self._auth: tuple[str, str] | None = auth
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[RequestKwargs],
+    ) -> Response:
+        if self._auth is not None:
+            kwargs.setdefault('auth', self._auth)
+        return self._session.request(method, url, **cast(Any, kwargs))
+
+
+class XUiSession:
+    """
+    3x-ui panel client with login refresh, health checks, and inbound caching.
+
+    Public methods may be called from multiple threads. Login and refresh state are serialized;
+    transport calls may run concurrently.
+    The health and refresh threads use the same synchronization as request threads.
+
+    Thread-safety and lifecycle:
+      - ``dead``, login state, and refresh scheduling are protected by internal locks.
+      - Cache reads return the stored list unchanged; callers must not mutate it.
+      - ``close`` stops client-managed threads and closes the default session. If a
+        transport or session is injected, its lifecycle remains the injector's
+        responsibility. Do not issue requests while or after ``close`` is running.
+      - Transport implementations must be safe for concurrent request submissions.
+    """
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        address: str,
+        port: int | str,
+        uri: str,
+        username: str,
+        password: str,
+        refresh_interval: int | float = 60,
+        https: bool = False,
+        nginx_auth: tuple[str, str] | None = None,
+        ignore_inbounds: tuple[int, ...] = (),
+        inject_headers: Mapping[str, str | bytes] | None = None,
+        health_check_interval: int = 20,
+        transport: XUiPanelTransport | None = None,
+        session: Session | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ):
-        """
+        """Initialize the panel client.
+
         Args:
             name: The display name for a panel.
             address: Hostname or IP of the panel.
             port: Port of the panel.
-            uri: The secret random path (e.g. https://your-panel.com/randompath/panel/api/login)
-            username: Username (internal)
-            password: Password (internal)
+            uri: The secret random path (e.g. your-panel.com/randompath/panel/api/login).
+            username: Username (internal).
+            password: Password (internal).
             refresh_interval: Interval in minutes, controls session refresh cycle.
-            https: set False for HTTP.
-            nginx_auth: External authentication (A.K.A. Basic Auth.). Format: ('username', 'password')
-            ignore_inbounds: A tuple of inbound IDs to permanently ignore.
-            inject_headers: Extra headers merged into every request. 
+            https: Set False for HTTP.
+            nginx_auth: External authentication (A.K.A. Basic Auth.), format ('username', 'password').
+            ignore_inbounds: Inbound IDs to permanently ignore.
+            inject_headers: Extra headers merged into every request.
                 Caller-supplied headers take precedence.
-            maximum_concurrent_executors: Maximum amount of asyncronous ThreadPoolExecutor functions
-                running at the same time. 
             health_check_interval: Interval in seconds between panel health checks.
+            transport: Replacement HTTP transport. If omitted, a transport is built around session.
+            session: Session used by the default transport. Defaults to a new ``requests.Session``.
+            clock: Monotonic clock used for cache, refresh, and backoff timing.
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            super().__init__()
             self.username = username
             self.password = password
             self.refresh_interval = refresh_interval
@@ -86,55 +139,59 @@ class XUiSession(Session):
             self.name = name
             self.local = self.address in ('localhost', '::1', '127.0.0.1', '0.0.0.0')
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
+
+            self._clock = clock
+            self._state_lock = threading.RLock()
             self._login_monotonic: float = 0
             self._login_retry_at: float = 0
             self._login_failures: int = 0
-            self._lock = threading.RLock()
+            self._refresh_started = False
             self._running = threading.Event()
             self._refresh_thread: threading.Thread | None = None
+
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
             self.cache_time: float = 0
             self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
-            
-            if maximum_concurrent_executors < 1:
-                raise ValueError("maximum_concurrent_executors must be more than 1")
-            elif maximum_concurrent_executors < 5:
-                self.log.warning("A small limit of thread executors makes asynchronous operations pointless. Consider raising it.")
-            
-            self._executor = ThreadPoolExecutor(max_workers=maximum_concurrent_executors, thread_name_prefix="3x-ui")
 
-            if nginx_auth:
-                self.auth = nginx_auth
+            self._session: Session | None = None
+            self._owns_session = session is None and transport is None
+            if transport is None:
+                self._session = session if session is not None else Session()
+                transport = RequestsPanelTransport(self._session, nginx_auth)
+            elif session is not None:
+                raise ValueError("pass either transport or session, not both")
+            self._transport = transport
 
             if health_check_interval < 1:
                 raise ValueError("health_check_interval must be more than 1")
             elif health_check_interval < 5:
-                self.log.warning("A low health_check_interval may cause lag. Proceed with caution.")
-            
+                self.log.warning("a low health_check_interval may cause lag. proceed with caution.")
+
             self._health_check_interval = health_check_interval
-            self._dead: bool = False
+            self._dead = False
             self._health_check_lock = threading.Lock()
-            self._health_check_thread = threading.Thread(target=self._health_check, name="3x-ui health check", daemon=True)
+            self._health_check_thread = threading.Thread(
+                target=self._health_check,
+                name="3x-ui health check",
+                daemon=True,
+            )
             self._health_check_event = threading.Event()
 
             self.login()
-
-            self._start_health_check_thread()
+            self._health_check_thread.start()
 
     @property
     def dead(self) -> bool:
         with self._health_check_lock:
             return self._dead
-    
+
     @dead.setter
     def dead(self, value: bool, /) -> None:
         with self._health_check_lock:
             self._dead = value
 
-    
     def _format_url(self, url: str, /) -> str:
-        # Strip /panel/ prefix from base_url since URLs passed are relative to it
         base = self.base_url.rstrip('/')
         panel_prefix = '/panel'
         if base.endswith(panel_prefix):
@@ -142,9 +199,6 @@ class XUiSession(Session):
         if not url.startswith(base):
             return f"{base}/{url.lstrip('/')}"
         return url
-    
-    def _start_health_check_thread(self) -> None:
-        self._health_check_thread.start()
 
     def _mark_dead(self, reason: str) -> None:
         with self._health_check_lock:
@@ -164,18 +218,20 @@ class XUiSession(Session):
         if was_dead:
             self.log.info(f"panel {self.name}: recovered")
 
+    def _health_request(self) -> Response:
+        return self._transport.request(
+            "GET",
+            self._format_url("panel/api/inbounds/list"),
+            headers=dict(self._inject_headers),
+            timeout=_HEALTH_CHECK_TIMEOUT,
+        )
+
     def _perform_health_check(self) -> None:
         try:
-            response = super().request(
-                "GET",
-                self._format_url("panel/api/inbounds/list"),
-                headers=dict(self._inject_headers),
-                timeout=_HEALTH_CHECK_TIMEOUT,
-            )
-
+            response = self._health_request()
             if response.status_code in (401, 403):
-                with self._lock:
-                    retry_backoff_active = time.monotonic() < self._login_retry_at
+                with self._state_lock:
+                    retry_backoff_active = self._clock() < self._login_retry_at
                 if retry_backoff_active:
                     self._mark_dead("authentication retry backoff active")
                     return
@@ -184,12 +240,7 @@ class XUiSession(Session):
                 except (RequestException, XUiSessionError) as error:
                     self._mark_dead(f"login failed: {error}")
                     return
-                response = super().request(
-                    "GET",
-                    self._format_url("panel/api/inbounds/list"),
-                    headers=dict(self._inject_headers),
-                    timeout=_HEALTH_CHECK_TIMEOUT,
-                )
+                response = self._health_request()
 
             if response.status_code != 200:
                 self._mark_dead(f"HTTP {response.status_code}")
@@ -212,98 +263,59 @@ class XUiSession(Session):
         while not self._health_check_event.wait(self._health_check_interval):
             self._perform_health_check()
 
-    def _request_core(
-        self,
-        method: str,
-        url: str,
-        **kwargs: Unpack[RequestKwargs],
-    ) -> Response:
-        """Custom behavior with ParamSpec signature forwarding."""
-        if self.dead:
-            return _FakeResponse(
-                {"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503
-            )
-
-        with self._lock:
-            if self._needs_refresh():
-                self.login()
-
-    
-        url = self._format_url(url)
-        kwargs["headers"] = {**cast(Any, kwargs.get("headers", {})), **self._inject_headers}
-        kwargs.setdefault("timeout", _DEFAULT_REQUEST_TIMEOUT)
-    
-        try:
-            return super().request(method, url, **cast(Any, kwargs)) # supress protocol mismatches
-        except Timeout:
-            self._mark_dead(f"timeout of {_DEFAULT_REQUEST_TIMEOUT:.0f} seconds exceeded")
-            return _FakeResponse(
-                {"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503
-            )
-        except ConnectionError as e:
-            self._mark_dead(f"connection error: {e}")
-            return _FakeResponse(
-                {"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503
-            )
-        except RequestException as e:
-            self._mark_dead(f"request error: {e}")
-            return _FakeResponse(
-                {"success": False, "msg": f"Panel {self.name} is down", "obj": None}, 503
-            )
-    
-    def request(self, method: str, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
-        return self._request_core(method, url, **kwargs)
-    
-    def _async_request_wrapper(
-        self,
-        log: bool,
-        method: str,
-        url: str,
-        **kwargs: Unpack[RequestKwargs],
-    ) -> Response:
-        """Executed inside the ThreadPoolExecutor to log failures without blocking."""
-        url_fixed = self._format_url(url)
-        # son im crine why is pyright blind here, dumb asf
-        # this is intentional tho
-        resp = self._request_core( # pyright: ignore[reportUnknownVariableType]
-            method=method,
-            url=url_fixed,
-            timeout=kwargs.pop('timeout', _DEFAULT_REQUEST_TIMEOUT),
-            **kwargs, # type: ignore[misc]
+    def _down_response(self, reason: str) -> Response:
+        return _FakeResponse(
+            {"success": False, "msg": f"Panel {self.name} is down: {reason}", "obj": None},
+            503,
         )
-        resp = cast(Response, resp)
-        if log:
-            if resp.status_code >= 500:
-                self.log.error(f"async request failed: HTTP {resp.status_code} on {url_fixed}")
-            elif resp.status_code >= 400:
-                self.log.warning(f"async request failed: HTTP {resp.status_code} on {url_fixed}")
-            try:
-                content = resp.json()
-                if not content.get('success'):
-                    self.log.error(f"async request failed: {content.get('msg')} on {url_fixed}")
-            except (json.JSONDecodeError, ValueError):
-                pass
-    
-        return resp
-    
-    def async_request(
+
+    def request(
         self,
         method: str,
         url: str,
-        log: bool,
         **kwargs: Unpack[RequestKwargs],
-    ) -> Future[Response]:
-        return self._executor.submit(self._async_request_wrapper, log, method, url, **kwargs)
-    
-    def post_async(self, url: str, log: bool = False, **kwargs: Unpack[RequestKwargs]) -> Future[Response]:
-        return self.async_request(method='POST', url=url, log=log, **kwargs)
-    
-    def get_async(self, url: str, log: bool = False, **kwargs: Unpack[RequestKwargs]) -> Future[Response]:
-        return self.async_request(method='GET', url=url, log=log, **kwargs)
+    ) -> Response:
+        if self.dead:
+            return self._down_response('unavailable')
+
+        with self._state_lock:
+            if self._needs_refresh():
+                try:
+                    self.login()
+                except (RequestException, XUiSessionError) as error:
+                    return self._down_response(str(error))
+
+        request_url = self._format_url(url)
+        kwargs['headers'] = {
+            **cast(Any, kwargs.get('headers', {})),
+            **self._inject_headers,
+        }
+        kwargs.setdefault('timeout', _DEFAULT_REQUEST_TIMEOUT)
+
+        try:
+            return self._transport.request(method, request_url, **cast(Any, kwargs))
+        except Timeout:
+            reason = f"timeout of {_DEFAULT_REQUEST_TIMEOUT:.0f} seconds exceeded"
+            self._mark_dead(reason)
+            return self._down_response(reason)
+        except ConnectionError as error:
+            reason = f"connection error: {error}"
+            self._mark_dead(reason)
+            return self._down_response(reason)
+        except RequestException as error:
+            reason = f"request error: {error}"
+            self._mark_dead(reason)
+            return self._down_response(reason)
+
+    def get(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
+        return self.request('GET', url, **kwargs)
+
+    def post(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
+        return self.request('POST', url, **kwargs)
 
     def login(self) -> None:
         self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui")
-        with self._lock:
+        with self._state_lock:
             if self._login_monotonic and not self._needs_refresh():
                 return
             try:
@@ -313,12 +325,12 @@ class XUiSession(Session):
                     **dict(self._inject_headers),
                     "Content-Type": "application/json",
                 }
-                response = super().request(
+                response = self._transport.request(
                     "POST",
                     login_url,
                     json=login_data,
                     headers=headers,
-                    timeout=_LOGIN_TIMEOUT
+                    timeout=_LOGIN_TIMEOUT,
                 )
 
                 if response.status_code in (401, 403):
@@ -330,27 +342,32 @@ class XUiSession(Session):
                 if not json_res.get("success"):
                     raise XUiSessionError(f"panel protocol error: {json_res.get('msg')}")
 
-                self._login_monotonic = time.monotonic()
+                self._login_monotonic = self._clock()
                 self._login_failures = 0
                 self._login_retry_at = 0
                 self.log.info(f"{self.address}:{self.port} > logged in as {self.username}")
 
-                if not self._running.is_set():
+                if not self._refresh_started:
                     self._start_refresh_thread()
 
-            except Exception as e:
-                if isinstance(e, XUiSessionError) and str(e).startswith("authentication failed:"):
+            except Exception as error:
+                if isinstance(error, XUiSessionError) and str(error).startswith("authentication failed:"):
                     self._login_failures += 1
-                    delay = min(_AUTH_BACKOFF_INITIAL * (2 ** (self._login_failures - 1)), _AUTH_BACKOFF_MAX)
-                    self._login_retry_at = time.monotonic() + delay
+                    delay = min(
+                        _AUTH_BACKOFF_INITIAL * (2 ** (self._login_failures - 1)),
+                        _AUTH_BACKOFF_MAX,
+                    )
+                    self._login_retry_at = self._clock() + delay
                 if self.dead:
                     self.log.debug(f"{self.address}:{self.port} > login failed", exc_info=True)
                 else:
                     self.log.critical(f"{self.address}:{self.port} > login failed", exc_info=True)
                 raise
-                
+
     def _start_refresh_thread(self) -> None:
         self._running.set()
+        self._refresh_started = True
+
         def refresh_loop() -> None:
             while self._running.wait(60):
                 if self._needs_refresh():
@@ -363,40 +380,41 @@ class XUiSession(Session):
                             f"{self.address}:{self.port} > session refresh failed",
                             exc_info=True,
                         )
+
         thread = threading.Thread(target=refresh_loop, daemon=True, name="3x-ui")
         self._refresh_thread = thread
         thread.start()
 
     def _needs_refresh(self) -> bool:
-        with self._lock:
+        with self._state_lock:
             if not self._login_monotonic:
                 return True
-            return (time.monotonic() - self._login_monotonic) > (self.refresh_interval * 60)
+            return (self._clock() - self._login_monotonic) > (self.refresh_interval * 60)
 
     @property
     def cache(self) -> list[Inbound] | None:
         with self._cache_lock:
             return self._cache
-            
+
     @cache.setter
     def cache(self, value: list[Inbound], /) -> None:
         with self._cache_lock:
             self._cache = value
-            self.cache_time = time.monotonic()
-    
+            self.cache_time = self._clock()
+
     def clear_cache(self) -> None:
         with self._cache_lock:
             self._cache = None
             self.cache_time = 0
 
     def close(self) -> None:
-        self._running.clear()
-        self._health_check_event.set()
-        if self._refresh_thread is not None and self._refresh_thread.is_alive():
-            self._refresh_thread.join(timeout=2)
-        if self._health_check_thread.is_alive():
+        with self._state_lock:
+            self._running.clear()
+            self._health_check_event.set()
+            refresh_thread = self._refresh_thread
+        if self._health_check_thread is not threading.current_thread():
             self._health_check_thread.join(timeout=2)
-        self._executor.shutdown(wait=True)
-        super().close()
-
-    
+        if refresh_thread is not None and refresh_thread is not threading.current_thread():
+            refresh_thread.join(timeout=2)
+        if self._owns_session and self._session is not None:
+            self._session.close()
