@@ -140,7 +140,7 @@ def _make_backup_thread(
 class Database:
     """Thread-safe SQLite repository for dynamic application state."""
 
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
 
     def __init__(
         self,
@@ -282,6 +282,7 @@ class Database:
                             username TEXT PRIMARY KEY,
                             uuid TEXT NOT NULL UNIQUE,
                             token TEXT NOT NULL UNIQUE,
+                            auth_token TEXT UNIQUE,
                             fingerprint TEXT NOT NULL,
                             displayname TEXT NOT NULL,
                             enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
@@ -297,6 +298,7 @@ class Database:
                             created_at INTEGER NOT NULL DEFAULT 0
                         )""",
                         "CREATE INDEX idx_users_token ON users(token)",
+                        "CREATE INDEX idx_users_auth_token ON users(auth_token)",
                         "CREATE INDEX idx_users_ext_username ON users(ext_username)",
                         """CREATE TABLE telegram_mappings (
                             telegram_id TEXT PRIMARY KEY,
@@ -354,6 +356,9 @@ class Database:
                         SET up = max(up, 0), down = max(down, 0),
                             wl_up = max(wl_up, 0), wl_down = max(wl_down, 0)"""
                     )
+                if version == 2:
+                    conn.execute("ALTER TABLE users ADD COLUMN auth_token TEXT")
+                    conn.execute("CREATE UNIQUE INDEX idx_users_auth_token ON users(auth_token)")
                 conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,))
                 conn.execute("COMMIT")
             except sqlite3.Error:
@@ -458,6 +463,21 @@ class Database:
         with self.connection() as conn:
             row = conn.execute("SELECT username FROM users WHERE token = ?", (token,)).fetchone()
             return str(row[0]) if row else None
+
+    def auth_token_to_user(self, auth_token: str) -> str | None:
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT username FROM users WHERE auth_token = ?", (auth_token,)
+            ).fetchone()
+            return str(row[0]) if row else None
+
+    def set_auth_token(self, username: str, auth_token: str | None) -> None:
+        with self.transaction(immediate=True) as conn:
+            cursor = conn.execute(
+                "UPDATE users SET auth_token = ? WHERE username = ?", (auth_token, username)
+            )
+            if cursor.rowcount != 1:
+                raise DatabaseError("failed to set auth token")
 
     def ext_to_user(self, ext_username: str) -> str | None:
         with self.connection() as conn:

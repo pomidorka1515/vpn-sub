@@ -10,6 +10,7 @@ import time
 import uuid
 import base64
 import binascii
+import secrets
 
 from functools import wraps
 from flask import Flask, Response, send_file, redirect, request, make_response, g
@@ -173,18 +174,18 @@ def requires_webapi_auth[**P, R](f: DecoratedInject[WebApi, str, P, R]) -> Decor
     Returns 401 on failure."""
     @wraps(f)
     def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
-        token = request.cookies.get('token')
-        username = self.validate_token(token)
+        auth_token = request.cookies.get('auth_token')
+        username = self.validate_auth_token(auth_token)
         if not username:
-            return err("Invalid token.", 401)
+            return err("Invalid auth token.", 401)
         return f(self, username, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
 def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P, R]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)
     def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
-        token = request.cookies.get('token')
-        if token and self.validate_token(token):
+        auth_token = request.cookies.get('auth_token')
+        if auth_token and self.validate_auth_token(auth_token):
             return err("Must not be authorized.", 403)
         return f(self, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
@@ -313,18 +314,29 @@ class WebApi(BaseApi):
             self.redirect_html = f.read()
         super().__init__(app, cfg, sub, bw, uri)
     
-    def validate_token(self, token: str | None = None) -> str | None:
-        def _v(t: str | None) -> str | None:
-            if not t or len(t) < 30:
+    def validate_auth_token(self, auth_token: str | None = None) -> str | None:
+        def _v(token: str | None) -> str | None:
+            if not token or len(token) != 100:
                 return None
-            x = self.sub.usertotoken(t)
-            if not isinstance(x, str):
-                return None
-            return x
-        if token is not None:
-            return _v(token)
-        else:
-            return _v(request.cookies.get('token'))
+            username = self.sub.auth_token_to_user(token)
+            return username if isinstance(username, str) else None
+
+        if auth_token is not None:
+            return _v(auth_token)
+        return _v(request.cookies.get('auth_token'))
+
+    @staticmethod
+    def _clear_auth_cookies(response: Response) -> None:
+        for name in ('auth_token', 'token'):
+            response.set_cookie(
+                name,
+                '',
+                max_age=0,
+                httponly=True,
+                secure=True,
+                samesite='Lax'
+            )
+
     def validate_credentials(self, username: str, password: str) -> str | bool:
         """Validate username+password. Returns internal username on success."""
         return self.sub.validate_credentials(username, password) or False
@@ -342,15 +354,15 @@ class WebApi(BaseApi):
         return response
 
     def gui_panel(self) -> ResponseType:
-        token = request.cookies.get('token')
-        if not self.validate_token(token):
+        auth_token = request.cookies.get('auth_token')
+        if not self.validate_auth_token(auth_token):
             return make_response(redirect('/sub/auth'))
         return send_file('res/dashboard.html', etag=False)
     def gui_auth(self) -> ResponseType:
         return send_file('res/auth.html', etag=False)
     def gui_history(self) -> ResponseType:
-        token = request.cookies.get('token')
-        if not self.validate_token(token):
+        auth_token = request.cookies.get('auth_token')
+        if not self.validate_auth_token(auth_token):
             return make_response(redirect('/sub/auth'))
         return send_file('res/history.html', etag=False)
     
@@ -416,29 +428,17 @@ class WebApi(BaseApi):
             return err("Account has no credentials set", 400)
         if self.sub.validate_credentials(cur_ext, current_password) != username:
             return err("Invalid current password", 401)
+        self.sub.set_auth_token(username, None)
         self.sub.delete_user(username=username, perma=True)
 
         resp, code = ok(msg="Deleted account")
-        resp.set_cookie(
-            'token',
-            '',
-            max_age=0,
-            httponly=True,
-            secure=True,
-            samesite='Lax'
-        )
+        self._clear_auth_cookies(resp)
         return resp, code
     @requires_webapi_auth
     def logout(self, username: str) -> ResponseType:
         resp, code = ok(msg="Logged out")
-        resp.set_cookie(
-            'token', 
-            '', 
-            max_age=0, 
-            httponly=True, 
-            secure=True, 
-            samesite='Lax'
-        )
+        self.sub.set_auth_token(username, None)
+        self._clear_auth_cookies(resp)
         return resp, code
     @requires_webapi_auth
     @requires_fields()
@@ -481,7 +481,9 @@ class WebApi(BaseApi):
     def reset(self, username: str) -> ResponseType:
         """Reset token and UUID (api wrapper)"""
         x = self.sub.reset_user(username)
-        return ok(obj=asdict(x))
+        resp, code = ok(obj=asdict(x))
+        self._clear_auth_cookies(resp)
+        return resp, code
     @requires_webapi_auth
     @requires_fields_strict(('code', str))
     def bonus(self, username: str) -> ResponseType:
@@ -554,12 +556,21 @@ class WebApi(BaseApi):
         internal = self.validate_credentials(content['username'], content['password'])
         if not isinstance(internal, str):
             return err("Invalid credentials.", 401)
-        token = self.sub.get_token(internal)
+        auth_token = secrets.token_hex(50)
+        self.sub.set_auth_token(internal, auth_token)
         r, code = ok(msg="Successful login", obj={"username": content['username']})
         r.set_cookie(
-            key='token',
-            value=token,
+            key='auth_token',
+            value=auth_token,
             max_age=30 * 24 * 3600,
+            httponly=True,
+            secure=True,
+            samesite='Lax'
+        )
+        r.set_cookie(
+            key='token',
+            value='',
+            max_age=0,
             httponly=True,
             secure=True,
             samesite='Lax'

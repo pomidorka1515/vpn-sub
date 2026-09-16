@@ -1,7 +1,7 @@
 # Public API Documentation  
   
 ## Introduction  
-Authentication: a cookie named 'token'.  
+Authentication: a cookie named 'auth_token'.  
 Cookie is httponly, samesite=lax, secure=True  
   
 ## Root URI (subject to change)  
@@ -22,7 +22,7 @@ Missing authorization:
 // HTTP 401  
 {  
     "success": false,  
-    "msg": "Invalid token.",  
+    "msg": "Invalid auth token.",  
     "obj": null  
 }  
 ```  
@@ -56,7 +56,7 @@ Errors use the same response shape and semantic HTTP status codes. Validation fa
 ### POST /register  
 Description: Register a new account with an invite code.  
 Rate limit: 5  
-Authentication: none (must NOT have a token cookie set)  
+Authentication: none (must NOT have an auth_token cookie set)  
 Body:  
 ```jsonc  
 {  
@@ -94,7 +94,7 @@ Response (error):
 ---  
   
 ### POST /login  
-Description: Log in using username and password. Sets a token cookie (30 days).  
+Description: Log in using username and password. Sets a separate auth_token cookie (30 days).  
 Rate limit: 10  
 Authentication: none  
 Body:  
@@ -106,7 +106,7 @@ Body:
 ```  
 Response (success):  
 ```jsonc  
-// HTTP 200, sets cookie 'token'  
+// HTTP 200, sets cookie 'auth_token'  
 {  
     "success": true,  
     "msg": "Successful login",  
@@ -208,7 +208,7 @@ Response (error):
 ---  
   
 ### POST /reset  
-Description: Reset your internal UUID and token. You will need to log in again after this!  
+Description: Reset your internal UUID and subscription token. Invalidates your auth_token; log in again.  
 Rate limit: 3  
 Authentication: cookie  
 Body: none  
@@ -265,7 +265,7 @@ Response (error):
 ---  
   
 ### POST /logout  
-Description: Log out and delete your cookie.  
+Description: Log out, invalidate your auth_token, and delete auth cookies.  
 Rate limit: 20  
 Authentication: cookie  
 Body: none  

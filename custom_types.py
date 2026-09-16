@@ -134,6 +134,7 @@ class UserRecord(TypedDict):
     username: str
     uuid: str
     token: str
+    auth_token: str | None
     fingerprint: str
     displayname: str
     enabled: int

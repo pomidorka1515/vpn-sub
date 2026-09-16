@@ -70,6 +70,49 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual([row["wl_up"] for row in rows], [7, 0])
         self.assertEqual([row["wl_down"] for row in rows], [8, 4])
 
+    def test_auth_token_migration_and_lookup(self) -> None:
+        self.db.close()
+        connection = sqlite3.connect(self.path)
+        connection.executescript(
+            """ALTER TABLE users RENAME TO old_users;
+            CREATE TABLE users (
+                username TEXT PRIMARY KEY,
+                uuid TEXT NOT NULL UNIQUE,
+                token TEXT NOT NULL UNIQUE,
+                fingerprint TEXT NOT NULL,
+                displayname TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+                enabled_time INTEGER NOT NULL DEFAULT 1 CHECK (enabled_time IN (0, 1)),
+                enabled_wl INTEGER NOT NULL DEFAULT 1 CHECK (enabled_wl IN (0, 1)),
+                expires_at INTEGER NOT NULL DEFAULT 0 CHECK (expires_at >= 0),
+                bw_limit_gb INTEGER NOT NULL DEFAULT 0 CHECK (bw_limit_gb >= 0),
+                bw_used INTEGER NOT NULL DEFAULT 0 CHECK (bw_used >= 0),
+                wl_limit_gb INTEGER NOT NULL DEFAULT 0 CHECK (wl_limit_gb >= 0),
+                wl_used INTEGER NOT NULL DEFAULT 0 CHECK (wl_used >= 0),
+                ext_username TEXT UNIQUE,
+                ext_password_hash TEXT,
+                created_at INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO users SELECT username, uuid, token, fingerprint, displayname,
+                enabled, enabled_time, enabled_wl, expires_at, bw_limit_gb, bw_used,
+                wl_limit_gb, wl_used, ext_username, ext_password_hash, created_at
+            FROM old_users;
+            DROP TABLE old_users;
+            UPDATE schema_version SET version = 2;"""
+        )
+        connection.close()
+
+        self.db = Database(path=str(self.path))
+        self.create_user()
+        record = self.db.get_user("alice")
+        assert record is not None
+        self.assertIsNone(record["auth_token"])
+        self.db.set_auth_token("alice", "a" * 100)
+        self.assertEqual(self.db.auth_token_to_user("a" * 100), "alice")
+        self.assertIsNone(self.db.auth_token_to_user("b" * 100))
+        self.db.set_auth_token("alice", None)
+        self.assertIsNone(self.db.auth_token_to_user("a" * 100))
+
     def test_user_constraints_reverse_lookups_and_deletion(self) -> None:
         token = "t" * 40
         self.create_user(token=token)
