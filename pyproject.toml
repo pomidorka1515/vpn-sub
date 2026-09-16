@@ -34,7 +34,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = [
-    "app", "api", "bots", "chart",
+    "app", "api", "bots", "chart", "builders",
     "config", "core", "bwatch", "custom_types", "db",
     "loggers", "session", "util", "errors", "protocols"
 ]
@@ -61,6 +61,7 @@ files = [
     "util.py",
     "errors.py",
     "protocols.py",
+    "builders.py",
     "tests/",
 ]
 
@@ -116,6 +117,7 @@ include = [
     "util.py",
     "errors.py",
     "protocols.py",
+    "builders.py",
     "tests/",
 ]
 typeCheckingMode = "strict"

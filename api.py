@@ -12,23 +12,21 @@ import base64
 import binascii
 
 from functools import wraps
-from flask import Flask, Response, jsonify, send_file, redirect, request, make_response, g
+from flask import Flask, Response, send_file, redirect, request, make_response, g
 from abc import ABC
 from typing import (
     cast, Callable, Literal, NamedTuple,
-    Sequence, Mapping,
     Concatenate
 )
 from dataclasses import asdict
 
 from protocols import ConfigLike, LinesConfigLike
-from util import SysUtil, parse_bool
+from util import SysUtil, parse_bool, ok, err, sanitize, compare
+
+from custom_types import HTTPMethod, JsonifyValue, ResponseType
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-type JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Sequence['JsonifyValue'] | tuple['JsonifyValue', ...] | None
-type HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
-type ResponseType = tuple[Response, int] | Response
 
 
 class Route(NamedTuple):
@@ -102,24 +100,6 @@ class BaseApi(ABC):
         pass
 
 
-def _ok(
-    msg: str | None = None,
-    code: int = 200,
-    obj: JsonifyValue = None
-) -> tuple[Response, int]:
-    """Internal helper function to return a successful Response."""
-    return jsonify({"success": True, "msg": msg, "obj": obj}), code
-
-def _err(
-    msg: str | None = None,
-    code: int = 400,
-    obj: JsonifyValue = None
-) -> tuple[Response, int]:
-    """Internal helper function to return an error Response."""
-    return jsonify({"success": False, "msg": msg, "obj": obj}), code
-
-
-
 
 type Decorated[
     API_T: BaseApi, 
@@ -168,8 +148,8 @@ def requires_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]
     @wraps(f)
     def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]: 
         provided = request.headers.get('Authorization', '')
-        if not provided or not self.sub.compare(provided, self.token):
-            return _err("Unauthorized", 401)
+        if not provided or not compare(provided, self.token):
+            return err("Unauthorized", 401)
         return f(self, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
 def requires_basic_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]:
@@ -184,7 +164,7 @@ def requires_basic_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api,
         if not creds:
             return err, 401
         user, pw = creds
-        if (not self.sub.compare(user, valid[0])) or (not self.sub.compare(pw, valid[1])):
+        if (not compare(user, valid[0])) or (not compare(pw, valid[1])):
             return err, 401
         return f(self, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
@@ -196,7 +176,7 @@ def requires_webapi_auth[**P, R](f: DecoratedInject[WebApi, str, P, R]) -> Decor
         token = request.cookies.get('token')
         username = self.validate_token(token)
         if not username:
-            return _err("Invalid token.", 401)
+            return err("Invalid token.", 401)
         return f(self, username, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
 def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P, R]:
@@ -205,7 +185,7 @@ def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P,
     def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
         token = request.cookies.get('token')
         if token and self.validate_token(token):
-            return _err("Must not be authorized.", 403)
+            return err("Must not be authorized.", 403)
         return f(self, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
 # ── Rate limiting ────────────────────────────────────────────────
@@ -228,7 +208,7 @@ def rate_limit[**P, R](max_requests: int) -> Callable[
                 self.rl_data.setdefault(ip, [])
                 self.rl_data[ip] = [t for t in self.rl_data[ip] if now - t < 60]
                 if len(self.rl_data[ip]) >= max_requests:
-                    return _err(msg="Too many requests.", code=429) 
+                    return err(msg="Too many requests.", code=429) 
                 self.rl_data[ip].append(now)
             return f(self, *args, **kwargs)
         return cast(DecoratedReturn[BaseApi, P, R], wrapper)
@@ -241,13 +221,13 @@ def requires_fields[**P, R](*fields: str) -> Callable[[Callable[P, R]], Callable
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
             content = request.get_json(silent=True)
             if content is None:
-                return _err("Missing JSON data.", 400)
+                return err("Missing JSON data.", 400)
             if not isinstance(content, dict):
-                return _err("Body must be a JSON dict.", 400)
+                return err("Body must be a JSON dict.", 400)
 
             missing = [x for x in fields if x not in content]
             if missing:
-                return _err(f"Missing fields: {', '.join(missing)}", 400)
+                return err(f"Missing fields: {', '.join(missing)}", 400)
 
             content = cast(dict[str, JsonifyValue], content) # NOTE: g.json_obj will appear
                                                              # NOTE: as dict[Unknown, Unknown] -> type errors without this
@@ -265,18 +245,18 @@ def requires_fields_strict[**P, R](*fields: tuple[str, type[JsonifyValue]]) -> C
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
             content = request.get_json(silent=True)
             if content is None:
-                return _err("Missing JSON data.", 400)
+                return err("Missing JSON data.", 400)
             if not isinstance(content, dict):
-                return _err("Body must be a JSON dict.", 400)
+                return err("Body must be a JSON dict.", 400)
             content = cast(dict[str, object], content)
 
             for field, expected_type in fields:
                 if field not in content:
-                    return _err(f"Missing field: {field}", 400)
+                    return err(f"Missing field: {field}", 400)
                 value = content[field]
                 # None is allowed for optional fields
                 if value is not None and not isinstance(value, expected_type):
-                    return _err(
+                    return err(
                         f"Field '{field}' must be {expected_type.__name__}, got {type(value).__name__}",
                         400
                     )
@@ -293,7 +273,7 @@ def requires_args[**P, R](*arg: str) -> Callable[[Callable[P, R]], Callable[P, W
             content = request.args
             missing = [x for x in arg if x not in content]
             if missing:
-                return _err(f"Missing args: {', '.join(missing)}", 400)
+                return err(f"Missing args: {', '.join(missing)}", 400)
             return f(*args, **kwargs)
         return cast(Callable[P, WrappedReturn[R]], wrapper)
     return decorator
@@ -351,9 +331,9 @@ class WebApi(BaseApi):
     def redirect_page(self) -> ResponseType:
         prefix = request.args.get('prefix', '')
         if not prefix.startswith(('happ://', 'v2ray', 'clash')):
-            return _err("Invalid prefix", 400)
+            return err("Invalid prefix", 400)
         if len(prefix) > 512:
-            return _err("Prefix too long", 400)
+            return err("Prefix too long", 400)
         return Response(self.redirect_html, mimetype='text/html')
 
     def common_js(self) -> ResponseType:
@@ -390,7 +370,7 @@ class WebApi(BaseApi):
         try:
             buf = self.sub.make_qr(link)
         except ValueError:
-            return _err("Invalid request", 400)
+            return err("Invalid request", 400)
 
         response = make_response(send_file(buf, mimetype='image/png'))
         response.headers['Cache-Control'] = 'private, max-age=300'
@@ -400,11 +380,11 @@ class WebApi(BaseApi):
         """Check if a username is valid (no illegal chars)"""
         raw = request.args.get('username', None)
         if not raw:
-            return _err("'username' field is missing")
-        sanitized = self.sub.sanitize(raw)
+            return err("'username' field is missing")
+        sanitized = sanitize(raw, "external")
         valid = raw == sanitized and len(raw) > 0
         taken = self.sub.external_username_exists(sanitized)
-        return _ok(obj={
+        return ok(obj={
             "MAX_LENGTH": 32,
             "valid": valid,
             "taken": taken,
@@ -414,7 +394,7 @@ class WebApi(BaseApi):
     def profiles(self, username: str) -> ResponseType:
         lang = request.args.get('lang')
         if lang not in ('ru', 'en'):
-            return _err("Unknown language", 400)
+            return err("Unknown language", 400)
 
         index = 0 if lang == 'en' else 1
         obj: dict[str, str] = {}
@@ -422,10 +402,10 @@ class WebApi(BaseApi):
             name = name[index]
             desc = self.cfg['profileDescriptions'][i_name][index]
             obj[name] = desc
-        return _ok(obj=obj)
+        return ok(obj=obj)
     @requires_webapi_auth
     def fps(self, username: str) -> ResponseType:
-        return _ok(obj=self.cfg['fingerprints'])
+        return ok(obj=self.cfg['fingerprints'])
     @requires_webapi_auth
     @requires_fields_strict(('current_password', str))
     def delete(self, username: str) -> ResponseType:
@@ -433,12 +413,12 @@ class WebApi(BaseApi):
         current_password: str = content.get('current_password')
         cur_ext = self.sub.get_external_username(username)
         if not cur_ext:
-            return _err("Account has no credentials set", 400)
+            return err("Account has no credentials set", 400)
         if self.sub.validate_credentials(cur_ext, current_password) != username:
-            return _err("Invalid current password", 401)
+            return err("Invalid current password", 401)
         self.sub.delete_user(username=username, perma=True)
 
-        resp, code = _ok(msg="Deleted account")
+        resp, code = ok(msg="Deleted account")
         resp.set_cookie(
             'token',
             '',
@@ -450,7 +430,7 @@ class WebApi(BaseApi):
         return resp, code
     @requires_webapi_auth
     def logout(self, username: str) -> ResponseType:
-        resp, code = _ok(msg="Logged out")
+        resp, code = ok(msg="Logged out")
         resp.set_cookie(
             'token', 
             '', 
@@ -473,22 +453,22 @@ class WebApi(BaseApi):
         current_password: str | None = content.get('current_password', None)
         if fingerprint:
             if fingerprint not in self.cfg['fingerprints']:
-                return _err("Unknown fingerprint")
+                return err("Unknown fingerprint")
         if displayname:
             if len(displayname) > 16:
-                return _err("displayname exceeds max. length of 16")
+                return err("displayname exceeds max. length of 16")
         if ext_username:
             if len(ext_username) > 32:
-                return _err("username exceeds max. length of 32")
+                return err("username exceeds max. length of 32")
         # credential changes require the current password (guards stolen cookies)
         if ext_username or ext_password:
             if not current_password:
-                return _err("current_password required to change credentials", 400)
+                return err("current_password required to change credentials", 400)
             cur_ext = self.sub.get_external_username(username)
             if not cur_ext:
-                return _err("Account has no credentials set", 400)
+                return err("Account has no credentials set", 400)
             if self.sub.validate_credentials(cur_ext, current_password) != username:
-                return _err("Invalid current password", 401)
+                return err("Invalid current password", 401)
         self.sub.update_params(
             username=username,
             ext_username=ext_username,
@@ -496,12 +476,12 @@ class WebApi(BaseApi):
             displayname=displayname,
             fingerprint=fingerprint
         )
-        return _ok()
+        return ok()
     @requires_webapi_auth
     def reset(self, username: str) -> ResponseType:
         """Reset token and UUID (api wrapper)"""
         x = self.sub.reset_user(username)
-        return _ok(obj=asdict(x))
+        return ok(obj=asdict(x))
     @requires_webapi_auth
     @requires_fields_strict(('code', str))
     def bonus(self, username: str) -> ResponseType:
@@ -512,12 +492,12 @@ class WebApi(BaseApi):
             username=username,
             code=cast(str, content["code"]),
         )
-        return _ok(obj=asdict(result))
+        return ok(obj=asdict(result))
     @requires_webapi_auth
     def stats(self, username: str) -> ResponseType:
         """Get user info from token"""
         x = self.sub.get_info(username)
-        return _ok(obj=asdict(x))
+        return ok(obj=asdict(x))
 
     @requires_webapi_auth
     def bandwidth_history(self, username: str) -> ResponseType:
@@ -525,10 +505,10 @@ class WebApi(BaseApi):
         try:
             days = int(request.args.get('days', 30))
         except (ValueError, TypeError):
-            return _err("'days' must be an integer")
+            return err("'days' must be an integer")
         days = max(1, min(days, 90))
         snapshots = self.sub.get_bw_history(username, days)
-        return _ok(obj=[asdict(s) for s in snapshots])
+        return ok(obj=[asdict(s) for s in snapshots])
 
 
     @requires_no_auth
@@ -547,13 +527,13 @@ class WebApi(BaseApi):
         raw_code: str = content.get('code')
 
         if not (1 <= len(raw_name) <= 16):
-            return _err("'name' must be 1-16 characters")
+            return err("'name' must be 1-16 characters")
         if not (1 <= len(raw_username) <= 32):
-            return _err("'username' must be 1-32 characters")
+            return err("'username' must be 1-32 characters")
         if not (1 <= len(raw_password) <= 128):
-            return _err("'password' must be 1-128 characters")
+            return err("'password' must be 1-128 characters")
         if not (1 <= len(raw_code) <= 64):
-            return _err("'code' must be 1-64 characters")
+            return err("'code' must be 1-64 characters")
         
         result = self.sub.register_with_code(
             code=raw_code,
@@ -562,7 +542,7 @@ class WebApi(BaseApi):
             ext_username=raw_username,
             ext_password=raw_password,
         )
-        return _ok("Created", 201, obj=asdict(result))
+        return ok("Created", 201, obj=asdict(result))
 
     @requires_fields_strict(
         ('username', str),
@@ -573,9 +553,9 @@ class WebApi(BaseApi):
         content = g.json_obj
         internal = self.validate_credentials(content['username'], content['password'])
         if not isinstance(internal, str):
-            return _err("Invalid credentials.", 401)
+            return err("Invalid credentials.", 401)
         token = self.sub.get_token(internal)
-        r, code = _ok(msg="Successful login", obj={"username": content['username']})
+        r, code = ok(msg="Successful login", obj={"username": content['username']})
         r.set_cookie(
             key='token',
             value=token,
@@ -636,8 +616,8 @@ class Api(BaseApi):
     def user_list(self) -> ResponseType: 
         users = self.sub.list_users()
         if not users:
-            return _ok(obj=[])
-        return _ok(obj=users)
+            return ok(obj=[])
+        return ok(obj=users)
         
     
     @requires_admin_auth
@@ -646,7 +626,7 @@ class Api(BaseApi):
         username = request.args['user']
         pretty = request.args.get('beautify', '').lower() in ('1', 'true', 'yes')
         x = self.sub.get_info(username=username, pretty=pretty)
-        return _ok(obj=asdict(x))
+        return ok(obj=asdict(x))
  
     @requires_admin_auth
     @requires_fields_strict(
@@ -673,16 +653,16 @@ class Api(BaseApi):
         for k, v in raw_data.items():
             if k in ('ext_username', 'ext_password', 'token', 'userid', 'fingerprint'):
                 if v is not None and not isinstance(v, str):
-                    return _err(f"{k} must be a string or null")
+                    return err(f"{k} must be a string or null")
                 data[k] = cast(str, v)
 
             elif k in ('limit', 'wl_limit', 'time'):
                 try:
                     data[k] = int(cast(str, v))
                 except (ValueError, TypeError):
-                    return _err(f"{k} must be an integer, got: {v}")
+                    return err(f"{k} must be an integer, got: {v}")
                 if cast(int, data[k]) < 0:
-                    return _err(f"{k} must be non-negative")
+                    return err(f"{k} must be non-negative")
 
         self.sub.add_new_user(
             username=cast(str, data['user']),
@@ -696,7 +676,7 @@ class Api(BaseApi):
             wl_limit=cast(int, data['wl_limit']),
             timee=cast(int, data['time'])
         )
-        return _ok("Created", 201)
+        return ok("Created", 201)
 
     @requires_admin_auth
     @requires_fields_strict(('user', str))
@@ -705,9 +685,9 @@ class Api(BaseApi):
         username: str = content.get('user')
         perma = parse_bool(content.get('perma', 'true'))
         if perma is None:
-            return _err("'perma' must be bool-like")
+            return err("'perma' must be bool-like")
         self.sub.delete_user(username, perma)
-        return _ok("Deleted")
+        return ok("Deleted")
 
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
@@ -720,25 +700,25 @@ class Api(BaseApi):
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)
         if failures and len(failures) == len(users):
-            return _err(
+            return err(
                 "Panel refresh failed for all users",
                 502,
                 {"failed": failures, "total": len(users)},
             )
         if failures:
-            return _ok(
+            return ok(
                 "Refresh completed with panel failures",
                 obj={"failed": failures, "succeeded": len(users) - len(failures), "total": len(users)},
             )
-        return _ok("Refreshed all users.")
+        return ok("Refreshed all users.")
     
     @requires_admin_auth
     def user_onlines(self) -> ResponseType:
         new = parse_bool(request.args.get('keyed', False))
         if new is None:
-            return _err("'keyed' must be bool-like")
+            return err("'keyed' must be bool-like")
         status = self.sub.get_online_status(new)
-        return _ok(obj={"users": status.users, "panel_health": status.panel_health})
+        return ok(obj={"users": status.users, "panel_health": status.panel_health})
 
     @requires_admin_auth
     @requires_fields_strict(('user', str))
@@ -746,7 +726,7 @@ class Api(BaseApi):
         content = g.json_obj
         username: str = content.get('user')
         x = self.sub.reset_user(username)
-        return _ok(obj=asdict(x))
+        return ok(obj=asdict(x))
             
     @requires_admin_auth
     def panel_status(self) -> ResponseType: 
@@ -760,20 +740,20 @@ class Api(BaseApi):
                 else:
                     _ = asdict(_)
                 result[panel.name] = _ if _ is not None else {"status": "unknown"}
-            return _ok(obj=result)
+            return ok(obj=result)
 
         for panel in self.sub.panels:
             if panel.name == query:
                 res = self.sub.getstatus(panel)
                 if res is None:
-                    return _err("getstatus() returned None; panel may be down")
-                return _ok(obj=asdict(res))
+                    return err("getstatus() returned None; panel may be down")
+                return ok(obj=asdict(res))
 
-        return _err("panel not found", 404)
+        return err("panel not found", 404)
     
     @requires_admin_auth
     def system_status(self) -> ResponseType:
-        return _ok(obj=asdict(SysUtil.full_info()))
+        return ok(obj=asdict(SysUtil.full_info()))
     
     @requires_admin_auth
     def full_info(self) -> ResponseType:
@@ -789,20 +769,20 @@ class Api(BaseApi):
             "host": asdict(SysUtil.full_info()),
             "panels": panels_data
         }
-        return _ok(obj=obj)
+        return ok(obj=obj)
         
     @requires_admin_auth
     def code_list(self) -> ResponseType: 
-        return _ok(obj=self.sub.list_code())
+        return ok(obj=self.sub.list_code())
     
     @requires_admin_auth
     @requires_args('code')
     def code_info(self) -> ResponseType:
         code = request.args.get('code')
         if not isinstance(code, str):
-            return _err("'code' must be a str")
+            return err("'code' must be a str")
         x = self.sub.get_code(code)
-        return _ok(obj=asdict(x))
+        return ok(obj=asdict(x))
     
     @requires_admin_auth
     @requires_fields_strict(
@@ -831,25 +811,25 @@ class Api(BaseApi):
                 case 'permanent':
                     parsed = parse_bool(v)
                     if parsed is None:
-                        return _err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
+                        return err(f"{k} must be boolean-like (true/false, yes/no, 1/0)")
                     data[k] = parsed
 
                 case 'days' | 'gb' | 'wl_gb' | 'uses':
                     try:
                         data[k] = int(cast(str, v))
                     except (ValueError, TypeError):
-                        return _err(f"{k} must be an integer, got: {v}")
+                        return err(f"{k} must be an integer, got: {v}")
 
                 case 'name' | 'action':
                     if not isinstance(v, str):
-                        return _err(f"{k} must be a string, got: {v}")
+                        return err(f"{k} must be a string, got: {v}")
                     data[k] = v
 
         if data['action'] not in ('register', 'bonus'):
-            return _err("action must be 'register' or 'bonus'")
+            return err("action must be 'register' or 'bonus'")
 
         if cast(int, data['days']) < 0 or cast(int, data['gb']) < 0 or cast(int, data['wl_gb']) < 0:
-            return _err("days, gb, and wl_gb must be non-negative")
+            return err("days, gb, and wl_gb must be non-negative")
 
         self.sub.add_code(
             code=cast(str, data['name']),
@@ -860,7 +840,7 @@ class Api(BaseApi):
             wl_gb=cast(int, data['wl_gb']),
             uses=cast(int, data['uses'])
         )
-        return _ok("Created", 201)
+        return ok("Created", 201)
 
     @requires_admin_auth
     @requires_fields_strict(('code', str))
@@ -868,20 +848,20 @@ class Api(BaseApi):
         content = g.json_obj
         name: str = content.get('code')
         self.sub.delete_code(name)
-        return _ok("Deleted")
+        return ok("Deleted")
 
     @requires_admin_auth
     def audit(self) -> ResponseType:
         n = request.args.get('n', 50, type=int)
     
         if n < 0:
-            return _err("'n' arg must be a positive integer, or 0 for the whole file")
+            return err("'n' arg must be a positive integer, or 0 for the whole file")
     
         if n == 0:
-            return _ok(obj=self.audit_cfg.read_all())
+            return ok(obj=self.audit_cfg.read_all())
     
         result = list(self.audit_cfg.tail(n))
-        return _ok(obj=result)
+        return ok(obj=result)
     
     @requires_admin_auth
     @requires_fields_strict(('cutoff', int))
@@ -891,10 +871,10 @@ class Api(BaseApi):
         cutoff: int = content.get('cutoff')
 
         if cutoff < 0:
-            return _err("cutoff param must be higher than 0", 400)
+            return err("cutoff param must be higher than 0", 400)
         
         obj = self.sub.get_snapshots(cutoff)
-        return _ok(obj=[asdict(s) for s in obj])
+        return ok(obj=[asdict(s) for s in obj])
     
     @requires_admin_auth
     @requires_fields_strict(
@@ -912,7 +892,7 @@ class Api(BaseApi):
         flip: bool = content.get('flip')
 
         if category not in ('total', 'monthly', 'wl_monthly'):
-            return _err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
+            return err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
 
         data = self.sub.leaderboard(
             category=category,
@@ -920,7 +900,7 @@ class Api(BaseApi):
             use_displaynames=use_displaynames,
             flip=flip
         )
-        return _ok(obj=[
+        return ok(obj=[
             {"place": i, "username": user, "amount": amount}
             for i, (user, amount) in enumerate(data.items(), start=1)
         ])
@@ -930,11 +910,11 @@ class Api(BaseApi):
         return send_file('res/admin.html', etag=False)
     
     def health(self) -> ResponseType:
-        return _ok()
+        return ok()
 
     @requires_admin_auth
     def operation_status(self) -> ResponseType:
-        return _ok(obj={
+        return ok(obj={
             "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
             "rollback_failures": self.sub.get_rollback_failures(),
         })
@@ -950,8 +930,8 @@ class Api(BaseApi):
         elif kind_value == 'registration':
             self.sub.clear_rollback_failure('registration', username)
         else:
-            return _err("kind must be 'uuid' or 'registration'")
-        return _ok("Resolved")
+            return err("kind must be 'uuid' or 'registration'")
+        return ok("Resolved")
 
     def teapot(self) -> ResponseType:
-        return _err("I'm a teapot", 418, obj={"teapot": True}) # is it really an error?
+        return err("I'm a teapot", 418, obj={"teapot": True}) # is it really an error?

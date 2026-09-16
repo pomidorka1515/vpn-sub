@@ -16,26 +16,22 @@ from session import XUiSession
 from db import Database
 
 import hashlib
-import hmac
-import re
 import json
 import string
 import random
 import uuid
 import time
-import copy
 import base64
-import urllib.parse
-import sys
 import io
 import qrcode
+import platform
 import secrets
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 from flask import Flask, Response, request
 from datetime import datetime, timezone
-from typing import Any, cast, NamedTuple, overload, Literal
+from typing import cast, NamedTuple, overload, Literal
 from dacite import from_dict, Config as DConfig
 from custom_types import (
     ServerMetricsResponse, Inbound, 
@@ -53,33 +49,22 @@ from protocols import (
     ConfigLike, LinesConfigLike,
     JsonValue
 )
-from util import format, fmt_bytes
+from builders import *
+from util import err, isuuid, isbrowser, compare, sanitize
 from dataclasses import asdict
 from collections.abc import Mapping
-from collections import deque
 
 # pyright: reportUnnecessaryIsInstance=false
 
 __all__ = [
     "Subscription",
-    "OnlineStatus",
-    "SERVER_TZ"
+    "OnlineStatus"
 ]
 
-nginx_404 = (
-    "<html>\r\n"
-    "<head><title>404 Not Found</title></head>\r\n"
-    "<body>\r\n"
-    "<center><h1>404 Not Found</h1></center>\r\n"
-    "<hr><center>nginx/1.29.8</center>\r\n"
-    "</body>\r\n"
-    "</html>\r\n"
-)
-
-if sys.platform != 'linux':
+if platform.system().lower() != 'linux': # avoid pylance static evaluation
     raise UnsupportedPlatformError()
 
-SERVER_TZ = timezone.utc
+RATIO: float = 1.073741824 # GiB to GB
 AUDIT_VALUES = Literal[
     'sub_hit',
     'user_refresh', 'user_delete', 'user_reset',
@@ -119,13 +104,7 @@ class Subscription:
             self.whitelist_panel: XUiSession | None  = whitelist_panel
             self.uri: str = cfg['uri']
             self.fps: list[str] = self.cfg['fingerprints']
-            self.nginx404: str = nginx_404
-            self.resp = Response(self.nginx404, status=404, mimetype='text/html')
-            self.BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')
-            self.RATIO: float = 1.073741824 # GiB to GB
-            self.FILTERS: dict[str, str] = {
-                'displayname': ':;"\'?/<>{}[]*&^%$#@\\|',
-            }
+
             self.panels: list[XUiSession] = list(panels)
             self.SALT: str = self.cfg['salt']
             self.password_hasher = PasswordHasher()
@@ -138,7 +117,7 @@ class Subscription:
 
     def register_routes(self) -> None:
         @self.app.route(f"/{self.uri}", strict_slashes=False)
-        def _sub() -> Response: # pyright: ignore[reportUnusedFunction]
+        def _sub() -> tuple[Response, int]:
             return self.get_subscription(
                 token=request.args.get('token', ''),
                 lang=request.args.get('lang', ''),
@@ -172,28 +151,10 @@ class Subscription:
             "info": info
         }
         self.audit_cfg.append(record=to_log)
-    @staticmethod
-    def compare(a: str, b: str) -> bool:
-        return hmac.compare_digest(a, b)
     
-    @staticmethod
-    def isuuid(s: str) -> bool:
-        """Validate a UUID."""
-        try:
-            val = uuid.UUID(s, version=4)
-            return str(val) == s.lower()
-        except ValueError:
-            return False
     
-    def isbrowser(self, ua: str) -> bool:
-        """Parse a User-Agent against a regex to detect if it is a browser."""
-        return bool(self.BROWSER_UA.search(ua))
-
-    @staticmethod
-    def sanitize(s: str) -> str:
-        """Sanitize an external username"""
-        s = s[:32]
-        return re.sub(r'[^A-Za-z0-9_\-]', '', s)
+    
+    
 
     def usertotoken(self, token: str) -> str | None:
         """Get a username from a token, None if doesnt exist."""
@@ -249,7 +210,7 @@ class Subscription:
                 )
                 return None
         else:
-            if self.compare(stored, self.legacy_hash(password)):
+            if compare(stored, self.legacy_hash(password)):
                 self.db.set_user(username, ext_password=self.hash(password))
                 return username
             return None
@@ -659,15 +620,15 @@ class Subscription:
         """Adds a new user. Raises a domain error if any argument is incorrect.
         Now also suppports ext username and password (optional)"""
         if ext_username:
-            ext_username = self.sanitize(ext_username)
             if len(ext_username) > 32:
                 raise ValidationError("Ext Username too long")
+            ext_username = sanitize(ext_username, "external")
         if token is None:
             token = secrets.token_urlsafe(40)
         if userid is None:
             userid = str(uuid.uuid4())
         else:
-            if not self.isuuid(userid):
+            if not isuuid(userid):
                 raise ValidationError("Invalid UUID")
         if fingerprint is None:
             fingerprint = random.choice(self.fps)
@@ -681,10 +642,10 @@ class Subscription:
         else:
             ext_username = None
 
-
-        displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
+        
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
+        displayname = sanitize(displayname, "display")
         try:
             self.db.create_user(
                 username=username, uuid=userid, token=token, fingerprint=fingerprint,
@@ -742,9 +703,9 @@ class Subscription:
         if displayname is None:
             displayname = str(current["displayname"])
         else:
-            displayname = displayname.translate(str.maketrans('', '', self.FILTERS['displayname']))
             if len(displayname) > 16:
                 raise ValidationError("Displayname too long")
+            displayname = sanitize(displayname, "display")
             audit_info['displayname'] = displayname
         token = token if token is not None else str(current["token"])
         if fingerprint is None:
@@ -762,9 +723,9 @@ class Subscription:
         if ext_username is None:
             ext_username = str(old_ext) if old_ext is not None else None
         else:
-            ext_username = self.sanitize(ext_username)
             if len(ext_username) > 32:
                 raise ValidationError("Username too long")
+            ext_username = sanitize(ext_username, "external")
             audit_info['ext_username'] = ext_username
         if ext_password is None:
             password_hash = current["ext_password_hash"]
@@ -837,7 +798,7 @@ class Subscription:
     def update_uuid(self, username: str, uid: str) -> None:
         """Seperate method for updating the UUID.
         Potentially dangerous operation, seperate function."""
-        if not self.isuuid(uid):
+        if not isuuid(uid):
             raise ValidationError("Invalid UUID")
         olduid = str(self._user(username)["uuid"])
         successful: list[tuple['XUiSession', int, SettingsClient, bool]] = []
@@ -909,19 +870,18 @@ class Subscription:
             raise ValidationError("Invalid username")
         if not ext_password or not isinstance(ext_password, str):
             raise ValidationError("Invalid password")
-    
-        ext_username = self.sanitize(ext_username)
+
+        
+        ext_username = sanitize(ext_username, "external")
         if not ext_username:
             raise ValidationError("Invalid username")
         if len(ext_username) > 32:
             raise ValidationError("Ext Username too long")
-    
-        displayname = displayname.translate(
-            str.maketrans("", "", self.FILTERS.get("displayname", ""))
-        )
+
+        
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
-    
+        displayname = sanitize(displayname, "display")
         token = secrets.token_urlsafe(40)
         userid = str(uuid.uuid4())
         fingerprint = random.choice(self.fps)
@@ -1252,77 +1212,67 @@ class Subscription:
         ua: str, 
         ip: str,
         force_json: str
-    ) -> Response:
+    ) -> tuple[Response, int]:
         """You alredy know what this is."""
         if not token:
-            return self.resp
+            return err("Invalid token.", 401)
         username = self.usertotoken(token)
         self.audit(name='sub_hit', info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json})
         
         if not username:
-            return self.resp
+            return err("Invalid token.", 401)
         if lang not in ("ru", "en"):
-            return self.resp
+            return err("Invalid token.", 401)
+
+        if isbrowser(ua=ua):
+            return Response(self.browser_html, mimetype="text/html"), 403
+        
         bandwidths = self.bandwidth(username)
 
         cfg = self.cfg.copy()
         lang_cfg = self.lang_cfg.copy()
         user = self._user(username)
         
-        browser = self.isbrowser(ua=ua)
         displayname = str(user['displayname'])
         need_dummy_link = "v2rayn" in ua.lower() or "v2rayng" in ua.lower()
         is_happ = ua.startswith("Happ/")
-        mimetype = "text/plain" if not browser else "text/html"
         uri: str = cfg['uri']
-        if browser:
-            return Response(self.browser_html, mimetype=mimetype)
 
         status = bool(user['enabled'])
         statusTime = bool(user['enabled_time'])
         statusWl = bool(user['enabled_wl'])
         times = int(user['expires_at'])
         sub_name: str = cfg['sub_name']
-        userinfo = "upload={upload};download={download};total={total};expire={expire}"
 
-        desc = self._build_description(
-            lang_cfg=lang_cfg,
-            username=username,
-            name=displayname,
-            lang=lang,
-            bandwidths=bandwidths,
-            status=status,
-            statusTime=statusTime,
-            ts=times,
-            bw_limit=int(user['bw_limit_gb']),
-            bw_used=int(user['bw_used']),
-            wl_limit=int(user['wl_limit_gb']),
-            wl_used=int(user['wl_used']),
-        )
-        announce = f"base64:{base64.b64encode(desc.encode('utf-8')).decode('utf-8')}"
-        if status:
-            upload = str(bandwidths[0]) if int(user['bw_limit_gb']) == 0 else str(int(int(user['bw_used']) / 2 * self.RATIO))
-            download = str(bandwidths[1]) if int(user['bw_limit_gb']) == 0 else str(int(int(user['bw_used']) / 2 * self.RATIO))
-            total = "0" if int(user['bw_limit_gb']) == 0 else str(int(int(user['bw_limit_gb']) * 10**9 * self.RATIO))
+        desc = f"base64:{base64.b64encode(
+            build_description(
+                lang_cfg=lang_cfg,
+                name=displayname,
+                lang=lang,
+                bandwidths=bandwidths,
+                status=status,
+                statusTime=statusTime,
+                ts=times,
+                bw_limit=int(user['bw_limit_gb']),
+                bw_used=int(user['bw_used']),
+                wl_limit=int(user['wl_limit_gb']),
+                wl_used=int(user['wl_used']),
+            ).encode('utf-8')).decode('utf-8')}"
+
+        total = int(user['bw_limit_gb']) * 10**9 * RATIO
+        if status and not total:
+            upload, download = bandwidths[:2]
         else:
-            upload = str(int(int(user['bw_limit_gb']) * 10**9 / 2 * self.RATIO))
-            download = str(int(int(user['bw_limit_gb']) * 10**9 / 2 * self.RATIO))
-            total = str(int(int(user['bw_limit_gb']) * 10**9 * self.RATIO))
-        expire = str(times)
-
-        userinfo = userinfo.format(
-            upload=upload,
-            download=download,
-            total=total,
-            expire=expire
-        )
+            upload = download = (int(user['bw_used']) * RATIO if status else total) / 2
         
+        userinfo = f"upload={upload:.0f};download={download:.0f};total={total:.0f};expire={times:.0f}"
+
         headers: dict[str, str] = {
             'Profile-Title': sub_name,
             'Subscription-Userinfo': userinfo,
             'profile-update-interval': "1",
             'X-If-Youre-Reading-This': 'Your-Subscription-Has-Been-Revoked',
-            'announce': announce,
+            'announce': desc,
             'Content-Type': "text/plain"
         }
 
@@ -1354,36 +1304,11 @@ class Subscription:
 
         ### Content Generation ###
 
-        mode: Literal['b64', 'json'] = 'b64'
-
         if is_happ or force_json == '1':
-            mode = 'json'
-        else:
-            mode = 'b64'
-
-        if mode == 'b64':
-            # Backwards compat, TODO: remove this entirely
-            if is_happ: headers['routing'] = f"happ://routing/onadd/{base64.b64encode(json.dumps(cfg['routing']).encode('utf-8')).decode('utf-8')}"
-            payload = self._build_link_array(
-                cfg=cfg,
-                status=status,
-                statusWl=statusWl,
-                lang=lang,
-                username=username,
-                bandwidths=bandwidths,
-                user_uuid=user_uuid,
-                is_happ=is_happ,
-                need_dummy_link=need_dummy_link,
-                fingerprint=str(user['fingerprint'])
-            )
-            return Response(payload, mimetype=mimetype, headers=headers)
-        
-        elif mode == 'json':
             headers['Content-Type'] = 'application/json'
-            json_payload = self._build_json(
+            json_payload = build_json(
                 cfg=cfg,
                 user_uuid=user_uuid,
-                username=username,
                 lang=lang,
                 fingerprint=str(user['fingerprint'])
             )
@@ -1391,242 +1316,19 @@ class Subscription:
                 response=json.dumps(json_payload, ensure_ascii=False),
                 mimetype='application/json; charset=utf-8',
                 headers=headers
-            )
+            ), 200
 
-    @staticmethod
-    def _build_description(
-        lang_cfg: dict[str, Any],
-        username: str,
-        name: str,
-        lang: str,
-        bandwidths: BandwidthInfo, 
-        status: bool,
-        statusTime: bool,
-        ts: int,
-        bw_limit: int,
-        bw_used: int,
-        wl_limit: int,
-        wl_used: int,
-    ) -> str:
-        descTable: dict[str, str] = lang_cfg['description'][lang]
-
-        if status:
-            desc = descTable["main"]
-
-            desc = format(
-                desc,
-                up=fmt_bytes(int(bandwidths.upload)),
-                down=fmt_bytes(int(bandwidths.download))
-            )
-            
-            if ts != 0:
-                ts_str = descTable["date"]
-                ts_str = format(
-                    ts_str,
-                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)"),
-                    days=str((ts - int(time.time())) // 86400)
-                )
-
-                desc = format(
-                    desc,
-                    slot_time=ts_str
-                )
-            else:
-                desc = format(
-                    desc,
-                    slot_time=""
-                )
-            
-            if bw_limit != 0:
-                bw_limit_str = descTable["bw"]
-                bw_limit_str = format(
-                    bw_limit_str,
-                    used=fmt_bytes(bw_used),
-                    limit=f"{str(bw_limit)}GB"
-                )
-                desc = format(
-                    desc,
-                    slot_bw=bw_limit_str
-                )
-            else:
-                desc = format(
-                    desc,
-                    slot_bw=""
-                )
-
-            if wl_limit != 0:
-                if wl_used > wl_limit * 10**9:
-                    wl_bw_str = descTable["wl_bw_exceeded"]
-                else:
-                    wl_bw_str = descTable["wl_bw"]
-                
-                wl_bw_str = format(
-                    wl_bw_str,
-                    used=fmt_bytes(wl_used),
-                    limit=f"{str(wl_limit)}GB"
-                )
-                desc = format(
-                    desc,
-                    slot_wl_bw=wl_bw_str
-                )
-            else:
-                desc = format(
-                    desc,
-                    slot_wl_bw=""
-                )
-                 
         else:
-            if bw_limit == 0:
-                desc = descTable["main"]
-
-                desc = format(
-                    desc,
-                    up=fmt_bytes(int(bandwidths.upload)),
-                    down=fmt_bytes(int(bandwidths.download)),
-
-                    # aren't needed here
-                    slot_bw="",
-                    slot_wl_bw=""
-                )
-            else:
-                desc = descTable["main_exceeded"]
-                desc = format(
-                    desc,
-                    up=fmt_bytes(int(bandwidths.upload)),
-                    down=fmt_bytes(int(bandwidths.download)),
-                    used=fmt_bytes(bw_used),
-                    limit=f"{str(bw_limit)}GB"
-                )
-            
-            if not statusTime:
-                time_str = descTable["date_expired"]
-                time_str = format(
-                    time_str,
-                    date=datetime.fromtimestamp(ts, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)"),
-                    days=str(-(ts - int(time.time())) // 86400)
-                )
-
-                desc = format(
-                    desc,
-                    slot_time=time_str
-                )
-            else:
-                desc = format(
-                    desc,
-                    slot_time=""
-                )
-
-        final = format(desc, username=name)
-        if "{" in final:
-            raise ValueError("formatted description contains unformatted placeholders")
-
-        return final
-
-    @staticmethod
-    def _build_link_array(
-        cfg: dict[str, Any],
-        status: bool,
-        statusWl: bool,
-        lang: str,
-        username: str,
-        is_happ: bool,
-        user_uuid: str,
-        bandwidths: BandwidthInfo,
-        need_dummy_link: bool,
-        fingerprint: str,
-    ) -> str:
-        """Build a base64-encoded link array."""
-        generated_links: deque[str] = deque()
-
-        for p_key, p_name in cfg['profiles'].items():
-            if p_key in cfg['whitelistProfiles'] and not statusWl:
-                continue
-            if not status:
-                break
-            link: str = cfg['masterLinks'][p_key]
-            flag: str = cfg['flags'][p_key] if is_happ else ""
-            node: str = cfg['profileNodes'][p_key]
-            domain: str = cfg['nodes'][node]
-            name: str = flag + p_name[0 if lang == "en" else 1]
-            link = link.replace("DOMAIN", domain)
-            link = link.replace("FINGERPRINT", fingerprint)
-            link = link.replace("UUID", user_uuid)
-            link = link.replace("NAME", name)
-            if "EXTRA" in link:
-                extra_data = cfg['xhttpExtra'].get(p_key)
-                if extra_data:
-                    json_str = json.dumps(extra_data, separators=(',', ':'))
-                    encoded_extra = urllib.parse.quote(json_str)
-                    link = link.replace("EXTRA", encoded_extra)
-                else:
-                    link = link.replace("extra=EXTRA&", "").replace("&extra=EXTRA", "").replace("extra=EXTRA", "")
-            generated_links.append(link)
-
-        if need_dummy_link:
-            dt = "Bandwidth: " if lang == "en" else "Трафик: "
-            dt = urllib.parse.quote(
-                dt + "↑ {up} / ↓ {down}".format(
-                    up=fmt_bytes(bandwidths.upload),
-                    down=fmt_bytes(bandwidths.download)
-                )
+            payload = build_link_array(
+                cfg=cfg,
+                status=status,
+                statusWl=statusWl,
+                lang=lang,
+                bandwidths=bandwidths,
+                user_uuid=user_uuid,
+                is_happ=is_happ,
+                need_dummy_link=need_dummy_link,
+                fingerprint=str(user['fingerprint'])
             )
-            generated_links.appendleft(
-                f"vless://0@localhost:1?type=tcp&security=none#{dt}"
-            )
+            return Response(payload, mimetype="text/plain", headers=headers), 200
 
-        raw_text = "\n".join(generated_links)
-
-        return base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
-    
-    @staticmethod
-    def _build_json(
-        cfg: dict[str, Any],
-        user_uuid: str,
-        username: str,
-        lang: str,
-        fingerprint: str,
-    ) -> list[dict[str, object]]:
-        """Build an array of profiles for Happ."""
-        obj: list[dict[str, object]] = []
-        template: dict[str, object] = cfg['json_template']
-        index: Literal[0, 1] = 0 if lang == "en" else 1 # Language index
-
-        for p_key, p_name_list in cfg['profiles'].items():
-            flag: str = cfg['flags'][p_key]
-            p_name_raw: str = p_name_list[index]
-            p_name: str = flag + p_name_raw
-            node: str = cfg['profileNodes'][p_key]
-            domain: str = cfg['nodes'][node]
-            short_desc: str = cfg['shortProfileDescriptions'][p_key][index]
-            is_reality: bool = False
-            result: dict[str, Any] = copy.deepcopy(template)
-            result['remarks'] = p_name
-            result['outbounds'][0] = cfg['json_profiles'][p_key]
-            result['outbounds'][0]['settings']['vnext'][0]['users'][0]['id'] = user_uuid
-            result['outbounds'][0]['settings']['vnext'][0]['address'] = domain
-            if result['outbounds'][0]['streamSettings'].get('tlsSettings', None) is not None:
-                result['outbounds'][0]['streamSettings']['tlsSettings']['serverName'] = domain
-                result['outbounds'][0]['streamSettings']['tlsSettings']['fingerprint'] = fingerprint
-            if result['outbounds'][0]['streamSettings'].get('realitySettings', None) is not None:
-                is_reality = True
-                result['outbounds'][0]['streamSettings']['realitySettings']['fingerprint'] = fingerprint
-            if result['outbounds'][0]['streamSettings'].get('xhttpSettings', None) is not None:
-                if not is_reality:
-                    result['outbounds'][0]['streamSettings']['xhttpSettings']['host'] = domain
-            if result['outbounds'][0]['streamSettings'].get('grpcSettings', None) is not None:
-                if not is_reality:
-                    result['outbounds'][0]['streamSettings']['grpcSettings']['authority'] = domain
-            if result['outbounds'][0]['streamSettings'].get('wsSettings', None) is not None:
-                wsSettings: dict[str, Any] = result['outbounds'][0]['streamSettings']['wsSettings']
-                wsSettings.setdefault('headers', {})
-                wsSettings['host'] = domain
-                wsSettings['headers']['Host'] = domain
-            if result['outbounds'][0]['streamSettings'].get('httpupgradeSettings', None) is not None:
-                httpupgradeSettings: dict[str, object] = result['outbounds'][0]['streamSettings']['httpupgradeSettings']
-                httpupgradeSettings['host'] = domain
-            meta = result.setdefault('meta', {})
-            meta['serverDescription'] = short_desc # NOTE: this only works if you have a providerid,
-                                                   # NOTE: but we set it regardless
-            obj.append(result)
-        
-        return obj

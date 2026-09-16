@@ -4,7 +4,7 @@
     "description": "Static deployment and presentation settings. Mutable user, quota, code, notification, Telegram, and snapshot state is stored in SQLite.",
     "type": "object",
     "required": [
-        "uri", "api_token", "api_admin_ui_auth", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot", "routing",
+        "uri", "api_token", "api_admin_ui_auth", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot",
         "json_template", "bypass_packages", "domain", "ping_check_url",
         "publicbot", "3xui", "sub_name", "flags",
         "profiles", "json_profiles", "profileDescriptions", "whitelistProfiles",
@@ -61,21 +61,6 @@
                     "default": [],
                     "items": { "type": "integer" }
                 }
-            }
-        },
-
-        "routing": {
-            "type": "object",
-            "description": "Happ routing object. Leave blank to disable.",
-            "default": {},
-            "required": ["Name", "GlobalProxy", "DomainStrategy", "DirectSites", "DirectPackages", "DirectIp"],
-            "properties": {
-                "Name": { "type": "string" },
-                "GlobalProxy": { "type": "boolean" },
-                "DomainStrategy": { "type": "string" },
-                "DirectSites": { "type": "array", "items": { "type": "string" } },
-                "DirectPackages": { "type": "array", "items": { "type": "string" } },
-                "DirectIp": { "type": "array", "items": { "type": "string" } }
             }
         },
 

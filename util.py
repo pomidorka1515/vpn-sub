@@ -5,24 +5,71 @@ import os
 import time
 import threading
 import json
+import hmac
+import uuid
+import re
 
 from pathlib import Path
+from flask import Response, jsonify
 from dacite import from_dict
 from custom_types import (
     CPUInfo, LoadAverage, NetTrafficStats, SystemMemory,
     RamInfo, SwapInfo, IPList, ConnCount, AppMemory,
-    GCStats, GCGenStats, ThreadInfo, FullSystemInfo
-)
+    GCStats, GCGenStats, ThreadInfo, FullSystemInfo,
 
-from typing import cast
+    JsonifyValue
+)
+from typing import cast, Literal
 
 __all__ = [
+    "compare", "isuuid", "isbrowser", "sanitize",
     "format", "tuple_hook", "parse_bool",
     "fmt_bytes_tuple", "fmt_bytes", "fmt_time",
     "format_usage", "is_cancel_command", "truncate_utf8",
     "strip_jsonc_comments", "strip_jsonc_trailing_commas",
     "SysUtil"
 ]
+
+_BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')
+
+def sanitize(s: str, typ: Literal["external", "display"], /) -> str:
+    match typ:
+        case "external":
+            return re.sub(r'[^A-Za-z0-9_\-]', '', s[:32])
+        case "display":
+            return s[:16].translate(str.maketrans('', '', r''':;"'?/<>{}[]*&^%$#@\|`'''))
+        
+
+def isbrowser(ua: str) -> bool:
+    return bool(_BROWSER_UA.search(ua))
+
+def compare(a: str, b: str) -> bool:
+    return hmac.compare_digest(a, b)
+
+def isuuid(s: str) -> bool:
+    """Validate a UUID."""
+    try:
+        val = uuid.UUID(s, version=4)
+        return str(val) == s.lower()
+    except ValueError:
+        return False
+
+def ok(
+    msg: str | None = None,
+    code: int = 200,
+    obj: JsonifyValue = None
+) -> tuple[Response, int]:
+    """Internal helper function to return a successful Response."""
+    return jsonify({"success": True, "msg": msg, "obj": obj}), code
+
+def err(
+    msg: str | None = None,
+    code: int = 400,
+    obj: JsonifyValue = None
+) -> tuple[Response, int]:
+    """Internal helper function to return an error Response."""
+    return jsonify({"success": False, "msg": msg, "obj": obj}), code
+
 
 
 class _PartialFormatter(dict[str, object]):

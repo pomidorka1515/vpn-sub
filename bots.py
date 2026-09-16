@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from loggers import Logger
-from core import Subscription, SERVER_TZ
+from core import Subscription
 from errors import AppError, PanelUnavailableError
 from session import XUiSession
 from chart import bandwidth_chart, leaderboard_chart
@@ -15,7 +15,7 @@ import threading
 import urllib.parse
 
 from typing import Any, cast, overload, Literal, Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from telebot import types
 from concurrent.futures import ThreadPoolExecutor
 
@@ -591,7 +591,7 @@ class AdminBot(TelegramPollingMixin):
             domain: str = self.cfg['domain']
             if times:
                 days_left = str((times - int(time.time())) // 86400)
-                date = datetime.fromtimestamp(times, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
+                date = datetime.fromtimestamp(times, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
             else:
                 days_left = "N/A"
                 date = "N/A"
@@ -721,7 +721,7 @@ class AdminBot(TelegramPollingMixin):
             return
         current_time = info.time
         if current_time:
-                date = datetime.fromtimestamp(current_time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
+                date = datetime.fromtimestamp(current_time, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
         else:
             date = "N/A"
         msg = self.bot.send_message(chat_id, f"⏰ Введите новое кол-во дней для <b>{username}</b> (текущая дата: <code>{date}</code>, 0 = безлимит):", parse_mode="HTML")
@@ -743,7 +743,7 @@ class AdminBot(TelegramPollingMixin):
             return
         self._pending_edits.pop(message.chat.id, None)
         if days:
-            new_date = datetime.fromtimestamp(timee, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
+            new_date = datetime.fromtimestamp(timee, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
             self.bot.send_message(message.chat.id, f"✅ Срок продлён на <code>{days}</code> дней, новая дата: <code>{new_date}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
         else:
             self.bot.send_message(message.chat.id, "✅ Срок установлен в безлимит.", parse_mode="HTML", reply_markup=self.get_main_menu())
@@ -1270,7 +1270,7 @@ class PublicBot(TelegramPollingMixin):
 
         if info.time:
             days_left = str((info.time - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(info.time, tz=SERVER_TZ).strftime("%d.%m.%y %H:%M (UTC)")
+            date_end = datetime.fromtimestamp(info.time, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t['lifetime']

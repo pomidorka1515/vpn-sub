@@ -16,10 +16,11 @@ from config import Config, LinesConfig
 from core import Subscription
 from db import Database
 from errors import AppError
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, request
 from loggers import Logger
 from protocols import ConfigLike
 from session import XUiSession, XUiPanelTransport
+from util import err
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -42,7 +43,7 @@ class _ProxyGuard:
     """Rejects requests that did not arrive from loopback.
 
     The reverse proxy, healthchecks and local tooling all connect via lo,
-    and gunicorn binds 127.0.0.1 so off-box traffic should be impossible —
+    and gunicorn binds 127.0.0.1 so off-box traffic should be impossible -
     this is defense-in-depth for an accidental 0.0.0.0 bind. Must wrap the
     app *outside* ProxyFix, which already rewrites REMOTE_ADDR.
     """
@@ -228,17 +229,13 @@ def _build_flask_app(options: AppOptions) -> Flask:
 
     @flask_app.errorhandler(AppError)
     def handle_app_error(error: AppError) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
-        return (
-            jsonify({"success": False, "msg": error.message, "obj": None}),
-            error.status,
-        )
+        return err(msg=error.message, code=error.status)
+
 
     @flask_app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
-        return (
-            jsonify({"success": False, "msg": error.description, "obj": None}),
-            error.code or 500,
-        )
+        return err(msg=error.description, code=error.code or 500)
+
 
     @flask_app.errorhandler(Exception)
     def handle_unexpected_error(error: Exception) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
@@ -248,7 +245,7 @@ def _build_flask_app(options: AppOptions) -> Flask:
             request.path,
             exc_info=error,
         )
-        return jsonify({"success": False, "msg": "Internal server error", "obj": None}), 500
+        return err(msg="Internal server error", code=500)
 
     return flask_app
 

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import (
     Protocol,
-    Any,
+    Any, Literal, Sequence,
     Callable, TypedDict, NamedTuple
 )
 from collections.abc import MutableMapping, Mapping, Iterator, Iterable
 
 from dataclasses import dataclass
-
+from flask import Response as FlaskResponse
 from requests import Response
 from requests.cookies import RequestsCookieJar
 from requests.auth import AuthBase
@@ -38,10 +38,15 @@ __all__ = [
     
     'client_stats_to_settings',
 
+    'JsonifyValue', 'HTTPMethod', 'ResponseType',
 
     'RequestKwargs'
 ]
 
+
+type JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Sequence['JsonifyValue'] | tuple['JsonifyValue', ...] | None
+type HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+type ResponseType = tuple[FlaskResponse, int] | FlaskResponse
 
 class BandwidthInfo(NamedTuple):
     """
