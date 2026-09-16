@@ -44,16 +44,16 @@ mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel c
 
 All path variables are **optional**. If omitted, runtime data defaults to the `./data/` folder inside the project directory.
 
-| Variable      | Default                  | Description                                         |
-| :---          | :---                     | :---                                                |
-| `DIR_DATA`    | `./data/`                | Base directory for runtime data (DB, logs, config)  |
-| `DIR_BACKUPS` | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored |
-| `PATH_CONFIG` | `<DIR_DATA>/config.json` | Path to the main application configuration          |
-| `PATH_DB`     | `<DIR_DATA>/state.db`    | Path to the SQLite database                         |
-| `PATH_LOG`    | `<DIR_DATA>/log.jsonl`   | Path to application event logs (JSONL)              |
-| `PATH_AUDIT`  | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                    |
-| `PATH_LANG`   | `./lang.jsonc`           | Path to the static UI language strings              |
-
+| Variable        | Default                  | Description                                                         |
+| :---            | :---                     | :---                                                                |
+| `DIR_DATA`      | `./data/`                | Base directory for runtime data (DB, logs, config)                  |
+| `DIR_BACKUPS`   | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored                 |
+| `PATH_CONFIG`   | `<DIR_DATA>/config.json` | Path to the main application configuration                          |
+| `PATH_DB`       | `<DIR_DATA>/state.db`    | Path to the SQLite database                                         |
+| `PATH_LOG`      | `<DIR_DATA>/log.jsonl`   | Path to application event logs (JSONL)                              |
+| `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                    |
+| `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                              |
+| `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended) |
 
 ### Systemd service
 
@@ -99,6 +99,26 @@ WantedBy=multi-user.target
 anything at import time, so `venv/bin/python wsgi.py` also works for a quick
 local run.
 
+### Nginx location block
+```
+location /sub {
+	proxy_pass http://127.0.0.1:5550;
+
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host  $host;
+
+    proxy_hide_header Server;
+    proxy_hide_header X-Powered-By;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection        ""; # needed for keepalive upstream
+}
+```
+
+
 ### Example Config
 **See [example config](docs/EXAMPLE.config.json)**
 
@@ -106,6 +126,12 @@ local run.
 All protocols in `custom_types.py` are fully compatible with their runtime classes.
 However, mypy cannot reliably validate that: the overloads are too complex.
 That's why casting is required.
+
+### Direct exposure
+Binding this to `0.0.0.0` or `::` is not recommended.
+The app automatically blocks direct hits (see `REQUIRE_PROXY` env variable),
+but allows local requests made from `127.0.0.1` and `::1`.
+Override this at your own risk: it's always best to leave TLS, etc. to reverse proxies.
 
 ## Deployment
 - Meant to run under gunicorn behind nginx (in front of the service, rate-limiting and TLS)

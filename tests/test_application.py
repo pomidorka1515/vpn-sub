@@ -118,6 +118,34 @@ class ApplicationFactoryTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
             self.assertEqual(remote_addresses, ["203.0.113.5"])
 
+    def test_require_proxy_allows_only_loopback(self) -> None:
+        with self.factory(require_proxy=True) as runtime:
+            client = runtime.app.test_client()
+
+            # local tools and healthchecks do not need proxy headers
+            response = client.get(
+                "/sub/api/api/health",
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+            self.assertEqual(response.status_code, 200)
+
+            # the local reverse proxy path also passes through
+            response = client.get(
+                "/sub/api/api/health",
+                headers={"X-Forwarded-For": "203.0.113.5"},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+            self.assertEqual(response.status_code, 200)
+
+            # spoofed proxy headers do not bypass the peer check
+            response = client.get(
+                "/sub/api/api/health",
+                headers={"X-Forwarded-For": "203.0.113.5"},
+                environ_base={"REMOTE_ADDR": "10.0.0.1"},
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(response.get_json()["success"])
+
     def test_secondary_process_does_not_recover_or_start_bots(self) -> None:
         self.paths.data.mkdir(parents=True, exist_ok=True)
         with self.paths.primary_lock.open("a+b") as lock:

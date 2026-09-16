@@ -627,7 +627,7 @@ class Api(BaseApi):
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        uri = f"/sub/{cfg['api_uri']}"
+        uri = f"/{cfg['uri']}/{cfg['api_uri']}"
         self.token = cfg['api_token']
         self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri)

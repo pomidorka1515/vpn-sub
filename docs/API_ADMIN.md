@@ -4,9 +4,10 @@
 Authentication: `Authorization` header with the admin API token.  
 On failure, returns HTTP 401.  
   
-## Root URI (subject to change)  
-`{domain}/sub/{api_uri}` where `domain` is your domain.  
-  
+## Root URI  
+`{domain}/{uri}/{api_uri}` where `domain` is your domain.  
+Example: `http://127.0.0.1/sub/adminapi/api/something`  
+the `/api/` part is present in case something else is added to the admin API.  
 ## Response format  
 Every response follows this pattern:  
 ```jsonc  

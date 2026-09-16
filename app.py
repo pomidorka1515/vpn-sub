@@ -38,6 +38,28 @@ __all__ = [
 ]
 
 
+class _ProxyGuard:
+    """Rejects requests that did not arrive from loopback.
+
+    The reverse proxy, healthchecks and local tooling all connect via lo,
+    and gunicorn binds 127.0.0.1 so off-box traffic should be impossible —
+    this is defense-in-depth for an accidental 0.0.0.0 bind. Must wrap the
+    app *outside* ProxyFix, which already rewrites REMOTE_ADDR.
+    """
+
+    def __init__(self, wsgi: Any) -> None:
+        self.wsgi = wsgi
+
+    def __call__(self, environ: dict[str, Any], start_response: Callable[..., Any]) -> Any:
+        peer = environ.get("REMOTE_ADDR")
+        if peer not in ("127.0.0.1", "::1"):
+            log.error("direct access attempt from %s; refusing", peer)
+            body = b'{"success": false, "msg": "direct access forbidden", "obj": null}'
+            start_response("400 Bad Request", [("Content-Type", "application/json"), ("Content-Length", str(len(body)))])
+            return [body]
+        return self.wsgi(environ, start_response)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class AppPaths:
     data: Path
@@ -70,6 +92,7 @@ class AppOptions:
     start_background: bool = True
     start_bots: bool = True
     proxy_hops: int = 1
+    require_proxy: bool = False
     panel_transport_factory: PanelTransportFactory | None = None
 
 
@@ -196,6 +219,11 @@ def _build_flask_app(options: AppOptions) -> Flask:
                 x_proto=1,
                 x_host=1,
             ),
+        )
+    if options.require_proxy:
+        flask_app.wsgi_app = cast(  # type: ignore[method-assign]
+            Any,
+            _ProxyGuard(flask_app.wsgi_app),
         )
 
     @flask_app.errorhandler(AppError)
