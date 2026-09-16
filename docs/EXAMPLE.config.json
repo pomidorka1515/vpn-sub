@@ -26,16 +26,6 @@
         "token": "",
         "whitelist": []
     },
-    "routing": {
-        "Name": "",
-        "GlobalProxy": true,
-        "DomainStrategy": "IPIfNonMatch",
-        "DirectSites": [],
-        "DirectPackages": [],
-        "DirectIp": [
-            "geoip:private"
-        ]
-    },
     "json_template": {
         "dns": {
             "servers": [
