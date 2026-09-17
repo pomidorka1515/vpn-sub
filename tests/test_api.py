@@ -11,7 +11,7 @@ from core import Subscription
 from argon2 import PasswordHasher
 from db import Database
 from flask import Flask
-from protocols import ConfigLike
+from config import ConfigLike
 
 
 class _BWatchConfig:

@@ -10,7 +10,8 @@ from custom_types import BandwidthInfo, BandwidthUpdate
 from db import Database
 from errors import AppError, PanelUnavailableError
 from loggers import Logger
-from protocols import AdminBotLike, ConfigLike, PublicBotLike
+from protocols import AdminBotLike, PublicBotLike
+from config import ConfigLike
 from util import SysUtil
 
 if TYPE_CHECKING:
@@ -20,9 +21,6 @@ __all__ = ["BWatch"]
 
 
 class BWatch:
-    """Class for monitoring bandwidth.
-    Dependencies: Subscription
-    Classes depending on this: Api, WebApi"""
     def _alert_admin(self, message: str) -> None:
         if self.admin_bot:
             self.admin_bot.msg(message)

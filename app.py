@@ -18,7 +18,7 @@ from db import Database
 from errors import AppError
 from flask import Flask, Response, request
 from loggers import Logger
-from protocols import ConfigLike
+from config import ConfigLike
 from session import XUiSession, XUiPanelTransport
 from util import err
 from werkzeug.exceptions import HTTPException

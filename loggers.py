@@ -8,10 +8,12 @@ from urllib.parse import parse_qsl, urlsplit
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from gunicorn.glogging import Logger as GunicornBaseLogger  # type: ignore[import-untyped]
-from protocols import AdminBotLike, LinesConfigLike
+from protocols import AdminBotLike
+if TYPE_CHECKING:
+    from config import LinesConfigLike # just to be safe
 
 _ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 

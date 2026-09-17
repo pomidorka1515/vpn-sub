@@ -21,7 +21,7 @@ from typing import (
 )
 from dataclasses import asdict
 
-from protocols import ConfigLike, LinesConfigLike
+from config import ConfigLike, LinesConfigLike
 from util import SysUtil, parse_bool, ok, err, sanitize, compare
 
 from custom_types import HTTPMethod, JsonifyValue, ResponseType

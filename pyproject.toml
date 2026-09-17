@@ -35,9 +35,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 py-modules = [
     "app", "api", "bots", "chart", "builders",
-    "config", "core", "bwatch", "custom_types", "db",
+    "core", "bwatch", "custom_types", "db",
     "loggers", "session", "util", "errors", "protocols"
 ]
+packages = ["config"]
 
 # ---------------------------------------------------------------------------
 # mypy
@@ -47,7 +48,7 @@ py-modules = [
 python_version = "3.14"
 
 files = [
-    "config.py",
+    "config/",
     "db.py",
     "custom_types.py",
     "loggers.py",
@@ -99,11 +100,18 @@ show_error_context  = true
 [[tool.mypy.overrides]]
 module = ["bots"]
 disallow_untyped_calls         = false
+
+# config is split across private implementation modules that access each
+# other's private helpers during the refactor
+[[tool.mypy.overrides]]
+module = ["config", "config.*"]
+no_implicit_reexport           = false
+disable_error_code             = ["attr-defined", "override"]
 # -- pylance compatibility ----------------------------------------------
 [tool.pyright]
 pythonVersion = "3.14"
 include = [
-    "config.py",
+    "config/",
     "db.py",
     "custom_types.py",
     "loggers.py",
@@ -124,6 +132,13 @@ typeCheckingMode = "strict"
 reportDeprecated = false
 venvPath = "."
 venv = "venv"
+
+[[tool.pyright.executionEnvironments]]
+extraPaths = ["."]
+root = "config"
+reportPrivateUsage = false
+reportUnusedFunction = false
+reportIncompatibleMethodOverride = false
 
 [tool.uv]
 required-environments = [

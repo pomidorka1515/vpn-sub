@@ -45,7 +45,7 @@ from custom_types import (
     UserRecord,
     client_stats_to_settings,
 )
-from protocols import (
+from config import (
     ConfigLike, LinesConfigLike,
     JsonValue
 )
@@ -117,7 +117,7 @@ class Subscription:
 
     def register_routes(self) -> None:
         @self.app.route(f"/{self.uri}", strict_slashes=False)
-        def _sub() -> tuple[Response, int]:
+        def _sub() -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
             return self.get_subscription(
                 token=request.args.get('token', ''),
                 lang=request.args.get('lang', ''),
