@@ -33,7 +33,7 @@ def build_paths(root: Path) -> AppPaths:
         data=data,
         backups=data / "backup",
         config=root / "config.json",
-        language=Path("lang.jsonc"),
+        language=Path(__file__).resolve().parents[2] / "lang.jsonc",
         database=data / "state.sqlite3",
         log=data / "log.jsonl",
         audit=data / "audit.jsonl",
@@ -46,7 +46,8 @@ class ApplicationFactoryTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.paths = build_paths(self.root)
-        config = json.loads(Path("docs/EXAMPLE.config.json").read_text())
+        project_root = Path(__file__).resolve().parents[2]
+        config = json.loads((project_root / "docs/EXAMPLE.config.json").read_text())
         config["$schema"] = "config.schema.json"
         config["api_uri"] = "api"
         config["bot"]["token"] = "123:test-admin-bot"
@@ -56,7 +57,8 @@ class ApplicationFactoryTests(unittest.TestCase):
         config["3xui"]["second_panel"] = second_panel
         self.paths.config.write_text(json.dumps(config), encoding="utf-8")
         (self.root / "config.schema.json").write_text(
-            Path("config.schema.json").read_text(encoding="utf-8"), encoding="utf-8"
+            (project_root / "config.schema.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
         )
 
     def tearDown(self) -> None:
@@ -69,6 +71,23 @@ class ApplicationFactoryTests(unittest.TestCase):
                 start_background=False,
                 panel_transport_factory=lambda: RecordingTransport({"success": True}),
                 **options,
+            ),
+        )
+
+    def test_from_env_defaults_to_project_root(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        data = project_root / "data"
+        self.assertEqual(
+            AppPaths.from_env(),
+            AppPaths(
+                data=data,
+                backups=data / "backup",
+                config=data / "config.json",
+                language=project_root / "lang.jsonc",
+                database=data / "state.sqlite3",
+                log=data / "log.jsonl",
+                audit=data / "audit.jsonl",
+                primary_lock=data / ".primary.lock",
             ),
         )
 

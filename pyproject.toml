@@ -33,6 +33,7 @@ requires = ["setuptools>=70"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = [
     "app", "api", "bots", "chart", "builders",
     "core", "bwatch", "custom_types", "db",
@@ -48,22 +49,22 @@ packages = ["config"]
 python_version = "3.14"
 
 files = [
-    "config/",
-    "db.py",
-    "custom_types.py",
-    "loggers.py",
-    "session.py",
-    "chart.py",
-    "core.py",
-    "bwatch.py",
-    "api.py",
-    "bots.py",
-    "app.py",
-    "util.py",
-    "errors.py",
-    "protocols.py",
-    "builders.py",
-    "tests/",
+    "src/config/",
+    "src/db.py",
+    "src/custom_types.py",
+    "src/loggers.py",
+    "src/session.py",
+    "src/chart.py",
+    "src/core.py",
+    "src/bwatch.py",
+    "src/api.py",
+    "src/bots.py",
+    "src/app.py",
+    "src/util.py",
+    "src/errors.py",
+    "src/protocols.py",
+    "src/builders.py",
+    "src/tests/",
 ]
 
 # -- strict mode --------------------------------------------------------
@@ -111,22 +112,22 @@ disable_error_code             = ["attr-defined", "override"]
 [tool.pyright]
 pythonVersion = "3.14"
 include = [
-    "config/",
-    "db.py",
-    "custom_types.py",
-    "loggers.py",
-    "session.py",
-    "chart.py",
-    "core.py",
-    "bwatch.py",
-    "api.py",
-    "bots.py",
-    "app.py",
-    "util.py",
-    "errors.py",
-    "protocols.py",
-    "builders.py",
-    "tests/",
+    "src/config/",
+    "src/db.py",
+    "src/custom_types.py",
+    "src/loggers.py",
+    "src/session.py",
+    "src/chart.py",
+    "src/core.py",
+    "src/bwatch.py",
+    "src/api.py",
+    "src/bots.py",
+    "src/app.py",
+    "src/util.py",
+    "src/errors.py",
+    "src/protocols.py",
+    "src/builders.py",
+    "src/tests/",
 ]
 typeCheckingMode = "strict"
 reportDeprecated = false
@@ -134,8 +135,8 @@ venvPath = "."
 venv = "venv"
 
 [[tool.pyright.executionEnvironments]]
-extraPaths = ["."]
-root = "config"
+extraPaths = ["src"]
+root = "src/config"
 reportPrivateUsage = false
 reportUnusedFunction = false
 reportIncompatibleMethodOverride = false

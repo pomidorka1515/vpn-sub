@@ -24,13 +24,13 @@ Fully synchronous, database-backed config, designed to run on a single small VPS
 
 ## Architecture
 
-- `app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, bots, Flask app) and wires everything together
-- `wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application and registers shutdown at exit
-- `core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
-- `config.py` — atomic JSON config with thread + cross-process locking
-- `db.py` — core database logic
-- `api.py` — Flask routes (`Api` for admin, `WebApi` for end users)
-- `bots.py` — `AdminBot` (management), `PublicBot` (user self-service)
+- `src/app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, bots, Flask app) and wires everything together
+- `src/wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application and registers shutdown at exit
+- `src/core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
+- `src/config/` — atomic JSON config with thread + cross-process locking
+- `src/db.py` — core database logic
+- `src/api.py` — Flask routes (`Api` for admin, `WebApi` for end users)
+- `src/bots.py` — `AdminBot` (management), `PublicBot` (user self-service)
 
 ## Setup
 
@@ -79,7 +79,7 @@ Environment=PYTHONUNBUFFERED=1
 
 ExecStart=X/venv/bin/gunicorn \
     --bind 127.0.0.1:X \
-    --config gunicorn.conf.py
+    --config src/gunicorn.conf.py
 
 TimeoutStopSec=35
 KillMode=mixed
@@ -94,9 +94,9 @@ WantedBy=multi-user.target
 ```
 *(replace `X` with your path/port/etc)*
 
-`gunicorn.conf.py` loads `wsgi:app` (module `wsgi.py`, which calls
-`create_application()` and registers shutdown at exit). `app.py` no longer runs
-anything at import time, so `venv/bin/python wsgi.py` also works for a quick
+`src/gunicorn.conf.py` loads `src.wsgi:app` (module `src/wsgi.py`, which calls
+`create_application()` and registers shutdown at exit). `src/app.py` no longer runs
+anything at import time, so `venv/bin/python -m src.wsgi` also works for a quick
 local run.
 
 ### Nginx location block
@@ -123,7 +123,7 @@ location /sub {
 **See [example config](docs/EXAMPLE.config.json)**
 
 ### Seemingly useless casts to protocols
-All protocols in `custom_types.py` are fully compatible with their runtime classes.
+All protocols in `src/custom_types.py` are fully compatible with their runtime classes.
 However, mypy cannot reliably validate that: the overloads are too complex.
 That's why casting is required.
 

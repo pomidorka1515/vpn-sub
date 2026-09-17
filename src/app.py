@@ -74,7 +74,7 @@ class AppPaths:
 
     @classmethod
     def from_env(cls) -> AppPaths:
-        root = Path(__file__).resolve().parent
+        root = Path(__file__).resolve().parent.parent
         data = Path(os.getenv("DIR_DATA", root / "data"))
         return cls(
             data=data,
