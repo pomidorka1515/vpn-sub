@@ -100,7 +100,7 @@ class Subscription:
             self.audit_cfg: LinesConfigLike | None = audit_cfg
             self.app: Flask = app
             self.whitelist_panel: XUiSession | None  = whitelist_panel
-            self.uri: str = cfg['uri']
+            self.uri: str = cfg['uri'].strip("/")
             self.fps: list[str] = self.cfg['fingerprints']
 
             self.panels: list[XUiSession] = list(panels)

@@ -51,7 +51,12 @@ class Route(NamedTuple):
         if self.rate_limit is not None:
             func = rate_limit(self.rate_limit)(func)
         func = func.__get__(api, type(api))
-        api.app.add_url_rule(api.uri + self.path, self.handler, func, methods=[self.method])
+        
+        url = '/' + '/'.join([
+            p.strip('/') for p in (api.uri, self.path) if p.strip('/')
+        ])
+        
+        api.app.add_url_rule(url, self.handler, func, methods=[self.method])
 
 class BaseApi(ABC):
     """Base class for API handlers. Enforces required attributes and route registration."""
@@ -308,7 +313,7 @@ class WebApi(BaseApi):
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        uri = f"/{cfg['uri']}" 
+        uri = '/' + '/'.join(p for p in cfg['uri'].split('/') if p)
         with open('res/redirect.html', 'r', encoding='utf-8') as f:
             self.redirect_html = f.read()
         super().__init__(app, cfg, sub, bw, uri)
@@ -617,7 +622,7 @@ class Api(BaseApi):
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        uri = f"/{cfg['uri']}/{cfg['api_uri']}"
+        uri = '/' + '/'.join(p.strip('/ ') for p in (cfg['uri'], cfg['api_uri']) if p and p.strip('/ '))
         self.token = cfg['api_token']
         self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri)

@@ -336,9 +336,11 @@ class PublicBot(TelegramPollingMixin):
         if not info:
             return
 
-        domain = self.cfg['domain']
-        link = f"{domain}/{self.cfg['uri']}?token={info.token}&lang={lang}"
-
+        sub_uri = self.cfg['uri'].strip("/")
+        domain = self.cfg['domain'].rstrip("/")
+        
+        link = f"{domain}/{sub_uri}?token={info.token}&lang={lang}"
+            
         qr = self.sub.make_qr(link)
 
         text = t['get_sub_text'].format(
@@ -349,7 +351,7 @@ class PublicBot(TelegramPollingMixin):
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton(t['get_sub_btn_link'], url=link),
-            types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"{domain}/{self.cfg['uri']}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
+            types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"{domain}/{sub_uri}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
         )
         self.bot.send_photo(chat_id, qr, text, parse_mode="Markdown", reply_markup=markup)
     def login_callback(self, call: types.CallbackQuery) -> None:

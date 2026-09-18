@@ -293,7 +293,7 @@ def get_subscription(
     displayname = str(user['displayname'])
     need_dummy_link = "v2rayn" in ua.lower() # catches both v2rayn and v2rayng
     is_happ = ua.startswith("Happ/")
-    uri: str = cfg['uri']
+    uri: str = cfg['uri'].strip("/")
 
     status = bool(user['enabled'])
     statusTime = bool(user['enabled_time'])
