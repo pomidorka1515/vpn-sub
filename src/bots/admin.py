@@ -27,9 +27,10 @@ class AdminBot(TelegramPollingMixin):
     USERS_PER_PAGE = 10
 
     def __init__(self,
-                 sub: Subscription,
-                 lang_cfg: ConfigLike,
-                 cfg: ConfigLike):
+        sub: Subscription,
+        lang_cfg: ConfigLike,
+        cfg: ConfigLike
+    ):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg: ConfigLike = cfg
@@ -45,7 +46,7 @@ class AdminBot(TelegramPollingMixin):
             self._pagination_state: dict[int, dict[str, int]] = {}
             self._pending_leaderboard: dict[int, dict[str, str | int]] = {}
 
-            self.polling_thread = None
+            self.polling_thread: threading.Thread | None = None
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids

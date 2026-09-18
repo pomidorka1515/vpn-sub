@@ -2,9 +2,10 @@ import telebot
 import urllib.parse
 import time
 import logging
+import threading
 
 from telebot import types
-from typing import Any, cast
+from typing import Any, cast, Callable
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
@@ -40,16 +41,21 @@ class PublicBot(TelegramPollingMixin):
 
             # NOTE: dumbass telebot has trash typing
             self.bot.message_handler(commands=['start', 'menu'])(self.cmd_start)
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))(self.set_lang_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))(self.settings_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('fp_'))(self.fp_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('login_'))(self.login_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self.bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))(self.chart_callback) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            callbacks: tuple[tuple[str, Callable[..., Any]], ...] = (
+                ('lang_', self.set_lang_callback),
+                ('set_', self.settings_callback),
+                ('fp_', self.fp_callback),
+                ('login_', self.login_callback),
+                ('chart_', self.chart_callback),
+            )
+            for prefix, handler in callbacks:
+                self.bot.callback_query_handler(func=lambda call, p=prefix: call.data.startswith(p))(handler) # pyright: ignore[reportUnknownLambdaType]
+            
             self.bot.message_handler(func=lambda g: True)(self.handle_text) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
 
             self._executor = ThreadPoolExecutor(max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart")
 
-            self.polling_thread = None
+            self.polling_thread: threading.Thread | None = None
 
     def _send_message(self, chat_id: int, text: str, **kwargs: object) -> None:
         try:
