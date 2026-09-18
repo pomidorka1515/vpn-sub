@@ -24,7 +24,7 @@ import time
 import io
 import qrcode
 import platform
-import secrets
+
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
@@ -49,7 +49,7 @@ from config import (
     JsonValue
 )
 from builders import *
-from util import isuuid, compare, sanitize
+from util import isuuid, compare, sanitize, generate_token
 from dataclasses import asdict
 from collections.abc import Mapping
 
@@ -632,7 +632,7 @@ class Subscription:
                 raise ValidationError("Ext Username too long")
             ext_username = sanitize(ext_username, "external")
         if token is None:
-            token = secrets.token_urlsafe(40)
+            token = generate_token("sub")
         if userid is None:
             userid = str(uuid.uuid4())
         else:
@@ -890,7 +890,7 @@ class Subscription:
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
         displayname = sanitize(displayname, "display")
-        token = secrets.token_urlsafe(40)
+        token = generate_token("sub")
         userid = str(uuid.uuid4())
         fingerprint = random.choice(self.fps)
         hashed_password = self.hash(ext_password)
@@ -1200,7 +1200,7 @@ class Subscription:
     def reset_user(self, username: str) -> ResetUserObject:
         """Resets token and uuid to randomness. Dict with new values on success."""
         newid = str(uuid.uuid4())
-        newt = secrets.token_urlsafe(40)
+        newt = generate_token("sub")
         self.update_uuid(username, newid)
         self.update_params(
             username=username,

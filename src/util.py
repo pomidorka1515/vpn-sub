@@ -7,6 +7,7 @@ import threading
 import hmac
 import uuid
 import re
+import secrets
 
 from pathlib import Path
 from flask import Response, jsonify
@@ -25,18 +26,38 @@ __all__ = [
     "format", "tuple_hook", "parse_bool",
     "fmt_bytes_tuple", "fmt_bytes", "fmt_time",
     "format_usage", "is_cancel_command", "truncate_utf8",
+    "generate_token",
     "SysUtil"
 ]
 
 _BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')
 
-def sanitize(s: str, typ: Literal["external", "display"], /) -> str:
-    match typ:
+def sanitize(s: str, kind: Literal["external", "display"], /) -> str:
+    """
+    Args:
+        kind:
+            "external" -> whitelist: A-Z, a-z, 0-9, and _, - chars allowed, max length 32
+            "display"  -> blacklist: filters special chars, max length 16
+    """
+    match kind:
         case "external":
             return re.sub(r'[^A-Za-z0-9_\-]', '', s[:32])
         case "display":
             return s[:16].translate(str.maketrans('', '', r''':;"'?/<>{}[]*&^%$#@\|`'''))
-        
+
+def generate_token(kind: Literal["sub", "auth"], /) -> str:
+    """
+    One central function to generate a token.
+    Args:
+        kind:
+            "sub"  -> url-safe, for subscription links
+            "auth" -> for web-ui auth, longer
+    """
+    match kind:
+        case "sub":
+            return secrets.token_urlsafe(40)
+        case "auth":
+            return secrets.token_hex(50)
 
 def isbrowser(ua: str) -> bool:
     return bool(_BROWSER_UA.search(ua))

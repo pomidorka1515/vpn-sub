@@ -10,7 +10,6 @@ import time
 import uuid
 import base64
 import binascii
-import secrets
 
 from functools import wraps
 from flask import Flask, Response, send_file, redirect, request, make_response, g
@@ -22,7 +21,7 @@ from typing import (
 from dataclasses import asdict
 
 from config import ConfigLike, LinesConfigLike
-from util import SysUtil, parse_bool, ok, err, sanitize, compare
+from util import SysUtil, parse_bool, ok, err, sanitize, compare, generate_token
 
 from custom_types import HTTPMethod, JsonifyValue, ResponseType
 
@@ -556,7 +555,7 @@ class WebApi(BaseApi):
         internal = self.validate_credentials(content['username'], content['password'])
         if not isinstance(internal, str):
             return err("Invalid credentials.", 401)
-        auth_token = secrets.token_hex(50)
+        auth_token = generate_token("auth")
         self.sub.set_auth_token(internal, auth_token)
         r, code = ok(msg="Successful login", obj={"username": content['username']})
         r.set_cookie(
