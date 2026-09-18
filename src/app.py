@@ -135,14 +135,17 @@ class Application:
             self.admin_bot.start()
             self.public_bot.start()
 
-        if sys.version_info < (3, 14):
-            log.warning(
-                "Use python >= 3.14 to prevent bugs (found: %s.%s.%s)",
-                sys.version_info.major,
-                sys.version_info.minor,
-                sys.version_info.patch
-            )
-
+        
+        match sys.version_info[:2]:
+            case (3, minor) if minor >= 13:
+                pass
+            case (3, 12):
+                log.warning("This app was built for Python 3.13+, consider switching to avoid bugs (found: 3.12)")
+            case (3, minor):
+                raise RuntimeError(f"Error: Python 3.12+ required (detected 3.{minor})")
+            case _:
+                raise RuntimeError(f"Error: Python 3.12+ required (detected {sys.version})")
+        
         # actually way safer than a direct call
         if getattr(sys, "_is_gil_enabled", lambda: True)():
             log.warning("Free-threading disabled. Use a free-threading build for better performance.")

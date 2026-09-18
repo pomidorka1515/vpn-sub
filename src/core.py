@@ -21,7 +21,6 @@ import string
 import random
 import uuid
 import time
-import base64
 import io
 import qrcode
 import platform
@@ -50,7 +49,7 @@ from config import (
     JsonValue
 )
 from builders import *
-from util import err, isuuid, isbrowser, compare, sanitize
+from util import isuuid, compare, sanitize
 from dataclasses import asdict
 from collections.abc import Mapping
 
@@ -64,7 +63,6 @@ __all__ = [
 if platform.system().lower() != 'linux': # avoid pylance static evaluation
     raise UnsupportedPlatformError()
 
-RATIO: float = 1.073741824 # GiB to GB
 AUDIT_VALUES = Literal[
     'sub_hit',
     'user_refresh', 'user_delete', 'user_reset',
@@ -118,7 +116,8 @@ class Subscription:
     def register_routes(self) -> None:
         @self.app.route(f"/{self.uri}", strict_slashes=False)
         def _sub() -> tuple[Response, int]: # pyright: ignore[reportUnusedFunction]
-            return self.get_subscription(
+            return get_subscription(
+                self,
                 token=request.args.get('token', ''),
                 lang=request.args.get('lang', ''),
                 ua=request.headers.get('User-Agent', ''),
@@ -381,9 +380,7 @@ class Subscription:
                 return BandwidthInfo(0, 0, 0)
             panels: list[XUiSession] = [self.whitelist_panel]
         else:
-            panels = list(self.panels)
-            if self.whitelist_panel:
-                panels.remove(self.whitelist_panel)
+            panels = [p for p in self.panels if p != self.whitelist_panel]
 
         if not panels:
             return BandwidthInfo(0, 0, 0)
@@ -396,6 +393,7 @@ class Subscription:
                     if v.uuid == userid:
                         up_total += v.up
                         down_total += v.down
+                        break
         
         return BandwidthInfo(up_total, down_total, up_total + down_total)
     def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
@@ -1212,134 +1210,3 @@ class Subscription:
         self.audit(name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"})
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)
-
-
-
-    def get_subscription(
-        self, 
-        *,
-        token: str, 
-        lang: str, 
-        ua: str, 
-        ip: str,
-        force_json: str
-    ) -> tuple[Response, int]:
-        """You alredy know what this is."""
-        if not token:
-            return err("Invalid token.", 401)
-        username = self.usertotoken(token)
-        self.audit(name='sub_hit', info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json})
-        
-        if not username:
-            return err("Invalid token.", 401)
-        if lang not in ("ru", "en"):
-            return err("Invalid token.", 401)
-
-        if isbrowser(ua=ua):
-            return Response(self.browser_html, mimetype="text/html"), 403
-        
-        bandwidths = self.bandwidth(username)
-
-        cfg = self.cfg.copy()
-        lang_cfg = self.lang_cfg.copy()
-        user = self._user(username)
-        
-        displayname = str(user['displayname'])
-        need_dummy_link = "v2rayn" in ua.lower() or "v2rayng" in ua.lower()
-        is_happ = ua.startswith("Happ/")
-        uri: str = cfg['uri']
-
-        status = bool(user['enabled'])
-        statusTime = bool(user['enabled_time'])
-        statusWl = bool(user['enabled_wl'])
-        times = int(user['expires_at'])
-        sub_name: str = cfg['sub_name']
-
-        desc = f"base64:{base64.b64encode(
-            build_description(
-                lang_cfg=lang_cfg,
-                name=displayname,
-                lang=lang,
-                bandwidths=bandwidths,
-                status=status,
-                statusTime=statusTime,
-                ts=times,
-                bw_limit=int(user['bw_limit_gb']),
-                bw_used=int(user['bw_used']),
-                wl_limit=int(user['wl_limit_gb']),
-                wl_used=int(user['wl_used']),
-            ).encode('utf-8')).decode('utf-8')}"
-
-        total = int(user['bw_limit_gb']) * 10**9 * RATIO
-        if status and not total:
-            upload, download = bandwidths[:2]
-        else:
-            upload = download = (int(user['bw_used']) * RATIO if status else total) / 2
-        
-        userinfo = f"upload={upload:.0f};download={download:.0f};total={total:.0f};expire={times:.0f}"
-
-        headers: dict[str, str] = {
-            'Profile-Title': sub_name,
-            'Subscription-Userinfo': userinfo,
-            'profile-update-interval': "1",
-            'X-If-Youre-Reading-This': 'Your-Subscription-Has-Been-Revoked',
-            'announce': desc,
-            'Content-Type': "text/plain"
-        }
-
-        provider_id = cfg['provider_id']
-
-        if provider_id and is_happ:
-            fallback_domain: str | None = cfg.get('fallback_domain', None)
-            provider_id_headers: dict[str, str] = {
-                'providerid': provider_id,
-                'per-app-proxy-mode': 'bypass',
-                'per-app-proxy-list': ','.join(cfg['bypass_packages']),
-                'no-limit-xhttp-enabled': '1',
-                'check-url-via-proxy': cfg.get('ping_check_url', 'https://google.com/generate_204'),
-                'ping-type': 'proxy',
-                'sniffing-enable': '1', # Routing works better
-                'ping-result': 'time',
-                'dont-use-filter': '1',
-                'manual-block-user-agent': '1',
-                'subscriptions-sort-type': 'without',
-                'proxy-ping-timeout': '5' # NOTE: iOS only for some reason
-            }
-            if fallback_domain is not None:
-                provider_id_headers['fallback-url'] = \
-                    f'{fallback_domain.strip('/')}/{uri.strip('/')}?token={token}&lang={lang}{"&force_json=" + force_json if force_json else ""}'
-                
-            headers.update(provider_id_headers)
-
-        user_uuid = str(user['uuid'])
-
-        ### Content Generation ###
-
-        if is_happ or force_json == '1':
-            headers['Content-Type'] = 'application/json'
-            json_payload = build_json(
-                cfg=cfg,
-                user_uuid=user_uuid,
-                lang=lang,
-                fingerprint=str(user['fingerprint'])
-            )
-            return Response(
-                response=json.dumps(json_payload, ensure_ascii=False),
-                mimetype='application/json; charset=utf-8',
-                headers=headers
-            ), 200
-
-        else:
-            payload = build_link_array(
-                cfg=cfg,
-                status=status,
-                statusWl=statusWl,
-                lang=lang,
-                bandwidths=bandwidths,
-                user_uuid=user_uuid,
-                is_happ=is_happ,
-                need_dummy_link=need_dummy_link,
-                fingerprint=str(user['fingerprint'])
-            )
-            return Response(payload, mimetype="text/plain", headers=headers), 200
-
