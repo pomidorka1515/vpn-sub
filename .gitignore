@@ -5,16 +5,13 @@ data/
 __pycache__/
 *.pyc
 *.pyo
-.venv/
 venv/
 out/
 *.log
-.vscode/
-.idea/
 *.swp
 *.md
 !README.md
 !API.md
 !API_ADMIN.md
 !AUDIT.md
-vpn_sub.egg-info/
+*.egg-info

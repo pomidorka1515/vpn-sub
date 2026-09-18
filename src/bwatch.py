@@ -10,7 +10,7 @@ from custom_types import BandwidthInfo, BandwidthUpdate
 from db import Database
 from errors import AppError, PanelUnavailableError
 from loggers import Logger
-from protocols import AdminBotLike, PublicBotLike
+from bots import AdminBot, PublicBot
 from config import ConfigLike
 from util import SysUtil
 
@@ -30,8 +30,8 @@ class BWatch:
         cfg: ConfigLike, 
         db: Database,
         sub: Subscription, 
-        bot: PublicBotLike | None = None,
-        admin_bot: AdminBotLike | None = None
+        bot: PublicBot | None = None,
+        admin_bot: AdminBot | None = None
     ):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -40,8 +40,8 @@ class BWatch:
             self._stop_event = threading.Event()
             self._mem_lock = threading.Lock()  # single lock for all mem/wl_mem access
             self.sub: Subscription = sub
-            self.bot: PublicBotLike | None = bot
-            self.admin_bot: AdminBotLike | None = admin_bot
+            self.bot: PublicBot | None = bot
+            self.admin_bot: AdminBot | None = admin_bot
             self.mem: dict[str, BandwidthInfo] = {}
             self.wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False

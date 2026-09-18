@@ -4,7 +4,6 @@ import socket
 import os
 import time
 import threading
-import json
 import hmac
 import uuid
 import re

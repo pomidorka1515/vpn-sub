@@ -35,11 +35,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = [
-    "app", "api", "bots", "chart", "builders",
+    "app", "api", "chart", "builders",
     "core", "bwatch", "custom_types", "db",
-    "loggers", "session", "util", "errors", "protocols"
+    "loggers", "session", "util", "errors"
 ]
-packages = ["config"]
+packages = ["config", "bots"]
 
 # ---------------------------------------------------------------------------
 # mypy
@@ -50,6 +50,7 @@ python_version = "3.14"
 
 files = [
     "src/config/",
+    "src/bots/",
     "src/db.py",
     "src/custom_types.py",
     "src/loggers.py",
@@ -58,11 +59,9 @@ files = [
     "src/core.py",
     "src/bwatch.py",
     "src/api.py",
-    "src/bots.py",
     "src/app.py",
     "src/util.py",
     "src/errors.py",
-    "src/protocols.py",
     "src/builders.py",
     "src/tests/",
 ]
@@ -99,7 +98,7 @@ show_error_context  = true
 # pyTelegramBotApi lacks proper typing,
 # all other modules are fine
 [[tool.mypy.overrides]]
-module = ["bots"]
+module = ["bots", "bots.*"]
 disallow_untyped_calls         = false
 
 # config is split across private implementation modules that access each
@@ -113,6 +112,7 @@ disable_error_code             = ["attr-defined", "override"]
 pythonVersion = "3.14"
 include = [
     "src/config/",
+    "src/bots/",
     "src/db.py",
     "src/custom_types.py",
     "src/loggers.py",
@@ -121,11 +121,9 @@ include = [
     "src/core.py",
     "src/bwatch.py",
     "src/api.py",
-    "src/bots.py",
     "src/app.py",
     "src/util.py",
     "src/errors.py",
-    "src/protocols.py",
     "src/builders.py",
     "src/tests/",
 ]

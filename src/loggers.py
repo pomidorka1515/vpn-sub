@@ -11,10 +11,9 @@ from datetime import datetime
 from typing import Any, TYPE_CHECKING
 
 from gunicorn.glogging import Logger as GunicornBaseLogger  # type: ignore[import-untyped]
-from protocols import AdminBotLike
 if TYPE_CHECKING:
     from config import LinesConfigLike # just to be safe
-
+    from bots import AdminBot
 _ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
@@ -27,7 +26,7 @@ def _safe_handle_error(handler: logging.Handler, record: logging.LogRecord) -> N
 __all__ = ['Logger']
 
 class _TelegramLogger(logging.Handler):
-    def __init__(self, bot: AdminBotLike):
+    def __init__(self, bot: AdminBot):
         """
         Logging handler to broadcast messages to a telegram bot (AdminBot).
         """
@@ -118,7 +117,7 @@ class Logger(logging.Logger):
             datefmt='%Y-%m-%d %H:%M:%S'
         )
     
-    def set_tg_bot(self, bot: AdminBotLike, level: int | None = None) -> None:
+    def set_tg_bot(self, bot: AdminBot, level: int | None = None) -> None:
         self.handlers = [h for h in self.handlers if not isinstance(h, _TelegramLogger)]
         tg_handler = _TelegramLogger(bot)
         if level is None: tg_handler.setLevel(logging.WARNING) 
