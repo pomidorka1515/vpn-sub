@@ -216,7 +216,7 @@ class AdminCallbackRoutingTests(unittest.TestCase):
 
         self.telegram.answer_callback_query.assert_called_once_with("callback-id")
         self.telegram.send_message.assert_not_called()
-        self.bot.log.error.assert_not_called()
+        cast(MagicMock, self.bot.log).error.assert_not_called()
 
     def test_non_admin_callback_is_ignored_without_acknowledgement(self) -> None:
         self.bot.handle_callbacks(self.callback("list_users", user_id=99))

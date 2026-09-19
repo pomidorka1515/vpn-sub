@@ -10,6 +10,7 @@ import time
 import uuid
 import base64
 import binascii
+from collections import OrderedDict, deque
 
 from functools import wraps
 from flask import Flask, Response, send_file, redirect, request, make_response, g
@@ -76,8 +77,6 @@ class BaseApi(ABC):
             self.sub = sub
             self.bw = bw
             self.uri = uri
-            self.rl_data: dict[str, list[float]] = {}
-            self.rl_lock = threading.Lock()
             self._register_routes()
             self.reg_handles()
 
@@ -194,27 +193,80 @@ def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P,
         return f(self, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
 # ── Rate limiting ────────────────────────────────────────────────
-def rate_limit[**P, R](max_requests: int) -> Callable[
+_RATE_LIMIT_WINDOW = 60.0
+
+class _RateLimiter:
+    """Thread-safe sliding-window limiter for one route instance."""
+
+    def __init__(self, max_requests: int, max_buckets: int = 10_000) -> None:
+        if max_requests <= 0:
+            raise ValueError(f"max_requests must be positive, got {max_requests}")
+        if max_buckets <= 0:
+            raise ValueError(f"max_buckets must be positive, got {max_buckets}")
+        self.max_requests = max_requests
+        self.max_buckets = max_buckets
+        self._buckets: OrderedDict[str, deque[float]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def allow(self, key: str, now: float) -> bool:
+        with self._lock:
+            self._remove_inactive(now)
+            timestamps = self._buckets.get(key)
+            if timestamps is None:
+                if len(self._buckets) >= self.max_buckets:
+                    self._buckets.popitem(last=False)
+                timestamps = deque[float]()
+                self._buckets[key] = timestamps
+
+            while timestamps and now - timestamps[0] >= _RATE_LIMIT_WINDOW:
+                timestamps.popleft()
+
+            if len(timestamps) >= self.max_requests:
+                return False
+
+            timestamps.append(now)
+            self._buckets.move_to_end(key)
+            return True
+
+    @property
+    def bucket_count(self) -> int:
+        with self._lock:
+            return len(self._buckets)
+
+    def bucket_keys(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(self._buckets)
+
+    def _remove_inactive(self, now: float) -> None:
+        """Remove expired buckets from the oldest end of the access order."""
+        while self._buckets:
+            key, timestamps = next(iter(self._buckets.items()))
+            last_request = timestamps[-1] if timestamps else now
+            if now - last_request < _RATE_LIMIT_WINDOW:
+                return
+            del self._buckets[key]
+
+
+def rate_limit[**P, R](max_requests: int, max_buckets: int = 10_000) -> Callable[
     [Decorated[BaseApi, P, R]],
     DecoratedReturn[BaseApi, P, R],
 ]:
-    """Rate-limit by IP. Reads rl_data and rl_lock from the instance (self)."""
+    """Rate-limit a handler by client IP using a sliding time window."""
+    if max_requests <= 0:
+        raise ValueError(f"max_requests must be positive, got {max_requests}")
+    if max_buckets <= 0:
+        raise ValueError(f"max_buckets must be positive, got {max_buckets}")
+
     def decorator(
         f: Decorated[BaseApi, P, R]
     ) -> DecoratedReturn[BaseApi, P, R]:
+        limiter = _RateLimiter(max_requests, max_buckets)
+
         @wraps(f)
         def wrapper(self: BaseApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
-            ip = cast(str, request.remote_addr)
-            now = time.time()
-            with self.rl_lock:
-                stale = [k for k, v in self.rl_data.items() if v and now - v[-1] > 60]
-                for k in stale:
-                    del self.rl_data[k]
-                self.rl_data.setdefault(ip, [])
-                self.rl_data[ip] = [t for t in self.rl_data[ip] if now - t < 60]
-                if len(self.rl_data[ip]) >= max_requests:
-                    return err(msg="Too many requests.", code=429) 
-                self.rl_data[ip].append(now)
+            ip = request.remote_addr or "<unknown>"
+            if not limiter.allow(ip, time.monotonic()):
+                return err(msg="Too many requests.", code=429)
             return f(self, *args, **kwargs)
         return cast(DecoratedReturn[BaseApi, P, R], wrapper)
     return decorator

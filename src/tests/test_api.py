@@ -4,8 +4,9 @@ import tempfile
 import unittest
 import uuid
 from typing import Any, cast
+from unittest import mock
 
-from api import WebApi
+from api import BaseApi, WebApi, _RateLimiter, rate_limit  # pyright: ignore[reportPrivateUsage]
 from bwatch import BWatch
 from core import Subscription
 from argon2 import PasswordHasher
@@ -99,6 +100,120 @@ class WebApiAuthTests(unittest.TestCase):
         assert record is not None
         self.assertIsNone(record["auth_token"])
         self.assertEqual(client.get("/sub/webapi/stats").status_code, 401)
+
+
+class RateLimitTests(unittest.TestCase):
+    def test_rejects_non_positive_limit(self) -> None:
+        with self.assertRaises(ValueError):
+            rate_limit(0)
+
+        with self.assertRaises(ValueError):
+            rate_limit(1, max_buckets=0)
+
+    def test_limits_each_ip_independently_without_instance_state(self) -> None:
+        class Handler(BaseApi):
+            ROUTES = []
+
+            @rate_limit(2)
+            def endpoint(self: BaseApi) -> tuple[str, int]:
+                return "ok", 200
+
+        handler = object.__new__(Handler)
+        with self.app_context("203.0.113.1"):
+            with mock.patch("api.time.monotonic", side_effect=[0.0, 1.0, 2.0]):
+                self.assertEqual(handler.endpoint(), ("ok", 200))
+                self.assertEqual(handler.endpoint(), ("ok", 200))
+                _, status = handler.endpoint()
+        self.assertEqual(status, 429)
+
+        with self.app_context("203.0.113.2"):
+            with mock.patch("api.time.monotonic", return_value=2.0):
+                self.assertEqual(handler.endpoint(), ("ok", 200))
+
+    def test_window_expires_at_sixty_seconds(self) -> None:
+        class Handler(BaseApi):
+            ROUTES = []
+
+            @rate_limit(1)
+            def endpoint(self: BaseApi) -> tuple[str, int]:
+                return "ok", 200
+
+        handler = object.__new__(Handler)
+        with self.app_context("203.0.113.3"):
+            with mock.patch("api.time.monotonic", side_effect=[0.0, 59.999, 60.0]):
+                self.assertEqual(handler.endpoint(), ("ok", 200))
+                self.assertEqual(handler.endpoint()[1], 429)
+                self.assertEqual(handler.endpoint(), ("ok", 200))
+
+    def test_inactive_buckets_are_evicted_without_global_scan(self) -> None:
+        limiter = _RateLimiter(1)
+        self.assertTrue(limiter.allow("first", 0.0))
+        self.assertTrue(limiter.allow("second", 1.0))
+        self.assertEqual(limiter.bucket_count, 2)
+
+        self.assertTrue(limiter.allow("third", 62.0))
+        self.assertEqual(limiter.bucket_keys(), ("third",))
+
+    def test_rejected_request_does_not_break_eviction_order(self) -> None:
+        limiter = _RateLimiter(1)
+        self.assertTrue(limiter.allow("first", 0.0))
+        self.assertTrue(limiter.allow("second", 1.0))
+        self.assertFalse(limiter.allow("first", 59.0))
+
+        self.assertTrue(limiter.allow("third", 60.5))
+        self.assertEqual(limiter.bucket_keys(), ("second", "third"))
+
+    def test_reused_decorator_gives_each_endpoint_its_own_limiter(self) -> None:
+        limiter_decorator = rate_limit(1)
+
+        class Handler(BaseApi):
+            ROUTES = []
+
+            @limiter_decorator
+            def first(self: BaseApi) -> tuple[str, int]:
+                return "first", 200
+
+            @limiter_decorator
+            def second(self: BaseApi) -> tuple[str, int]:
+                return "second", 200
+
+        handler = object.__new__(Handler)
+        with self.app_context("203.0.113.4"):
+            with mock.patch("api.time.monotonic", return_value=0.0):
+                self.assertEqual(handler.first(), ("first", 200))
+                self.assertEqual(handler.second(), ("second", 200))
+
+    def test_bucket_count_is_capped(self) -> None:
+        limiter = _RateLimiter(1, max_buckets=2)
+        self.assertTrue(limiter.allow("first", 0.0))
+        self.assertTrue(limiter.allow("second", 1.0))
+        self.assertTrue(limiter.allow("third", 2.0))
+
+        self.assertEqual(limiter.bucket_count, 2)
+        self.assertEqual(limiter.bucket_keys(), ("second", "third"))
+
+    def test_missing_remote_address_uses_shared_unknown_bucket(self) -> None:
+        class Handler(BaseApi):
+            ROUTES = []
+
+            @rate_limit(1)
+            def endpoint(self: BaseApi) -> tuple[str, int]:
+                return "ok", 200
+
+        handler = object.__new__(Handler)
+        with self.app_context(None):
+            with mock.patch("api.time.monotonic", side_effect=[0.0, 1.0]):
+                self.assertEqual(handler.endpoint(), ("ok", 200))
+                self.assertEqual(handler.endpoint()[1], 429)
+
+    def setUp(self) -> None:
+        self.app = Flask(__name__)
+
+    def app_context(self, remote_addr: str | None) -> Any:
+        return self.app.test_request_context(
+            "/",
+            environ_base={"REMOTE_ADDR": remote_addr} if remote_addr is not None else {},
+        )
 
 
 if __name__ == "__main__":
