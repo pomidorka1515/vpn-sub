@@ -1,17 +1,19 @@
+
+from __future__ import annotations
+
 import telebot
 import time
 import threading
 import logging
 
 from loggers import Logger
+__all__ = ['TelegramPollingMixin']
 
-# pyright: reportUnknownMemberType=false
 
 _POLLING_CONNECT_TIMEOUT = 5
 _POLLING_LONG_TIMEOUT = 5
 _POLLING_STOP_TIMEOUT = 6
 
-__all__ = ['TelegramPollingMixin']
 
 class TelegramPollingMixin:
     polling_thread: threading.Thread | None = None
@@ -30,7 +32,7 @@ class TelegramPollingMixin:
         self.polling_thread.start()
 
     def _poll_forever(self) -> None:
-        self.bot.infinity_polling(
+        self.bot.infinity_polling(  # pyright: ignore[reportUnknownMemberType]
             timeout=_POLLING_CONNECT_TIMEOUT,
             long_polling_timeout=_POLLING_LONG_TIMEOUT,
             logger_level=logging.CRITICAL,

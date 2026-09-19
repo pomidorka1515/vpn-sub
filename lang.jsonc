@@ -88,16 +88,14 @@
             // login and registration flow
             "choose_login": "🔒 Как бы вы хотели войти?",
             "btn_login_credentials": "По логину и паролю",
-            "btn_login_token": "По ссылке",
             "enter_invite": "🔑 Пожалуйста, отправьте мне ваш код приглашения:",
             "enter_email": "📧 Введите ваш логин",
             "enter_pass": "🔒 Введите пароль:",
-            "enter_token": "🔑 Введите вашу ссылку или токен.",
             "invalid_code": "❌ Неверный код, либо он уже был использован.",
             "no_account": "⚠ У вас нету зарегистрированного аккаунта.",
             "reg_success": "✅ Подписка успешно активирована!",
             "login_success": "✅ Успешный вход!",
-            "login_fail": "❌ Неверный логин, пароль или токен.",
+            "login_fail": "❌ Неверный логин или пароль.",
 
             // account settings
             "settings_menu": "⚙ <b>Настройки</b>\nВыберите что хотите изменить:",
@@ -191,16 +189,14 @@
             // login and registration flow
             "choose_login": "🔒 How would you like to log in?",
             "btn_login_credentials": "With login and password",
-            "btn_login_token": "With subscription link",
             "enter_invite": "🔑 Please send me your invite code:",
             "enter_email": "📧 Enter your Email (login):",
             "enter_pass": "🔒 Enter your password:",
-            "enter_token": "🔑 Enter your link or token.",
             "invalid_code": "❌ Invalid code or already used.",
             "no_account": "⚠ You do not have a registered account.",
             "reg_success": "✅ Subscription successfully activated!",
             "login_success": "✅ Successfully logged in!",
-            "login_fail": "❌ Invalid login, password or token.",
+            "login_fail": "❌ Invalid login or password.",
 
             // account settings
             "settings_menu": "⚙ <b>Settings</b>\nChoose what to change:",

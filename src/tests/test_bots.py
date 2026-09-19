@@ -6,7 +6,8 @@ import unittest
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, cast
 
-from bots import PublicBot, TelegramPollingMixin
+from bots import PublicBot
+from bots.polling import TelegramPollingMixin
 
 
 _STOP_WAIT_SECONDS = 30

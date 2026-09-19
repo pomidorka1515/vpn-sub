@@ -39,7 +39,12 @@ py-modules = [
     "core", "bwatch", "custom_types", "db",
     "loggers", "session", "util", "errors"
 ]
-packages = ["config", "bots"]
+packages = [
+    "config",
+    "bots",
+    "bots.admin",
+    "bots.public",
+]
 
 # ---------------------------------------------------------------------------
 # mypy
@@ -95,18 +100,19 @@ show_column_numbers = true
 show_error_context  = true
 
 # -- per-module relaxations ---------------------------------------------
-# pyTelegramBotApi lacks proper typing,
-# all other modules are fine
-[[tool.mypy.overrides]]
-module = ["bots", "bots.*"]
-disallow_untyped_calls         = false
-
 # config is split across private implementation modules that access each
 # other's private helpers during the refactor
 [[tool.mypy.overrides]]
 module = ["config", "config.*"]
 no_implicit_reexport           = false
 disable_error_code             = ["attr-defined", "override"]
+
+# Bt feature mixins intentionally depend on attributes supplied by the concrete
+# composition roots; pyTelegramBotAPI is also only partially typed.
+[[tool.mypy.overrides]]
+module = ["bots.*"]
+disallow_untyped_calls         = false
+disable_error_code             = ["attr-defined", "no-any-return"]
 # -- pylance compatibility ----------------------------------------------
 [tool.pyright]
 pythonVersion = "3.14"
