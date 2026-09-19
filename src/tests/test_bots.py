@@ -4,7 +4,11 @@ import threading
 import time
 import unittest
 from concurrent.futures import Future, ThreadPoolExecutor
+from types import SimpleNamespace
 from typing import Any, Callable, cast
+from unittest.mock import MagicMock, patch
+
+from telebot import types
 
 from bots import PublicBot
 from bots.polling import TelegramPollingMixin
@@ -92,6 +96,69 @@ class PollingLifecycleTests(unittest.TestCase):
         stop_event.set()
         thread.join(_STOP_WAIT_SECONDS)
         self.assertFalse(thread.is_alive())
+
+
+class PublicTextRoutingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.bot = PublicBot.__new__(PublicBot)
+        self.telegram = MagicMock()
+        self.subscription = MagicMock()
+        self.bot.bot = cast(Any, self.telegram)
+        self.bot.sub = cast(Any, self.subscription)
+        self.subscription.get_telegram_language.return_value = "en"
+        self.bot.TEXTS = {
+            lang: {button: f"{lang}:{button}" for button, _, _ in self.bot.ROUTES}
+            for lang in ("ru", "en")
+        }
+
+    def message(self, text: str) -> types.Message:
+        return cast(
+            types.Message,
+            SimpleNamespace(text=text, from_user=SimpleNamespace(id=42), chat=SimpleNamespace(id=7)),
+        )
+
+    def test_routes_both_languages_to_first_matching_handler(self) -> None:
+        for button, handler_name, _requires_reg in self.bot.ROUTES:
+            for lang in ("ru", "en"):
+                with self.subTest(button=button, lang=lang):
+                    message = self.message(self.bot.TEXTS[lang][button])
+                    with patch.object(PublicBot, handler_name) as handler:
+                        self.bot.handle_text(message)
+                    handler.assert_called_once_with(message, 42, "en")
+
+    def test_unknown_text_is_ignored(self) -> None:
+        self.bot.handle_text(self.message("not a button"))
+        self.telegram.send_message.assert_not_called()
+        self.subscription.is_registered.assert_not_called()
+
+    def test_chart_buttons_keep_original_order_and_registration_guard(self) -> None:
+        self.bot.TEXTS["en"].update(
+            btn_chart_days="Last {days} days", choose_chart_days="Choose a period"
+        )
+        message = self.message(self.bot.TEXTS["ru"]["btn_chart"])
+        self.subscription.is_registered.return_value = False
+        self.bot.handle_text(message)
+        self.telegram.send_message.assert_not_called()
+
+        self.subscription.is_registered.return_value = True
+        self.bot.handle_text(message)
+        args, kwargs = self.telegram.send_message.call_args
+        self.assertEqual(args, (7, "Choose a period"))
+        markup = kwargs["reply_markup"]
+        self.assertEqual(
+            [button.callback_data for row in markup.keyboard for button in row],
+            ["chart_3", "chart_14", "chart_30", "chart_90"],
+        )
+
+    def test_registered_routes_are_blocked_before_handler_dispatch(self) -> None:
+        self.subscription.is_registered.return_value = False
+        message = self.message(self.bot.TEXTS["en"]["btn_info"])
+
+        with patch.object(PublicBot, "_handle_info") as handler:
+            self.bot.handle_text(message)
+
+        handler.assert_not_called()
+        self.subscription.is_registered.assert_called_once_with(42)
 
 
 class _ChartOnlyPublicBot(PublicBot):
