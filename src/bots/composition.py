@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         _pagination_state: dict[int, dict[str, int]]
         _pending_leaderboard: dict[int, dict[str, str | int]]
 
+        def is_admin(self, user_id: int) -> bool: ...
         def _send_message(self, chat_id: int, text: str, **kwargs: object) -> None: ...
         def _delete_message(self, chat_id: int, message_id: int, *, secret: bool = False) -> None: ...
         def get_main_menu(self) -> types.InlineKeyboardMarkup: ...
@@ -85,5 +86,4 @@ else:
 
     class PublicFeatureMixin:
         """Runtime-neutral base for public feature mixins."""
-
 

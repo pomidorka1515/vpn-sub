@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 from telebot import types
 
-from bots import PublicBot
+from bots import AdminBot, PublicBot
 from bots.polling import TelegramPollingMixin
 
 
@@ -159,6 +159,69 @@ class PublicTextRoutingTests(unittest.TestCase):
 
         handler.assert_not_called()
         self.subscription.is_registered.assert_called_once_with(42)
+
+
+class AdminCallbackRoutingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.bot = AdminBot.__new__(AdminBot)
+        self.telegram = MagicMock()
+        self.bot.bot = cast(Any, self.telegram)
+        self.bot.admin_uids = [42]
+        self.bot.log = MagicMock()
+
+    def callback(self, data: str, user_id: int = 42) -> types.CallbackQuery:
+        return cast(
+            types.CallbackQuery,
+            SimpleNamespace(
+                id="callback-id",
+                data=data,
+                from_user=SimpleNamespace(id=user_id),
+                message=SimpleNamespace(
+                    message_id=11,
+                    chat=SimpleNamespace(id=7),
+                ),
+            ),
+        )
+
+    def test_routes_exact_and_prefix_callbacks_to_first_matching_handler(self) -> None:
+        for route, handler_name, is_prefix in self.bot.ROUTES:
+            with self.subTest(route=route):
+                data = f"{route}value" if is_prefix else route
+                call = self.callback(data)
+                with patch.object(AdminBot, handler_name) as handler:
+                    self.bot.handle_callbacks(call)
+                handler.assert_called_once_with(data, 7, call.message)
+
+    def test_overlapping_routes_keep_specific_callbacks_first(self) -> None:
+        call = self.callback("info_code")
+        with (
+            patch.object(AdminBot, "_handle_info_code") as info_code,
+            patch.object(AdminBot, "_handle_info_user") as info_user,
+        ):
+            self.bot.handle_callbacks(call)
+        info_code.assert_called_once_with("info_code", 7, call.message)
+        info_user.assert_not_called()
+
+        call = self.callback("edit_user_alice")
+        with (
+            patch.object(AdminBot, "_handle_edit_user") as edit_user,
+            patch.object(AdminBot, "_handle_edit") as edit_action,
+        ):
+            self.bot.handle_callbacks(call)
+        edit_user.assert_called_once_with("edit_user_alice", 7, call.message)
+        edit_action.assert_not_called()
+
+    def test_unknown_callback_is_acknowledged_and_ignored(self) -> None:
+        self.bot.handle_callbacks(self.callback("unknown"))
+
+        self.telegram.answer_callback_query.assert_called_once_with("callback-id")
+        self.telegram.send_message.assert_not_called()
+        self.bot.log.error.assert_not_called()
+
+    def test_non_admin_callback_is_ignored_without_acknowledgement(self) -> None:
+        self.bot.handle_callbacks(self.callback("list_users", user_id=99))
+
+        self.telegram.answer_callback_query.assert_not_called()
 
 
 class _ChartOnlyPublicBot(PublicBot):
