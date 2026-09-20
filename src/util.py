@@ -7,6 +7,8 @@ import threading
 import hmac
 import uuid
 import re
+import io
+import qrcode
 import secrets
 
 from pathlib import Path
@@ -26,7 +28,7 @@ __all__ = [
     "format", "tuple_hook", "parse_bool",
     "fmt_bytes_tuple", "fmt_bytes", "fmt_time",
     "format_usage", "is_cancel_command", "truncate_utf8",
-    "generate_token",
+    "generate_token", "make_qr",
     "SysUtil"
 ]
 
@@ -196,6 +198,14 @@ def truncate_utf8(text: str, max_bytes: int, suffix: str = "...") -> str:
     return raw.decode("utf-8", errors="ignore") + suffix
 
 
+def make_qr(text: str) -> io.BytesIO:
+    img = qrcode.make(text)
+    bio = io.BytesIO()
+    img.save(bio, 'PNG')
+    bio.seek(0)
+    bio.name = "qr.png"
+    return bio
+   
 
 class SysUtil:
     """
