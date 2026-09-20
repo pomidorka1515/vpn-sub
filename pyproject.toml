@@ -36,11 +36,12 @@ build-backend = "setuptools.build_meta"
 package-dir = {"" = "src"}
 py-modules = [
     "app", "api", "chart", "builders",
-    "core", "bwatch", "custom_types", "db",
+    "bwatch", "custom_types", "db",
     "loggers", "session", "util", "errors"
 ]
 packages = [
     "config",
+    "core",
     "bots",
     "bots.admin",
     "bots.public",
@@ -61,7 +62,6 @@ files = [
     "src/loggers.py",
     "src/session.py",
     "src/chart.py",
-    "src/core.py",
     "src/bwatch.py",
     "src/api.py",
     "src/app.py",
@@ -69,6 +69,7 @@ files = [
     "src/errors.py",
     "src/builders.py",
     "src/tests/",
+    "src/core/"
 ]
 
 # -- strict mode --------------------------------------------------------
@@ -124,7 +125,6 @@ include = [
     "src/loggers.py",
     "src/session.py",
     "src/chart.py",
-    "src/core.py",
     "src/bwatch.py",
     "src/api.py",
     "src/app.py",
@@ -132,6 +132,7 @@ include = [
     "src/errors.py",
     "src/builders.py",
     "src/tests/",
+    "src/core/"
 ]
 typeCheckingMode = "strict"
 reportDeprecated = false

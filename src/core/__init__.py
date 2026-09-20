@@ -1,3 +1,3 @@
-from .core import Subscription
+from .main import Subscription
 
 __all__ = ["Subscription"]

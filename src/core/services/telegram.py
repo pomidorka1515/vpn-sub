@@ -1,11 +1,25 @@
+from typing import overload, Literal
 
-from ..common import BaseService
-from custom_types import UserInfo
+from ..common import BaseService, SharedCoreResources
+from .user.business import BusinessUserService
+from .code import CodeService
+from custom_types import UserInfo, ApplyBonusCodeObject
 from errors import NotFoundError
 
 __all__ = ["TelegramService"]
 
 class TelegramService(BaseService):
+    def __init__(
+        self,
+        res: SharedCoreResources,
+        *,
+        user_svc: BusinessUserService,
+        code_svc: CodeService
+    ) -> None:
+        super().__init__(res)
+        self.user_svc: BusinessUserService = user_svc
+        self.code_svc: CodeService = code_svc
+    
     def get_telegram_language(self, tgid: int | str) -> str:
         return self.db.get_telegram_language(tgid)
 
@@ -20,8 +34,30 @@ class TelegramService(BaseService):
         username = self.db.tgid_to_user(tgid)
         if username is None:
             raise NotFoundError("Unknown Telegram user")
-        return self.get_info(username, True)
+        return self.user_svc.get_info(username, True)
     
     def is_registered(self, tgid: int) -> bool:
         """Check if a telegram user is already registered."""
         return self.db.tgid_to_user(tgid) is not None
+    
+    def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
+        """Apply a bonus code for a Telegram user."""
+        username = self.get_username_telegram(value)
+        if not isinstance(username, str) or not username:
+            raise NotFoundError("Unknown Telegram user")
+        return self.code_svc.apply_bonus_code(username=username, code=code)
+    
+    @overload
+    def get_username_telegram(self, tgid: int | str, reverse: Literal[False] = False) -> str | None: ...
+
+    @overload
+    def get_username_telegram(self, tgid: int | str, reverse: Literal[True]) -> int | None: ...
+
+    def get_username_telegram(self, tgid: int | str, reverse: bool = False) -> int | str | None:
+        """Get the internal username for a tgid.
+        Parameter reverse: if True, get tg id from username. Otherwise default behaviour."""
+
+        if not reverse:
+            return self.db.tgid_to_user(tgid)
+        mapped = self.db.user_to_tgid(str(tgid))
+        return int(mapped) if mapped is not None else None

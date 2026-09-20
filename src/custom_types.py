@@ -75,6 +75,9 @@ class BandwidthUpdate(NamedTuple):
     delta: int
     current: BandwidthInfo
 
+class OnlineStatus(NamedTuple):
+    users: list[str] | dict[str, str | None]
+    panel_health: dict[str, Literal["ok", "unavailable", "invalid"]]
 
 # pyright: reportPrivateUsage=false
 # pyright: reportUnnecessaryIsInstance=false

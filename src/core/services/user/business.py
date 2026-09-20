@@ -4,83 +4,43 @@ import random
 import uuid
 import time
 from dataclasses import asdict
+from typing import cast
 
-from core.common import SharedCoreResources
-
-from ..common import BaseService
-from .panel import PanelService
-from .password import PasswordService
-from .audit import AuditService
-from custom_types import UserRecord, SettingsClient, NewUserInfo, client_stats_to_settings, ResetUserObject, UserInfo
-from errors import NotFoundError, PanelRejectedError, ValidationError, ConflictError, DuplicateError
+from ...common import BaseService, SharedCoreResources
+from .common import CommonUserService
+from ..panel import PanelService
+from ..bandwidth import BandwidthService
+from ..password import PasswordService
+from ..audit import AuditService
+from custom_types import (
+    SettingsClient, NewUserInfo, 
+    client_stats_to_settings, ResetUserObject, UserInfo,
+    UserInfoBandwidth, UserInfoBandwidthTotal
+)
+from errors import PanelRejectedError, ValidationError, ConflictError, DuplicateError
 from session import XUiSession
 from util import *
 
-__all__ = ["UserService"]
+__all__ = ["BusinessUserService"]
 
-class UserService(BaseService):
+class BusinessUserService(BaseService):
     def __init__(
         self,
         res: SharedCoreResources,
+        *,
+        user_svc: CommonUserService,
         panel_svc: PanelService,
         password_svc: PasswordService,
-        audit_svc: AuditService
+        audit_svc: AuditService,
+        bandwidth_svc: BandwidthService
     ) -> None:
         super().__init__(res)
         self.panel_svc: PanelService = panel_svc
         self.password_svc: PasswordService = password_svc
+        self.user_svc: CommonUserService = user_svc
         self.audit_svc: AuditService = audit_svc
+        self.bandwidth_svc: BandwidthService = bandwidth_svc
     
-    def isuser(self, username: str) -> bool:
-        """Know if a username exists."""
-        return bool(username) and self.db.user_exists(username)
-
-    def user(self, username: str) -> UserRecord:
-        """Helper method"""
-        user = self.db.get_user(username)
-        if user is None:
-            raise NotFoundError("Unknown username")
-        return user
-
-    def usertotoken(self, token: str) -> str | None:
-        """Get a username from a token, None if doesnt exist."""
-        if len(token) < 30:
-            return None
-        return self.db.token_to_user(token)
-
-    def get_user_state(self, username: str) -> UserRecord:
-        """Return a typed copy of the user's persisted state."""
-        return self.user(username)
-
-    def list_users(self) -> list[str]:
-        """Return users in deterministic username order."""
-        return self.db.list_users()
-
-    def get_token(self, username: str) -> str:
-        return str(self.user(username)["token"])
-
-
-    def auth_token_to_user(self, auth_token: str) -> str | None:
-        """Get a username from a web auth token, None if it does not exist."""
-        if len(auth_token) != 100:
-            return None
-        return self.db.auth_token_to_user(auth_token)
-
-
-    def set_auth_token(self, username: str, auth_token: str | None) -> None:
-        self.user(username)
-        self.db.set_auth_token(username, auth_token)
-
-    def get_fingerprint(self, username: str) -> str:
-        return str(self.user(username)["fingerprint"])
-
-    def get_external_username(self, username: str) -> str | None:
-        return self.db.user_to_ext(username)
-
-    def external_username_exists(self, ext_username: str) -> bool:
-        return self.db.ext_to_user(ext_username) is not None
-
-
     def _drop_cache(self, panel: XUiSession | None = None) -> None:
         """Drop cached inbounds. Call after mutations."""
         targets = [panel] if panel else list(self.panels)
@@ -92,9 +52,9 @@ class UserService(BaseService):
         """Get all info about a user. Raises NotFoundError if it does not exist."""
         
         conf = self.cfg.copy()
-        user = self._user(username)
-        bandwidths = self.bandwidth(username=username)
-        wl_bandwidths = self.bandwidth(username=username, whitelist=True)
+        user = self.user_svc.user(username)
+        bandwidths = self.bandwidth_svc.bandwidth(username=username)
+        wl_bandwidths = self.bandwidth_svc.bandwidth(username=username, whitelist=True)
         monthly = int(user['bw_used'])
         wl_monthly = int(user['wl_used'])
         domain = self.cfg['domain']
@@ -111,7 +71,7 @@ class UserService(BaseService):
             enabled=bool(user['enabled']),
             wl_enabled=bool(user['enabled_wl']),
             time=int(user['expires_at']),
-            online=self.is_online(username),
+            online=self.panel_svc.is_online(username),
             bandwidth=UserInfoBandwidth(
                 total=UserInfoBandwidthTotal(
                     upload=bandwidths.upload,
@@ -134,7 +94,7 @@ class UserService(BaseService):
 
     def add_users(self, username: str, _called_internally: bool = False) -> None:
         """Sync users to panels."""
-        userid = str(self.user(username)["uuid"])
+        userid = str(self.user_svc.user(username)["uuid"])
         panels = self.panels
 
         payload = SettingsClient(
@@ -193,7 +153,7 @@ class UserService(BaseService):
                     perma: bool = False
     ) -> None:
         """Delete a user, either from panels or from storage too."""
-        userid = str(self.user(username)["uuid"])
+        userid = str(self.user_svc.user(username)["uuid"])
         panels = self.panels
 
         for panel in panels:
@@ -220,7 +180,7 @@ class UserService(BaseService):
                     wl_enable: bool | None = None) -> None:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
         Raises a domain error if the user is absent or a panel update fails."""
-        userid = str(self.user(username)["uuid"])
+        userid = str(self.user_svc.user(username)["uuid"])
         audit_info: dict[str, str | bool] = {"username": username}
         if enable is not None:
             panels = list(self.panels)
@@ -380,7 +340,7 @@ class UserService(BaseService):
         timee: int | None = None
     ) -> None:
         """Updates certain fields for any user. Changing UUIDs isnt supported."""
-        current = self.user(username)
+        current = self.user_svc.user(username)
         audit_info: dict[str, str | int] = {"username": username}
         if displayname is None:
             displayname = str(current["displayname"])
@@ -482,7 +442,7 @@ class UserService(BaseService):
         Potentially dangerous operation, seperate function."""
         if not isuuid(uid):
             raise ValidationError("Invalid UUID")
-        olduid = str(self.user(username)["uuid"])
+        olduid = str(self.user_svc.user(username)["uuid"])
         successful: list[tuple['XUiSession', int, SettingsClient, bool]] = []
 
         for panel in self.panels:
@@ -539,7 +499,7 @@ class UserService(BaseService):
             username=username,
             token=newt
         )
-        self.set_auth_token(username, None)
+        self.user_svc.set_auth_token(username, None)
         self.audit_svc.audit(name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"})
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)

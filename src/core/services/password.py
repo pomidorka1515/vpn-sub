@@ -7,13 +7,11 @@ from ..common import BaseService
 __all__ = ["PasswordService"]
 
 class PasswordService(BaseService):
-
     def hash(self, s: str) -> str:
         return self.password_hasher.hash(s)
     
     def legacy_hash(self, s: str) -> str:
         return hashlib.sha256((self.legacy_salt + s).encode()).hexdigest()
-
 
     def validate_credentials(self, ext_username: str, password: str) -> str | None:
         stored = self.db.ext_password(ext_username)

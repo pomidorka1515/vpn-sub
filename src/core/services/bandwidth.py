@@ -1,11 +1,10 @@
 import time
 from dacite import from_dict, Config as DConfig
 
-from core.common import SharedCoreResources
 
-from ..common import BaseService
+from ..common import BaseService, SharedCoreResources
 from .panel import PanelService
-from .user import UserService
+from .user.common import CommonUserService
 from session import XUiSession
 from custom_types import BandwidthInfo, BandwidthSnapshot, StateSnapshot
 
@@ -15,12 +14,13 @@ class BandwidthService(BaseService):
     def __init__(
         self, 
         res: SharedCoreResources, 
-        panel_service: PanelService,
-        user_service: UserService
+        *,
+        panel_svc: PanelService,
+        user_svc: CommonUserService
     ) -> None:
         super().__init__(res)
-        self.panel_svc: PanelService = panel_service
-        self.user_svc: UserService = user_service
+        self.panel_svc: PanelService = panel_svc
+        self.user_svc: CommonUserService = user_svc
      
     def bandwidth(self, 
                   username: str,

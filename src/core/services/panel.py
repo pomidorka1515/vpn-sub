@@ -1,9 +1,10 @@
 import time
 from dacite import from_dict
+from typing import Literal, cast, overload
 
 from ..common import BaseService
 from session import XUiSession
-from custom_types import ServerMetricsResponse, Inbound
+from custom_types import ServerMetricsResponse, Inbound, OnlineStatus
 from errors import PanelUnavailableError, AppError
 
 __all__ = ["PanelService"]
@@ -64,3 +65,103 @@ class PanelService(BaseService):
                 if parsed_username == username:
                     emails[str(i.id)] = actual_email
         return emails
+
+    @overload
+    def get_online_status(self, new: Literal[False] = False) -> OnlineStatus: ...
+
+    @overload
+    def get_online_status(self, new: Literal[True]) -> OnlineStatus: ...
+
+    @overload
+    def get_online_status(self, new: bool) -> OnlineStatus: ...
+
+    def get_online_status(self, new: bool = False) -> OnlineStatus:
+        """Get online users and per-panel query health.
+
+        An empty result is valid only when every configured panel reports
+        a successful empty response.
+        """
+        online_users: set[str] = set()
+        panel_health: dict[str, Literal["ok", "unavailable", "invalid"]] = {}
+
+        if not self.panels:
+            if new:
+                return OnlineStatus({}, panel_health)
+            return OnlineStatus([], panel_health)
+
+        for panel in self.panels:
+            if panel.dead:
+                panel_health[panel.name] = "unavailable"
+                continue
+            try:
+                response = panel.post("panel/api/inbounds/onlines")
+                data: dict[str, object] = response.json()
+                if response.status_code not in (200, 201) or not data.get('success'):
+                    panel_health[panel.name] = "unavailable"
+                    self.log.error(
+                        "Online check failed for panel %s: %s",
+                        panel.name,
+                        data.get('msg') or response.status_code,
+                    )
+                    continue
+                raw_online = data.get('obj', [])
+                if not isinstance(raw_online, list):
+                    panel_health[panel.name] = "invalid"
+                    self.log.error(
+                        "Online check returned invalid payload for panel %s",
+                        panel.name,
+                    )
+                    continue
+                raw_emails: list[object] = cast(list[object], raw_online)
+                for raw_email in raw_emails:
+                    if not isinstance(raw_email, str):
+                        panel_health[panel.name] = "invalid"
+                        self.log.error(
+                            "Online check returned a non-string email for panel %s",
+                            panel.name,
+                        )
+                        break
+                    name_candidate = raw_email.rsplit('-', 1)[0]
+                    if self.db.user_exists(name_candidate):
+                        online_users.add(name_candidate)
+                else:
+                    panel_health[panel.name] = "ok"
+            except Exception as exc:
+                panel_health[panel.name] = "unavailable"
+                self.log.error("Online check failed for panel %s", panel.name, exc_info=exc)
+
+        if all(health == "unavailable" for health in panel_health.values()):
+            raise PanelUnavailableError("No panel could be queried for online users")
+
+        users: list[str] | dict[str, str | None]
+        if not new:
+            users = list(online_users)
+        else:
+            users = {name: self.db.user_to_ext(name) for name in online_users}
+        return OnlineStatus(users, panel_health)
+
+    @overload
+    def get_online_users(self, new: Literal[False] = False) -> list[str]: ...
+
+    @overload
+    def get_online_users(self, new: Literal[True]) -> dict[str, str | None]: ...
+
+    @overload
+    def get_online_users(self, new: bool) -> list[str] | dict[str, str | None]: ...
+
+    def get_online_users(self, new: bool = False) -> list[str] | dict[str, str | None]:
+        """Compatibility wrapper for callers that do not need panel health."""
+        return self.get_online_status(new).users
+
+    def is_online(self, username: str) -> bool:
+        """Return True only when the user is online and every panel is healthy.
+
+        No configured panels is an explicit known-empty state rather than an
+        availability failure.
+        """
+        if not self.panels:
+            return False
+        status = self.get_online_status()
+        return username in status.users and any(
+            health == "ok" for health in status.panel_health.values()
+        )
