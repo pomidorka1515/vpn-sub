@@ -7,6 +7,7 @@ import json
 import copy
 import base64
 
+from pathlib import Path
 from typing import Any, Literal, TYPE_CHECKING
 from datetime import datetime, timezone
 from collections import deque
@@ -24,7 +25,7 @@ __all__ = ["build_description", "build_link_array", "build_json", "get_subscript
 
 # pyright: reportPrivateUsage=false
 
-with open("res/browser.html", "r", encoding="utf-8") as f:
+with open(Path(__file__).resolve().parent.parent / "res" / "browser.html", encoding="utf-8") as f:
     BROWSER_HTML = f.read()
 def build_description(
     lang_cfg: dict[str, Any],

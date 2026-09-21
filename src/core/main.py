@@ -6,7 +6,8 @@ from .common import SharedCoreResources
 from errors import UnsupportedPlatformError
 from config import ConfigLike, LinesConfigLike
 from db import Database
-from flask import Flask
+from flask import Flask, Response, request
+from builders import get_subscription
 from session import XUiSession
 from loggers import Logger
 
@@ -80,4 +81,19 @@ class Subscription:
             )
             self.leaderboard_svc: LeaderboardService = LeaderboardService(
                 self.res, user_svc=self.user_svc, bandwidth_svc=self.bandwidth_svc
+            )
+            self.register_routes()
+
+    def register_routes(self) -> None:
+        uri = str(self.res.cfg["uri"]).strip("/")
+
+        @self.res.app.route(f"/{uri}", strict_slashes=False)
+        def _sub() -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction]
+            return get_subscription(
+                self,
+                token=request.args.get("token", ""),
+                lang=request.args.get("lang", ""),
+                ua=request.headers.get("User-Agent", ""),
+                ip=request.headers.get("X-Real-IP", ""),
+                force_json=request.args.get("force_json", "0"),
             )

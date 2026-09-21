@@ -98,6 +98,9 @@ class ApplicationFactoryTests(unittest.TestCase):
             self.assertTrue(
                 any(rule.rule == "/sub" for rule in runtime.app.url_map.iter_rules())
             )
+            sub_response = client.get("/sub")
+            self.assertEqual(sub_response.status_code, 401)
+            self.assertFalse(sub_response.get_json()["success"])
             self.assertTrue(self.paths.database.exists())
             self.assertTrue(self.paths.log.exists())
             self.assertTrue(self.paths.audit.exists())
