@@ -20,15 +20,22 @@ _STOP_WAIT_SECONDS = 30
 class _NullLogger:
     def __init__(self) -> None:
         self.errors: list[str] = []
+        self.warnings: list[str] = []
 
     def error(self, message: str) -> None:
         self.errors.append(message)
+
+    def warning(self, message: str, *args: object) -> None:
+        if args:
+            message = message % args
+        self.warnings.append(message)
 
 
 class _Poller:
     def __init__(self) -> None:
         self.stop_polling_calls = 0
         self.polling_started = threading.Event()
+        self.token: str | None = None
 
     def infinity_polling(self, **kwargs: Any) -> None:
         self.polling_started.set()
@@ -96,6 +103,42 @@ class PollingLifecycleTests(unittest.TestCase):
         stop_event.set()
         thread.join(_STOP_WAIT_SECONDS)
         self.assertFalse(thread.is_alive())
+
+    def test_polling_errors_are_logged_without_token_or_traceback(self) -> None:
+        bot = _TestBot()
+        token = "123456:secret-token-value"
+        bot.poller.token = token
+        raised = threading.Event()
+
+        def infinity_polling(**kwargs: Any) -> None:
+            if not raised.is_set():
+                raised.set()
+                raise ConnectionError(
+                    f"HTTPSConnectionPool(host='api.telegram.org', port=443): "
+                    f"Max retries exceeded with url: /bot{token}/getUpdates "
+                    f"(Caused by ProtocolError('Connection aborted.', "
+                    f"ConnectionResetError(104, 'Connection reset by peer')))"
+                )
+            stop_event.wait(_STOP_WAIT_SECONDS)
+
+        bot.poller.infinity_polling = infinity_polling  # type: ignore[method-assign]
+        bot.start_polling()
+        self.assertTrue(raised.wait(1))
+        deadline = time.monotonic() + 1
+        while not bot.logger.warnings and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        self.assertEqual(len(bot.logger.warnings), 1)
+        warning = bot.logger.warnings[0]
+        self.assertIn("telegram polling failed:", warning)
+        self.assertIn("ConnectionError", warning)
+        self.assertNotIn(token, warning)
+        self.assertNotIn("secret-token-value", warning)
+        self.assertNotIn("Traceback", warning)
+        self.assertEqual(bot.logger.errors, [])
+
+        stop_event.set()
+        bot.stop_polling()
 
 
 class PublicTextRoutingTests(unittest.TestCase):
