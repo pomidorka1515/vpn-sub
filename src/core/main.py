@@ -40,6 +40,10 @@ class Subscription:
     ):
         log = Logger(type(self).__name__)
         with log.loading():
+            self.panels = panels
+            if whitelist_panel:
+                self.panels.append(whitelist_panel)
+            
             self.res = SharedCoreResources(
                 cfg=cfg, lang_cfg=lang_cfg, db=db,
                 app=app, log=log,

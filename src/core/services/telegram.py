@@ -39,6 +39,14 @@ class TelegramService(BaseService):
     def is_registered(self, tgid: int) -> bool:
         """Check if a telegram user is already registered."""
         return self.db.tgid_to_user(tgid) is not None
+
+    def set_telegram_user(self, tgid: int | str, username: str | None) -> None:
+        if username is None:
+            existing = self.db.tgid_to_user(tgid)
+            if existing is not None:
+                self.db.set_telegram(existing, None)
+            return
+        self.db.set_telegram(username, str(tgid))
     
     def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
         """Apply a bonus code for a Telegram user."""

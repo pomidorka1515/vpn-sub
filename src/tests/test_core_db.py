@@ -38,36 +38,36 @@ class SubscriptionDatabaseWorkflowTests(unittest.TestCase):
                 panels=[], whitelist_panel=None,
             )
             with self.assertRaises(NotFoundError):
-                subscription.get_info("missing")
-            created = subscription.add_new_user(
+                subscription.business_svc.get_info("missing")
+            created = subscription.business_svc.add_new_user(
                 "alice", "Alice", ext_username="alice-login",
                 ext_password="secret", limit=10, wl_limit=5,
             )
             with self.assertRaises(ValidationError):
-                subscription.update_params("alice", fingerprint="invalid")
+                subscription.business_svc.update_params("alice", fingerprint="invalid")
             with self.assertRaises(ConflictError):
-                subscription.add_new_user(
+                subscription.business_svc.add_new_user(
                     "alice", "Alice", ext_username="alice-login",
                     ext_password="secret", limit=10, wl_limit=5,
                 )
             with self.assertRaises(ValidationError):
-                subscription.add_code("", "bonus")
-            subscription.add_code("invite", "bonus")
+                subscription.code_svc.add_code("", "bonus")
+            subscription.code_svc.add_code("invite", "bonus")
             with self.assertRaises(ConflictError):
-                subscription.add_code("invite", "bonus")
+                subscription.code_svc.add_code("invite", "bonus")
             with self.assertRaises(NotFoundError):
-                subscription.get_code("missing")
+                subscription.code_svc.get_code("missing")
             with self.assertRaises(NotFoundError):
-                subscription.delete_code("missing")
+                subscription.code_svc.delete_code("missing")
             self.assertNotIsInstance(created, str)
-            self.assertEqual(subscription.validate_credentials("alice-login", "secret"), "alice")
-            subscription.set_telegram_user(123, "alice")
-            self.assertEqual(subscription.get_username_telegram(123), "alice")
-            subscription.update_params("alice", displayname="Alice 2", fingerprint="firefox")
-            info = subscription.get_info("alice")
+            self.assertEqual(subscription.password_svc.validate_credentials("alice-login", "secret"), "alice")
+            subscription.telegram_svc.set_telegram_user(123, "alice")
+            self.assertEqual(subscription.telegram_svc.get_username_telegram(123), "alice")
+            subscription.business_svc.update_params("alice", displayname="Alice 2", fingerprint="firefox")
+            info = subscription.business_svc.get_info("alice")
             self.assertEqual((info.displayname, info.fingerprint), ("Alice 2", "firefox"))
-            subscription.delete_user("alice", perma=True)
-            self.assertFalse(subscription.isuser("alice"))
+            subscription.business_svc.delete_user("alice", perma=True)
+            self.assertFalse(subscription.user_svc.isuser("alice"))
             database.close()
 
 
@@ -89,14 +89,14 @@ class SubscriptionAuthSessionTests(unittest.TestCase):
             )
             database.set_auth_token("alice", "b" * 100)
 
-            result = subscription.reset_user("alice")
+            result = subscription.business_svc.reset_user("alice")
 
             self.assertNotEqual(result.token, "a" * 40)
-            self.assertEqual(subscription.get_token("alice"), result.token)
+            self.assertEqual(subscription.user_svc.get_token("alice"), result.token)
             record = database.get_user("alice")
             assert record is not None
             self.assertIsNone(record["auth_token"])
-            self.assertIsNone(subscription.auth_token_to_user("b" * 100))
+            self.assertIsNone(subscription.user_svc.auth_token_to_user("b" * 100))
             database.close()
 
 
@@ -151,9 +151,9 @@ class RejectedPanelTests(unittest.TestCase):
                     ).encode()
                     return response
 
-            subscription.panels.append(cast(XUiSession, RejectedPanel()))
+            subscription.res.panels.append(cast(XUiSession, RejectedPanel()))
             with self.assertRaises(PanelRejectedError):
-                subscription.add_users("alice")
+                subscription.business_svc.add_users("alice")
             database.close()
 
 
@@ -189,7 +189,7 @@ class OnlineStatusTests(unittest.TestCase):
                     return response
 
             subscription.panels.append(cast(XUiSession, EmptyPanel()))
-            status = subscription.get_online_status()
+            status = subscription.panel_svc. get_online_status()
             self.assertEqual(status.users, [])
             self.assertEqual(status.panel_health, {"panel": "ok"})
             database.close()
@@ -206,19 +206,19 @@ class OnlineStatusTests(unittest.TestCase):
                 def post(self, url: str, **kwargs: object) -> Response:
                     raise RuntimeError("transport failed")
 
-            subscription.panels.append(cast(XUiSession, FailedPanel()))
+            subscription.res.panels.append(cast(XUiSession, FailedPanel()))
             with self.assertRaises(PanelUnavailableError):
-                subscription.get_online_status()
+                subscription.panel_svc.get_online_status()
             database.close()
 
     def test_online_status_reports_empty_without_panels(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Database(path=f"{directory}/state.sqlite3")
             subscription = self._subscription(database)
-            status = subscription.get_online_status()
+            status = subscription.panel_svc.get_online_status()
             self.assertEqual(status.users, [])
             self.assertEqual(status.panel_health, {})
-            self.assertEqual(subscription.get_online_status(new=True).users, {})
+            self.assertEqual(subscription.panel_svc.get_online_status(new=True).users, {})
             database.close()
 
     def test_online_status_marks_malformed_payload_invalid(self) -> None:
@@ -599,7 +599,7 @@ class DailySnapshotTests(unittest.TestCase):
                     raise RuntimeError("panel unavailable")
                 return BandwidthInfo(1, 2, 3)
 
-            subscription.bandwidth = bandwidth  # type: ignore[method-assign]
+            subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
             watch.record_daily_snapshot()
             failure = watch.get_daily_snapshot_failure()
             assert failure is not None
@@ -634,9 +634,9 @@ class CredentialValidationTests(unittest.TestCase):
             subscription = self._subscription(directory, database)
             self._create_user(database, PasswordHasher().hash("secret"))
 
-            self.assertIsNone(subscription.validate_credentials("alice-login", "wrong"))
+            self.assertIsNone(subscription.password_svc.validate_credentials("alice-login", "wrong"))
             self.assertEqual(
-                subscription.validate_credentials("alice-login", "secret"), "alice"
+                subscription.password_svc.validate_credentials("alice-login", "secret"), "alice"
             )
             database.close()
 
@@ -647,7 +647,7 @@ class CredentialValidationTests(unittest.TestCase):
             self._create_user(database, subscription.legacy_hash("secret"))
 
             self.assertEqual(
-                subscription.validate_credentials("alice-login", "secret"), "alice"
+                subscription.password_svc.validate_credentials("alice-login", "secret"), "alice"
             )
             stored = database.ext_password("alice-login")
             self.assertIsNotNone(stored)
@@ -656,7 +656,7 @@ class CredentialValidationTests(unittest.TestCase):
 
             subscription.SALT = "changed-legacy-salt"
             self.assertEqual(
-                subscription.validate_credentials("alice-login", "secret"), "alice"
+                subscription.password_svc.validate_credentials("alice-login", "secret"), "alice"
             )
             database.close()
 
@@ -666,10 +666,10 @@ class CredentialValidationTests(unittest.TestCase):
             subscription = self._subscription(directory, database)
             self._create_user(database, "$argon2id$corrupt")
 
-            subscription.log.addHandler(logging.NullHandler())
-            with self.assertLogs(subscription.log, level="ERROR") as logs:
+            subscription.res.log.addHandler(logging.NullHandler())
+            with self.assertLogs(subscription.res.log, level="ERROR") as logs:
                 self.assertIsNone(
-                    subscription.validate_credentials("alice-login", "secret")
+                    subscription.password_svc.validate_credentials("alice-login", "secret")
                 )
             self.assertIn("Corrupt or tampered argon2 password hash", logs.output[0])
             database.close()

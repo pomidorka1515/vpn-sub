@@ -24,6 +24,8 @@ __all__ = ["build_description", "build_link_array", "build_json", "get_subscript
 
 # pyright: reportPrivateUsage=false
 
+with open("res/browser.html", "r", encoding="utf-8") as f:
+    BROWSER_HTML = f.read()
 def build_description(
     lang_cfg: dict[str, Any],
     name: str,
@@ -273,8 +275,8 @@ def get_subscription(
     # ===================================
     if not token:
         return err("Invalid token.", 401)
-    username = obj.usertotoken(token)
-    obj.audit(name='sub_hit', info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json})
+    username = obj.user_svc.usertotoken(token)
+    obj.audit_svc.audit(name='sub_hit', info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json})
 
     if not username:
         return err("Invalid token.", 401)
@@ -282,13 +284,13 @@ def get_subscription(
         return err("Language can be either 'ru' or 'en'", 400)
 
     if isbrowser(ua=ua):
-        return Response(obj.browser_html, mimetype="text/html"), 403
+        return Response(BROWSER_HTML, mimetype="text/html"), 403
 
-    bandwidths = obj.bandwidth(username)
+    bandwidths = obj.bandwidth_svc.bandwidth(username)
 
-    cfg = obj.cfg.copy()
-    lang_cfg = obj.lang_cfg.copy()
-    user = obj._user(username)
+    cfg = obj.res.cfg.copy()
+    lang_cfg = obj.res.lang_cfg.copy()
+    user = obj.user_svc.user(username)
 
     displayname = str(user['displayname'])
     need_dummy_link = "v2rayn" in ua.lower() # catches both v2rayn and v2rayng

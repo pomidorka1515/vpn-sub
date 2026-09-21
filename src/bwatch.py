@@ -69,11 +69,11 @@ class BWatch:
     def start(self) -> None:
         initial_mem: dict[str, BandwidthInfo] = {}
         initial_wl_mem: dict[str, BandwidthInfo] = {}
-        for i in self.sub.list_users():
-            initial_wl_mem[i] = self.sub.bandwidth(username=i, whitelist=True)
-            if self.sub.get_user_state(i)['bw_limit_gb'] == 0:
+        for i in self.sub.user_svc.list_users():
+            initial_wl_mem[i] = self.sub.bandwidth_svc.bandwidth(username=i, whitelist=True)
+            if self.sub.user_svc.get_user_state(i)['bw_limit_gb'] == 0:
                 continue
-            initial_mem[i] = self.sub.bandwidth(username=i)
+            initial_mem[i] = self.sub.bandwidth_svc.bandwidth(username=i)
 
         with self._mem_lock:
             self.mem = initial_mem
@@ -104,7 +104,7 @@ class BWatch:
         
     def _update_user(self, *args: Any, **kwargs: Any) -> None:
         try:
-            self.sub.update_user(*args, **kwargs)
+            self.sub.business_svc.update_user(*args, **kwargs)
         except AppError:
             self.log.error("background user update failed", exc_info=True)
     
@@ -123,8 +123,8 @@ class BWatch:
     def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
         wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
-        for i in self.sub.list_users():
-            state = self.sub.get_user_state(i)
+        for i in self.sub.user_svc.list_users():
+            state = self.sub.user_svc.get_user_state(i)
             # Main bandwidth
             if int(state['expires_at']) != 0:
                 if (int(state['expires_at']) - int(time.time())) >= 0 and not bool(state['enabled_time']):
@@ -140,8 +140,8 @@ class BWatch:
             # Read both counters before advancing either baseline. If either required
             # read fails, do not commit a partial delta for this user.
             try:
-                current_bws = self.sub.bandwidth(username=i) if main_required else None
-                current_wl_bws = self.sub.bandwidth(username=i, whitelist=True) if wl_required else None
+                current_bws = self.sub.bandwidth_svc.bandwidth(username=i) if main_required else None
+                current_wl_bws = self.sub.bandwidth_svc.bandwidth(username=i, whitelist=True) if wl_required else None
             except Exception:
                 self.log.error("bandwidth poll failed for user %s", i, exc_info=True)
                 continue
@@ -181,7 +181,7 @@ class BWatch:
             if panel.dead:
                 continue
             try:
-                status = self.sub.getstatus(panel)
+                status = self.sub.panel_svc.getstatus(panel)
                 if not status:
                     continue
                 
@@ -223,9 +223,9 @@ class BWatch:
                 self.log.error("health check failed for panel %s (%s)", panel.name, panel.address, exc_info=True)
 
     def check(self) -> None:
-        for i in self.sub.list_users():
-            state = self.sub.get_user_state(i)
-            tg_user = self.sub.get_username_telegram(tgid=i, reverse=True)
+        for i in self.sub.user_svc.list_users():
+            state = self.sub.user_svc.get_user_state(i)
+            tg_user = self.sub.telegram_svc.get_username_telegram(tgid=i, reverse=True)
             expires_at = int(state['expires_at'])
             bw_limit = int(state['bw_limit_gb'])
             bw_used = int(state['bw_used'])
@@ -279,7 +279,7 @@ class BWatch:
         panels_data: dict[str, object] = {}
         panel_errors: list[str] = []
         for panel in self.sub.panels:
-            status = self.sub.getstatus(panel)
+            status = self.sub.panel_svc.getstatus(panel)
             if status is None:
                 panel_errors.append(panel.name)
             else:
@@ -318,8 +318,8 @@ class BWatch:
         eligible_users: list[str] = []
         failed_users: list[str] = []
 
-        for username in self.sub.list_users():
-            state = self.sub.get_user_state(username)
+        for username in self.sub.user_svc.list_users():
+            state = self.sub.user_svc.get_user_state(username)
             bw_limit = int(state['bw_limit_gb'])
             wl_limit = int(state['wl_limit_gb'])
             if bw_limit == 0 and wl_limit == 0:
@@ -327,8 +327,8 @@ class BWatch:
             eligible_users.append(username)
 
             try:
-                current = self.sub.bandwidth(username=username)
-                wl_current = self.sub.bandwidth(username=username, whitelist=True)
+                current = self.sub.bandwidth_svc.bandwidth(username=username)
+                wl_current = self.sub.bandwidth_svc.bandwidth(username=username, whitelist=True)
             except Exception:
                 failed_users.append(username)
                 self.log.error(

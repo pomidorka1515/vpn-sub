@@ -7,6 +7,7 @@ from loggers import Logger
 
 import threading
 import time
+import random
 import uuid
 import base64
 import binascii
@@ -22,7 +23,7 @@ from typing import (
 from dataclasses import asdict
 
 from config import ConfigLike, LinesConfigLike
-from util import SysUtil, parse_bool, ok, err, sanitize, compare, generate_token
+from util import SysUtil, parse_bool, ok, err, sanitize, compare, generate_token, make_qr
 
 from custom_types import HTTPMethod, JsonifyValue, ResponseType
 
@@ -374,7 +375,7 @@ class WebApi(BaseApi):
         def _v(token: str | None) -> str | None:
             if not token or len(token) != 100:
                 return None
-            username = self.sub.auth_token_to_user(token)
+            username = self.sub.user_svc.auth_token_to_user(token)
             return username if isinstance(username, str) else None
 
         if auth_token is not None:
@@ -395,7 +396,7 @@ class WebApi(BaseApi):
 
     def validate_credentials(self, username: str, password: str) -> str | bool:
         """Validate username+password. Returns internal username on success."""
-        return self.sub.validate_credentials(username, password) or False
+        return self.sub.password_svc.validate_credentials(username, password) or False
     def redirect_page(self) -> ResponseType:
         prefix = request.args.get('prefix', '')
         if not prefix.startswith(('happ://', 'v2ray', 'clash')):
@@ -428,7 +429,7 @@ class WebApi(BaseApi):
         if lang not in ('en', 'ru'):
             lang = 'en'
         
-        token = self.sub.get_token(username)
+        token = self.sub.user_svc.get_token(username)
         domain = self.cfg['domain']
         link = f"{domain}/sub?token={token}&lang={lang}"
         
@@ -436,7 +437,7 @@ class WebApi(BaseApi):
             link = f"happ://add/{link}"
         
         try:
-            buf = self.sub.make_qr(link)
+            buf = make_qr(link)
         except ValueError:
             return err("Invalid request", 400)
 
@@ -451,7 +452,7 @@ class WebApi(BaseApi):
             return err("'username' field is missing")
         sanitized = sanitize(raw, "external")
         valid = raw == sanitized and len(raw) > 0
-        taken = self.sub.external_username_exists(sanitized)
+        taken = self.sub.user_svc.external_username_exists(sanitized)
         return ok(obj={
             "MAX_LENGTH": 32,
             "valid": valid,
@@ -554,7 +555,7 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     def stats(self, username: str) -> ResponseType:
         """Get user info from token"""
-        x = self.sub.get_info(username)
+        x = self.sub.business_svc.get_info(username)
         return ok(obj=asdict(x))
 
     @requires_webapi_auth
@@ -565,7 +566,7 @@ class WebApi(BaseApi):
         except (ValueError, TypeError):
             return err("'days' must be an integer")
         days = max(1, min(days, 90))
-        snapshots = self.sub.get_bw_history(username, days)
+        snapshots = self.sub.bandwidth_svc.get_bw_history(username, days)
         return ok(obj=[asdict(s) for s in snapshots])
 
 
@@ -593,7 +594,7 @@ class WebApi(BaseApi):
         if not (1 <= len(raw_code) <= 64):
             return err("'code' must be 1-64 characters")
         
-        result = self.sub.register_with_code(
+        result = self.sub.business_code_svc.register_with_code(
             code=raw_code,
             username=f"web_{uuid.uuid4().hex[:16]}",
             displayname=raw_name,
@@ -613,7 +614,7 @@ class WebApi(BaseApi):
         if not isinstance(internal, str):
             return err("Invalid credentials.", 401)
         auth_token = generate_token("auth")
-        self.sub.set_auth_token(internal, auth_token)
+        self.sub.user_svc.set_auth_token(internal, auth_token)
         r, code = ok(msg="Successful login", obj={"username": content['username']})
         r.set_cookie(
             key='auth_token',
@@ -681,7 +682,7 @@ class Api(BaseApi):
 
     @requires_admin_auth
     def user_list(self) -> ResponseType: 
-        users = self.sub.list_users()
+        users = self.sub.user_svc.list_users()
         if not users:
             return ok(obj=[])
         return ok(obj=users)
@@ -692,7 +693,7 @@ class Api(BaseApi):
     def user_info(self) -> ResponseType: 
         username = request.args['user']
         pretty = request.args.get('beautify', '').lower() in ('1', 'true', 'yes')
-        x = self.sub.get_info(username=username, pretty=pretty)
+        x = self.sub.business_svc.get_info(username=username, pretty=pretty)
         return ok(obj=asdict(x))
  
     @requires_admin_auth
@@ -731,7 +732,7 @@ class Api(BaseApi):
                 if cast(int, data[k]) < 0:
                     return err(f"{k} must be non-negative")
 
-        self.sub.add_new_user(
+        self.sub.business_svc.add_new_user(
             username=cast(str, data['user']),
             displayname=cast(str, data['displayname']),
             ext_username=cast(str, data['ext_username']),
@@ -753,16 +754,16 @@ class Api(BaseApi):
         perma = parse_bool(content.get('perma', 'true'))
         if perma is None:
             return err("'perma' must be bool-like")
-        self.sub.delete_user(username, perma)
+        self.sub.business_svc.delete_user(username, perma)
         return ok("Deleted")
 
     @requires_admin_auth
     def user_refresh(self) -> ResponseType:
-        users = self.sub.list_users()
+        users = self.sub.user_svc.list_users()
         failures: list[str] = []
         for cc in users:
             try:
-                self.sub.add_users(cc)
+                self.sub.business_svc.add_users(cc)
             except PanelUnavailableError:
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)
@@ -784,7 +785,7 @@ class Api(BaseApi):
         new = parse_bool(request.args.get('keyed', False))
         if new is None:
             return err("'keyed' must be bool-like")
-        status = self.sub.get_online_status(new)
+        status = self.sub.business_svc.get_online_status(new)
         return ok(obj={"users": status.users, "panel_health": status.panel_health})
 
     @requires_admin_auth
@@ -792,7 +793,7 @@ class Api(BaseApi):
     def user_reset(self) -> ResponseType:
         content = g.json_obj
         username: str = content.get('user')
-        x = self.sub.reset_user(username)
+        x = self.sub.business_svc.reset_user(username)
         return ok(obj=asdict(x))
             
     @requires_admin_auth
@@ -801,7 +802,7 @@ class Api(BaseApi):
         if query is None:
             result: dict[str, dict[str, JsonifyValue] | None] = {}
             for panel in self.sub.panels:
-                _ = self.sub.getstatus(panel)
+                _ = self.sub.panel_svc.getstatus(panel)
                 if _ is None:
                     self.log.error(f"getstatus: {panel.name} returned None")
                 else:
@@ -811,7 +812,7 @@ class Api(BaseApi):
 
         for panel in self.sub.panels:
             if panel.name == query:
-                res = self.sub.getstatus(panel)
+                res = self.sub.panel_svc.getstatus(panel)
                 if res is None:
                     return err("getstatus() returned None; panel may be down")
                 return ok(obj=asdict(res))
@@ -826,7 +827,7 @@ class Api(BaseApi):
     def full_info(self) -> ResponseType:
         panels_data: dict[str, JsonifyValue] = {}
         for panel in self.sub.panels:
-            res = self.sub.getstatus(panel)
+            res = self.sub.panel_svc.getstatus(panel)
             if res is None:
                 panels_data[panel.name] = {"status": "unknown"}
             else:
@@ -840,7 +841,7 @@ class Api(BaseApi):
         
     @requires_admin_auth
     def code_list(self) -> ResponseType: 
-        return ok(obj=self.sub.list_code())
+        return ok(obj=self.sub.code_svc.list_code())
     
     @requires_admin_auth
     @requires_args('code')
@@ -848,7 +849,7 @@ class Api(BaseApi):
         code = request.args.get('code')
         if not isinstance(code, str):
             return err("'code' must be a str")
-        x = self.sub.get_code(code)
+        x = self.sub.code_svc.get_code(code)
         return ok(obj=asdict(x))
     
     @requires_admin_auth
@@ -898,7 +899,7 @@ class Api(BaseApi):
         if cast(int, data['days']) < 0 or cast(int, data['gb']) < 0 or cast(int, data['wl_gb']) < 0:
             return err("days, gb, and wl_gb must be non-negative")
 
-        self.sub.add_code(
+        self.sub.code_svc.add_code(
             code=cast(str, data['name']),
             action=data['action'],
                 permanent=cast(bool, data['permanent']),
@@ -914,7 +915,7 @@ class Api(BaseApi):
     def code_delete(self) -> ResponseType:
         content = g.json_obj
         name: str = content.get('code')
-        self.sub.delete_code(name)
+        self.sub.code_svc.delete_code(name)
         return ok("Deleted")
 
     @requires_admin_auth
@@ -940,7 +941,7 @@ class Api(BaseApi):
         if cutoff < 0:
             return err("cutoff param must be higher than 0", 400)
         
-        obj = self.sub.get_snapshots(cutoff)
+        obj = self.sub.bandwidth_svc.get_snapshots(cutoff)
         return ok(obj=[asdict(s) for s in obj])
     
     @requires_admin_auth
@@ -961,7 +962,7 @@ class Api(BaseApi):
         if category not in ('total', 'monthly', 'wl_monthly'):
             return err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
 
-        data = self.sub.leaderboard(
+        data = self.sub.leaderboard_svc.leaderboard(
             category=category,
             top_n=top_n,
             use_displaynames=use_displaynames,
@@ -983,7 +984,7 @@ class Api(BaseApi):
     def operation_status(self) -> ResponseType:
         return ok(obj={
             "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
-            "rollback_failures": self.sub.get_rollback_failures(),
+            "rollback_failures": self.sub.business_code_svc.get_rollback_failures(),
         })
 
     @requires_admin_auth
@@ -993,12 +994,12 @@ class Api(BaseApi):
         kind_value: str = content.get('kind')
         username: str = content.get('user')
         if kind_value == 'uuid':
-            self.sub.clear_rollback_failure('uuid', username)
+            self.sub.business_code_svc.clear_rollback_failure('uuid', username)
         elif kind_value == 'registration':
-            self.sub.clear_rollback_failure('registration', username)
+            self.sub.business_code_svc.clear_rollback_failure('registration', username)
         else:
             return err("kind must be 'uuid' or 'registration'")
         return ok("Resolved")
 
     def teapot(self) -> ResponseType:
-        return err("I'm a teapot", 418, obj={"teapot": True}) # is it really an error?
+        return err("I'm a teapot", 418, obj={"teapot": True if random.random() < 0.01 else False }) # is it really an error?

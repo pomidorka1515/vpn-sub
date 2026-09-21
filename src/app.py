@@ -129,7 +129,7 @@ class Application:
             return
         self._started = True
 
-        self.subscription.recover_rollback_failures()
+        self.subscription.business_code_svc.recover_rollback_failures()
         self.bandwidth_watcher.start()
         if self._start_bots:
             self.admin_bot.start()
@@ -333,7 +333,7 @@ def _wire_loggers(
 ) -> None:
     for logger in (
         log,
-        runtime.subscription.log,
+        runtime.subscription.res.log,
         runtime.bandwidth_watcher.log,
         api.log,
         webapi.log,
