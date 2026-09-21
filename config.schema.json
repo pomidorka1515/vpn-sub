@@ -116,7 +116,7 @@
             "description": "3x-ui panels.",
             "additionalProperties": {
                 "type": "object",
-                "required": ["name", "address", "port", "uri", "username", "password", "https", "whitelist", "ignore_inbounds"],
+                "required": ["name", "address", "port", "uri", "username", "password", "https", "whitelist", "inbounds_list", "mode"],
                 "additionalProperties": false,
                 "properties": {
                     "name": { "type": "string" },
@@ -133,9 +133,13 @@
                         "minItems": 2,
                         "maxItems": 2
                     },
-                    "ignore_inbounds": {
+                    "inbounds_list": {
                         "type": "array",
                         "items": { "type": "integer" }
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["whitelist", "blacklist"]
                     },
                     "inject_headers": { "type": "object" }
                 }

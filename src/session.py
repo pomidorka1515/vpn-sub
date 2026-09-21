@@ -11,7 +11,7 @@ from custom_types import Inbound, RequestKwargs
 from config import JsonValue
 from errors import XUiSessionError
 
-from typing import Unpack, cast, Any, Mapping, Protocol, Callable
+from typing import Unpack, cast, Any, Mapping, Protocol, Callable, Literal
 
 __all__ = ['XUiSession', 'XUiPanelTransport', 'RequestsPanelTransport', 'XUiSessionError']
 
@@ -99,7 +99,8 @@ class XUiSession:
         refresh_interval: int | float = 60,
         https: bool = False,
         nginx_auth: tuple[str, str] | None = None,
-        ignore_inbounds: tuple[int, ...] = (),
+        inbounds_list: tuple[int, ...] = (),
+        mode: Literal["whitelist", "blacklist"] = "blacklist",
         inject_headers: Mapping[str, str | bytes] | None = None,
         health_check_interval: int = 20,
         transport: XUiPanelTransport | None = None,
@@ -119,7 +120,10 @@ class XUiSession:
             refresh_interval: Interval in minutes, controls session refresh cycle.
             https: Set False for HTTP.
             nginx_auth: External authentication (A.K.A. Basic Auth.), format ('username', 'password').
-            ignore_inbounds: Inbound IDs to permanently ignore.
+            inbounds_list: Inbound IDs used by ``mode``.
+            mode: ``whitelist`` keeps only IDs in ``inbounds_list``;
+                ``blacklist`` drops those IDs. An empty list keeps no inbounds
+                in whitelist mode and all inbounds in blacklist mode.
             inject_headers: Extra headers merged into every request.
                 Caller-supplied headers take precedence.
             health_check_interval: Interval in seconds between panel health checks.
@@ -132,7 +136,10 @@ class XUiSession:
             self.username = username
             self.password = password
             self.refresh_interval = refresh_interval
-            self.ignore_inbounds = ignore_inbounds or ()
+            if mode not in ("whitelist", "blacklist"):
+                raise ValueError("mode must be 'whitelist' or 'blacklist'")
+            self.inbounds_list = inbounds_list or ()
+            self.mode: Literal["whitelist", "blacklist"] = mode
             protocol = "https" if https else "http"
             clean_uri = f"/{uri.strip('/')}/" if uri.strip('/') else "/"
             self.port = str(port)

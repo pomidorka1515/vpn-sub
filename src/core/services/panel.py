@@ -24,7 +24,11 @@ class PanelService(BaseService):
             return None
 
     def getinbounds(self, panel: XUiSession) -> list[Inbound]:
-        """Get inbounds list. Uses cache with TTL, panel.local (almost) skips cache."""
+        """Get inbounds list. Uses cache with TTL, panel.local (almost) skips cache.
+
+        Filters by ``panel.mode`` and ``panel.inbounds_list``: whitelist keeps
+        only listed IDs, blacklist drops them.
+        """
         now = time.time()
         ttl = 2 if panel.local else 15  # fast local, slow remote
 
@@ -42,8 +46,11 @@ class PanelService(BaseService):
                 )
             raw_inbounds: list[dict[str, object]] = data['obj']
             inbounds = [from_dict(Inbound, i) for i in raw_inbounds]
-            if panel.ignore_inbounds:
-                inbounds = [i for i in inbounds if i.id not in panel.ignore_inbounds]
+            listed = set(panel.inbounds_list)
+            if panel.mode == "whitelist":
+                inbounds = [i for i in inbounds if i.id in listed]
+            else:
+                inbounds = [i for i in inbounds if i.id not in listed]
             panel.cache = inbounds
             return inbounds
         except AppError:

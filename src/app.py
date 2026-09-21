@@ -312,7 +312,8 @@ def _build_panels(
             password=panel_cfg["password"],
             https=panel_cfg["https"],
             nginx_auth=tuple(panel_cfg.get("nginx_auth", [])) or None,
-            ignore_inbounds=tuple(panel_cfg.get("ignore_inbounds", [])),
+            inbounds_list=tuple(panel_cfg["inbounds_list"]),
+            mode=panel_cfg["mode"],
             inject_headers=panel_cfg.get("inject_headers"),
             transport=transport,
         )

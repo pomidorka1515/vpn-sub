@@ -62,7 +62,8 @@
             "password": "123",
             "https": false,
             "whitelist": false,
-            "ignore_inbounds": [],
+            "inbounds_list": [],
+            "mode": "blacklist",
             "inject_headers": {}
         }
     },
