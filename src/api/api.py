@@ -14,7 +14,6 @@ import binascii
 from collections import OrderedDict, deque
 
 from functools import wraps
-from pathlib import Path
 from flask import Flask, Response, send_file, redirect, request, make_response, g
 from abc import ABC
 from typing import (
@@ -30,7 +29,6 @@ from custom_types import HTTPMethod, JsonifyValue, ResponseType
 
 __all__ = ['WebApi', 'Api', 'BaseApi']
 
-_RES_DIR = Path(__file__).resolve().parent.parent / 'res'
 
 
 class Route(NamedTuple):
@@ -369,7 +367,7 @@ class WebApi(BaseApi):
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
         uri = '/' + '/'.join(p for p in cfg['uri'].split('/') if p)
-        with open(_RES_DIR / 'redirect.html', encoding='utf-8') as f:
+        with open('res/redirect.html', 'r', encoding='utf-8') as f:
             self.redirect_html = f.read()
         super().__init__(app, cfg, sub, bw, uri)
     
@@ -408,7 +406,7 @@ class WebApi(BaseApi):
         return Response(self.redirect_html, mimetype='text/html')
 
     def common_js(self) -> ResponseType:
-        response = make_response(send_file(_RES_DIR / 'common.js', etag=False))
+        response = make_response(send_file('res/common.js', etag=False))
         response.headers['Cache-Control'] = 'no-cache'
         return response
 
@@ -416,14 +414,14 @@ class WebApi(BaseApi):
         auth_token = request.cookies.get('auth_token')
         if not self.validate_auth_token(auth_token):
             return make_response(redirect('/sub/auth'))
-        return send_file(_RES_DIR / 'dashboard.html', etag=False)
+        return send_file('res/dashboard.html', etag=False)
     def gui_auth(self) -> ResponseType:
-        return send_file(_RES_DIR / 'auth.html', etag=False)
+        return send_file('res/auth.html', etag=False)
     def gui_history(self) -> ResponseType:
         auth_token = request.cookies.get('auth_token')
         if not self.validate_auth_token(auth_token):
             return make_response(redirect('/sub/auth'))
-        return send_file(_RES_DIR / 'history.html', etag=False)
+        return send_file('res/history.html', etag=False)
     
     @requires_webapi_auth
     def qr(self, username: str) -> ResponseType:
@@ -977,7 +975,7 @@ class Api(BaseApi):
     
     @requires_basic_admin_auth
     def admin_ui(self) -> ResponseType:
-        return send_file(_RES_DIR / 'admin.html', etag=False)
+        return send_file('res/admin.html', etag=False)
     
     def health(self) -> ResponseType:
         return ok()
