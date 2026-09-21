@@ -23,10 +23,10 @@ class PublicCommonMixin(
     """Localization, menus, start handling, and lifecycle glue."""
 
     def get_lang(self, uid: int) -> str:
-        return self.sub.get_telegram_language(uid)
+        return self.sub.telegram_svc.get_telegram_language(uid)
 
     def set_lang(self, uid: int, lang: str) -> None:
-        self.sub.set_telegram_language(uid, lang)
+        self.sub.telegram_svc.set_telegram_language(uid, lang)
 
     def msg(self, tgid: int | str | None, key: str, **kwargs: str | int | float | bool) -> None:
         if tgid is None or isinstance(tgid, str):
@@ -49,7 +49,7 @@ class PublicCommonMixin(
     def get_menu(self, uid: int) -> types.ReplyKeyboardMarkup:
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        is_reg = self.sub.is_registered(uid)
+        is_reg = self.sub.telegram_svc.is_registered(uid)
 
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         if not is_reg:
@@ -71,7 +71,7 @@ class PublicCommonMixin(
         uid = cast(types.User, message.from_user).id
         self.bot.clear_step_handler_by_chat_id(message.chat.id)
 
-        if not self.sub.has_telegram_language(uid):
+        if not self.sub.telegram_svc.has_telegram_language(uid):
             markup = types.InlineKeyboardMarkup()
             markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
@@ -81,7 +81,7 @@ class PublicCommonMixin(
         else:
             lang = self.get_lang(uid)
             t = self.TEXTS[lang]
-            msg_text = t['welcome_reg'] if self.sub.is_registered(uid) else t['welcome_new']
+            msg_text = t['welcome_reg'] if self.sub.telegram_svc.is_registered(uid) else t['welcome_new']
             self.bot.send_message(message.chat.id, msg_text, reply_markup=self.get_menu(uid))
 
     def set_lang_callback(self, call: types.CallbackQuery) -> None:

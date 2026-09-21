@@ -6,7 +6,7 @@ from ..composition import PublicFeatureMixin
 import time
 import urllib.parse
 from datetime import datetime, timezone
-
+from util import make_qr
 from telebot import types
 __all__ = ["PublicSubscriptionMixin"]
 
@@ -16,7 +16,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
 
     def send_info(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
-        info = self.sub.get_info_telegram(uid)
+        info = self.sub.telegram_svc.get_info_telegram(uid)
         if not info:
             return
         daystext = "дней" if lang == 'ru' else "days"
@@ -64,7 +64,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
 
     def send_link(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
-        info = self.sub.get_info_telegram(uid)
+        info = self.sub.telegram_svc.get_info_telegram(uid)
         if not info:
             return
 
@@ -73,7 +73,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         
         link = f"{domain}/{sub_uri}?token={info.token}&lang={lang}"
             
-        qr = self.sub.make_qr(link)
+        qr = make_qr(link)
 
         text = t['get_sub_text'].format(
             link=link

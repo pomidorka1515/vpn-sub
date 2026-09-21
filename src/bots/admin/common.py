@@ -60,7 +60,7 @@ class AdminCommonMixin(
 
     def get_users_menu(self, prefix: str, page: int = 0) -> types.InlineKeyboardMarkup:
         """Get paginated user list with navigation buttons."""
-        all_users = self.sub.list_users()
+        all_users = self.sub.user_svc.list_users()
         total_users = len(all_users)
         total_pages = max(1, (total_users - 1) // self.USERS_PER_PAGE + 1)
 

@@ -44,7 +44,7 @@ class WebApiAuthTests(unittest.TestCase):
             fingerprint="chrome", displayname="Alice",
             ext_username="alice-login", ext_password_hash=self.password_hash,
         )
-        self.subscription.hash = lambda value: self.password_hash  # type: ignore[assignment]
+        self.subscription.password_svc.hash = lambda value: self.password_hash  # type: ignore[assignment]
         self.watcher = BWatch(
             cfg=cast(ConfigLike, _BWatchConfig()), db=self.database,
             sub=self.subscription, bot=None, admin_bot=None,

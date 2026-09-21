@@ -23,6 +23,8 @@ dependencies = [
 # pip install -e ".[dev]"
 dev = [
     "mypy>=1.15",
+    "pyright",
+    "types-gunicorn",
     "types-requests>=2.31",
     "types-jsonschema>=4.23",
     "types-Pillow>=10.2",
@@ -53,6 +55,7 @@ packages = [
 
 [tool.mypy]
 python_version = "3.14"
+cache_dir = "$MYPY_CONFIG_FILE_DIR/.mypy_cache"
 
 files = [
     "src/config/",
@@ -113,6 +116,7 @@ disable_error_code             = ["attr-defined", "override"]
 [[tool.mypy.overrides]]
 module = ["bots.*"]
 disallow_untyped_calls         = false
+disallow_any_expr              = false
 disable_error_code             = ["attr-defined", "no-any-return"]
 # -- pylance compatibility ----------------------------------------------
 [tool.pyright]

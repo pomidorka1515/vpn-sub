@@ -15,7 +15,7 @@ class PublicLoginMixin(PublicFeatureMixin):
     def login_callback(self, call: types.CallbackQuery) -> None:
         message = cast(types.Message, call.message)
         uid = call.from_user.id
-        if self.sub.is_registered(uid): return
+        if self.sub.telegram_svc.is_registered(uid): return
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         action = call.data
@@ -48,9 +48,9 @@ class PublicLoginMixin(PublicFeatureMixin):
 
         self._delete_message(message.chat.id, message.message_id, secret=True)
 
-        internal_username = self.sub.validate_credentials(email, password)
+        internal_username = self.sub.password_svc.validate_credentials(email, password)
         if internal_username:
-            self.sub.set_telegram_user(uid, internal_username)
+            self.sub.telegram_svc.set_telegram_user(uid, internal_username)
             self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
             self.send_info(message.chat.id, uid, lang)
             return

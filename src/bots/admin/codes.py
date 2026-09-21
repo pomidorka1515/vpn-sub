@@ -16,7 +16,7 @@ class AdminCodesMixin(AdminFeatureMixin):
 
     def _cb_list_codes(self, chat_id: int) -> None:
         try:
-            codes = self.sub.list_code()
+            codes = self.sub.code_svc.list_code()
             if not codes:
                 self._send_message(chat_id, "Список кодов пуст.", reply_markup=self.get_codes_menu())
                 return
@@ -31,7 +31,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         if text.startswith('/'): return
         code = text.strip()
         try:
-            info = self.sub.get_code(code)
+            info = self.sub.code_svc.get_code(code)
             text = (
                 f"ℹ️ <b>Код: <code>{code}</code></b>\n\n"
                 f"Тип: <code>{info.action}</code>\n"
@@ -53,7 +53,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         if text.startswith('/'): return
         code = text.strip()
         try:
-            self.sub.delete_code(code)
+            self.sub.code_svc.delete_code(code)
         except AppError as error:
             self._send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
             return
@@ -182,7 +182,7 @@ class AdminCodesMixin(AdminFeatureMixin):
             chat_id = message
 
         try:
-            self.sub.add_code(
+            self.sub.code_svc.add_code(
                 code=code_name, action=code_type, permanent=perma,
                 days=days, gb=gb, wl_gb=wl_gb, uses=uses
             )

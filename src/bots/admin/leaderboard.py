@@ -70,7 +70,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         order: Literal["asc", "desc"],
         window: int
     ) -> None:
-        lb_data = self.sub.leaderboard(
+        lb_data = self.sub.leaderboard_svc.leaderboard(
             category=bw_type,
             top_n=window,
             use_displaynames=True,

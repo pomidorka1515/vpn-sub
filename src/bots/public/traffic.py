@@ -22,7 +22,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
         message = cast(types.Message, call.message)
         uid = call.from_user.id
 
-        if not self.sub.is_registered(uid):
+        if not self.sub.telegram_svc.is_registered(uid):
             return
 
         lang = self.get_lang(uid)
@@ -36,7 +36,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
             self.bot.answer_callback_query(call.id, t['chart_invalid_period'])
             return
 
-        username = self.sub.get_username_telegram(uid)
+        username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str):
             return
 
@@ -62,8 +62,8 @@ class PublicTrafficMixin(PublicFeatureMixin):
     ) -> None:
         t = self.TEXTS[lang]
         try:
-            snapshots = self.sub.get_bw_history(username, days=days)
-            info = self.sub.get_info(username, pretty=False)
+            snapshots = self.sub.bandwidth_svc.get_bw_history(username, days=days)
+            info = self.sub.business_svc.get_info(username, pretty=False)
 
             bandwidths = info.bandwidth
 

@@ -19,7 +19,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
                        chat_id: int,
                        panel: XUiSession,
                        last: bool) -> None:
-        info = self.sub.getstatus(panel)
+        info = self.sub.panel_svc.getstatus(panel)
         if info is None:
             self._send_message(chat_id, f"❌ Статус панели {panel.name} неизвестен", reply_markup=self.get_main_menu())
             return

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 import uuid
 from argon2 import PasswordHasher
-from dataclasses import asdict
+from dataclasses import asdict, replace as dreplace
 from requests import Response
 
 from core import Subscription
@@ -238,7 +238,7 @@ class OnlineStatusTests(unittest.TestCase):
                     return response
 
             subscription.panels.append(cast(XUiSession, InvalidPanel()))
-            status = subscription.get_online_status()
+            status = subscription.panel_svc.get_online_status()
             self.assertEqual(status.panel_health, {"panel": "invalid"})
             database.close()
 
@@ -282,14 +282,14 @@ class BandwidthPollTests(unittest.TestCase):
 
             watch.mem["alice"] = first
             watch.wl_mem["alice"] = first
-            subscription.bandwidth = bandwidth  # type: ignore[method-assign]
+            subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
             watch.bandwidth_check()
 
             self.assertEqual(calls, [False, True])
             self.assertEqual(watch.mem["alice"], first)
             self.assertEqual(watch.wl_mem["alice"], first)
-            self.assertEqual(int(subscription.get_user_state("alice")["bw_used"]), 0)
-            self.assertEqual(int(subscription.get_user_state("alice")["wl_used"]), 0)
+            self.assertEqual(int(subscription.user_svc.get_user_state("alice")["bw_used"]), 0)
+            self.assertEqual(int(subscription.user_svc.get_user_state("alice")["wl_used"]), 0)
             database.close()
 
     def test_daily_snapshot_accumulates_repeated_days(self) -> None:
@@ -334,7 +334,7 @@ class BandwidthPollTests(unittest.TestCase):
 
             watch.mem["alice"] = BandwidthInfo(upload=0, download=0, total=0)
             watch.wl_mem["alice"] = BandwidthInfo(upload=0, download=0, total=0)
-            subscription.bandwidth = bandwidth  # type: ignore[method-assign]
+            subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
             watch.record_daily_snapshot()
             watch.record_daily_snapshot()
 
@@ -379,7 +379,7 @@ class BandwidthPollTests(unittest.TestCase):
 
             watch.mem["alice"] = baseline
             watch.wl_mem["alice"] = baseline
-            subscription.bandwidth = bandwidth  # type: ignore[method-assign]
+            subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
             watch.record_daily_snapshot()
             rows = database.get_bandwidth_snapshots("alice", 0)
 
@@ -413,7 +413,7 @@ class RollbackTests(unittest.TestCase):
             )
             database.set_metadata("registration_rollback_failed:alice", "123")
             subscription = self._subscription(database)
-            subscription.recover_rollback_failures()
+            subscription.business_code_svc.recover_rollback_failures()
             self.assertIsNone(database.get_metadata("registration_rollback_failed:alice"))
             self.assertFalse(database.user_exists("alice"))
             database.close()
@@ -424,11 +424,11 @@ class RollbackTests(unittest.TestCase):
             subscription = self._subscription(database)
             database.set_metadata("uuid_rollback_failed:alice", "123:panel rejected")
             database.set_metadata("registration_rollback_failed:bob", "124")
-            failures = subscription.get_rollback_failures()
+            failures = subscription.business_code_svc.get_rollback_failures()
             self.assertEqual(failures["uuid"]["alice"]["reason"], "panel rejected")
             self.assertEqual(failures["registration"]["bob"]["ts"], "124")
-            subscription.clear_rollback_failure("uuid", "alice")
-            self.assertEqual(subscription.get_rollback_failures()["uuid"], {})
+            subscription.business_code_svc.clear_rollback_failure("uuid", "alice")
+            self.assertEqual(subscription.business_code_svc.get_rollback_failures()["uuid"], {})
             database.close()
 
     def test_registration_rollback_failure_preserves_sync_error(self) -> None:
@@ -451,10 +451,10 @@ class RollbackTests(unittest.TestCase):
             def fail_rollback(username: str) -> None:
                 raise RuntimeError("database rollback failed")
 
-            subscription.add_users = fail_sync  # type: ignore[method-assign]
+            subscription.business_svc.add_users = fail_sync  # type: ignore[method-assign]
             database.rollback_registration_sync = fail_rollback  # type: ignore[method-assign]
             with self.assertRaises(RuntimeError) as raised:
-                subscription.register_with_code(
+                subscription.business_code_svc.register_with_code(
                     code="invite", username="alice", displayname="Alice",
                     ext_username="alice-login", ext_password="secret",
                 )
@@ -540,7 +540,7 @@ class DailySnapshotTests(unittest.TestCase):
             def fail_bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
                 raise RuntimeError("panel unavailable")
 
-            subscription.bandwidth = fail_bandwidth  # type: ignore[method-assign]
+            subscription.bandwidth_svc.bandwidth = fail_bandwidth  # type: ignore[method-assign]
             with self.assertRaises(PanelUnavailableError):
                 watch.record_daily_snapshot()
             failure = watch.get_daily_snapshot_failure()
@@ -570,7 +570,7 @@ class DailySnapshotTests(unittest.TestCase):
             def bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
                 return BandwidthInfo(1, 2, 3)
 
-            subscription.bandwidth = bandwidth  # type: ignore[method-assign]
+            subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
             watch.record_daily_snapshot()
             self.assertIsNone(watch.get_daily_snapshot_failure())
             database.close()
@@ -644,7 +644,7 @@ class CredentialValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             database = Database(path=f"{directory}/state.sqlite3")
             subscription = self._subscription(directory, database)
-            self._create_user(database, subscription.legacy_hash("secret"))
+            self._create_user(database, subscription.password_svc.legacy_hash("secret"))
 
             self.assertEqual(
                 subscription.password_svc.validate_credentials("alice-login", "secret"), "alice"
@@ -654,7 +654,7 @@ class CredentialValidationTests(unittest.TestCase):
             assert stored is not None
             self.assertTrue(stored.startswith("$argon2id$"))
 
-            subscription.SALT = "changed-legacy-salt"
+            subscription.res = dreplace(subscription.res, legacy_salt="changed-legacy-salt")
             self.assertEqual(
                 subscription.password_svc.validate_credentials("alice-login", "secret"), "alice"
             )

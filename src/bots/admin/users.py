@@ -17,7 +17,7 @@ class AdminUsersMixin(AdminFeatureMixin):
     """User listing, editing, and account workflows."""
 
     def _cb_list_users(self, chat_id: int, page: int = 0) -> None:
-        all_users = self.sub.list_users()
+        all_users = self.sub.user_svc.list_users()
         total_users = len(all_users)
 
         if not all_users:
@@ -47,7 +47,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         self._send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
     def _cb_online_users(self, chat_id: int) -> None:
-        online_users = self.sub.get_online_users(new=True)
+        online_users = self.sub.panel_svc.get_online_users(new=True)
         if not online_users:
             self._send_message(chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu())
             return
@@ -56,10 +56,10 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_refresh(self, chat_id: int) -> None:
         failures: list[str] = []
-        users = self.sub.list_users()
+        users = self.sub.user_svc.list_users()
         for cc in users:
             try:
-                self.sub.add_users(cc)
+                self.sub.business_svc.add_users(cc)
             except PanelUnavailableError:
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)
@@ -83,7 +83,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_info_user(self, chat_id: int, username: str) -> None:
         try:
-            info = self.sub.get_info(username, pretty=True)
+            info = self.sub.business_svc.get_info(username, pretty=True)
 
             bw = info.bandwidth
             up = bw.total.upload
@@ -137,7 +137,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_del_user(self, chat_id: int, username: str) -> None:
         try:
-            self.sub.delete_user(username=username, perma=True)
+            self.sub.business_svc.delete_user(username=username, perma=True)
         except AppError as error:
             self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -162,7 +162,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_edit_fingerprint(self, chat_id: int, username: str) -> None:
         try:
-            info = self.sub.get_info(username, pretty=False)
+            info = self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -176,7 +176,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_edit_limit(self, chat_id: int, username: str) -> None:
         try:
-            info = self.sub.get_info(username, pretty=False)
+            info = self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -193,7 +193,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu())
             return
         try:
-            self.sub.update_params(username=username, limit=limit)
+            self.sub.business_svc.update_params(username=username, limit=limit)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
             return
@@ -202,7 +202,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_edit_wl_limit(self, chat_id: int, username: str) -> None:
         try:
-            info = self.sub.get_info(username, pretty=False)
+            info = self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -219,7 +219,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             self.bot.send_message(message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu())
             return
         try:
-            self.sub.update_params(username=username, wl_limit=wl_limit)
+            self.sub.business_svc.update_params(username=username, wl_limit=wl_limit)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
             return
@@ -228,7 +228,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_edit_time(self, chat_id: int, username: str) -> None:
         try:
-            info = self.sub.get_info(username, pretty=False)
+            info = self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -250,7 +250,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         timee = int(time.time() + (days * 86400)) if days else 0
         try:
-            self.sub.update_params(username=username, timee=timee)
+            self.sub.business_svc.update_params(username=username, timee=timee)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
             return
@@ -263,7 +263,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     def _cb_edit_name(self, chat_id: int, username: str) -> None:
         try:
-            info = self.sub.get_info(username, pretty=False)
+            info = self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -279,7 +279,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             self.bot.send_message(message.chat.id, "❌ Имя слишком длинное (макс. 16 символов).", reply_markup=self.get_main_menu())
             return
         try:
-            self.sub.update_params(username=username, displayname=new_name)
+            self.sub.business_svc.update_params(username=username, displayname=new_name)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
             return
@@ -292,7 +292,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         username = text.strip()
 
         try:
-            obj = self.sub.reset_user(username)
+            obj = self.sub.business_svc.reset_user(username)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -303,7 +303,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         text = cast(str, message.text)
         if text.startswith('/'): return
         username = text.strip()
-        if self.sub.isuser(username):
+        if self.sub.user_svc.isuser(username):
             self.bot.send_message(message.chat.id, "❌ Этот username уже существует.", reply_markup=self.get_main_menu())
             return
 
@@ -341,7 +341,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
         timee = int(time.time() + (timee * 86400)) if timee else 0
         try:
-            self.sub.add_new_user(username=username, displayname=displayname, limit=limit, timee=timee)
+            self.sub.business_svc.add_new_user(username=username, displayname=displayname, limit=limit, timee=timee)
             self._send_message(message.chat.id, f"✅ Пользователь <b>{username}</b> успешно добавлен!", parse_mode="HTML", reply_markup=self.get_main_menu())
         except AppError as error:
             self._send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())

@@ -24,7 +24,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
         username = text.strip()
 
         try:
-            self.sub.get_user_state(username)
+            self.sub.user_svc.get_user_state(username)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
@@ -56,8 +56,8 @@ class AdminTrafficMixin(AdminFeatureMixin):
 
     def _render_chart(self, *, username: str, days: int, chat_id: int) -> None:
         try:
-            snapshots = self.sub.get_bw_history(username, days=days)
-            info = self.sub.get_info(username, pretty=False)
+            snapshots = self.sub.bandwidth_svc.get_bw_history(username, days=days)
+            info = self.sub.business_svc.get_info(username, pretty=False)
 
             bandwidths = info.bandwidth
 

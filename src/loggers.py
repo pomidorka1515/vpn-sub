@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, TYPE_CHECKING
 
-from gunicorn.glogging import Logger as GunicornBaseLogger  # type: ignore[import-untyped]
+from gunicorn.glogging import Logger as GunicornBaseLogger
 if TYPE_CHECKING:
     from config import LinesConfigLike # just to be safe
     from bots import AdminBot
@@ -186,7 +186,7 @@ def _client_address(environ: dict[str, object]) -> str:
     return str(address) if address else "-"
 
 
-class GunicornLogger(GunicornBaseLogger):  # type: ignore[misc]
+class GunicornLogger(GunicornBaseLogger):
     """Compact, privacy-preserving access logs for the systemd journal."""
 
     def setup(self, cfg: Any) -> None:

@@ -44,7 +44,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
                 self.TEXTS["en"][button_name],
             ):
                 continue
-            if requires_reg and not self.sub.is_registered(uid):
+            if requires_reg and not self.sub.telegram_svc.is_registered(uid):
                 return
             handler = cast(
                 Callable[[types.Message, int, str], None],
@@ -76,7 +76,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         self.bot.send_message(message.chat.id, t["choose_lang"], reply_markup=markup)
 
     def _handle_login(self, message: types.Message, uid: int, lang: str) -> None:
-        if self.sub.is_registered(uid):
+        if self.sub.telegram_svc.is_registered(uid):
             return
         t = self.TEXTS[lang]
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -147,7 +147,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
 
     def _handle_logout(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
-        self.sub.set_telegram_user(uid, None)
+        self.sub.telegram_svc.set_telegram_user(uid, None)
         self.bot.send_message(
             message.chat.id, t["logout_success"], reply_markup=self.get_menu(uid)
         )

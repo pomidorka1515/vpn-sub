@@ -110,7 +110,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     def _handle_info_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
-        if not self.sub.list_users():
+        if not self.sub.user_svc.list_users():
             self.bot.send_message(chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu())
             return
         page = self._pagination_state.get(chat_id, {}).get("info_page", 0)
@@ -128,7 +128,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     def _handle_delete_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
-        if not self.sub.list_users():
+        if not self.sub.user_svc.list_users():
             self.bot.send_message(chat_id, "Список пуст.", reply_markup=self.get_main_menu())
             return
         page = self._pagination_state.get(chat_id, {}).get("del_page", 0)
@@ -216,7 +216,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             return
         fp = data.split("fp_save_", 1)[1]
         try:
-            self.sub.update_params(username=pending["username"], fingerprint=fp)
+            self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
         except AppError as error:
             self._send_message(chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
         else:

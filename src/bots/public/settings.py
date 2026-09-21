@@ -17,7 +17,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
     def settings_callback(self, call: types.CallbackQuery) -> None:
         message = cast(types.Message, call.message)
         uid = call.from_user.id
-        if not self.sub.is_registered(uid): return
+        if not self.sub.telegram_svc.is_registered(uid): return
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         action = call.data  # set_name, set_fp, set_pass, set_login
@@ -30,8 +30,8 @@ class PublicSettingsMixin(PublicFeatureMixin):
             self.bot.register_next_step_handler(msg, self.step_settings_name)  # pyright: ignore[reportUnknownMemberType]
         elif action == "set_fp":
             markup = types.InlineKeyboardMarkup(row_width=2)
-            username = self.sub.get_username_telegram(uid)
-            current_fp = self.sub.get_fingerprint(username) if isinstance(username, str) else ''
+            username = self.sub.telegram_svc.get_username_telegram(uid)
+            current_fp = self.sub.user_svc.get_fingerprint(username) if isinstance(username, str) else ''
             for fp in self.cfg['fingerprints']:
                 label = f"✅ {fp}" if fp == current_fp else fp
                 markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}"))  # pyright: ignore[reportUnknownMemberType]
@@ -47,17 +47,17 @@ class PublicSettingsMixin(PublicFeatureMixin):
         data = cast(str, call.data)
         message = cast(types.Message, call.message)
         uid = call.from_user.id
-        if not self.sub.is_registered(uid): return
+        if not self.sub.telegram_svc.is_registered(uid): return
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         fp = data[3:]  # strip "fp_"
 
-        username = self.sub.get_username_telegram(uid)
+        username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str): return
 
         self.bot.answer_callback_query(call.id)
         try:
-            self.sub.update_params(username=username, fingerprint=fp)
+            self.sub.business_svc.update_params(username=username, fingerprint=fp)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid))
         else:
@@ -71,7 +71,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        username = self.sub.get_username_telegram(uid)
+        username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str): return
 
         new_name = text.strip()
@@ -80,7 +80,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             return
 
         try:
-            self.sub.update_params(username=username, displayname=new_name)
+            self.sub.business_svc.update_params(username=username, displayname=new_name)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid))
         else:
@@ -93,7 +93,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        username = self.sub.get_username_telegram(uid)
+        username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str): return
 
         new_login = text.strip()
@@ -102,7 +102,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             return
 
         try:
-            self.sub.update_params(username=username, ext_username=new_login)
+            self.sub.business_svc.update_params(username=username, ext_username=new_login)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid))
         else:
@@ -115,22 +115,22 @@ class PublicSettingsMixin(PublicFeatureMixin):
         uid = cast(types.User, message.from_user).id
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        username = self.sub.get_username_telegram(uid)
+        username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str): return
-        if not self.sub.get_external_username(username):
+        if not self.sub.user_svc.get_external_username(username):
             self.bot.send_message(message.chat.id, t['no_account'], reply_markup=self.get_menu(uid))
             return
         new_pass = text.strip()
         self._delete_message(message.chat.id, message.message_id, secret=True)
 
         # Need current ext_username to update password (update_params requires both)
-        ext_username = self.sub.get_external_username(username)
+        ext_username = self.sub.user_svc.get_external_username(username)
         if not ext_username:
             self.bot.send_message(message.chat.id, "❌ No login found", reply_markup=self.get_menu(uid))
             return
 
         try:
-            self.sub.update_params(username=username, ext_username=ext_username, ext_password=new_pass)
+            self.sub.business_svc.update_params(username=username, ext_username=ext_username, ext_password=new_pass)
         except AppError as error:
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid))
         else:

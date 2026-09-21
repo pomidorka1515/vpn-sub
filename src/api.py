@@ -480,13 +480,13 @@ class WebApi(BaseApi):
     def delete(self, username: str) -> ResponseType:
         content = g.json_obj
         current_password: str = content.get('current_password')
-        cur_ext = self.sub.get_external_username(username)
+        cur_ext = self.sub.user_svc.get_external_username(username)
         if not cur_ext:
             return err("Account has no credentials set", 400)
-        if self.sub.validate_credentials(cur_ext, current_password) != username:
+        if self.sub.password_svc.validate_credentials(cur_ext, current_password) != username:
             return err("Invalid current password", 401)
-        self.sub.set_auth_token(username, None)
-        self.sub.delete_user(username=username, perma=True)
+        self.sub.user_svc.set_auth_token(username, None)
+        self.sub.business_svc.delete_user(username=username, perma=True)
 
         resp, code = ok(msg="Deleted account")
         self._clear_auth_cookies(resp)
@@ -494,7 +494,7 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     def logout(self, username: str) -> ResponseType:
         resp, code = ok(msg="Logged out")
-        self.sub.set_auth_token(username, None)
+        self.sub.user_svc.set_auth_token(username, None)
         self._clear_auth_cookies(resp)
         return resp, code
     @requires_webapi_auth
@@ -521,12 +521,12 @@ class WebApi(BaseApi):
         if ext_username or ext_password:
             if not current_password:
                 return err("current_password required to change credentials", 400)
-            cur_ext = self.sub.get_external_username(username)
+            cur_ext = self.sub.user_svc.get_external_username(username)
             if not cur_ext:
                 return err("Account has no credentials set", 400)
-            if self.sub.validate_credentials(cur_ext, current_password) != username:
+            if self.sub.password_svc.validate_credentials(cur_ext, current_password) != username:
                 return err("Invalid current password", 401)
-        self.sub.update_params(
+        self.sub.business_svc.update_params(
             username=username,
             ext_username=ext_username,
             ext_password=ext_password,
@@ -537,7 +537,7 @@ class WebApi(BaseApi):
     @requires_webapi_auth
     def reset(self, username: str) -> ResponseType:
         """Reset token and UUID (api wrapper)"""
-        x = self.sub.reset_user(username)
+        x = self.sub.business_svc.reset_user(username)
         resp, code = ok(obj=asdict(x))
         self._clear_auth_cookies(resp)
         return resp, code
@@ -547,7 +547,7 @@ class WebApi(BaseApi):
         """Apply bonus code."""
         content = g.json_obj
         
-        result = self.sub.apply_bonus_code(
+        result = self.sub.code_svc.apply_bonus_code(
             username=username,
             code=cast(str, content["code"]),
         )
@@ -785,7 +785,7 @@ class Api(BaseApi):
         new = parse_bool(request.args.get('keyed', False))
         if new is None:
             return err("'keyed' must be bool-like")
-        status = self.sub.business_svc.get_online_status(new)
+        status = self.sub.panel_svc.get_online_status(new)
         return ok(obj={"users": status.users, "panel_health": status.panel_health})
 
     @requires_admin_auth
