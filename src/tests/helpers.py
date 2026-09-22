@@ -36,6 +36,7 @@ def make_subscription(
     panels: list[object] | None = None,
     whitelist_panel: object | None = None,
     app: Flask | None = None,
+    audit_cfg: object | None = None,
     **config_overrides: Any,
 ) -> Subscription:
     return Subscription(
@@ -45,6 +46,7 @@ def make_subscription(
         app=app or Flask(__name__),
         panels=cast(list[XUiSession], panels or []),
         whitelist_panel=cast(XUiSession | None, whitelist_panel),
+        audit_cfg=cast(Any, audit_cfg),
     )
 
 
@@ -115,6 +117,13 @@ class FakePanel:
         post_payload: dict[str, Any] | None = None,
         post_status: int = 200,
         post_error: BaseException | None = None,
+        post_queue: list[dict[str, Any] | BaseException] | None = None,
+        get_payload: dict[str, Any] | None = None,
+        get_status: int = 200,
+        get_error: BaseException | None = None,
+        status_payload: dict[str, Any] | None = None,
+        status_status: int = 200,
+        status_error: BaseException | None = None,
     ) -> None:
         self.local = local
         self.dead = dead
@@ -127,21 +136,53 @@ class FakePanel:
         self._post_payload = post_payload
         self._post_status = post_status
         self._post_error = post_error
+        self._post_queue = list(post_queue or [])
+        self._get_payload = get_payload
+        self._get_status = get_status
+        self._get_error = get_error
+        self._status_payload = status_payload
+        self._status_status = status_status
+        self._status_error = status_error
+        self.gets: list[str] = []
+        self.posts: list[tuple[str, dict[str, object]]] = []
+
+    def clear_cache(self) -> None:
+        self.cache = None
+        self.cache_time = 0
 
     def get(self, url: str) -> Response:
-        del url
+        self.gets.append(url)
+        if "server/status" in url:
+            if self._status_error is not None:
+                raise self._status_error
+            payload: dict[str, Any] = (
+                self._status_payload if self._status_payload is not None
+                else {"success": True, "msg": "", "obj": {}}
+            )
+            return json_http(payload, self._status_status)
+        if self._get_error is not None:
+            raise self._get_error
+        if self._get_payload is not None:
+            return json_http(self._get_payload, self._get_status)
         return json_http({
             "success": True,
             "msg": "",
             "obj": [asdict(inbound) for inbound in self._inbounds],
-        })
+        }, self._get_status)
 
     def post(self, url: str, **kwargs: object) -> Response:
-        del url, kwargs
+        self.posts.append((url, dict(kwargs)))
         if self._post_error is not None:
             raise self._post_error
-        payload: dict[str, Any] = (
+        if self._post_queue:
+            item = self._post_queue.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            queued = dict(item)
+            status = int(queued.pop("status_code", self._post_status))
+            return json_http(queued, status)
+        fallback: dict[str, Any] = (
             self._post_payload if self._post_payload is not None
             else {"success": True, "obj": []}
         )
-        return json_http(payload, self._post_status)
+        return json_http(fallback, self._post_status)
