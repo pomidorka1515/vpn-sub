@@ -34,7 +34,7 @@ class TelegramService(BaseService):
         username = self.db.tgid_to_user(tgid)
         if username is None:
             raise NotFoundError("Unknown Telegram user")
-        return self.user_svc.get_info(username, True)
+        return self.user_svc.get_info(username, pretty=False)
     
     def is_registered(self, tgid: int) -> bool:
         """Check if a telegram user is already registered."""

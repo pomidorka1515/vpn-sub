@@ -296,5 +296,124 @@ class ExecutorShutdownTests(unittest.TestCase):
         bot.close()
 
 
+
+class PublicInfoMessageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from bots.public.subscription import PublicSubscriptionMixin
+        from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
+
+        self.mixin = PublicSubscriptionMixin.__new__(PublicSubscriptionMixin)
+        self.telegram = MagicMock()
+        self.subscription = MagicMock()
+        self.mixin.bot = cast(Any, self.telegram)
+        self.mixin.sub = cast(Any, self.subscription)
+        self.mixin.TEXTS = {
+            "en": {
+                "info_text": (
+                    "ℹ️ <b>Your Profile:</b> <code>{username}</code>\n"
+                    "Enabled: {status}\n"
+                    "Access to WL locations: {wl_status}\n"
+                    "Online: {online}\n\n"
+                    "📊 <b>Traffic:</b>\n"
+                    "Total downloaded: {total}\n"
+                    "This month: {monthly}\n"
+                    "WL traffic total: {wl_total}\n"
+                    "WL traffic this month: {wl_monthly}\n"
+                    "Detailed info:\n"
+                    "↑ {up} / ↓ {down}\n"
+                    "WL: ↑ {wl_up} / ↓ {wl_down}\n\n"
+                    "<i>WL = whitelist locations</i>\n\n"
+                    "⏳ <b>Time remaining:</b> {days}\n"
+                    "Fingerprint: <code>{fingerprint}</code>"
+                ),
+                "unlimited": "Unlimited",
+                "lifetime": "Lifetime",
+            },
+            "ru": {
+                "info_text": (
+                    "ℹ️ <b>Ваш профиль:</b> <code>{username}</code>\n"
+                    "Включен: {status}\n"
+                    "Доступ к WL-локациям: {wl_status}\n"
+                    "В сети: {online}\n\n"
+                    "📊 <b>Трафик:</b>\n"
+                    "Скачано за всё время: {total}\n"
+                    "В этом месяце: {monthly}\n"
+                    "WL за всё время: {wl_total}\n"
+                    "WL в этом месяце: {wl_monthly}\n"
+                    "Подробная информация:\n"
+                    "↑ {up} / ↓ {down}\n"
+                    "WL: ↑ {wl_up} / ↓ {wl_down}\n\n"
+                    "<i>WL = whitelist-локации</i>\n\n"
+                    "⏳ <b>Осталось времени:</b> {days}\n"
+                    "Отпечаток: <code>{fingerprint}</code>"
+                ),
+                "unlimited": "Безлимит",
+                "lifetime": "Навсегда",
+            },
+        }
+        self.mixin.get_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
+        self.UserInfo = UserInfo
+        self.UserInfoBandwidth = UserInfoBandwidth
+        self.UserInfoBandwidthTotal = UserInfoBandwidthTotal
+
+    def _info(self, **overrides: Any) -> Any:
+        bandwidth = self.UserInfoBandwidth(
+            total=self.UserInfoBandwidthTotal(
+                upload=13_785_700_000,
+                download=113_972_680_000,
+                total=127_758_370_000,
+            ),
+            wl_total=self.UserInfoBandwidthTotal(upload=0, download=0, total=0),
+            monthly=0,
+            wl_monthly=0,
+            limit=0,
+            wl_limit=5,
+        )
+        payload: dict[str, Any] = {
+            "_": "test",
+            "token": "t" * 40,
+            "link": "https://example.test/sub?token=t",
+            "displayname": "PomiDor",
+            "uuid": "01234567-89ab-cdef-0123-456789abcdef",
+            "fingerprint": "edge",
+            "enabled": True,
+            "wl_enabled": True,
+            "time": 0,
+            "online": True,
+            "bandwidth": bandwidth,
+        }
+        payload.update(overrides)
+        return self.UserInfo(**payload)
+
+    def test_english_info_uses_auto_units_and_html(self) -> None:
+        self.subscription.telegram_svc.get_info_telegram.return_value = self._info()
+        self.mixin.send_info(7, 42, "en")
+        self.telegram.send_message.assert_called_once()
+        args, kwargs = self.telegram.send_message.call_args
+        text = args[1]
+        self.assertEqual(kwargs["parse_mode"], "HTML")
+        self.assertIn("Total downloaded: 127.76 GB", text)
+        self.assertIn("This month: <i>Unlimited</i>", text)
+        self.assertIn("WL traffic total: 0 B", text)
+        self.assertIn("WL traffic this month: 0 B / 5 GB", text)
+        self.assertIn("↑ 13.79 GB / ↓ 113.97 GB", text)
+        self.assertIn("WL: ↑ 0 B / ↓ 0 B", text)
+        self.assertIn("<i>WL = whitelist locations</i>", text)
+        self.assertIn("⏳ <b>Time remaining:</b> Lifetime", text)
+        self.assertIn("Fingerprint: <code>edge</code>", text)
+        self.assertNotIn("Unlimited MB", text)
+
+    def test_russian_info_matches_english_layout(self) -> None:
+        self.subscription.telegram_svc.get_info_telegram.return_value = self._info()
+        self.mixin.send_info(7, 42, "ru")
+        text = self.telegram.send_message.call_args.args[1]
+        self.assertIn("Скачано за всё время: 127.76 GB", text)
+        self.assertIn("В этом месяце: <i>Безлимит</i>", text)
+        self.assertIn("WL за всё время: 0 B", text)
+        self.assertIn("WL в этом месяце: 0 B / 5 GB", text)
+        self.assertIn("Отпечаток: <code>edge</code>", text)
+        self.assertIn("⏳ <b>Осталось времени:</b> Навсегда", text)
+
+
 if __name__ == "__main__":
     unittest.main()

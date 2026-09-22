@@ -118,7 +118,7 @@
             "get_sub_text": "**🚀 Ваша подписка готова!**\nОтсканируйте QR-код для получения ссылки или выберите способ подключения ниже.\n*⚠️ Никому не пересылайте это сообщение, оно содержит ваш личный ключ доступа.*",
             "get_sub_btn_link": "🌐 Открыть ссылку",
             "get_sub_btn_happ": "⚡ Добавить в Happ",
-            "info_text": "ℹ️ <b>Ваш профиль:</b> <code>{username}</code>\nВключен: {status}\nДоступ к WL-локациям: {wl_status}\nВ сети: {online}\n\n📊 <b>Трафик:</b>\nСкачано за всё время: {total} MB\nВ этом месяце: {monthly} MB / {limit}\nWL за всё время: {wl_total} MB\nWL в этом месяце: {wl_monthly} MB / {wl_limit}\nПодробная информация:\nUp {up} MB | Down {down} MB\nWL Up {wl_up} MB | Down {wl_down} MB\n<i>wl — whitelist-локации</i>\n⏳ <b>Осталось времени:</b>\n{days}\nОтпечаток: {fingerprint}",
+            "info_text": "ℹ️ <b>Ваш профиль:</b> <code>{username}</code>\nВключен: {status}\nДоступ к WL-локациям: {wl_status}\nВ сети: {online}\n\n📊 <b>Трафик:</b>\nСкачано за всё время: {total}\nВ этом месяце: {monthly}\nWL за всё время: {wl_total}\nWL в этом месяце: {wl_monthly}\nПодробная информация:\n↑ {up} / ↓ {down}\nWL: ↑ {wl_up} / ↓ {wl_down}\n\n<i>WL = whitelist-локации</i>\n\n⏳ <b>Осталось времени:</b> {days}\nОтпечаток: <code>{fingerprint}</code>",
             "unlimited": "Безлимит",
             "lifetime": "Навсегда",
 
@@ -219,7 +219,7 @@
             "get_sub_text": "**🚀 Your subscription is ready!**\nScan the QR code to set it up, or choose a connection method below.\n*Do not forward this message to anyone, as it contains your personal access key.*",
             "get_sub_btn_link": "🌐 Open Link",
             "get_sub_btn_happ": "⚡ Add to Happ",
-            "info_text": "ℹ️ <b>Your Profile:</b> <code>{username}</code>\nEnabled: {status}\nAccess to WL locations: {wl_status}\nOnline: {online}\n\n📊 <b>Traffic:</b>\nTotal downloaded: {total} MB\nThis month: {monthly} MB / {limit}\nWL traffic total: {wl_total} MB\nWL traffic this month: {wl_monthly} MB / {wl_limit}\nDetailed info:\nUp {up} MB | Down {down} MB\nWL Up {wl_up} MB | Down {wl_down} MB\n<i>WL — whitelist locations</i>\n\n⏳ <b>Time remaining:</b>\n{days}\nFingerprint: {fingerprint}",
+            "info_text": "ℹ️ <b>Your Profile:</b> <code>{username}</code>\nEnabled: {status}\nAccess to WL locations: {wl_status}\nOnline: {online}\n\n📊 <b>Traffic:</b>\nTotal downloaded: {total}\nThis month: {monthly}\nWL traffic total: {wl_total}\nWL traffic this month: {wl_monthly}\nDetailed info:\n↑ {up} / ↓ {down}\nWL: ↑ {wl_up} / ↓ {wl_down}\n\n<i>WL = whitelist locations</i>\n\n⏳ <b>Time remaining:</b> {days}\nFingerprint: <code>{fingerprint}</code>",
             "unlimited": "Unlimited",
             "lifetime": "Lifetime",
 

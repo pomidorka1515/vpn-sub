@@ -6,7 +6,7 @@ from ..composition import PublicFeatureMixin
 import time
 import urllib.parse
 from datetime import datetime, timezone
-from util import make_qr
+from util import fmt_bytes, make_qr
 from telebot import types
 __all__ = ["PublicSubscriptionMixin"]
 
@@ -20,16 +20,12 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not info:
             return
         daystext = "дней" if lang == 'ru' else "days"
-        limit_str = f"{info.bandwidth.limit} GB" if info.bandwidth.limit else t['unlimited']
-        wl_limit_str = f"{info.bandwidth.wl_limit} GB" if info.bandwidth.wl_limit else t['unlimited']
+        unlimited = f"<i>{t['unlimited']}</i>"
 
-        monthly_str = f"{info.bandwidth.monthly / (1024 ** 2):.2f}"
-        wl_monthly_str = f"{info.bandwidth.wl_monthly / (1024 ** 2):.2f}"
-
-        if limit_str == t['unlimited']:
-            monthly_str = t['unlimited']
-        if wl_limit_str == t['unlimited']:
-            wl_monthly_str = t['unlimited']
+        def quota(used: int | float, limit: int) -> str:
+            if not limit:
+                return unlimited
+            return f"{fmt_bytes(used)} / {limit} GB"
 
         if info.time:
             days_left = str((info.time - int(time.time())) // 86400)
@@ -40,23 +36,21 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
 
         status = "🟢" if info.enabled else "🔴"
         wl_status = "🟢" if info.wl_enabled else "🔴"
-
         online = "🟢" if info.online else "🔴"
+        bw = info.bandwidth
         text = t['info_text'].format(
             username=info.displayname,
             status=status,
             wl_status=wl_status,
             online=online,
-            total=info.bandwidth.total.total,
-            monthly=monthly_str,
-            limit=limit_str,
-            wl_total=info.bandwidth.wl_total.total,
-            wl_monthly=wl_monthly_str,
-            wl_limit=wl_limit_str,
-            up=info.bandwidth.total.upload,
-            down=info.bandwidth.total.download,
-            wl_up=info.bandwidth.wl_total.upload,
-            wl_down=info.bandwidth.wl_total.download,
+            total=fmt_bytes(bw.total.total),
+            monthly=quota(bw.monthly, bw.limit),
+            wl_total=fmt_bytes(bw.wl_total.total),
+            wl_monthly=quota(bw.wl_monthly, bw.wl_limit),
+            up=fmt_bytes(bw.total.upload),
+            down=fmt_bytes(bw.total.download),
+            wl_up=fmt_bytes(bw.wl_total.upload),
+            wl_down=fmt_bytes(bw.wl_total.download),
             days=time_str,
             fingerprint=info.fingerprint
         )
@@ -86,5 +80,3 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"{domain}/{sub_uri}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
         )
         self.bot.send_photo(chat_id, qr, text, parse_mode="Markdown", reply_markup=markup)
-
-
