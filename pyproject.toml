@@ -38,11 +38,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = [
-    "app", "api", "chart", "builders",
+    "app", "chart", "builders",
     "bwatch", "custom_types", "db",
     "loggers", "session", "util", "errors"
 ]
 packages = [
+    "api",
+    "api.decorators",
     "config",
     "core",
     "bots",
@@ -67,7 +69,7 @@ files = [
     "src/session.py",
     "src/chart.py",
     "src/bwatch.py",
-    "src/api.py",
+    "src/api/",
     "src/app.py",
     "src/util.py",
     "src/errors.py",
@@ -136,7 +138,7 @@ include = [
     "src/session.py",
     "src/chart.py",
     "src/bwatch.py",
-    "src/api.py",
+    "src/api/",
     "src/app.py",
     "src/util.py",
     "src/errors.py",

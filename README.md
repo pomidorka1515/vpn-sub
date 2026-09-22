@@ -29,7 +29,7 @@ Fully synchronous, database-backed config, designed to run on a single small VPS
 - `src/core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
 - `src/config/` — atomic JSON config with thread + cross-process locking
 - `src/db.py` — core database logic
-- `src/api.py` — Flask routes (`Api` for admin, `WebApi` for end users)
+- `src/api/` — Flask routes (`Api` for admin, `WebApi` for end users)
 - `src/bots.py` — `AdminBot` (management), `PublicBot` (user self-service)
 
 ## Setup

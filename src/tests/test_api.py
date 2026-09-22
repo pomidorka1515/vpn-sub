@@ -106,14 +106,14 @@ def test_limits_each_ip_independently_without_instance_state(flask_app: Flask) -
 
     handler = object.__new__(Handler)
     with app_context(flask_app, "203.0.113.1"):
-        with mock.patch("api.time.monotonic", side_effect=[0.0, 1.0, 2.0]):
+        with mock.patch("api.decorators.rate_limit.time.monotonic", side_effect=[0.0, 1.0, 2.0]):
             assert handler.endpoint() == ("ok", 200)
             assert handler.endpoint() == ("ok", 200)
             _, status = handler.endpoint()
     assert status == 429
 
     with app_context(flask_app, "203.0.113.2"):
-        with mock.patch("api.time.monotonic", return_value=2.0):
+        with mock.patch("api.decorators.rate_limit.time.monotonic", return_value=2.0):
             assert handler.endpoint() == ("ok", 200)
 
 
@@ -127,7 +127,7 @@ def test_window_expires_at_sixty_seconds(flask_app: Flask) -> None:
 
     handler = object.__new__(Handler)
     with app_context(flask_app, "203.0.113.3"):
-        with mock.patch("api.time.monotonic", side_effect=[0.0, 59.999, 60.0]):
+        with mock.patch("api.decorators.rate_limit.time.monotonic", side_effect=[0.0, 59.999, 60.0]):
             assert handler.endpoint() == ("ok", 200)
             assert handler.endpoint()[1] == 429
             assert handler.endpoint() == ("ok", 200)
@@ -167,7 +167,7 @@ def test_reused_decorator_gives_each_endpoint_its_own_limiter(flask_app: Flask) 
 
     handler = object.__new__(Handler)
     with app_context(flask_app, "203.0.113.4"):
-        with mock.patch("api.time.monotonic", return_value=0.0):
+        with mock.patch("api.decorators.rate_limit.time.monotonic", return_value=0.0):
             assert handler.first() == ("first", 200)
             assert handler.second() == ("second", 200)
 
@@ -191,6 +191,6 @@ def test_missing_remote_address_uses_shared_unknown_bucket(flask_app: Flask) -> 
 
     handler = object.__new__(Handler)
     with app_context(flask_app, None):
-        with mock.patch("api.time.monotonic", side_effect=[0.0, 1.0]):
+        with mock.patch("api.decorators.rate_limit.time.monotonic", side_effect=[0.0, 1.0]):
             assert handler.endpoint() == ("ok", 200)
             assert handler.endpoint()[1] == 429
