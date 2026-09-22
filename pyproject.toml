@@ -39,7 +39,7 @@ build-backend = "setuptools.build_meta"
 package-dir = {"" = "src"}
 py-modules = [
     "app", "chart", "builders",
-    "bwatch", "custom_types", "db",
+    "bwatch", "custom_types",
     "loggers", "session", "util", "errors"
 ]
 packages = [
@@ -50,6 +50,7 @@ packages = [
     "bots",
     "bots.admin",
     "bots.public",
+    "db",
 ]
 
 # ---------------------------------------------------------------------------
@@ -63,7 +64,7 @@ cache_dir = "$MYPY_CONFIG_FILE_DIR/.mypy_cache"
 files = [
     "src/config/",
     "src/bots/",
-    "src/db.py",
+    "src/db/",
     "src/custom_types.py",
     "src/loggers.py",
     "src/session.py",
@@ -114,6 +115,11 @@ module = ["config", "config.*"]
 no_implicit_reexport           = false
 disable_error_code             = ["attr-defined", "override"]
 
+# Database mixins share connection/transaction helpers supplied by Database.
+[[tool.mypy.overrides]]
+module = ["db", "db.*"]
+disable_error_code             = ["attr-defined"]
+
 # Bt feature mixins intentionally depend on attributes supplied by the concrete
 # composition roots; pyTelegramBotAPI is also only partially typed.
 [[tool.mypy.overrides]]
@@ -132,7 +138,7 @@ pythonVersion = "3.14"
 include = [
     "src/config/",
     "src/bots/",
-    "src/db.py",
+    "src/db/",
     "src/custom_types.py",
     "src/loggers.py",
     "src/session.py",
@@ -157,6 +163,12 @@ root = "src/config"
 reportPrivateUsage = false
 reportUnusedFunction = false
 reportIncompatibleMethodOverride = false
+
+[[tool.pyright.executionEnvironments]]
+extraPaths = ["src"]
+root = "src/db"
+reportPrivateUsage = false
+reportUnusedFunction = false
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src", "src/tests"]
