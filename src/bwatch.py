@@ -44,6 +44,8 @@ class BWatch:
             self.admin_bot: AdminBot | None = admin_bot
             self.mem: dict[str, BandwidthInfo] = {}
             self.wl_mem: dict[str, BandwidthInfo] = {}
+            self.snap_mem: dict[str, BandwidthInfo] = {}
+            self.snap_wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
             self._panel_alerts: dict[str, int | float] = {} # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', as_type=int) or 3600
@@ -69,15 +71,23 @@ class BWatch:
     def start(self) -> None:
         initial_mem: dict[str, BandwidthInfo] = {}
         initial_wl_mem: dict[str, BandwidthInfo] = {}
+        initial_snap_mem: dict[str, BandwidthInfo] = {}
+        initial_snap_wl_mem: dict[str, BandwidthInfo] = {}
         for i in self.sub.user_svc.list_users():
-            initial_wl_mem[i] = self.sub.bandwidth_svc.bandwidth(username=i, whitelist=True)
+            wl_current = self.sub.bandwidth_svc.bandwidth(username=i, whitelist=True)
+            initial_wl_mem[i] = wl_current
+            initial_snap_wl_mem[i] = wl_current
             if self.sub.user_svc.get_user_state(i)['bw_limit_gb'] == 0:
                 continue
-            initial_mem[i] = self.sub.bandwidth_svc.bandwidth(username=i)
+            current = self.sub.bandwidth_svc.bandwidth(username=i)
+            initial_mem[i] = current
+            initial_snap_mem[i] = current
 
         with self._mem_lock:
             self.mem = initial_mem
             self.wl_mem = initial_wl_mem
+            self.snap_mem = initial_snap_mem
+            self.snap_wl_mem = initial_snap_wl_mem
             self._snapshot_initialized = True
 
         # Run first snapshot immediately; the scheduler tracks retries per kind.
@@ -300,21 +310,54 @@ class BWatch:
         
         self.prune_old_snap_snapshots()
 
+    @staticmethod
+    def _daily_snapshot_delta(
+        current: BandwidthInfo | None,
+        last: BandwidthInfo | None,
+    ) -> tuple[int, int, BandwidthInfo | None]:
+        """Return daily up/down deltas and the baseline to store.
+
+        A missing current means that counter was not queried. A drop below the
+        stored baseline is treated as a bad 3x-ui reading: write 0 and keep the
+        old baseline so a flake cannot become a later spike.
+        """
+        if current is None:
+            return 0, 0, None
+        if last is None:
+            return 0, 0, current
+        if current.upload < last.upload or current.download < last.download:
+            return 0, 0, None
+        return (
+            int(current.upload - last.upload),
+            int(current.download - last.download),
+            current,
+        )
+
     def record_daily_snapshot(self) -> None:
         """Record one bandwidth snapshot per user for today (UTC midnight).
 
-        Thread-safe: takes a copy of mem under lock, releases it for I/O,
-        then updates mem + writes config under lock."""
+        Uses dedicated snapshot baselines so the 15s quota poller cannot shrink
+        the day's delta to the last poll interval. Thread-safe: copies snap
+        baselines under lock, releases it for panel I/O, then writes rows and
+        advances only the counters that were recorded successfully.
+        """
 
-        # 1. Snapshot mem under lock
         with self._mem_lock:
-            mem_snapshot = dict(self.mem)
-            wl_mem_snapshot = dict(self.wl_mem)
+            mem_snapshot = dict(self.snap_mem)
+            wl_mem_snapshot = dict(self.snap_wl_mem)
 
-        # 2. Fetch bandwidth outside lock (I/O can be slow)
         midnight = int(time.time()) - (int(time.time()) % 86400)
-        # {username: (current, wl_current, delta_up, delta_down, wl_up, wl_down)}
-        snapshot_data: dict[str, tuple[BandwidthInfo, BandwidthInfo, int, int, int, int]] = {}
+        # username -> (current, wl_current, up, down, wl_up, wl_down, next_main, next_wl)
+        snapshot_data: dict[
+            str,
+            tuple[
+                BandwidthInfo | None,
+                BandwidthInfo | None,
+                int, int, int, int,
+                BandwidthInfo | None,
+                BandwidthInfo | None,
+            ],
+        ] = {}
         eligible_users: list[str] = []
         failed_users: list[str] = []
 
@@ -326,9 +369,13 @@ class BWatch:
                 continue
             eligible_users.append(username)
 
+            current: BandwidthInfo | None = None
+            wl_current: BandwidthInfo | None = None
             try:
-                current = self.sub.bandwidth_svc.bandwidth(username=username)
-                wl_current = self.sub.bandwidth_svc.bandwidth(username=username, whitelist=True)
+                if bw_limit != 0:
+                    current = self.sub.bandwidth_svc.bandwidth(username=username)
+                if wl_limit != 0:
+                    wl_current = self.sub.bandwidth_svc.bandwidth(username=username, whitelist=True)
             except Exception:
                 failed_users.append(username)
                 self.log.error(
@@ -337,24 +384,23 @@ class BWatch:
                     exc_info=True,
                 )
                 continue
-            
-            last_mem = mem_snapshot.get(username)
-            last_wl_mem = wl_mem_snapshot.get(username)
 
+            up, down, next_main = self._daily_snapshot_delta(current, mem_snapshot.get(username))
+            wl_up, wl_down, next_wl = self._daily_snapshot_delta(
+                wl_current, wl_mem_snapshot.get(username),
+            )
             snapshot_data[username] = (
-                current, wl_current,
-                max(int(current.upload - last_mem.upload), 0) if last_mem else 0,
-                max(int(current.download - last_mem.download), 0) if last_mem else 0,
-                max(int(wl_current.upload - last_wl_mem.upload), 0) if last_wl_mem else 0,
-                max(int(wl_current.download - last_wl_mem.download), 0) if last_wl_mem else 0,
+                current, wl_current, up, down, wl_up, wl_down, next_main, next_wl,
             )
 
-        # 3. Update mem + write snapshot under lock (atomic)
         with self._mem_lock:
-            for username, (current, wl_current, up, down, wl_up, wl_down) in snapshot_data.items():
-                self.mem[username] = current
-                self.wl_mem[username] = wl_current
-
+            for username, (
+                _current, _wl_current, up, down, wl_up, wl_down, next_main, next_wl,
+            ) in snapshot_data.items():
+                if next_main is not None:
+                    self.snap_mem[username] = next_main
+                if next_wl is not None:
+                    self.snap_wl_mem[username] = next_wl
                 self.db.add_bandwidth_snapshot(username, midnight, up, down, wl_up, wl_down)
 
         self.prune_old_bw_snapshots()
@@ -364,12 +410,10 @@ class BWatch:
                 "daily_bw_snapshot_failures",
                 f"{int(time.time())}:{len(failed_users)}:{len(eligible_users)}",
             )
-        else:
-            self.db.delete_metadata("daily_bw_snapshot_failures")
-        if eligible_users and len(failed_users) == len(eligible_users):
             raise PanelUnavailableError(
-                f"Daily bandwidth snapshot failed for all {len(eligible_users)} eligible user(s)"
+                f"Daily bandwidth snapshot failed for {len(failed_users)}/{len(eligible_users)} eligible user(s)"
             )
+        self.db.delete_metadata("daily_bw_snapshot_failures")
 
     def get_daily_snapshot_failure(self) -> dict[str, int] | None:
         """Return metadata from the latest bandwidth snapshot attempt."""
