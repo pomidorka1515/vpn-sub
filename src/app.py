@@ -4,10 +4,10 @@ import fcntl
 import os
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, BinaryIO, Self, cast
+from typing import BinaryIO, Self, cast
 
 from api import Api, WebApi
 from bots import AdminBot, PublicBot
@@ -23,6 +23,7 @@ from session import XUiSession, XUiPanelTransport
 from util import err
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
+from wsgiref.types import WSGIApplication, StartResponse, WSGIEnvironment
 
 threading.main_thread().name = "main"
 
@@ -48,10 +49,10 @@ class _ProxyGuard:
     app *outside* ProxyFix, which already rewrites REMOTE_ADDR.
     """
 
-    def __init__(self, wsgi: Any) -> None:
-        self.wsgi = wsgi
+    def __init__(self, wsgi: WSGIApplication) -> None:
+        self.wsgi: WSGIApplication = wsgi
 
-    def __call__(self, environ: dict[str, Any], start_response: Callable[..., Any]) -> Any:
+    def __call__(self, environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
         peer = environ.get("REMOTE_ADDR")
         if peer not in ("127.0.0.1", "::1"):
             log.error("direct access attempt from %s; refusing", peer)
@@ -215,20 +216,15 @@ def _build_flask_app(options: AppOptions) -> Flask:
     flask_app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     flask_app.config["JSON_SORT_KEYS"] = False
     if options.proxy_hops > 0:
-        flask_app.wsgi_app = cast(  # type: ignore[method-assign]
-            Any,
-            ProxyFix(
-                flask_app.wsgi_app,
-                x_for=options.proxy_hops,
-                x_proto=1,
-                x_host=1,
-            ),
+        flask_app.wsgi_app = ProxyFix( # type: ignore[method-assign]
+            flask_app.wsgi_app,
+            x_for=options.proxy_hops,
+            x_proto=1,
+            x_host=1
         )
     if options.require_proxy:
-        flask_app.wsgi_app = cast(  # type: ignore[method-assign]
-            Any,
-            _ProxyGuard(flask_app.wsgi_app),
-        )
+        flask_app.wsgi_app = _ProxyGuard(flask_app.wsgi_app) # type: ignore[method-assign]
+
 
     @flask_app.errorhandler(AppError)
     def handle_app_error(error: AppError) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:

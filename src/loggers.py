@@ -5,10 +5,12 @@ import html
 import time
 from urllib.parse import parse_qsl, urlsplit
 
-from collections.abc import Generator
+from collections.abc import Generator, MutableMapping
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, TYPE_CHECKING
+from gunicorn.http.message import Request
+from gunicorn.http.wsgi import Response
 
 from gunicorn.glogging import Logger as GunicornBaseLogger
 if TYPE_CHECKING:
@@ -174,7 +176,7 @@ def _safe_request_target(raw_uri: str) -> str:
     return path
 
 
-def _client_address(environ: dict[str, object]) -> str:
+def _client_address(environ: MutableMapping[str, object]) -> str:
     """Use the original client address when the app is behind a proxy."""
     forwarded = environ.get("HTTP_X_FORWARDED_FOR")
     if isinstance(forwarded, str) and forwarded.strip():
@@ -208,7 +210,7 @@ class GunicornLogger(GunicornBaseLogger):
         for handler in self.access_log.handlers:
             handler.setFormatter(formatter)
 
-    def access(self, resp: Any, req: Any, environ: Any, request_time: Any) -> None:
+    def access(self, resp: Response, req: Request, environ: MutableMapping[str, Any], request_time: timedelta) -> None:
         if not self.access_log_enabled:
             return
 
