@@ -79,7 +79,7 @@ class PublicRoutingMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         lang = self.get_lang(interaction.user.id)
         result = await self.http.profiles(token, lang)
         if not await self.consume_result(interaction, result):

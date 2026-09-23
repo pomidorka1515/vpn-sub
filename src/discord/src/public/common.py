@@ -84,12 +84,6 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
             return True
         return isinstance(channel, discord.DMChannel)
 
-    async def require_dm(self, interaction: discord.Interaction) -> bool:
-        if self.in_dm(interaction):
-            return True
-        await self._reply_key(interaction, "dm_required")
-        return False
-
     async def require_login(self, interaction: discord.Interaction) -> bool:
         if self.is_logged_in(interaction.user.id):
             return True

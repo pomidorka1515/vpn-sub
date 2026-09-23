@@ -47,7 +47,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.bonus(token, code)
         if not await self.consume_result(interaction, result):
             return
@@ -85,7 +85,7 @@ class PublicAccountMixin(PublicFeatureMixin):
 
     async def confirm_logout(self, interaction: discord.Interaction) -> None:
         token = self.sessions.token(interaction.user.id)
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         if token:
             result = await self.http.logout(token)
             if result.status not in (200, 401) and not result.ok:
@@ -104,7 +104,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.reset(token)
         if result.status == 429:
             await self._reply_key(interaction, "rate_limited")
@@ -132,7 +132,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.delete(token, password)
         if result.status == 401:
             if result.msg and "password" in result.msg.lower():

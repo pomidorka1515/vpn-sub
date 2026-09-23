@@ -76,6 +76,45 @@ def test_sub_uses_stats_and_qr(public_bot_factory: PublicBotFactory) -> None:
     assert "subscription is ready" in str(last["content"])
     assert last.get("file") is not None
     assert last.get("view") is not None
+    assert last.get("ephemeral") is True
+    assert interaction.response.defers[-1].get("ephemeral") is True
+
+
+def test_sub_works_in_guild_and_stays_ephemeral(public_bot_factory: PublicBotFactory) -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, json, headers
+        if url.endswith("/stats"):
+            return json_ok(stats_obj())
+        if url.endswith("/qr"):
+            return FakeResponse(200, {}, body=b"qr-png", content_type="image/png")
+        raise AssertionError(url)
+
+    bot, _store, session = public_bot_factory(handler)
+    interaction = FakeInteraction(guild_id=123)
+    run(bot.cmd_sub(interaction))  # type: ignore[arg-type]
+    assert [str(call["url"]) for call in session.calls][0].endswith("/stats")
+    last = interaction.response.messages[-1]
+    assert "subscription is ready" in str(last["content"])
+    assert last.get("ephemeral") is True
+    assert interaction.response.defers[-1].get("ephemeral") is True
+
+
+def test_info_is_persistent_in_dm_and_ephemeral_in_guild(public_bot_factory: PublicBotFactory) -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, json, params, headers
+        assert url.endswith("/stats")
+        return json_ok(stats_obj())
+
+    bot, _store, _session = public_bot_factory(handler)
+    dm = FakeInteraction(guild_id=None)
+    run(bot.cmd_info(dm))  # type: ignore[arg-type]
+    assert dm.response.defers[-1].get("ephemeral") is False
+    assert dm.response.messages[-1].get("ephemeral") is not True
+
+    guild = FakeInteraction(guild_id=123)
+    run(bot.cmd_info(guild))  # type: ignore[arg-type]
+    assert guild.response.defers[-1].get("ephemeral") is True
+    assert guild.response.messages[-1].get("ephemeral") is True
 
 
 def test_bonus_posts_code_then_refreshes_info(public_bot_factory: PublicBotFactory) -> None:

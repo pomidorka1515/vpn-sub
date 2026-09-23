@@ -114,7 +114,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         values = self.modal_values(interaction)
         username = values.get("username", "").strip()
         password = values.get("password", "")
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.login(username, password)
         if result.status == 401:
             await self._reply_key(interaction, "login_fail")
@@ -144,7 +144,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         password = values.get("password", "")
         code = values.get("code", "").strip()
         name = values.get("name", "").strip()
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         check = await self.http.validate_username(username)
         if not await self.consume_result(interaction, check):
             return

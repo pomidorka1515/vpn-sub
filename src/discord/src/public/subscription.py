@@ -97,13 +97,11 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             await self._respond(interaction, text)
 
     async def cmd_info(self, interaction: discord.Interaction) -> None:
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         await self.send_info(interaction)
 
     async def send_sub(self, interaction: discord.Interaction) -> None:
         uid = interaction.user.id
-        if not await self.require_dm(interaction):
-            return
         token = self.sessions.token(uid)
         if not token:
             await self._reply_key(interaction, "not_logged_in")

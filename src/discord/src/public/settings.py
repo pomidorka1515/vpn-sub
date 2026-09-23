@@ -98,7 +98,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.fingerprints(token)
         if not await self.consume_result(interaction, result):
             return
@@ -127,7 +127,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.settings(token, fingerprint=fingerprint)
         if not await self.consume_result(interaction, result):
             return
@@ -146,7 +146,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.settings(token, name=name)
         if not await self.consume_result(interaction, result):
             return
@@ -160,7 +160,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         check = await self.http.validate_username(username)
         if not await self.consume_result(interaction, check):
             return
@@ -187,7 +187,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        await self._defer(interaction, ephemeral=True)
+        await self._defer(interaction)
         result = await self.http.settings(token, password=password, current_password=current_password)
         if not await self.consume_result(interaction, result):
             return

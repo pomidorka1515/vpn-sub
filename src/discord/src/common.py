@@ -13,17 +13,23 @@ __all__ = ["DiscordIOMixin"]
 class DiscordIOMixin(PublicFeatureMixin):
     """Shared send, edit, and ephemeral helpers for Discord interactions."""
 
+    def _ephemeral(self, interaction: discord.Interaction, ephemeral: bool | None) -> bool:
+        if ephemeral is not None:
+            return ephemeral
+        return not self.in_dm(interaction)
+
     async def _respond(
         self,
         interaction: discord.Interaction,
         content: str | None,
         *,
-        ephemeral: bool = True,
+        ephemeral: bool | None = None,
         view: discord.ui.View | None = None,
         file: discord.File | None = None,
     ) -> None:
         if not content and view is None and file is None:
             return
+        ephemeral = self._ephemeral(interaction, ephemeral)
         kwargs: dict[str, Any] = {"ephemeral": ephemeral}
         if content is not None:
             kwargs["content"] = content
@@ -47,7 +53,7 @@ class DiscordIOMixin(PublicFeatureMixin):
         interaction: discord.Interaction,
         key: str,
         *,
-        ephemeral: bool = True,
+        ephemeral: bool | None = None,
         view: discord.ui.View | None = None,
         file: discord.File | None = None,
         **fmt: object,
@@ -64,11 +70,11 @@ class DiscordIOMixin(PublicFeatureMixin):
             file=file,
         )
 
-    async def _defer(self, interaction: discord.Interaction, *, ephemeral: bool = True) -> None:
+    async def _defer(self, interaction: discord.Interaction, *, ephemeral: bool | None = None) -> None:
         if interaction.response.is_done():
             return
         try:
-            await interaction.response.defer(ephemeral=ephemeral)
+            await interaction.response.defer(ephemeral=self._ephemeral(interaction, ephemeral))
         except Exception:
             self.log.error("failed to defer interaction", exc_info=True)
 

@@ -101,6 +101,7 @@ class FakeResponseAPI:
         self.deferred = False
         self.messages: list[dict[str, object]] = []
         self.modals: list[object] = []
+        self.defers: list[dict[str, object]] = []
 
     def is_done(self) -> bool:
         return self.done
@@ -114,7 +115,7 @@ class FakeResponseAPI:
         self.modals.append(modal)
 
     async def defer(self, **kwargs: object) -> None:
-        del kwargs
+        self.defers.append(kwargs)
         self.done = True
         self.deferred = True
 

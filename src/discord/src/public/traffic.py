@@ -52,7 +52,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
         lock = self._chart_lock(uid)
         try:
             async with lock:
-                await self._defer(interaction, ephemeral=True)
+                await self._defer(interaction)
                 await self._reply_key(interaction, "chart_generating")
                 history = await self.http.history(token, days)
                 if not await self.consume_result(interaction, history):
