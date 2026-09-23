@@ -145,6 +145,19 @@ class PublicLoginMixin(PublicFeatureMixin):
         code = values.get("code", "").strip()
         name = values.get("name", "").strip()
         await self._defer(interaction, ephemeral=True)
+        check = await self.http.validate_username(username)
+        if not await self.consume_result(interaction, check):
+            return
+        obj = check.obj
+        if not isinstance(obj, dict):
+            await self._reply_key(interaction, "bad_response")
+            return
+        if not obj.get("valid"):
+            await self._reply_key(interaction, "length_username", ln=32)
+            return
+        if obj.get("taken"):
+            await self._reply_key(interaction, "username_taken")
+            return
         result = await self.http.register(username, password, code, name)
         if not result.ok:
             if result.status in (400, 404, 409) and result.msg:

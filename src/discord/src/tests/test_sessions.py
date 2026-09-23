@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -48,18 +47,6 @@ def test_401_clears_session(session_store: SessionStore) -> None:
     record = session_store.get("123")
     assert not record.logged_in
     assert record.lang == "en"
-
-
-def test_snapshot_does_not_include_tokens(session_store: SessionStore, session_path: Path) -> None:
-    session_store.set_token("99", "super-secret")
-    session_store.set_lang("99", "ru")
-    snap = session_store.snapshot_for_log()
-    encoded = json.dumps(snap)
-    assert "super-secret" not in encoded
-    assert "token" not in encoded
-    raw = json.loads(session_path.read_text(encoding="utf-8"))
-    assert raw["99"]["token"] == "super-secret"
-
 
 def test_chmod_600(session_path: Path, session_store: SessionStore) -> None:
     mode = os.stat(session_path).st_mode & 0o777

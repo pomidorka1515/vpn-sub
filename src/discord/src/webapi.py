@@ -70,7 +70,6 @@ class WebApiClient:
         self._session = session
         self._owns_session = session is None
         self._stats_cache: dict[str, tuple[float, ApiResult]] = {}
-        self._request_count = 0
 
     async def start(self) -> None:
         if self._session is None or self._session.closed:
@@ -81,10 +80,6 @@ class WebApiClient:
         if self._owns_session and self._session is not None and not self._session.closed:
             await self._session.close()
         self._session = None
-
-    @property
-    def request_count(self) -> int:
-        return self._request_count
 
     def invalidate_stats(self, token: str) -> None:
         self._stats_cache.pop(token, None)
@@ -114,7 +109,6 @@ class WebApiClient:
         expect_image: bool = False,
     ) -> ApiResult:
         session = self._session_or_raise()
-        self._request_count += 1
         try:
             async with session.request(
                 method,

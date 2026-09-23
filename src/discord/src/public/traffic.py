@@ -33,125 +33,126 @@ class PublicTrafficMixin(PublicFeatureMixin):
         return lock
 
     async def cmd_chart(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         lang = self.get_lang(interaction.user.id)
         await self._reply_key(interaction, "choose_chart_days", view=self.chart_view(lang))
 
     async def render_chart(self, interaction: discord.Interaction, days: int) -> None:
         uid = interaction.user.id
-        if not await self.require_login(interaction):
-            return
         token = self.sessions.token(uid)
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
         if not 1 <= days <= 90:
             return
-        lock = self._chart_lock(uid)
-        if lock.locked():
+        busy = self._chart_busy
+        if uid in busy:
             await self._reply_key(interaction, "chart_generating")
             return
-        await self._defer(interaction, ephemeral=True)
-        async with lock:
-            await self._reply_key(interaction, "chart_generating")
-            history = await self.http.history(token, days)
-            if not await self.consume_result(interaction, history):
-                return
-            stats = await self.http.stats(token)
-            if not await self.consume_result(interaction, stats):
-                return
-            lang = self.get_lang(uid)
-            t = self.TEXTS[lang]
-            raw_obj = stats.obj
-            if isinstance(raw_obj, dict):
+        busy.add(uid)
+        lock = self._chart_lock(uid)
+        try:
+            async with lock:
+                await self._defer(interaction, ephemeral=True)
+                await self._reply_key(interaction, "chart_generating")
+                history = await self.http.history(token, days)
+                if not await self.consume_result(interaction, history):
+                    return
+                stats = await self.http.stats(token)
+                if not await self.consume_result(interaction, stats):
+                    return
+                lang = self.get_lang(uid)
+                t = self.TEXTS[lang]
+                raw_obj = stats.obj
+                if not isinstance(raw_obj, dict):
+                    await self._reply_key(interaction, "bad_response")
+                    return
                 obj = cast(dict[str, Any], raw_obj)
-            else:
-                obj = {}
-            bandwidth_obj = obj.get("bandwidth")
-            if isinstance(bandwidth_obj, dict):
-                bandwidth = cast(dict[str, Any], bandwidth_obj)
-            else:
-                bandwidth = {}
-            total_obj = bandwidth.get("total")
-            if isinstance(total_obj, dict):
-                total = cast(dict[str, Any], total_obj)
-            else:
-                total = {}
-            wl_total_obj = bandwidth.get("wl_total")
-            if isinstance(wl_total_obj, dict):
-                wl_total = cast(dict[str, Any], wl_total_obj)
-            else:
-                wl_total = {}
-            used_str, limit_str, percent_str = format_usage(
-                bandwidth.get("monthly") or 0,
-                bandwidth.get("limit") or 0,
-                t.get("unlimited", "Unlimited"),
-            )
-            wl_used_str, wl_limit_str, wl_percent_str = format_usage(
-                bandwidth.get("wl_monthly") or 0,
-                bandwidth.get("wl_limit") or 0,
-                t.get("unlimited", "Unlimited"),
-            )
-            text = t.get("chart_text", "").format(
-                days=days,
-                upload=fmt_bytes(total.get("upload") or 0),
-                download=fmt_bytes(total.get("download") or 0),
-                used=used_str,
-                limit=limit_str,
-                percent=percent_str,
-                wl_upload=fmt_bytes(wl_total.get("upload") or 0),
-                wl_download=fmt_bytes(wl_total.get("download") or 0),
-                wl_used=wl_used_str,
-                wl_limit=wl_limit_str,
-                wl_percent=wl_percent_str,
-            )
-            text = truncate_utf8(text, 1024)
-            snapshots: list[BandwidthSnapshot] = []
-            history_raw = history.obj
-            if isinstance(history_raw, list):
-                raw_history = cast(list[dict[str, Any]], history_raw)
-            else:
-                raw_history = []
-            for item in raw_history:
-                snapshots.append(
-                    BandwidthSnapshot(
-                        ts=int(item.get("ts") or 0),
-                        up=int(item.get("up") or 0),
-                        down=int(item.get("down") or 0),
-                        wl_up=int(item.get("wl_up") or 0),
-                        wl_down=int(item.get("wl_down") or 0),
-                    )
+                bandwidth_obj = obj.get("bandwidth")
+                if isinstance(bandwidth_obj, dict):
+                    bandwidth = cast(dict[str, Any], bandwidth_obj)
+                else:
+                    bandwidth = {}
+                total_obj = bandwidth.get("total")
+                if isinstance(total_obj, dict):
+                    total = cast(dict[str, Any], total_obj)
+                else:
+                    total = {}
+                wl_total_obj = bandwidth.get("wl_total")
+                if isinstance(wl_total_obj, dict):
+                    wl_total = cast(dict[str, Any], wl_total_obj)
+                else:
+                    wl_total = {}
+                used_str, limit_str, percent_str = format_usage(
+                    bandwidth.get("monthly") or 0,
+                    bandwidth.get("limit") or 0,
+                    t.get("unlimited", "Unlimited"),
                 )
-            chart_lang = {
-                "bandwidth": "Bandwidth",
-                "days": "days",
-                "day": "day",
-                "regular_traffic": "Regular traffic",
-                "whitelist_traffic": "Whitelist traffic",
-                "download": "Download",
-                "upload": "Upload",
-                "no_data": "No data",
-            }
-            if lang == "ru":
+                wl_used_str, wl_limit_str, wl_percent_str = format_usage(
+                    bandwidth.get("wl_monthly") or 0,
+                    bandwidth.get("wl_limit") or 0,
+                    t.get("unlimited", "Unlimited"),
+                )
+                text = t.get("chart_text", "").format(
+                    days=days,
+                    upload=fmt_bytes(total.get("upload") or 0),
+                    download=fmt_bytes(total.get("download") or 0),
+                    used=used_str,
+                    limit=limit_str,
+                    percent=percent_str,
+                    wl_upload=fmt_bytes(wl_total.get("upload") or 0),
+                    wl_download=fmt_bytes(wl_total.get("download") or 0),
+                    wl_used=wl_used_str,
+                    wl_limit=wl_limit_str,
+                    wl_percent=wl_percent_str,
+                )
+                text = truncate_utf8(text, 1024)
+                snapshots: list[BandwidthSnapshot] = []
+                history_raw = history.obj
+                if isinstance(history_raw, list):
+                    raw_history = cast(list[dict[str, Any]], history_raw)
+                else:
+                    raw_history = []
+                for item in raw_history:
+                    snapshots.append(
+                        BandwidthSnapshot(
+                            ts=int(item.get("ts") or 0),
+                            up=int(item.get("up") or 0),
+                            down=int(item.get("down") or 0),
+                            wl_up=int(item.get("wl_up") or 0),
+                            wl_down=int(item.get("wl_down") or 0),
+                        )
+                    )
                 chart_lang = {
-                    "bandwidth": "Использование трафика",
-                    "days": "дн.",
-                    "day": "день",
-                    "regular_traffic": "Обычный трафик",
-                    "whitelist_traffic": "Белый список",
-                    "download": "Загрузка",
-                    "upload": "Отдача",
-                    "no_data": "Нет данных",
+                    "bandwidth": "Bandwidth",
+                    "days": "days",
+                    "day": "day",
+                    "regular_traffic": "Regular traffic",
+                    "whitelist_traffic": "Whitelist traffic",
+                    "download": "Download",
+                    "upload": "Upload",
+                    "no_data": "No data",
                 }
-            image = await asyncio.to_thread(
-                bandwidth_chart,
-                snapshots,
-                label=str(obj.get("displayname") or ""),
-                lang=cast(Mapping[str, str], chart_lang),
-            )
-            file: discord.File | None = None
-            if image is not None:
-                image.seek(0)
-                file = discord.File(image, filename="chart.png")
-            await self._respond(interaction, text or None, file=file)
+                if lang == "ru":
+                    chart_lang = {
+                        "bandwidth": "Использование трафика",
+                        "days": "дн.",
+                        "day": "день",
+                        "regular_traffic": "Обычный трафик",
+                        "whitelist_traffic": "Белый список",
+                        "download": "Загрузка",
+                        "upload": "Отдача",
+                        "no_data": "Нет данных",
+                    }
+                image = await asyncio.to_thread(
+                    bandwidth_chart,
+                    snapshots,
+                    label=str(obj.get("displayname") or ""),
+                    lang=cast(Mapping[str, str], chart_lang),
+                )
+                file: discord.File | None = None
+                if image is not None:
+                    image.seek(0)
+                    file = discord.File(image, filename="chart.png")
+                await self._respond(interaction, text or None, file=file)
+        finally:
+            busy.discard(uid)

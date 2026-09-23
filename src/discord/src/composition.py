@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         sessions: SessionStore
         TEXTS: dict[str, dict[str, str]]
         _chart_locks: dict[int, asyncio.Lock]
+        _chart_busy: set[int]
 
         def get_lang(self, user_id: int) -> str: ...
         def has_lang(self, user_id: int) -> bool: ...

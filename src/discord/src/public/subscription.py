@@ -88,6 +88,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             return
         raw_obj = result.obj
         if not isinstance(raw_obj, dict):
+            await self._reply_key(interaction, "bad_response")
             return
         obj = cast(dict[str, Any], raw_obj)
         lang = self.get_lang(uid)
@@ -96,8 +97,6 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             await self._respond(interaction, text)
 
     async def cmd_info(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         await self._defer(interaction, ephemeral=True)
         await self.send_info(interaction)
 
@@ -114,10 +113,10 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not await self.consume_result(interaction, stats):
             return
         raw_obj = stats.obj
-        if isinstance(raw_obj, dict):
-            obj = cast(dict[str, Any], raw_obj)
-        else:
-            obj = {}
+        if not isinstance(raw_obj, dict):
+            await self._reply_key(interaction, "bad_response")
+            return
+        obj = cast(dict[str, Any], raw_obj)
         link = str(obj.get("link") or "")
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
@@ -136,6 +135,4 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         await self._respond(interaction, content, view=view, file=file, ephemeral=True)
 
     async def cmd_sub(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         await self.send_sub(interaction)

@@ -68,6 +68,7 @@ class PublicBot(
             self.bot = _PublicClient(self, intents=intents)
             self.tree = app_commands.CommandTree(self.bot)
             self._chart_locks: dict[int, asyncio.Lock] = {}
+            self._chart_busy: set[int] = set()
             self._wire_events()
             self._wire_commands()
 
@@ -100,8 +101,18 @@ class PublicBot(
             ("reset", self.cmd_reset, "Reset your subscription link"),
             ("delete", self.cmd_delete, "Delete your account"),
         )
+        def bind(command_name: str, command_handler: Any):
+            async def wrapped(interaction: discord.Interaction) -> None:
+                if self.command_requires_auth(command_name) and not self.is_logged_in(interaction.user.id):
+                    await self._reply_key(interaction, "not_logged_in")
+                    return
+                await command_handler(interaction)
+            wrapped.__name__ = command_name
+            wrapped.__qualname__ = command_name
+            return wrapped
+
         for name, handler, description in commands:
-            self.tree.command(name=name, description=description)(handler)
+            self.tree.command(name=name, description=description)(bind(name, handler))
 
     async def start(self) -> None:
         await self.bot.login(self._token)

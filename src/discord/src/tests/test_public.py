@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -197,3 +198,188 @@ def test_slash_commands_sync_in_setup_hook_not_on_ready(public_bot_factory: Publ
     on_ready = getattr(bot.bot, "on_ready")
     run(on_ready())
     assert calls["n"] == 1
+
+def test_register_modal_validates_then_registers(public_bot_factory: PublicBotFactory) -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del headers
+        if url.endswith("/validate"):
+            assert method == "GET"
+            assert params == {"username": "alice"}
+            return json_ok({"valid": True, "taken": False, "sanitized": "alice"})
+        if url.endswith("/register"):
+            assert method == "POST"
+            assert json == {"username": "alice", "password": "secret", "code": "INVITE", "name": "Ada"}
+            return FakeResponse(201, {}, {"success": True, "msg": "Created", "obj": {"username": "alice"}})
+        if url.endswith("/login"):
+            return FakeResponse(
+                200,
+                {"Set-Cookie": "auth_token=newtok; Secure"},
+                {"success": True, "msg": "Successful login", "obj": {"username": "alice"}},
+            )
+        if url.endswith("/stats"):
+            return json_ok(stats_obj())
+        raise AssertionError(url)
+
+    bot, store, session = public_bot_factory(handler)
+    store.clear_token(7)
+    interaction = FakeInteraction(
+        data=modal_data(
+            "register_modal",
+            {"username": "alice", "password": "secret", "code": "INVITE", "name": "Ada"},
+        )
+    )
+    run(bot.handle_register_modal(interaction))  # type: ignore[arg-type]
+    paths = [str(call["url"]) for call in session.calls]
+    assert paths[0].endswith("/validate")
+    assert paths[1].endswith("/register")
+    assert paths[2].endswith("/login")
+    assert store.logged_in(7)
+
+
+@pytest.mark.parametrize(
+    ("obj", "needle"),
+    (
+        ({"valid": False, "taken": False, "sanitized": "bad name"}, "too long"),
+        ({"valid": True, "taken": True, "sanitized": "alice"}, "taken"),
+    ),
+)
+def test_register_modal_taken_or_invalid_never_posts_register(
+    public_bot_factory: PublicBotFactory,
+    obj: dict[str, object],
+    needle: str,
+) -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, json, headers
+        if url.endswith("/validate"):
+            assert params == {"username": "alice"}
+            return json_ok(obj)
+        raise AssertionError(f"unexpected {url}")
+
+    bot, store, session = public_bot_factory(handler)
+    store.clear_token(7)
+    interaction = FakeInteraction(
+        data=modal_data(
+            "register_modal",
+            {"username": "alice", "password": "secret", "code": "INVITE", "name": "Ada"},
+        )
+    )
+    run(bot.handle_register_modal(interaction))  # type: ignore[arg-type]
+    assert [str(call["url"]) for call in session.calls] == [session.calls[0]["url"]]
+    assert str(session.calls[0]["url"]).endswith("/validate")
+    content = str(interaction.response.messages[-1]["content"]).lower()
+    assert needle in content
+    assert not store.logged_in(7)
+
+
+def test_login_change_modal_validates_username(public_bot_factory: PublicBotFactory) -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del headers
+        if url.endswith("/validate"):
+            assert method == "GET"
+            assert params == {"username": "newname"}
+            return json_ok({"valid": True, "taken": False, "sanitized": "newname"})
+        if url.endswith("/settings"):
+            assert method == "POST"
+            assert json == {"username": "newname", "current_password": "secret"}
+            return json_ok()
+        raise AssertionError(url)
+
+    bot, _store, session = public_bot_factory(handler)
+    interaction = FakeInteraction(
+        data=modal_data(
+            "settings_login_modal",
+            {"username": "newname", "current_password": "secret"},
+        )
+    )
+    run(bot.handle_login_change_modal(interaction))  # type: ignore[arg-type]
+    paths = [str(call["url"]) for call in session.calls]
+    assert paths[0].endswith("/validate")
+    assert paths[1].endswith("/settings")
+    assert "Login changed" in str(interaction.response.messages[-1]["content"])
+
+
+@pytest.mark.parametrize(
+    ("obj", "needle"),
+    (
+        ({"valid": False, "taken": False, "sanitized": "x"}, "too long"),
+        ({"valid": True, "taken": True, "sanitized": "newname"}, "taken"),
+    ),
+)
+def test_login_change_modal_taken_or_invalid_never_posts_settings(
+    public_bot_factory: PublicBotFactory,
+    obj: dict[str, object],
+    needle: str,
+) -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, json, headers
+        if url.endswith("/validate"):
+            assert params == {"username": "newname"}
+            return json_ok(obj)
+        raise AssertionError(f"unexpected {url}")
+
+    bot, _store, session = public_bot_factory(handler)
+    interaction = FakeInteraction(
+        data=modal_data(
+            "settings_login_modal",
+            {"username": "newname", "current_password": "secret"},
+        )
+    )
+    run(bot.handle_login_change_modal(interaction))  # type: ignore[arg-type]
+    assert len(session.calls) == 1
+    assert str(session.calls[0]["url"]).endswith("/validate")
+    assert needle in str(interaction.response.messages[-1]["content"]).lower()
+
+
+def test_cmd_info_non_dict_obj_replies_bad_response(public_bot_factory: PublicBotFactory) -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, json, params, headers
+        assert url.endswith("/stats")
+        return json_ok(["not-a-dict"])
+
+    bot, _store, _session = public_bot_factory(handler)
+    interaction = FakeInteraction()
+    run(bot.cmd_info(interaction))  # type: ignore[arg-type]
+    assert interaction.response.deferred
+    content = str(interaction.response.messages[-1]["content"]).lower()
+    assert "unexpected" in content or "incorrect" in content or "bad" in content
+    assert "temporarily unavailable" not in content
+
+
+def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: PublicBotFactory) -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, json, headers
+        if url.endswith("/history"):
+            assert params == {"days": 14}
+            return json_ok([{"ts": 1, "up": 10, "down": 20, "wl_up": 1, "wl_down": 2}])
+        if url.endswith("/stats"):
+            return json_ok(stats_obj())
+        raise AssertionError(url)
+
+    bot, _store, session = public_bot_factory(handler)
+    first = FakeInteraction()
+    second = FakeInteraction()
+
+    async def fake_to_thread(func: Any, *args: object, **kwargs: object) -> object:
+        del func, args, kwargs
+        entered.set()
+        await release.wait()
+        return None
+
+    async def scenario() -> None:
+        task = asyncio.create_task(bot.render_chart(first, 14))  # type: ignore[arg-type]
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        await asyncio.wait_for(bot.render_chart(second, 14), timeout=1)  # type: ignore[arg-type]
+        release.set()
+        await asyncio.wait_for(task, timeout=1)
+
+    with patch("public.traffic.asyncio.to_thread", fake_to_thread):
+        run(scenario())
+
+    assert len(session.calls) == 2
+    second_text = str(second.response.messages[-1]["content"]).lower()
+    assert "generating" in second_text
+    assert "14" in str(first.response.messages[-1]["content"])
+

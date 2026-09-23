@@ -101,15 +101,3 @@ class SessionStore:
     def clear_token(self, user_id: int | str) -> None:
         self.set_token(user_id, "")
 
-    def snapshot_for_log(self) -> dict[str, dict[str, object]]:
-        out: dict[str, dict[str, object]] = {}
-        for key, value in self._cfg.items():
-            lang: str | None = None
-            logged_in = False
-            if isinstance(value, dict):
-                raw_lang = value.get("lang")
-                lang = raw_lang if raw_lang in ("en", "ru") else None
-                raw_token = value.get("token")
-                logged_in = bool(raw_token) if isinstance(raw_token, str) else False
-            out[str(key)] = {"lang": lang, "logged_in": logged_in}
-        return out

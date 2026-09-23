@@ -55,8 +55,6 @@ class PublicSettingsMixin(PublicFeatureMixin):
         return view
 
     async def cmd_settings(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         lang = self.get_lang(interaction.user.id)
         await self._reply_key(interaction, "settings_menu", view=self.settings_menu_view(lang))
 
@@ -113,7 +111,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         for item in fps:
             options.append(discord.SelectOption(label=item, value=item))
         if not options:
-            await self._reply_key(interaction, "http_unavailable")
+            await self._reply_key(interaction, "bad_response")
             return
         view = discord.ui.View(timeout=None)
         select: discord.ui.Select[Any] = discord.ui.Select(
@@ -158,17 +156,24 @@ class PublicSettingsMixin(PublicFeatureMixin):
         values = self.modal_values(interaction)
         username = values.get("username", "").strip()
         current_password = values.get("current_password", "")
-        lang = self.get_lang(interaction.user.id)
-        if len(username) > 32:
-            text = self.text(lang, "length_username", ln=32)
-            if text:
-                await self._respond(interaction, text)
-            return
         token = self.sessions.token(interaction.user.id)
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction, ephemeral=True)
+        check = await self.http.validate_username(username)
+        if not await self.consume_result(interaction, check):
+            return
+        obj = check.obj
+        if not isinstance(obj, dict):
+            await self._reply_key(interaction, "bad_response")
+            return
+        if not obj.get("valid"):
+            await self._reply_key(interaction, "length_username", ln=32)
+            return
+        if obj.get("taken"):
+            await self._reply_key(interaction, "username_taken")
+            return
         result = await self.http.settings(token, username=username, current_password=current_password)
         if not await self.consume_result(interaction, result):
             return

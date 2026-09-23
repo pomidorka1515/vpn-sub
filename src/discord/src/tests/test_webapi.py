@@ -65,7 +65,6 @@ def test_429_is_not_retried() -> None:
     assert not result.ok
     assert result.status == 429
     assert len(session.calls) == 1
-    assert client.request_count == 1
 
 
 def test_stats_sends_cookie_and_caches() -> None:
@@ -146,3 +145,20 @@ def test_logout_reset_delete_history_qr() -> None:
     qr = run(client.qr("tok", happ=False, lang="en"))
     assert qr.ok
     assert qr.body == b"png-bytes"
+
+def test_validate_username_sends_params_and_passthrough() -> None:
+    obj = {"valid": True, "taken": False, "sanitized": "alice"}
+
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del json, headers
+        assert method == "GET"
+        assert url.endswith("/validate")
+        assert params == {"username": "alice"}
+        return json_ok(obj)
+
+    client, session = make_web_client(handler)
+    result = run(client.validate_username("alice"))
+    assert result.ok
+    assert result.obj == obj
+    assert session.calls[0]["params"] == {"username": "alice"}
+    assert str(session.calls[0]["url"]).endswith("/validate")

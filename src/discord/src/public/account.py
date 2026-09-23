@@ -30,8 +30,6 @@ class DeleteModal(discord.ui.Modal):
 
 class PublicAccountMixin(PublicFeatureMixin):
     async def cmd_bonus(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         lang = self.get_lang(interaction.user.id)
         t = self.TEXTS[lang]
         modal = BonusModal(title=t.get("btn_bonus", "Bonus"), label=t.get("enter_bonus", "Code"))
@@ -57,8 +55,6 @@ class PublicAccountMixin(PublicFeatureMixin):
         await self.send_info(interaction)
 
     async def cmd_logout(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         lang = self.get_lang(interaction.user.id)
         warning = self.text(lang, "logout_web_warning")
         await self._respond(
@@ -68,8 +64,6 @@ class PublicAccountMixin(PublicFeatureMixin):
         )
 
     async def cmd_reset(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         lang = self.get_lang(interaction.user.id)
         await self._reply_key(
             interaction,
@@ -78,8 +72,6 @@ class PublicAccountMixin(PublicFeatureMixin):
         )
 
     async def cmd_delete(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         lang = self.get_lang(interaction.user.id)
         t = self.TEXTS[lang]
         modal = DeleteModal(

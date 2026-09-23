@@ -147,7 +147,18 @@ async def _run() -> None:
 
     await runtime.start()
     try:
-        await stopping.wait()
+        runner = getattr(runtime.public_bot, "_runner", None)
+        waiters: list[asyncio.Future[Any]] = [asyncio.ensure_future(stopping.wait())]
+        if isinstance(runner, asyncio.Task):
+            waiters.append(runner)
+        done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+        for waiter in pending:
+            waiter.cancel()
+        if isinstance(runner, asyncio.Task) and runner in done:
+            try:
+                await runner
+            except Exception:
+                log.error("public discord runner failed", exc_info=True)
     finally:
         await runtime.stop()
 

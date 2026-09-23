@@ -26,7 +26,6 @@ _AUTH_IDS = (
     "menu_logout",
     "menu_help",
     "menu_delete",
-    "menu_main",
     "fp_select",
     "chart_select",
 )
@@ -69,13 +68,13 @@ class PublicRoutingMixin(PublicFeatureMixin):
         return None
 
     def _requires_auth(self, custom_id: str) -> bool:
+        if custom_id in ("menu_main", "confirm_cancel"):
+            return False
         if custom_id in _AUTH_IDS or custom_id in _AUTH_MODALS:
             return True
         return custom_id.startswith(_AUTH_PREFIXES)
 
     async def cmd_help(self, interaction: discord.Interaction) -> None:
-        if not await self.require_login(interaction):
-            return
         token = self.sessions.token(interaction.user.id)
         if not token:
             await self._reply_key(interaction, "not_logged_in")
@@ -86,16 +85,18 @@ class PublicRoutingMixin(PublicFeatureMixin):
         if not await self.consume_result(interaction, result):
             return
         raw_obj = result.obj
-        if isinstance(raw_obj, dict):
-            obj = cast(dict[str, str], raw_obj)
-        else:
-            obj = {}
+        if not isinstance(raw_obj, dict):
+            await self._reply_key(interaction, "bad_response")
+            return
+        obj = cast(dict[str, str], raw_obj)
         lines: list[str] = []
         for name, desc in obj.items():
             lines.append(f"`{name}` — {desc}")
         text = self.text(lang, "help_text", text="\n".join(lines))
         if text:
             await self._respond(interaction, text)
+        else:
+            await self._reply_key(interaction, "bad_response")
 
     async def dispatch_component(self, interaction: discord.Interaction) -> None:
         custom_id = self._custom_id(interaction)
@@ -172,13 +173,13 @@ class PublicRoutingMixin(PublicFeatureMixin):
         if custom_id == "set_pass":
             await self.open_pass_modal(interaction)
             return
-        if custom_id.startswith("fp_"):
-            value = custom_id[3:] if custom_id != "fp_select" else (self._select_value(interaction) or "")
+        if custom_id == "fp_select":
+            value = self._select_value(interaction) or ""
             if value:
                 await self.apply_fingerprint(interaction, value)
             return
-        if custom_id.startswith("chart_"):
-            raw = custom_id.split("_", 1)[1] if custom_id != "chart_select" else (self._select_value(interaction) or "")
+        if custom_id == "chart_select":
+            raw = self._select_value(interaction) or ""
             try:
                 days = int(raw)
             except ValueError:
@@ -190,9 +191,6 @@ class PublicRoutingMixin(PublicFeatureMixin):
             return
         if custom_id == "confirm_reset":
             await self.confirm_reset(interaction)
-            return
-        if custom_id == "confirm_delete":
-            await self.cmd_delete(interaction)
             return
         if custom_id == "confirm_cancel":
             await self._reply_key(interaction, "cancelled")

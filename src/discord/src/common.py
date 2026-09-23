@@ -72,21 +72,6 @@ class DiscordIOMixin(PublicFeatureMixin):
         except Exception:
             self.log.error("failed to defer interaction", exc_info=True)
 
-    async def _delete_secret(self, message: discord.Message | None) -> None:
-        if message is None:
-            return
-        try:
-            await message.delete()
-        except Exception:
-            self.log.error(
-                "failed to delete secret message %s in channel %s",
-                message.id,
-                message.channel.id,
-                extra={},
-                exc_info=True,
-            )
-
-
     def modal_values(self, interaction: discord.Interaction) -> dict[str, str]:
         out: dict[str, str] = {}
         data = cast(Mapping[str, Any] | None, interaction.data)
@@ -130,5 +115,7 @@ class DiscordIOMixin(PublicFeatureMixin):
         if not result.ok:
             if result.msg:
                 await self._respond(interaction, result.msg)
+            else:
+                await self._reply_key(interaction, "bad_response")
             return False
         return True
