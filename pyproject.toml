@@ -16,7 +16,8 @@ dependencies = [
     "gunicorn>=21.0.0",
     "dacite",
     "psutil",
-    "argon2-cffi>=23.1.0"
+    "argon2-cffi>=23.1.0",
+    "discord.py>=2.4"
 ]
 
 [project.optional-dependencies]
@@ -60,6 +61,9 @@ packages = [
 [tool.mypy]
 python_version = "3.14"
 cache_dir = "$MYPY_CONFIG_FILE_DIR/.mypy_cache"
+# IMPORTANT: discord launcher collides with `src/app.py`,
+# the actual implementation is in `src/discord/src/runtime.py`, this file doesn't need type checking.
+exclude = ['src/discord/src/app.py']
 
 files = [
     "src/config/",
@@ -76,7 +80,8 @@ files = [
     "src/errors.py",
     "src/builders.py",
     "src/tests/",
-    "src/core/"
+    "src/core/",
+    "src/discord/src/"
 ]
 
 # -- strict mode --------------------------------------------------------
@@ -129,6 +134,11 @@ disallow_any_expr              = false
 disable_error_code             = ["attr-defined", "no-any-return"]
 
 [[tool.mypy.overrides]]
+module = ["public.*", "admin.*"]
+disallow_untyped_calls         = false
+disable_error_code             = ["attr-defined", "no-any-return"]
+
+[[tool.mypy.overrides]]
 module = ["helpers"]
 disallow_untyped_calls         = false
 
@@ -150,12 +160,19 @@ include = [
     "src/errors.py",
     "src/builders.py",
     "src/tests/",
-    "src/core/"
+    "src/core/",
+    "src/discord/src/"
+]
+exclude = [
+    "venv",
+    ".venv",
+    "**/__pycache__"
 ]
 typeCheckingMode = "strict"
 reportDeprecated = false
 venvPath = "."
 venv = "venv"
+useLibraryCodeForTypes = false # why the fuck is this on by default
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]
@@ -174,11 +191,24 @@ reportUnusedFunction = false
 extraPaths = ["src", "src/tests"]
 root = "src/tests"
 
+[[tool.pyright.executionEnvironments]]
+extraPaths = ["src/discord/src", "src"]
+root = "src/discord/src"
+reportPrivateUsage = false
+reportUnusedFunction = false
+
+[[tool.pyright.executionEnvironments]]
+extraPaths = ["src/discord/src", "src", "src/discord/src/tests"]
+root = "src/discord/src/tests"
+
 [tool.uv]
 required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'"
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["src/tests"]
+pythonpath = ["src", "src/discord/src"]
+testpaths = ["src/tests", "src/discord/src/tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:discord.*",
+]

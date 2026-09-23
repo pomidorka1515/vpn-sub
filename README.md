@@ -1,7 +1,8 @@
 # vpn-sub
 
-VPN subscription management service. Flask + Telegram bots + 3x-ui panel glue.
-Fully synchronous, database-backed config, designed to run on a single small VPS.
+VPN subscription management service. Flask + Telegram bots + Discord bots + 3x-ui panel glue.
+Flask and Telegram are fully synchronous. Discord is a separate asyncio process.
+Database-backed config, designed to run on a single small VPS.
 
 ## What it does
 
@@ -10,6 +11,7 @@ Fully synchronous, database-backed config, designed to run on a single small VPS
 - Serves VLESS subscription links with custom per-user traffic/expiry info
 - Tracks bandwidth and auto-disables users who exceed quota or expire
 - Two Telegram bots: admin panel and public user-facing bot
+- Public Discord bot (admin Discord bot is still a stub); separate process, talks to WebAPI over loopback
 - SQLite database as a source of truth
 
 ## Core principles
@@ -24,20 +26,23 @@ Fully synchronous, database-backed config, designed to run on a single small VPS
 
 ## Architecture
 
-- `src/app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, bots, Flask app) and wires everything together
+- `src/app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, Telegram bots, Flask app) and wires everything together
 - `src/wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application and registers shutdown at exit
 - `src/core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
 - `src/config/` — atomic JSON config with thread + cross-process locking
 - `src/db.py` — core database logic
 - `src/api/` — Flask routes (`Api` for admin, `WebApi` for end users)
-- `src/bots.py` — `AdminBot` (management), `PublicBot` (user self-service)
+- `src/bots.py` — Telegram `AdminBot` (management), `PublicBot` (user self-service)
+- `src/discord/` — Discord bots as a **separate process**. Not started by gunicorn or `create_application()`. Public bot is real; admin bot is a stub. See [src/discord/README.md](src/discord/README.md).
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
 mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel credentials, bot tokens, etc
-# run a systemd service; explained below
+# optional Discord public bot:
+cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token; leave private as {}
+# run systemd services; explained below
 ```
 
 ### Environment Variables
@@ -136,7 +141,8 @@ Override this at your own risk: it's always best to leave TLS, etc. to reverse p
 ## Deployment
 - Meant to run under gunicorn behind nginx (in front of the service, rate-limiting and TLS)
 - Systemd unit recommended for persistence
-- Startup order matters: configs → DB → panels → Subscription → BWatch + bots (handled automatically by `create_application()`)
+- Startup order matters: configs → DB → panels → Subscription → BWatch + Telegram bots (handled automatically by `create_application()`)
+- Discord is a second systemd unit. Start Flask first so `{SUB_HTTP_URL}/{SUB_URI}/webapi` exists. Killing gunicorn does not kill Discord, and vice versa.
 
 ## Status
 Personal project. Works in production for my small user base.

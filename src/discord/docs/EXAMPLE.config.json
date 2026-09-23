@@ -1,0 +1,7 @@
+{
+    "$schema": "../src/discord/config.schema.json",
+    "public": {
+        "token": ""
+    },
+    "private": {}
+}

@@ -1,0 +1,23 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Discord bots config",
+    "type": "object",
+    "required": ["public", "private"],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": { "type": "string" },
+        "public": {
+            "type": "object",
+            "required": ["token"],
+            "additionalProperties": false,
+            "properties": {
+                "token": { "type": "string", "description": "Public Discord bot token." }
+            }
+        },
+        "private": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Admin bot placeholder. Ignored."
+        }
+    }
+}

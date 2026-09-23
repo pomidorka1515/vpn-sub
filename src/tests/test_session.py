@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from requests import ConnectionError, Response, Timeout
@@ -9,7 +9,7 @@ from requests import ConnectionError, Response, Timeout
 from errors import XUiSessionError
 from helpers import json_http, make_inbound
 from session import XUiSession
-
+from custom_types import Inbound
 
 class FakeClock:
     def __init__(self, now: float = 1000.0) -> None:
@@ -176,11 +176,11 @@ def test_cache_roundtrip_and_clear(panel: XUiSession, clock: FakeClock) -> None:
     inbound = make_inbound(1)
     panel.cache = [inbound]
     assert panel.cache is not None
-    assert panel.cache[0].id == 1
+    assert cast(list[Inbound], panel.cache)[0].id == 1
     assert panel.cache_time == clock.now
     panel.clear_cache()
     assert panel.cache is None
-    assert panel.cache_time == 0
+    assert panel.cache_time == 0 # type: ignore[unreachable]
 
 
 def test_rejects_transport_and_session_together(transport: RecordingTransport) -> None:
@@ -192,7 +192,7 @@ def test_rejects_transport_and_session_together(transport: RecordingTransport) -
 
 def test_invalid_mode_is_rejected(transport: RecordingTransport) -> None:
     with pytest.raises(ValueError, match="whitelist"):
-        XUiSession(**session_kwargs(transport=transport, mode="both"))  # type: ignore[arg-type]
+        XUiSession(**session_kwargs(transport=transport, mode="both"))
 
 
 def test_health_check_marks_dead_on_unsuccessful_payload(
