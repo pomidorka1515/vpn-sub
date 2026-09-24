@@ -45,10 +45,10 @@ def test_all_daily_snapshot_failures_raise_and_persist_counts(
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
 
-    def fail_bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
+    def fail_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
         raise RuntimeError("panel unavailable")
 
-    subscription.bandwidth_svc.bandwidth = fail_bandwidth  # type: ignore[method-assign]
+    subscription.bandwidth_svc.all_traffic = fail_traffic  # type: ignore[method-assign]
     with pytest.raises(PanelUnavailableError):
         watch.record_daily_snapshot()
     failure = watch.get_daily_snapshot_failure()
@@ -62,10 +62,10 @@ def test_successful_daily_snapshot_clears_previous_failure(
     create_alice(database, uuid=str(uuid.uuid4()), bw_limit_gb=1, wl_limit_gb=1)
     database.set_metadata("daily_bw_snapshot_failures", "123:1:1")
 
-    def bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
-        return BandwidthInfo(1, 2, 3)
+    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+        return {"alice": BandwidthInfo(1, 2, 3)}
 
-    subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
+    subscription.bandwidth_svc.all_traffic = all_traffic  # type: ignore[method-assign]
     watch.record_daily_snapshot()
     assert watch.get_daily_snapshot_failure() is None
 
@@ -80,22 +80,20 @@ def test_partial_daily_snapshot_failure_is_visible(
             displayname=username.title(), bw_limit_gb=1, wl_limit_gb=1,
         )
 
-    def bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
-        if username == "alice":
+    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+        if whitelist:
             raise RuntimeError("panel unavailable")
-        return BandwidthInfo(1, 2, 3)
+        return {"bob": BandwidthInfo(1, 2, 3)}
 
-    subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
+    subscription.bandwidth_svc.all_traffic = all_traffic  # type: ignore[method-assign]
     with pytest.raises(PanelUnavailableError):
         watch.record_daily_snapshot()
     failure = watch.get_daily_snapshot_failure()
     assert failure is not None
-    assert (failure["failed"], failure["eligible"]) == (1, 2)
-    bob = database.get_bandwidth_snapshots("bob", 0)
-    assert bob == [{"ts": bob[0]["ts"], "up": 0, "down": 0, "wl_up": 0, "wl_down": 0}]
+    assert (failure["failed"], failure["eligible"]) == (2, 2)
 
 
-def test_partial_daily_snapshot_retry_does_not_double_count(
+def test_partial_daily_snapshot_failure_does_not_advance_failed_baseline(
     database: Database, subscription: Subscription, watch: BWatch,
 ) -> None:
     for username in ("alice", "bob"):
@@ -115,22 +113,19 @@ def test_partial_daily_snapshot_retry_does_not_double_count(
         "alice": BandwidthInfo(upload=100, download=200, total=300),
         "bob": BandwidthInfo(upload=10, download=20, total=30),
     }
-    fail_alice = True
 
-    def bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
-        if fail_alice and username == "alice":
+    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+        if whitelist:
             raise RuntimeError("panel unavailable")
-        return readings[username]
+        return readings
 
-    subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
+    subscription.bandwidth_svc.all_traffic = all_traffic  # type: ignore[method-assign]
     with pytest.raises(PanelUnavailableError):
         watch.record_daily_snapshot()
 
-    fail_alice = False
-    watch.record_daily_snapshot()
-
-    alice = database.get_bandwidth_snapshots("alice", 0)[0]
-    bob = database.get_bandwidth_snapshots("bob", 0)[0]
-    assert (alice["up"], alice["down"], alice["wl_up"], alice["wl_down"]) == (100, 200, 100, 200)
-    assert (bob["up"], bob["down"], bob["wl_up"], bob["wl_down"]) == (10, 20, 10, 20)
-    assert watch.get_daily_snapshot_failure() is None
+    # No rows were written, no baseline advanced.
+    assert database.get_bandwidth_snapshots("alice", 0) == []
+    assert database.get_bandwidth_snapshots("bob", 0) == []
+    assert watch.snap_mem["alice"] == zero
+    assert watch.snap_wl_mem["alice"] == zero
+    assert watch.get_daily_snapshot_failure() is not None

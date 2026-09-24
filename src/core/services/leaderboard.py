@@ -1,4 +1,4 @@
-from typing import Literal, cast
+from typing import Literal
 
 from ..common import BaseService, SharedCoreResources
 from .user.common import CommonUserService
@@ -49,9 +49,11 @@ class LeaderboardService(BaseService):
         # populate the raw data
         match category:
             case 'total':
+                # One batched read instead of a per-user panel poll.
+                totals = self.bandwidth_svc.all_traffic()
                 for user, display in zip(users, display_users):
-                    total = self.bandwidth_svc.bandwidth(user).total
-                    raw[display] = cast(int, total) or 0
+                    info = totals.get(user)
+                    raw[display] = int(info.total) if info is not None else 0
             case 'monthly' | 'wl_monthly':
                 for user, display in zip(users, display_users):
                     state = self.user_svc.user(user)

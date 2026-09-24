@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal
 import threading
 import time
 
-from custom_types import BandwidthInfo, BandwidthUpdate
+from custom_types import BandwidthInfo, BandwidthUpdate, UserRecord
 from db import Database
 from errors import AppError, PanelUnavailableError
 from loggers import Logger
@@ -73,13 +73,17 @@ class BWatch:
         initial_wl_mem: dict[str, BandwidthInfo] = {}
         initial_snap_mem: dict[str, BandwidthInfo] = {}
         initial_snap_wl_mem: dict[str, BandwidthInfo] = {}
+        # One batched read per map (whitelist + main); per-user seeding from
+        # the two maps. Absent clients seed zero baselines, like before.
+        wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True)
+        main_map = self.sub.bandwidth_svc.all_traffic()
         for i in self.sub.user_svc.list_users():
-            wl_current = self.sub.bandwidth_svc.bandwidth(username=i, whitelist=True)
+            wl_current = wl_map.get(i, BandwidthInfo(0, 0, 0))
             initial_wl_mem[i] = wl_current
             initial_snap_wl_mem[i] = wl_current
             if self.sub.user_svc.get_user_state(i)['bw_limit_gb'] == 0:
                 continue
-            current = self.sub.bandwidth_svc.bandwidth(username=i)
+            current = main_map.get(i, BandwidthInfo(0, 0, 0))
             initial_mem[i] = current
             initial_snap_mem[i] = current
 
@@ -133,8 +137,12 @@ class BWatch:
     def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
         wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
+        states: dict[str, UserRecord] = {}
+        need_main = False
+        need_wl = False
         for i in self.sub.user_svc.list_users():
             state = self.sub.user_svc.get_user_state(i)
+            states[i] = state
             # Main bandwidth
             if int(state['expires_at']) != 0:
                 if (int(state['expires_at']) - int(time.time())) >= 0 and not bool(state['enabled_time']):
@@ -142,23 +150,33 @@ class BWatch:
 
             main_required = int(state['bw_limit_gb']) != 0
             wl_required = int(state['wl_limit_gb']) != 0
+            need_main = need_main or main_required
+            need_wl = need_wl or wl_required
             if main_required and int(state['bw_used']) < int(int(state['bw_limit_gb']) * 10**9) and not bool(state['enabled']):
                 self._update_user(username=i, enable=True)
             if wl_required and int(state['wl_used']) < int(int(state['wl_limit_gb']) * 10**9) and not bool(state['enabled_wl']):
                 self._update_user(username=i, wl_enable=True)
 
-            # Read both counters before advancing either baseline. If either required
-            # read fails, do not commit a partial delta for this user.
-            try:
-                current_bws = self.sub.bandwidth_svc.bandwidth(username=i) if main_required else None
-                current_wl_bws = self.sub.bandwidth_svc.bandwidth(username=i, whitelist=True) if wl_required else None
-            except Exception:
-                self.log.error("bandwidth poll failed for user %s", i, exc_info=True)
-                continue
+        # One batched read per side (clients/list per panel). Read both
+        # before committing either: if either required read fails, commit
+        # nothing this cycle so no partial delta is recorded.
+        main_map: dict[str, BandwidthInfo] = {}
+        wl_map: dict[str, BandwidthInfo] = {}
+        try:
+            if need_main:
+                main_map = self.sub.bandwidth_svc.all_traffic()
+            if need_wl:
+                wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True)
+        except Exception:
+            self.log.error("bandwidth poll failed", exc_info=True)
+            return
 
-            with self._mem_lock:
+        with self._mem_lock:
+            for i, state in states.items():
+                main_required = int(state['bw_limit_gb']) != 0
+                wl_required = int(state['wl_limit_gb']) != 0
                 if main_required:
-                    assert current_bws is not None
+                    current_bws = main_map.get(i, BandwidthInfo(0, 0, 0))
                     if i not in self.mem:
                         self.mem[i] = current_bws
                     else:
@@ -166,7 +184,7 @@ class BWatch:
                         if delta > 0:
                             updates[i] = BandwidthUpdate(delta=delta, current=current_bws)
                 if wl_required:
-                    assert current_wl_bws is not None
+                    current_wl_bws = wl_map.get(i, BandwidthInfo(0, 0, 0))
                     if i not in self.wl_mem:
                         self.wl_mem[i] = current_wl_bws
                     else:
@@ -359,8 +377,9 @@ class BWatch:
             ],
         ] = {}
         eligible_users: list[str] = []
-        failed_users: list[str] = []
-
+        states: dict[str, UserRecord] = {}
+        need_main = False
+        need_wl = False
         for username in self.sub.user_svc.list_users():
             state = self.sub.user_svc.get_user_state(username)
             bw_limit = int(state['bw_limit_gb'])
@@ -368,22 +387,46 @@ class BWatch:
             if bw_limit == 0 and wl_limit == 0:
                 continue
             eligible_users.append(username)
+            states[username] = state
+            need_main = need_main or bw_limit != 0
+            need_wl = need_wl or wl_limit != 0
 
+        # One batched read per side; per-user deltas come from the maps.
+        main_map: dict[str, BandwidthInfo] = {}
+        wl_map: dict[str, BandwidthInfo] = {}
+        try:
+            if need_main:
+                main_map = self.sub.bandwidth_svc.all_traffic()
+            if need_wl:
+                wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True)
+        except Exception:
+            self.log.error(
+                "failed to record daily bandwidth snapshot",
+                exc_info=True,
+            )
+            # No rows, no baseline advance — every eligible user counts as
+            # failed so the metadata marker and the admin alert still fire.
+            if eligible_users:
+                self.db.set_metadata(
+                    "daily_bw_snapshot_failures",
+                    f"{int(time.time())}:{len(eligible_users)}:{len(eligible_users)}",
+                )
+                raise PanelUnavailableError(
+                    "Daily bandwidth snapshot failed for "
+                    f"{len(eligible_users)}/{len(eligible_users)} eligible user(s)"
+                )
+            raise
+
+        for username in eligible_users:
+            state = states[username]
+            bw_limit = int(state['bw_limit_gb'])
+            wl_limit = int(state['wl_limit_gb'])
             current: BandwidthInfo | None = None
             wl_current: BandwidthInfo | None = None
-            try:
-                if bw_limit != 0:
-                    current = self.sub.bandwidth_svc.bandwidth(username=username)
-                if wl_limit != 0:
-                    wl_current = self.sub.bandwidth_svc.bandwidth(username=username, whitelist=True)
-            except Exception:
-                failed_users.append(username)
-                self.log.error(
-                    "failed to record daily bandwidth snapshot for user %s",
-                    username,
-                    exc_info=True,
-                )
-                continue
+            if bw_limit != 0:
+                current = main_map.get(username, BandwidthInfo(0, 0, 0))
+            if wl_limit != 0:
+                wl_current = wl_map.get(username, BandwidthInfo(0, 0, 0))
 
             up, down, next_main = self._daily_snapshot_delta(current, mem_snapshot.get(username))
             wl_up, wl_down, next_wl = self._daily_snapshot_delta(
@@ -404,15 +447,6 @@ class BWatch:
                 self.db.add_bandwidth_snapshot(username, midnight, up, down, wl_up, wl_down)
 
         self.prune_old_bw_snapshots()
-
-        if eligible_users and failed_users:
-            self.db.set_metadata(
-                "daily_bw_snapshot_failures",
-                f"{int(time.time())}:{len(failed_users)}:{len(eligible_users)}",
-            )
-            raise PanelUnavailableError(
-                f"Daily bandwidth snapshot failed for {len(failed_users)}/{len(eligible_users)} eligible user(s)"
-            )
         self.db.delete_metadata("daily_bw_snapshot_failures")
 
     def get_daily_snapshot_failure(self) -> dict[str, int] | None:

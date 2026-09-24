@@ -24,12 +24,14 @@ def test_leaderboard_total_and_monthly_ranking(database: Database) -> None:
 
     totals = {"alice": 100, "bob": 50, "cara": 300}
 
-    def bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
-        del whitelist
-        total = totals[username]
-        return BandwidthInfo(total, 0, total)
+    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+        assert whitelist is False
+        return {
+            user: BandwidthInfo(total, 0, total)
+            for user, total in totals.items()
+        }
 
-    subscription.bandwidth_svc.bandwidth = bandwidth  # type: ignore[method-assign]
+    subscription.bandwidth_svc.all_traffic = all_traffic  # type: ignore[method-assign]
 
     assert subscription.leaderboard_svc.leaderboard("total") == {
         "cara": 300, "alice": 100, "bob": 50,

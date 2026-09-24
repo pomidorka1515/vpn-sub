@@ -1,10 +1,9 @@
-import json
-import string
 import random
 import uuid
 import time
 from dataclasses import asdict
 from typing import cast
+from urllib.parse import quote
 
 from ...common import BaseService, SharedCoreResources
 from .common import CommonUserService
@@ -13,35 +12,69 @@ from ..bandwidth import BandwidthService
 from ..password import PasswordService
 from ..audit import AuditService
 from custom_types import (
-    ClientPayload, ClientTraffic, NewUserInfo,
+    ClientPayload, NewUserInfo, PanelClient,
     ResetUserObject, UserInfo,
     UserInfoBandwidth, UserInfoBandwidthTotal
 )
-from errors import PanelRejectedError, ValidationError, ConflictError, DuplicateError
+from errors import AppError, PanelRejectedError, ValidationError, ConflictError, DuplicateError
 from session import XUiSession
 from util import *
 
 __all__ = ["BusinessUserService"]
 
 
-def _client_traffic_to_payload(stats: ClientTraffic) -> ClientPayload:
-    """Rebuild a write payload from a panel client-traffic row (legacy glue)."""
+def _client_payload_from(client: PanelClient) -> ClientPayload:
+    """Rebuild a full write payload from the panel read model.
+
+    ``clients/update/{email}`` is a full row replace: everything the panel
+    returned (uuid, subId, tgId, comment, ...) must be echoed back or it is
+    clobbered. Never build update payloads from a hardcoded template.
+    """
     return ClientPayload(
-        email=stats.email,
-        id=stats.uuid,
-        flow="",
-        limitIp=0,
-        totalGB=stats.total,
-        expiryTime=stats.expiryTime,
-        enable=stats.enable,
-        tgId="",
-        subId=stats.subId,
-        comment="",
-        reset=stats.reset,
+        email=client.email,
+        id=client.uuid,
+        flow=client.flow,
+        limitIp=client.limitIp,
+        totalGB=client.totalGB,
+        expiryTime=client.expiryTime,
+        enable=client.enable,
+        tgId=client.tgId,
+        subId=client.subId,
+        comment=client.comment,
+        reset=client.reset,
     )
 
 
+def _panel_post_json(
+    panel: XUiSession,
+    url: str,
+    body: dict[str, object],
+    what: str,
+) -> dict[str, object]:
+    """POST a JSON mutation and require the panel's success envelope."""
+    response = panel.post(url, json=body, headers={'Accept': 'application/json'})
+    try:
+        content: dict[str, object] = response.json()
+    except Exception:
+        content = {}
+    if response.status_code not in (200, 201) or not content.get('success'):
+        raise PanelRejectedError(
+            f"Panel {panel.name} {what} rejected: "
+            f"{content.get('msg') or response.status_code}"
+        )
+    return content
+
+
 class BusinessUserService(BaseService):
+    """User lifecycle mutations against the 3x-ui clients-first API.
+
+    Panel client email == service username: one client per user per panel,
+    attached to every eligible VLESS inbound via ``inboundIds``. Panel-side
+    limits stay 0 (``totalGB``/``expiryTime``/``limitIp``) on purpose: this
+    service (BWatch) is the single quota authority and the panel's own
+    depletion / auto-disable logic must never fire. Do not "fix" the zeros.
+    """
+
     def __init__(
         self,
         res: SharedCoreResources,
@@ -111,58 +144,65 @@ class BusinessUserService(BaseService):
 
 
     def add_users(self, username: str, _called_internally: bool = False) -> None:
-        """Sync users to panels."""
+        """Sync a user to every panel (idempotent).
+
+        Creates the panel client once per panel with ``email == username``
+        and attaches it to every VLESS inbound, or attaches any inbounds
+        the existing client is missing (resync path). The panel normalizes
+        ``flow`` per inbound, so vision is sent once and stripped where the
+        inbound cannot do TLS flow.
+        """
         userid = str(self.user_svc.user(username)["uuid"])
-        panels = self.panels
 
-        payload = ClientPayload(
-            id=userid,
-            flow="",
-            email="",
-            limitIp=0,
-            totalGB=0,
-            expiryTime=0,
-            enable=True,
-            tgId="",
-            subId="",
-            comment="",
-            reset=0
-        )
-
-        for panel in panels:
+        for panel in self.panels:
             inbounds = self.panel_svc.getinbounds(panel)
-            list_2_add: list[int] = []
-            need_vision: list[int] = []
+            inbound_ids: list[int] = []
             for i in inbounds:
                 if i.protocol != "vless":
                     self.log.debug(f"Non-VLESS inbound found ({i.protocol}). Ignoring.")
                     continue
-                already_exists = any(v.uuid == userid for v in i.clientStats)
-                if already_exists:
-                    continue
-                list_2_add.append(i.id)
-                streamsettings = json.loads(i.streamSettings)
-                if streamsettings['network'] in ('tcp', 'raw'):
-                    need_vision.append(i.id)
-            
-            
-            for j in list_2_add:
-                client = payload
-                client.email = f"{username}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
-                client.flow = "xtls-rprx-vision" if j in need_vision else ""
-                data: dict[str, int | str] = {
-                    'id': j,
-                    'settings': json.dumps({"clients": [asdict(client)]})
-                }
+                inbound_ids.append(i.id)
+            if not inbound_ids:
+                continue
 
-                resp = panel.post(
-                    url=f"panel/api/inbounds/addClient",
-                    data=data,
-                    headers={'Accept': 'application/json'}
+            existing = self.panel_svc.get_client(panel, username)
+            if existing is None:
+                payload = ClientPayload(
+                    email=username,
+                    id=userid,
+                    flow="xtls-rprx-vision",
+                    limitIp=0,
+                    totalGB=0,
+                    expiryTime=0,
+                    enable=True,
+                    tgId="",
+                    subId="",
+                    comment="",
+                    reset=0
                 )
-                content = resp.json()
-                if not (resp.status_code in (200, 201) and content.get('success')):
-                    raise PanelRejectedError("Panel rejected user update")
+                _panel_post_json(
+                    panel,
+                    "panel/api/clients/add",
+                    {"client": asdict(payload), "inboundIds": inbound_ids},
+                    "user add",
+                )
+            elif existing.uuid != userid:
+                # Shared-panel collision: the email is owned by a foreign
+                # client. Attach would graft our inbounds onto someone
+                # else's identity — refuse loudly instead.
+                raise PanelRejectedError(
+                    f"Panel {panel.name} reports email {username!r} is "
+                    f"already used by a different client (uuid {existing.uuid})"
+                )
+            else:
+                missing = [i for i in inbound_ids if i not in existing.inboundIds]
+                if missing:
+                    _panel_post_json(
+                        panel,
+                        f"panel/api/clients/{quote(username, safe='')}/attach",
+                        {"inboundIds": missing},
+                        "user attach",
+                    )
         if not _called_internally: self.audit_svc.audit(name="user_refresh", info={"username":username})
         self._drop_cache()
 
@@ -171,55 +211,50 @@ class BusinessUserService(BaseService):
                     perma: bool = False
     ) -> None:
         """Delete a user, either from panels or from storage too."""
-        userid = str(self.user_svc.user(username)["uuid"])
-        panels = self.panels
+        self.user_svc.user(username)
 
-        for panel in panels:
-            inbounds = self.panel_svc.getinbounds(panel)
-
-            for j in inbounds:
-                response = panel.post(
-                    f"panel/api/inbounds/{str(j.id)}/delClient/{userid}",
-                    headers={'Accept': 'application/json'}
-                )
-                content = response.json()
-                if not (response.status_code in (200, 201) and content.get('success')):
-                    raise PanelRejectedError("Panel rejected user deletion")
+        for panel in self.panels:
+            _panel_post_json(
+                panel,
+                f"panel/api/clients/del/{quote(username, safe='')}",
+                {},
+                "user delete",
+            )
         if perma:
             self.db.delete_user(username)
 
         self.audit_svc.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
 
+    def _set_enabled(self, panel: XUiSession, username: str, enabled: bool) -> None:
+        """Flip a panel client's enable flag via the bulk endpoints.
+
+        One email per call; bulkEnable/bulkDisable preserve every other
+        client field by construction. A ``success: false`` reply (unknown
+        client, duplicate email, ...) surfaces as ``PanelRejectedError``
+        carrying the panel ``msg``.
+        """
+        action = "bulkEnable" if enabled else "bulkDisable"
+        _panel_post_json(
+            panel,
+            f"panel/api/clients/{action}",
+            {"emails": [username]},
+            "user update",
+        )
+
     def update_user(self, 
                     username: str, 
                     enable: bool | None = None, 
-                    timee: bool | None = None, 
+                    timee: bool | None = None,
                     wl_enable: bool | None = None) -> None:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
         Raises a domain error if the user is absent or a panel update fails."""
-        userid = str(self.user_svc.user(username)["uuid"])
+        self.user_svc.user(username)
         audit_info: dict[str, str | bool] = {"username": username}
         if enable is not None:
-            panels = list(self.panels)
-            if self.whitelist_panel: panels.remove(self.whitelist_panel)
+            panels = [p for p in self.panels if p != self.whitelist_panel]
             for panel in panels:
-                inbounds = self.panel_svc.getinbounds(panel)
-                l = [i.id for i in inbounds if i.protocol == "vless"]
-                the = {str(vi.id): vx for vi in inbounds for vx in vi.clientStats if vx.uuid == userid}
-                for k in l:
-                    if str(k) not in the: continue 
-                    payload = _client_traffic_to_payload(the[str(k)])
-                    payload.enable = enable
-                    payload.id = userid
-                    response = panel.post(
-                        f"panel/api/inbounds/updateClient/{userid}",
-                        data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
-                        headers={'Accept': 'application/json'}
-                    )
-                    content = response.json()
-                    if not (response.status_code in (200, 201) and content.get('success')):
-                        raise PanelRejectedError("Panel rejected user update")
+                self._set_enabled(panel, username, enable)
             
             fields: dict[str, object] = {"status": enable}
             if timee is not None:
@@ -236,25 +271,7 @@ class BusinessUserService(BaseService):
             # and BWatch.check() would keep re-triggering the same disable/enable
             # every cycle since `statusWl` never flips.
             if self.whitelist_panel:
-                panel = self.whitelist_panel
-                inbounds = self.panel_svc.getinbounds(panel)
-                l = [i.id for i in inbounds if i.protocol == "vless"]
-                the = {str(vi.id): vx for vi in inbounds for vx in vi.clientStats if vx.uuid == userid}
-
-                for k in l:
-                    if str(k) not in the: continue
-                    payload = _client_traffic_to_payload(the[str(k)])
-                    payload.enable = wl_enable
-                    payload.id = userid
-
-                    response = panel.post(
-                        f"panel/api/inbounds/updateClient/{userid}",
-                        data={'id': k, 'settings': json.dumps({"clients": [asdict(payload)]})},
-                        headers={'Accept': 'application/json'}
-                    )
-                    content = response.json()
-                    if not (response.status_code in (200, 201) and content.get('success')):
-                        raise PanelRejectedError("Panel rejected whitelist user update")
+                self._set_enabled(self.whitelist_panel, username, wl_enable)
 
             self.db.update_user(username, status_wl=wl_enable)
 
@@ -416,94 +433,44 @@ class BusinessUserService(BaseService):
                 exc_info=True,
             )
 
-    def _rollback_user_uuid(
-        self,
-        username: str,
-        old_uid: str,
-        new_uid: str,
-        successful: list[tuple[XUiSession, int, ClientPayload, bool]],
-    ) -> None:
-        """Restore old UUID on panels that were already updated before a failure.
-        Logs but never raises — rollback failures are logged, not propagated."""
-        failures: list[str] = []
-        for panel, inbound_id, settings, had_vision in successful:
-            settings.id = old_uid
-            settings.flow = "xtls-rprx-vision" if had_vision else ""
-            data: dict[str, int | str] = {
-                'id': inbound_id,
-                'settings': json.dumps({"clients": [asdict(settings)]})
-            }
-            try:
-                resp = panel.post(
-                    f"panel/api/inbounds/updateClient/{new_uid}",
-                    data=data,
-                    headers={'Accept': 'application/json'}
-                )
-                if not (resp.ok and resp.json().get('success')):
-                    failures.append(f"{panel.name}:{inbound_id}:panel rejected rollback")
-                    self.log.critical(
-                        f"_rollback_user_uuid: panel {panel.name} inbound {inbound_id} "
-                        f"failed to restore UUID {old_uid}: {resp.json().get('msg', 'unknown')}"
-                    )
-            except Exception as e:
-                failures.append(f"{panel.name}:{inbound_id}:exception")
-                self.log.critical(
-                    f"_rollback_user_uuid: panel {panel.name} inbound {inbound_id} "
-                    f"exception during rollback: {e}",
-                    exc_info=True,
-                )
-        if failures:
-            self._mark_rollback_failure(username, ",".join(failures))
-
     def update_uuid(self, username: str, uid: str) -> None:
         """Seperate method for updating the UUID.
-        Potentially dangerous operation, seperate function."""
+        Potentially dangerous operation, seperate function.
+
+        One atomic ``clients/update/{email}`` per panel (full row replace
+        with only ``id`` changed). There is no compensation loop: if a
+        later panel (or the DB write) fails, earlier panels keep the new
+        UUID and the DB keeps the old one — exactly the state the
+        ``uuid_rollback_failed`` marker records for manual repair.
+        """
         if not isuuid(uid):
             raise ValidationError("Invalid UUID")
-        olduid = str(self.user_svc.user(username)["uuid"])
-        successful: list[tuple['XUiSession', int, ClientPayload, bool]] = []
+        self.user_svc.user(username)
 
         for panel in self.panels:
-            inbounds = self.panel_svc.getinbounds(panel)
-            l: list[int] = []
-            need_vision: list[int] = []
-            for i in inbounds:
-                l.append(i.id)
-            the: dict[str, ClientPayload] = {}
-            for vi in inbounds:
-                for vx in vi.clientStats:
-                    if vx.uuid == olduid:
-                        the[str(vi.id)] = _client_traffic_to_payload(vx)
-                        if json.loads(vi.streamSettings)['network'] in ("tcp", "raw"):
-                            need_vision.append(vi.id)
-                        break
-            for k in l:
-                if str(k) not in the:
-                    continue
-                payload = the[str(k)]
+            try:
+                current = self.panel_svc.get_client(panel, username)
+                if current is None:
+                    continue  # not synced to this panel yet
+                payload = _client_payload_from(current)
                 payload.id = uid
-                payload.flow = "xtls-rprx-vision" if k in need_vision else ""
-                data: dict[str, int | str] = {
-                    'id': k,
-                    'settings': json.dumps({"clients": [asdict(payload)]})
-                }
-                response = panel.post(
-                    f"panel/api/inbounds/updateClient/{olduid}",
-                    data=data,
-                    headers={'Accept': 'application/json'}
+                _panel_post_json(
+                    panel,
+                    f"panel/api/clients/update/{quote(username, safe='')}",
+                    asdict(payload),
+                    "UUID update",
                 )
-                if not (response.status_code in (200, 201) and response.json().get('success')):
-                    err_msg: str = response.json().get('msg', 'panel rejected update')
-                    self.log.critical(f"update_uuid failed on panel {panel.name}: {err_msg}")
-                    self._rollback_user_uuid(username, olduid, uid, successful)
-                    raise PanelRejectedError("Panel rejected UUID update")
-
-                successful.append((panel, k, the[str(k)], k in need_vision))
+            except AppError as exc:
+                self.log.critical(
+                    "update_uuid failed on panel %s", panel.name, exc_info=True,
+                )
+                self._mark_rollback_failure(username, f"{panel.name}: {exc.message}")
+                raise
 
         try:
             self.db.update_user(username, uuid=uid)
         except DuplicateError:
-            self._rollback_user_uuid(username, olduid, uid, successful)
+            self._mark_rollback_failure(username, "db duplicate uuid")
             raise ConflictError("UUID exists")
         self.audit_svc.audit(name="user_update_uuid", info={"username": username, "uuid": uid})
         self._drop_cache()
