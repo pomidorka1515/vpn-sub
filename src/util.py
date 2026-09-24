@@ -24,7 +24,7 @@ from custom_types import (
 from typing import cast, Literal
 
 __all__ = [
-    "compare", "isuuid", "isbrowser", "sanitize",
+    "compare", "isuuid", "isusername", "isbrowser", "sanitize",
     "format", "tuple_hook", "parse_bool",
     "fmt_bytes_tuple", "fmt_bytes", "fmt_time",
     "format_usage", "is_cancel_command", "truncate_utf8",
@@ -74,6 +74,17 @@ def isuuid(s: str) -> bool:
         return str(val) == s.lower()
     except ValueError:
         return False
+
+_USERNAME_RE = re.compile(r'[A-Za-z0-9_-]+')
+
+def isusername(s: str) -> bool:
+    """Validate a username for panel use.
+
+    The username becomes the 3x-ui client email (the clients-first API join
+    key), so it must survive the panel's forbidden-character check for client
+    emails (no whitespace, slashes, etc.) and URL path segments.
+    """
+    return bool(_USERNAME_RE.fullmatch(s))
 
 def ok(
     msg: str | None = None,

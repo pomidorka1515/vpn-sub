@@ -45,6 +45,29 @@ cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token, 
 # run systemd services; explained below
 ```
 
+### 3x-ui panel auth
+
+Each panel in `3xui.*` authenticates with an **admin-scoped API token**
+(Bearer), not a username/password login:
+
+1. In the panel UI open **Settings → Security → API Token** and create a
+   token with the `admin` scope (the `monitor` scope is read-only and gets
+   rejected on every user mutation).
+2. Put it in the panel's `token` config field (`username`/`password` are
+   gone). Tokens are long random strings; the schema enforces `minLength: 20`.
+3. A revoked or wrong token marks the panel dead with a `token rejected`
+   reason in the logs and the admin-bot health alert — reissue the token in
+   the panel and update the config; there is no auto-recovery.
+
+This service targets the 3x-ui **v3 clients-first API** (`/panel/api/clients/*`,
+one client per user with `email == username`). Upgrading the panel from 2.x?
+After the panel upgrade, run the one-time reconciliation (service stopped):
+
+```bash
+venv/bin/python scripts/reconcile_clients.py          # dry-run report
+venv/bin/python scripts/reconcile_clients.py --apply  # merge legacy clients
+```
+
 ### Environment Variables
 
 All path variables are **optional**. If omitted, runtime data defaults to the `./data/` folder inside the project directory.

@@ -175,6 +175,9 @@ class FakePanel:
         self.cache = None
         self.cache_time = 0
 
+    def close(self) -> None:
+        pass
+
     def get(self, url: str) -> Response:
         self.gets.append(url)
         if "server/status" in url:
@@ -287,6 +290,21 @@ class FakePanel:
             if found is None:
                 return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
             self.clients.remove(found)
+            return json_http({"success": True, "msg": "", "obj": None}, 200)
+        if "clients/updateTraffic/" in url:
+            email = unquote(url.rsplit("/", 1)[-1])
+            found = self._find(email)
+            if found is None or found.traffic is None:
+                return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
+            updated = replace(
+                found,
+                traffic=replace(
+                    found.traffic,
+                    up=int(body.get("upload", 0)),
+                    down=int(body.get("download", 0)),
+                ),
+            )
+            self.clients = [updated if c.email == email else c for c in self.clients]
             return json_http({"success": True, "msg": "", "obj": None}, 200)
         if "clients/update/" in url:
             email = unquote(url.rsplit("/", 1)[-1])

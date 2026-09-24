@@ -82,7 +82,8 @@ files = [
     "src/builders.py",
     "src/tests/",
     "src/core/",
-    "src/discord/src/"
+    "src/discord/src/",
+    "scripts/"
 ]
 
 # -- strict mode --------------------------------------------------------
@@ -162,7 +163,8 @@ include = [
     "src/builders.py",
     "src/tests/",
     "src/core/",
-    "src/discord/src/"
+    "src/discord/src/",
+    "scripts/"
 ]
 exclude = [
     "venv",
@@ -199,8 +201,12 @@ reportPrivateUsage = false
 reportUnusedFunction = false
 
 [[tool.pyright.executionEnvironments]]
-extraPaths = ["src/discord/src", "src", "src/discord/src/tests"]
+extraPaths = ["src", "src/discord/src", "src/discord/src/tests"]
 root = "src/discord/src/tests"
+
+[[tool.pyright.executionEnvironments]]
+extraPaths = ["src"]
+root = "scripts"
 
 [tool.uv]
 required-environments = [

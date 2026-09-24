@@ -295,6 +295,10 @@ class BusinessUserService(BaseService):
     ) -> NewUserInfo:
         """Adds a new user. Raises a domain error if any argument is incorrect.
         Now also suppports ext username and password (optional)"""
+        if not isusername(username):
+            # the username becomes the panel client email (clients-first API
+            # join key) — the panel rejects emails with whitespace/slashes
+            raise ValidationError("Invalid username")
         if ext_username:
             if len(ext_username) > 32:
                 raise ValidationError("Ext Username too long")

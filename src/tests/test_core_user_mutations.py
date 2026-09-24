@@ -305,3 +305,46 @@ def test_add_new_user_rolls_back_db_row_when_panel_rejects(
             ext_password="secret", limit=10, wl_limit=5,
         )
     assert not database.user_exists("alice")
+
+
+def test_add_users_quotes_username_in_attach_path(database: Database) -> None:
+    panel = FakePanel(
+        name="panel",
+        inbounds=[make_inbound(1), make_inbound(2)],
+        clients=[make_panel_client("quoted_user", [1])],
+    )
+    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
+    database.create_user(
+        username="quoted_user", uuid=USER_UUID, token="q" * 40,
+        fingerprint="chrome", displayname="Quoted",
+    )
+
+    subscription.business_svc.add_users("quoted_user")
+
+    assert panel.posts[0][0] == "panel/api/clients/quoted_user/attach"
+
+
+def test_delete_user_quotes_username_in_path(database: Database) -> None:
+    panel = FakePanel(
+        name="panel",
+        inbounds=[make_inbound(1)],
+        clients=[make_panel_client("quoted_user", [1])],
+    )
+    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
+    database.create_user(
+        username="quoted_user", uuid=USER_UUID, token="q" * 40,
+        fingerprint="chrome", displayname="Quoted",
+    )
+
+    subscription.business_svc.delete_user("quoted_user")
+
+    assert panel.posts[0][0] == "panel/api/clients/del/quoted_user"
+
+
+def test_add_new_user_rejects_panel_unsafe_username(database: Database) -> None:
+    subscription = make_subscription(database)
+    with pytest.raises(ValidationError):
+        subscription.business_svc.add_new_user("bad name", "Bad")
+    with pytest.raises(ValidationError):
+        subscription.business_svc.add_new_user("sl/ash", "Slash")
+    assert not database.user_exists("bad name")

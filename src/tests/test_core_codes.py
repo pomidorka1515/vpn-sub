@@ -78,3 +78,18 @@ def test_register_with_code_rejects_empty_code(
             code="", username="alice", displayname="Alice",
             ext_username="alice-login", ext_password="secret",
         )
+
+
+def test_register_with_code_rejects_panel_unsafe_username(
+    database: Database, subscription: Subscription,
+) -> None:
+    subscription.code_svc.add_code("invite", "register", uses=1)
+    for bad in ("bad name", "sl/ash", "back\\slash", ""):
+        with pytest.raises(ValidationError):
+            subscription.business_code_svc.register_with_code(
+                code="invite", username=bad, displayname="Alice",
+                ext_username="alice-login", ext_password="secret",
+            )
+    assert not database.user_exists("bad name")
+    # the code was never consumed by a rejected attempt
+    assert subscription.code_svc.get_code("invite") is not None

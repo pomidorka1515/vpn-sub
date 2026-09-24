@@ -11,7 +11,7 @@ from ..audit import AuditService
 from ..user.business import BusinessUserService
 from errors import DuplicateError, NotFoundError, CodeError, ConflictError, ValidationError
 from custom_types import RegisterWithCodeInfo
-from util import generate_token, sanitize
+from util import generate_token, isusername, sanitize
 
 # pyright: reportUnnecessaryIsInstance=false
 
@@ -111,6 +111,10 @@ class BusinessCodeService(BaseService):
         if not code or not isinstance(code, str):
             raise ValidationError("Invalid code")
         if not username or not isinstance(username, str):
+            raise ValidationError("Invalid username")
+        if not isusername(username):
+            # the username becomes the panel client email (clients-first API
+            # join key) — the panel rejects emails with whitespace/slashes
             raise ValidationError("Invalid username")
         if not ext_username or not isinstance(ext_username, str):
             raise ValidationError("Invalid username")
