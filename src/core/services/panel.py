@@ -90,11 +90,16 @@ class PanelService(BaseService):
     def get_client(self, panel: XUiSession, email: str) -> PanelClient | None:
         """Get a panel client by email, or ``None`` when the panel reports one.
 
-        Not-found contract: ``success: true`` with a ``null`` ``obj`` means
-        the client is unknown. A non-200 status (404 included) is an
-        availability error — a missing route must not look like an absent
-        client. ``success: false`` is a rejection and carries the panel
-        ``msg``.
+        Not-found contract: the clients-first API answers ``success: false``
+        with ``Obtain (record not found)`` (or a ``null`` ``obj``) on HTTP
+        200 — both mean the client is unknown. A non-200 status (404
+        included) is an availability error — a missing route must not look
+        like an absent client. Any other ``success: false`` is a rejection
+        and carries the panel ``msg``.
+
+        Found payloads are wrapped: ``obj.client`` holds the client row and
+        ``obj.inboundIds`` its attachments. Flat ``obj`` payloads (older
+        panels, tests) are still accepted.
         """
         url = f"panel/api/clients/get/{quote(email, safe='')}"
         try:
@@ -103,14 +108,30 @@ class PanelService(BaseService):
                 raise self._status_error(panel, "client query", response)
             data: dict[str, object] = response.json()
             if not data.get("success"):
+                message = str(data.get("msg") or response.status_code)
+                if "record not found" in message.lower():
+                    return None
                 raise PanelRejectedError(
-                    f"Panel {panel.name} client query failed: "
-                    f"{data.get('msg') or response.status_code}"
+                    f"Panel {panel.name} client query failed: {message}"
                 )
             raw: object = data.get("obj")
             if raw is None:
                 return None
-            return from_dict(PanelClient, cast(dict[str, object], raw))
+            if not isinstance(raw, dict):
+                raise PanelUnavailableError(
+                    f"Panel {panel.name} client query failed: obj is not an object"
+                )
+            obj = cast(dict[str, object], raw)
+            client_raw: object = obj.get("client", obj)
+            if not isinstance(client_raw, dict):
+                raise PanelUnavailableError(
+                    f"Panel {panel.name} client query failed: obj.client is not an object"
+                )
+            merged: dict[str, object] = dict(cast(dict[str, object], client_raw))
+            inbound_ids_raw: object = obj.get("inboundIds")
+            if isinstance(inbound_ids_raw, list) and "inboundIds" not in merged:
+                merged["inboundIds"] = list(cast(list[object], inbound_ids_raw))
+            return from_dict(PanelClient, merged)
         except AppError:
             raise
         except Exception as exc:

@@ -65,8 +65,7 @@ def test_get_client_parses_panel_client(
     assert client.email == "alice"
     assert client.uuid == USER_UUID
     assert client.inboundIds == [1, 2]
-    assert client.traffic is not None
-    assert (client.traffic.up, client.traffic.down) == (3, 4)
+    assert client.traffic is None  # wrapped clients/get payload carries no traffic row
     assert panel.gets[-1] == "panel/api/clients/get/alice"
 
 

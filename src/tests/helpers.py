@@ -225,9 +225,15 @@ class FakePanel:
             email = unquote(url.rsplit("/", 1)[-1])
             found = next((c for c in self.clients if c.email == email), None)
             if found is None:
-                return json_http({"success": True, "msg": "", "obj": None}, 200)
+                return json_http(
+                    {"success": False, "msg": "Obtain (record not found)", "obj": None}, 200
+                )
+            client_row = asdict(found)
+            inbound_ids = client_row.pop("inboundIds")
+            client_row.pop("traffic", None)
             return json_http(
-                {"success": True, "msg": "", "obj": asdict(found)}, self._get_status,
+                {"success": True, "msg": "", "obj": {"client": client_row, "inboundIds": inbound_ids}},
+                self._get_status,
             )
         if "clients/traffic/" in url:
             email = unquote(url.rsplit("/", 1)[-1])
