@@ -57,7 +57,7 @@ class BWatch:
 
             _threads: tuple[tuple[Callable[..., object], str], ...] = (
                 (self._every_120s, "Quota & Notifs"),
-                (self._every_2h, "Date check"),
+                (self._every_2h, "Date check & reconcile"),
                 (self._every_15s, "Bandwidth"),
                 (self._every_24h, "Snapshots"),
                 (self._every_5m, "Panels check"),
@@ -292,6 +292,27 @@ class BWatch:
             elif bw_used > int(bw_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("regular", tg_user):
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(bw_used / 10**6, 0)), available=bw_limit)
 
+    def reconcile_inbounds(self) -> None:
+        """Re-sync every user to every panel (idempotent).
+
+        Creates missing panel clients and attaches any VLESS inbounds the
+        existing clients lack (e.g. after an admin adds an inbound to a
+        panel). One user's panel rejection must not abort the rest; the
+        next cycle retries the failures.
+        """
+        failures: list[str] = []
+        for username in self.sub.user_svc.list_users():
+            try:
+                self.sub.business_svc.add_users(username, _called_internally=True)
+            except AppError:
+                self.log.error("inbound reconcile failed for %s", username, exc_info=True)
+                failures.append(username)
+        if failures:
+            shown = ", ".join(failures[:10])
+            self._alert_admin(
+                f"⚠️ Inbound reconcile failed for {len(failures)} user(s): {shown}"
+            )
+
     def is_first(self) -> None:
         # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
         # NOTE: Exclusive to one thread only.
@@ -490,6 +511,7 @@ class BWatch:
     def _every_2h(self) -> None:
         while not self._stop_event.wait(7200):
             self._guarded("monthly reset check", self.is_first)
+            self._guarded("inbound reconcile", self.reconcile_inbounds)
     def _every_15s(self) -> None:
         while not self._stop_event.wait(15):
             self._guarded("bandwidth poll", self.bandwidth_check)
