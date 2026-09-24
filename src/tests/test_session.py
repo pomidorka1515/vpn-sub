@@ -168,6 +168,13 @@ def test_cache_roundtrip_and_clear(panel: XUiSession, clock: FakeClock) -> None:
     assert panel.cache_time == 0
 
 
+def test_cache_age_uses_the_session_clock(panel: XUiSession, clock: FakeClock) -> None:
+    panel.cache = [make_inbound(1)]
+    assert panel.cache_age == 0.0
+    clock.advance(5)
+    assert panel.cache_age == 5.0
+
+
 def test_rejects_transport_and_session_together(transport: RecordingTransport) -> None:
     from requests import Session
 

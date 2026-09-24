@@ -1,4 +1,3 @@
-import time
 from urllib.parse import quote
 from dacite import from_dict
 from typing import Literal, cast, overload
@@ -39,11 +38,10 @@ class PanelService(BaseService):
         Filters by ``panel.mode`` and ``panel.inbounds_list``: whitelist keeps
         only listed IDs, blacklist drops them.
         """
-        now = time.time()
         ttl = 2 if panel.local else 15  # fast local, slow remote
 
         cached = panel.cache
-        if cached is not None and now - panel.cache_time < ttl:
+        if cached is not None and panel.cache_age < ttl:
             return cached # NOTE: cache stores dataclasses!
         
         try:

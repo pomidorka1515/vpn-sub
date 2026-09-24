@@ -116,11 +116,18 @@ class BWatch:
             if thread.is_alive():
                 thread.join(timeout=5)
         
-    def _update_user(self, *args: Any, **kwargs: Any) -> None:
+    def _update_user(self, *args: Any, **kwargs: Any) -> bool:
+        """Run a background user update. Returns False when it failed.
+
+        Callers must not notify the user of a state change that never
+        happened — the next cycle retries it.
+        """
         try:
             self.sub.business_svc.update_user(*args, **kwargs)
+            return True
         except AppError:
             self.log.error("background user update failed", exc_info=True)
+            return False
     
     # prune_old_<cfg name>_snapshots
 
@@ -262,8 +269,8 @@ class BWatch:
             if expires_at != 0:
                 if (expires_at - int(time.time())) <= 0:
                     if bool(state['enabled_time']):
-                        self._update_user(username=i, enable=False, timee=False)
-                        if self.bot: self.bot.msg(tg_user, 'warning_disabled') # sub expired
+                        disabled = self._update_user(username=i, enable=False, timee=False)
+                        if disabled and self.bot: self.bot.msg(tg_user, 'warning_disabled') # sub expired
                     continue
                 else:
                     days = (expires_at - int(time.time())) // 86400
@@ -271,8 +278,8 @@ class BWatch:
                             if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
             if wl_limit != 0 and wl_used > int(wl_limit * 10**9):
                 if bool(state['enabled_wl']):
-                    self._update_user(username=i, wl_enable=False)
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=wl_limit)
+                    disabled = self._update_user(username=i, wl_enable=False)
+                    if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=wl_limit)
             elif wl_limit != 0 and wl_used > int(wl_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("whitelist", tg_user):
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(wl_used / 10**6, 0)), available=wl_limit)
             if not bool(state['enabled']):
@@ -280,8 +287,8 @@ class BWatch:
             if bw_limit == 0:
                 continue
             if bw_used > int(bw_limit * 10**9):
-                self._update_user(username=i, enable=False, timee=True)
-                if self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=bw_limit)
+                disabled = self._update_user(username=i, enable=False, timee=True)
+                if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=bw_limit)
             elif bw_used > int(bw_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("regular", tg_user):
                     if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(bw_used / 10**6, 0)), available=bw_limit)
 
@@ -470,20 +477,27 @@ class BWatch:
             return None
 
     ### Helper functions ###
+    def _guarded(self, what: str, operation: Callable[[], object]) -> None:
+        """Run one periodic operation; a crash must not kill the loop thread."""
+        try:
+            operation()
+        except Exception:
+            self.log.error("%s crashed", what, exc_info=True)
+
     def _every_120s(self) -> None:
         while not self._stop_event.wait(120):
-            self.check()
+            self._guarded("periodic user check", self.check)
     def _every_2h(self) -> None:
         while not self._stop_event.wait(7200):
-            self.is_first()
+            self._guarded("monthly reset check", self.is_first)
     def _every_15s(self) -> None:
         while not self._stop_event.wait(15):
-            self.bandwidth_check()
+            self._guarded("bandwidth poll", self.bandwidth_check)
     def _every_24h(self) -> None:
         while not self._stop_event.wait(86400):
-            self.reset()
-            self.prune_old_bw_snapshots()
-            self.prune_old_snap_snapshots()
+            self._guarded("notification reset", self.reset)
+            self._guarded("bandwidth snapshot pruning", self.prune_old_bw_snapshots)
+            self._guarded("state snapshot pruning", self.prune_old_snap_snapshots)
     def _run_daily_snapshot(
         self,
         kind: Literal["bandwidth", "state"],
@@ -533,4 +547,4 @@ class BWatch:
 
     def _every_5m(self) -> None:
         while not self._stop_event.wait(300):
-            self.panel_health_check()
+            self._guarded("panel health check", self.panel_health_check)

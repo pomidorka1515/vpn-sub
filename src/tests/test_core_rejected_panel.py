@@ -8,7 +8,7 @@ from core import Subscription
 from db import Database
 from errors import PanelRejectedError
 from session import XUiSession
-from helpers import FakePanel, create_alice, make_inbound
+from helpers import FakePanel, create_alice, make_inbound, make_panel_client
 
 
 def test_add_users_raises_panel_rejected_error(
@@ -32,6 +32,8 @@ def test_delete_user_raises_panel_rejected_error(
     create_alice(database)
     panel = FakePanel(
         inbounds=[make_inbound(1)],
+        # the client must exist on the panel for the delete to be attempted
+        clients=[make_panel_client("alice", [1])],
         post_payload={"success": False, "msg": "rejected", "obj": None},
     )
     subscription.res.panels.append(cast(XUiSession, panel))

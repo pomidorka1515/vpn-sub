@@ -5,6 +5,7 @@ from typing import Any, cast
 from urllib.parse import unquote
 
 import json
+import time
 from flask import Flask
 from requests import Response
 
@@ -70,13 +71,19 @@ class BWatchConfig:
         raise KeyError(key)
 
 
-def make_watch(database: Database, subscription: Subscription) -> BWatch:
+def make_watch(
+    database: Database,
+    subscription: Subscription,
+    *,
+    bot: object | None = None,
+    admin_bot: object | None = None,
+) -> BWatch:
     return BWatch(
         cfg=cast(ConfigLike, BWatchConfig()),
         db=database,
         sub=subscription,
-        bot=None,
-        admin_bot=None,
+        bot=cast(Any, bot),
+        admin_bot=cast(Any, admin_bot),
     )
 
 
@@ -153,8 +160,9 @@ class FakePanel:
         self.dead = dead
         self.inbounds_list = inbounds_list
         self.mode = mode
-        self.cache: list[Inbound] | None = None
-        self.cache_time = 0
+        self._cache: list[Inbound] | None = None
+        self._cache_set_at: float = 0.0
+        self.cache_time: float = 0
         self.name = name
         self._inbounds = inbounds or []
         self.clients: list[PanelClient] = clients or []
@@ -171,9 +179,24 @@ class FakePanel:
         self.gets: list[str] = []
         self.posts: list[tuple[str, dict[str, object]]] = []
 
+    @property
+    def cache(self) -> list[Inbound] | None:
+        return self._cache
+
+    @cache.setter
+    def cache(self, value: list[Inbound] | None) -> None:
+        self._cache = value
+        self._cache_set_at = time.monotonic() if value is not None else 0.0
+        self.cache_time = self._cache_set_at
+
+    @property
+    def cache_age(self) -> float:
+        if self._cache is None:
+            return float("inf")
+        return time.monotonic() - self._cache_set_at
+
     def clear_cache(self) -> None:
         self.cache = None
-        self.cache_time = 0
 
     def close(self) -> None:
         pass

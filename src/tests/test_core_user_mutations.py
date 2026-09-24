@@ -171,6 +171,7 @@ def test_update_user_rejection_carries_panel_msg(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
+        clients=[make_panel_client("alice", [1])],
         post_payload={"success": False, "msg": "client not found: alice", "obj": None},
     )
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
@@ -178,6 +179,26 @@ def test_update_user_rejection_carries_panel_msg(database: Database) -> None:
 
     with pytest.raises(PanelRejectedError, match="client not found"):
         subscription.business_svc.update_user("alice", enable=False)
+
+
+def test_update_user_skips_panels_without_the_client(database: Database) -> None:
+    # add_users never creates a client on a panel with no managed VLESS
+    # inbounds; enable/disable must not fail on such panels
+    absent = FakePanel(name="absent", inbounds=[make_inbound(1)], clients=[])
+    present = FakePanel(
+        name="present",
+        inbounds=[make_inbound(1)],
+        clients=[make_panel_client("alice", [1])],
+    )
+    subscription = make_subscription(
+        database, panels=[cast(XUiSession, absent), cast(XUiSession, present)],
+    )
+    create_alice(database)
+
+    subscription.business_svc.update_user("alice", enable=False)
+
+    assert absent.posts == []
+    assert [url for url, _ in present.posts] == ["panel/api/clients/bulkDisable"]
 
 
 def test_whitelist_status_persists_without_whitelist_panel(
@@ -339,6 +360,27 @@ def test_delete_user_quotes_username_in_path(database: Database) -> None:
     subscription.business_svc.delete_user("quoted_user")
 
     assert panel.posts[0][0] == "panel/api/clients/del/quoted_user"
+
+
+def test_delete_user_skips_panels_without_the_client(database: Database) -> None:
+    # add_users never creates a client on a panel with no VLESS inbounds
+    # (or before a resync); delete must not fail on such panels
+    absent = FakePanel(name="absent", inbounds=[make_inbound(1)], clients=[])
+    present = FakePanel(
+        name="present",
+        inbounds=[make_inbound(1)],
+        clients=[make_panel_client("alice", [1])],
+    )
+    subscription = make_subscription(
+        database, panels=[cast(XUiSession, absent), cast(XUiSession, present)],
+    )
+    create_alice(database)
+
+    subscription.business_svc.delete_user("alice")
+
+    assert absent.posts == []
+    assert [url for url, _ in present.posts] == ["panel/api/clients/del/alice"]
+    assert present.clients == []
 
 
 def test_add_new_user_rejects_panel_unsafe_username(database: Database) -> None:

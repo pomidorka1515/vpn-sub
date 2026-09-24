@@ -30,3 +30,22 @@ def test_empty_whitelist_keeps_no_inbounds(subscription: Subscription) -> None:
 
 def test_empty_blacklist_keeps_all_inbounds(subscription: Subscription) -> None:
     assert _filter(subscription, "blacklist", ()) == [1, 2, 3]
+
+
+def test_getinbounds_uses_cache_within_ttl(subscription: Subscription) -> None:
+    panel = FakePanel(inbounds=[make_inbound(1)])
+    first = subscription.panel_svc.getinbounds(cast(XUiSession, panel))
+    second = subscription.panel_svc.getinbounds(cast(XUiSession, panel))
+    assert [i.id for i in first] == [1]
+    assert [i.id for i in second] == [1]
+    # the second call must hit the cache, not the panel
+    assert panel.gets.count("panel/api/inbounds/list") == 1
+
+
+def test_getinbounds_requeries_after_ttl_expiry(subscription: Subscription) -> None:
+    panel = FakePanel(inbounds=[make_inbound(1)])
+    subscription.panel_svc.getinbounds(cast(XUiSession, panel))
+    # age the cache past the local TTL of 2 seconds
+    panel._cache_set_at -= 10  # pyright: ignore[reportPrivateUsage]
+    subscription.panel_svc.getinbounds(cast(XUiSession, panel))
+    assert panel.gets.count("panel/api/inbounds/list") == 2

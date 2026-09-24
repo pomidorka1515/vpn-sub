@@ -214,6 +214,10 @@ class BusinessUserService(BaseService):
         self.user_svc.user(username)
 
         for panel in self.panels:
+            # add_users skips panels with no managed VLESS inbounds, so a
+            # client absent there is expected — deleting must not fail on it
+            if self.panel_svc.get_client(panel, username) is None:
+                continue
             _panel_post_json(
                 panel,
                 f"panel/api/clients/del/{quote(username, safe='')}",
@@ -233,7 +237,14 @@ class BusinessUserService(BaseService):
         client field by construction. A ``success: false`` reply (unknown
         client, duplicate email, ...) surfaces as ``PanelRejectedError``
         carrying the panel ``msg``.
+
+        A client absent from the panel is expected — ``add_users`` skips
+        panels with no managed VLESS inbounds — so there is nothing to
+        flip there. Without this skip, one absent-panel rejection would
+        block the disable everywhere and BWatch would retry forever.
         """
+        if self.panel_svc.get_client(panel, username) is None:
+            return
         action = "bulkEnable" if enabled else "bulkDisable"
         _panel_post_json(
             panel,

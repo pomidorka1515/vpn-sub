@@ -310,6 +310,12 @@ class XUiSession:
             self._cache = value
             self.cache_time = self._clock()
 
+    @property
+    def cache_age(self) -> float:
+        """Seconds since the inbound cache was last populated (own clock domain)."""
+        with self._cache_lock:
+            return self._clock() - self.cache_time
+
     def clear_cache(self) -> None:
         with self._cache_lock:
             self._cache = None

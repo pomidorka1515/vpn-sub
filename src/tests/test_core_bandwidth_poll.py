@@ -4,7 +4,60 @@ from bwatch import BWatch
 from core import Subscription
 from custom_types import BandwidthInfo
 from db import Database
-from helpers import create_alice
+from errors import PanelRejectedError
+from helpers import create_alice, make_watch
+
+
+def test_periodic_loop_guard_swallows_crashes(
+    database: Database, subscription: Subscription, watch: BWatch,
+) -> None:
+    def boom() -> None:
+        raise RuntimeError("poll exploded")
+
+    # a crashing operation must not kill the periodic loop thread
+    watch._guarded("bandwidth poll", boom)  # pyright: ignore[reportPrivateUsage]
+
+
+class _RecordingBot:
+    def __init__(self) -> None:
+        self.sent: list[tuple[int | str | None, str]] = []
+
+    def msg(self, tgid: int | str | None, key: str, **kwargs: object) -> None:
+        self.sent.append((tgid, key))
+
+
+def test_no_traffic_disabled_notification_when_panel_update_fails(
+    database: Database, subscription: Subscription,
+) -> None:
+    bot = _RecordingBot()
+    failing_watch = make_watch(database, subscription, bot=bot)
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
+    database.update_user("alice", bw_used=2 * 10**9)
+
+    def fail_update(*args: object, **kwargs: object) -> None:
+        raise PanelRejectedError("panel rejected")
+
+    subscription.business_svc.update_user = fail_update  # type: ignore[method-assign]
+    failing_watch.check()
+
+    # the disable never happened; the user must not be told it did
+    assert bot.sent == []
+
+
+def test_no_expiry_disabled_notification_when_panel_update_fails(
+    database: Database, subscription: Subscription,
+) -> None:
+    bot = _RecordingBot()
+    failing_watch = make_watch(database, subscription, bot=bot)
+    create_alice(database, bw_limit_gb=0, expires_at=1)
+
+    def fail_update(*args: object, **kwargs: object) -> None:
+        raise PanelRejectedError("panel rejected")
+
+    subscription.business_svc.update_user = fail_update  # type: ignore[method-assign]
+    failing_watch.check()
+
+    assert bot.sent == []
 
 
 def test_counter_failure_does_not_advance_either_baseline(
