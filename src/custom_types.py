@@ -300,10 +300,10 @@ class Inbound:
     listen: str
     port: int
     protocol: str
-    settings: str
-    streamSettings: str
+    settings: dict[str, Any]
+    streamSettings: dict[str, Any]
     tag: str
-    sniffing: str
+    sniffing: dict[str, Any]
     subSortIndex: int = 0
     trafficResetDay: int = 0
     nodeId: int | None = None

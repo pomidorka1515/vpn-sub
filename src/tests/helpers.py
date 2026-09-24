@@ -129,8 +129,8 @@ def make_inbound(
     return Inbound(
         id=inbound_id, up=0, down=0, total=0, remark="test", enable=True,
         expiryTime=0, trafficReset="", lastTrafficResetTime=0, clientStats=clients or [],
-        listen="", port=443, protocol=protocol, settings="{}",
-        streamSettings=json.dumps({"network": "tcp"}), tag="", sniffing="",
+        listen="", port=443, protocol=protocol, settings={},
+        streamSettings={"network": "tcp"}, tag="", sniffing={},
     )
 
 

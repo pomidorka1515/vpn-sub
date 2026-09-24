@@ -272,7 +272,7 @@ def _reconcile_user(
             totalGB=0,
             expiryTime=0,
             enable=True,
-            tgId="",
+            tgId=0,
             subId="",
             comment="",
             reset=0,
