@@ -147,3 +147,80 @@ def test_run_stops_when_public_connect_task_finishes(discord_env: Path) -> None:
     assert fake_public.stopped
     assert fake_admin.stopped
 
+
+def test_stop_closes_sessions_when_runner_is_cancelled(discord_env: Path) -> None:
+    del discord_env
+    import asyncio
+
+    from runtime import DiscordApplication
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def is_closed(self) -> bool:
+            return self.closed
+
+        async def close(self) -> None:
+            self.closed = True
+
+    class FakeBot:
+        def __init__(self) -> None:
+            self.stopped = False
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    class FakeHttp:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    class FakeResource:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    async def scenario() -> None:
+        client = FakeClient()
+        public = FakeBot()
+        admin = FakeBot()
+        http = FakeHttp()
+        admin_http = FakeHttp()
+        sessions = FakeResource()
+        cfg = FakeResource()
+        lang = FakeResource()
+        log_cfg = FakeResource()
+
+        async def hang() -> None:
+            await asyncio.Event().wait()
+
+        app = DiscordApplication(
+            cfg=cfg,  # type: ignore[arg-type]
+            lang_cfg=lang,  # type: ignore[arg-type]
+            log_cfg=log_cfg,  # type: ignore[arg-type]
+            http=http,  # type: ignore[arg-type]
+            admin_http=admin_http,  # type: ignore[arg-type]
+            sessions=sessions,  # type: ignore[arg-type]
+            client=client,  # type: ignore[arg-type]
+            public_bot=public,  # type: ignore[arg-type]
+            admin_bot=admin,  # type: ignore[arg-type]
+            _token="tok",
+        )
+        app._runner = asyncio.create_task(hang())
+        await app.stop()
+        assert client.closed
+        assert public.stopped
+        assert admin.stopped
+        assert http.closed
+        assert admin_http.closed
+        assert sessions.closed
+        assert cfg.closed
+        assert app._runner.cancelled()
+
+    asyncio.run(scenario())
+

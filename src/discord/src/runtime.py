@@ -87,9 +87,13 @@ class DiscordApplication:
         runner = self._runner
         if self.client.is_closed() is False:
             await self.client.close()
+        if runner is not None and not runner.done():
+            runner.cancel()
         if runner is not None:
             try:
                 await runner
+            except asyncio.CancelledError:
+                pass
             except Exception:
                 log.error("discord runner failed", exc_info=True)
         await self.public_bot.stop()
@@ -198,10 +202,13 @@ async def _run() -> None:
             waiters.append(runner)
         done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
         for waiter in pending:
-            waiter.cancel()
-        if isinstance(runner, asyncio.Task) and runner in done:
+            if waiter is not runner:
+                waiter.cancel()
+        if isinstance(runner, asyncio.Task) and runner in done and not runner.cancelled():
             try:
-                await runner
+                runner.result()
+            except asyncio.CancelledError:
+                pass
             except Exception:
                 log.error("discord runner failed", exc_info=True)
     finally:
