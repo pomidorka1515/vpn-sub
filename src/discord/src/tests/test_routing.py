@@ -5,7 +5,6 @@ from typing import Any
 
 from discord_helpers import FakeInteraction, FakeUser, json_ok, make_public_bot, run
 from public.routing import PublicRoutingMixin
-from sessions import SessionStore
 
 
 def _invoke_slash(command: Any, interaction: FakeInteraction) -> None:
@@ -53,7 +52,7 @@ def test_unauthenticated_users_cannot_hit_protected_handlers() -> None:
 
 
 def test_slash_wrapper_uses_command_requires_auth(tmp_path: Path) -> None:
-    bot, store, _session = make_public_bot(tmp_path, lambda *args: json_ok())
+    bot, store, _session = make_public_bot(tmp_path, lambda *args: json_ok()) # pyright: ignore
     store.clear_token(7)
     try:
         info_cmd = bot.tree.get_command("info")

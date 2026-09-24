@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import cast
 
-from core import Subscription
 from db import Database
 from errors import PanelRejectedError
 from helpers import (

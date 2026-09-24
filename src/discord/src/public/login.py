@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import discord
 
@@ -152,6 +152,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         if not isinstance(obj, dict):
             await self._reply_key(interaction, "bad_response")
             return
+        obj = cast(dict[str, Any], obj)
         if not obj.get("valid"):
             await self._reply_key(interaction, "length_username", ln=32)
             return
