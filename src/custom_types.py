@@ -7,7 +7,7 @@ from typing import (
 )
 from collections.abc import MutableMapping, Mapping, Iterator, Iterable
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from flask import Response as FlaskResponse
 from requests import Response
 from requests.cookies import RequestsCookieJar
@@ -22,10 +22,12 @@ __all__ = [
     'MemoryStats', 'SwapStats', 'DiskStats', 'XrayStats',
     'NetIOStats', 'NetTrafficStats', 'PublicIPStats', 'AppStats',
 
-    'ServerMetricsObj', 'ServerMetricsResponse', 'ClientStats',
-    'Inbound', 'InboundListResponse', 'InboundSettings',
+    'ServerMetricsObj', 'ServerMetricsResponse', 'ClientTraffic',
+    'Inbound', 'InboundListResponse',
+    'ClientPayload', 'PanelClient',
+    'ClientListResponse', 'ClientTrafficResponse',
 
-    'SettingsClient', 'NewUserInfo', 'RegisterWithCodeInfo',
+    'NewUserInfo', 'RegisterWithCodeInfo',
     'CodeObject', 'ResetUserObject', 'ApplyBonusCodeObject',
 
     'UserInfoBandwidthTotal', 'UserInfoBandwidth', 'UserInfo',
@@ -35,8 +37,6 @@ __all__ = [
     'ThreadInfo', 'FullSystemInfo',
     'BandwidthSnapshot', 'StateSnapshot',
     'BandwidthInfo', 'BandwidthUpdate',
-    
-    'client_stats_to_settings',
 
     'JsonifyValue', 'HTTPMethod', 'ResponseType',
 
@@ -266,7 +266,7 @@ class ServerMetricsResponse:
 
 ### 3x-ui inbound list object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
-class ClientStats:
+class ClientTraffic:
     id: int
     inboundId: int
     enable: bool
@@ -275,11 +275,14 @@ class ClientStats:
     subId: str
     up: int
     down: int
-    allTime: int
     expiryTime: int
     total: int
     reset: int
-    lastOnline: int
+    resetDay: int = 0
+    resetMax: int = 0
+    resetCount: int = 0
+    lastOnline: int = 0
+    lastSubFetch: int = 0
 
 
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -288,13 +291,12 @@ class Inbound:
     up: int
     down: int
     total: int
-    allTime: int
     remark: str
     enable: bool
     expiryTime: int
     trafficReset: str
     lastTrafficResetTime: int
-    clientStats: list[ClientStats]
+    clientStats: list[ClientTraffic]
     listen: str
     port: int
     protocol: str
@@ -302,6 +304,9 @@ class Inbound:
     streamSettings: str
     tag: str
     sniffing: str
+    subSortIndex: int = 0
+    trafficResetDay: int = 0
+    nodeId: int | None = None
 
 
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -310,24 +315,54 @@ class InboundListResponse:
     msg: str
     obj: list[Inbound]
 
-### 3x-ui client settings object ###
+### 3x-ui clients-first API objects ###
 @dataclass(slots=True, kw_only=True)
-class SettingsClient: # NOTE: this must NOT be frozen
+class ClientPayload: # NOTE: this must NOT be frozen
+    email: str
     id: str
     flow: str
-    email: str
     limitIp: int
     totalGB: int
     expiryTime: int
     enable: bool
-    tgId: str | int
+    tgId: str
     subId: str
     comment: str
     reset: int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
-class InboundSettings:
-    clients: list[SettingsClient]
+class PanelClient:
+    email: str
+    uuid: str
+    subId: str
+    enable: bool
+    flow: str
+    limitIp: int
+    totalGB: int
+    expiryTime: int
+    tgId: str
+    comment: str
+    reset: int
+    resetDay: int = 0
+    resetMax: int = 0
+    resetCount: int = 0
+    inboundIds: list[int] = field(default_factory=list[int])
+    traffic: ClientTraffic | None = None
+
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ClientListResponse:
+    success: bool
+    msg: str
+    obj: list[PanelClient]
+
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class ClientTrafficResponse:
+    success: bool
+    msg: str
+    obj: ClientTraffic
 
 ### add_new_user() ###
 
@@ -506,35 +541,3 @@ class StateSnapshot:
     ts: int
     host: FullSystemInfo
     panels: dict[str, ServerMetricsObj]
-
-### Helper functions ###
-def client_stats_to_settings(
-    stats: ClientStats, 
-    flow: str = '', 
-    limit_ip: int = 0, 
-    tg_id: str | int = '', 
-    comment: str = ''
-) -> SettingsClient:
-    """Convert ClientStats to SettingsClient format.
-
-    Args:
-        stats: ClientStats object from inbound list response
-        flow: Optional flow value (default: '')
-        limit_ip: Optional IP limit (default: 0)
-        tg_id: Optional Telegram ID (default: '')
-        comment: Optional comment (default: '')
-    """
-
-    return SettingsClient(
-        id=stats.uuid,
-        flow=flow,
-        email=stats.email,
-        limitIp=limit_ip,
-        totalGB=stats.total,
-        expiryTime=stats.expiryTime,
-        enable=stats.enable,
-        tgId=tg_id,
-        subId=stats.subId,
-        comment=comment,
-        reset=stats.reset
-    )
