@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Any, cast
+from urllib.parse import unquote
 
 import json
 from flask import Flask
@@ -10,7 +11,7 @@ from requests import Response
 from bwatch import BWatch
 from config import ConfigLike
 from core import Subscription
-from custom_types import ClientTraffic, Inbound
+from custom_types import ClientTraffic, Inbound, PanelClient
 from db import Database
 from session import XUiSession
 
@@ -89,9 +90,27 @@ def json_http(data: dict[str, Any] | list[Any], status_code: int = 200) -> Respo
 
 def make_client(uuid: str, up: int, down: int, inbound_id: int = 1) -> ClientTraffic:
     return ClientTraffic(
-        id=inbound_id, inboundId=inbound_id, enable=True, email="alice-abcd1234",
+        id=inbound_id, inboundId=inbound_id, enable=True, email="alice",
         uuid=uuid, subId="", up=up, down=down,
         expiryTime=0, total=0, reset=0, lastOnline=0,
+    )
+
+
+def make_panel_client(
+    email: str,
+    inbound_ids: list[int],
+    up: int = 0,
+    down: int = 0,
+    uuid: str = USER_UUID,
+) -> PanelClient:
+    return PanelClient(
+        email=email, uuid=uuid, subId="", enable=True, flow="",
+        limitIp=0, totalGB=0, expiryTime=0, tgId="", comment="", reset=0,
+        inboundIds=inbound_ids,
+        traffic=ClientTraffic(
+            id=0, inboundId=0, enable=True, email=email, uuid=uuid,
+            subId="", up=up, down=down, expiryTime=0, total=0, reset=0,
+        ),
     )
 
 
@@ -109,6 +128,7 @@ class FakePanel:
         self,
         *,
         inbounds: list[Inbound] | None = None,
+        clients: list[PanelClient] | None = None,
         name: str = "panel",
         local: bool = True,
         dead: bool = False,
@@ -133,6 +153,7 @@ class FakePanel:
         self.cache_time = 0
         self.name = name
         self._inbounds = inbounds or []
+        self._clients: list[PanelClient] = clients or []
         self._post_payload = post_payload
         self._post_status = post_status
         self._post_error = post_error
@@ -164,6 +185,29 @@ class FakePanel:
             raise self._get_error
         if self._get_payload is not None:
             return json_http(self._get_payload, self._get_status)
+        if "clients/list" in url:
+            return json_http({
+                "success": True,
+                "msg": "",
+                "obj": [asdict(client) for client in self._clients],
+            }, self._get_status)
+        if "clients/get/" in url:
+            email = unquote(url.rsplit("/", 1)[-1])
+            found = next((c for c in self._clients if c.email == email), None)
+            if found is None:
+                return json_http({"success": True, "msg": "", "obj": None}, 200)
+            return json_http(
+                {"success": True, "msg": "", "obj": asdict(found)}, self._get_status,
+            )
+        if "clients/traffic/" in url:
+            email = unquote(url.rsplit("/", 1)[-1])
+            found = next((c for c in self._clients if c.email == email), None)
+            if found is None or found.traffic is None:
+                return json_http({"success": True, "msg": "", "obj": None}, 200)
+            return json_http(
+                {"success": True, "msg": "", "obj": asdict(found.traffic)},
+                self._get_status,
+            )
         return json_http({
             "success": True,
             "msg": "",

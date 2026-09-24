@@ -1,11 +1,21 @@
 import time
+from urllib.parse import quote
 from dacite import from_dict
 from typing import Literal, cast, overload
 
+from requests import Response
+
 from ..common import BaseService
 from session import XUiSession
-from custom_types import ServerMetricsResponse, Inbound, OnlineStatus
-from errors import PanelUnavailableError, AppError
+from custom_types import (
+    ClientListResponse,
+    ClientTraffic,
+    Inbound,
+    OnlineStatus,
+    PanelClient,
+    ServerMetricsResponse,
+)
+from errors import AppError, PanelRejectedError, PanelUnavailableError
 
 __all__ = ["PanelService"]
 
@@ -60,18 +70,105 @@ class PanelService(BaseService):
                 f"Panel {panel.name} inbound query failed: {exc}"
             ) from exc
 
-    def get_emails(self, username: str, panel: XUiSession) -> dict[str, str]:
-        """Get the panel emails. {'inboundId': 'actual_panel_email', ...}"""
-        inbounds = self.getinbounds(panel=panel)
-        emails: dict[str, str] = {}
-        for i in inbounds:
-            for r in i.clientStats:
-                actual_email = r.email
-                parts = actual_email.rsplit('-', 1)
-                parsed_username = parts[0] if len(parts) == 2 else actual_email
-                if parsed_username == username:
-                    emails[str(i.id)] = actual_email
-        return emails
+    def _status_error(self, panel: XUiSession, what: str, response: Response) -> PanelUnavailableError:
+        """Classify a non-200 response as unavailability.
+
+        The synthetic 503 from a dead ``XUiSession`` carries the down reason
+        in ``msg`` — surface it like ``getinbounds`` does. A 404 means a
+        missing/renamed route until a captured body proves otherwise, so it
+        is an error, not "client absent".
+        """
+        message: object = response.status_code
+        try:
+            data: object = response.json()
+            if isinstance(data, dict):
+                message = cast(dict[str, object], data).get("msg") or response.status_code
+        except Exception:
+            pass
+        return PanelUnavailableError(
+            f"Panel {panel.name} {what} failed: {message}"
+        )
+
+    def get_client(self, panel: XUiSession, email: str) -> PanelClient | None:
+        """Get a panel client by email, or ``None`` when the panel reports one.
+
+        Not-found contract: ``success: true`` with a ``null`` ``obj`` means
+        the client is unknown. A non-200 status (404 included) is an
+        availability error — a missing route must not look like an absent
+        client. ``success: false`` is a rejection and carries the panel
+        ``msg``.
+        """
+        url = f"panel/api/clients/get/{quote(email, safe='')}"
+        try:
+            response = panel.get(url)
+            if response.status_code != 200:
+                raise self._status_error(panel, "client query", response)
+            data: dict[str, object] = response.json()
+            if not data.get("success"):
+                raise PanelRejectedError(
+                    f"Panel {panel.name} client query failed: "
+                    f"{data.get('msg') or response.status_code}"
+                )
+            raw: object = data.get("obj")
+            if raw is None:
+                return None
+            return from_dict(PanelClient, cast(dict[str, object], raw))
+        except AppError:
+            raise
+        except Exception as exc:
+            raise PanelUnavailableError(
+                f"Panel {panel.name} client query failed: {exc}"
+            ) from exc
+
+    def list_clients(self, panel: XUiSession) -> list[PanelClient]:
+        """List every panel client with its inbound attachments and traffic."""
+        try:
+            response = panel.get("panel/api/clients/list")
+            if response.status_code != 200:
+                raise self._status_error(panel, "client list query", response)
+            data: dict[str, object] = response.json()
+            if not data.get("success"):
+                raise PanelRejectedError(
+                    f"Panel {panel.name} client list query failed: "
+                    f"{data.get('msg') or response.status_code}"
+                )
+            return from_dict(ClientListResponse, data).obj
+        except AppError:
+            raise
+        except Exception as exc:
+            raise PanelUnavailableError(
+                f"Panel {panel.name} client list query failed: {exc}"
+            ) from exc
+
+    def client_traffic(self, panel: XUiSession, email: str) -> ClientTraffic | None:
+        """Get the client's single shared traffic row, or ``None`` when absent.
+
+        The clients-first API keeps one ``client_traffics`` row per client
+        (keyed by email) shared across every attached inbound — callers must
+        NOT sum it over inbounds. A non-200 status (404 included) is an
+        availability error, not "no traffic row".
+        """
+        url = f"panel/api/clients/traffic/{quote(email, safe='')}"
+        try:
+            response = panel.get(url)
+            if response.status_code != 200:
+                raise self._status_error(panel, "traffic query", response)
+            data: dict[str, object] = response.json()
+            if not data.get("success"):
+                raise PanelRejectedError(
+                    f"Panel {panel.name} traffic query failed: "
+                    f"{data.get('msg') or response.status_code}"
+                )
+            raw: object = data.get("obj")
+            if raw is None:
+                return None
+            return from_dict(ClientTraffic, cast(dict[str, object], raw))
+        except AppError:
+            raise
+        except Exception as exc:
+            raise PanelUnavailableError(
+                f"Panel {panel.name} traffic query failed: {exc}"
+            ) from exc
 
     @overload
     def get_online_status(self, new: Literal[False] = False) -> OnlineStatus: ...
@@ -101,7 +198,7 @@ class PanelService(BaseService):
                 panel_health[panel.name] = "unavailable"
                 continue
             try:
-                response = panel.post("panel/api/inbounds/onlines")
+                response = panel.post("panel/api/clients/onlines")
                 data: dict[str, object] = response.json()
                 if response.status_code not in (200, 201) or not data.get('success'):
                     panel_health[panel.name] = "unavailable"
@@ -128,9 +225,8 @@ class PanelService(BaseService):
                             panel.name,
                         )
                         break
-                    name_candidate = raw_email.rsplit('-', 1)[0]
-                    if self.db.user_exists(name_candidate):
-                        online_users.add(name_candidate)
+                    if self.db.user_exists(raw_email):
+                        online_users.add(raw_email)
                 else:
                     panel_health[panel.name] = "ok"
             except Exception as exc:

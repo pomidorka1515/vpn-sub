@@ -325,7 +325,7 @@ class ClientPayload: # NOTE: this must NOT be frozen
     totalGB: int
     expiryTime: int
     enable: bool
-    tgId: str
+    tgId: str | int
     subId: str
     comment: str
     reset: int
@@ -341,7 +341,7 @@ class PanelClient:
     limitIp: int
     totalGB: int
     expiryTime: int
-    tgId: str
+    tgId: str | int
     comment: str
     reset: int
     resetDay: int = 0
