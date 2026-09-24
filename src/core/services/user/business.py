@@ -13,8 +13,8 @@ from ..bandwidth import BandwidthService
 from ..password import PasswordService
 from ..audit import AuditService
 from custom_types import (
-    SettingsClient, NewUserInfo, 
-    client_stats_to_settings, ResetUserObject, UserInfo,
+    ClientPayload, ClientTraffic, NewUserInfo,
+    ResetUserObject, UserInfo,
     UserInfoBandwidth, UserInfoBandwidthTotal
 )
 from errors import PanelRejectedError, ValidationError, ConflictError, DuplicateError
@@ -22,6 +22,24 @@ from session import XUiSession
 from util import *
 
 __all__ = ["BusinessUserService"]
+
+
+def _client_traffic_to_payload(stats: ClientTraffic) -> ClientPayload:
+    """Rebuild a write payload from a panel client-traffic row (legacy glue)."""
+    return ClientPayload(
+        email=stats.email,
+        id=stats.uuid,
+        flow="",
+        limitIp=0,
+        totalGB=stats.total,
+        expiryTime=stats.expiryTime,
+        enable=stats.enable,
+        tgId="",
+        subId=stats.subId,
+        comment="",
+        reset=stats.reset,
+    )
+
 
 class BusinessUserService(BaseService):
     def __init__(
@@ -97,7 +115,7 @@ class BusinessUserService(BaseService):
         userid = str(self.user_svc.user(username)["uuid"])
         panels = self.panels
 
-        payload = SettingsClient(
+        payload = ClientPayload(
             id=userid,
             flow="",
             email="",
@@ -191,7 +209,7 @@ class BusinessUserService(BaseService):
                 the = {str(vi.id): vx for vi in inbounds for vx in vi.clientStats if vx.uuid == userid}
                 for k in l:
                     if str(k) not in the: continue 
-                    payload = client_stats_to_settings(the[str(k)])
+                    payload = _client_traffic_to_payload(the[str(k)])
                     payload.enable = enable
                     payload.id = userid
                     response = panel.post(
@@ -225,7 +243,7 @@ class BusinessUserService(BaseService):
 
                 for k in l:
                     if str(k) not in the: continue
-                    payload = client_stats_to_settings(the[str(k)])
+                    payload = _client_traffic_to_payload(the[str(k)])
                     payload.enable = wl_enable
                     payload.id = userid
 
@@ -403,7 +421,7 @@ class BusinessUserService(BaseService):
         username: str,
         old_uid: str,
         new_uid: str,
-        successful: list[tuple[XUiSession, int, SettingsClient, bool]],
+        successful: list[tuple[XUiSession, int, ClientPayload, bool]],
     ) -> None:
         """Restore old UUID on panels that were already updated before a failure.
         Logs but never raises — rollback failures are logged, not propagated."""
@@ -443,7 +461,7 @@ class BusinessUserService(BaseService):
         if not isuuid(uid):
             raise ValidationError("Invalid UUID")
         olduid = str(self.user_svc.user(username)["uuid"])
-        successful: list[tuple['XUiSession', int, SettingsClient, bool]] = []
+        successful: list[tuple['XUiSession', int, ClientPayload, bool]] = []
 
         for panel in self.panels:
             inbounds = self.panel_svc.getinbounds(panel)
@@ -451,11 +469,11 @@ class BusinessUserService(BaseService):
             need_vision: list[int] = []
             for i in inbounds:
                 l.append(i.id)
-            the: dict[str, SettingsClient] = {}
+            the: dict[str, ClientPayload] = {}
             for vi in inbounds:
                 for vx in vi.clientStats:
                     if vx.uuid == olduid:
-                        the[str(vi.id)] = client_stats_to_settings(vx)
+                        the[str(vi.id)] = _client_traffic_to_payload(vx)
                         if json.loads(vi.streamSettings)['network'] in ("tcp", "raw"):
                             need_vision.append(vi.id)
                         break

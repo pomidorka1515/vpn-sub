@@ -11,15 +11,13 @@ from custom_types import Inbound, RequestKwargs
 from config import JsonValue
 from errors import XUiSessionError
 
-from typing import Unpack, cast, Any, Mapping, Protocol, Callable, Literal
+from collections.abc import Callable
+from typing import Unpack, cast, Any, Mapping, Protocol, Literal
 
 __all__ = ['XUiSession', 'XUiPanelTransport', 'RequestsPanelTransport', 'XUiSessionError']
 
 _HEALTH_CHECK_TIMEOUT = 5.0
-_LOGIN_TIMEOUT = 10.0
 _DEFAULT_REQUEST_TIMEOUT = 5.0
-_AUTH_BACKOFF_INITIAL = 30.0
-_AUTH_BACKOFF_MAX = 15 * 60.0
 
 
 
@@ -72,18 +70,21 @@ class RequestsPanelTransport:
 
 class XUiSession:
     """
-    3x-ui panel client with login refresh, health checks, and inbound caching.
+    3x-ui panel client with Bearer-token auth, health checks, and inbound caching.
 
-    Public methods may be called from multiple threads. Login and refresh state are serialized;
-    transport calls may run concurrently.
-    The health and refresh threads use the same synchronization as request threads.
+    Authentication is a static admin-scoped API token sent as
+    ``Authorization: Bearer <token>`` on every request. There is no login and no
+    session refresh. A 401/403 from the panel marks it dead with a distinct
+    "token rejected" reason -- the token is bad or revoked and must be reissued
+    in config; no automatic recovery is attempted.
 
     Thread-safety and lifecycle:
-      - ``dead``, login state, and refresh scheduling are protected by internal locks.
+      - ``dead`` is protected by an internal lock.
       - Cache reads return the stored list unchanged; callers must not mutate it.
-      - ``close`` stops client-managed threads and closes the default session. If a
-        transport or session is injected, its lifecycle remains the injector's
-        responsibility. Do not issue requests while or after ``close`` is running.
+      - ``close`` stops the client-managed health-check thread and closes the
+        default session. If a transport or session is injected, its lifecycle
+        remains the injector's responsibility. Do not issue requests while or
+        after ``close`` is running.
       - Transport implementations must be safe for concurrent request submissions.
     """
 
@@ -94,9 +95,7 @@ class XUiSession:
         address: str,
         port: int | str,
         uri: str,
-        username: str,
-        password: str,
-        refresh_interval: int | float = 60,
+        api_token: str,
         https: bool = False,
         nginx_auth: tuple[str, str] | None = None,
         inbounds_list: tuple[int, ...] = (),
@@ -114,10 +113,8 @@ class XUiSession:
             name: The display name for a panel.
             address: Hostname or IP of the panel.
             port: Port of the panel.
-            uri: The secret random path (e.g. your-panel.com/randompath/panel/api/login).
-            username: Username (internal).
-            password: Password (internal).
-            refresh_interval: Interval in minutes, controls session refresh cycle.
+            uri: The secret random path (e.g. your-panel.com/randompath/panel/api/...).
+            api_token: Admin-scoped 3x-ui API token (Settings -> Security -> API Token).
             https: Set False for HTTP.
             nginx_auth: External authentication (A.K.A. Basic Auth.), format ('username', 'password').
             inbounds_list: Inbound IDs used by ``mode``.
@@ -125,17 +122,17 @@ class XUiSession:
                 ``blacklist`` drops those IDs. An empty list keeps no inbounds
                 in whitelist mode and all inbounds in blacklist mode.
             inject_headers: Extra headers merged into every request.
-                Caller-supplied headers take precedence.
+                Caller-supplied headers take precedence (except Authorization).
             health_check_interval: Interval in seconds between panel health checks.
             transport: Replacement HTTP transport. If omitted, a transport is built around session.
             session: Session used by the default transport. Defaults to a new ``requests.Session``.
-            clock: Monotonic clock used for cache, refresh, and backoff timing.
+            clock: Monotonic clock used for cache timing.
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.username = username
-            self.password = password
-            self.refresh_interval = refresh_interval
+            if not api_token:
+                raise ValueError("api_token must be a non-empty API token")
+            self._api_token = api_token
             if mode not in ("whitelist", "blacklist"):
                 raise ValueError("mode must be 'whitelist' or 'blacklist'")
             self.inbounds_list = inbounds_list or ()
@@ -149,13 +146,6 @@ class XUiSession:
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
 
             self._clock = clock
-            self._state_lock = threading.RLock()
-            self._login_monotonic: float = 0
-            self._login_retry_at: float = 0
-            self._login_failures: int = 0
-            self._refresh_started = False
-            self._stop_event = threading.Event()
-            self._refresh_thread: threading.Thread | None = None
 
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
@@ -186,7 +176,6 @@ class XUiSession:
             )
             self._health_check_event = threading.Event()
 
-            self.login()
             self._health_check_thread.start()
 
     @property
@@ -226,11 +215,14 @@ class XUiSession:
         if was_dead:
             self.log.info(f"panel {self.name}: recovered")
 
+    def _auth_header(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._api_token}"}
+
     def _health_request(self) -> Response:
         return self._transport.request(
             "GET",
             self._format_url("panel/api/inbounds/list"),
-            headers=dict(self._inject_headers),
+            headers={**dict(self._inject_headers), **self._auth_header()},
             timeout=_HEALTH_CHECK_TIMEOUT,
         )
 
@@ -238,17 +230,8 @@ class XUiSession:
         try:
             response = self._health_request()
             if response.status_code in (401, 403):
-                with self._state_lock:
-                    retry_backoff_active = self._clock() < self._login_retry_at
-                if retry_backoff_active:
-                    self._mark_dead("authentication retry backoff active")
-                    return
-                try:
-                    self.login()
-                except (RequestException, XUiSessionError) as error:
-                    self._mark_dead(f"login failed: {error}")
-                    return
-                response = self._health_request()
+                self._mark_dead(f"token rejected (HTTP {response.status_code})")
+                return
 
             if response.status_code != 200:
                 self._mark_dead(f"HTTP {response.status_code}")
@@ -286,17 +269,12 @@ class XUiSession:
         if self.dead:
             return self._down_response('unavailable')
 
-        with self._state_lock:
-            if self._needs_refresh():
-                try:
-                    self.login()
-                except (RequestException, XUiSessionError) as error:
-                    return self._down_response(str(error))
-
         request_url = self._format_url(url)
         kwargs['headers'] = {
             **cast(Any, kwargs.get('headers', {})),
             **self._inject_headers,
+            # set last: the panel Authorization must not be overridable by accident
+            **self._auth_header(),
         }
         kwargs.setdefault('timeout', _DEFAULT_REQUEST_TIMEOUT)
 
@@ -321,83 +299,6 @@ class XUiSession:
     def post(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
         return self.request('POST', url, **kwargs)
 
-    def login(self) -> None:
-        self.log.debug(f"{self.address}:{self.port} > logging into 3x-ui")
-        with self._state_lock:
-            if self._login_monotonic and not self._needs_refresh():
-                return
-            try:
-                login_url = self._format_url("login")
-                login_data = {"username": self.username, "password": self.password}
-                headers = {
-                    **dict(self._inject_headers),
-                    "Content-Type": "application/json",
-                }
-                response = self._transport.request(
-                    "POST",
-                    login_url,
-                    json=login_data,
-                    headers=headers,
-                    timeout=_LOGIN_TIMEOUT,
-                )
-
-                if response.status_code in (401, 403):
-                    raise XUiSessionError(f"authentication failed: HTTP {response.status_code}")
-                if response.status_code != 200:
-                    raise XUiSessionError(f"panel protocol error: HTTP {response.status_code}")
-
-                json_res = response.json()
-                if not json_res.get("success"):
-                    raise XUiSessionError(f"panel protocol error: {json_res.get('msg')}")
-
-                self._login_monotonic = self._clock()
-                self._login_failures = 0
-                self._login_retry_at = 0
-                self.log.info(f"{self.address}:{self.port} > logged in as {self.username}")
-
-                if not self._refresh_started:
-                    self._start_refresh_thread()
-
-            except Exception as error:
-                if isinstance(error, XUiSessionError) and str(error).startswith("authentication failed:"):
-                    self._login_failures += 1
-                    delay = min(
-                        _AUTH_BACKOFF_INITIAL * (2 ** (self._login_failures - 1)),
-                        _AUTH_BACKOFF_MAX,
-                    )
-                    self._login_retry_at = self._clock() + delay
-                if self.dead:
-                    self.log.debug(f"{self.address}:{self.port} > login failed", exc_info=True)
-                else:
-                    self.log.critical(f"{self.address}:{self.port} > login failed", exc_info=True)
-                raise
-
-    def _start_refresh_thread(self) -> None:
-        self._refresh_started = True
-
-        def refresh_loop() -> None:
-            while not self._stop_event.wait(60):
-                if self._needs_refresh():
-                    try:
-                        self.log.info(f"{self.address}:{self.port} > refreshing session")
-                        self.login()
-                    except Exception as error:
-                        self._mark_dead(f"refresh login failed: {error}")
-                        self.log.error(
-                            f"{self.address}:{self.port} > session refresh failed",
-                            exc_info=True,
-                        )
-
-        thread = threading.Thread(target=refresh_loop, daemon=True, name="3x-ui")
-        self._refresh_thread = thread
-        thread.start()
-
-    def _needs_refresh(self) -> bool:
-        with self._state_lock:
-            if not self._login_monotonic:
-                return True
-            return (self._clock() - self._login_monotonic) > (self.refresh_interval * 60)
-
     @property
     def cache(self) -> list[Inbound] | None:
         with self._cache_lock:
@@ -415,13 +316,8 @@ class XUiSession:
             self.cache_time = 0
 
     def close(self) -> None:
-        with self._state_lock:
-            self._stop_event.set()
-            self._health_check_event.set()
-            refresh_thread = self._refresh_thread
+        self._health_check_event.set()
         if self._health_check_thread is not threading.current_thread():
             self._health_check_thread.join(timeout=2)
-        if refresh_thread is not None and refresh_thread is not threading.current_thread():
-            refresh_thread.join(timeout=2)
         if self._owns_session and self._session is not None:
             self._session.close()

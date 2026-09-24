@@ -116,15 +116,14 @@
             "description": "3x-ui panels.",
             "additionalProperties": {
                 "type": "object",
-                "required": ["name", "address", "port", "uri", "username", "password", "https", "whitelist", "inbounds_list", "mode"],
+                "required": ["name", "address", "port", "uri", "token", "https", "whitelist", "inbounds_list", "mode"],
                 "additionalProperties": false,
                 "properties": {
                     "name": { "type": "string" },
                     "address": { "type": "string" },
                     "port": { "type": ["string", "integer"] },
                     "uri": { "type": "string" },
-                    "username": { "type": "string" },
-                    "password": { "type": "string" },
+                    "token": { "type": "string", "minLength": 20, "description": "Admin-scoped 3x-ui API token (panel Settings -> Security -> API Token)." },
                     "https": { "type": "boolean" },
                     "whitelist": { "type": "boolean" },
                     "nginx_auth": {

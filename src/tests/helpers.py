@@ -10,7 +10,7 @@ from requests import Response
 from bwatch import BWatch
 from config import ConfigLike
 from core import Subscription
-from custom_types import ClientStats, Inbound
+from custom_types import ClientTraffic, Inbound
 from db import Database
 from session import XUiSession
 
@@ -87,17 +87,17 @@ def json_http(data: dict[str, Any] | list[Any], status_code: int = 200) -> Respo
     return response
 
 
-def make_client(uuid: str, up: int, down: int, inbound_id: int = 1) -> ClientStats:
-    return ClientStats(
+def make_client(uuid: str, up: int, down: int, inbound_id: int = 1) -> ClientTraffic:
+    return ClientTraffic(
         id=inbound_id, inboundId=inbound_id, enable=True, email="alice-abcd1234",
-        uuid=uuid, subId="", up=up, down=down, allTime=up + down,
+        uuid=uuid, subId="", up=up, down=down,
         expiryTime=0, total=0, reset=0, lastOnline=0,
     )
 
 
-def make_inbound(inbound_id: int, clients: list[ClientStats] | None = None) -> Inbound:
+def make_inbound(inbound_id: int, clients: list[ClientTraffic] | None = None) -> Inbound:
     return Inbound(
-        id=inbound_id, up=0, down=0, total=0, allTime=0, remark="test", enable=True,
+        id=inbound_id, up=0, down=0, total=0, remark="test", enable=True,
         expiryTime=0, trafficReset="", lastTrafficResetTime=0, clientStats=clients or [],
         listen="", port=443, protocol="vless", settings="{}",
         streamSettings=json.dumps({"network": "tcp"}), tag="", sniffing="",
