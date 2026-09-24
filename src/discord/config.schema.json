@@ -16,8 +16,20 @@
         },
         "private": {
             "type": "object",
-            "additionalProperties": true,
-            "description": "Admin bot placeholder. Ignored."
+            "required": ["whitelist", "api_token"],
+            "additionalProperties": false,
+            "description": "Admin Discord surface on the same bot token.",
+            "properties": {
+                "whitelist": {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "description": "Discord user IDs allowed to use /admin."
+                },
+                "api_token": {
+                    "type": "string",
+                    "description": "Same value as Flask cfg api_token. Sent as the Authorization header."
+                }
+            }
         }
     }
 }

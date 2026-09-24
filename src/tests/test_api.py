@@ -8,9 +8,10 @@ import uuid
 from argon2 import PasswordHasher
 from flask import Flask
 
-from api import BaseApi, WebApi, _RateLimiter, rate_limit  # pyright: ignore[reportPrivateUsage]
-from config import ConfigLike
+from api import Api, BaseApi, WebApi, _RateLimiter, rate_limit  # pyright: ignore[reportPrivateUsage]
+from config import ConfigLike, LinesConfigLike
 from db import Database
+from errors import AppError
 from helpers import make_subscription, make_watch, subscription_config
 
 
@@ -35,6 +36,71 @@ def web_api(database: Database, flask_app: Flask) -> tuple[Flask, Database]:
         sub=subscription, bw=watcher,
     )
     return flask_app, database
+
+
+class _Audit:
+    path = "audit.jsonl"
+    size = 0
+
+    def append(self, record: object) -> None:
+        del record
+
+    def append_many(self, records: object) -> None:
+        del records
+
+    def __iter__(self) -> object:
+        return iter(())
+
+    def tail(self, n: int = 100) -> object:
+        del n
+        return iter(())
+
+    def read_all(self) -> list[object]:
+        return []
+
+    def first(self, n: int = 1) -> list[object]:
+        del n
+        return []
+
+    def count(self) -> int:
+        return 0
+
+
+def test_user_refresh_aborts_on_non_panel_error(database: Database, flask_app: Flask) -> None:
+    subscription = make_subscription(database, app=flask_app)
+    database.create_user(
+        username="alice", uuid="01234567-89ab-cdef-0123-456789abcdef", token="a" * 40,
+        fingerprint="chrome", displayname="Alice",
+    )
+    database.create_user(
+        username="bob", uuid="11234567-89ab-cdef-0123-456789abcdef", token="b" * 40,
+        fingerprint="chrome", displayname="Bob",
+    )
+
+    def add_users(username: str, _called_internally: bool = False) -> None:
+        del _called_internally
+        if username == "bob":
+            raise AppError("panel rejected")
+
+    subscription.business_svc.add_users = add_users  # type: ignore[method-assign]
+    Api(
+        app=flask_app,
+        cfg=cast(ConfigLike, subscription_config(api_uri="api", api_token="secret")),
+        audit_cfg=cast(LinesConfigLike, _Audit()),
+        sub=subscription,
+        bw=make_watch(database, subscription),
+    )
+    response = flask_app.test_client().get(
+        "/sub/api/api/user/refresh",
+        headers={"Authorization": "secret"},
+    )
+    assert response.status_code == 500
+    payload = response.get_json()
+    assert payload["msg"] == "Refresh aborted"
+    assert payload["obj"]["aborted"] == "bob"
+    assert payload["obj"]["failed"] == []
+    assert payload["obj"]["succeeded"] == 1
+    assert payload["obj"]["total"] == 2
 
 
 def test_login_uses_isolated_auth_token(web_api: tuple[Flask, Database]) -> None:

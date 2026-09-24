@@ -7,8 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
+import discord
+
 from admin import AdminBot
+from adminapi import AdminApiClient
 from config import Config, ConfigLike, LinesConfig
+from host import SharedDiscordClient
 from loggers import Logger
 from public import PublicBot
 from sessions import SessionStore
@@ -34,6 +38,7 @@ class DiscordPaths:
     backups: Path
     http_url: str
     uri: str
+    api_uri: str
 
     @classmethod
     def from_env(cls) -> DiscordPaths:
@@ -48,6 +53,7 @@ class DiscordPaths:
             backups=data / "backup",
             http_url=os.getenv("SUB_HTTP_URL", "http://127.0.0.1:5550"),
             uri=os.getenv("SUB_URI", "sub"),
+            api_uri=os.getenv("SUB_API_URI", "privapi"),
         )
 
 
@@ -57,23 +63,39 @@ class DiscordApplication:
     lang_cfg: Config
     log_cfg: LinesConfig
     http: WebApiClient
+    admin_http: AdminApiClient
     sessions: SessionStore
+    client: SharedDiscordClient
     public_bot: PublicBot
     admin_bot: AdminBot
+    _token: str
     _stop: asyncio.Event = field(default_factory=asyncio.Event, init=False)
+    _runner: asyncio.Task[None] | None = field(default=None, init=False)
 
     async def start(self) -> None:
         await self.http.start()
+        await self.admin_http.start()
         await self.admin_bot.start()
         await self.public_bot.start()
+        await self.client.login(self._token)
+        self._runner = asyncio.create_task(self.client.connect(reconnect=True), name="discord")
 
     async def stop(self) -> None:
         if self._stop.is_set():
             return
         self._stop.set()
+        runner = self._runner
+        if self.client.is_closed() is False:
+            await self.client.close()
+        if runner is not None:
+            try:
+                await runner
+            except Exception:
+                log.error("discord runner failed", exc_info=True)
         await self.public_bot.stop()
         await self.admin_bot.stop()
         await self.http.close()
+        await self.admin_http.close()
         for resource in (self.sessions, self.cfg, self.lang_cfg, self.log_cfg):
             close = getattr(resource, "close", None)
             if callable(close):
@@ -111,23 +133,46 @@ def create_application(paths: DiscordPaths | None = None) -> DiscordApplication:
         token = cfg["public"]["token"]
         if not isinstance(token, str) or not token:
             raise RuntimeError("public discord bot token not found in discord.json")
+        private = cfg["private"]
+        api_token = private["api_token"]
+        if not isinstance(api_token, str) or not api_token:
+            raise RuntimeError("private discord api_token not found in discord.json")
         http = WebApiClient(base=paths.http_url, uri=paths.uri)
+        admin_http = AdminApiClient(
+            base=paths.http_url,
+            uri=paths.uri,
+            api_uri=paths.api_uri,
+            token=api_token,
+        )
         sessions = SessionStore(paths.sessions)
+        client = SharedDiscordClient(intents=discord.Intents.default())
         public_bot = PublicBot(
             cfg=cast(ConfigLike, cfg),
             lang_cfg=cast(ConfigLike, lang_cfg),
             http=http,
             sessions=sessions,
+            client=client,
+            tree=client.tree,
         )
-        admin_bot = AdminBot()
+        admin_bot = AdminBot(
+            cfg=cast(ConfigLike, cfg),
+            lang_cfg=cast(ConfigLike, lang_cfg),
+            http=admin_http,
+            client=client,
+            tree=client.tree,
+        )
+        client.attach(public_bot, admin_bot)
         return DiscordApplication(
             cfg=cfg,
             lang_cfg=lang_cfg,
             log_cfg=log_cfg,
             http=http,
+            admin_http=admin_http,
             sessions=sessions,
+            client=client,
             public_bot=public_bot,
             admin_bot=admin_bot,
+            _token=token,
         )
 
 
@@ -147,7 +192,7 @@ async def _run() -> None:
 
     await runtime.start()
     try:
-        runner = getattr(runtime.public_bot, "_runner", None)
+        runner = runtime._runner
         waiters: list[asyncio.Future[Any]] = [asyncio.ensure_future(stopping.wait())]
         if isinstance(runner, asyncio.Task):
             waiters.append(runner)
@@ -158,7 +203,7 @@ async def _run() -> None:
             try:
                 await runner
             except Exception:
-                log.error("public discord runner failed", exc_info=True)
+                log.error("discord runner failed", exc_info=True)
     finally:
         await runtime.stop()
 

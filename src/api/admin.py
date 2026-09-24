@@ -24,6 +24,9 @@ class Api(BaseApi):
         Route('GET', '/api/user/refresh', 'user_refresh'),
         Route('GET', '/api/user/onlines', 'user_onlines'),
         Route('POST', '/api/user/reset', 'user_reset'),
+        Route('POST', '/api/user/update', 'user_update'),
+        Route('GET', '/api/user/history', 'user_history'),
+        Route('GET', '/api/fingerprints', 'fingerprints'),
 
         Route('GET', '/api/panel/status', 'panel_status'),
 
@@ -78,8 +81,8 @@ class Api(BaseApi):
  
     @requires_admin_auth
     @requires_fields_strict(
-        ('username', str),
-        ('password', str)
+        ('user', str),
+        ('displayname', str)
     )
     def user_add(self) -> ResponseType:
         content = g.json_obj
@@ -99,7 +102,12 @@ class Api(BaseApi):
         data: dict[str, str | int] = {}
 
         for k, v in raw_data.items():
-            if k in ('ext_username', 'ext_password', 'token', 'userid', 'fingerprint'):
+            if k in ('user', 'displayname'):
+                if not isinstance(v, str):
+                    return err(f"{k} must be a string")
+                data[k] = v
+
+            elif k in ('ext_username', 'ext_password', 'token', 'userid', 'fingerprint'):
                 if v is not None and not isinstance(v, str):
                     return err(f"{k} must be a string or null")
                 data[k] = cast(str, v)
@@ -147,6 +155,18 @@ class Api(BaseApi):
             except PanelUnavailableError:
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)
+            except Exception:
+                self.log.critical("bulk user refresh aborted for %s", cc, exc_info=True)
+                return err(
+                    "Refresh aborted",
+                    500,
+                    {
+                        "failed": failures,
+                        "aborted": cc,
+                        "succeeded": users.index(cc) - len(failures),
+                        "total": len(users),
+                    },
+                )
         if failures and len(failures) == len(users):
             return err(
                 "Panel refresh failed for all users",
@@ -175,6 +195,62 @@ class Api(BaseApi):
         username: str = content.get('user')
         x = self.sub.business_svc.reset_user(username)
         return ok(obj=asdict(x))
+
+    @requires_admin_auth
+    @requires_fields_strict(('user', str))
+    def user_update(self) -> ResponseType:
+        content = g.json_obj
+        username: str = content.get('user')
+        fingerprint = content.get('fingerprint')
+        displayname = content.get('displayname')
+        if fingerprint is not None and not isinstance(fingerprint, str):
+            return err("fingerprint must be a string or null")
+        if displayname is not None and not isinstance(displayname, str):
+            return err("displayname must be a string or null")
+
+        def _optional_int(name: str) -> int | None:
+            if name not in content:
+                return None
+            try:
+                value = int(cast(str | int, content.get(name)))
+            except (ValueError, TypeError):
+                raise ValueError(name)
+            if value < 0:
+                raise ValueError(name)
+            return value
+
+        try:
+            limit = _optional_int('limit')
+            wl_limit = _optional_int('wl_limit')
+            timee = _optional_int('time')
+        except ValueError as error:
+            return err(f"{error.args[0]} must be a non-negative integer")
+
+        self.sub.business_svc.update_params(
+            username=username,
+            displayname=displayname,
+            fingerprint=fingerprint,
+            limit=limit,
+            wl_limit=wl_limit,
+            timee=timee,
+        )
+        return ok("Updated")
+
+    @requires_admin_auth
+    @requires_args('user')
+    def user_history(self) -> ResponseType:
+        username = request.args['user']
+        try:
+            days = int(request.args.get('days', 30))
+        except (ValueError, TypeError):
+            return err("'days' must be an integer")
+        days = max(1, min(days, 90))
+        snapshots = self.sub.bandwidth_svc.get_bw_history(username, days)
+        return ok(obj=[asdict(s) for s in snapshots])
+
+    @requires_admin_auth
+    def fingerprints(self) -> ResponseType:
+        return ok(obj=self.cfg['fingerprints'])
             
     @requires_admin_auth
     def panel_status(self) -> ResponseType: 

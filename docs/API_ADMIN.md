@@ -182,11 +182,20 @@ Response (success):
   
 Response (error):  
 ```jsonc  
-// HTTP 502, when every user failed  
+// HTTP 502, when every user failed because a panel was unavailable  
 {  
 	"success": false,  
 	"msg": "Panel refresh failed for all users",  
 	"obj": {"failed": ["user"], "total": 1}  
+}  
+```  
+  
+```jsonc  
+// HTTP 500, when a non-panel error aborts the remaining users  
+{  
+	"success": false,  
+	"msg": "Refresh aborted",  
+	"obj": {"failed": ["user"], "aborted": "user2", "succeeded": 1, "total": 3}  
 }  
 ```  
   
@@ -288,6 +297,54 @@ Response (error):
   
 ---  
   
+### POST /api/user/update
+Description: Update selected fields for a user. Omitted fields are left unchanged.
+Authentication: header
+Body:
+```jsonc
+{
+    "user": "",            // str, internal username (required)
+    "displayname": "",     // OPTIONAL str
+    "fingerprint": "",     // OPTIONAL str, must be in cfg fingerprints
+    "limit": 0,            // OPTIONAL int >= 0, monthly GB limit (0 = unlimited)
+    "wl_limit": 0,         // OPTIONAL int >= 0, whitelist monthly GB limit
+    "time": 0              // OPTIONAL int >= 0, expiry unix timestamp (0 = unlimited)
+}
+```
+Response (success):
+```jsonc
+// HTTP 200
+{"success": true, "msg": "Updated", "obj": null}
+```
+
+---
+
+### GET /api/user/history
+Description: Daily bandwidth history for a user, same snapshots as `/webapi/history`.
+Authentication: header
+Args:
+    user: Internal username.
+    days: optional int, clamped to 1-90 (default 30).
+Response (success):
+```jsonc
+// HTTP 200
+{"success": true, "msg": null, "obj": [{"ts": 0, "up": 0, "down": 0, "wl_up": 0, "wl_down": 0}]}
+```
+
+---
+
+### GET /api/fingerprints
+Description: Allowed TLS fingerprints from config.
+Authentication: header
+Body: none
+Response (success):
+```jsonc
+// HTTP 200
+{"success": true, "msg": null, "obj": ["chrome", "firefox"]}
+```
+
+---
+
 ### GET /api/health  
 Description: Lightweight health check. Returns the standard success envelope on success.  
 Authentication: none  
@@ -313,9 +370,18 @@ Response (success):
     "success": true,  
     "msg": null,  
     "obj": {  
-        "PanelName": { } // status object per panel  
+        "PanelName": {  
+            "success": true,  
+            "msg": "",  
+            "obj": {  
+                "cpu": 0,  
+                "mem": {"current": 0, "total": 0}  
+                // remaining 3x-ui server metrics  
+            }  
+        }  
+        // or {"status": "unknown"} when that panel did not answer  
     }  
-    // or a single status object if ?name= was provided  
+    // or one 3x-ui envelope if ?name= was provided  
 }  
 ```  
 Response (error):  

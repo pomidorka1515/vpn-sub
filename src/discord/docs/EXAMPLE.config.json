@@ -3,5 +3,8 @@
     "public": {
         "token": ""
     },
-    "private": {}
+    "private": {
+        "whitelist": [],
+        "api_token": ""
+    }
 }

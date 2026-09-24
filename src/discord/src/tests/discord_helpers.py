@@ -6,7 +6,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
+import discord
+
+from admin.bot import AdminBot
+from adminapi import AdminApiClient
 from config import ConfigLike
+from host import SharedDiscordClient
 from public.bot import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
@@ -196,6 +201,18 @@ def make_web_client(handler: Any) -> tuple[WebApiClient, FakeSession]:
     return client, session
 
 
+def make_admin_client(handler: Any) -> tuple[AdminApiClient, FakeSession]:
+    session = FakeSession(handler)
+    client = AdminApiClient(
+        "http://127.0.0.1:5550",
+        "sub",
+        "adminapi",
+        "api-token",
+        session=session,  # type: ignore[arg-type]
+    )
+    return client, session
+
+
 def make_public_bot(
     tmp_path: Path,
     handler: Any,
@@ -206,10 +223,45 @@ def make_public_bot(
     store.set_lang(user_id, "en")
     store.set_token(user_id, "tok")
     session = FakeSession(handler)
+    host = SharedDiscordClient(intents=discord.Intents.none())
     bot = PublicBot(
         cast(ConfigLike, {"public": {"token": "discord-token"}}),
         LANG,
         WebApiClient("http://127.0.0.1:5550", "sub", session=session),  # type: ignore[arg-type]
         store,
+        client=host,
+        tree=host.tree,
     )
     return bot, store, session
+
+
+def make_admin_bot(
+    handler: Any,
+    *,
+    whitelist: list[int] | None = None,
+) -> tuple[AdminBot, FakeSession]:
+    session = FakeSession(handler)
+    host = SharedDiscordClient(intents=discord.Intents.none())
+    bot = AdminBot(
+        cast(
+            ConfigLike,
+            {
+                "public": {"token": "discord-token"},
+                "private": {
+                    "whitelist": whitelist if whitelist is not None else [7],
+                    "api_token": "api-token",
+                },
+            },
+        ),
+        LANG,
+        AdminApiClient(
+            "http://127.0.0.1:5550",
+            "sub",
+            "adminapi",
+            "api-token",
+            session=session,  # type: ignore[arg-type]
+        ),
+        client=host,
+        tree=host.tree,
+    )
+    return bot, session

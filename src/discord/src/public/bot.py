@@ -23,20 +23,6 @@ from .traffic import PublicTrafficMixin
 __all__ = ["PublicBot"]
 
 
-class _PublicClient(discord.Client):
-    """Client that syncs slash commands once in setup_hook, not on every ready."""
-
-    def __init__(self, owner: PublicBot, *, intents: discord.Intents) -> None:
-        super().__init__(intents=intents)
-        self._owner = owner
-
-    async def setup_hook(self) -> None:
-        try:
-            await self._owner.tree.sync()
-        except Exception:
-            self._owner.log.error("failed to sync slash commands", exc_info=True)
-
-
 class PublicBot(
     PublicCommonMixin,
     PublicLoginMixin,
@@ -52,6 +38,9 @@ class PublicBot(
         lang_cfg: ConfigLike,
         http: WebApiClient,
         sessions: SessionStore,
+        *,
+        client: discord.Client,
+        tree: app_commands.CommandTree,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -59,30 +48,12 @@ class PublicBot(
             self.lang_cfg = lang_cfg
             self.http = http
             self.sessions = sessions
-            token = self.cfg["public"]["token"]
-            if not isinstance(token, str) or not token:
-                raise RuntimeError("public discord bot token not found in discord.json")
-            self._token = token
+            self.bot = client
+            self.tree = tree
             self.TEXTS = cast(dict[str, dict[str, str]], lang_cfg["public"])
-            intents = discord.Intents.default()
-            self.bot = _PublicClient(self, intents=intents)
-            self.tree = app_commands.CommandTree(self.bot)
             self._chart_locks: dict[int, asyncio.Lock] = {}
             self._chart_busy: set[int] = set()
-            self._wire_events()
             self._wire_commands()
-
-    def _wire_events(self) -> None:
-        @self.bot.event
-        async def on_ready() -> None:
-            self.log.info("public discord bot is ready")
-
-        @self.bot.event
-        async def on_interaction(interaction: discord.Interaction) -> None:
-            if interaction.type is discord.InteractionType.component:
-                await self.dispatch_component(interaction)
-            elif interaction.type is discord.InteractionType.modal_submit:
-                await self.dispatch_modal(interaction)
 
     def _wire_commands(self) -> None:
         commands: tuple[tuple[str, Any, str], ...] = (
@@ -101,7 +72,7 @@ class PublicBot(
             ("reset", self.cmd_reset, "Reset your subscription link"),
             ("delete", self.cmd_delete, "Delete your account"),
         )
-        def bind(command_name: str, command_handler: Any):
+        def bind(command_name: str, command_handler: Any) -> Any:
             async def wrapped(interaction: discord.Interaction) -> None:
                 if self.command_requires_auth(command_name) and not self.is_logged_in(interaction.user.id):
                     await self._reply_key(interaction, "not_logged_in")
@@ -115,15 +86,7 @@ class PublicBot(
             self.tree.command(name=name, description=description)(bind(name, handler))
 
     async def start(self) -> None:
-        await self.bot.login(self._token)
-        self._runner = asyncio.create_task(self.bot.connect(reconnect=True), name="public-discord")
+        return
 
     async def stop(self) -> None:
-        runner = getattr(self, "_runner", None)
-        if self.bot.is_closed() is False:
-            await self.bot.close()
-        if runner is not None:
-            try:
-                await runner
-            except Exception:
-                self.log.error("public discord runner failed", exc_info=True)
+        return

@@ -21,23 +21,35 @@ def test_example_validates(schema: dict[str, object]) -> None:
     jsonschema.validate(example, schema)
 
 
-def test_private_may_have_extra_keys(schema: dict[str, object]) -> None:
+def test_private_rejects_extra_keys(schema: dict[str, object]) -> None:
     data: dict[str, dict[str, object]] = {
         "public": {"token": "x"},
-        "private": {"token": "nope", "whitelist": []},
+        "private": {"token": "nope", "whitelist": [], "api_token": "t"},
     }
-    jsonschema.validate(data, schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(data, schema)
+
+
+def test_private_requires_whitelist_and_api_token(schema: dict[str, object]) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"public": {"token": "x"}, "private": {}}, schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"public": {"token": "x"}, "private": {"whitelist": []}}, schema)
+    jsonschema.validate(
+        {"public": {"token": "x"}, "private": {"whitelist": [1], "api_token": "t"}},
+        schema,
+    )
 
 
 def test_public_requires_token(schema: dict[str, object]) -> None:
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate({"public": {}, "private": {}}, schema)
+        jsonschema.validate({"public": {}, "private": {"whitelist": [], "api_token": ""}}, schema)
 
 
 def test_extra_top_level_keys_fail(schema: dict[str, object]) -> None:
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(
-            {"public": {"token": ""}, "private": {}, "extra": 1},
+            {"public": {"token": ""}, "private": {"whitelist": [], "api_token": ""}, "extra": 1},
             schema,
         )
 

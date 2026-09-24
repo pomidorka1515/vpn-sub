@@ -11,7 +11,7 @@ Database-backed config, designed to run on a single small VPS.
 - Serves VLESS subscription links with custom per-user traffic/expiry info
 - Tracks bandwidth and auto-disables users who exceed quota or expire
 - Two Telegram bots: admin panel and public user-facing bot
-- Public Discord bot (admin Discord bot is still a stub); separate process, talks to WebAPI over loopback
+- Discord bots (public and admin) as a separate process; talks to Flask over loopback
 - SQLite database as a source of truth
 
 ## Core principles
@@ -33,15 +33,15 @@ Database-backed config, designed to run on a single small VPS.
 - `src/db.py` — core database logic
 - `src/api/` — Flask routes (`Api` for admin, `WebApi` for end users)
 - `src/bots.py` — Telegram `AdminBot` (management), `PublicBot` (user self-service)
-- `src/discord/` — Discord bots as a **separate process**. Not started by gunicorn or `create_application()`. Public bot is real; admin bot is a stub. See [src/discord/README.md](src/discord/README.md).
+- `src/discord/` — Discord bots as a **separate process**. Not started by gunicorn or `create_application()`. One token serves public commands and `/admin`. See [src/discord/README.md](src/discord/README.md).
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
 mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel credentials, bot tokens, etc
-# optional Discord public bot:
-cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token; leave private as {}
+# optional Discord bots (one token, public commands plus /admin):
+cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token, private.whitelist, private.api_token
 # run systemd services; explained below
 ```
 

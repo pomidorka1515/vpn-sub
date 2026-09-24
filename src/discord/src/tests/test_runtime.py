@@ -14,7 +14,7 @@ from discord_helpers import LANG_PATH
 def discord_env(tmp_path: Path) -> Iterator[Path]:
     config = tmp_path / "discord.json"
     config.write_text(
-        json.dumps({"public": {"token": ""}, "private": {}}),
+        json.dumps({"public": {"token": ""}, "private": {"whitelist": [], "api_token": "t"}}),
         encoding="utf-8",
     )
     old = {
@@ -39,6 +39,22 @@ def discord_env(tmp_path: Path) -> Iterator[Path]:
                 os.environ[key] = value
 
 
+def test_admin_api_uri_defaults_to_privapi(discord_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    del discord_env
+    monkeypatch.delenv("SUB_API_URI", raising=False)
+    from runtime import DiscordPaths
+
+    assert DiscordPaths.from_env().api_uri == "privapi"
+
+
+def test_admin_api_uri_reads_env(discord_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    del discord_env
+    monkeypatch.setenv("SUB_API_URI", "adminapi")
+    from runtime import DiscordPaths
+
+    assert DiscordPaths.from_env().api_uri == "adminapi"
+
+
 def test_empty_public_token_fails(discord_env: Path) -> None:
     del discord_env
     from runtime import create_application
@@ -51,31 +67,32 @@ def test_run_stops_when_public_connect_task_finishes(discord_env: Path) -> None:
     import asyncio
     from unittest.mock import patch
 
-    class FakePublic:
+    class FakeClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def login(self, token: str) -> None:
+            del token
+
+        async def connect(self, reconnect: bool = True) -> None:
+            del reconnect
+            raise RuntimeError("discord runner died")
+
+        def is_closed(self) -> bool:
+            return self.closed
+
+        async def close(self) -> None:
+            self.closed = True
+
+    class FakeBot:
         def __init__(self) -> None:
             self.stopped = False
-            self._runner: asyncio.Task[None] | None = None
 
         async def start(self) -> None:
-            async def boom() -> None:
-                raise RuntimeError("public runner died")
-
-            self._runner = asyncio.create_task(boom(), name="public-discord")
+            return None
 
         async def stop(self) -> None:
             self.stopped = True
-            if self._runner is not None:
-                try:
-                    await self._runner
-                except Exception:
-                    pass
-
-    class FakeAdmin:
-        async def start(self) -> None:
-            return None
-
-        async def stop(self) -> None:
-            return None
 
     class FakeHttp:
         async def start(self) -> None:
@@ -97,7 +114,9 @@ def test_run_stops_when_public_connect_task_finishes(discord_env: Path) -> None:
                 return {"token": "tok"}
             raise KeyError(key)
 
-    fake_public = FakePublic()
+    fake_client = FakeClient()
+    fake_public = FakeBot()
+    fake_admin = FakeBot()
     fake_http = FakeHttp()
     fake_sessions = FakeSessions()
     fake_cfg = FakeCfg()
@@ -112,14 +131,19 @@ def test_run_stops_when_public_connect_task_finishes(discord_env: Path) -> None:
             lang_cfg=fake_lang,  # type: ignore[arg-type]
             log_cfg=fake_log,  # type: ignore[arg-type]
             http=fake_http,  # type: ignore[arg-type]
+            admin_http=fake_http,  # type: ignore[arg-type]
             sessions=fake_sessions,  # type: ignore[arg-type]
+            client=fake_client,  # type: ignore[arg-type]
             public_bot=fake_public,  # type: ignore[arg-type]
-            admin_bot=FakeAdmin(),  # type: ignore[arg-type]
+            admin_bot=fake_admin,  # type: ignore[arg-type]
+            _token="tok",
         )
 
     with patch("runtime.create_application", fake_create):
         from runtime import _run
 
         asyncio.run(asyncio.wait_for(_run(), timeout=2))
+    assert fake_client.closed
     assert fake_public.stopped
+    assert fake_admin.stopped
 
