@@ -19,7 +19,7 @@ class ApiResult:
     ok: bool
     status: int
     msg: str | None
-    obj: Any
+    obj: object
     raw_headers: Mapping[str, str]
     body: bytes | None = None
     auth_token: str | None = None
@@ -143,7 +143,7 @@ class WebApiClient:
                         raw_headers=header_map,
                         auth_token=auth_token,
                     )
-                typed = cast(dict[str, Any], payload)
+                typed = cast(dict[str, object], payload)
                 success = bool(typed.get("success"))
                 msg_raw = typed.get("msg")
                 msg = msg_raw if isinstance(msg_raw, str) else None

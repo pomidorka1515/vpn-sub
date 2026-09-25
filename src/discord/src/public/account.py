@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Self
 
 import discord
 
@@ -12,14 +12,14 @@ __all__ = ["PublicAccountMixin"]
 class BonusModal(discord.ui.Modal):
     def __init__(self, title: str, label: str) -> None:
         super().__init__(title=title, custom_id="bonus_modal")
-        self.code: discord.ui.TextInput[Any] = discord.ui.TextInput(label=label, custom_id="code", min_length=1, max_length=64)
+        self.code: discord.ui.TextInput[Self] = discord.ui.TextInput(label=label, custom_id="code", min_length=1, max_length=64)
         self.add_item(self.code)
 
 
 class DeleteModal(discord.ui.Modal):
     def __init__(self, title: str, label: str) -> None:
         super().__init__(title=title, custom_id="delete_modal")
-        self.password: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=label,
             custom_id="current_password",
             min_length=1,

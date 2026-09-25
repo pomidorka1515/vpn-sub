@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, cast
-
+from collections.abc import Callable, Awaitable, Coroutine
 import discord
 from discord import app_commands
+from discord import Client, Interaction
 
 from config import ConfigLike
 from loggers import Logger
@@ -22,6 +23,7 @@ from .traffic import PublicTrafficMixin
 
 __all__ = ["PublicBot"]
 
+type Coro[T = None] = Coroutine[Any, Any, T]
 
 class PublicBot(
     PublicCommonMixin,
@@ -56,7 +58,7 @@ class PublicBot(
             self._wire_commands()
 
     def _wire_commands(self) -> None:
-        commands: tuple[tuple[str, Any, str], ...] = (
+        commands: tuple[tuple[str, Callable[[Interaction[Client]], Awaitable[None]], str], ...] = (
             ("start", self.cmd_start, "Open the language gate or main menu"),
             ("menu", self.cmd_start, "Open the language gate or main menu"),
             ("login", self.cmd_login, "Log in with username and password"),
@@ -72,7 +74,10 @@ class PublicBot(
             ("reset", self.cmd_reset, "Reset your subscription link"),
             ("delete", self.cmd_delete, "Delete your account"),
         )
-        def bind(command_name: str, command_handler: Any) -> Any:
+        def bind(
+            command_name: str, 
+            command_handler: Callable[[discord.Interaction[Client]], Coro]
+        ) -> Callable[[discord.Interaction[Client]], Coro]:
             async def wrapped(interaction: discord.Interaction) -> None:
                 if self.command_requires_auth(command_name) and not self.is_logged_in(interaction.user.id):
                     await self._reply_key(interaction, "not_logged_in")

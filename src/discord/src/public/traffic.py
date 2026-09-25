@@ -66,7 +66,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
                 if not isinstance(raw_obj, dict):
                     await self._reply_key(interaction, "bad_response")
                     return
-                obj = cast(dict[str, Any], raw_obj)
+                obj = cast(dict[str, object], raw_obj)
                 bandwidth_obj = obj.get("bandwidth")
                 if isinstance(bandwidth_obj, dict):
                     bandwidth = cast(dict[str, Any], bandwidth_obj)

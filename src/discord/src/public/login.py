@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Self, cast
 
 import discord
 
@@ -12,13 +12,13 @@ __all__ = ["PublicLoginMixin"]
 class LoginModal(discord.ui.Modal):
     def __init__(self, title: str, username_label: str, password_label: str) -> None:
         super().__init__(title=title, custom_id="login_modal")
-        self.username: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=username_label,
             custom_id="username",
             min_length=1,
             max_length=32,
         )
-        self.password: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=password_label,
             custom_id="password",
             min_length=1,
@@ -39,25 +39,25 @@ class RegisterModal(discord.ui.Modal):
         name_label: str,
     ) -> None:
         super().__init__(title=title, custom_id="register_modal")
-        self.username: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=username_label,
             custom_id="username",
             min_length=1,
             max_length=32,
         )
-        self.password: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=password_label,
             custom_id="password",
             min_length=1,
             max_length=128,
         )
-        self.code: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.code: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=code_label,
             custom_id="code",
             min_length=1,
             max_length=64,
         )
-        self.name: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.name: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=name_label,
             custom_id="name",
             min_length=1,
@@ -152,7 +152,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         if not isinstance(obj, dict):
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, Any], obj)
+        obj = cast(dict[str, object], obj)
         if not obj.get("valid"):
             await self._reply_key(interaction, "length_username", ln=32)
             return

@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, Callable, Awaitable
 
 import discord
 
@@ -22,6 +22,11 @@ EXAMPLE_PATH = DISCORD_ROOT / "docs" / "EXAMPLE.config.json"
 LANG_PATH = DISCORD_ROOT / "lang.jsonc"
 LANG = cast(ConfigLike, json.loads(LANG_PATH.read_text(encoding="utf-8")))
 
+
+type Handler = Callable[[
+    str, str,
+    Mapping[str, object] | None, Mapping[str, str | int] | None, Mapping[str, str] | None
+], FakeResponse]
 
 class FakeHeaders(dict[str, str]):
     def getall(self, key: str, default: list[str] | None = None) -> list[str]:
@@ -68,7 +73,10 @@ class FakeResponse:
 class FakeSession:
     closed = False
 
-    def __init__(self, handler: Any) -> None:
+    def __init__(
+        self, 
+        handler: Handler
+    ) -> None:
         self.handler = handler
         self.calls: list[dict[str, object]] = []
 
@@ -90,12 +98,12 @@ class FakeSession:
             }
         )
         result = self.handler(method, url, json, params, headers)
-        if not isinstance(result, FakeResponse):
+        if not isinstance(result, FakeResponse): # type: ignore
             raise TypeError("handler must return FakeResponse")
         return result
 
 
-class FakeUser:
+class FakeUser: 
     def __init__(self, user_id: int) -> None:
         self.id = user_id
 
@@ -154,7 +162,7 @@ def json_ok(obj: object = None, msg: str = "ok", status: int = 200) -> FakeRespo
     return FakeResponse(status, {}, {"success": True, "msg": msg, "obj": obj})
 
 
-def run(coro: Any) -> Any:
+def run[T: Awaitable[Any]](coro: T) -> T:
     return asyncio.run(coro)
 
 
@@ -191,7 +199,7 @@ def modal_data(custom_id: str, fields: Mapping[str, str]) -> dict[str, object]:
     }
 
 
-def make_web_client(handler: Any) -> tuple[WebApiClient, FakeSession]:
+def make_web_client(handler: Handler) -> tuple[WebApiClient, FakeSession]:
     session = FakeSession(handler)
     client = WebApiClient(
         "http://127.0.0.1:5550",
@@ -201,7 +209,7 @@ def make_web_client(handler: Any) -> tuple[WebApiClient, FakeSession]:
     return client, session
 
 
-def make_admin_client(handler: Any) -> tuple[AdminApiClient, FakeSession]:
+def make_admin_client(handler: Handler) -> tuple[AdminApiClient, FakeSession]:
     session = FakeSession(handler)
     client = AdminApiClient(
         "http://127.0.0.1:5550",
@@ -215,7 +223,7 @@ def make_admin_client(handler: Any) -> tuple[AdminApiClient, FakeSession]:
 
 def make_public_bot(
     tmp_path: Path,
-    handler: Any,
+    handler: Handler,
     *,
     user_id: int = 7,
 ) -> tuple[PublicBot, SessionStore, FakeSession]:
@@ -236,7 +244,7 @@ def make_public_bot(
 
 
 def make_admin_bot(
-    handler: Any,
+    handler: Handler,
     *,
     whitelist: list[int] | None = None,
 ) -> tuple[AdminBot, FakeSession]:

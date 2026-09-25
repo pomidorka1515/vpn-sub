@@ -90,7 +90,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not isinstance(raw_obj, dict):
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, Any], raw_obj)
+        obj = cast(dict[str, object], raw_obj)
         lang = self.get_lang(uid)
         text = self._info_text(lang, obj)
         if text:
@@ -114,7 +114,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not isinstance(raw_obj, dict):
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, Any], raw_obj)
+        obj = cast(dict[str, object], raw_obj)
         link = str(obj.get("link") or "")
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]

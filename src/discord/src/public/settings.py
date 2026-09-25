@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Self, cast
 
 import discord
 
@@ -12,15 +12,15 @@ __all__ = ["PublicSettingsMixin"]
 class NameModal(discord.ui.Modal):
     def __init__(self, title: str, label: str) -> None:
         super().__init__(title=title, custom_id="settings_name_modal")
-        self.name: discord.ui.TextInput[Any] = discord.ui.TextInput(label=label, custom_id="name", min_length=1, max_length=16)
+        self.name: discord.ui.TextInput[Self] = discord.ui.TextInput(label=label, custom_id="name", min_length=1, max_length=16)
         self.add_item(self.name)
 
 
 class LoginChangeModal(discord.ui.Modal):
     def __init__(self, title: str, login_label: str, password_label: str) -> None:
         super().__init__(title=title, custom_id="settings_login_modal")
-        self.username: discord.ui.TextInput[Any] = discord.ui.TextInput(label=login_label, custom_id="username", min_length=1, max_length=32)
-        self.current_password: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(label=login_label, custom_id="username", min_length=1, max_length=32)
+        self.current_password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=password_label,
             custom_id="current_password",
             min_length=1,
@@ -33,8 +33,8 @@ class LoginChangeModal(discord.ui.Modal):
 class PasswordChangeModal(discord.ui.Modal):
     def __init__(self, title: str, new_label: str, current_label: str) -> None:
         super().__init__(title=title, custom_id="settings_pass_modal")
-        self.password: discord.ui.TextInput[Any] = discord.ui.TextInput(label=new_label, custom_id="password", min_length=1, max_length=128)
-        self.current_password: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(label=new_label, custom_id="password", min_length=1, max_length=128)
+        self.current_password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=current_label,
             custom_id="current_password",
             min_length=1,
@@ -114,7 +114,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "bad_response")
             return
         view = discord.ui.View(timeout=None)
-        select: discord.ui.Select[Any] = discord.ui.Select(
+        select: discord.ui.Select[discord.ui.View] = discord.ui.Select(
             custom_id="fp_select",
             placeholder=self.TEXTS[self.get_lang(interaction.user.id)].get("settings_fp_prompt", "Fingerprint"),
             options=options[:25],
@@ -168,7 +168,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not isinstance(obj, dict):
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, Any], obj)
+        obj = cast(dict[str, object], obj)
         if not obj.get("valid"):
             await self._reply_key(interaction, "length_username", ln=32)
             return

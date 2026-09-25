@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, cast
+from typing import Mapping, cast
 
 import discord
 
@@ -51,14 +51,14 @@ _AUTH_COMMANDS = (
 
 class PublicRoutingMixin(PublicFeatureMixin):
     def _custom_id(self, interaction: discord.Interaction) -> str:
-        data = cast(Mapping[str, Any] | None, interaction.data)
+        data = cast(Mapping[str, object] | None, interaction.data)
         if not data:
             return ""
         custom_id = data.get("custom_id")
         return custom_id if isinstance(custom_id, str) else ""
 
     def _select_value(self, interaction: discord.Interaction) -> str | None:
-        data = cast(Mapping[str, Any] | None, interaction.data)
+        data = cast(Mapping[str, object] | None, interaction.data)
         if not data:
             return None
         values_raw = data.get("values")
