@@ -1,18 +1,40 @@
 # vpn-sub
 
-VPN subscription management service. Flask + Telegram bots + Discord bots + 3x-ui panel glue.
-Flask and Telegram are fully synchronous. Discord is a separate asyncio process.
+VPN subscription management service. Flask + Telegram bots + Discord bots + 3x-ui panel glue.  
+Flask and Telegram are fully synchronous. Discord is a separate asyncio process.  
 Database-backed config, designed to run on a single small VPS.
 
 ## What it does
 
-- Manages users across multiple [3x-ui](https://github.com/MHSanaei/3x-ui) panels
-  from one place
-- Serves VLESS subscription links with custom per-user traffic/expiry info
+- Manages users across multiple [3x-ui](https://github.com/MHSanaei/3x-ui) panels from one place
+- Serves VLESS subscription links with custom per-user traffic and expiry info
 - Tracks bandwidth and auto-disables users who exceed quota or expire
 - Two Telegram bots: admin panel and public user-facing bot
 - Discord bots (public and admin) as a separate process; talks to Flask over loopback
 - SQLite database as a source of truth
+
+## Key features
+
+- Multi-panel user lifecycle: create, update, reset, delete, with panel writes rolled back if the database commit fails
+- Invite codes and bonus codes (days, monthly GB, whitelist GB; one-shot or reusable)
+- Optional dedicated whitelist panel, separate from the main traffic quota
+- Subscription endpoint at `/{uri}`: VLESS links, JSON profiles, QR, language and fingerprint selection
+- Public web dashboard (`res/`) and WebAPI: register, login, stats, history, settings, account delete
+- Admin API (token header): users, codes, panel health, audit log, snapshots, leaderboard
+- Telegram admin bot (whitelist) and public bot (link account, traffic, subscription, settings)
+- Discord as a second process, one token, public commands plus `/admin`. See [src/discord/README.md](src/discord/README.md)
+- Bandwidth watcher (`BWatch`): quota enforcement, expiry, panel health alerts, daily bandwidth and state snapshots
+- Argon2id passwords, JSONL audit trail, schema-validated config, scheduled config backups
+
+## Limitations
+
+- Single VPS, Linux only. `Subscription` refuses to import on anything else.
+- One gunicorn process. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`data/.primary.lock`) elects one primary; it is not a multi-node design.
+- Not highly available. Panel, database, and bots all live on the same box. A dead panel stays dead until you reissue the token and update config.
+- 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`). 2.x needs the one-time reconcile below. No other panel software.
+- Discord does not share the process. It only talks to Flask over loopback. Start Flask first. Killing one does not stop the other.
+- Personal project. Untagged `main` is rolling development. Tests are for this repo, not a supported public suite.
+- Direct binds are blocked when `REQUIRE_PROXY=1`. TLS, rate limits, and public exposure belong on the reverse proxy.
 
 ## Core principles
 
@@ -26,24 +48,32 @@ Database-backed config, designed to run on a single small VPS.
 
 ## Architecture
 
+Startup order is fixed and handled by `create_application()`: configs, database, panels, `Subscription`, then `BWatch` and Telegram bots. Discord is not in that list.
+
 - `src/app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, Telegram bots, Flask app) and wires everything together
 - `src/wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application and registers shutdown at exit
-- `src/core.py` — `Subscription`, `BWatch`, `XUiSession` (the heart)
+- `src/core/` — `Subscription` and the user, code, panel, bandwidth, and audit services
+- `src/bwatch.py` — `BWatch`: quota, expiry, panel health, snapshots
+- `src/session.py` — `XUiSession` panel HTTP client
 - `src/config/` — atomic JSON config with thread + cross-process locking
-- `src/db.py` — core database logic
+- `src/db/` — SQLite. Users, codes, quotas, and bandwidth live here. `config.json` is deployment and presentation only
 - `src/api/` — Flask routes (`Api` for admin, `WebApi` for end users)
-- `src/bots.py` — Telegram `AdminBot` (management), `PublicBot` (user self-service)
+- `src/bots/` — Telegram `AdminBot` (management), `PublicBot` (user self-service)
 - `src/discord/` — Discord bots as a **separate process**. Not started by gunicorn or `create_application()`. One token serves public commands and `/admin`. See [src/discord/README.md](src/discord/README.md).
+- `res/` — admin and user HTML. `docs/` — [public API](docs/API.md), [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
 
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
 mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel credentials, bot tokens, etc
 # optional Discord bots (one token, public commands plus /admin):
 cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token, private.whitelist, private.api_token
 # run systemd services; explained below
 ```
+
+Always use `venv/bin/...`, never system Python. Runtime state lives in `data/` and is gitignored.
 
 ### 3x-ui panel auth
 
@@ -127,6 +157,8 @@ WantedBy=multi-user.target
 anything at import time, so `venv/bin/python -m src.wsgi` also works for a quick
 local run.
 
+Do not pass `-w` or `--workers`. The config file already forces one worker. A second process would start another `BWatch` and another pair of Telegram bots.
+
 ### Nginx location block
 ```
 location /sub {
@@ -150,6 +182,8 @@ location /sub {
 ### Example Config
 **See [example config](docs/EXAMPLE.config.json)**
 
+`config.json` is validated against `config.schema.json` on load and on every commit. Remote `$schema` URLs are rejected. Put panel tokens, bot tokens, and `api_token` here; do not commit the filled file.
+
 ### Seemingly useless casts to protocols
 All protocols in `src/custom_types.py` are fully compatible with their runtime classes.
 However, mypy cannot reliably validate that: the overloads are too complex.
@@ -165,7 +199,17 @@ Override this at your own risk: it's always best to leave TLS, etc. to reverse p
 - Meant to run under gunicorn behind nginx (in front of the service, rate-limiting and TLS)
 - Systemd unit recommended for persistence
 - Startup order matters: configs → DB → panels → Subscription → BWatch + Telegram bots (handled automatically by `create_application()`)
-- Discord is a second systemd unit. Start Flask first so `{SUB_HTTP_URL}/{SUB_URI}/webapi` exists. Killing gunicorn does not kill Discord, and vice versa.
+- Route every user mutation through `Subscription`. The admin API, WebAPI, and Telegram bots already do. Discord mutates users only by calling those HTTP APIs.
+
+## Development
+
+```bash
+venv/bin/pytest
+venv/bin/mypy && venv/bin/pyright
+venv/bin/python -m src.wsgi   # local run; production is the systemd unit above
+```
+
+HTTP contracts: [docs/API.md](docs/API.md) (cookie `auth_token`) and [docs/API_ADMIN.md](docs/API_ADMIN.md) (`Authorization` header).
 
 ## Status
 Personal project. Works in production for my small user base.
