@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Awaitable
 from typing import Any, Mapping, cast
 
 import discord
@@ -78,7 +78,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
             for route, handler_name, is_prefix in self.ROUTES:
                 if data.startswith(route) if is_prefix else data == route:
                     handler = cast(
-                        Callable[[str, discord.Interaction], Any],
+                        Callable[[str, discord.Interaction], Awaitable[None]],
                         getattr(self, handler_name),
                     )
                     await handler(data, interaction)
@@ -95,7 +95,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
         if handler_name is None:
             return
         try:
-            handler = cast(Callable[[discord.Interaction], Any], getattr(self, handler_name))
+            handler = cast(Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name))
             await handler(interaction)
         except Exception:
             self.log.error("admin modal dispatch failed", exc_info=True)

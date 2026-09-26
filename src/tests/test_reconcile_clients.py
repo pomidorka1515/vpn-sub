@@ -190,7 +190,7 @@ def test_main_is_dry_run_by_default(
 
 
 def test_main_rejects_unknown_panel_key(
-    tmp_path: Path, database: Database, db_path: Path, monkeypatch: Any,
+    tmp_path: Path, database: Database, db_path: Path, monkeypatch: object,
 ) -> None:
     create_alice(database)
     code = rc.main([

@@ -30,7 +30,7 @@ class RecordingTransport:
         self.health_payload: dict[str, Any] = {"success": True, "msg": "", "obj": []}
         self.health_error: BaseException | None = None
 
-    def request(self, method: str, url: str, **kwargs: Any) -> Response:
+    def request(self, method: str, url: str, **kwargs: object) -> Response:
         self.calls.append((method, url, kwargs))
         if url.endswith("panel/api/inbounds/list"):
             if self.health_error is not None:
@@ -41,7 +41,7 @@ class RecordingTransport:
         return json_http(self.request_payload, self.request_status)
 
 
-def session_kwargs(**overrides: Any) -> dict[str, Any]:
+def session_kwargs(**overrides: object) -> dict[str, Any]:
     values: dict[str, Any] = {
         "name": "local",
         "address": "127.0.0.1",

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urljoin
 
 import aiohttp
@@ -78,7 +78,7 @@ class AdminApiClient:
                         obj=None,
                         raw_headers=header_map,
                     )
-                typed = cast(dict[str, Any], payload)
+                typed = cast(dict[str, object], payload)
                 success = bool(typed.get("success"))
                 msg_raw = typed.get("msg")
                 msg = msg_raw if isinstance(msg_raw, str) else None

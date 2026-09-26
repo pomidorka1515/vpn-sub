@@ -55,7 +55,7 @@ class BWatch:
                 "state": 0.0,
             }
 
-            _threads: tuple[tuple[Callable[..., object], str], ...] = (
+            _threads: tuple[tuple[Callable[[], None], str], ...] = (
                 (self._every_120s, "Quota & Notifs"),
                 (self._every_2h, "Date check & reconcile"),
                 (self._every_15s, "Bandwidth"),

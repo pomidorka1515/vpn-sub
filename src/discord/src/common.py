@@ -80,18 +80,18 @@ class DiscordIOMixin(PublicFeatureMixin):
 
     def modal_values(self, interaction: discord.Interaction) -> dict[str, str]:
         out: dict[str, str] = {}
-        data = cast(Mapping[str, Any] | None, interaction.data)
+        data = cast(Mapping[str, object] | None, interaction.data)
         if not data:
             return out
         rows_raw = data.get("components")
         if not isinstance(rows_raw, list):
             return out
-        rows = cast(list[dict[str, Any]], rows_raw)
+        rows = cast(list[dict[str, object]], rows_raw)
         for row in rows:
             items_raw = row.get("components")
             if not isinstance(items_raw, list):
                 continue
-            items = cast(list[dict[str, Any]], items_raw)
+            items = cast(list[dict[str, object]], items_raw)
             for item in items:
                 cid = item.get("custom_id")
                 if isinstance(cid, str):

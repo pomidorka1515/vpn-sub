@@ -166,7 +166,7 @@ def test_chart_uses_history_and_stats(public_bot_factory: PublicBotFactory) -> N
     bot, _store, session = public_bot_factory(handler)
     interaction = FakeInteraction()
 
-    async def fake_to_thread(func: Any, *args: object, **kwargs: object) -> object:
+    async def fake_to_thread(func: Callable[..., object], *args: object, **kwargs: object) -> None:
         del func, args, kwargs
         return None
 
@@ -401,7 +401,7 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
     first = FakeInteraction()
     second = FakeInteraction()
 
-    async def fake_to_thread(func: Any, *args: object, **kwargs: object) -> object:
+    async def fake_to_thread(func: Callable[..., object], *args: object, **kwargs: object) -> None:
         del func, args, kwargs
         entered.set()
         await release.wait()

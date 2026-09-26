@@ -5,7 +5,7 @@ import os
 import signal
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import discord
 
@@ -185,7 +185,7 @@ async def _run() -> None:
     loop = asyncio.get_running_loop()
     stopping = asyncio.Event()
 
-    def _request_stop(*_args: Any) -> None:
+    def _request_stop() -> None:
         stopping.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -197,7 +197,7 @@ async def _run() -> None:
     await runtime.start()
     try:
         runner = runtime._runner
-        waiters: list[asyncio.Future[Any]] = [asyncio.ensure_future(stopping.wait())]
+        waiters: list[asyncio.Task[bool] | asyncio.Task[None]] = [asyncio.ensure_future(stopping.wait())]
         if isinstance(runner, asyncio.Task):
             waiters.append(runner)
         done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)

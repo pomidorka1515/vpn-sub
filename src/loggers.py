@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any, TYPE_CHECKING
 from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
-
+from gunicorn.config import Config
 from gunicorn.glogging import Logger as GunicornBaseLogger
 if TYPE_CHECKING:
     from config import LinesConfigLike # just to be safe
@@ -191,7 +191,7 @@ def _client_address(environ: MutableMapping[str, object]) -> str:
 class GunicornLogger(GunicornBaseLogger):
     """Compact, privacy-preserving access logs for the systemd journal."""
 
-    def setup(self, cfg: Any) -> None:
+    def setup(self, cfg: Config) -> None:
         super().setup(cfg)
         class AccessFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:

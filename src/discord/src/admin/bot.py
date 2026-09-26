@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any, cast
 
 import discord
 from discord import app_commands
@@ -46,8 +45,8 @@ class AdminBot(
             self.http = http
             self.bot = client
             self.tree = tree
-            whitelist = cfg["private"]["whitelist"]
-            self.admin_uids = [int(item) for item in cast(list[Any], whitelist)]
+            whitelist: list[int] = cfg["private"]["whitelist"]
+            self.admin_uids = [int(item) for item in whitelist]
             self._pending_codes: dict[int, dict[str, str | int | bool]] = {}
             self._pending_edits: dict[int, dict[str, str]] = {}
             self._pagination_state: dict[int, dict[str, int]] = {}

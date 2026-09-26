@@ -16,7 +16,7 @@ def _as_loads(value: object) -> list[object]:
 
 
 class AdminPanelsMixin(AdminFeatureMixin):
-    def _metrics(self, payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    def _metrics(self, payload: Mapping[str, object]) -> dict[str, Any] | None:
         if payload.get("status") == "unknown":
             return None
         # GET /api/panel/status stores the 3x-ui envelope in obj:
@@ -37,7 +37,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
             return obj_map(cast(object, payload))
         return None
 
-    def _panel_text(self, name: str, payload: Mapping[str, Any]) -> str:
+    def _panel_text(self, name: str, payload: Mapping[str, object]) -> str:
         obj = self._metrics(payload)
         if obj is None:
             return f"❌ Статус панели {name} неизвестен"
