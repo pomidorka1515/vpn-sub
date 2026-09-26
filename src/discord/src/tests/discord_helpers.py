@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast, Callable, Awaitable
+from typing import Any, cast, Callable, Coroutine
 
 import discord
 
@@ -23,10 +23,7 @@ LANG_PATH = DISCORD_ROOT / "lang.jsonc"
 LANG = cast(ConfigLike, json.loads(LANG_PATH.read_text(encoding="utf-8")))
 
 
-type Handler = Callable[[
-    str, str,
-    Mapping[str, object] | None, Mapping[str, str | int] | None, Mapping[str, str] | None
-], FakeResponse]
+type Handler = Callable[..., FakeResponse]
 
 class FakeHeaders(dict[str, str]):
     def getall(self, key: str, default: list[str] | None = None) -> list[str]:
@@ -97,10 +94,7 @@ class FakeSession:
                 "headers": dict(headers) if headers is not None else None,
             }
         )
-        result = self.handler(method, url, json, params, headers)
-        if not isinstance(result, FakeResponse): # type: ignore
-            raise TypeError("handler must return FakeResponse")
-        return result
+        return self.handler(method, url, json, params, headers)
 
 
 class FakeUser: 
@@ -162,7 +156,7 @@ def json_ok(obj: object = None, msg: str = "ok", status: int = 200) -> FakeRespo
     return FakeResponse(status, {}, {"success": True, "msg": msg, "obj": obj})
 
 
-def run[T: Awaitable[Any]](coro: T) -> T:
+def run[T](coro: Coroutine[Any, Any, T]) -> T:
     return asyncio.run(coro)
 
 

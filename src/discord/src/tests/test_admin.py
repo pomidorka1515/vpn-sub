@@ -14,7 +14,7 @@ def _ok(*args: object) -> FakeResponse:
 def test_non_whitelist_admin_does_not_call_api() -> None:
     calls: list[str] = []
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, json, params, headers
         calls.append(url)
         return json_ok()
@@ -47,7 +47,7 @@ def test_whitelist_admin_renders_main_menu() -> None:
 
 
 def test_list_users_button_uses_admin_api() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, json, params
         assert headers == {"Authorization": "api-token"}
         assert url.endswith("/api/user/list")
@@ -98,7 +98,7 @@ def test_panel_status_uses_admin_api() -> None:
         }
     }
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/api/panel/status")
         return json_ok(payload)
@@ -112,7 +112,7 @@ def test_panel_status_uses_admin_api() -> None:
 
 
 def test_add_user_modal_posts_admin_api() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del params, headers
         assert method == "POST"
         assert url.endswith("/api/user/add")
@@ -137,7 +137,7 @@ def test_add_user_modal_posts_admin_api() -> None:
 def test_permanent_code_posts_unlimited_uses() -> None:
     posted: list[object] = []
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, params, headers
         assert url.endswith("/api/code/add")
         posted.append(json)
@@ -160,7 +160,7 @@ def test_permanent_code_posts_unlimited_uses() -> None:
 
 
 def test_refresh_abort_reports_counts() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/api/user/refresh")
         return FakeResponse(
@@ -229,7 +229,7 @@ def test_code_type_keeps_name_and_type() -> None:
 def test_edit_modals_open_before_user_info() -> None:
     calls: list[str] = []
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, json, params, headers
         calls.append(url)
         return json_ok(stats_obj())
@@ -247,7 +247,7 @@ def test_edit_modals_open_before_user_info() -> None:
 def test_leaderboard_text_uses_discord_limit() -> None:
     rows = [{"username": f"user-{index:03d}", "amount": 2_000_000_000} for index in range(40)]
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/api/leaderboard")
         return json_ok(rows)

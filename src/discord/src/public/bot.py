@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, cast
-from collections.abc import Callable, Awaitable, Coroutine
+from collections.abc import Callable, Coroutine
 import discord
 from discord import app_commands
 from discord import Client, Interaction
@@ -58,7 +58,7 @@ class PublicBot(
             self._wire_commands()
 
     def _wire_commands(self) -> None:
-        commands: tuple[tuple[str, Callable[[Interaction[Client]], Awaitable[None]], str], ...] = (
+        commands: tuple[tuple[str, Callable[[Interaction[Client]], Coro], str], ...] = (
             ("start", self.cmd_start, "Open the language gate or main menu"),
             ("menu", self.cmd_start, "Open the language gate or main menu"),
             ("login", self.cmd_login, "Log in with username and password"),

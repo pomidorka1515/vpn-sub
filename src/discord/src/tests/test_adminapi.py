@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from discord_helpers import json_ok, make_admin_client, run
+from discord_helpers import FakeResponse, json_ok, make_admin_client, run
 
 
 def test_admin_client_sends_authorization_header() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del method, json, params
         assert url.endswith("/api/user/list")
         assert headers == {"Authorization": "api-token"}
@@ -18,7 +18,7 @@ def test_admin_client_sends_authorization_header() -> None:
 
 
 def test_admin_client_user_update_and_history() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> object:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
         del headers
         if url.endswith("/api/user/update"):
             assert method == "POST"
@@ -34,4 +34,6 @@ def test_admin_client_user_update_and_history() -> None:
     assert run(client.update_user("alice", limit=12)).ok
     history = run(client.history("alice", 14))
     assert history.ok
-    assert history.obj[0]["up"] == 1
+    rows = history.obj
+    assert isinstance(rows, list)
+    assert rows[0]["up"] == 1
