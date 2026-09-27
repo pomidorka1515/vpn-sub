@@ -452,18 +452,7 @@ body {
     <span class="topbar-name">Admin Panel</span>
   </div>
   <div class="topbar-right">
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme">
-      <svg id="themeIconDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-      </svg>
-      <svg id="themeIconLight" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
-        <circle cx="12" cy="12" r="5"/>
-        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-      </svg>
-    </button>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme"></button>
     <div class="lang-toggle">
       <button class="lang-btn" onclick="setLang('en')">EN</button>
       <button class="lang-btn" onclick="setLang('ru')">RU</button>
@@ -967,7 +956,6 @@ const L = {
 };
 
 let lang = localStorage.getItem('admin_lang') || 'en';
-let theme = localStorage.getItem('theme') || 'dark';
 let baseUrl = '';
 let apiToken = '';
 let authBlocked = false;
@@ -1096,7 +1084,7 @@ function hideUserDetail() {
 
 async function doResetUser() {
   if (!selectedUser) return;
-  if (!await confirmDialog(t('confirm_reset_user'))) return;
+  if (!await confirmDialog(t('confirm_reset_user'), t('confirm'), confirmOpts())) return;
   const res = await api('POST', '/api/user/reset', { user: selectedUser });
   const result = document.getElementById('userDetailResult');
   if (res && res.success) {
@@ -1110,7 +1098,7 @@ async function doResetUser() {
 }
 
 async function deleteUser(username) {
-  if (!await confirmDialog(t('confirm_delete_user'))) return;
+  if (!await confirmDialog(t('confirm_delete_user'), t('confirm'), confirmOpts())) return;
   const res = await api('POST', '/api/user/delete', { user: username });
   if (res && res.success) {
     toast(t('deleted'), 'success');
@@ -1190,12 +1178,6 @@ async function doAddUser() {
   }
 }
 
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-
 async function loadCodes() {
   const list = document.getElementById('codeList');
   list.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
@@ -1267,7 +1249,7 @@ function copyCode(code) {
 }
 
 async function deleteCode(code) {
-  if (!await confirmDialog(t('confirm_delete_code'))) return;
+  if (!await confirmDialog(t('confirm_delete_code'), t('confirm'), confirmOpts())) return;
   const res = await api('POST', '/api/code/delete', { code });
   if (res && res.success) {
     toast(t('deleted'), 'success');
@@ -1711,18 +1693,6 @@ function renderSnapshots(snaps) {
 
 
 
-function fmtUptime(seconds) {
-  if (seconds == null || isNaN(seconds)) return 'N/A';
-  seconds = Math.floor(seconds);
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  return `${m}m ${s}s`;
-}
-
 async function loadOnlineUsers() {
   const keyed = document.getElementById('onlineKeyed').checked;
   const path = keyed ? '/api/user/onlines?keyed=1' : '/api/user/onlines';
@@ -1871,7 +1841,7 @@ async function loadOperationsStatus() {
 }
 
 async function resolveRollbackMarker(kind, user) {
-  if (!await confirmDialog(t('confirm_resolve_rollback'))) return;
+  if (!await confirmDialog(t('confirm_resolve_rollback'), t('confirm'), confirmOpts())) return;
   const res = await api('POST', '/api/operations/rollback/resolve', { kind, user });
   if (res && res.success) {
     toast(t('resolved'), 'success');
@@ -1941,38 +1911,7 @@ async function fetchLeaderboard() {
   `;
 }
 
-function confirmDialog(message, title) {
-  return new Promise(resolve => {
-    const overlay = document.getElementById('modalOverlay');
-    const okBtn = document.getElementById('modalOk');
-    const cancelBtn = document.getElementById('modalCancel');
-    const input = document.getElementById('modalInput');
-    document.getElementById('modalTitle').textContent = title || t('confirm');
-    document.getElementById('modalMsg').textContent = message;
-    input.style.display = 'none';
-
-    const close = (val) => {
-      overlay.classList.remove('show');
-      okBtn.onclick = null;
-      cancelBtn.onclick = null;
-      overlay.onclick = null;
-      document.removeEventListener('keydown', onKey);
-      resolve(val);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') close(false);
-      else if (e.key === 'Enter') close(true);
-    };
-    okBtn.textContent = t('confirm');
-    cancelBtn.textContent = t('cancel');
-    okBtn.onclick = () => close(true);
-    cancelBtn.onclick = () => close(false);
-    overlay.onclick = (e) => { if (e.target === overlay) close(false); };
-    document.addEventListener('keydown', onKey);
-    overlay.classList.add('show');
-    cancelBtn.focus();
-  });
-}
+const confirmOpts = () => ({ okText: t('confirm'), cancelText: t('cancel') });
 
 applyTheme();
 renderLang();

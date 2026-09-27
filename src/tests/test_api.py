@@ -231,7 +231,7 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert b"BASE+'/history'" in panel.data
     history = client.get("/custom/history")
     assert history.status_code == 200
-    assert b"const BASE_PATH = '/custom';" in history.data
+    assert b"const BASE = '/custom';" in history.data
 
 
 def test_login_uses_isolated_auth_token(web_api: tuple[Flask, Database]) -> None:
