@@ -374,11 +374,34 @@ Response (error):
   
 ---  
   
-### GET /api/ui  
+## Admin UI
+
+Pages are mounted on the service URI, not under the admin API prefix. Both require HTTP Basic (`api_admin_ui_auth` user and password from config). The browser caches those credentials and resends them; the API token is never stored in `localStorage`.
+
+### GET /{uri}/admin  
 Description: Admin HTML UI.  
-Authentication: HTTP Basic (`api_admin_ui_auth` user and password from config)  
+Authentication: HTTP Basic  
 Body: none  
 Response (success): HTML document (`admin.html`).  
+Response (error): HTTP 401 with `WWW-Authenticate: Basic realm="Admin UI"`.
+
+### GET /{uri}/admin/token  
+Description: Bootstrap the admin UI. Returns the admin API token and the already-computed API root so the page does not guess paths. Token and `api_root` stay in memory only.  
+Authentication: HTTP Basic  
+Body: none  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{  
+	"success": true,  
+	"msg": null,  
+	"obj": {  
+		"token": "admin-api-token",  
+		"api_root": "/sub/privapi" // or "/sub" when api_uri is empty  
+	}  
+}  
+```  
+Response (error): HTTP 401 with `WWW-Authenticate: Basic realm="Admin UI"`. On 401 the UI shows a reload-to-re-auth toast and blocks further API calls.  
   
 ---  
   

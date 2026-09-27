@@ -43,8 +43,6 @@ class Api(BaseApi):
         
         Route('GET', '/api/logs/audit', 'audit'),
 
-        Route('GET', '/api/ui', 'admin_ui'),
-        
         Route('GET', '/api/health', 'health'),
         Route('GET', '/api/operations/status', 'operation_status'),
         Route('POST', '/api/operations/rollback/resolve', 'operation_rollback_resolve'),
@@ -62,6 +60,13 @@ class Api(BaseApi):
         self.token = cfg['api_token']
         self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri)
+
+    def reg_handles(self) -> None:
+        prefix = '/' + '/'.join(p.strip('/ ') for p in (self.cfg['uri'],) if p and p.strip('/ '))
+        for path, handler in (('/admin', 'admin_ui'), ('/admin/token', 'admin_token')):
+            func = getattr(type(self), handler).__get__(self, type(self))
+            url = '/' + '/'.join(p.strip('/') for p in (prefix, path) if p.strip('/'))
+            self.app.add_url_rule(url, handler, func, methods=['GET'])
 
     @requires_admin_auth
     def user_list(self) -> ResponseType: 
@@ -432,6 +437,10 @@ class Api(BaseApi):
     @requires_basic_admin_auth
     def admin_ui(self) -> ResponseType:
         return send_file(RES_DIR / 'admin.html', etag=False)
+
+    @requires_basic_admin_auth
+    def admin_token(self) -> ResponseType:
+        return ok(obj={"token": self.token, "api_root": self.uri})
     
     @requires_admin_auth
     def health(self) -> ResponseType:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 from unittest import mock
 
+import base64
 import pytest
 import uuid
 from argon2 import PasswordHasher
@@ -103,15 +104,63 @@ def test_user_refresh_aborts_on_non_panel_error(database: Database, flask_app: F
     assert payload["obj"]["total"] == 2
 
 
-def _admin_api(database: Database, flask_app: Flask) -> None:
+def _admin_api(
+    database: Database,
+    flask_app: Flask,
+    *,
+    api_uri: str = "api",
+    api_admin_ui_auth: tuple[str, str] = ("admin", "panel-secret"),
+) -> None:
     subscription = make_subscription(database, app=flask_app)
     Api(
         app=flask_app,
-        cfg=cast(ConfigLike, subscription_config(api_uri="api", api_token="secret")),
+        cfg=cast(ConfigLike, subscription_config(
+            api_uri=api_uri,
+            api_token="secret",
+            api_admin_ui_auth=list(api_admin_ui_auth),
+        )),
         audit_cfg=cast(LinesConfigLike, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
     )
+
+
+def _basic(user: str, password: str) -> dict[str, str]:
+    token = base64.b64encode(f"{user}:{password}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
+
+
+def test_admin_ui_requires_basic_auth(database: Database, flask_app: Flask) -> None:
+    _admin_api(database, flask_app)
+    client = flask_app.test_client()
+    denied = client.get("/sub/admin")
+    assert denied.status_code == 401
+    assert denied.headers["WWW-Authenticate"] == 'Basic realm="Admin UI"'
+    response = client.get("/sub/admin", headers=_basic("admin", "panel-secret"))
+    assert response.status_code == 200
+    assert b"<html" in response.data.lower()
+
+
+def test_admin_token_returns_secret_and_api_root(database: Database, flask_app: Flask) -> None:
+    _admin_api(database, flask_app)
+    client = flask_app.test_client()
+    denied = client.get("/sub/admin/token")
+    assert denied.status_code == 401
+    response = client.get("/sub/admin/token", headers=_basic("admin", "panel-secret"))
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["obj"]["token"] == "secret"
+    assert payload["obj"]["api_root"] == "/sub/api"
+
+
+def test_admin_token_api_root_omits_empty_api_uri(database: Database, flask_app: Flask) -> None:
+    _admin_api(database, flask_app, api_uri="")
+    response = flask_app.test_client().get(
+        "/sub/admin/token", headers=_basic("admin", "panel-secret"),
+    )
+    assert response.status_code == 200
+    assert response.get_json()["obj"]["api_root"] == "/sub"
 
 
 def test_health_reports_db_and_process_status(database: Database, flask_app: Flask) -> None:

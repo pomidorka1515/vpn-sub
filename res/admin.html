@@ -476,16 +476,6 @@ body {
 
 <div class="admin-content">
 
-  <div class="config-bar">
-    <div class="config-row">
-      <label data-t="api_key"></label>
-      <input type="text" id="cfgApiKey" placeholder="your-admin-token">
-    </div>
-    <div class="config-actions">
-      <button class="btn btn-primary" style="padding:10px 20px" onclick="saveConfig()" id="btnSaveCfg">Save</button>
-    </div>
-  </div>
-
   <div class="tabs">
     <button class="tab active" onclick="showTab('users')" data-t="users">Users</button>
     <button class="tab" onclick="showTab('codes')" data-t="codes">Codes</button>
@@ -842,7 +832,6 @@ body {
 <script>
 const L = {
   en: {
-    api_key: 'API Key', save: 'Save',
     users: 'Users', codes: 'Codes', audit_logs: 'Audit Logs', state: 'State', snapshots: 'Snapshots', health: 'Health',
     user_list: 'User List', add_user: 'Add User', bonus_codes: 'Bonus Codes', add_code: 'Add Code',
     user_details: 'User Details', internal_user: 'Internal User', display_name: 'Display Name',
@@ -869,7 +858,8 @@ const L = {
     rollback_markers: 'Rollback Markers', no_recovery_issues: 'No recovery markers', marker_type: 'Type',
     marker_reason: 'Reason', resolve: 'Resolve', resolved: 'Resolved', timestamp: 'Time',
     confirm_resolve_rollback: 'Mark this rollback as manually repaired and remove it?',
-    network_err: 'Network error', saved: 'Saved', created: 'Created', deleted: 'Deleted', refreshed: 'Refreshed',
+    network_err: 'Network error', created: 'Created', deleted: 'Deleted', refreshed: 'Refreshed',
+    reload_reauth: 'Reload to re-auth',
     confirm: 'Confirm', cancel: 'Cancel',
     confirm_delete_user: 'Delete user permanently?', confirm_reset_user: 'Reset token and UUID?',
     confirm_delete_code: 'Delete this code?',
@@ -909,7 +899,6 @@ const L = {
     lb_rank: '#', lb_user: 'User', lb_bandwidth: 'Bandwidth',
   },
   ru: {
-    api_key: 'API Key', save: 'Сохранить',
     users: 'Пользователи', codes: 'Коды', audit_logs: 'Логи', state: 'Состояние', snapshots: 'Снимки', health: 'Здоровье',
     user_list: 'Список пользователей', add_user: 'Добавить', bonus_codes: 'Бонус-коды', add_code: 'Создать код',
     user_details: 'Данные пользователя', internal_user: 'Внутр. имя', display_name: 'Отображаемое имя',
@@ -936,7 +925,8 @@ const L = {
     rollback_markers: 'Маркеры отката', no_recovery_issues: 'Нет маркеров восстановления', marker_type: 'Тип',
     marker_reason: 'Причина', resolve: 'Закрыть', resolved: 'Закрыто', timestamp: 'Время',
     confirm_resolve_rollback: 'Подтвердить ручное исправление и удалить этот маркер?',
-    network_err: 'Ошибка сети', saved: 'Сохранено', created: 'Создано', deleted: 'Удалено', refreshed: 'Обновлено',
+    network_err: 'Ошибка сети', created: 'Создано', deleted: 'Удалено', refreshed: 'Обновлено',
+    reload_reauth: 'Перезагрузите страницу для повторной авторизации',
     confirm: 'Подтвердить', cancel: 'Отмена',
     confirm_delete_user: 'Удалить пользователя навсегда?', confirm_reset_user: 'Сбросить токен и UUID?',
     confirm_delete_code: 'Удалить этот код?',
@@ -978,8 +968,9 @@ const L = {
 
 let lang = localStorage.getItem('admin_lang') || 'en';
 let theme = localStorage.getItem('theme') || 'dark';
-let config = JSON.parse(localStorage.getItem('admin_config') || '{}');
 let baseUrl = '';
+let apiToken = '';
+let authBlocked = false;
 let currentUsers = [];
 let selectedUser = null;
 
@@ -998,43 +989,39 @@ function renderLang() {
 
 function setLang(l) { lang = l; localStorage.setItem('admin_lang', l); renderLang(); }
 
-function detectBaseUrl() {
-  const loc = window.location;
-  const path = loc.pathname;
-  // Strip trailing /ui (with or without trailing slash)
-  let base = path.replace(/\/ui\/?$/, '');
-  // If path is /sub/privapi/api → strip the whole /privapi/api part → /sub/
-  if (base.endsWith('/privapi/api')) {
-    base = base.replace('/privapi/api', '');
-  } else {
-    // Otherwise replace /privapi/ with /api/
-    base = base.replace('/privapi/', '/api/');
+async function bootstrap() {
+  const tokenUrl = location.pathname.replace(/\/+$/, '') + '/token';
+  try {
+    const res = await fetch(tokenUrl);
+    if (res.status === 401) {
+      authBlocked = true;
+      toast(t('reload_reauth'), 'error');
+      return;
+    }
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.obj || !data.obj.token || !data.obj.api_root) {
+      authBlocked = true;
+      toast(t('reload_reauth'), 'error');
+      return;
+    }
+    apiToken = data.obj.token;
+    baseUrl = location.origin + data.obj.api_root;
+  } catch (e) {
+    authBlocked = true;
+    toast(t('network_err'), 'error');
   }
-  base = base + '/privapi/'
-  return loc.origin + base;
-}
-
-function loadConfig() {
-  document.getElementById('cfgApiKey').value = config.apiKey || '';
-  baseUrl = detectBaseUrl();
-}
-
-function saveConfig() {
-  config.apiKey = document.getElementById('cfgApiKey').value.trim();
-  localStorage.setItem('admin_config', JSON.stringify(config));
-  toast(t('saved'), 'success');
 }
 
 async function api(path, options = {}) {
-  if (!baseUrl || !config.apiKey) {
-    toast('Configure API key and ensure base URL is detected', 'error');
+  if (authBlocked || !baseUrl || !apiToken) {
+    toast(t('reload_reauth'), 'error');
     return null;
   }
   const url = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) + '/' + path.replace(/^\//, '');
   const opts = {
     method: options.method || 'GET',
     headers: {
-      'Authorization': config.apiKey,
+      'Authorization': apiToken,
       'Content-Type': 'application/json'
     },
     ...options
@@ -1045,7 +1032,8 @@ async function api(path, options = {}) {
     if (res.status === 204) return { success: true, status: 204 };
     const data = await res.json();
     if (res.status === 401) {
-      toast('Unauthorized - check API key', 'error');
+      authBlocked = true;
+      toast(t('reload_reauth'), 'error');
       return null;
     }
     return { ...data, status: res.status };
@@ -2015,7 +2003,7 @@ function confirmDialog(message, title) {
 
 applyTheme();
 renderLang();
-loadConfig();
+bootstrap();
 document.getElementById('codeList').addEventListener('click', onCodeListClick);
 document.getElementById('operationsStatusWrap').addEventListener('click', e => {
   const button = e.target.closest('[data-rollback-kind]');
