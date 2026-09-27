@@ -1,4 +1,4 @@
-from .common import BaseApi, Route, ResponseType
+from .common import BaseApi, Route, ResponseType, asset_version
 from .decorators import requires_args, requires_fields_strict, requires_basic_admin_auth, requires_admin_auth
 from flask import Flask, Response, g, render_template, request
 from custom_types import JsonifyValue
@@ -436,7 +436,7 @@ class Api(BaseApi):
     
     @requires_basic_admin_auth
     def admin_ui(self) -> ResponseType:
-        return Response(render_template('admin.html'), mimetype='text/html')
+        return Response(render_template('admin.html', asset_version=asset_version()), mimetype='text/html')
 
     @requires_basic_admin_auth
     def admin_token(self) -> ResponseType:

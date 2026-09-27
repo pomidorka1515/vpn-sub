@@ -1,4 +1,4 @@
-from .common import Route, BaseApi, RES_DIR, ResponseType
+from .common import Route, BaseApi, RES_DIR, ResponseType, asset_version
 from flask import Flask, request, Response, make_response, redirect, render_template, send_file, g
 from config import ConfigLike
 from core import Subscription
@@ -80,8 +80,9 @@ class WebApi(BaseApi):
         return make_response(send_file(RES_DIR / 'redirect.html', etag=False))
 
     def common_js(self) -> ResponseType:
-        response = make_response(send_file(RES_DIR / 'common.js', etag=False))
-        response.headers['Cache-Control'] = 'no-cache'
+        # url is versioned via ?v= (asset_version), so long caching is safe
+        response = make_response(send_file(RES_DIR / 'common.js', etag=True, max_age=31536000))
+        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
         return response
 
     def gui_panel(self) -> ResponseType:
@@ -98,7 +99,7 @@ class WebApi(BaseApi):
         return self._page('history.html')
 
     def _page(self, name: str) -> Response:
-        html = render_template(name, prefix=self.prefix)
+        html = render_template(name, prefix=self.prefix, asset_version=asset_version())
         return Response(html, mimetype='text/html')
     
     @requires_webapi_auth

@@ -2,6 +2,8 @@ from pathlib import Path
 from custom_types import HTTPMethod
 from typing import NamedTuple
 from abc import ABC
+from functools import lru_cache
+from hashlib import sha1
 from config import ConfigLike
 from core import Subscription
 from bwatch import BWatch
@@ -11,6 +13,13 @@ from loggers import Logger
 type ResponseType = tuple[Response, int] | Response
 
 RES_DIR = Path(__file__).resolve().parent.parent.parent / 'res'
+
+
+@lru_cache(maxsize=1)
+def asset_version() -> str:
+    """Cache-busting version for static assets, derived from common.js content."""
+    data = (RES_DIR / 'common.js').read_bytes()
+    return sha1(data).hexdigest()[:12]
 
 
 class Route(NamedTuple):
