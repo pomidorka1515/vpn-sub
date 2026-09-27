@@ -1012,36 +1012,15 @@ async function bootstrap() {
   }
 }
 
-async function api(path, options = {}) {
-  if (authBlocked || !baseUrl || !apiToken) {
-    toast(t('reload_reauth'), 'error');
-    return null;
-  }
-  const url = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) + '/' + path.replace(/^\//, '');
-  const opts = {
-    method: options.method || 'GET',
-    headers: {
-      'Authorization': apiToken,
-      'Content-Type': 'application/json'
-    },
-    ...options
-  };
-  if (options.body) opts.body = JSON.stringify(options.body);
-  try {
-    const res = await fetch(url, opts);
-    if (res.status === 204) return { success: true, status: 204 };
-    const data = await res.json();
-    if (res.status === 401) {
-      authBlocked = true;
-      toast(t('reload_reauth'), 'error');
-      return null;
-    }
-    return { ...data, status: res.status };
-  } catch (e) {
-    toast(t('network_err'), 'error');
-    return null;
-  }
-}
+window.apiConfig = {
+  baseUrl: () => baseUrl,
+  headers: () => ({ 'Authorization': apiToken }),
+  guard: () => authBlocked || !baseUrl || !apiToken,
+  guardMessage: () => t('reload_reauth'),
+  on401: () => { authBlocked = true; toast(t('reload_reauth'), 'error'); },
+  networkError: 'toast',
+  networkMessage: () => t('network_err'),
+};
 
 
 
@@ -1053,7 +1032,7 @@ function showTab(name) {
 }
 
 async function loadUsers() {
-  const res = await api('/api/user/list');
+  const res = await api('GET', '/api/user/list');
   if (!res || !res.success) return;
   currentUsers = res.obj || [];
   renderUsersTable();
@@ -1089,7 +1068,7 @@ function renderUsersTable() {
 document.getElementById('usersTableWrap').addEventListener('click', e => { const b=e.target.closest('[data-user-action]'); if(!b)return; const u=b.getAttribute('data-user'); b.dataset.userAction==='view'?viewUser(u):deleteUser(u); });
 
 async function viewUser(username) {
-  const res = await api(`/api/user/info?user=${encodeURIComponent(username)}`);
+  const res = await api('GET', `/api/user/info?user=${encodeURIComponent(username)}`);
   if (!res || !res.success) return;
   selectedUser = username;
   const s = res.obj;
@@ -1118,10 +1097,7 @@ function hideUserDetail() {
 async function doResetUser() {
   if (!selectedUser) return;
   if (!await confirmDialog(t('confirm_reset_user'))) return;
-  const res = await api('/api/user/reset', {
-    method: 'POST',
-    body: { user: selectedUser }
-  });
+  const res = await api('POST', '/api/user/reset', { user: selectedUser });
   const result = document.getElementById('userDetailResult');
   if (res && res.success) {
     result.innerHTML = `<div class="result-title ok">OK</div>
@@ -1135,10 +1111,7 @@ async function doResetUser() {
 
 async function deleteUser(username) {
   if (!await confirmDialog(t('confirm_delete_user'))) return;
-  const res = await api('/api/user/delete', {
-    method: 'POST',
-    body: { user: username }
-  });
+  const res = await api('POST', '/api/user/delete', { user: username });
   if (res && res.success) {
     toast(t('deleted'), 'success');
     loadUsers();
@@ -1205,7 +1178,7 @@ async function doAddUser() {
   if (uuid) body.userid = uuid;
 
   const result = document.getElementById('addUserResult');
-  const res = await api('/api/user/add', { method: 'POST', body });
+  const res = await api('POST', '/api/user/add', body);
   if (res && res.success) {
     result.innerHTML = `<div class="result-title ok">${t('created')}</div>`;
     result.className = 'result-box success';
@@ -1226,7 +1199,7 @@ function escapeHtml(s) {
 async function loadCodes() {
   const list = document.getElementById('codeList');
   list.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
-  const res = await api('/api/code/list');
+  const res = await api('GET', '/api/code/list');
   if (!res || !res.success) {
     list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
     return;
@@ -1237,7 +1210,7 @@ async function loadCodes() {
     return;
   }
   const entries = await Promise.all(names.map(async name => {
-    const info = await api(`/api/code/info?code=${encodeURIComponent(name)}`);
+    const info = await api('GET', `/api/code/info?code=${encodeURIComponent(name)}`);
     return [name, info && info.success ? info.obj : null];
   }));
   renderCodesList(entries);
@@ -1295,7 +1268,7 @@ function copyCode(code) {
 
 async function deleteCode(code) {
   if (!await confirmDialog(t('confirm_delete_code'))) return;
-  const res = await api('/api/code/delete', { method: 'POST', body: { code } });
+  const res = await api('POST', '/api/code/delete', { code });
   if (res && res.success) {
     toast(t('deleted'), 'success');
     loadCodes();
@@ -1349,7 +1322,7 @@ async function doAddCode() {
     body.uses = uses;
   }
 
-  const res = await api('/api/code/add', { method: 'POST', body });
+  const res = await api('POST', '/api/code/add', body);
   if (res && res.success) {
     toast(t('created'), 'success');
     hideAddCode();
@@ -1364,7 +1337,7 @@ async function doAddCode() {
 
 async function loadLogs() {
   const count = document.getElementById('logCount').value || 50;
-  const res = await api(`/api/logs/audit?n=${encodeURIComponent(count)}`);
+  const res = await api('GET', `/api/logs/audit?n=${encodeURIComponent(count)}`);
   if (!res || !res.success) return;
   renderLogsTable(res.obj || []);
 }
@@ -1419,7 +1392,7 @@ function renderHealthDetails(obj) {
 }
 
 async function runHealthCheck() {
-  const res = await api('/api/health');
+  const res = await api('GET', '/api/health');
   const dot = document.getElementById('healthDot');
   const text = document.getElementById('healthText');
   const details = document.getElementById('healthDetails');
@@ -1446,7 +1419,7 @@ async function runHealthCheck() {
 async function checkPanelStatus() {
   const name = document.getElementById('panelName').value.trim();
   const path = name ? `/api/panel/status?name=${encodeURIComponent(name)}` : '/api/panel/status';
-  const res = await api(path);
+  const res = await api('GET', path);
   const result = document.getElementById('panelStatusResult');
   if (res && res.success) {
     result.innerHTML = renderPanelCards(res.obj);
@@ -1580,7 +1553,7 @@ async function loadSystemStatus() {
   const result = document.getElementById('systemStatusResult');
   result.innerHTML = `<div class="result-msg">${t('loading')}</div>`;
   result.className = 'result-box';
-  const res = await api('/api/state/system');
+  const res = await api('GET', '/api/state/system');
   if (res && res.success) {
     result.innerHTML = renderSystemStatus(res.obj);
     result.className = 'result-box';
@@ -1683,7 +1656,7 @@ async function loadSnapshots() {
   const cutoff = parseInt(document.getElementById('snapCutoff').value, 10);
   if (isNaN(cutoff) || cutoff <= 0) { toast(t('cutoff_invalid'), 'error'); return; }
   list.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
-  const res = await api('/api/state/snapshots', { method: 'POST', body: { cutoff } });
+  const res = await api('POST', '/api/state/snapshots', { cutoff });
   if (!res || !res.success) {
     list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
     return;
@@ -1753,7 +1726,7 @@ function fmtUptime(seconds) {
 async function loadOnlineUsers() {
   const keyed = document.getElementById('onlineKeyed').checked;
   const path = keyed ? '/api/user/onlines?keyed=1' : '/api/user/onlines';
-  const res = await api(path);
+  const res = await api('GET', path);
   const wrap = document.getElementById('onlineUsersWrap');
   if (!res || !res.success) {
     wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || 'Error')}</div>`;
@@ -1822,7 +1795,7 @@ async function doRefreshUsers() {
   const result = document.getElementById('refreshResult');
   result.innerHTML = '<div class="result-msg">Loading...</div>';
   result.className = 'result-box';
-  const res = await api('/api/user/refresh');
+  const res = await api('GET', '/api/user/refresh');
   if (res && res.success) {
     result.innerHTML = `<div class="result-title ok">${t('refreshed')}</div><div class="result-msg">${escapeHtml(res.msg || '')}</div>`;
     result.className = 'result-box success';
@@ -1889,7 +1862,7 @@ function renderOperationsStatus(obj) {
 async function loadOperationsStatus() {
   const wrap = document.getElementById('operationsStatusWrap');
   wrap.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
-  const res = await api('/api/operations/status');
+  const res = await api('GET', '/api/operations/status');
   if (!res || !res.success) {
     wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
     return;
@@ -1899,7 +1872,7 @@ async function loadOperationsStatus() {
 
 async function resolveRollbackMarker(kind, user) {
   if (!await confirmDialog(t('confirm_resolve_rollback'))) return;
-  const res = await api('/api/operations/rollback/resolve', { method: 'POST', body: { kind, user } });
+  const res = await api('POST', '/api/operations/rollback/resolve', { kind, user });
   if (res && res.success) {
     toast(t('resolved'), 'success');
     await loadOperationsStatus();
@@ -1909,7 +1882,7 @@ async function resolveRollbackMarker(kind, user) {
 }
 
 async function checkTeapot() {
-  const res = await api('/api/teapot');
+  const res = await api('GET', '/api/teapot');
   const status = document.getElementById('teapotStatus');
   if (res && res.teapot) {
     status.textContent = t('teapot_yes') + ' 🍵';
@@ -1936,7 +1909,7 @@ async function fetchLeaderboard() {
   const wrap = document.getElementById('lbTableWrap');
   wrap.innerHTML = '<div class="table-empty" style="padding:20px">Loading...</div>';
 
-  const res = await api('/api/leaderboard', { method: 'POST', body });
+  const res = await api('POST', '/api/leaderboard', body);
   if (!res || !res.success) {
     wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || 'Error')}</div>`;
     return;

@@ -311,16 +311,12 @@ function handleChartJsError() {
   document.getElementById('wlWrap').innerHTML = '<div class="chart-empty">' + t('chart_load_err') + '</div>';
 }
 
-async function api(method, path) {
-  try {
-    const r = await fetch(API + path, { method, credentials: 'same-origin' });
-    if (r.status === 401) { window.location.href = AUTH_PAGE; return null; }
-    return await r.json();
-  } catch (e) {
-    toast(t('network_err'), 'error');
-    return null;
-  }
-}
+window.apiConfig = {
+  baseUrl: API,
+  on401: () => { window.location.href = AUTH_PAGE; },
+  networkError: 'toast',
+  networkMessage: () => t('network_err'),
+};
 
 
 
