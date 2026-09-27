@@ -1,6 +1,6 @@
-from .common import BaseApi, Route, ResponseType, RES_DIR
+from .common import BaseApi, Route, ResponseType
 from .decorators import requires_args, requires_fields_strict, requires_basic_admin_auth, requires_admin_auth
-from flask import Flask, g, request, send_file
+from flask import Flask, Response, g, render_template, request
 from custom_types import JsonifyValue
 from util import ok, err, parse_bool, SysUtil
 from dataclasses import asdict
@@ -436,7 +436,7 @@ class Api(BaseApi):
     
     @requires_basic_admin_auth
     def admin_ui(self) -> ResponseType:
-        return send_file(RES_DIR / 'admin.html', etag=False)
+        return Response(render_template('admin.html'), mimetype='text/html')
 
     @requires_basic_admin_auth
     def admin_token(self) -> ResponseType:

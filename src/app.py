@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import BinaryIO, Self, cast
 
 from api import Api, WebApi
+from api.common import RES_DIR
 from bots import AdminBot, PublicBot
 from bwatch import BWatch
 from config import Config, LinesConfig
@@ -17,6 +18,7 @@ from core import Subscription
 from db import Database
 from errors import AppError
 from flask import Flask, Response, request
+from jinja2 import FileSystemLoader
 from loggers import Logger
 from config import ConfigLike
 from session import XUiSession, XUiPanelTransport
@@ -212,6 +214,8 @@ class Application:
 
 def _build_flask_app(options: AppOptions) -> Flask:
     flask_app = Flask(__name__)
+    # pages live in res/, not a flask-style templates/ directory
+    flask_app.jinja_loader = FileSystemLoader(str(RES_DIR))
     # should not be changed, 64KB is also plenty
     flask_app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     flask_app.config["JSON_SORT_KEYS"] = False

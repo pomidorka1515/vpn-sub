@@ -10,15 +10,19 @@ from argon2 import PasswordHasher
 from flask import Flask
 
 from api import Api, BaseApi, WebApi, _RateLimiter, rate_limit  # pyright: ignore[reportPrivateUsage]
+from api.common import RES_DIR
 from config import ConfigLike, LinesConfigLike
 from db import Database
 from errors import AppError, DatabaseError
 from helpers import make_subscription, make_watch, subscription_config
+from jinja2 import FileSystemLoader
 
 
 @pytest.fixture
 def flask_app() -> Flask:
-    return Flask(__name__)
+    app = Flask(__name__)
+    app.jinja_loader = FileSystemLoader(str(RES_DIR))
+    return app
 
 
 @pytest.fixture
@@ -221,17 +225,19 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
 
     auth = client.get("/custom/auth")
     assert auth.status_code == 200
-    assert b"const BASE = '/custom';" in auth.data
+    assert b"__SUB_URI__" not in auth.data
+    assert b"'/custom'" in auth.data
     assert b"/sub/" not in auth.data
 
     client.set_cookie("auth_token", "a" * 100)
     panel = client.get("/custom/panel")
     assert panel.status_code == 200
-    assert b"const BASE = '/custom';" in panel.data
-    assert b"BASE+'/history'" in panel.data
+    assert b"__SUB_URI__" not in panel.data
+    assert b"'/custom'" in panel.data
     history = client.get("/custom/history")
     assert history.status_code == 200
-    assert b"const BASE = '/custom';" in history.data
+    assert b"__SUB_URI__" not in history.data
+    assert b"'/custom'" in history.data
 
 
 def test_login_uses_isolated_auth_token(web_api: tuple[Flask, Database]) -> None:

@@ -1,5 +1,5 @@
 from .common import Route, BaseApi, RES_DIR, ResponseType
-from flask import Flask, request, Response, make_response, redirect, g, send_file
+from flask import Flask, request, Response, make_response, redirect, render_template, send_file, g
 from config import ConfigLike
 from core import Subscription
 from bwatch import BWatch
@@ -44,12 +44,7 @@ class WebApi(BaseApi):
         uri = '/' + '/'.join(p for p in cfg['uri'].split('/') if p)
         super().__init__(app, cfg, sub, bw, uri)
         self.prefix = self.uri.rstrip('/')
-        self.redirect_html = (RES_DIR / 'redirect.html').read_text(encoding='utf-8')
-        self.pages = {
-            name: (RES_DIR / name).read_text(encoding='utf-8').replace('__SUB_URI__', self.prefix)
-            for name in ('dashboard.html', 'auth.html', 'history.html')
-        }
-    
+
     def validate_auth_token(self, auth_token: str | None = None) -> str | None:
         def _v(token: str | None) -> str | None:
             if not token or len(token) != 100:
@@ -82,7 +77,7 @@ class WebApi(BaseApi):
             return err("Invalid prefix", 400)
         if len(prefix) > 512:
             return err("Prefix too long", 400)
-        return Response(self.redirect_html, mimetype='text/html')
+        return make_response(send_file(RES_DIR / 'redirect.html', etag=False))
 
     def common_js(self) -> ResponseType:
         response = make_response(send_file(RES_DIR / 'common.js', etag=False))
@@ -103,7 +98,8 @@ class WebApi(BaseApi):
         return self._page('history.html')
 
     def _page(self, name: str) -> Response:
-        return Response(self.pages[name], mimetype='text/html')
+        html = render_template(name, prefix=self.prefix)
+        return Response(html, mimetype='text/html')
     
     @requires_webapi_auth
     def qr(self, username: str) -> ResponseType:
