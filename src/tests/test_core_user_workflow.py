@@ -7,6 +7,16 @@ from helpers import make_subscription
 from db import Database
 
 
+def test_get_info_link_uses_configured_uri(database: Database) -> None:
+    subscription = make_subscription(database, uri="custom")
+    created = subscription.business_svc.add_new_user(
+        "alice", "Alice", ext_username="alice-login",
+        ext_password="secret", limit=10, wl_limit=5,
+    )
+    info = subscription.business_svc.get_info("alice")
+    assert info.link == f"https://example.test/custom?token={created.token}"
+
+
 def test_user_workflow_without_live_panels(database: Database) -> None:
     subscription = make_subscription(
         database, fingerprints=["chrome", "firefox"],
@@ -40,5 +50,6 @@ def test_user_workflow_without_live_panels(database: Database) -> None:
     subscription.business_svc.update_params("alice", displayname="Alice 2", fingerprint="firefox")
     info = subscription.business_svc.get_info("alice")
     assert (info.displayname, info.fingerprint) == ("Alice 2", "firefox")
+    assert info.link == f"https://example.test/sub?token={created.token}"
     subscription.business_svc.delete_user("alice", perma=True)
     assert not subscription.user_svc.isuser("alice")

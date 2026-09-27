@@ -200,6 +200,40 @@ def test_health_returns_503_when_database_ping_fails(
     assert payload["obj"]["db"] is False
 
 
+def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask) -> None:
+    subscription = make_subscription(database, app=flask_app, uri="custom")
+    database.create_user(
+        username="alice", uuid=str(uuid.uuid4()), token="a" * 40,
+        fingerprint="chrome", displayname="Alice",
+    )
+    database.set_auth_token("alice", "a" * 100)
+    WebApi(
+        app=flask_app,
+        cfg=cast(ConfigLike, subscription_config(uri="custom")),
+        sub=subscription,
+        bw=make_watch(database, subscription),
+    )
+    client = flask_app.test_client()
+
+    denied = client.get("/custom/panel")
+    assert denied.status_code == 302
+    assert denied.headers["Location"].endswith("/custom/auth")
+
+    auth = client.get("/custom/auth")
+    assert auth.status_code == 200
+    assert b"const BASE = '/custom';" in auth.data
+    assert b"/sub/" not in auth.data
+
+    client.set_cookie("auth_token", "a" * 100)
+    panel = client.get("/custom/panel")
+    assert panel.status_code == 200
+    assert b"const BASE = '/custom';" in panel.data
+    assert b"BASE+'/history'" in panel.data
+    history = client.get("/custom/history")
+    assert history.status_code == 200
+    assert b"const BASE_PATH = '/custom';" in history.data
+
+
 def test_login_uses_isolated_auth_token(web_api: tuple[Flask, Database]) -> None:
     app, _database = web_api
     client = app.test_client()

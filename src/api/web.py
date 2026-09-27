@@ -42,9 +42,13 @@ class WebApi(BaseApi):
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
         uri = '/' + '/'.join(p for p in cfg['uri'].split('/') if p)
-        with open(RES_DIR / 'redirect.html', encoding='utf-8') as f:
-            self.redirect_html = f.read()
         super().__init__(app, cfg, sub, bw, uri)
+        self.prefix = self.uri.rstrip('/')
+        self.redirect_html = (RES_DIR / 'redirect.html').read_text(encoding='utf-8')
+        self.pages = {
+            name: (RES_DIR / name).read_text(encoding='utf-8').replace('__SUB_URI__', self.prefix)
+            for name in ('dashboard.html', 'auth.html', 'history.html')
+        }
     
     def validate_auth_token(self, auth_token: str | None = None) -> str | None:
         def _v(token: str | None) -> str | None:
@@ -88,15 +92,18 @@ class WebApi(BaseApi):
     def gui_panel(self) -> ResponseType:
         auth_token = request.cookies.get('auth_token')
         if not self.validate_auth_token(auth_token):
-            return make_response(redirect('/sub/auth'))
-        return send_file(RES_DIR / 'dashboard.html', etag=False)
+            return make_response(redirect(f"{self.prefix}/auth"))
+        return self._page('dashboard.html')
     def gui_auth(self) -> ResponseType:
-        return send_file(RES_DIR / 'auth.html', etag=False)
+        return self._page('auth.html')
     def gui_history(self) -> ResponseType:
         auth_token = request.cookies.get('auth_token')
         if not self.validate_auth_token(auth_token):
-            return make_response(redirect('/sub/auth'))
-        return send_file(RES_DIR / 'history.html', etag=False)
+            return make_response(redirect(f"{self.prefix}/auth"))
+        return self._page('history.html')
+
+    def _page(self, name: str) -> Response:
+        return Response(self.pages[name], mimetype='text/html')
     
     @requires_webapi_auth
     def qr(self, username: str) -> ResponseType:
@@ -106,7 +113,7 @@ class WebApi(BaseApi):
         
         token = self.sub.user_svc.get_token(username)
         domain = self.cfg['domain']
-        link = f"{domain}/sub?token={token}&lang={lang}"
+        link = f"{domain}/{str(self.cfg['uri']).strip('/')}?token={token}&lang={lang}"
         
         if parse_bool(request.args.get('happ')):
             link = f"happ://add/{link}"

@@ -380,7 +380,7 @@ body {
       </div>
     </div>
     <div style="display:flex;justify-content:center;margin-top:14px">
-      <button class="btn" style="width:auto;padding:9px 20px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:13px" onclick="window.location.href='/sub/history'" data-t="extra_bw"></button>
+      <button class="btn" style="width:auto;padding:9px 20px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:13px" onclick="window.location.href=BASE+'/history'" data-t="extra_bw"></button>
     </div>
   </div>
 
@@ -475,8 +475,9 @@ body {
 </div>
 
 <script>
-const API = '/sub/webapi';
-const AUTH_PAGE = '/sub/auth';
+const BASE = '__SUB_URI__';
+const API = BASE + '/webapi';
+const AUTH_PAGE = BASE + '/auth';
 
 const L = {
   en: {

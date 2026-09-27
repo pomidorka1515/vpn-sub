@@ -95,13 +95,11 @@ class AdminUsersMixin(AdminFeatureMixin):
             limit = bw.limit
             wl_limit = bw.wl_limit
             times = info.time
-            token = info.token
             displayname = info.displayname
             status = "🟢 Включен" if info.enabled else "🔴 Отключен"
             wl_status = "🟢 Включен" if info.wl_enabled else "🔴 Отключен"
             online = "🟢 Да" if info.online else "🔴 Нет"
             fingerprint = info.fingerprint
-            domain: str = self.cfg['domain']
             if times:
                 days_left = str((times - int(time.time())) // 86400)
                 date = datetime.fromtimestamp(times, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
@@ -121,7 +119,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 f"Upload: {up} MB | Download: {down} MB\n"
                 f"WL Upload: {wl_up} MB | Download: {wl_down} MB\n"
                 f"Отпечаток: <code>{fingerprint}</code>\n"
-                f"Ссылка: <code>{domain}/sub?token={token}&lang=ru</code>\n"
+                f"Ссылка: <code>{info.link}&lang=ru</code>\n"
             )
             markup = types.InlineKeyboardMarkup(row_width=2)
             markup.add(  # pyright: ignore[reportUnknownMemberType]

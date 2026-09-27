@@ -109,13 +109,14 @@ class BusinessUserService(BaseService):
         monthly = int(user['bw_used'])
         wl_monthly = int(user['wl_used'])
         domain = self.cfg['domain']
+        uri = str(self.cfg['uri']).strip('/')
         if pretty:
             bandwidths = bandwidths.format_all_mb()
             wl_bandwidths = wl_bandwidths.format_all_mb()
         return UserInfo(
             _=random.choice(cast(list[str], conf.get('funny_strings', []))),
             token=str(user['token']),
-            link=f"{domain}/sub?token={user['token']}",
+            link=f"{domain}/{uri}?token={user['token']}",
             displayname=str(user['displayname']),
             uuid=str(user['uuid']),
             fingerprint=str(user['fingerprint']),
