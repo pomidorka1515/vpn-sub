@@ -11,7 +11,7 @@ from flask import Flask
 from api import Api, BaseApi, WebApi, _RateLimiter, rate_limit  # pyright: ignore[reportPrivateUsage]
 from config import ConfigLike, LinesConfigLike
 from db import Database
-from errors import AppError
+from errors import AppError, DatabaseError
 from helpers import make_subscription, make_watch, subscription_config
 
 
@@ -101,6 +101,54 @@ def test_user_refresh_aborts_on_non_panel_error(database: Database, flask_app: F
     assert payload["obj"]["failed"] == []
     assert payload["obj"]["succeeded"] == 1
     assert payload["obj"]["total"] == 2
+
+
+def _admin_api(database: Database, flask_app: Flask) -> None:
+    subscription = make_subscription(database, app=flask_app)
+    Api(
+        app=flask_app,
+        cfg=cast(ConfigLike, subscription_config(api_uri="api", api_token="secret")),
+        audit_cfg=cast(LinesConfigLike, _Audit()),
+        sub=subscription,
+        bw=make_watch(database, subscription),
+    )
+
+
+def test_health_reports_db_and_process_status(database: Database, flask_app: Flask) -> None:
+    _admin_api(database, flask_app)
+    client = flask_app.test_client()
+    denied = client.get("/sub/api/api/health")
+    assert denied.status_code == 401
+    response = client.get("/sub/api/api/health", headers={"Authorization": "secret"})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    obj = payload["obj"]
+    assert obj["db"] is True
+    assert obj["degraded"] is False
+    assert isinstance(obj["uptime"], float)
+    assert isinstance(obj["threads"], int)
+    assert set(obj["memory"]) == {"ram", "swap"}
+    assert obj["daily_snapshot_failure"] is None
+    assert obj["rollback_failures"] == {"uuid": {}, "registration": {}}
+
+
+def test_health_returns_503_when_database_ping_fails(
+    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail() -> object:
+        raise DatabaseError("down")
+
+    _admin_api(database, flask_app)
+    monkeypatch.setattr(database, "connection", fail)
+    response = flask_app.test_client().get(
+        "/sub/api/api/health", headers={"Authorization": "secret"},
+    )
+    assert response.status_code == 503
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["msg"] == "Database unavailable"
+    assert payload["obj"]["db"] is False
 
 
 def test_login_uses_isolated_auth_token(web_api: tuple[Flask, Database]) -> None:

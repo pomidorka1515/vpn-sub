@@ -48,6 +48,7 @@ def paths(tmp_path: Path) -> AppPaths:
     config = json.loads((project_root / "docs/EXAMPLE.config.json").read_text())
     config["$schema"] = "config.schema.json"
     config["api_uri"] = "api"
+    config["api_token"] = "secret"
     config["bot"]["token"] = "123:test-admin-bot"
     config["publicbot"]["token"] = "123:test-public-bot"
     second_panel = dict(config["3xui"]["local_panel"])
@@ -90,7 +91,10 @@ def test_from_env_defaults_to_project_root() -> None:
 def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:
     with factory(paths) as runtime:
         client = runtime.app.test_client()
-        assert client.get("/sub/api/api/health").status_code == 200
+        assert client.get("/sub/api/api/health").status_code == 401
+        assert client.get(
+            "/sub/api/api/health", headers={"Authorization": "secret"},
+        ).status_code == 200
         assert any(rule.rule == "/sub" for rule in runtime.app.url_map.iter_rules())
         sub_response = client.get("/sub")
         assert sub_response.status_code == 401
@@ -142,18 +146,19 @@ def test_require_proxy_allows_only_loopback(paths: AppPaths) -> None:
         client = runtime.app.test_client()
         response = client.get(
             "/sub/api/api/health",
+            headers={"Authorization": "secret"},
             environ_base={"REMOTE_ADDR": "127.0.0.1"},
         )
         assert response.status_code == 200
         response = client.get(
             "/sub/api/api/health",
-            headers={"X-Forwarded-For": "203.0.113.5"},
+            headers={"Authorization": "secret", "X-Forwarded-For": "203.0.113.5"},
             environ_base={"REMOTE_ADDR": "127.0.0.1"},
         )
         assert response.status_code == 200
         response = client.get(
             "/sub/api/api/health",
-            headers={"X-Forwarded-For": "203.0.113.5"},
+            headers={"Authorization": "secret", "X-Forwarded-For": "203.0.113.5"},
             environ_base={"REMOTE_ADDR": "10.0.0.1"},
         )
         assert response.status_code == 400

@@ -9,7 +9,7 @@ from core import Subscription
 from bwatch import BWatch
 from loggers import Logger
 from typing import cast, Literal
-from errors import PanelUnavailableError
+from errors import DatabaseError, PanelUnavailableError
 from random import random
 
 __all__ = ["Api"]
@@ -433,8 +433,30 @@ class Api(BaseApi):
     def admin_ui(self) -> ResponseType:
         return send_file(RES_DIR / 'admin.html', etag=False)
     
+    @requires_admin_auth
     def health(self) -> ResponseType:
-        return ok()
+        status = SysUtil.health()
+        try:
+            with self.sub.res.db.connection() as conn:
+                conn.execute("SELECT 1")
+        except DatabaseError:
+            return err("Database unavailable", 503, obj={
+                "db": False,
+                "uptime": status.uptime,
+                "memory": {"ram": status.memory.ram, "swap": status.memory.swap},
+                "threads": status.threads,
+            })
+        snapshot_failure = self.bw.get_daily_snapshot_failure()
+        rollback_failures = self.sub.business_code_svc.get_rollback_failures()
+        return ok(obj={
+            "db": True,
+            "uptime": status.uptime,
+            "memory": {"ram": status.memory.ram, "swap": status.memory.swap},
+            "threads": status.threads,
+            "degraded": snapshot_failure is not None or any(rollback_failures.values()),
+            "daily_snapshot_failure": snapshot_failure,
+            "rollback_failures": rollback_failures,
+        })
 
     @requires_admin_auth
     def operation_status(self) -> ResponseType:

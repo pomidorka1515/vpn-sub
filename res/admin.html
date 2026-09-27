@@ -241,6 +241,7 @@ body {
 }
 .health-dot { width: 10px; height: 10px; border-radius: 50%; }
 .health-dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,.5); }
+.health-dot.warn { background: var(--orange); box-shadow: 0 0 8px rgba(245,158,11,.5); }
 .health-dot.err { background: var(--red); }
 .health-text { font-size: 14px; font-weight: 500; }
 
@@ -744,8 +745,9 @@ body {
         <div class="health-dot" id="healthDot"></div>
         <span id="healthText" data-t="not_checked">Not checked</span>
       </div>
+      <div id="healthDetails" style="display:none;margin-top:12px"></div>
       <div style="margin-top:20px">
-        <button class="btn-secondary" onclick="runHealthCheck()" id="btnRunHealth">Check Health</button>
+        <button class="btn-secondary" onclick="runHealthCheck()" id="btnRunHealth" data-t="check_health">Check Health</button>
       </div>
     </div>
 
@@ -859,7 +861,9 @@ const L = {
     load_logs_hint: 'Click "Load Logs" to fetch audit logs',
     internal_user_hint: 'Unique internal identifier', ext_username_hint: 'Web UI login (optional)',
     limit_hint: '0 = unlimited', expires_hint: 'Empty = unlimited',
-    health_ok: 'API is healthy', health_err: 'API check failed',
+    health_ok: 'API is healthy', health_warn: 'API is degraded', health_err: 'API check failed',
+    check_health: 'Check Health', db: 'Database', degraded: 'Degraded',
+    yes: 'Yes', no: 'No',
     operations_recovery: 'Operational Recovery', load_operations: 'Load Status',
     load_operations_hint: 'Load status to check recovery markers', snapshot_failure: 'Daily Snapshot Failure',
     rollback_markers: 'Rollback Markers', no_recovery_issues: 'No recovery markers', marker_type: 'Type',
@@ -924,7 +928,9 @@ const L = {
     load_logs_hint: 'Нажмите "Загрузить" для логов',
     internal_user_hint: 'Уникальный внутр. идентификатор', ext_username_hint: 'Веб-логин (опц.)',
     limit_hint: '0 = безлимит', expires_hint: 'Пусто = безлимит',
-    health_ok: 'API работает', health_err: 'Ошибка API',
+    health_ok: 'API работает', health_warn: 'API деградировал', health_err: 'Ошибка API',
+    check_health: 'Проверить', db: 'База', degraded: 'Деградация',
+    yes: 'Да', no: 'Нет',
     operations_recovery: 'Восстановление', load_operations: 'Загрузить статус',
     load_operations_hint: 'Загрузите статус для проверки маркеров', snapshot_failure: 'Ошибка дневного снимка',
     rollback_markers: 'Маркеры отката', no_recovery_issues: 'Нет маркеров восстановления', marker_type: 'Тип',
@@ -1405,18 +1411,47 @@ function renderLogsTable(logs) {
   `;
 }
 
+function renderHealthDetails(obj) {
+  if (!obj) return '';
+  const mem = obj.memory || {};
+  const ram = Number.isFinite(mem.ram) ? mem.ram.toFixed(2) + ' MB' : 'N/A';
+  const swap = Number.isFinite(mem.swap) ? mem.swap.toFixed(2) + ' MB' : 'N/A';
+  const row = (label, value, cls) =>
+    `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value${cls ? ' ' + cls : ''}">${value}</span></div>`;
+  return `<div class="panel-grid" style="padding-top:0">
+    <div class="panel-section">
+      ${row(t('db'), obj.db ? t('yes') : t('no'), obj.db ? 'ok' : 'err')}
+      ${row(t('degraded'), obj.degraded ? t('yes') : t('no'), obj.degraded ? 'warn' : 'ok')}
+      ${row(t('app_uptime'), fmtUptime(obj.uptime))}
+      ${row(t('app_mem'), ram)}
+      ${row(t('app_swap'), swap)}
+      ${row(t('app_threads'), obj.threads ?? 'N/A')}
+    </div>
+  </div>`;
+}
+
 async function runHealthCheck() {
   const res = await api('/api/health');
   const dot = document.getElementById('healthDot');
   const text = document.getElementById('healthText');
-  if (res && res.success) {
+  const details = document.getElementById('healthDetails');
+  const obj = res?.obj;
+  if (res && res.success && !obj?.degraded) {
     dot.className = 'health-dot ok';
     text.textContent = t('health_ok');
     text.style.color = '';
+  } else if (res && res.success) {
+    dot.className = 'health-dot warn';
+    text.textContent = t('health_warn');
+    text.style.color = 'var(--orange)';
   } else {
     dot.className = 'health-dot err';
-    text.textContent = t('health_err');
+    text.textContent = res?.msg || t('health_err');
     text.style.color = 'var(--red)';
+  }
+  if (obj) {
+    details.style.display = '';
+    details.innerHTML = renderHealthDetails(obj);
   }
 }
 

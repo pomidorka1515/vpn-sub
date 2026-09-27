@@ -17,7 +17,7 @@ from dacite import from_dict
 from custom_types import (
     CPUInfo, LoadAverage, NetTrafficStats, SystemMemory,
     RamInfo, SwapInfo, IPList, ConnCount, AppMemory,
-    GCStats, GCGenStats, ThreadInfo, FullSystemInfo,
+    GCStats, GCGenStats, ThreadInfo, FullSystemInfo, HealthStatus,
 
     JsonifyValue
 )
@@ -444,6 +444,15 @@ class SysUtil:
             ) for t in threading.enumerate()
         )
     
+    @staticmethod
+    def health() -> HealthStatus:
+        """Cheap process status. Does not sleep or touch the network."""
+        return HealthStatus(
+            uptime=SysUtil.app_uptime(),
+            memory=SysUtil.app_memory(),
+            threads=SysUtil.app_thread_amount(),
+        )
+
     @staticmethod
     def app_gc_stats() -> GCStats:
         return GCStats(

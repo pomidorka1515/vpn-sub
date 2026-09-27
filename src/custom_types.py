@@ -510,6 +510,12 @@ class ThreadInfo:
     daemon: bool
 
 @dataclass(slots=True, frozen=True, kw_only=True)
+class HealthStatus:
+    uptime: float
+    memory: AppMemory
+    threads: int
+
+@dataclass(slots=True, frozen=True, kw_only=True)
 class FullSystemInfo:
     cpu: float
     process_count: int

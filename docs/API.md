@@ -5,7 +5,7 @@ Authentication: a cookie named 'auth_token'.
 Cookie is httponly, samesite=lax, secure=True  
   
 ## Root URI (subject to change)  
-`{domain}/sub/webapi` where `domain` is your domain    
+`{domain}/sub/webapi` where `domain` is your domain  
   
 ## Response format  
 Every response follows this pattern:  
@@ -47,7 +47,7 @@ Error:
 }  
 ```  
   
-Errors use the same response shape and semantic HTTP status codes. Validation failures return HTTP 400, missing resources return HTTP 404, conflicts return HTTP 409, and panel failures return HTTP 502. Unexpected failures always return the fixed message above.
+Errors use the same response shape and semantic HTTP status codes. Validation failures return HTTP 400, missing resources return HTTP 404, conflicts return HTTP 409, and panel failures return HTTP 502. Unexpected failures always return the fixed message above.  
   
 ## Endpoints  
   
@@ -236,7 +236,7 @@ Response (error):
   
 ### POST /settings  
 Description: Update your settings. All fields are optional, only provided fields are updated.  
-Rate limit: 10  
+Rate limit: 15  
 Authentication: cookie  
 Body:  
 ```jsonc  
@@ -283,7 +283,7 @@ Response (success):
   
 ### GET /fingerprints  
 Description: List of available TLS fingerprints.  
-Rate limit: 60  
+Rate limit: none  
 Authentication: cookie  
 Body: none  
 Response (success):  
@@ -298,7 +298,7 @@ Response (success):
   
 ---  
   
-### DELETE /delete  
+### POST /delete  
 Description: Delete your account. Irreversible.  
 Rate limit: 3  
 Authentication: cookie  

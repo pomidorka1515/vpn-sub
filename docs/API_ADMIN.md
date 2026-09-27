@@ -37,7 +37,7 @@ Error:
 }  
 ```  
   
-Errors preserve the response format above and use semantic HTTP status codes. Validation failures return HTTP 400, missing resources return HTTP 404, conflicts return HTTP 409, and panel failures return HTTP 502.
+Errors preserve the response format above and use semantic HTTP status codes. Validation failures return HTTP 400, missing resources return HTTP 404, conflicts return HTTP 409, and panel failures return HTTP 502.  
   
 ## Endpoints  
   
@@ -201,39 +201,39 @@ Response (error):
   
 ---  
   
-### GET /api/operations/status
-
+### GET /api/operations/status  
+  
 Description: Return operational recovery metadata, including rollback markers and partial snapshot failures.  
 Authentication: header  
 Body: none  
 Response (success):  
-```jsonc
-// HTTP 200
-{
-	"success": true,
-	"msg": null,
-	"obj": {
-		"daily_snapshot_failure": null, // or {"ts": 0, "failed": 0, "eligible": 0}
-		"rollback_failures": {"uuid": {}, "registration": {}}
-	}
-}
-```
-
-### POST /api/operations/rollback/resolve
-
+```jsonc  
+// HTTP 200  
+{  
+	"success": true,  
+	"msg": null,  
+	"obj": {  
+		"daily_snapshot_failure": null, // or {"ts": 0, "failed": 0, "eligible": 0}  
+		"rollback_failures": {"uuid": {}, "registration": {}}  
+	}  
+}  
+```  
+  
+### POST /api/operations/rollback/resolve  
+  
 Description: Clear a rollback marker after manual repair.  
 Authentication: header  
 Body:  
-```json
-{"kind": "uuid|registration", "user": "<username>"}
-```
+```json  
+{"kind": "uuid|registration", "user": "<username>"}  
+```  
 Response (success):  
-```jsonc
-// HTTP 200
-{"success": true, "msg": "Resolved", "obj": null}
-```
-
----
+```jsonc  
+// HTTP 200  
+{"success": true, "msg": "Resolved", "obj": null}  
+```  
+  
+---  
 ### GET /api/user/onlines  
 Description: Get currently online users.  
 Authentication: header  
@@ -293,68 +293,92 @@ Response (error):
   
 ---  
   
-  
+### POST /api/user/update  
+Description: Update selected fields for a user. Omitted fields are left unchanged.  
+Authentication: header  
+Body:  
+```jsonc  
+{  
+    "user": "",            // str, internal username (required)  
+    "displayname": "",     // OPTIONAL str  
+    "fingerprint": "",     // OPTIONAL str, must be in cfg fingerprints  
+    "limit": 0,            // OPTIONAL int >= 0, monthly GB limit (0 = unlimited)  
+    "wl_limit": 0,         // OPTIONAL int >= 0, whitelist monthly GB limit  
+    "time": 0              // OPTIONAL int >= 0, expiry unix timestamp (0 = unlimited)  
+}  
+```  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{"success": true, "msg": "Updated", "obj": null}  
+```  
   
 ---  
   
-### POST /api/user/update
-Description: Update selected fields for a user. Omitted fields are left unchanged.
-Authentication: header
-Body:
-```jsonc
-{
-    "user": "",            // str, internal username (required)
-    "displayname": "",     // OPTIONAL str
-    "fingerprint": "",     // OPTIONAL str, must be in cfg fingerprints
-    "limit": 0,            // OPTIONAL int >= 0, monthly GB limit (0 = unlimited)
-    "wl_limit": 0,         // OPTIONAL int >= 0, whitelist monthly GB limit
-    "time": 0              // OPTIONAL int >= 0, expiry unix timestamp (0 = unlimited)
-}
-```
-Response (success):
-```jsonc
-// HTTP 200
-{"success": true, "msg": "Updated", "obj": null}
-```
-
----
-
-### GET /api/user/history
-Description: Daily bandwidth history for a user, same snapshots as `/webapi/history`.
-Authentication: header
-Args:
-    user: Internal username.
-    days: optional int, clamped to 1-90 (default 30).
-Response (success):
-```jsonc
-// HTTP 200
-{"success": true, "msg": null, "obj": [{"ts": 0, "up": 0, "down": 0, "wl_up": 0, "wl_down": 0}]}
-```
-
----
-
-### GET /api/fingerprints
-Description: Allowed TLS fingerprints from config.
-Authentication: header
-Body: none
-Response (success):
-```jsonc
-// HTTP 200
-{"success": true, "msg": null, "obj": ["chrome", "firefox"]}
-```
-
----
-
-### GET /api/health  
-Description: Lightweight health check. Returns the standard success envelope on success.  
-Authentication: none  
+### GET /api/user/history  
+Description: Daily bandwidth history for a user, same snapshots as `/webapi/history`.  
+Authentication: header  
+Args:  
+    user: Internal username.  
+    days: optional int, clamped to 1-90 (default 30).  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{"success": true, "msg": null, "obj": [{"ts": 0, "up": 0, "down": 0, "wl_up": 0, "wl_down": 0}]}  
+```  
+  
+---  
+  
+### GET /api/fingerprints  
+Description: Allowed TLS fingerprints from config.  
+Authentication: header  
 Body: none  
 Response (success):  
 ```jsonc  
 // HTTP 200  
-{"success": true, "msg": null, "obj": null}  
+{"success": true, "msg": null, "obj": ["chrome", "firefox"]}  
 ```  
-Use this to verify the API is reachable and the token is valid.  
+  
+---  
+  
+### GET /api/health  
+Description: Lightweight liveness check. Pings the database and reports process stats. Does not contact panels.  
+Authentication: header  
+Body: none  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{  
+	"success": true,  
+	"msg": null,  
+	"obj": {  
+		"db": true,  
+		"uptime": 432000.0, // float, process uptime in seconds  
+		"memory": {"ram": 0.0, "swap": 0.0}, // float, MB  
+		"threads": 12, // int  
+		"degraded": false, // bool, true if a snapshot or rollback marker is set  
+		"daily_snapshot_failure": null, // or {"ts": 0, "failed": 0, "eligible": 0}  
+		"rollback_failures": {"uuid": {}, "registration": {}}  
+	}  
+}  
+```  
+Response (error):  
+```jsonc  
+// HTTP 503, database ping failed. obj has the same shape with "db": false  
+{  
+	"success": false,  
+	"msg": "Database unavailable",  
+	"obj": {"db": false}  
+}  
+```  
+  
+---  
+  
+### GET /api/ui  
+Description: Admin HTML UI.  
+Authentication: HTTP Basic (`api_admin_ui_auth` user and password from config)  
+Body: none  
+Response (success): HTML document (`admin.html`).  
   
 ---  
   
@@ -364,7 +388,7 @@ Authentication: header
 Args:  
     name: (optional) Panel name. If omitted, returns status for all panels (long, blocking).  
 Response (success):  
-```jsonc 
+```jsonc  
 // HTTP 200  
 {  
     "success": true,  
@@ -494,7 +518,7 @@ Authentication: header
 Body:  
 ```jsonc  
 {  
-    "code": "" // str, code name
+    "code": "" // str, code name  
 }  
 ```  
 Response (success):  
@@ -555,7 +579,7 @@ Response (error):
   
 ---  
   
-### POST /api/state/snapshots
+### POST /api/state/snapshots  
 Description: Get state snapshots (system + panels).  
 Authorization: header  
 Body:  
@@ -566,16 +590,16 @@ Body:
 }  
 ```  
 Response (success):  
-```jsonc
-{
-  "success": true,
-  "msg": null,
-  "obj": [
-  // object list
+```jsonc  
+{  
+  "success": true,  
+  "msg": null,  
+  "obj": [  
+  // object list  
   {  
-
+  
   // sorry for broken indentation  
-
+  
   "ts": 1717200000, // int, unix timestamp at start of day (midnight UTC)  
   "host": {  
     "cpu": 23.5,           // float, current CPU usage percentage  
@@ -637,7 +661,7 @@ Response (success):
           "collections": 42,  // int, number of collections for gen0  
           "collected": 1337,  // int, objects collected in gen0  
           "uncollectable": 0  // int, uncollectable objects in gen0  
-        }
+        }  
         // ...  
       ]  
     }  
@@ -702,48 +726,48 @@ Response (error):
 }  
 ```  
   
----
-
-### GET /api/state/all
-Description: Latest system + per-panel info, combines 2 endpoints.
-Authorization: header
-Response (success):
-```jsonc
-{
-    "success": true,
-    "msg": null,
-    "obj": {
-        "host": {
-            // SysUtil.full_info() object, as a dict
-        },
-        "panels": {
-            "node-1": {
-                // state object, as a dict
-            }
-            // ...
-        }
-    }
-}
-```
-
 ---  
-
-### GET /api/state/system
-Description: Get system info from SysUtil.
-Authorization: header
-Response (success):
-```jsonc
-{
-    "success": true,
-    "msg": null,
-    "obj": {
-        // SysUtil.full_info() as a dict
-    }
-}
-```
-
----
-
+  
+### GET /api/state/all  
+Description: Latest system + per-panel info, combines 2 endpoints.  
+Authorization: header  
+Response (success):  
+```jsonc  
+{  
+    "success": true,  
+    "msg": null,  
+    "obj": {  
+        "host": {  
+            // SysUtil.full_info() object, as a dict  
+        },  
+        "panels": {  
+            "node-1": {  
+                // state object, as a dict  
+            }  
+            // ...  
+        }  
+    }  
+}  
+```  
+  
+---  
+  
+### GET /api/state/system  
+Description: Get system info from SysUtil.  
+Authorization: header  
+Response (success):  
+```jsonc  
+{  
+    "success": true,  
+    "msg": null,  
+    "obj": {  
+        // SysUtil.full_info() as a dict  
+    }  
+}  
+```  
+  
+---  
+  
 ### POST /api/leaderboard  
 Description: Get leaderboard data for a specified bandwidth type.  
 Authorization: header  
@@ -751,8 +775,8 @@ Body:
 ```jsonc  
 {  
     "type": "total",       // str, type of bandwidth to use  
-                           // allowed values: "total" (all-time), "monthly", "wl_monthly"
-    "cutoff": 0,           // OPTIONAL int, clamp the leaderboard to a certain amount,   
+                           // allowed values: "total" (all-time), "monthly", "wl_monthly"  
+    "cutoff": 0,           // OPTIONAL int, clamp the leaderboard to a certain amount,  
                            // if <= 0 or omitted, returns a leaderboard with all users  
     "displaynames": false, // OPTIONAL bool, if True, uses displaynames as dict keys  
                            // instead of internal usernames  
@@ -772,9 +796,9 @@ Response (success):
     ]  
 }  
 ```  
-
+  
 ---  
-
+  
 ### GET /api/teapot  
 Description: Verify the server cannot brew coffee because it is a teapot.  
 Authorization: None  
