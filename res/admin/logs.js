@@ -1,12 +1,30 @@
-export async function loadLogs() {
-  const count = document.getElementById('logCount').value || 50;
-  const res = await api('GET', `/api/logs/audit?n=${encodeURIComponent(count)}`);
-  if (!res || !res.success) return;
-  renderLogsTable(res.obj || []);
+function runLogs(btn) {
+  const other = document.getElementById(btn && btn.id === 'btnRefreshLogs' ? 'btnLoadLogs' : 'btnRefreshLogs');
+  if (busyDepth(btn) || busyDepth(other)) return;
+  const wrap = document.getElementById('logsTableWrap');
+  const current = loadGen('logs');
+  wrap.innerHTML = loadingHtml();
+  const load = withBusy(btn, () => fetchLogs(wrap, current));
+  return other ? withBusy(other, () => load) : load;
+}
+
+export function loadLogs() {
+  return runLogs(document.getElementById('btnLoadLogs'));
 }
 
 export function refreshLogs() {
-  loadLogs();
+  return runLogs(document.getElementById('btnRefreshLogs'));
+}
+
+async function fetchLogs(wrap, current) {
+  const count = document.getElementById('logCount').value || 50;
+  const res = await api('GET', `/api/logs/audit?n=${encodeURIComponent(count)}`);
+  if (!current()) return;
+  if (!res || !res.success) {
+    wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
+    return;
+  }
+  if (current()) renderLogsTable(res.obj || []);
 }
 
 function renderLogsTable(logs) {

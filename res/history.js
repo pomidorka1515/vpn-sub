@@ -212,10 +212,16 @@ function setLoading(isLoading) {
   if (isLoading) {
     regWrap.style.display = 'none';
     wlWrap.style.display = 'none';
-    regEmpty.textContent = t('loading');
-    wlEmpty.textContent = t('loading');
+    regEmpty.innerHTML = loadingHtml();
+    wlEmpty.innerHTML = loadingHtml();
     regEmpty.style.display = '';
     wlEmpty.style.display = '';
+    return;
+  }
+  if (lastData) renderCharts(lastData);
+  else {
+    regEmpty.textContent = t('no_data');
+    wlEmpty.textContent = t('no_data');
   }
 }
 
@@ -275,29 +281,25 @@ function renderSummaries(filled) {
 
 async function loadHistory() {
   const btnRefresh = document.getElementById('btnRefresh');
-  btnRefresh.disabled = true;
-  btnRefresh.setAttribute('aria-busy', 'true');
-  const days = parseInt(document.getElementById('daysRange').value, 10);
-  lastDays = days;
-  setLoading(true);
-  const res = await api('GET', '/history?days=' + days);
-  if (!res) {
-    btnRefresh.disabled = false;
-    btnRefresh.setAttribute('aria-busy', 'false');
-    return;
-  }
-  if (!res.success) {
-    toast(res.msg || t('network_err'), 'error');
-    btnRefresh.disabled = false;
-    btnRefresh.setAttribute('aria-busy', 'false');
-    return;
-  }
-  const filled = fillDays(res.obj || [], days);
-  lastData = filled;
-  renderCharts(filled);
-  renderSummaries(filled);
-  btnRefresh.disabled = false;
-  btnRefresh.setAttribute('aria-busy', 'false');
+  const current = loadGen('history');
+  await withBusy(btnRefresh, async () => {
+    const days = parseInt(document.getElementById('daysRange').value, 10);
+    lastDays = days;
+    setLoading(true);
+    const res = await api('GET', '/history?days=' + days);
+    if (!current()) return;
+    if (!res) { setLoading(false); return; }
+    if (!res.success) {
+      toast(res.msg || t('network_err'), 'error');
+      setLoading(false);
+      return;
+    }
+    const filled = fillDays(res.obj || [], days);
+    if (!current()) return;
+    lastData = filled;
+    renderCharts(filled);
+    renderSummaries(filled);
+  });
 }
 
 let dbT;

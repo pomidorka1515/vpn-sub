@@ -1,10 +1,19 @@
 import { state } from './state.js';
 
 export async function loadUsers() {
-  const res = await api('GET', '/api/user/list');
-  if (!res || !res.success) return;
-  state.currentUsers = res.obj || [];
-  renderUsersTable();
+  const wrap = document.getElementById('usersTableWrap');
+  const current = loadGen('users');
+  await withBusy(document.getElementById('btnLoadUsers'), async () => {
+    wrap.innerHTML = loadingHtml();
+    const res = await api('GET', '/api/user/list');
+    if (!current()) return;
+    if (!res || !res.success) {
+      wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
+      return;
+    }
+    state.currentUsers = res.obj || [];
+    if (current()) renderUsersTable();
+  });
 }
 
 function renderUsersTable() {
@@ -39,11 +48,15 @@ export function bindUsersTable() {
     const b = e.target.closest('[data-user-action]');
     if (!b) return;
     const u = b.getAttribute('data-user');
-    b.dataset.userAction === 'view' ? viewUser(u) : deleteUser(u);
+    b.dataset.userAction === 'view' ? viewUser(u, b) : deleteUser(u, b);
   });
 }
 
-export async function viewUser(username) {
+export async function viewUser(username, btn) {
+  await withBusy(btn, () => viewUserRequest(username));
+}
+
+async function viewUserRequest(username) {
   const res = await api('GET', `/api/user/info?user=${encodeURIComponent(username)}`);
   if (!res || !res.success) return;
   state.selectedUser = username;
@@ -73,28 +86,33 @@ export function hideUserDetail() {
 export async function doResetUser() {
   if (!state.selectedUser) return;
   if (!await confirmDialog(t('confirm_reset_user'), t('confirm'), confirmOpts())) return;
-  const res = await api('POST', '/api/user/reset', { user: state.selectedUser });
-  const result = document.getElementById('userDetailResult');
-  if (res && res.success) {
-    result.innerHTML = `<div class="result-title ok">${t('ok')}</div>
-      <div class="result-msg">${t('uuid')}: ${escapeHtml(res.obj.uuid)}<br>${t('token')}: ${escapeHtml(res.obj.token)}</div>`;
-    result.className = 'result-box success';
-  } else {
-    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
-    result.className = 'result-box error';
-  }
+  await withBusy(document.getElementById('btnDoReset'), async () => {
+    const res = await api('POST', '/api/user/reset', { user: state.selectedUser });
+    const result = document.getElementById('userDetailResult');
+    if (res && res.success) {
+      result.innerHTML = `<div class="result-title ok">${t('ok')}</div>
+        <div class="result-msg">${t('uuid')}: ${escapeHtml(res.obj.uuid)}<br>${t('token')}: ${escapeHtml(res.obj.token)}</div>`;
+      result.className = 'result-box success';
+    } else {
+      result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
+      result.className = 'result-box error';
+    }
+  });
 }
 
-export async function deleteUser(username) {
+export async function deleteUser(username, btn) {
   if (!await confirmDialog(t('confirm_delete_user'), t('confirm'), confirmOpts())) return;
-  const res = await api('POST', '/api/user/delete', { user: username });
-  if (res && res.success) {
-    toast(t('deleted'), 'success');
-    loadUsers();
-    hideUserDetail();
-  } else {
-    toast(res?.msg || t('error'), 'error');
-  }
+  const trigger = btn || document.getElementById('btnDoDelete');
+  await withBusy(trigger, async () => {
+    const res = await api('POST', '/api/user/delete', { user: username });
+    if (res && res.success) {
+      toast(t('deleted'), 'success');
+      loadUsers();
+      hideUserDetail();
+    } else {
+      toast(res?.msg || t('error'), 'error');
+    }
+  });
 }
 
 export async function doDeleteUser() {
@@ -154,16 +172,18 @@ export async function doAddUser() {
   if (uuid) body.userid = uuid;
 
   const result = document.getElementById('addUserResult');
-  const res = await api('POST', '/api/user/add', body);
-  if (res && res.success) {
-    result.innerHTML = `<div class="result-title ok">${t('created')}</div>`;
-    result.className = 'result-box success';
-    hideAddUser();
-    loadUsers();
-  } else {
-    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
-    result.className = 'result-box error';
-  }
+  await withBusy(document.getElementById('btnDoAdd'), async () => {
+    const res = await api('POST', '/api/user/add', body);
+    if (res && res.success) {
+      result.innerHTML = `<div class="result-title ok">${t('created')}</div>`;
+      result.className = 'result-box success';
+      hideAddUser();
+      loadUsers();
+    } else {
+      result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
+      result.className = 'result-box error';
+    }
+  });
 }
 
 const confirmOpts = () => ({ okText: t('confirm'), cancelText: t('cancel') });

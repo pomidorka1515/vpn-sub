@@ -20,6 +20,10 @@ function renderHealthDetails(obj) {
 }
 
 export async function runHealthCheck() {
+  await withBusy(document.getElementById('btnRunHealth'), () => runHealthCheckRequest());
+}
+
+async function runHealthCheckRequest() {
   const res = await api('GET', '/api/health');
   const dot = document.getElementById('healthDot');
   const text = document.getElementById('healthText');
@@ -45,10 +49,19 @@ export async function runHealthCheck() {
 }
 
 export async function loadOnlineUsers() {
+  const wrap = document.getElementById('onlineUsersWrap');
+  const current = loadGen('online');
+  await withBusy(document.getElementById('btnLoadOnline'), () => {
+    wrap.innerHTML = loadingHtml();
+    return loadOnlineUsersRequest(wrap, current);
+  });
+}
+
+async function loadOnlineUsersRequest(wrap, current) {
   const keyed = document.getElementById('onlineKeyed').checked;
   const path = keyed ? '/api/user/onlines?keyed=1' : '/api/user/onlines';
   const res = await api('GET', path);
-  const wrap = document.getElementById('onlineUsersWrap');
+  if (!current()) return;
   if (!res || !res.success) {
     wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('error'))}</div>`;
     return;
@@ -112,9 +125,17 @@ export async function loadOnlineUsers() {
 
 export async function doRefreshUsers() {
   const result = document.getElementById('refreshResult');
-  result.innerHTML = `<div class="result-msg">${t('loading')}</div>`;
-  result.className = 'result-box';
+  const current = loadGen('refreshUsers');
+  await withBusy(document.getElementById('btnDoRefresh'), () => {
+    result.innerHTML = loadingHtml();
+    result.className = 'result-box';
+    return doRefreshUsersRequest(result, current);
+  });
+}
+
+async function doRefreshUsersRequest(result, current) {
   const res = await api('GET', '/api/user/refresh');
+  if (!current()) return;
   if (res && res.success) {
     result.innerHTML = `<div class="result-title ok">${t('refreshed')}</div><div class="result-msg">${escapeHtml(res.msg || '')}</div>`;
     result.className = 'result-box success';
@@ -180,8 +201,16 @@ function renderOperationsStatus(obj) {
 
 export async function loadOperationsStatus() {
   const wrap = document.getElementById('operationsStatusWrap');
-  wrap.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
+  const current = loadGen('operations');
+  await withBusy(document.getElementById('btnLoadOperations'), () => {
+    wrap.innerHTML = loadingHtml();
+    return loadOperationsStatusRequest(wrap, current);
+  });
+}
+
+async function loadOperationsStatusRequest(wrap, current) {
   const res = await api('GET', '/api/operations/status');
+  if (!current()) return;
   if (!res || !res.success) {
     wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
     return;
@@ -189,26 +218,32 @@ export async function loadOperationsStatus() {
   wrap.innerHTML = renderOperationsStatus(res.obj);
 }
 
-async function resolveRollbackMarker(kind, user) {
+async function resolveRollbackMarker(kind, user, btn) {
   if (!await confirmDialog(t('confirm_resolve_rollback'), t('confirm'), confirmOpts())) return;
-  const res = await api('POST', '/api/operations/rollback/resolve', { kind, user });
-  if (res && res.success) {
-    toast(t('resolved'), 'success');
-    await loadOperationsStatus();
-  } else {
-    toast(res?.msg || t('network_err'), 'error');
-  }
+  await withBusy(btn, async () => {
+    const res = await api('POST', '/api/operations/rollback/resolve', { kind, user });
+    if (res && res.success) {
+      toast(t('resolved'), 'success');
+      await loadOperationsStatus();
+    } else {
+      toast(res?.msg || t('network_err'), 'error');
+    }
+  });
 }
 
 export function bindOperations() {
   document.getElementById('operationsStatusWrap').addEventListener('click', e => {
     const button = e.target.closest('[data-rollback-kind]');
     if (!button) return;
-    resolveRollbackMarker(button.getAttribute('data-rollback-kind'), button.getAttribute('data-rollback-user'));
+    resolveRollbackMarker(button.getAttribute('data-rollback-kind'), button.getAttribute('data-rollback-user'), button);
   });
 }
 
 export async function checkTeapot() {
+  await withBusy(document.getElementById('btnTeapot'), () => checkTeapotRequest());
+}
+
+async function checkTeapotRequest() {
   const res = await api('GET', '/api/teapot');
   const status = document.getElementById('teapotStatus');
   if (res && res.teapot) {

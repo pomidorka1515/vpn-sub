@@ -25,18 +25,18 @@ let currentStats = null;
 async function loadStats() {
   const btn = document.getElementById('btnRefresh');
   const dash = document.querySelector('.dash-content');
-  btn.disabled = true;
-  btn.setAttribute('aria-busy', 'true');
   dash.setAttribute('aria-busy', 'true');
   try {
-    const res = await api('GET', '/stats');
-    if (!res) return;
-    if (!res.success) { toast(res.msg || t('network_err'), 'error'); return; }
-    currentStats = res.obj;
-    renderStats(res.obj);
+    const current = loadGen('stats');
+    await withBusy(btn, async () => {
+      const res = await api('GET', '/stats');
+      if (!current()) return;
+      if (!res) return;
+      if (!res.success) { toast(res.msg || t('network_err'), 'error'); return; }
+      currentStats = res.obj;
+      renderStats(res.obj);
+    });
   } finally {
-    btn.disabled = false;
-    btn.setAttribute('aria-busy', 'false');
     dash.setAttribute('aria-busy', 'false');
   }
 }
@@ -140,20 +140,22 @@ async function applyBonus() {
   const code = document.getElementById('bonusInput').value.trim();
   if (!code) return;
   const msg = document.getElementById('bonusMsg');
-  const res = await api('POST', '/bonus', { code });
-  if (!res) return;
-  if (res.success) {
-    const o = res.obj;
-    let parts = [];
-    if (o.days) parts.push('+' + o.days + ' ' + t('days'));
-    if (o.gb) parts.push('+' + o.gb + ' ' + t('gb_unit'));
-    if (o.wl_gb) parts.push('+' + o.wl_gb + ' ' + t('gb_wl'));
-    if (o.perma) parts.push(t('bonus_reusable'));
-    msg.textContent = parts.join(', ') || t('ok');
-    msg.className = 'bonus-msg ok';
-    document.getElementById('bonusInput').value = '';
-    loadStats();
-  } else { msg.textContent = res.msg || t('error'); msg.className = 'bonus-msg err'; }
+  await withBusy(document.getElementById('btnApply'), async () => {
+    const res = await api('POST', '/bonus', { code });
+    if (!res) return;
+    if (res.success) {
+      const o = res.obj;
+      let parts = [];
+      if (o.days) parts.push('+' + o.days + ' ' + t('days'));
+      if (o.gb) parts.push('+' + o.gb + ' ' + t('gb_unit'));
+      if (o.wl_gb) parts.push('+' + o.wl_gb + ' ' + t('gb_wl'));
+      if (o.perma) parts.push(t('bonus_reusable'));
+      msg.textContent = parts.join(', ') || t('ok');
+      msg.className = 'bonus-msg ok';
+      document.getElementById('bonusInput').value = '';
+      loadStats();
+    } else { msg.textContent = res.msg || t('error'); msg.className = 'bonus-msg err'; }
+  });
 }
 
 let svt;
@@ -196,28 +198,32 @@ async function saveSettings() {
     }
     body.current_password = curPass;
   }
-  const res = await api('POST', '/settings', body);
-  if (!res) return;
-  if (res.success) {
-    msg.textContent = t('saved'); msg.className = 'settings-msg ok';
-    document.getElementById('setUser').value = '';
-    document.getElementById('setPass').value = '';
-    document.getElementById('setCurPass').value = '';
-    document.getElementById('setUserHint').textContent = '';
-    document.getElementById('setUserHint').className = 'username-hint';
-    loadStats();
-  } else { msg.textContent = res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')); msg.className = 'settings-msg err'; }
-  setTimeout(() => { msg.textContent = ''; }, 3000);
+  await withBusy(document.getElementById('btnSave'), async () => {
+    const res = await api('POST', '/settings', body);
+    if (!res) return;
+    if (res.success) {
+      msg.textContent = t('saved'); msg.className = 'settings-msg ok';
+      document.getElementById('setUser').value = '';
+      document.getElementById('setPass').value = '';
+      document.getElementById('setCurPass').value = '';
+      document.getElementById('setUserHint').textContent = '';
+      document.getElementById('setUserHint').className = 'username-hint';
+      loadStats();
+    } else { msg.textContent = res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')); msg.className = 'settings-msg err'; }
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  });
 }
 
 const confirmOpts = () => ({ okText: t('confirm_yes'), cancelText: t('confirm_cancel') });
 
 async function doReset() {
   if (!(await confirmDialog(t('confirm_reset'), t('confirm_title_reset'), confirmOpts()))) return;
-  const res = await api('POST', '/reset');
-  if (!res) return;
-  if (res.success) { toast(t('ok')); loadStats(); }
-  else toast(res.msg || t('error'), 'error');
+  await withBusy(document.getElementById('btnReset'), async () => {
+    const res = await api('POST', '/reset');
+    if (!res) return;
+    if (res.success) { toast(t('ok')); loadStats(); }
+    else toast(res.msg || t('error'), 'error');
+  });
 }
 
 async function doDelete() {
@@ -225,10 +231,12 @@ async function doDelete() {
   if (!(await confirmDialog(t('confirm_delete2'), t('confirm_title_final'), confirmOpts()))) return;
   const curPass = await confirmDialog(t('current_pw_required'), t('confirm_title_delete'), { input: true, inputPlaceholder: t('current_password'), ...confirmOpts() });
   if (!curPass) return;
-  const res = await api('POST', '/delete', { current_password: curPass });
-  if (!res) return;
-  if (res.success) { window.location.href = window.AUTH_PAGE; }
-  else toast(res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')), 'error');
+  await withBusy(document.getElementById('btnDelete'), async () => {
+    const res = await api('POST', '/delete', { current_password: curPass });
+    if (!res) return;
+    if (res.success) { window.location.href = window.AUTH_PAGE; }
+    else toast(res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')), 'error');
+  });
 }
 
 async function doLogout() {
@@ -243,27 +251,33 @@ async function showQrCode() {
   let url = window.API + '/qr?lang=' + window.lang;
   if (qrMode === 'happ') url += '&happ=1';
 
-  try {
-    const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
-
-    if (!res.ok) throw new Error(t('qr_failed'));
-
-    const blob = await res.blob();
-    const canvas = document.getElementById('qrCanvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-      document.getElementById('qrSection').style.display = 'block';
-    };
-
-    img.src = URL.createObjectURL(blob);
-  } catch (err) {
-    toast(t('qr_failed'), 'error');
-  }
+  await withBusy(document.getElementById('btnQr'), async () => {
+    let objectUrl;
+    try {
+      const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
+      if (!res.ok) throw new Error(t('qr_failed'));
+      const blob = await res.blob();
+      objectUrl = URL.createObjectURL(blob);
+      const canvas = document.getElementById('qrCanvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          document.getElementById('qrSection').style.display = 'block';
+          resolve();
+        };
+        img.onerror = () => reject(new Error(t('qr_failed')));
+        img.src = objectUrl;
+      });
+    } catch (err) {
+      toast(t('qr_failed'), 'error');
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  });
 }
 
 function hideQrCode() {
@@ -281,8 +295,9 @@ function setQrMode(mode) {
 async function showProfiles() {
   const overlay = document.getElementById('profilesOverlay');
   const list = document.getElementById('profilesList');
-  list.innerHTML = '<div class="profiles-loading">…</div>';
+  const current = loadGen('profiles');
   overlay.classList.add('show');
+  list.innerHTML = loadingHtml();
 
   const close = () => {
     overlay.classList.remove('show');
@@ -296,6 +311,7 @@ async function showProfiles() {
   document.addEventListener('keydown', onKey);
 
   const res = await api('GET', '/profiles?lang=' + window.lang);
+  if (!current()) return;
   if (!res || !res.success) {
     list.innerHTML = '<div class="profiles-loading">' + escapeHtml(res?.msg || t('network_err')) + '</div>';
     return;

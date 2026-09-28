@@ -2,9 +2,17 @@ import { renderPanelCards } from './panels.js';
 
 export async function loadSystemStatus() {
   const result = document.getElementById('systemStatusResult');
-  result.innerHTML = `<div class="result-msg">${t('loading')}</div>`;
-  result.className = 'result-box';
+  const current = loadGen('system');
+  await withBusy(document.getElementById('btnSystemStatus'), () => {
+    result.innerHTML = loadingHtml();
+    result.className = 'result-box';
+    return loadSystemStatusRequest(result, current);
+  });
+}
+
+async function loadSystemStatusRequest(result, current) {
   const res = await api('GET', '/api/state/system');
+  if (!current()) return;
   if (res && res.success) {
     result.innerHTML = renderSystemStatus(res.obj);
     result.className = 'result-box';
@@ -106,8 +114,16 @@ export async function loadSnapshots() {
   const list = document.getElementById('snapshotsList');
   const cutoff = parseInt(document.getElementById('snapCutoff').value, 10);
   if (isNaN(cutoff) || cutoff <= 0) { toast(t('cutoff_invalid'), 'error'); return; }
-  list.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
+  const current = loadGen('snapshots');
+  await withBusy(document.getElementById('btnLoadSnapshots'), () => {
+    list.innerHTML = loadingHtml();
+    return loadSnapshotsRequest(list, cutoff, current);
+  });
+}
+
+async function loadSnapshotsRequest(list, cutoff, current) {
   const res = await api('POST', '/api/state/snapshots', { cutoff });
+  if (!current()) return;
   if (!res || !res.success) {
     list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
     return;

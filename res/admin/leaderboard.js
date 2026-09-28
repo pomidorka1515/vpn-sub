@@ -12,9 +12,16 @@ export async function fetchLeaderboard() {
   };
 
   const wrap = document.getElementById('lbTableWrap');
-  wrap.innerHTML = `<div class="table-empty" style="padding:20px">${t('loading')}</div>`;
+  const current = loadGen('leaderboard');
+  await withBusy(document.getElementById('btnFetchLb'), () => {
+    wrap.innerHTML = loadingHtml();
+    return fetchLeaderboardRequest(wrap, body, current);
+  });
+}
 
+async function fetchLeaderboardRequest(wrap, body, current) {
   const res = await api('POST', '/api/leaderboard', body);
+  if (!current()) return;
   if (!res || !res.success) {
     wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('error'))}</div>`;
     return;

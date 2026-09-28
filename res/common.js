@@ -16,6 +16,31 @@
     if (dark && light) { dark.style.display = theme === 'dark' ? 'block' : 'none'; light.style.display = theme === 'light' ? 'block' : 'none'; }
   };
   w.toggleTheme = function () { w.theme = (w.theme || 'dark') === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', w.theme); w.applyTheme(); };
+  w.loadingHtml = function () {
+    return '<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>' + w.escapeHtml(w.t('loading')) + '</div>';
+  };
+  w.busyDepth = function (btn) { return btn && btn._busy || 0; };
+  w.loadGen = function (key) {
+    w._loadGen = w._loadGen || {};
+    w._loadGen[key] = (w._loadGen[key] || 0) + 1;
+    const gen = w._loadGen[key];
+    return () => w._loadGen[key] === gen;
+  };
+  w.withBusy = async function (btn, fn) {
+    if (!btn) return await fn();
+    if (btn.disabled && !w.busyDepth(btn)) return;
+    btn._busy = w.busyDepth(btn) + 1;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    try { return await fn(); }
+    finally {
+      btn._busy = w.busyDepth(btn) - 1;
+      if (btn.isConnected && !w.busyDepth(btn)) {
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+      }
+    }
+  };
   w.toast = function (msg, type = 'success') {
     document.querySelector('.toast')?.remove();
     const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;

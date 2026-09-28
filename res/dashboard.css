@@ -29,6 +29,7 @@
   cursor: pointer; transition: all .2s; white-space: nowrap;
 }
 .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+.btn-copy:disabled { opacity: .5; cursor: not-allowed; }
 .btn-copy.copied { border-color: var(--green); color: var(--green); }
 
 .qr-section {
@@ -121,6 +122,7 @@
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .profiles-loading { font-size: 13px; color: var(--text2); padding: 18px 0; text-align: center; }
+.profiles-list .loading { padding: 18px 0; }
 
 @media (max-width: 500px) {
   .stats-grid { grid-template-columns: 1fr; }

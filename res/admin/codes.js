@@ -1,20 +1,31 @@
 export async function loadCodes() {
   const list = document.getElementById('codeList');
-  list.innerHTML = `<div class="table-empty">${t('loading')}</div>`;
+  const current = loadGen('codes');
+  await withBusy(document.getElementById('btnLoadCodes'), () => {
+    list.innerHTML = loadingHtml();
+    return loadCodesRequest(list, current);
+  });
+}
+
+async function loadCodesRequest(list, current) {
   const res = await api('GET', '/api/code/list');
+  if (!current()) return;
   if (!res || !res.success) {
     list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
     return;
   }
   const names = Array.isArray(res.obj) ? res.obj : [];
+  if (!current()) return;
   if (!names.length) {
     list.innerHTML = `<div class="table-empty">${t('no_codes')}</div>`;
     return;
   }
-  const entries = await Promise.all(names.map(async name => {
+  const entries = [];
+  for (const name of names) {
     const info = await api('GET', `/api/code/info?code=${encodeURIComponent(name)}`);
-    return [name, info && info.success ? info.obj : null];
-  }));
+    if (!current()) return;
+    entries.push([name, info && info.success ? info.obj : null]);
+  }
   renderCodesList(entries);
 }
 
@@ -57,25 +68,27 @@ function onCodeListClick(e) {
   if (!btn) return;
   const code = btn.getAttribute('data-code');
   const action = btn.getAttribute('data-code-action');
-  if (action === 'copy') copyCode(code);
-  else if (action === 'delete') deleteCode(code);
+  if (action === 'copy') copyCode(code, btn);
+  else if (action === 'delete') deleteCode(code, btn);
 }
 
-function copyCode(code) {
-  navigator.clipboard.writeText(code)
+function copyCode(code, btn) {
+  withBusy(btn, () => navigator.clipboard.writeText(code)
     .then(() => toast(t('copied'), 'success'))
-    .catch(() => toast(t('copy_failed'), 'error'));
+    .catch(() => toast(t('copy_failed'), 'error')));
 }
 
-async function deleteCode(code) {
+async function deleteCode(code, btn) {
   if (!await confirmDialog(t('confirm_delete_code'), t('confirm'), confirmOpts())) return;
-  const res = await api('POST', '/api/code/delete', { code });
-  if (res && res.success) {
-    toast(t('deleted'), 'success');
-    loadCodes();
-  } else {
-    toast(res?.msg || t('error'), 'error');
-  }
+  await withBusy(btn, async () => {
+    const res = await api('POST', '/api/code/delete', { code });
+    if (res && res.success) {
+      toast(t('deleted'), 'success');
+      loadCodes();
+    } else {
+      toast(res?.msg || t('error'), 'error');
+    }
+  });
 }
 
 export function toggleUsesRow() {
@@ -122,17 +135,19 @@ export async function doAddCode() {
     body.uses = uses;
   }
 
-  const res = await api('POST', '/api/code/add', body);
-  if (res && res.success) {
-    toast(t('created'), 'success');
-    hideAddCode();
-    loadCodes();
-  } else {
-    const result = document.getElementById('addCodeResult');
-    result.style.display = 'block';
-    result.className = 'result-box error';
-    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
-  }
+  await withBusy(document.getElementById('btnDoAddCode'), async () => {
+    const res = await api('POST', '/api/code/add', body);
+    if (res && res.success) {
+      toast(t('created'), 'success');
+      hideAddCode();
+      loadCodes();
+    } else {
+      const result = document.getElementById('addCodeResult');
+      result.style.display = 'block';
+      result.className = 'result-box error';
+      result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
+    }
+  });
 }
 
 export function bindCodeList() {

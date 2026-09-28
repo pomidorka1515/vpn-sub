@@ -1,15 +1,21 @@
 export async function checkPanelStatus() {
-  const name = document.getElementById('panelName').value.trim();
-  const path = name ? `/api/panel/status?name=${encodeURIComponent(name)}` : '/api/panel/status';
-  const res = await api('GET', path);
   const result = document.getElementById('panelStatusResult');
-  if (res && res.success) {
-    result.innerHTML = renderPanelCards(res.obj);
+  const current = loadGen('panels');
+  await withBusy(document.getElementById('btnPanelStatus'), async () => {
+    result.innerHTML = loadingHtml();
     result.className = 'result-box';
-  } else {
-    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
-    result.className = 'result-box error';
-  }
+    const name = document.getElementById('panelName').value.trim();
+    const path = name ? `/api/panel/status?name=${encodeURIComponent(name)}` : '/api/panel/status';
+    const res = await api('GET', path);
+    if (!current()) return;
+    if (res && res.success) {
+      result.innerHTML = renderPanelCards(res.obj);
+      result.className = 'result-box';
+    } else {
+      result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
+      result.className = 'result-box error';
+    }
+  });
 }
 
 export function renderPanelCards(panels, idPrefix = '') {
