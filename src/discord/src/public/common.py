@@ -95,7 +95,7 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         if not self.has_lang(uid):
             await self._respond(
                 interaction,
-                "Welcome! Please choose your language:\nДобро пожаловать! Выберите язык:",
+                self.text(self.get_lang(uid), "choose_lang_prompt"),
                 view=self.language_view(),
             )
             return

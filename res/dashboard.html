@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <script src="common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel</title>
+<title data-t="page_title">Panel</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -296,11 +296,11 @@ body {
     <span class="topbar-name" id="topName">—</span>
   </div>
   <div class="topbar-right">
-    <div class="lang-toggle">
-      <button class="lang-btn" onclick="setLang('en')">EN</button>
-      <button class="lang-btn" onclick="setLang('ru')">RU</button>
+    <div class="lang-toggle" data-t-aria="lang_selection">
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
+      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
     </div>
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme"></button>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
     <button class="btn-sm" onclick="showProfiles()" id="btnProfiles"></button>
     <button class="btn-sm" onclick="loadStats()" id="btnRefresh"></button>
     <button class="btn-sm danger" onclick="doLogout()" id="btnLogout"></button>
@@ -397,13 +397,13 @@ body {
       <div class="settings-row"><label data-t="password"></label>
         <div class="pass-wrap">
           <input type="password" id="setPass" autocomplete="new-password">
-          <button class="pass-toggle" onclick="togglePass('setPass', this)" type="button" aria-label="Toggle password"></button>
+          <button class="pass-toggle" onclick="togglePass('setPass', this)" type="button" data-t-aria="toggle_password"></button>
         </div>
       </div>
       <div class="settings-row"><label data-t="current_password"></label>
         <div class="pass-wrap">
           <input type="password" id="setCurPass" autocomplete="current-password">
-          <button class="pass-toggle" onclick="togglePass('setCurPass', this)" type="button" aria-label="Toggle password"></button>
+          <button class="pass-toggle" onclick="togglePass('setCurPass', this)" type="button" data-t-aria="toggle_password"></button>
         </div>
       </div>
     </div>
@@ -416,7 +416,7 @@ body {
   <div class="card">
     <div class="card-title" data-t="account"></div>
     <div class="info-grid">
-      <div class="info-row"><span class="info-label">UUID</span><span class="info-value" id="infoUuid">—</span></div>
+      <div class="info-row"><span class="info-label" data-t="uuid"></span><span class="info-value" id="infoUuid">—</span></div>
       <div class="info-row"><span class="info-label" data-t="fingerprint"></span><span class="info-value" id="infoFp">—</span></div>
       <div class="info-row"><span class="info-label" data-t="token"></span><span class="info-value" id="infoToken">—</span></div>
     </div>
@@ -457,88 +457,13 @@ body {
 const BASE = '{{ prefix }}';
 const API = BASE + '/webapi';
 const AUTH_PAGE = BASE + '/auth';
-
-const L = {
-  en: {
-    subscription: 'Subscription', usage: 'Usage', bonus_code: 'Bonus code',
-    settings: 'Settings', account: 'Account', danger_zone: 'Danger zone',
-    expires: 'Expires', status: 'Status', total_traffic: 'Total traffic',
-    wl_traffic: 'Whitelist traffic', monthly: 'Monthly', wl_monthly: 'Whitelist monthly',
-    extra_bw: 'Additional bandwidth info',
-    display_name: 'Display name', fingerprint: 'Fingerprint', username: 'Username',
-    password: 'Password', current_password: 'Current password', token: 'Token',
-    current_pw_required: 'Enter your current password to confirm.',
-    invalid_current_pw: 'Invalid current password',
-    copy: 'Copy', copied: 'Copied', qr: 'QR', apply: 'Apply', save: 'Save', saved: 'Saved',
-    refresh: 'Refresh', logout: 'Logout',
-    qr_link: 'Link', qr_happ: 'Happ',
-    reset_uuid: 'Reset UUID & token', delete_account: 'Delete account',
-    enter_code: 'Enter code', keep_empty: 'Leave empty to keep',
-    online: 'Online', offline: 'Offline',
-    active: 'Active', disabled: 'Disabled', unlimited: 'Unlimited', expired: 'Expired',
-    d_left: 'd left', h_left: 'h left',
-    confirm_reset: 'Reset UUID & token? You will need to re-add your subscription.',
-    confirm_delete: 'Permanently delete your account? This cannot be undone.',
-    confirm_delete2: 'Really sure?',
-    confirm_title_reset: 'Reset credentials',
-    confirm_title_delete: 'Delete account',
-    confirm_title_final: 'Final confirmation',
-    confirm_yes: 'Confirm', confirm_cancel: 'Cancel',
-    banner_disabled: 'Your account is disabled. Contact support to restore access.',
-    banner_expired: 'Your subscription has expired. Apply a bonus code to extend it.',
-    network_err: 'Network error',
-    hint_invalid: 'Invalid characters. Try: ', hint_taken: 'Username taken', hint_ok: 'Available',
-    bonus_reusable: '(reusable)',
-    profiles: 'Profiles', profiles_title: 'Available profiles',
-    no_profiles: 'No profiles available.', close: 'Close',
-  },
-  ru: {
-    subscription: 'Подписка', usage: 'Использование', bonus_code: 'Бонус-код',
-    settings: 'Настройки', account: 'Аккаунт', danger_zone: 'Опасная зона',
-    expires: 'Истекает', status: 'Статус', total_traffic: 'Весь трафик',
-    wl_traffic: 'Трафик WL', monthly: 'За месяц', wl_monthly: 'WL за месяц',
-    extra_bw: 'Дополнительная информация о трафике',
-    display_name: 'Имя', fingerprint: 'Отпечаток', username: 'Логин',
-    password: 'Пароль', current_password: 'Текущий пароль', token: 'Токен',
-    current_pw_required: 'Введите текущий пароль для подтверждения.',
-    invalid_current_pw: 'Неверный текущий пароль',
-    copy: 'Копировать', copied: 'Скопировано', qr: 'QR', apply: 'Применить', save: 'Сохранить', saved: 'Сохранено',
-    refresh: 'Обновить', logout: 'Выйти',
-    qr_link: 'Ссылка', qr_happ: 'Happ',
-    reset_uuid: 'Сбросить UUID и токен', delete_account: 'Удалить аккаунт',
-    enter_code: 'Введите код', keep_empty: 'Оставьте пустым',
-    online: 'В сети', offline: 'Не в сети',
-    active: 'Активен', disabled: 'Отключён', unlimited: 'Безлимит', expired: 'Истёк',
-    d_left: 'д', h_left: 'ч',
-    confirm_reset: 'Сбросить UUID и токен? Подписку нужно будет добавить заново.',
-    confirm_delete: 'Удалить аккаунт навсегда? Это необратимо.',
-    confirm_delete2: 'Точно уверены?',
-    confirm_title_reset: 'Сброс данных',
-    confirm_title_delete: 'Удаление аккаунта',
-    confirm_title_final: 'Последнее подтверждение',
-    confirm_yes: 'Подтвердить', confirm_cancel: 'Отмена',
-    banner_disabled: 'Ваш аккаунт отключён. Свяжитесь с поддержкой для восстановления.',
-    banner_expired: 'Подписка истекла. Примените бонус-код для продления.',
-    network_err: 'Ошибка сети',
-    hint_invalid: 'Недопустимые символы. Попробуйте: ', hint_taken: 'Логин занят', hint_ok: 'Свободен',
-    bonus_reusable: '(многоразовый)',
-    profiles: 'Профили', profiles_title: 'Доступные профили',
-    no_profiles: 'Профили недоступны.', close: 'Закрыть',
-  }
-};
-
-let lang = localStorage.getItem('lang') || 'en';
-function t(k) { return L[lang]?.[k] || L.en[k] || k; }
-
-
-
-
+window.LANG = {{ L | tojson }};
+window.LANG_EN = {{ L_en | tojson }};
+window.LANG_CODE = '{{ lang }}';
+window.lang = window.LANG_CODE;
 
 function renderLang() {
-  document.querySelectorAll('.lang-btn').forEach(b =>
-    b.classList.toggle('active', b.textContent.toLowerCase() === lang));
-  document.querySelectorAll('[data-t]').forEach(el =>
-    el.textContent = t(el.getAttribute('data-t')));
+  applyStaticLang();
   document.getElementById('btnProfiles').textContent = t('profiles');
   document.getElementById('btnRefresh').textContent = t('refresh');
   document.getElementById('btnLogout').textContent = t('logout');
@@ -558,8 +483,6 @@ function renderLang() {
   document.getElementById('setCurPass').placeholder = t('keep_empty');
   if (currentStats) renderStats(currentStats);
 }
-
-function setLang(l) { lang = l; localStorage.setItem('lang', l); renderLang(); }
 
 window.apiConfig = {
   baseUrl: API,
@@ -606,7 +529,7 @@ function renderStats(s) {
     banner.classList.remove('show');
   }
 
-  document.getElementById('subLink').textContent = s.link ? s.link + '&lang=' + lang : '—';
+  document.getElementById('subLink').textContent = s.link ? s.link + '&lang=' + window.lang : '—';
 
   const expEl = document.getElementById('statExpiry');
   expEl.textContent = fmtTime(s.time, t);
@@ -619,7 +542,7 @@ function renderStats(s) {
   } else {
     enEl.textContent = t('active');
     enEl.style.color = 'var(--green)';
-    if (s.wl_enabled) enEl.textContent += ' + WL';
+    if (s.wl_enabled) enEl.textContent += t('wl_suffix');
   }
 
   const bw = s.bandwidth;
@@ -635,7 +558,7 @@ function renderStats(s) {
     const pct = (bw.monthly / limitB) * 100;
     document.getElementById('bwMonthlyBar').style.width = Math.min(100, pct) + '%';
     document.getElementById('bwMonthlyBar').style.background = getBwColor(pct);
-    document.getElementById('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ' + bw.limit + ' GB';
+    document.getElementById('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ' + bw.limit + ' ' + t('gb_unit');
   } else {
     document.getElementById('bwMonthlyBar').style.width = '0%';
     document.getElementById('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ∞';
@@ -645,7 +568,7 @@ function renderStats(s) {
     const pct = (bw.wl_monthly / wlLimitB) * 100;
     document.getElementById('bwWlBar').style.width = Math.min(100, pct) + '%';
     document.getElementById('bwWlBar').style.background = getBwColor(pct);
-    document.getElementById('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ' + bw.wl_limit + ' GB';
+    document.getElementById('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ' + bw.wl_limit + ' ' + t('gb_unit');
   } else {
     document.getElementById('bwWlBar').style.width = '0%';
     document.getElementById('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ∞';
@@ -690,15 +613,15 @@ async function applyBonus() {
   if (res.success) {
     const o = res.obj;
     let parts = [];
-    if (o.days) parts.push('+' + o.days + (lang === 'ru' ? ' дн.' : ' days'));
-    if (o.gb) parts.push('+' + o.gb + ' GB');
-    if (o.wl_gb) parts.push('+' + o.wl_gb + ' GB (WL)');
+    if (o.days) parts.push('+' + o.days + ' ' + t('days'));
+    if (o.gb) parts.push('+' + o.gb + ' ' + t('gb_unit'));
+    if (o.wl_gb) parts.push('+' + o.wl_gb + ' ' + t('gb_wl'));
     if (o.perma) parts.push(t('bonus_reusable'));
-    msg.textContent = parts.join(', ') || 'OK';
+    msg.textContent = parts.join(', ') || t('ok');
     msg.className = 'bonus-msg ok';
     document.getElementById('bonusInput').value = '';
     loadStats();
-  } else { msg.textContent = res.msg || 'Error'; msg.className = 'bonus-msg err'; }
+  } else { msg.textContent = res.msg || t('error'); msg.className = 'bonus-msg err'; }
 }
 
 let svt;
@@ -751,7 +674,7 @@ async function saveSettings() {
     document.getElementById('setUserHint').textContent = '';
     document.getElementById('setUserHint').className = 'username-hint';
     loadStats();
-  } else { msg.textContent = res.msg || 'Error'; msg.className = 'settings-msg err'; }
+  } else { msg.textContent = res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')); msg.className = 'settings-msg err'; }
   setTimeout(() => { msg.textContent = ''; }, 3000);
 }
 
@@ -761,8 +684,8 @@ async function doReset() {
   if (!(await confirmDialog(t('confirm_reset'), t('confirm_title_reset'), confirmOpts()))) return;
   const res = await api('POST', '/reset');
   if (!res) return;
-  if (res.success) { toast('OK'); loadStats(); }
-  else toast(res.msg || 'Error', 'error');
+  if (res.success) { toast(t('ok')); loadStats(); }
+  else toast(res.msg || t('error'), 'error');
 }
 
 async function doDelete() {
@@ -773,7 +696,7 @@ async function doDelete() {
   const res = await api('POST', '/delete', { current_password: curPass });
   if (!res) return;
   if (res.success) { window.location.href = AUTH_PAGE; }
-  else toast(res.msg || 'Error', 'error');
+  else toast(res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')), 'error');
 }
 
 async function doLogout() {
@@ -785,13 +708,13 @@ async function showQrCode() {
   const link = document.getElementById('subLink').textContent;
   if (!link || link === '—') return;
 
-  let url = API + '/qr?lang=' + lang;
+  let url = API + '/qr?lang=' + window.lang;
   if (qrMode === 'happ') url += '&happ=1';
 
   try {
     const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
 
-    if (!res.ok) throw new Error('Failed to generate QR code');
+    if (!res.ok) throw new Error(t('qr_failed'));
 
     const blob = await res.blob();
     const canvas = document.getElementById('qrCanvas');
@@ -807,7 +730,7 @@ async function showQrCode() {
 
     img.src = URL.createObjectURL(blob);
   } catch (err) {
-    toast('Failed to generate QR code', 'error');
+    toast(t('qr_failed'), 'error');
   }
 }
 
@@ -840,7 +763,7 @@ async function showProfiles() {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   document.addEventListener('keydown', onKey);
 
-  const res = await api('GET', '/profiles?lang=' + lang);
+  const res = await api('GET', '/profiles?lang=' + window.lang);
   if (!res || !res.success) {
     list.innerHTML = '<div class="profiles-loading">' + escapeHtml(res?.msg || t('network_err')) + '</div>';
     return;
@@ -861,6 +784,7 @@ async function showProfiles() {
 
 applyTheme();
 initPassToggles();
+initLang();
 renderLang();
 loadStats();
 loadFingerprints();

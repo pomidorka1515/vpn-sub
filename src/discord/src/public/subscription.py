@@ -25,7 +25,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         template = t.get("info_text")
         if not template:
             return None
-        daystext = "дней" if lang == "ru" else "days"
+        daystext = t["days_word"]
         expiry = obj.get("time") or 0
         try:
             expiry_i = int(expiry)

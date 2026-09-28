@@ -8,14 +8,21 @@ import pytest
 import uuid
 from argon2 import PasswordHasher
 from flask import Flask
+from pathlib import Path
 
 from api import Api, BaseApi, WebApi, _RateLimiter, rate_limit  # pyright: ignore[reportPrivateUsage]
 from api.common import RES_DIR
-from config import ConfigLike, LinesConfigLike
+from config import Config, ConfigLike, LinesConfigLike
 from db import Database
 from errors import AppError, DatabaseError
 from helpers import make_subscription, make_watch, subscription_config
 from jinja2 import FileSystemLoader
+
+_LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
+
+
+def _web_lang_cfg() -> ConfigLike:
+    return cast(ConfigLike, Config(path=_LANG_PATH, read_only=True, read_only_jsonc=True))
 
 
 @pytest.fixture
@@ -115,7 +122,7 @@ def _admin_api(
     api_uri: str = "api",
     api_admin_ui_auth: tuple[str, str] = ("admin", "panel-secret"),
 ) -> None:
-    subscription = make_subscription(database, app=flask_app)
+    subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
     Api(
         app=flask_app,
         cfg=cast(ConfigLike, subscription_config(
@@ -205,7 +212,7 @@ def test_health_returns_503_when_database_ping_fails(
 
 
 def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask) -> None:
-    subscription = make_subscription(database, app=flask_app, uri="custom")
+    subscription = make_subscription(database, app=flask_app, uri="custom", lang_cfg=_web_lang_cfg())
     database.create_user(
         username="alice", uuid=str(uuid.uuid4()), token="a" * 40,
         fingerprint="chrome", displayname="Alice",
@@ -238,6 +245,34 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert history.status_code == 200
     assert b"__SUB_URI__" not in history.data
     assert b"'/custom'" in history.data
+
+
+def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) -> None:
+    subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
+    WebApi(
+        app=flask_app,
+        cfg=cast(ConfigLike, subscription_config()),
+        sub=subscription,
+        bw=make_watch(database, subscription),
+    )
+    client = flask_app.test_client()
+
+    russian = client.get("/sub/auth?lang=ru")
+    assert russian.status_code == 200
+    assert '"sign_in": "\\u0412\\u0445\\u043e\\u0434"' in russian.get_data(as_text=True)
+    assert "lang=ru" in russian.headers.get("Set-Cookie", "")
+
+    unknown = client.get("/sub/auth?lang=xx")
+    assert unknown.status_code == 200
+    assert '"sign_in": "Sign in"' in unknown.get_data(as_text=True)
+    assert "lang=" not in unknown.headers.get("Set-Cookie", "")
+
+    client.set_cookie("lang", "ru")
+    from_cookie = client.get("/sub/auth")
+    assert from_cookie.status_code == 200
+    body = from_cookie.get_data(as_text=True)
+    assert "window.LANG_CODE = 'ru'" in body
+    assert '"sign_in": "\\u0412\\u0445\\u043e\\u0434"' in body
 
 
 def test_login_uses_isolated_auth_token(web_api: tuple[Flask, Database]) -> None:

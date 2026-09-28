@@ -15,6 +15,16 @@ __all__ = ["PublicTrafficMixin"]
 
 
 class PublicTrafficMixin(PublicFeatureMixin):
+    def _chart_lang(self, lang: str) -> Mapping[str, str]:
+        raw = self.lang_cfg.get("chart")
+        if isinstance(raw, dict):
+            table = raw.get(lang)
+            if not isinstance(table, dict):
+                table = raw.get("en")
+            if isinstance(table, dict):
+                return {str(k): str(v) for k, v in table.items()}
+        return {}
+
     def chart_view(self, lang: str) -> discord.ui.View:
         t = self.TEXTS[lang]
         view = discord.ui.View(timeout=None)
@@ -122,32 +132,12 @@ class PublicTrafficMixin(PublicFeatureMixin):
                             wl_down=int(item.get("wl_down") or 0),
                         )
                     )
-                chart_lang = {
-                    "bandwidth": "Bandwidth",
-                    "days": "days",
-                    "day": "day",
-                    "regular_traffic": "Regular traffic",
-                    "whitelist_traffic": "Whitelist traffic",
-                    "download": "Download",
-                    "upload": "Upload",
-                    "no_data": "No data",
-                }
-                if lang == "ru":
-                    chart_lang = {
-                        "bandwidth": "Использование трафика",
-                        "days": "дн.",
-                        "day": "день",
-                        "regular_traffic": "Обычный трафик",
-                        "whitelist_traffic": "Белый список",
-                        "download": "Загрузка",
-                        "upload": "Отдача",
-                        "no_data": "Нет данных",
-                    }
+                chart_lang = self._chart_lang(lang)
                 image = await asyncio.to_thread(
                     bandwidth_chart,
                     snapshots,
                     label=str(obj.get("displayname") or ""),
-                    lang=cast(Mapping[str, str], chart_lang),
+                    lang=chart_lang,
                 )
                 file: discord.File | None = None
                 if image is not None:

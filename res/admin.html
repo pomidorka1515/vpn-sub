@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <script src="common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Panel</title>
+<title data-t="page_title">Admin Panel</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -449,17 +449,17 @@ body {
 <div class="topbar">
   <div class="topbar-left">
     <div class="topbar-dot"></div>
-    <span class="topbar-name">Admin Panel</span>
+    <span class="topbar-name" data-t="page_title">Admin Panel</span>
   </div>
   <div class="topbar-right">
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme"></button>
-    <div class="lang-toggle">
-      <button class="lang-btn" onclick="setLang('en')">EN</button>
-      <button class="lang-btn" onclick="setLang('ru')">RU</button>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
+    <div class="lang-toggle" data-t-aria="lang_selection">
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
+      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
     </div>
-    <button class="btn-sm" onclick="runHealthCheck()" id="btnHealth">Health</button>
-    <button class="btn-sm success" onclick="showTab('users')">Users</button>
-    <button class="btn-sm success" onclick="showTab('codes')">Codes</button>
+    <button class="btn-sm" onclick="runHealthCheck()" id="btnHealth" data-t="health">Health</button>
+    <button class="btn-sm success" onclick="showTab('users')" data-t="users">Users</button>
+    <button class="btn-sm success" onclick="showTab('codes')" data-t="codes">Codes</button>
   </div>
 </div>
 
@@ -479,8 +479,8 @@ body {
     <div class="card">
       <div class="card-title" data-t="user_list">User List</div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn-secondary" onclick="loadUsers()" id="btnLoadUsers">Load Users</button>
-        <button class="btn-secondary" onclick="showAddUser()" id="btnShowAdd">+ Add User</button>
+        <button class="btn-secondary" onclick="loadUsers()" id="btnLoadUsers" data-t="load_users">Load Users</button>
+        <button class="btn-secondary" onclick="showAddUser()" id="btnShowAdd" data-t="add_user_btn">+ Add User</button>
       </div>
       <div class="table-wrap" id="usersTableWrap">
         <div class="table-empty" data-t="load_users_hint">Click "Load Users" to fetch user list</div>
@@ -519,7 +519,7 @@ body {
         <div class="form-row">
           <label data-t="fingerprint">Fingerprint</label>
           <div class="input-wrap">
-            <input type="text" id="addFp" placeholder="chrome">
+            <input type="text" id="addFp" data-t-ph="fp_placeholder" placeholder="chrome">
           </div>
         </div>
         <div class="form-row">
@@ -545,18 +545,18 @@ body {
         <div class="form-row">
           <label data-t="custom_token">Custom Token</label>
           <div class="input-wrap">
-            <input type="text" id="addToken" placeholder="auto">
+            <input type="text" id="addToken" data-t-ph="auto" placeholder="auto">
           </div>
         </div>
         <div class="form-row">
           <label data-t="custom_uuid">Custom UUID</label>
           <div class="input-wrap">
-            <input type="text" id="addUuid" placeholder="auto">
+            <input type="text" id="addUuid" data-t-ph="auto" placeholder="auto">
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="doAddUser()" id="btnDoAdd">Create</button>
-          <button class="btn-secondary" onclick="hideAddUser()" id="btnCancelAdd">Cancel</button>
+          <button class="btn btn-primary" onclick="doAddUser()" id="btnDoAdd" data-t="create">Create</button>
+          <button class="btn-secondary" onclick="hideAddUser()" id="btnCancelAdd" data-t="cancel">Cancel</button>
         </div>
         <div class="result-box" id="addUserResult"></div>
       </div>
@@ -566,9 +566,9 @@ body {
       <div class="card-title" data-t="user_details">User Details</div>
       <div class="info-grid" id="userDetailInfo"></div>
       <div style="display:flex;gap:8px;margin-top:16px">
-        <button class="btn-danger" onclick="doResetUser()" id="btnDoReset">Reset</button>
-        <button class="btn-danger" onclick="doDeleteUser()" id="btnDoDelete">Delete</button>
-        <button class="btn-secondary" onclick="hideUserDetail()" id="btnCloseDetail">Close</button>
+        <button class="btn-danger" onclick="doResetUser()" id="btnDoReset" data-t="reset">Reset</button>
+        <button class="btn-danger" onclick="doDeleteUser()" id="btnDoDelete" data-t="delete">Delete</button>
+        <button class="btn-secondary" onclick="hideUserDetail()" id="btnCloseDetail" data-t="close">Close</button>
       </div>
       <div class="result-box" id="userDetailResult"></div>
     </div>
@@ -657,8 +657,8 @@ body {
           <input type="number" id="logCount" value="50" min="1" class="dark-num-input">
           <span style="font-size:12px;color:var(--text2)" data-t="log_count_label">rows</span>
         </div>
-        <button class="btn-secondary" onclick="loadLogs()" id="btnLoadLogs">Load Logs</button>
-        <button class="btn-secondary" onclick="refreshLogs()" id="btnRefreshLogs">Refresh</button>
+        <button class="btn-secondary" onclick="loadLogs()" id="btnLoadLogs" data-t="load_logs">Load Logs</button>
+        <button class="btn-secondary" onclick="refreshLogs()" id="btnRefreshLogs" data-t="refresh">Refresh</button>
       </div>
       <div class="table-wrap" id="logsTableWrap">
         <div class="table-empty" data-t="load_logs_hint">Click "Load Logs" to fetch audit logs</div>
@@ -672,7 +672,7 @@ body {
       <div class="form-row">
         <label data-t="panel_name">Panel Name</label>
         <div class="input-wrap">
-          <input type="text" id="panelName" placeholder="optional">
+          <input type="text" id="panelName" data-t-ph="optional" placeholder="optional">
           <span class="form-hint" data-t="panel_name_hint">Leave empty for all panels</span>
         </div>
       </div>
@@ -733,7 +733,7 @@ body {
     <div class="card">
       <div class="card-title" data-t="online_users">Online Users</div>
       <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
-        <button class="btn-secondary" onclick="loadOnlineUsers()" id="btnLoadOnline">Load Online</button>
+        <button class="btn-secondary" onclick="loadOnlineUsers()" id="btnLoadOnline" data-t="load_online">Load Online</button>
         <label class="dark-check">
           <input type="checkbox" id="onlineKeyed" onchange="loadOnlineUsers()">
           <div class="check-track"><div class="check-thumb"></div></div>
@@ -748,7 +748,7 @@ body {
     <div class="card">
       <div class="card-title" data-t="refresh_users">Refresh All Users</div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">This syncs all users to all panels. May take time.</p>
-      <button class="btn-secondary" onclick="doRefreshUsers()" id="btnDoRefresh">Refresh Users</button>
+      <button class="btn-secondary" onclick="doRefreshUsers()" id="btnDoRefresh" data-t="refresh_users_btn">Refresh Users</button>
       <div class="result-box" id="refreshResult"></div>
     </div>
 
@@ -760,7 +760,7 @@ body {
         <div class="teapot-sub" data-t="teapot_sub">Spoiler: it cannot.</div>
       </div>
       <div style="text-align:center;margin-top:20px">
-        <button class="btn-secondary" onclick="checkTeapot()" id="btnTeapot">Check Teapot</button>
+        <button class="btn-secondary" onclick="checkTeapot()" id="btnTeapot" data-t="check_teapot">Check Teapot</button>
       </div>
     </div>
   </div>
@@ -772,14 +772,14 @@ body {
         <div class="config-row" style="flex:0 0 auto;min-width:160px">
           <label data-t="bw_type">Type</label>
           <select id="lbType" style="flex:1;min-width:0;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:12px;outline:none;cursor:pointer">
-            <option value="total">Total (All-time)</option>
-            <option value="monthly">Monthly</option>
-            <option value="wl_monthly">WL Monthly</option>
+            <option value="total" data-t="lb_total">Total (All-time)</option>
+            <option value="monthly" data-t="lb_monthly">Monthly</option>
+            <option value="wl_monthly" data-t="lb_wl_monthly">WL Monthly</option>
           </select>
         </div>
         <div class="config-row" style="flex:0 0 auto;min-width:130px">
           <label data-t="cutoff">Cutoff</label>
-          <input type="number" id="lbCutoff" placeholder="0 = all" min="0" style="padding:8px 10px">
+          <input type="number" id="lbCutoff" data-t-ph="cutoff_all" placeholder="0 = all" min="0" style="padding:8px 10px">
         </div>
         <div class="config-row" style="flex:1;min-width:180px">
           <label>&nbsp;</label>
@@ -808,174 +808,32 @@ body {
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal danger">
-    <div class="modal-title" id="modalTitle">Confirm</div>
+    <div class="modal-title" id="modalTitle" data-t="confirm">Confirm</div>
     <div class="modal-msg" id="modalMsg"></div>
     <input type="text" id="modalInput" class="modal-input" style="display:none" autocomplete="off">
     <div class="modal-actions">
-      <button class="modal-btn" id="modalCancel">Cancel</button>
-      <button class="modal-btn danger" id="modalOk">Confirm</button>
+      <button class="modal-btn" id="modalCancel" data-t="cancel">Cancel</button>
+      <button class="modal-btn danger" id="modalOk" data-t="confirm">Confirm</button>
     </div>
   </div>
 </div>
 
 <script>
-const L = {
-  en: {
-    users: 'Users', codes: 'Codes', audit_logs: 'Audit Logs', state: 'State', snapshots: 'Snapshots', health: 'Health',
-    user_list: 'User List', add_user: 'Add User', bonus_codes: 'Bonus Codes', add_code: 'Add Code',
-    user_details: 'User Details', internal_user: 'Internal User', display_name: 'Display Name',
-    ext_username: 'Ext Username', ext_password: 'Ext Password', fingerprint: 'Fingerprint',
-    monthly_limit: 'Monthly Limit (GB)', wl_limit: 'WL Limit (GB)', expires: 'Expires',
-    custom_token: 'Custom Token', custom_uuid: 'Custom UUID', code: 'Code', action_type: 'Action Type',
-    bonus: 'Bonus', register: 'Register', days: 'Days', gb: 'GB', wl_gb: 'WL GB', reusable: 'Reusable', uses: 'Uses', uses_hint: 'Ignored if reusable',
-    load_codes: 'Load Codes', add_code_btn: '+ Add Code', create: 'Create', code_hint: 'Unique code string',
-    reusable_label: 'Unlimited uses', no_codes: 'No codes', loading: 'Loading…', error: 'Error',
-    code_required: 'Code is required', uses_invalid: 'Uses must be greater than 0', copy_failed: 'Copy failed',
-    health_status: 'Health Status', not_checked: 'Not checked', panel_name: 'Panel Name',
-    panel_name_hint: 'Leave empty for all panels', online_users: 'Online Users', keyed: 'Keyed output',
-    refresh_users: 'Refresh All Users', refresh_warning: 'This syncs all users to all panels. May take time.',
-    teapot_title: 'Teapot Status',
-    load_users_hint: 'Click "Load Users" to fetch user list', load_codes_hint: 'Click "Load Codes" to fetch codes',
-    load_logs_hint: 'Click "Load Logs" to fetch audit logs',
-    internal_user_hint: 'Unique internal identifier', ext_username_hint: 'Web UI login (optional)',
-    limit_hint: '0 = unlimited', expires_hint: 'Empty = unlimited',
-    health_ok: 'API is healthy', health_warn: 'API is degraded', health_err: 'API check failed',
-    check_health: 'Check Health', db: 'Database', degraded: 'Degraded',
-    yes: 'Yes', no: 'No',
-    operations_recovery: 'Operational Recovery', load_operations: 'Load Status',
-    load_operations_hint: 'Load status to check recovery markers', snapshot_failure: 'Daily Snapshot Failure',
-    rollback_markers: 'Rollback Markers', no_recovery_issues: 'No recovery markers', marker_type: 'Type',
-    marker_reason: 'Reason', resolve: 'Resolve', resolved: 'Resolved', timestamp: 'Time',
-    confirm_resolve_rollback: 'Mark this rollback as manually repaired and remove it?',
-    network_err: 'Network error', created: 'Created', deleted: 'Deleted', refreshed: 'Refreshed',
-    reload_reauth: 'Reload to re-auth',
-    confirm: 'Confirm', cancel: 'Cancel',
-    confirm_delete_user: 'Delete user permanently?', confirm_reset_user: 'Reset token and UUID?',
-    confirm_delete_code: 'Delete this code?',
-    actions: 'Actions', info: 'Info', reset: 'Reset', delete: 'Delete', failed: 'Failed',
-    copied: 'Copied', copy: 'Copy',
-    teapot_question: 'Can this server brew coffee?', teapot_sub: 'Spoiler: it cannot.',
-    teapot_yes: 'Yes, I am a teapot', teapot_no: 'No, I am not a teapot',
-    // Panel status
-    panel_status: 'Panel Status', no_panels: 'No panels',
-    check_panel_status: 'Check Panel Status',
-    // Host system status
-    host_system_status: 'Host System Status', load_system_status: 'Load System Status',
-    no_data: 'No data', cpu_model: 'Model', available: 'Available',
-    app_uptime: 'App Uptime', app_swap: 'App Swap',
-    // Snapshots
-    load_snapshots: 'Load Snapshots',
-    load_snapshots_hint: 'Configure cutoff and click "Load Snapshots"',
-    no_snapshots: 'No snapshots', cutoff_days: 'Cutoff (days)',
-    cutoff_invalid: 'Cutoff must be greater than 0', panels_label: 'panels',
-    system: 'System', memory: 'Memory', disk: 'Disk', network: 'Network',
-    connections: 'Connections', uptime_app: 'Uptime & App',
-    public_ip: 'Public IP', xray_error: 'Xray Error',
-    cpu: 'CPU', cores: 'Cores', speed: 'Speed', load_avg: 'Load Avg', processes: 'Processes',
-    used: 'Used', percent: 'Percent', swap: 'Swap',
-    total_in: 'Total In', total_out: 'Total Out',
-    tcp: 'TCP', udp: 'UDP',
-    sys_uptime: 'System Uptime', app_mem: 'App Mem', app_threads: 'App Threads', xray_ver: 'Xray Ver',
-    ipv4: 'IPv4', ipv6: 'IPv6',
-    // Online users
-    no_online: 'No online users',
-    load_online_hint: 'Click "Load Online" to fetch online users',
-    log_count_label: 'rows',
-    // Leaderboard
-    leaderboard: 'Leaderboard', bw_type: 'Type', cutoff: 'Cutoff',
-    displaynames: 'Displaynames', ascending: 'Ascending', fetch: 'Fetch',
-    lb_hint: 'Configure options and click "Fetch"', no_entries: 'No entries',
-    lb_rank: '#', lb_user: 'User', lb_bandwidth: 'Bandwidth',
-  },
-  ru: {
-    users: 'Пользователи', codes: 'Коды', audit_logs: 'Логи', state: 'Состояние', snapshots: 'Снимки', health: 'Здоровье',
-    user_list: 'Список пользователей', add_user: 'Добавить', bonus_codes: 'Бонус-коды', add_code: 'Создать код',
-    user_details: 'Данные пользователя', internal_user: 'Внутр. имя', display_name: 'Отображаемое имя',
-    ext_username: 'Логин', ext_password: 'Пароль', fingerprint: 'Отпечаток',
-    monthly_limit: 'Лимит (ГБ)', wl_limit: 'WL лимит (ГБ)', expires: 'Истекает',
-    custom_token: 'Токен', custom_uuid: 'UUID', code: 'Код', action_type: 'Тип',
-    bonus: 'Бонус', register: 'Регистрация', days: 'Дни', gb: 'ГБ', wl_gb: 'WL ГБ', reusable: 'Многоразовый', uses: 'Использований', uses_hint: 'Игнорируется если многоразовый',
-    load_codes: 'Загрузить', add_code_btn: '+ Создать код', create: 'Создать', code_hint: 'Уникальная строка кода',
-    reusable_label: 'Безлимит. использований', no_codes: 'Нет кодов', loading: 'Загрузка…', error: 'Ошибка',
-    code_required: 'Введите код', uses_invalid: 'Использований должно быть больше 0', copy_failed: 'Не удалось скопировать',
-    health_status: 'Статус', not_checked: 'Не проверено', panel_name: 'Панель',
-    panel_name_hint: 'Пусто = все панели', online_users: 'Онлайн', keyed: 'Ключ',
-    refresh_users: 'Синхронизация', refresh_warning: 'Синхронизирует всех пользователей. Займёт время.',
-    teapot_title: 'Статус чайника',
-    load_users_hint: 'Нажмите "Загрузить" для получения списка', load_codes_hint: 'Нажмите "Загрузить" для кодов',
-    load_logs_hint: 'Нажмите "Загрузить" для логов',
-    internal_user_hint: 'Уникальный внутр. идентификатор', ext_username_hint: 'Веб-логин (опц.)',
-    limit_hint: '0 = безлимит', expires_hint: 'Пусто = безлимит',
-    health_ok: 'API работает', health_warn: 'API деградировал', health_err: 'Ошибка API',
-    check_health: 'Проверить', db: 'База', degraded: 'Деградация',
-    yes: 'Да', no: 'Нет',
-    operations_recovery: 'Восстановление', load_operations: 'Загрузить статус',
-    load_operations_hint: 'Загрузите статус для проверки маркеров', snapshot_failure: 'Ошибка дневного снимка',
-    rollback_markers: 'Маркеры отката', no_recovery_issues: 'Нет маркеров восстановления', marker_type: 'Тип',
-    marker_reason: 'Причина', resolve: 'Закрыть', resolved: 'Закрыто', timestamp: 'Время',
-    confirm_resolve_rollback: 'Подтвердить ручное исправление и удалить этот маркер?',
-    network_err: 'Ошибка сети', created: 'Создано', deleted: 'Удалено', refreshed: 'Обновлено',
-    reload_reauth: 'Перезагрузите страницу для повторной авторизации',
-    confirm: 'Подтвердить', cancel: 'Отмена',
-    confirm_delete_user: 'Удалить пользователя навсегда?', confirm_reset_user: 'Сбросить токен и UUID?',
-    confirm_delete_code: 'Удалить этот код?',
-    actions: 'Действия', info: 'Инфо', reset: 'Сброс', delete: 'Удалить', failed: 'Не удалось',
-    copied: 'Скопировано', copy: 'Копировать',
-    teapot_question: 'Может ли этот сервер сварить кофе?', teapot_sub: 'Спойлер: не может.',
-    teapot_yes: 'Да, я чайник', teapot_no: 'Нет, я не чайник',
-    // Panel status
-    panel_status: 'Статус панелей', no_panels: 'Нет панелей',
-    check_panel_status: 'Проверить панели',
-    // Host system status
-    host_system_status: 'Статус хост-системы', load_system_status: 'Загрузить статус',
-    no_data: 'Нет данных', cpu_model: 'Модель', available: 'Доступно',
-    app_uptime: 'Аптайм прилож.', app_swap: 'Swap прилож.',
-    // Snapshots
-    load_snapshots: 'Загрузить снимки',
-    load_snapshots_hint: 'Укажите cutoff и нажмите "Загрузить снимки"',
-    no_snapshots: 'Нет снимков', cutoff_days: 'Cutoff (дни)',
-    cutoff_invalid: 'Cutoff должен быть больше 0', panels_label: 'панелей',
-    system: 'Система', memory: 'Память', disk: 'Диск', network: 'Сеть',
-    connections: 'Подключения', uptime_app: 'Аптайм и приложение',
-    public_ip: 'Публичный IP', xray_error: 'Ошибка Xray',
-    cpu: 'CPU', cores: 'Ядра', speed: 'Частота', load_avg: 'Load Avg', processes: 'Процессы',
-    used: 'Использовано', percent: 'Процент', swap: 'Swap',
-    total_in: 'Всего вход.', total_out: 'Всего выход.',
-    tcp: 'TCP', udp: 'UDP',
-    sys_uptime: 'Аптайм системы', app_mem: 'Память прилож.', app_threads: 'Потоки прилож.', xray_ver: 'Версия Xray',
-    ipv4: 'IPv4', ipv6: 'IPv6',
-    // Online users
-    no_online: 'Нет онлайн', load_online_hint: 'Нажмите "Загрузить" для списка',
-    log_count_label: 'строк',
-    // Leaderboard
-    leaderboard: 'Рейтинг', bw_type: 'Тип', cutoff: 'Лимит',
-    displaynames: 'Имена', ascending: 'По возраст.', fetch: 'Загрузить',
-    lb_hint: 'Настройте параметры и нажмите "Загрузить"', no_entries: 'Нет записей',
-    lb_rank: '#', lb_user: 'Пользователь', lb_bandwidth: 'Трафик',
-  }
-};
+window.LANG = {{ L | tojson }};
+window.LANG_EN = {{ L_en | tojson }};
+window.LANG_CODE = '{{ lang }}';
+window.lang = window.LANG_CODE;
 
-let lang = localStorage.getItem('admin_lang') || 'en';
 let baseUrl = '';
 let apiToken = '';
 let authBlocked = false;
 let currentUsers = [];
 let selectedUser = null;
 
-function t(k) { return L[lang]?.[k] || L.en[k] || k; }
-
-
-
-
-
 function renderLang() {
-  document.querySelectorAll('.lang-btn').forEach(b =>
-    b.classList.toggle('active', b.textContent.toLowerCase() === lang));
-  document.querySelectorAll('[data-t]').forEach(el =>
-    el.textContent = t(el.getAttribute('data-t')));
+  applyStaticLang();
 }
 
-function setLang(l) { lang = l; localStorage.setItem('admin_lang', l); renderLang(); }
 
 async function bootstrap() {
   const tokenUrl = location.pathname.replace(/\/+$/, '') + '/token';
@@ -1029,7 +887,7 @@ async function loadUsers() {
 function renderUsersTable() {
   const wrap = document.getElementById('usersTableWrap');
   if (!currentUsers.length) {
-    wrap.innerHTML = `<div class="table-empty">No users</div>`;
+    wrap.innerHTML = `<div class="table-empty">${t('no_users')}</div>`;
     return;
   }
   wrap.innerHTML = `
@@ -1064,14 +922,14 @@ async function viewUser(username) {
   document.getElementById('userDetailInfo').innerHTML = `
     <div class="info-row"><span class="info-label">${t('internal_user')}</span><span class="info-value">${escapeHtml(s.username || '—')}</span></div>
     <div class="info-row"><span class="info-label">${t('display_name')}</span><span class="info-value">${escapeHtml(s.displayname || '—')}</span></div>
-    <div class="info-row"><span class="info-label">UUID</span><span class="info-value">${escapeHtml(s.uuid || '—')}</span></div>
-    <div class="info-row"><span class="info-label">Token</span><span class="info-value">${escapeHtml(s.token || '—')}</span></div>
+    <div class="info-row"><span class="info-label">${t('uuid')}</span><span class="info-value">${escapeHtml(s.uuid || '—')}</span></div>
+    <div class="info-row"><span class="info-label">${t('token')}</span><span class="info-value">${escapeHtml(s.token || '—')}</span></div>
     <div class="info-row"><span class="info-label">${t('fingerprint')}</span><span class="info-value">${escapeHtml(s.fingerprint || '—')}</span></div>
-    <div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${s.bandwidth?.limit || 0} GB</span></div>
-    <div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${s.bandwidth?.wl_limit || 0} GB</span></div>
+    <div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${s.bandwidth?.limit || 0} ${t('gb_unit')}</span></div>
+    <div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${s.bandwidth?.wl_limit || 0} ${t('gb_unit')}</span></div>
     <div class="info-row"><span class="info-label">${t('expires')}</span><span class="info-value">${s.time ? new Date(s.time * 1000).toLocaleString() : '∞'}</span></div>
     <div class="info-row"><span class="info-label">${t('status')}</span><span class="info-value">
-      <span class="badge ${s.enabled ? 'green' : 'red'}">${s.enabled ? 'Active' : 'Disabled'}</span>
+      <span class="badge ${s.enabled ? 'green' : 'red'}">${s.enabled ? t('active') : t('disabled')}</span>
     </span></div>
   `;
   document.getElementById('userDetailResult').innerHTML = '';
@@ -1088,11 +946,11 @@ async function doResetUser() {
   const res = await api('POST', '/api/user/reset', { user: selectedUser });
   const result = document.getElementById('userDetailResult');
   if (res && res.success) {
-    result.innerHTML = `<div class="result-title ok">OK</div>
-      <div class="result-msg">UUID: ${escapeHtml(res.obj.uuid)}<br>Token: ${escapeHtml(res.obj.token)}</div>`;
+    result.innerHTML = `<div class="result-title ok">${t('ok')}</div>
+      <div class="result-msg">${t('uuid')}: ${escapeHtml(res.obj.uuid)}<br>${t('token')}: ${escapeHtml(res.obj.token)}</div>`;
     result.className = 'result-box success';
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
+    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1105,7 +963,7 @@ async function deleteUser(username) {
     loadUsers();
     hideUserDetail();
   } else {
-    toast(res?.msg || 'Error', 'error');
+    toast(res?.msg || t('error'), 'error');
   }
 }
 
@@ -1136,8 +994,8 @@ async function doAddUser() {
   const body = {};
   const user = document.getElementById('addUser').value.trim();
   const displayname = document.getElementById('addDisplayName').value.trim();
-  if (!user) { toast('Internal user required', 'error'); return; }
-  if (!displayname) { toast('Display name required', 'error'); return; }
+  if (!user) { toast(t('internal_user_required'), 'error'); return; }
+  if (!displayname) { toast(t('display_name_required'), 'error'); return; }
   body.user = user;
   body.displayname = displayname;
 
@@ -1173,7 +1031,7 @@ async function doAddUser() {
     hideAddUser();
     loadUsers();
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
+    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1215,7 +1073,7 @@ function renderCodesList(entries) {
         : `<span class="badge gray">${c.uses ?? 1} ${t('uses').toLowerCase()}</span>`;
       if (c.days) meta.push(`<span>${c.days} ${t('days').toLowerCase()}</span>`);
       if (c.gb) meta.push(`<span>${c.gb} ${t('gb')}</span>`);
-      if (c.wl_gb) meta.push(`<span>${c.wl_gb} ${t('gb')} WL</span>`);
+      if (c.wl_gb) meta.push(`<span>${c.wl_gb} ${t('gb')} ${t('wl')}</span>`);
     }
     return `
       <div class="code-card">
@@ -1331,15 +1189,15 @@ function refreshLogs() {
 function renderLogsTable(logs) {
   const wrap = document.getElementById('logsTableWrap');
   if (!logs.length) {
-    wrap.innerHTML = `<div class="table-empty">No logs</div>`;
+    wrap.innerHTML = `<div class="table-empty">${t('no_logs')}</div>`;
     return;
   }
   wrap.innerHTML = `
     <table class="data-table logs-table">
       <thead><tr>
-        <th>Time</th>
-        <th>Action</th>
-        <th>Info</th>
+        <th>${t('timestamp')}</th>
+        <th>${t('log_action')}</th>
+        <th>${t('info')}</th>
       </tr></thead>
       <tbody>
         ${logs.map(l => `
@@ -1357,8 +1215,8 @@ function renderLogsTable(logs) {
 function renderHealthDetails(obj) {
   if (!obj) return '';
   const mem = obj.memory || {};
-  const ram = Number.isFinite(mem.ram) ? mem.ram.toFixed(2) + ' MB' : 'N/A';
-  const swap = Number.isFinite(mem.swap) ? mem.swap.toFixed(2) + ' MB' : 'N/A';
+  const ram = Number.isFinite(mem.ram) ? mem.ram.toFixed(2) + ' MB' : t('na');
+  const swap = Number.isFinite(mem.swap) ? mem.swap.toFixed(2) + ' MB' : t('na');
   const row = (label, value, cls) =>
     `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value${cls ? ' ' + cls : ''}">${value}</span></div>`;
   return `<div class="panel-grid" style="padding-top:0">
@@ -1368,7 +1226,7 @@ function renderHealthDetails(obj) {
       ${row(t('app_uptime'), fmtUptime(obj.uptime))}
       ${row(t('app_mem'), ram)}
       ${row(t('app_swap'), swap)}
-      ${row(t('app_threads'), obj.threads ?? 'N/A')}
+      ${row(t('app_threads'), obj.threads ?? t('na'))}
     </div>
   </div>`;
 }
@@ -1407,7 +1265,7 @@ async function checkPanelStatus() {
     result.innerHTML = renderPanelCards(res.obj);
     result.className = 'result-box';
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
+    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1424,32 +1282,32 @@ function renderPanelCards(panels, idPrefix = '') {
         const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
         const xrayState = s?.xray?.state;
         const xrayClr = xrayState === 'running' ? 'ok' : 'err';
-        const xrayVersion = s?.xray?.version || 'N/A';
+        const xrayVersion = s?.xray?.version || t('na');
         const xrayErr = s?.xray?.errorMsg;
 
-        const uptimeFmt = s ? fmtUptime(s.uptime) : 'N/A';
-        const memUsed = s ? fmtBytes(s.mem.current) : 'N/A';
-        const memTotal = s ? fmtBytes(s.mem.total) : 'N/A';
+        const uptimeFmt = s ? fmtUptime(s.uptime) : t('na');
+        const memUsed = s ? fmtBytes(s.mem.current) : t('na');
+        const memTotal = s ? fmtBytes(s.mem.total) : t('na');
         const memPct = s && s.mem.total > 0 ? Math.round(s.mem.current / s.mem.total * 100) : null;
         const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
 
-        const swapUsed = s ? fmtBytes(s.swap.current) : 'N/A';
-        const swapTotal = s ? fmtBytes(s.swap.total) : 'N/A';
+        const swapUsed = s ? fmtBytes(s.swap.current) : t('na');
+        const swapTotal = s ? fmtBytes(s.swap.total) : t('na');
 
-        const diskUsed = s ? fmtBytes(s.disk.current) : 'N/A';
-        const diskTotal = s ? fmtBytes(s.disk.total) : 'N/A';
+        const diskUsed = s ? fmtBytes(s.disk.current) : t('na');
+        const diskTotal = s ? fmtBytes(s.disk.total) : t('na');
         const diskPct = s && s.disk.total > 0 ? Math.round(s.disk.current / s.disk.total * 100) : null;
         const diskClr = diskPct !== null ? (diskPct > 90 ? 'err' : diskPct > 75 ? 'warn' : 'ok') : 'ok';
 
-        const appMem = s ? fmtBytes(s.appStats.mem) : 'N/A';
-        const netDown = s ? fmtBytes(s.netIO.down) + '/s' : 'N/A';
-        const netUp = s ? fmtBytes(s.netIO.up) + '/s' : 'N/A';
-        const netRecv = s ? fmtBytes(s.netTraffic.recv) : 'N/A';
-        const netSent = s ? fmtBytes(s.netTraffic.sent) : 'N/A';
-        const ipv4 = s?.publicIP?.ipv4 || 'N/A';
-        const ipv6 = s?.publicIP?.ipv6 || 'N/A';
-        const loads = s?.loads ? s.loads.map(l => l.toFixed(2)).join(', ') : 'N/A';
-        const threads = s?.appStats?.threads ?? 'N/A';
+        const appMem = s ? fmtBytes(s.appStats.mem) : t('na');
+        const netDown = s ? fmtBytes(s.netIO.down) + '/s' : t('na');
+        const netUp = s ? fmtBytes(s.netIO.up) + '/s' : t('na');
+        const netRecv = s ? fmtBytes(s.netTraffic.recv) : t('na');
+        const netSent = s ? fmtBytes(s.netTraffic.sent) : t('na');
+        const ipv4 = s?.publicIP?.ipv4 || t('na');
+        const ipv6 = s?.publicIP?.ipv6 || t('na');
+        const loads = s?.loads ? s.loads.map(l => l.toFixed(2)).join(', ') : t('na');
+        const threads = s?.appStats?.threads ?? t('na');
 
         const cardKey = idPrefix + 'panel-' + panelIndex;
         return `
@@ -1457,10 +1315,10 @@ function renderPanelCards(panels, idPrefix = '') {
             <div class="panel-card-header" onclick="togglePanelCard('${cardKey}')">
               <div class="panel-card-title">
                 <span class="panel-card-name">${escapeHtml(panelName)}</span>
-                <span class="badge ${xrayClr}">${escapeHtml(xrayState || 'unknown')}</span>
+                <span class="badge ${xrayClr}">${escapeHtml(xrayState || t('unknown'))}</span>
               </div>
               <div class="panel-card-meta">
-                ${s ? `<span style="font-size:12px;color:var(--text2)">Xray ${escapeHtml(xrayVersion)}</span>` : ''}
+                ${s ? `<span style="font-size:12px;color:var(--text2)">${t('xray')} ${escapeHtml(xrayVersion)}</span>` : ''}
                 <svg class="panel-card-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="4,6 8,10 12,6"/>
                 </svg>
@@ -1470,9 +1328,9 @@ function renderPanelCards(panels, idPrefix = '') {
               <div class="panel-grid">
                 <div class="panel-section">
                   <div class="panel-section-label">${t('system')}</div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : 'N/A'}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${s?.cpuCores ?? 'N/A'}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${s?.cpuSpeedMhz ? Math.round(s.cpuSpeedMhz) + ' MHz' : 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : t('na')}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${s?.cpuCores ?? t('na')}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${s?.cpuSpeedMhz ? Math.round(s.cpuSpeedMhz) + ' MHz' : t('na')}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('load_avg')}</span><span class="panel-metric-value">${escapeHtml(loads)}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${escapeHtml(threads)}</span></div>
                 </div>
@@ -1489,8 +1347,8 @@ function renderPanelCards(panels, idPrefix = '') {
                 </div>
                 <div class="panel-section">
                   <div class="panel-section-label">${t('network')}</div>
-                  <div class="panel-metric"><span class="panel-metric-label">Down</span><span class="panel-metric-value">${netDown}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">Up</span><span class="panel-metric-value">${netUp}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('down')}</span><span class="panel-metric-value">${netDown}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('up')}</span><span class="panel-metric-value">${netUp}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('total_in')}</span><span class="panel-metric-value">${netRecv}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('total_out')}</span><span class="panel-metric-value">${netSent}</span></div>
                 </div>
@@ -1501,14 +1359,14 @@ function renderPanelCards(panels, idPrefix = '') {
                 </div>
                 <div class="panel-section">
                   <div class="panel-section-label">${t('connections')}</div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${s?.tcpCount ?? 'N/A'}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${s?.udpCount ?? 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${s?.tcpCount ?? t('na')}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${s?.udpCount ?? t('na')}</span></div>
                 </div>
                 <div class="panel-section">
                   <div class="panel-section-label">${t('uptime_app')}</div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('sys_uptime')}</span><span class="panel-metric-value">${uptimeFmt}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('app_mem')}</span><span class="panel-metric-value">${appMem}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${s?.appStats?.threads ?? 'N/A'}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${s?.appStats?.threads ?? t('na')}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('xray_ver')}</span><span class="panel-metric-value">${escapeHtml(xrayVersion)}</span></div>
                 </div>
                 ${xrayErr && xrayErr !== '' ? `
@@ -1550,37 +1408,37 @@ function renderSystemStatus(s) {
 
   const cpuPct = s.cpu != null ? Math.round(s.cpu * 100) / 100 : null;
   const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
-  const cpuName = s.cpu_info?.name || 'N/A';
-  const cpuCores = s.cpu_info?.cores ?? 'N/A';
-  const cpuSpeed = s.cpu_info?.mhz_max ? Math.round(s.cpu_info.mhz_max) + ' MHz' : 'N/A';
+  const cpuName = s.cpu_info?.name || t('na');
+  const cpuCores = s.cpu_info?.cores ?? t('na');
+  const cpuSpeed = s.cpu_info?.mhz_max ? Math.round(s.cpu_info.mhz_max) + ' MHz' : t('na');
   const loads = s.loadavg
     ? [s.loadavg.load_1m, s.loadavg.load_5m, s.loadavg.load_15m].map(l => (l ?? 0).toFixed(2)).join(', ')
-    : 'N/A';
+    : t('na');
 
   const ram = s.memory?.ram;
-  const memUsed = ram ? fmtBytes(ram.used) : 'N/A';
-  const memTotal = ram ? fmtBytes(ram.total) : 'N/A';
-  const memAvail = ram ? fmtBytes(ram.available) : 'N/A';
+  const memUsed = ram ? fmtBytes(ram.used) : t('na');
+  const memTotal = ram ? fmtBytes(ram.total) : t('na');
+  const memAvail = ram ? fmtBytes(ram.available) : t('na');
   const memPct = ram && ram.total > 0 ? Math.round(ram.used / ram.total * 100) : null;
   const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
 
   const swap = s.memory?.swap;
-  const swapUsed = swap ? fmtBytes(swap.used) : 'N/A';
-  const swapTotal = swap ? fmtBytes(swap.total) : 'N/A';
+  const swapUsed = swap ? fmtBytes(swap.used) : t('na');
+  const swapTotal = swap ? fmtBytes(swap.total) : t('na');
 
-  const netRecv = s.network ? fmtBytes(s.network.recv) : 'N/A';
-  const netSent = s.network ? fmtBytes(s.network.sent) : 'N/A';
+  const netRecv = s.network ? fmtBytes(s.network.recv) : t('na');
+  const netSent = s.network ? fmtBytes(s.network.sent) : t('na');
 
-  const appMem = s.app_memory ? fmtBytes(s.app_memory.ram) : 'N/A';
-  const appSwap = s.app_memory ? fmtBytes(s.app_memory.swap) : 'N/A';
+  const appMem = s.app_memory ? fmtBytes(s.app_memory.ram) : t('na');
+  const appSwap = s.app_memory ? fmtBytes(s.app_memory.swap) : t('na');
   const sysUptime = fmtUptime(s.uptime);
   const appUptime = fmtUptime(s.app_uptime);
-  const threads = s.app_thread_amount ?? 'N/A';
-  const procs = s.process_count ?? 'N/A';
+  const threads = s.app_thread_amount ?? t('na');
+  const procs = s.process_count ?? t('na');
 
   const ipRows = (label, list) => {
     const arr = Array.isArray(list) ? list.filter(Boolean) : [];
-    if (!arr.length) return `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value">N/A</span></div>`;
+    if (!arr.length) return `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value">${t('na')}</span></div>`;
     return arr.map((ip, i) => {
       const lbl = arr.length > 1 ? `${label} ${i + 1}` : label;
       const fs = ip.length > 28 ? '8px' : ip.length > 22 ? '9px' : ip.length > 15 ? '10px' : '11px';
@@ -1592,7 +1450,7 @@ function renderSystemStatus(s) {
     <div class="panel-grid" style="padding-top:0">
       <div class="panel-section">
         <div class="panel-section-label">${t('system')}</div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : 'N/A'}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : t('na')}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('cpu_model')}</span><span class="panel-metric-value" style="font-size:${cpuName.length > 20 ? '9px' : '11px'}">${escapeHtml(cpuName)}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${cpuCores}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${cpuSpeed}</span></div>
@@ -1613,8 +1471,8 @@ function renderSystemStatus(s) {
       </div>
       <div class="panel-section">
         <div class="panel-section-label">${t('connections')}</div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${s.connections?.tcp ?? 'N/A'}</span></div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${s.connections?.udp ?? 'N/A'}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${s.connections?.tcp ?? t('na')}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${s.connections?.udp ?? t('na')}</span></div>
       </div>
       <div class="panel-section">
         <div class="panel-section-label">${t('public_ip')}</div>
@@ -1647,11 +1505,11 @@ async function loadSnapshots() {
 }
 
 function fmtSnapDate(ts) {
-  if (ts == null || isNaN(ts)) return 'N/A';
-  return new Date(ts * 1000).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', {
+  if (ts == null || isNaN(ts)) return t('na');
+  return new Date(ts * 1000).toLocaleString(window.lang === 'ru' ? 'ru-RU' : 'en-US', {
     timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit'
-  }) + ' UTC';
+  }) + ' ' + t('utc');
 }
 
 function renderSnapshots(snaps) {
@@ -1699,7 +1557,7 @@ async function loadOnlineUsers() {
   const res = await api('GET', path);
   const wrap = document.getElementById('onlineUsersWrap');
   if (!res || !res.success) {
-    wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || 'Error')}</div>`;
+    wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('error'))}</div>`;
     return;
   }
   const data = res.obj.users;
@@ -1708,7 +1566,7 @@ async function loadOnlineUsers() {
     .map(([name, state]) => `${name}: ${state}`);
 
   if (unhealthy.length) {
-    wrap.innerHTML = `<div class="table-empty">⚠️ Partial data: ${unhealthy.map(escapeHtml).join(', ')}</div>`;
+    wrap.innerHTML = `<div class="table-empty">${t('partial_data').replace('{detail}', unhealthy.map(escapeHtml).join(', '))}</div>`;
   } else {
     wrap.innerHTML = '';
   }
@@ -1763,14 +1621,14 @@ async function loadOnlineUsers() {
 
 async function doRefreshUsers() {
   const result = document.getElementById('refreshResult');
-  result.innerHTML = '<div class="result-msg">Loading...</div>';
+  result.innerHTML = `<div class="result-msg">${t('loading')}</div>`;
   result.className = 'result-box';
   const res = await api('GET', '/api/user/refresh');
   if (res && res.success) {
     result.innerHTML = `<div class="result-title ok">${t('refreshed')}</div><div class="result-msg">${escapeHtml(res.msg || '')}</div>`;
     result.className = 'result-box success';
   } else {
-    result.innerHTML = `<div class="result-title err">Error</div><div class="result-msg">${escapeHtml(res?.msg || 'Error')}</div>`;
+    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
     result.className = 'result-box error';
   }
 }
@@ -1795,7 +1653,7 @@ function renderRollbackMarkers(markers) {
           <tr>
             <td class="mono">${escapeHtml(user)}</td>
             <td>${escapeHtml(kind)}</td>
-            <td class="mono">${ts ? escapeHtml(fmtSnapDate(ts)) : 'N/A'}</td>
+            <td class="mono">${ts ? escapeHtml(fmtSnapDate(ts)) : t('na')}</td>
             <td>${escapeHtml(reason || '')}</td>
             <td style="text-align:center">
               <button class="btn-tiny danger" data-rollback-kind="${escapeHtml(kind)}" data-rollback-user="${escapeHtml(user)}">${t('resolve')}</button>
@@ -1877,11 +1735,11 @@ async function fetchLeaderboard() {
   };
 
   const wrap = document.getElementById('lbTableWrap');
-  wrap.innerHTML = '<div class="table-empty" style="padding:20px">Loading...</div>';
+  wrap.innerHTML = `<div class="table-empty" style="padding:20px">${t('loading')}</div>`;
 
   const res = await api('POST', '/api/leaderboard', body);
   if (!res || !res.success) {
-    wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || 'Error')}</div>`;
+    wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('error'))}</div>`;
     return;
   }
 
@@ -1914,6 +1772,7 @@ async function fetchLeaderboard() {
 const confirmOpts = () => ({ okText: t('confirm'), cancelText: t('cancel') });
 
 applyTheme();
+initLang();
 renderLang();
 bootstrap();
 document.getElementById('codeList').addEventListener('click', onCodeListClick);

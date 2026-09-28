@@ -8,7 +8,9 @@
             "date": "Подписка до: {date} (осталось дней: {days})\n",
             "date_expired": "Подписка закончилась: {date}!, {days} дней назад\n",
             "wl_bw": "🏳️ WL: {used} / {limit}\n",
-            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used} / {limit}\n"
+            "wl_bw_exceeded": "🏳️⛔ Трафик WL кончился! {used} / {limit}\n",
+            // label for the dummy bandwidth link in build_link_array
+            "bw_label": "Трафик: "
         },
 		"en": {
 		    "main": "👋Hi, {username}!\n{slot_time}{slot_bw}{slot_wl_bw}All-time: ↑ {up} / ↓ {down}",
@@ -17,7 +19,8 @@
 		    "date": "Expires at: {date} (days left: {days})\n",
 		    "date_expired": "⛔Expired at: {date}, {days} days ago\n",
 		    "wl_bw": "🏳️ WL: {used} / {limit}\n",
-		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used} > {limit}\n"
+		    "wl_bw_exceeded": "🏳️⛔ WL Bandwidth exceeded! {used} > {limit}\n",
+		    "bw_label": "Bandwidth: "
 		}
     },
     "chart": {
@@ -76,7 +79,6 @@
 
             // common action buttons
             "btn_cancel": "🔙 Отменить",
-            "btn_delete_confirm": "✅ Удалить аккаунт",
 
             // welcome and language selection
             "welcome_new": "👋 Добро пожаловать!\nЧтобы начать пользоваться интернетом без ограничений, нажмите «Получить подписку» и введите код приглашения.",
@@ -150,7 +152,12 @@
             "warning_traffic": "⚠ Вы использовали <b>{used}</b> ГБ из <b>{available}</b> ГБ доступных вам.",
             "warning_traffic_disabled": "⚠ Вы использовали весь доступный вам трафик ({available} ГБ). Подписка была отключена.",
             "warning_traffic_whitelist": "⚠ Вы использовали <b>{used}</b> MB из <b>{available}</b> GB на БС локациях.",
-            "warning_traffic_whitelist_disabled": "⚠ Вы использовали весь доступный Вам трафик на БС локациях ({available} ГБ). Они были отключены для вас."
+            "warning_traffic_whitelist_disabled": "⚠ Вы использовали весь доступный Вам трафик на БС локациях ({available} ГБ). Они были отключены для вас.",
+
+            // generic errors and misc
+            "error_generic": "⚠️ Ошибка",
+            "no_data": "Нет данных для графика",
+            "days_word": "дней"
         },
         "en": {
             // main navigation buttons
@@ -177,7 +184,6 @@
 
             // common action buttons
             "btn_cancel": "🔙 Cancel",
-            "btn_delete_confirm": "✅ Yes, delete my account",
 
             // welcome and language selection
             "welcome_new": "👋 Welcome!\nTo start using the internet, click «Get Subscription» and enter your invite code.",
@@ -251,7 +257,793 @@
             "warning_traffic": "⚠ You have used <b>{used}</b> GB out of <b>{available}</b> GB available to you.",
             "warning_traffic_disabled": "⚠ You have used all bandwidth available to you ({available} ГБ). Subscription has been disabled.",
             "warning_traffic_whitelist": "⚠ You have used <b>{used}</b> MB out of <b>{available}</b> GB on whitelist locations.",
-            "warning_traffic_whitelist_disabled": "⚠ You have used all bandwidth available to you on whitelist locations ({available} ГБ). Whitelist locations have been disabled for you."
+            "warning_traffic_whitelist_disabled": "⚠ You have used all bandwidth available to you on whitelist locations ({available} ГБ). Whitelist locations have been disabled for you.",
+
+            // generic errors and misc
+            "error_generic": "⚠️ Error",
+            "no_data": "No chart data available",
+            "days_word": "days"
+        }
+    },
+    "web": {
+        "shared": {
+            "en": {
+                // errors and actions
+                "network_err": "Network error",
+                "invalid_response": "Invalid server response",
+                "error": "Error",
+                "ok": "OK",
+                "cancel": "Cancel",
+                "refresh": "Refresh",
+                "na": "N/A",
+
+                // units
+                "gb_unit": "GB",
+                "days": "days",
+
+                // status
+                "active": "Active",
+                "disabled": "Disabled",
+
+                // chrome
+                "toggle_theme": "Toggle theme",
+                "toggle_password": "Toggle password",
+                "lang_selection": "Language selection",
+                "lang_en": "Switch to English",
+                "lang_ru": "Switch to Russian",
+
+                // browser subscription hit
+                "forbidden_title": "403 Forbidden",
+                "use_vpn_client": "use a VPN client!",
+                "use_vpn_client_hint": "use a VPN client to get the subscription",
+
+                // username hints
+                "hint_invalid": "Invalid characters. Try: ",
+                "hint_taken": "Username taken",
+                "hint_ok": "Available"
+            },
+
+            "ru": {
+                // errors and actions
+                "network_err": "Ошибка сети",
+                "invalid_response": "Некорректный ответ сервера",
+                "error": "Ошибка",
+                "ok": "ОК",
+                "cancel": "Отмена",
+                "refresh": "Обновить",
+                "na": "н/д",
+
+                // units
+                "gb_unit": "ГБ",
+                "days": "дн.",
+
+                // status
+                "active": "Активен",
+                "disabled": "Отключён",
+
+                // chrome
+                "toggle_theme": "Переключить тему",
+                "toggle_password": "Показать пароль",
+                "lang_selection": "Выбор языка",
+                "lang_en": "Переключить на английский",
+                "lang_ru": "Переключить на русский",
+
+                // browser subscription hit
+                "forbidden_title": "403 Forbidden",
+                "use_vpn_client": "используйте ВПН клиент",
+                "use_vpn_client_hint": "используйте ВПН клиент для получения подписки",
+
+                // username hints
+                "hint_invalid": "Недопустимые символы. Попробуйте: ",
+                "hint_taken": "Логин занят",
+                "hint_ok": "Свободен"
+            }
+        },
+        "auth": {
+            "en": {
+                // tabs and titles
+                "sign_in": "Sign in",
+                "create_account": "Create account",
+                "login": "Login",
+                "register": "Register",
+
+                // form fields
+                "username": "Username",
+                "password": "Password",
+                "confirm_password": "Confirm password",
+                "invite_code": "Invite code",
+                "display_name": "Display name",
+
+                // validation
+                "passwords_not_match": "Passwords do not match"
+            },
+
+            "ru": {
+                // tabs and titles
+                "sign_in": "Вход",
+                "create_account": "Регистрация",
+                "login": "Вход",
+                "register": "Регистрация",
+
+                // form fields
+                "username": "Логин",
+                "password": "Пароль",
+                "confirm_password": "Подтвердите пароль",
+                "invite_code": "Код приглашения",
+                "display_name": "Отображаемое имя",
+
+                // validation
+                "passwords_not_match": "Пароли не совпадают"
+            }
+        },
+        "dashboard": {
+            "en": {
+                // sections
+                "subscription": "Subscription",
+                "usage": "Usage",
+                "bonus_code": "Bonus code",
+                "settings": "Settings",
+                "account": "Account",
+                "danger_zone": "Danger zone",
+
+                // stats
+                "expires": "Expires",
+                "status": "Status",
+                "total_traffic": "Total traffic",
+                "wl_traffic": "Whitelist traffic",
+                "monthly": "Monthly",
+                "wl_monthly": "Whitelist monthly",
+                "extra_bw": "Additional bandwidth info",
+
+                // account fields
+                "display_name": "Display name",
+                "fingerprint": "Fingerprint",
+                "username": "Username",
+                "password": "Password",
+                "current_password": "Current password",
+                "token": "Token",
+
+                // actions
+                "copy": "Copy",
+                "copied": "Copied",
+                "qr": "QR",
+                "apply": "Apply",
+                "save": "Save",
+                "saved": "Saved",
+                "logout": "Logout",
+                "qr_link": "Link",
+                "qr_happ": "Happ",
+                "reset_uuid": "Reset UUID & token",
+                "delete_account": "Delete account",
+
+                // placeholders
+                "current_pw_required": "Enter your current password to confirm.",
+                "invalid_current_pw": "Invalid current password",
+                "enter_code": "Enter code",
+                "keep_empty": "Leave empty to keep",
+
+                // status
+                "online": "Online",
+                "offline": "Offline",
+                "active": "Active",
+                "disabled": "Disabled",
+                "unlimited": "Unlimited",
+                "expired": "Expired",
+                "d_left": "d left",
+                "h_left": "h left",
+
+                // confirmations
+                "confirm_reset": "Reset UUID & token? You will need to re-add your subscription.",
+                "confirm_delete": "Permanently delete your account? This cannot be undone.",
+                "confirm_delete2": "Really sure?",
+                "confirm_title_reset": "Reset credentials",
+                "confirm_title_delete": "Delete account",
+                "confirm_title_final": "Final confirmation",
+                "confirm_yes": "Confirm",
+                "confirm_cancel": "Cancel",
+
+                // banners
+                "banner_disabled": "Your account is disabled. Contact support to restore access.",
+                "banner_expired": "Your subscription has expired. Apply a bonus code to extend it.",
+                "bonus_reusable": "(reusable)",
+
+                // profiles
+                "profiles": "Profiles",
+                "profiles_title": "Available profiles",
+                "no_profiles": "No profiles available.",
+                "close": "Close",
+
+                // page
+                "page_title": "Panel",
+                "uuid": "UUID",
+                "wl_suffix": " + WL",
+                "gb_wl": "GB (WL)",
+                "qr_failed": "Failed to generate QR code"
+            },
+
+            "ru": {
+                // sections
+                "subscription": "Подписка",
+                "usage": "Использование",
+                "bonus_code": "Бонус-код",
+                "settings": "Настройки",
+                "account": "Аккаунт",
+                "danger_zone": "Опасная зона",
+
+                // stats
+                "expires": "Истекает",
+                "status": "Статус",
+                "total_traffic": "Весь трафик",
+                "wl_traffic": "Трафик WL",
+                "monthly": "За месяц",
+                "wl_monthly": "WL за месяц",
+                "extra_bw": "Дополнительная информация о трафике",
+
+                // account fields
+                "display_name": "Имя",
+                "fingerprint": "Отпечаток",
+                "username": "Логин",
+                "password": "Пароль",
+                "current_password": "Текущий пароль",
+                "token": "Токен",
+
+                // actions
+                "copy": "Копировать",
+                "copied": "Скопировано",
+                "qr": "QR",
+                "apply": "Применить",
+                "save": "Сохранить",
+                "saved": "Сохранено",
+                "logout": "Выйти",
+                "qr_link": "Ссылка",
+                "qr_happ": "Happ",
+                "reset_uuid": "Сбросить UUID и токен",
+                "delete_account": "Удалить аккаунт",
+
+                // placeholders
+                "current_pw_required": "Введите текущий пароль для подтверждения.",
+                "invalid_current_pw": "Неверный текущий пароль",
+                "enter_code": "Введите код",
+                "keep_empty": "Оставьте пустым",
+
+                // status
+                "online": "В сети",
+                "offline": "Не в сети",
+                "active": "Активен",
+                "disabled": "Отключён",
+                "unlimited": "Безлимит",
+                "expired": "Истёк",
+                "d_left": "д",
+                "h_left": "ч",
+
+                // confirmations
+                "confirm_reset": "Сбросить UUID и токен? Подписку нужно будет добавить заново.",
+                "confirm_delete": "Удалить аккаунт навсегда? Это необратимо.",
+                "confirm_delete2": "Точно уверены?",
+                "confirm_title_reset": "Сброс данных",
+                "confirm_title_delete": "Удаление аккаунта",
+                "confirm_title_final": "Последнее подтверждение",
+                "confirm_yes": "Подтвердить",
+                "confirm_cancel": "Отмена",
+
+                // banners
+                "banner_disabled": "Ваш аккаунт отключён. Свяжитесь с поддержкой для восстановления.",
+                "banner_expired": "Подписка истекла. Примените бонус-код для продления.",
+                "bonus_reusable": "(многоразовый)",
+
+                // profiles
+                "profiles": "Профили",
+                "profiles_title": "Доступные профили",
+                "no_profiles": "Профили недоступны.",
+                "close": "Закрыть",
+
+                // page
+                "page_title": "Панель",
+                "uuid": "UUID",
+                "wl_suffix": " + WL",
+                "gb_wl": "ГБ (WL)",
+                "qr_failed": "Не удалось создать QR-код"
+            }
+        },
+        "history": {
+            "en": {
+                // page
+                "page_title": "Bandwidth history",
+                "range": "Range",
+                "days_suffix": "days",
+                "back": "Back",
+
+                // chart
+                "regular_traffic": "Regular traffic",
+                "wl_traffic": "Whitelist traffic",
+                "upload": "Upload",
+                "download": "Download",
+                "total": "Total",
+
+                // states
+                "no_data": "No data for this period",
+                "loading": "Loading...",
+                "chart_load_err": "Failed to load charting library",
+
+                // chrome
+                "back_aria": "Go back to dashboard",
+                "refresh_aria": "Refresh data",
+                "days_range_aria": "Select number of days"
+            },
+
+            "ru": {
+                // page
+                "page_title": "История трафика",
+                "range": "Период",
+                "days_suffix": "дн.",
+                "back": "Назад",
+
+                // chart
+                "regular_traffic": "Обычный трафик",
+                "wl_traffic": "Трафик WL",
+                "upload": "Отправлено",
+                "download": "Получено",
+                "total": "Всего",
+
+                // states
+                "no_data": "Нет данных за этот период",
+                "loading": "Загрузка...",
+                "chart_load_err": "Не удалось загрузить библиотеку графиков",
+
+                // chrome
+                "back_aria": "Вернуться на панель",
+                "refresh_aria": "Обновить данные",
+                "days_range_aria": "Выбрать количество дней"
+            }
+        },
+        "admin": {
+            "en": {
+                // tabs
+                "users": "Users",
+                "codes": "Codes",
+                "audit_logs": "Audit Logs",
+                "state": "State",
+                "snapshots": "Snapshots",
+                "health": "Health",
+                "leaderboard": "Leaderboard",
+
+                // users
+                "user_list": "User List",
+                "add_user": "Add User",
+                "user_details": "User Details",
+                "internal_user": "Internal User",
+                "display_name": "Display Name",
+                "ext_username": "Ext Username",
+                "ext_password": "Ext Password",
+                "fingerprint": "Fingerprint",
+                "monthly_limit": "Monthly Limit (GB)",
+                "wl_limit": "WL Limit (GB)",
+                "expires": "Expires",
+                "custom_token": "Custom Token",
+                "custom_uuid": "Custom UUID",
+                "actions": "Actions",
+                "info": "Info",
+                "reset": "Reset",
+                "delete": "Delete",
+
+                // user hints
+                "load_users_hint": "Click \"Load Users\" to fetch user list",
+                "internal_user_hint": "Unique internal identifier",
+                "ext_username_hint": "Web UI login (optional)",
+                "limit_hint": "0 = unlimited",
+                "expires_hint": "Empty = unlimited",
+
+                // bonus codes
+                "bonus_codes": "Bonus Codes",
+                "add_code": "Add Code",
+                "code": "Code",
+                "action_type": "Action Type",
+                "bonus": "Bonus",
+                "register": "Register",
+                "days": "Days",
+                "gb": "GB",
+                "wl_gb": "WL GB",
+                "reusable": "Reusable",
+                "uses": "Uses",
+                "uses_hint": "Ignored if reusable",
+                "load_codes": "Load Codes",
+                "add_code_btn": "+ Add Code",
+                "create": "Create",
+                "code_hint": "Unique code string",
+                "reusable_label": "Unlimited uses",
+                "no_codes": "No codes",
+                "load_codes_hint": "Click \"Load Codes\" to fetch codes",
+
+                // code validation
+                "code_required": "Code is required",
+                "uses_invalid": "Uses must be greater than 0",
+                "copy_failed": "Copy failed",
+
+                // audit logs
+                "load_logs_hint": "Click \"Load Logs\" to fetch audit logs",
+                "log_count_label": "rows",
+
+                // confirmations
+                "confirm": "Confirm",
+                "cancel": "Cancel",
+                "confirm_delete_user": "Delete user permanently?",
+                "confirm_reset_user": "Reset token and UUID?",
+                "confirm_delete_code": "Delete this code?",
+                "confirm_resolve_rollback": "Mark this rollback as manually repaired and remove it?",
+
+                // toasts
+                "created": "Created",
+                "deleted": "Deleted",
+                "refreshed": "Refreshed",
+                "copied": "Copied",
+                "copy": "Copy",
+                "failed": "Failed",
+                "error": "Error",
+                "loading": "Loading…",
+                "reload_reauth": "Reload to re-auth",
+
+                // health
+                "health_status": "Health Status",
+                "not_checked": "Not checked",
+                "health_ok": "API is healthy",
+                "health_warn": "API is degraded",
+                "health_err": "API check failed",
+                "check_health": "Check Health",
+                "db": "Database",
+                "degraded": "Degraded",
+                "yes": "Yes",
+                "no": "No",
+                "app_uptime": "App Uptime",
+                "app_swap": "App Swap",
+
+                // panels
+                "panel_status": "Panel Status",
+                "panel_name": "Panel Name",
+                "panel_name_hint": "Leave empty for all panels",
+                "no_panels": "No panels",
+                "check_panel_status": "Check Panel Status",
+                "online_users": "Online Users",
+                "keyed": "Keyed output",
+                "no_online": "No online users",
+                "load_online_hint": "Click \"Load Online\" to fetch online users",
+
+                // host
+                "host_system_status": "Host System Status",
+                "load_system_status": "Load System Status",
+                "no_data": "No data",
+                "cpu_model": "Model",
+                "available": "Available",
+
+                // recovery
+                "operations_recovery": "Operational Recovery",
+                "load_operations": "Load Status",
+                "load_operations_hint": "Load status to check recovery markers",
+                "snapshot_failure": "Daily Snapshot Failure",
+                "rollback_markers": "Rollback Markers",
+                "no_recovery_issues": "No recovery markers",
+                "marker_type": "Type",
+                "marker_reason": "Reason",
+                "resolve": "Resolve",
+                "resolved": "Resolved",
+                "timestamp": "Time",
+
+                // refresh
+                "refresh_users": "Refresh All Users",
+                "refresh_warning": "This syncs all users to all panels. May take time.",
+
+                // snapshots
+                "load_snapshots": "Load Snapshots",
+                "load_snapshots_hint": "Configure cutoff and click \"Load Snapshots\"",
+                "no_snapshots": "No snapshots",
+                "cutoff_days": "Cutoff (days)",
+                "cutoff_invalid": "Cutoff must be greater than 0",
+                "panels_label": "panels",
+
+                // system metrics
+                "system": "System",
+                "memory": "Memory",
+                "disk": "Disk",
+                "network": "Network",
+                "connections": "Connections",
+                "uptime_app": "Uptime & App",
+                "public_ip": "Public IP",
+                "xray_error": "Xray Error",
+                "cpu": "CPU",
+                "cores": "Cores",
+                "speed": "Speed",
+                "load_avg": "Load Avg",
+                "processes": "Processes",
+                "used": "Used",
+                "percent": "Percent",
+                "swap": "Swap",
+                "total_in": "Total In",
+                "total_out": "Total Out",
+                "tcp": "TCP",
+                "udp": "UDP",
+                "sys_uptime": "System Uptime",
+                "app_mem": "App Mem",
+                "app_threads": "App Threads",
+                "xray_ver": "Xray Ver",
+                "ipv4": "IPv4",
+                "ipv6": "IPv6",
+
+                // leaderboard
+                "bw_type": "Type",
+                "cutoff": "Cutoff",
+                "displaynames": "Displaynames",
+                "ascending": "Ascending",
+                "fetch": "Fetch",
+                "lb_hint": "Configure options and click \"Fetch\"",
+                "no_entries": "No entries",
+                "lb_rank": "#",
+                "lb_user": "User",
+                "lb_bandwidth": "Bandwidth",
+
+                // teapot
+                "teapot_title": "Teapot Status",
+                "teapot_question": "Can this server brew coffee?",
+                "teapot_sub": "Spoiler: it cannot.",
+                "teapot_yes": "Yes, I am a teapot",
+                "teapot_no": "No, I am not a teapot",
+                "check_teapot": "Check Teapot",
+
+                // page chrome
+                "page_title": "Admin Panel",
+                "load_users": "Load Users",
+                "add_user_btn": "+ Add User",
+                "close": "Close",
+                "load_logs": "Load Logs",
+                "load_online": "Load Online",
+                "refresh_users_btn": "Refresh Users",
+                "fp_placeholder": "chrome",
+                "auto": "auto",
+                "optional": "optional",
+                "cutoff_all": "0 = all",
+                "lb_total": "Total (All-time)",
+                "lb_monthly": "Monthly",
+                "lb_wl_monthly": "WL Monthly",
+
+                // dynamic labels
+                "no_users": "No users",
+                "no_logs": "No logs",
+                "uuid": "UUID",
+                "token": "Token",
+                "log_action": "Action",
+                "wl": "WL",
+                "unknown": "unknown",
+                "xray": "Xray",
+                "down": "Down",
+                "up": "Up",
+                "utc": "UTC",
+                "partial_data": "Partial data: {detail}",
+                "internal_user_required": "Internal user required",
+                "display_name_required": "Display name required",
+                "status": "Status"
+            },
+
+            "ru": {
+                // tabs
+                "users": "Пользователи",
+                "codes": "Коды",
+                "audit_logs": "Логи",
+                "state": "Состояние",
+                "snapshots": "Снимки",
+                "health": "Здоровье",
+                "leaderboard": "Рейтинг",
+
+                // users
+                "user_list": "Список пользователей",
+                "add_user": "Добавить",
+                "user_details": "Данные пользователя",
+                "internal_user": "Внутр. имя",
+                "display_name": "Отображаемое имя",
+                "ext_username": "Логин",
+                "ext_password": "Пароль",
+                "fingerprint": "Отпечаток",
+                "monthly_limit": "Лимит (ГБ)",
+                "wl_limit": "WL лимит (ГБ)",
+                "expires": "Истекает",
+                "custom_token": "Токен",
+                "custom_uuid": "UUID",
+                "actions": "Действия",
+                "info": "Инфо",
+                "reset": "Сброс",
+                "delete": "Удалить",
+
+                // user hints
+                "load_users_hint": "Нажмите \"Загрузить\" для получения списка",
+                "internal_user_hint": "Уникальный внутр. идентификатор",
+                "ext_username_hint": "Веб-логин (опц.)",
+                "limit_hint": "0 = безлимит",
+                "expires_hint": "Пусто = безлимит",
+
+                // bonus codes
+                "bonus_codes": "Бонус-коды",
+                "add_code": "Создать код",
+                "code": "Код",
+                "action_type": "Тип",
+                "bonus": "Бонус",
+                "register": "Регистрация",
+                "days": "Дни",
+                "gb": "ГБ",
+                "wl_gb": "WL ГБ",
+                "reusable": "Многоразовый",
+                "uses": "Использований",
+                "uses_hint": "Игнорируется если многоразовый",
+                "load_codes": "Загрузить",
+                "add_code_btn": "+ Создать код",
+                "create": "Создать",
+                "code_hint": "Уникальная строка кода",
+                "reusable_label": "Безлимит. использований",
+                "no_codes": "Нет кодов",
+                "load_codes_hint": "Нажмите \"Загрузить\" для кодов",
+
+                // code validation
+                "code_required": "Введите код",
+                "uses_invalid": "Использований должно быть больше 0",
+                "copy_failed": "Не удалось скопировать",
+
+                // audit logs
+                "load_logs_hint": "Нажмите \"Загрузить\" для логов",
+                "log_count_label": "строк",
+
+                // confirmations
+                "confirm": "Подтвердить",
+                "cancel": "Отмена",
+                "confirm_delete_user": "Удалить пользователя навсегда?",
+                "confirm_reset_user": "Сбросить токен и UUID?",
+                "confirm_delete_code": "Удалить этот код?",
+                "confirm_resolve_rollback": "Подтвердить ручное исправление и удалить этот маркер?",
+
+                // toasts
+                "created": "Создано",
+                "deleted": "Удалено",
+                "refreshed": "Обновлено",
+                "copied": "Скопировано",
+                "copy": "Копировать",
+                "failed": "Не удалось",
+                "error": "Ошибка",
+                "loading": "Загрузка…",
+                "reload_reauth": "Перезагрузите страницу для повторной авторизации",
+
+                // health
+                "health_status": "Статус",
+                "not_checked": "Не проверено",
+                "health_ok": "API работает",
+                "health_warn": "API деградировал",
+                "health_err": "Ошибка API",
+                "check_health": "Проверить",
+                "db": "База",
+                "degraded": "Деградация",
+                "yes": "Да",
+                "no": "Нет",
+                "app_uptime": "Аптайм прилож.",
+                "app_swap": "Swap прилож.",
+
+                // panels
+                "panel_status": "Статус панелей",
+                "panel_name": "Панель",
+                "panel_name_hint": "Пусто = все панели",
+                "no_panels": "Нет панелей",
+                "check_panel_status": "Проверить панели",
+                "online_users": "Онлайн",
+                "keyed": "Ключ",
+                "no_online": "Нет онлайн",
+                "load_online_hint": "Нажмите \"Загрузить\" для списка",
+
+                // host
+                "host_system_status": "Статус хост-системы",
+                "load_system_status": "Загрузить статус",
+                "no_data": "Нет данных",
+                "cpu_model": "Модель",
+                "available": "Доступно",
+
+                // recovery
+                "operations_recovery": "Восстановление",
+                "load_operations": "Загрузить статус",
+                "load_operations_hint": "Загрузите статус для проверки маркеров",
+                "snapshot_failure": "Ошибка дневного снимка",
+                "rollback_markers": "Маркеры отката",
+                "no_recovery_issues": "Нет маркеров восстановления",
+                "marker_type": "Тип",
+                "marker_reason": "Причина",
+                "resolve": "Закрыть",
+                "resolved": "Закрыто",
+                "timestamp": "Время",
+
+                // refresh
+                "refresh_users": "Синхронизация",
+                "refresh_warning": "Синхронизирует всех пользователей. Займёт время.",
+
+                // snapshots
+                "load_snapshots": "Загрузить снимки",
+                "load_snapshots_hint": "Укажите cutoff и нажмите \"Загрузить снимки\"",
+                "no_snapshots": "Нет снимков",
+                "cutoff_days": "Cutoff (дни)",
+                "cutoff_invalid": "Cutoff должен быть больше 0",
+                "panels_label": "панелей",
+
+                // system metrics
+                "system": "Система",
+                "memory": "Память",
+                "disk": "Диск",
+                "network": "Сеть",
+                "connections": "Подключения",
+                "uptime_app": "Аптайм и приложение",
+                "public_ip": "Публичный IP",
+                "xray_error": "Ошибка Xray",
+                "cpu": "CPU",
+                "cores": "Ядра",
+                "speed": "Частота",
+                "load_avg": "Load Avg",
+                "processes": "Процессы",
+                "used": "Использовано",
+                "percent": "Процент",
+                "swap": "Swap",
+                "total_in": "Всего вход.",
+                "total_out": "Всего выход.",
+                "tcp": "TCP",
+                "udp": "UDP",
+                "sys_uptime": "Аптайм системы",
+                "app_mem": "Память прилож.",
+                "app_threads": "Потоки прилож.",
+                "xray_ver": "Версия Xray",
+                "ipv4": "IPv4",
+                "ipv6": "IPv6",
+
+                // leaderboard
+                "bw_type": "Тип",
+                "cutoff": "Лимит",
+                "displaynames": "Имена",
+                "ascending": "По возраст.",
+                "fetch": "Загрузить",
+                "lb_hint": "Настройте параметры и нажмите \"Загрузить\"",
+                "no_entries": "Нет записей",
+                "lb_rank": "#",
+                "lb_user": "Пользователь",
+                "lb_bandwidth": "Трафик",
+
+                // teapot
+                "teapot_title": "Статус чайника",
+                "teapot_question": "Может ли этот сервер сварить кофе?",
+                "teapot_sub": "Спойлер: не может.",
+                "teapot_yes": "Да, я чайник",
+                "teapot_no": "Нет, я не чайник",
+                "check_teapot": "Проверить чайник",
+
+                // page chrome
+                "page_title": "Панель администратора",
+                "load_users": "Загрузить",
+                "add_user_btn": "+ Добавить",
+                "close": "Закрыть",
+                "load_logs": "Загрузить",
+                "load_online": "Загрузить",
+                "refresh_users_btn": "Синхронизация",
+                "fp_placeholder": "chrome",
+                "auto": "авто",
+                "optional": "необязательно",
+                "cutoff_all": "0 = все",
+                "lb_total": "Всего (за всё время)",
+                "lb_monthly": "За месяц",
+                "lb_wl_monthly": "WL за месяц",
+
+                // dynamic labels
+                "no_users": "Нет пользователей",
+                "no_logs": "Нет логов",
+                "uuid": "UUID",
+                "token": "Токен",
+                "log_action": "Действие",
+                "wl": "WL",
+                "unknown": "неизвестно",
+                "xray": "Xray",
+                "down": "Вход",
+                "up": "Выход",
+                "utc": "UTC",
+                "partial_data": "Неполные данные: {detail}",
+                "internal_user_required": "Укажите внутреннее имя",
+                "display_name_required": "Укажите отображаемое имя",
+                "status": "Статус"
+            }
         }
     }
 }

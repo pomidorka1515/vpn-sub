@@ -30,6 +30,7 @@ INFO_TEXTS = {
         ),
         "unlimited": "Unlimited",
         "lifetime": "Lifetime",
+        "days_word": "days",
     },
     "ru": {
         "info_text": (
@@ -51,6 +52,7 @@ INFO_TEXTS = {
         ),
         "unlimited": "Безлимит",
         "lifetime": "Навсегда",
+        "days_word": "дней",
     },
 }
 

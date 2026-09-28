@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <script src="common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>History</title>
+<title data-t="page_title">History</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -164,17 +164,17 @@ body {
 
 <div class="topbar">
   <div class="topbar-left">
-    <button class="btn-back" onclick="goBack()" id="btnBack" aria-label="Go back to dashboard">
+    <button class="btn-back" onclick="goBack()" id="btnBack" data-t-aria="back_aria">
       <span class="arrow" aria-hidden="true">←</span><span id="btnBackText">Back</span>
     </button>
   </div>
   <div class="topbar-right">
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme"></button>
-    <div class="lang-toggle" role="group" aria-label="Language selection">
-      <button class="lang-btn" onclick="setLang('en')" aria-label="Switch to English">EN</button>
-      <button class="lang-btn" onclick="setLang('ru')" aria-label="Switch to Russian">RU</button>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
+    <div class="lang-toggle" role="group" data-t-aria="lang_selection">
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
+      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
     </div>
-    <button class="btn-sm" onclick="loadHistory()" id="btnRefresh" aria-label="Refresh data"></button>
+    <button class="btn-sm" onclick="loadHistory()" id="btnRefresh" data-t-aria="refresh_aria"></button>
   </div>
 </div>
 
@@ -221,59 +221,14 @@ const BASE = '{{ prefix }}';
 const API = BASE + '/webapi';
 const AUTH_PAGE = BASE + '/auth';
 const DASHBOARD_PAGE = BASE + '/panel';
-const DEBOUNCE_MS = 1000; 
-
-const L = {
-  en: {
-    page_title: 'Bandwidth history',
-    range: 'Range', days_suffix: 'days',
-    regular_traffic: 'Regular traffic', wl_traffic: 'Whitelist traffic',
-    upload: 'Upload', download: 'Download',
-    no_data: 'No data for this period',
-    refresh: 'Refresh', back: 'Back',
-    network_err: 'Network error',
-    total: 'Total',
-    loading: 'Loading...',
-    chart_load_err: 'Failed to load charting library'
-  },
-  ru: {
-    page_title: 'История трафика',
-    range: 'Период', days_suffix: 'дн.',
-    regular_traffic: 'Обычный трафик', wl_traffic: 'Трафик WL',
-    upload: 'Отправлено', download: 'Получено',
-    no_data: 'Нет данных за этот период',
-    refresh: 'Обновить', back: 'Назад',
-    network_err: 'Ошибка сети',
-    total: 'Всего',
-    loading: 'Загрузка...',
-    chart_load_err: 'Не удалось загрузить библиотеку графиков'
-  }
-};
-
-// lang resolution: ?lang= wins; else localStorage; else English
-function resolveLang() {
-  const params = new URLSearchParams(window.location.search);
-  const q = (params.get('lang') || '').toLowerCase();
-  if (q === 'en' || q === 'ru') {
-    localStorage.setItem('lang', q);
-    return q;
-  }
-  const stored = localStorage.getItem('lang');
-  if (stored === 'en' || stored === 'ru') return stored;
-  return 'en';
-}
-let lang = resolveLang();
-function t(k) { return L[lang]?.[k] || L.en[k] || k; }
-
-
-
-
+const DEBOUNCE_MS = 1000;
+window.LANG = {{ L | tojson }};
+window.LANG_EN = {{ L_en | tojson }};
+window.LANG_CODE = '{{ lang }}';
+window.lang = window.LANG_CODE;
 
 function renderLang() {
-  document.querySelectorAll('.lang-btn').forEach(b =>
-    b.classList.toggle('active', b.textContent.toLowerCase() === lang));
-  document.querySelectorAll('[data-t]').forEach(el =>
-    el.textContent = t(el.getAttribute('data-t')));
+  applyStaticLang();
   document.getElementById('btnRefresh').textContent = t('refresh');
   document.getElementById('btnBackText').textContent = t('back');
   document.title = t('page_title');
@@ -281,12 +236,6 @@ function renderLang() {
     updateChartLabels();
     renderSummaries(lastData);
   }
-}
-
-function setLang(l) {
-  lang = l;
-  localStorage.setItem('lang', l);
-  renderLang();
 }
 
 function goBack() {
@@ -543,7 +492,7 @@ async function loadHistory() {
 let dbT;
 const rangeEl = document.getElementById('daysRange');
 const dValEl = document.getElementById('daysValue');
-rangeEl.setAttribute('aria-label', 'Select number of days');
+rangeEl.setAttribute('aria-label', t('days_range_aria'));
 rangeEl.addEventListener('input', () => {
   dValEl.textContent = rangeEl.value;
   clearTimeout(dbT);
@@ -551,6 +500,7 @@ rangeEl.addEventListener('input', () => {
 });
 
 applyTheme();
+initLang();
 renderLang();
 loadHistory();
 </script>

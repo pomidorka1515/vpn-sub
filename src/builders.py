@@ -7,11 +7,11 @@ import json
 import copy
 import base64
 
-from pathlib import Path
-from typing import Any, Literal, TYPE_CHECKING
+from collections.abc import Mapping
+from typing import Any, Literal, cast, TYPE_CHECKING
 from datetime import datetime, timezone
 from collections import deque
-from flask import Response
+from flask import Response, render_template
 
 from util import fmt_bytes, format, isbrowser, err
 from custom_types import (
@@ -25,8 +25,6 @@ __all__ = ["build_description", "build_link_array", "build_json", "get_subscript
 
 # pyright: reportPrivateUsage=false
 
-with open(Path(__file__).resolve().parent.parent / "res" / "browser.html", encoding="utf-8") as f:
-    BROWSER_HTML = f.read()
 def build_description(
     lang_cfg: dict[str, Any],
     name: str,
@@ -164,6 +162,7 @@ def build_link_array(
     bandwidths: BandwidthInfo,
     need_dummy_link: bool,
     fingerprint: str,
+    lang_cfg: dict[str, Any],
 ) -> str:
     """Build a base64-encoded link array."""
     generated_links: deque[str] = deque()
@@ -193,7 +192,7 @@ def build_link_array(
         generated_links.append(link)
 
     if need_dummy_link:
-        dt = "Bandwidth: " if lang == "en" else "Трафик: "
+        dt = lang_cfg['description'][lang]['bw_label']
         dt = urllib.parse.quote(
             dt + "↑ {up} / ↓ {down}".format(
                 up=fmt_bytes(bandwidths.upload),
@@ -285,7 +284,8 @@ def get_subscription(
         return err("Language can be either 'ru' or 'en'", 400)
 
     if isbrowser(ua=ua):
-        return Response(BROWSER_HTML, mimetype="text/html"), 403
+        html = render_template("browser.html", **_browser_strings(obj, lang))
+        return Response(html, mimetype="text/html"), 403
 
     bandwidths = obj.bandwidth_svc.bandwidth(username)
 
@@ -379,5 +379,38 @@ def get_subscription(
         return Response(build_link_array(
             cfg=cfg, status=status, statusWl=statusWl, lang=lang,
             bandwidths=bandwidths, user_uuid=user_uuid, is_happ=is_happ, need_dummy_link=need_dummy_link,
-            fingerprint=str(user['fingerprint'])
+            fingerprint=str(user['fingerprint']), lang_cfg=lang_cfg
         ), mimetype="text/plain", headers=headers), 200
+
+
+def _string_map(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        key: text
+        for key, text in cast(Mapping[object, object], value).items()
+        if isinstance(key, str) and isinstance(text, str)
+    }
+
+
+def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
+    section = web.get(name)
+    if isinstance(section, Mapping):
+        return cast(Mapping[str, object], section)
+    return {}
+
+
+def _browser_strings(obj: Subscription, lang: str) -> dict[str, str]:
+    raw = obj.res.lang_cfg.get("web")
+    web: Mapping[str, object] = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
+    langs = _section(web, "shared")
+    strings = _string_map(langs.get(lang)) or _string_map(langs.get("en"))
+
+    def text(key: str, fallback: str) -> str:
+        return strings.get(key, fallback)
+
+    return {
+        "forbidden_title": text("forbidden_title", "403 Forbidden"),
+        "use_vpn_client": text("use_vpn_client", "use a VPN client!"),
+        "use_vpn_client_hint": text("use_vpn_client_hint", "use a VPN client to get the subscription"),
+    }

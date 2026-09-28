@@ -40,17 +40,17 @@
       const base = String(str(cfg.baseUrl) || '').replace(/\/+$/, '');
       r = await fetch(base + path, opts);
     } catch (e) {
-      if (cfg.networkError === 'toast') { w.toast(str(cfg.networkMessage) || 'Network error', 'error'); return null; }
+      if (cfg.networkError === 'toast') { w.toast(str(cfg.networkMessage) || w.t('network_err'), 'error'); return null; }
       throw e;
     }
     if (r.status === 204) return { success: true, status: 204 };
     if (r.status === 401 && cfg.on401) { cfg.on401(); return null; }
     let data = {};
-    try { data = await r.json(); } catch (_) { data = { success: false, msg: r.statusText || 'Invalid server response' }; }
+    try { data = await r.json(); } catch (_) { data = { success: false, msg: r.statusText || w.t('invalid_response') }; }
     return Object.assign({}, data, { status: r.status });
   };
   w.fmtBytes = function (b) {
-    if (!Number.isFinite(b)) return 'N/A';
+    if (!Number.isFinite(b)) return w.t('na');
     if (b <= 0) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.min(Math.floor(Math.log(b) / Math.log(1000)), units.length - 1);
@@ -79,8 +79,8 @@
       const dismiss = () => close(withInput ? null : false);
       document.getElementById('modalTitle').textContent = title || '';
       document.getElementById('modalMsg').textContent = message;
-      okBtn.textContent = opts.okText || 'OK';
-      cancelBtn.textContent = opts.cancelText || 'Cancel';
+      okBtn.textContent = opts.okText || w.t('ok');
+      cancelBtn.textContent = opts.cancelText || w.t('cancel');
       if (input) {
         input.value = '';
         input.style.display = withInput ? 'block' : 'none';
@@ -107,7 +107,7 @@
     });
   };
   w.fmtUptime = function (seconds) {
-    if (seconds == null || isNaN(seconds)) return 'N/A';
+    if (seconds == null || isNaN(seconds)) return w.t('na');
     seconds = Math.floor(seconds);
     const d = Math.floor(seconds / 86400);
     const h = Math.floor((seconds % 86400) / 3600);
@@ -116,6 +116,51 @@
     if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
     if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
     return m + 'm ' + s + 's';
+  };
+  w.t = function (k) {
+    const table = w.LANG || {};
+    const fallback = w.LANG_EN || table;
+    return table[k] || fallback[k] || k;
+  };
+  w.applyStaticLang = function () {
+    document.querySelectorAll('.lang-btn').forEach(b =>
+      b.classList.toggle('active', (b.getAttribute('data-lang') || b.textContent.toLowerCase()) === w.lang));
+    const set = (sel, attr, key) => {
+      document.querySelectorAll(sel).forEach(el => {
+        const value = w.t(el.getAttribute(key));
+        if (attr === 'text') el.textContent = value;
+        else el.setAttribute(attr, value);
+      });
+    };
+    set('[data-t]', 'text', 'data-t');
+    set('[data-t-title]', 'title', 'data-t-title');
+    set('[data-t-aria]', 'aria-label', 'data-t-aria');
+    set('[data-t-ph]', 'placeholder', 'data-t-ph');
+    const title = document.querySelector('title[data-t]');
+    if (title) document.title = w.t(title.getAttribute('data-t'));
+  };
+  w.initLang = function () {
+    w.lang = w.LANG_CODE || 'en';
+    const params = new URLSearchParams(w.location.search);
+    const stored = localStorage.getItem('lang') || localStorage.getItem('admin_lang');
+    if (!params.has('lang') && (stored === 'en' || stored === 'ru') && stored !== w.lang && !sessionStorage.getItem('lang_synced')) {
+      sessionStorage.setItem('lang_synced', '1');
+      document.cookie = 'lang=' + stored + '; path=/; max-age=31536000; samesite=lax';
+      localStorage.setItem('lang', stored);
+      w.location.reload();
+      return;
+    }
+    localStorage.setItem('lang', w.lang);
+    document.documentElement.lang = w.lang;
+    w.applyStaticLang();
+  };
+  w.setLang = function (l) {
+    if (l !== 'en' && l !== 'ru') return;
+    localStorage.setItem('lang', l);
+    document.cookie = 'lang=' + l + '; path=/; max-age=31536000; samesite=lax';
+    const url = new URL(w.location.href);
+    url.searchParams.delete('lang');
+    w.location.replace(url);
   };
   w.fmtTime = function (ts, t) {
     t = t || function (k) { return k; };

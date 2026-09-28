@@ -63,7 +63,6 @@
             "logout_success": "✅ Вы вышли из аккаунта.",
             "help_text": "ℹ️ **Описания профилей**\n\n{text}",
             "support_text": "💬 По всем вопросам обращайтесь: @pomidorka_1515",
-            "dm_required": "🔒 Эту команду нужно использовать в личных сообщениях с ботом.",
             "logout_web_warning": "⚠ Выход также завершит сессию на сайте. Продолжить?",
             "delete_need_password": "🔒 Введите текущий пароль для удаления аккаунта",
             "rate_limited": "⏳ Слишком много запросов. Подождите минуту и попробуйте снова.",
@@ -72,7 +71,9 @@
             "already_logged_in": "✅ Вы уже вошли.",
             "http_unavailable": "⚠ Сервис временно недоступен. Попробуйте позже.",
             "username_taken": "❌ Это имя пользователя уже занято.",
-            "bad_response": "⚠ Некорректный ответ сервиса. Попробуйте ещё раз."
+            "bad_response": "⚠ Некорректный ответ сервиса. Попробуйте ещё раз.",
+            "days_word": "дней",
+            "choose_lang_prompt": "Welcome! Please choose your language:\nДобро пожаловать! Выберите язык:"
         },
         "en": {
             "btn_main_account": "⚙ Account management",
@@ -137,7 +138,6 @@
             "logout_success": "✅ Logged out successfully!",
             "help_text": "ℹ️ **VPN Profile descriptions**\n\n{text}",
             "support_text": "💬 For any questions contact: @pomidorka_1515",
-            "dm_required": "🔒 Use this command in DMs with the bot.",
             "logout_web_warning": "⚠ Logging out also signs you out of the website. Continue?",
             "delete_need_password": "🔒 Enter your current password to delete the account",
             "rate_limited": "⏳ Too many requests. Wait a minute and try again.",
@@ -146,7 +146,39 @@
             "already_logged_in": "✅ You are already logged in.",
             "http_unavailable": "⚠ Service is temporarily unavailable. Try again later.",
             "username_taken": "❌ This username is already taken.",
-            "bad_response": "⚠ Unexpected response from the service. Please try again."
+            "bad_response": "⚠ Unexpected response from the service. Please try again.",
+            "days_word": "days",
+            "choose_lang_prompt": "Welcome! Please choose your language:\nДобро пожаловать! Выберите язык:"
+        }
+    },
+    "chart": {
+        "ru": {
+            "bandwidth": "Использование трафика",
+            "days": "дн.",
+            "day": "день",
+            "regular_traffic": "Обычный трафик",
+            "whitelist_traffic": "Белый список",
+            "download": "Загрузка",
+            "upload": "Отдача",
+            "no_data": "Нет данных",
+            "leaderboard": "Таблица лидеров",
+            "bw_type_total": "весь трафик",
+            "bw_type_monthly": "трафик за месяц",
+            "bw_type_wl_monthly": "WL-трафик за месяц"
+        },
+        "en": {
+            "bandwidth": "Bandwidth",
+            "days": "days",
+            "day": "day",
+            "regular_traffic": "Regular traffic",
+            "whitelist_traffic": "Whitelist traffic",
+            "download": "Download",
+            "upload": "Upload",
+            "no_data": "No data",
+            "leaderboard": "Leaderboard",
+            "bw_type_total": "total bandwidth",
+            "bw_type_monthly": "monthly bandwidth",
+            "bw_type_wl_monthly": "whitelist monthly bandwidth"
         }
     }
 }

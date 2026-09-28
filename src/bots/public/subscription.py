@@ -19,7 +19,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         info = self.sub.telegram_svc.get_info_telegram(uid)
         if not info:
             return
-        daystext = "дней" if lang == 'ru' else "days"
+        daystext = t['days_word']
         unlimited = f"<i>{t['unlimited']}</i>"
 
         def quota(used: int | float, limit: int) -> str:

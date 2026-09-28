@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <script src="common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sign in</title>
+<title data-t="sign_in">Sign in</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -109,10 +109,10 @@ body {
 </head>
 <body>
 <div class="auth-box">
-  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme"></button>
-  <div class="lang-toggle">
-    <button class="lang-btn" onclick="setLang('en')">EN</button>
-    <button class="lang-btn" onclick="setLang('ru')">RU</button>
+  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
+  <div class="lang-toggle" data-t-aria="lang_selection">
+    <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
+    <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
   </div>
   <h1 id="authTitle"></h1>
   <div class="auth-tabs">
@@ -130,7 +130,7 @@ body {
       <label data-t="password"></label>
       <div class="pass-wrap">
         <input type="password" id="loginPass" autocomplete="current-password">
-        <button class="pass-toggle" onclick="togglePass('loginPass', this)" type="button" aria-label="Toggle password"></button>
+        <button class="pass-toggle" onclick="togglePass('loginPass', this)" type="button" data-t-aria="toggle_password"></button>
       </div>
     </div>
     <button class="btn btn-primary" id="loginBtn" onclick="doLogin()"></button>
@@ -154,14 +154,14 @@ body {
       <label data-t="password"></label>
       <div class="pass-wrap">
         <input type="password" id="regPass" autocomplete="new-password">
-        <button class="pass-toggle" onclick="togglePass('regPass', this)" type="button" aria-label="Toggle password"></button>
+        <button class="pass-toggle" onclick="togglePass('regPass', this)" type="button" data-t-aria="toggle_password"></button>
       </div>
     </div>
     <div class="form-group">
       <label data-t="confirm_password"></label>
       <div class="pass-wrap">
         <input type="password" id="regPass2" autocomplete="new-password">
-        <button class="pass-toggle" onclick="togglePass('regPass2', this)" type="button" aria-label="Toggle password"></button>
+        <button class="pass-toggle" onclick="togglePass('regPass2', this)" type="button" data-t-aria="toggle_password"></button>
       </div>
     </div>
     <button class="btn btn-primary" id="regBtn" onclick="doRegister()"></button>
@@ -172,50 +172,21 @@ body {
 const BASE = '{{ prefix }}';
 const API = BASE + '/webapi';
 const DASHBOARD = BASE + '/panel';
+window.LANG = {{ L | tojson }};
+window.LANG_EN = {{ L_en | tojson }};
+window.LANG_CODE = '{{ lang }}';
+window.lang = window.LANG_CODE;
 
-const L = {
-  en: {
-    sign_in: 'Sign in', create_account: 'Create account',
-    login: 'Login', register: 'Register',
-    username: 'Username', password: 'Password', confirm_password: 'Confirm password',
-    invite_code: 'Invite code', display_name: 'Display name',
-    network_err: 'Network error',
-    hint_invalid: 'Invalid characters. Try: ', hint_taken: 'Username taken', hint_ok: 'Available',
-    passwords_not_match: 'Passwords do not match',
-  },
-  ru: {
-    sign_in: 'Вход', create_account: 'Регистрация',
-    login: 'Вход', register: 'Регистрация',
-    username: 'Логин', password: 'Пароль', confirm_password: 'Подтвердите пароль',
-    invite_code: 'Код приглашения', display_name: 'Отображаемое имя',
-    network_err: 'Ошибка сети',
-    hint_invalid: 'Недопустимые символы. Попробуйте: ', hint_taken: 'Логин занят', hint_ok: 'Свободен',
-    passwords_not_match: 'Пароли не совпадают',
-  }
-};
-
-let lang = localStorage.getItem('lang') || 'en';
 let curTab = 'login';
 
-function t(k) { return L[lang]?.[k] || L.en[k] || k; }
-
-
-
-
-
 function render() {
-  document.querySelectorAll('.lang-btn').forEach(b =>
-    b.classList.toggle('active', b.textContent.toLowerCase() === lang));
-  document.querySelectorAll('[data-t]').forEach(el =>
-    el.textContent = t(el.getAttribute('data-t')));
+  applyStaticLang();
   document.getElementById('authTitle').textContent = t(curTab === 'login' ? 'sign_in' : 'create_account');
   document.getElementById('tabLogin').textContent = t('login');
   document.getElementById('tabRegister').textContent = t('register');
   document.getElementById('loginBtn').textContent = t('sign_in');
   document.getElementById('regBtn').textContent = t('create_account');
 }
-
-function setLang(l) { lang = l; localStorage.setItem('lang', l); render(); }
 
 window.apiConfig = { baseUrl: API };
 
@@ -301,6 +272,7 @@ async function doRegister() {
 
 applyTheme();
 initPassToggles();
+initLang();
 render();
 document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('regPass').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });

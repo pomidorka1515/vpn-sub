@@ -49,7 +49,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
             )
         except Exception:
             self.log.error("chart submission failed", exc_info=True)
-            self._send_message(message.chat.id, t.get("error_generic", "⚠️ Error"))
+            self._send_message(message.chat.id, t['error_generic'])
 
     def _render_chart(
         self,
@@ -108,11 +108,11 @@ class PublicTrafficMixin(PublicFeatureMixin):
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
             else:
-                self.bot.send_message(chat_id, text + "\n\n" + t.get('no_data', 'No chart data available'), parse_mode="HTML", reply_markup=self.get_menu(uid))
+                self.bot.send_message(chat_id, text + "\n\n" + t['no_data'], parse_mode="HTML", reply_markup=self.get_menu(uid))
         except AppError as error:
             self._send_message(chat_id, error.message, reply_markup=self.get_menu(uid))
         except Exception:
             self.log.error(f"Chart error for uid {uid}", exc_info=True)
-            self._send_message(chat_id, "Error occurred", reply_markup=self.get_menu(uid))
+            self._send_message(chat_id, t['error_generic'], reply_markup=self.get_menu(uid))
 
 

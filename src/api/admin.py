@@ -1,4 +1,4 @@
-from .common import BaseApi, Route, ResponseType, asset_version
+from .common import BaseApi, Route, ResponseType, asset_version, web_lang_tables
 from .decorators import requires_args, requires_fields_strict, requires_basic_admin_auth, requires_admin_auth
 from flask import Flask, Response, g, render_template, request
 from custom_types import JsonifyValue
@@ -436,7 +436,18 @@ class Api(BaseApi):
     
     @requires_basic_admin_auth
     def admin_ui(self) -> ResponseType:
-        return Response(render_template('admin.html', asset_version=asset_version()), mimetype='text/html')
+        lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, 'admin')
+        html = render_template(
+            'admin.html',
+            asset_version=asset_version(),
+            lang=lang,
+            L=strings,
+            L_en=fallback,
+        )
+        response = Response(html, mimetype='text/html')
+        if request.args.get('lang', '').lower() in ('en', 'ru'):
+            response.set_cookie('lang', lang, max_age=31536000, samesite='Lax', path='/')
+        return response
 
     @requires_basic_admin_auth
     def admin_token(self) -> ResponseType:

@@ -39,11 +39,12 @@ def make_subscription(
     whitelist_panel: object | None = None,
     app: Flask | None = None,
     audit_cfg: object | None = None,
+    lang_cfg: object | None = None,
     **config_overrides: Any,
 ) -> Subscription:
     return Subscription(
         cfg=cast(ConfigLike, subscription_config(**config_overrides)),
-        lang_cfg=cast(ConfigLike, {}),
+        lang_cfg=cast(ConfigLike, {} if lang_cfg is None else lang_cfg),
         db=database,
         app=app or Flask(__name__),
         panels=cast(list[XUiSession], panels or []),

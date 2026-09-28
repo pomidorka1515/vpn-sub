@@ -1,4 +1,4 @@
-from .common import Route, BaseApi, RES_DIR, ResponseType, asset_version
+from .common import Route, BaseApi, RES_DIR, ResponseType, asset_version, web_lang_tables
 from flask import Flask, request, Response, make_response, redirect, render_template, send_file, g
 from config import ConfigLike
 from core import Subscription
@@ -99,8 +99,20 @@ class WebApi(BaseApi):
         return self._page('history.html')
 
     def _page(self, name: str) -> Response:
-        html = render_template(name, prefix=self.prefix, asset_version=asset_version())
-        return Response(html, mimetype='text/html')
+        page = {'auth.html': 'auth', 'dashboard.html': 'dashboard', 'history.html': 'history'}[name]
+        lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, page)
+        html = render_template(
+            name,
+            prefix=self.prefix,
+            asset_version=asset_version(),
+            lang=lang,
+            L=strings,
+            L_en=fallback,
+        )
+        response = Response(html, mimetype='text/html')
+        if request.args.get('lang', '').lower() in ('en', 'ru'):
+            response.set_cookie('lang', lang, max_age=31536000, samesite='Lax', path='/')
+        return response
     
     @requires_webapi_auth
     def qr(self, username: str) -> ResponseType:

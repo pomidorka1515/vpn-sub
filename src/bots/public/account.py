@@ -62,7 +62,7 @@ class PublicAccountMixin(PublicFeatureMixin):
                 self._send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
             except Exception:
                 self.log.critical("reset_user failed", exc_info=True)
-                self._send_message(message.chat.id, t.get("error_generic", "⚠️ Error"), reply_markup=self.get_menu(uid))
+                self._send_message(message.chat.id, t['error_generic'], reply_markup=self.get_menu(uid))
         else:
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
             return
@@ -86,6 +86,6 @@ class PublicAccountMixin(PublicFeatureMixin):
             self._send_message(message.chat.id, t['invalid_code'], reply_markup=self.get_menu(uid))
         except Exception:
             self.log.error(f"Bonus error for uid {uid}", exc_info=True)
-            self._send_message(message.chat.id, "⚠️ Error occurred", reply_markup=self.get_menu(uid))
+            self._send_message(message.chat.id, t['error_generic'], reply_markup=self.get_menu(uid))
 
 

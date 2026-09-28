@@ -1,13 +1,14 @@
 from pathlib import Path
 from custom_types import HTTPMethod
-from typing import NamedTuple
+from typing import NamedTuple, cast
 from abc import ABC
+from collections.abc import Mapping
 from functools import lru_cache
 from hashlib import sha1
 from config import ConfigLike
 from core import Subscription
 from bwatch import BWatch
-from flask import Flask, Response
+from flask import Flask, Response, request
 from loggers import Logger
 
 type ResponseType = tuple[Response, int] | Response
@@ -20,6 +21,56 @@ def asset_version() -> str:
     """Cache-busting version for static assets, derived from common.js content."""
     data = (RES_DIR / 'common.js').read_bytes()
     return sha1(data).hexdigest()[:12]
+
+
+WEB_LANGS: tuple[str, ...] = ('en', 'ru')
+_WEB_PAGES: tuple[str, ...] = ('auth', 'dashboard', 'history', 'admin')
+
+
+def resolve_web_lang() -> str:
+    """?lang= wins, then the lang cookie, then English."""
+    for raw in (request.args.get('lang'), request.cookies.get('lang')):
+        code = (raw or '').lower()
+        if code in WEB_LANGS:
+            return code
+    return 'en'
+
+
+def _string_map(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        key: text
+        for key, text in cast(Mapping[object, object], value).items()
+        if isinstance(key, str) and isinstance(text, str)
+    }
+
+
+def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
+    section = web.get(name)
+    if isinstance(section, Mapping):
+        return cast(Mapping[str, object], section)
+    return {}
+
+
+def web_lang_tables(lang_cfg: ConfigLike, page: str) -> tuple[str, dict[str, str], dict[str, str]]:
+    """Active page strings, plus the English table used when a key is missing."""
+    if page not in _WEB_PAGES:
+        raise ValueError(f"unknown web page '{page}'")
+    lang = resolve_web_lang()
+    raw = lang_cfg.get('web')
+    web: Mapping[str, object] = (
+        cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
+    )
+    shared = _section(web, 'shared')
+    page_table = _section(web, page)
+
+    def merged(code: str) -> dict[str, str]:
+        out = _string_map(shared.get(code))
+        out.update(_string_map(page_table.get(code)))
+        return out
+
+    return lang, merged(lang), merged('en')
 
 
 class Route(NamedTuple):
