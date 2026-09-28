@@ -23,6 +23,8 @@ class WebApi(BaseApi):
         Route('GET', '/history.css', 'history_css'),
         Route('GET', '/admin.css', 'admin_css'),
         Route('GET', '/admin.js', 'admin_js'),
+        Route('GET', '/dashboard.js', 'dashboard_js'),
+        Route('GET', '/history.js', 'history_js'),
         Route('POST', '/webapi/register', 'register', 5),
         Route('POST', '/webapi/login', 'login', 10),
         Route('POST', '/webapi/bonus', 'bonus', 15),
@@ -111,6 +113,12 @@ class WebApi(BaseApi):
 
     def admin_js(self) -> ResponseType:
         return self._static('admin.js', 'text/javascript')
+
+    def dashboard_js(self) -> ResponseType:
+        return self._static('dashboard.js', 'text/javascript')
+
+    def history_js(self) -> ResponseType:
+        return self._static('history.js', 'text/javascript')
 
     def gui_panel(self) -> ResponseType:
         auth_token = request.cookies.get('auth_token')

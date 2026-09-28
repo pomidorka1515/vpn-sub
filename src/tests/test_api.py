@@ -245,17 +245,28 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     panel = client.get("/custom/panel")
     assert panel.status_code == 200
     assert b"__SUB_URI__" not in panel.data
-    assert b"'/custom'" in panel.data
+    assert b"window.BASE = '/custom'" in panel.data
+    assert b'src="/custom/dashboard.js?v=' in panel.data
     history = client.get("/custom/history")
     assert history.status_code == 200
     assert b"__SUB_URI__" not in history.data
-    assert b"'/custom'" in history.data
+    assert b"window.BASE = '/custom'" in history.data
+    assert b'src="/custom/history.js?v=' in history.data
 
     css = client.get("/custom/common.css")
     assert css.status_code == 200
     assert css.mimetype == "text/css"
     assert b"--accent:" in css.data
     assert "immutable" in css.headers["Cache-Control"]
+
+    dashboard_js = client.get("/custom/dashboard.js")
+    assert dashboard_js.status_code == 200
+    assert dashboard_js.mimetype == "text/javascript"
+    assert b"function loadStats" in dashboard_js.data
+    history_js = client.get("/custom/history.js")
+    assert history_js.status_code == 200
+    assert history_js.mimetype == "text/javascript"
+    assert b"function loadHistory" in history_js.data
 
 
 def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) -> None:

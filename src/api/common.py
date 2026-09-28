@@ -24,6 +24,8 @@ _ASSET_FILES: tuple[str, ...] = (
     'history.css',
     'admin.css',
     'admin.js',
+    'dashboard.js',
+    'history.js',
 )
 
 
