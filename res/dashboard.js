@@ -251,18 +251,22 @@ async function showQrCode() {
   let url = window.API + '/qr?lang=' + window.lang;
   if (qrMode === 'happ') url += '&happ=1';
 
+  const gen = ++qrGen;
   await withBusy(document.getElementById('btnQr'), async () => {
     let objectUrl;
     try {
       const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
+      if (gen !== qrGen) return;
       if (!res.ok) throw new Error(t('qr_failed'));
       const blob = await res.blob();
+      if (gen !== qrGen) return;
       objectUrl = URL.createObjectURL(blob);
       const canvas = document.getElementById('qrCanvas');
       const ctx = canvas.getContext('2d');
       const img = new Image();
       await new Promise((resolve, reject) => {
         img.onload = () => {
+          if (gen !== qrGen) { resolve(); return; }
           canvas.width = img.width;
           canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
@@ -273,7 +277,7 @@ async function showQrCode() {
         img.src = objectUrl;
       });
     } catch (err) {
-      toast(t('qr_failed'), 'error');
+      if (gen === qrGen) toast(t('qr_failed'), 'error');
     } finally {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
@@ -285,6 +289,7 @@ function hideQrCode() {
 }
 
 let qrMode = 'link';
+let qrGen = 0;
 function setQrMode(mode) {
   qrMode = mode;
   document.getElementById('qrBtnLink').classList.toggle('active', mode === 'link');

@@ -288,9 +288,8 @@ async function loadHistory() {
     setLoading(true);
     const res = await api('GET', '/history?days=' + days);
     if (!current()) return;
-    if (!res) { setLoading(false); return; }
-    if (!res.success) {
-      toast(res.msg || t('network_err'), 'error');
+    if (!res || !res.success) {
+      if (res) toast(res.msg || t('network_err'), 'error');
       setLoading(false);
       return;
     }
