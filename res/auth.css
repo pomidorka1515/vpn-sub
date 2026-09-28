@@ -1,0 +1,54 @@
+body {
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.auth-box {
+  width: 100%; max-width: 380px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 36px 32px;
+  animation: fadeUp .4s ease; position: relative;
+}
+.auth-box h1 {
+  font-size: 18px; font-weight: 500; margin-bottom: 28px;
+  text-align: center; color: var(--text2); letter-spacing: .5px;
+}
+.lang-toggle { position: absolute; top: 16px; right: 16px; margin-right: 0; }
+.theme-btn { position: absolute; top: 16px; left: 16px; margin-right: 0; }
+.auth-tabs {
+  display: flex; gap: 4px; background: var(--bg);
+  border-radius: 8px; padding: 3px; margin-bottom: 24px;
+}
+.auth-tab {
+  flex: 1; padding: 8px; border: none; background: none;
+  color: var(--text2); font-family: inherit; font-size: 13px;
+  font-weight: 500; border-radius: 6px; cursor: pointer; transition: all .2s;
+}
+.auth-tab.active { background: var(--surface2); color: var(--text); }
+.form-group { margin-bottom: 14px; position: relative; }
+.form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+.form-group input {
+  width: 100%; padding: 10px 40px 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: inherit; font-size: 14px;
+  outline: none; transition: border-color .2s;
+}
+.form-group input:focus { border-color: var(--accent); }
+.pass-wrap { position: relative; }
+.pass-toggle {
+  position: absolute; right: 10px; top: 50%;
+  transform: translateY(-50%); background: none; border: none;
+  color: var(--text2); cursor: pointer; padding: 4px;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .2s;
+}
+.pass-toggle:hover { color: var(--text); }
+.pass-toggle svg { width: 18px; height: 18px; }
+.username-hint-wrap { position: relative; }
+.btn { width: 100%; padding: 11px; margin-top: 6px; }
+.auth-error {
+  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2);
+  color: var(--red); padding: 8px 12px; border-radius: 8px;
+  font-size: 13px; margin-bottom: 14px; display: none;
+}
+.auth-error.show { display: block; }
+@media (max-width: 500px) { .auth-box { padding: 28px 20px; } }

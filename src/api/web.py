@@ -17,6 +17,11 @@ class WebApi(BaseApi):
     ROUTES: list[Route] = [
         Route('GET', '/redirect', 'redirect_page'),
         Route('GET', '/common.js', 'common_js'),
+        Route('GET', '/common.css', 'common_css'),
+        Route('GET', '/auth.css', 'auth_css'),
+        Route('GET', '/dashboard.css', 'dashboard_css'),
+        Route('GET', '/history.css', 'history_css'),
+        Route('GET', '/admin.css', 'admin_css'),
         Route('POST', '/webapi/register', 'register', 5),
         Route('POST', '/webapi/login', 'login', 10),
         Route('POST', '/webapi/bonus', 'bonus', 15),
@@ -79,11 +84,29 @@ class WebApi(BaseApi):
             return err("Prefix too long", 400)
         return make_response(send_file(RES_DIR / 'redirect.html', etag=False))
 
-    def common_js(self) -> ResponseType:
+    def _static(self, name: str, mimetype: str) -> ResponseType:
         # url is versioned via ?v= (asset_version), so long caching is safe
-        response = make_response(send_file(RES_DIR / 'common.js', etag=True, max_age=31536000))
+        response = make_response(send_file(RES_DIR / name, mimetype=mimetype, etag=True, max_age=31536000))
         response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
         return response
+
+    def common_js(self) -> ResponseType:
+        return self._static('common.js', 'text/javascript')
+
+    def common_css(self) -> ResponseType:
+        return self._static('common.css', 'text/css')
+
+    def auth_css(self) -> ResponseType:
+        return self._static('auth.css', 'text/css')
+
+    def dashboard_css(self) -> ResponseType:
+        return self._static('dashboard.css', 'text/css')
+
+    def history_css(self) -> ResponseType:
+        return self._static('history.css', 'text/css')
+
+    def admin_css(self) -> ResponseType:
+        return self._static('admin.css', 'text/css')
 
     def gui_panel(self) -> ResponseType:
         auth_token = request.cookies.get('auth_token')

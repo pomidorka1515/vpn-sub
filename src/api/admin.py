@@ -439,6 +439,7 @@ class Api(BaseApi):
         lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, 'admin')
         html = render_template(
             'admin.html',
+            prefix='/' + '/'.join(p for p in self.cfg['uri'].split('/') if p),
             asset_version=asset_version(),
             lang=lang,
             L=strings,

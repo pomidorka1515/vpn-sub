@@ -150,6 +150,8 @@ def test_admin_ui_requires_basic_auth(database: Database, flask_app: Flask) -> N
     response = client.get("/sub/admin", headers=_basic("admin", "panel-secret"))
     assert response.status_code == 200
     assert b"<html" in response.data.lower()
+    assert b'href="/sub/common.css?v=' in response.data
+    assert b'href="/sub/admin.css?v=' in response.data
 
 
 def test_admin_token_returns_secret_and_api_root(database: Database, flask_app: Flask) -> None:
@@ -235,6 +237,8 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert b"__SUB_URI__" not in auth.data
     assert b"'/custom'" in auth.data
     assert b"/sub/" not in auth.data
+    assert b'href="/custom/common.css?v=' in auth.data
+    assert b'href="/custom/auth.css?v=' in auth.data
 
     client.set_cookie("auth_token", "a" * 100)
     panel = client.get("/custom/panel")
@@ -245,6 +249,12 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert history.status_code == 200
     assert b"__SUB_URI__" not in history.data
     assert b"'/custom'" in history.data
+
+    css = client.get("/custom/common.css")
+    assert css.status_code == 200
+    assert css.mimetype == "text/css"
+    assert b"--accent:" in css.data
+    assert "immutable" in css.headers["Cache-Control"]
 
 
 def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) -> None:

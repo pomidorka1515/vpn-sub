@@ -1,0 +1,74 @@
+:root { --orange: #f59e0b; }
+.btn-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: none; color: var(--text2);
+  font-family: inherit; font-size: 12px; cursor: pointer;
+  transition: all .2s;
+}
+.btn-back:hover { border-color: var(--border-h); color: var(--text); }
+.btn-back .arrow { font-size: 14px; line-height: 1; }
+
+.dash-content { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+.page-title {
+  font-size: 18px; font-weight: 500; margin-bottom: 22px;
+  letter-spacing: .2px;
+}
+.card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
+}
+.card-title { margin-bottom: 0; }
+.card-sub {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  color: var(--text2);
+}
+.card-sub .up-val { color: var(--accent-light); }
+.card-sub .down-val { color: var(--accent); }
+.card-sub.wl .up-val { color: var(--wl-light); }
+.card-sub.wl .down-val { color: var(--wl); }
+
+.range-row { display: flex; align-items: center; gap: 16px; }
+.range-input {
+  -webkit-appearance: none; appearance: none;
+  flex: 1; height: 6px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 3px;
+  outline: none; cursor: pointer;
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  border: 2px solid var(--surface);
+  transition: transform .15s;
+}
+.range-input::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  border: 2px solid var(--surface);
+}
+.range-input::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.range-value {
+  display: flex; align-items: baseline; gap: 4px;
+  min-width: 70px; justify-content: flex-end;
+}
+.range-value .num {
+  font-family: 'JetBrains Mono', monospace; font-size: 16px;
+  font-weight: 500; color: var(--text);
+}
+.range-value .suffix { font-size: 12px; color: var(--text2); }
+
+.chart-wrap { position: relative; height: 280px; margin-top: 4px; }
+.chart-empty {
+  text-align: center; padding: 80px 0; color: var(--text2);
+  font-size: 13px;
+}
+
+@media (max-width: 500px) {
+  .dash-content { padding: 20px 14px; }
+  .topbar { padding: 14px 16px; }
+  .chart-wrap { height: 240px; }
+  .card { padding: 18px; }
+  .card-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+}

@@ -1,111 +1,12 @@
 <!DOCTYPE html>
 <html lang="{{ lang }}">
 <head>
-<script src="common.js?v={{ asset_version }}"></script>
+<script src="{{ prefix }}/common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title data-t="sign_in">Sign in</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap');
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-:root {
-  --bg: #0a0a0b; --surface: #131316; --surface2: #1a1a1f;
-  --border: #252529; --text: #e4e4e7; --text2: #8e8e96;
-  --accent: #6366f1; --accent-dim: #4f46e5;
-  --green: #22c55e; --red: #ef4444;
-}
-[data-theme="light"] {
-  --bg: #f5f5f7; --surface: #ffffff; --surface2: #eaeaec;
-  --border: #d8d8dc; --text: #1a1a1f; --text2: #6e6e76;
-}
-body {
-  font-family: 'Outfit', sans-serif;
-  background: var(--bg); color: var(--text);
-  min-height: 100vh; display: flex;
-  align-items: center; justify-content: center;
-  padding: 20px; -webkit-font-smoothing: antialiased;
-}
-.auth-box {
-  width: 100%; max-width: 380px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; padding: 36px 32px;
-  animation: fadeUp .4s ease; position: relative;
-}
-.auth-box h1 {
-  font-size: 18px; font-weight: 500; margin-bottom: 28px;
-  text-align: center; color: var(--text2); letter-spacing: .5px;
-}
-.lang-toggle {
-  position: absolute; top: 16px; right: 16px;
-  display: flex; gap: 2px; background: var(--bg);
-  border-radius: 6px; padding: 2px;
-}
-.lang-btn {
-  padding: 4px 10px; border: none; background: none;
-  color: var(--text2); font-family: inherit; font-size: 11px;
-  font-weight: 600; border-radius: 4px; cursor: pointer;
-  transition: all .2s; letter-spacing: .5px;
-}
-.lang-btn.active { background: var(--surface2); color: var(--text); }
-.theme-btn {
-  position: absolute; top: 16px; left: 16px;
-  display: flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border: 1px solid var(--border);
-  border-radius: 6px; background: none; color: var(--text2);
-  cursor: pointer; transition: all .2s; padding: 0;
-}
-.theme-btn:hover { border-color: var(--border-h, var(--text2)); color: var(--text); }
-.theme-btn svg { width: 16px; height: 16px; }
-.auth-tabs {
-  display: flex; gap: 4px; background: var(--bg);
-  border-radius: 8px; padding: 3px; margin-bottom: 24px;
-}
-.auth-tab {
-  flex: 1; padding: 8px; border: none; background: none;
-  color: var(--text2); font-family: inherit; font-size: 13px;
-  font-weight: 500; border-radius: 6px; cursor: pointer; transition: all .2s;
-}
-.auth-tab.active { background: var(--surface2); color: var(--text); }
-.form-group { margin-bottom: 14px; position: relative; }
-.form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
-.form-group input {
-  width: 100%; padding: 10px 40px 10px 12px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text); font-family: inherit; font-size: 14px;
-  outline: none; transition: border-color .2s;
-}
-.form-group input:focus { border-color: var(--accent); }
-.pass-wrap { position: relative; }
-.pass-toggle {
-  position: absolute; right: 10px; top: 50%;
-  transform: translateY(-50%); background: none; border: none;
-  color: var(--text2); cursor: pointer; padding: 4px;
-  display: flex; align-items: center; justify-content: center;
-  transition: color .2s;
-}
-.pass-toggle:hover { color: var(--text); }
-.pass-toggle svg { width: 18px; height: 18px; }
-.username-hint-wrap { position: relative; }
-.btn {
-  width: 100%; padding: 11px; border: none; border-radius: 8px;
-  font-family: inherit; font-size: 14px; font-weight: 500;
-  cursor: pointer; transition: all .2s; margin-top: 6px;
-}
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { background: var(--accent-dim); }
-.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-.auth-error {
-  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2);
-  color: var(--red); padding: 8px 12px; border-radius: 8px;
-  font-size: 13px; margin-bottom: 14px; display: none;
-}
-.auth-error.show { display: block; }
-.username-hint { font-size: 11px; color: var(--text2); margin-top: 4px; min-height: 16px; }
-.username-hint.ok { color: var(--green); }
-.username-hint.bad { color: var(--red); }
-@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-@media (max-width: 500px) { .auth-box { padding: 28px 20px; } }
-</style>
+<link rel="stylesheet" href="{{ prefix }}/common.css?v={{ asset_version }}">
+<link rel="stylesheet" href="{{ prefix }}/auth.css?v={{ asset_version }}">
 </head>
 <body>
 <div class="auth-box">

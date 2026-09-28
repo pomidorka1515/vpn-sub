@@ -16,11 +16,23 @@ type ResponseType = tuple[Response, int] | Response
 RES_DIR = Path(__file__).resolve().parent.parent.parent / 'res'
 
 
+_ASSET_FILES: tuple[str, ...] = (
+    'common.js',
+    'common.css',
+    'auth.css',
+    'dashboard.css',
+    'history.css',
+    'admin.css',
+)
+
+
 @lru_cache(maxsize=1)
 def asset_version() -> str:
-    """Cache-busting version for static assets, derived from common.js content."""
-    data = (RES_DIR / 'common.js').read_bytes()
-    return sha1(data).hexdigest()[:12]
+    """Cache-busting version for static assets, derived from shared frontend files."""
+    digest = sha1()
+    for name in _ASSET_FILES:
+        digest.update((RES_DIR / name).read_bytes())
+    return digest.hexdigest()[:12]
 
 
 WEB_LANGS: tuple[str, ...] = ('en', 'ru')
