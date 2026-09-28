@@ -13,7 +13,7 @@
 <div class="topbar">
   <div class="topbar-left">
     <button class="btn-back" onclick="goBack()" id="btnBack" data-t-aria="back_aria">
-      <span class="arrow" aria-hidden="true">←</span><span id="btnBackText">Back</span>
+      <span class="arrow" aria-hidden="true">←</span><span id="btnBackText" data-t="back"></span>
     </button>
   </div>
   <div class="topbar-right">
@@ -22,7 +22,7 @@
       <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
       <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
     </div>
-    <button class="btn-sm" onclick="loadHistory()" id="btnRefresh" data-t-aria="refresh_aria"></button>
+    <button class="btn-sm" onclick="loadHistory()" id="btnRefresh" data-t="refresh" data-t-aria="refresh_aria"></button>
   </div>
 </div>
 
@@ -48,7 +48,7 @@
     <div class="chart-wrap" id="regWrap">
       <canvas id="regChart"></canvas>
     </div>
-    <div class="chart-empty" id="regEmpty" style="display:none" data-t="no_data"></div>
+    <div class="chart-empty" id="regEmpty" style="display:none"></div>
   </div>
 
   <div class="card">
@@ -59,7 +59,7 @@
     <div class="chart-wrap" id="wlWrap">
       <canvas id="wlChart"></canvas>
     </div>
-    <div class="chart-empty" id="wlEmpty" style="display:none" data-t="no_data"></div>
+    <div class="chart-empty" id="wlEmpty" style="display:none"></div>
   </div>
 </div>
 

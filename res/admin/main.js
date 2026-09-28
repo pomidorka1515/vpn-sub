@@ -15,9 +15,7 @@ import {
 } from './health.js';
 import { fetchLeaderboard } from './leaderboard.js';
 
-function renderLang() {
-  applyStaticLang();
-}
+
 
 async function bootstrap() {
   const tokenUrl = location.pathname.replace(/\/+$/, '') + '/token';
@@ -89,7 +87,8 @@ Object.assign(window, {
 
 applyTheme();
 initLang();
-renderLang();
+document.getElementById('healthText').textContent = t('not_checked');
+document.getElementById('teapotStatus').textContent = t('teapot_question');
 bootstrap();
 bindUsersTable();
 bindCodeList();

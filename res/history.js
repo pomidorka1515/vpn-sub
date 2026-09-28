@@ -1,8 +1,5 @@
 function renderLang() {
   applyStaticLang();
-  document.getElementById('btnRefresh').textContent = t('refresh');
-  document.getElementById('btnBackText').textContent = t('back');
-  document.title = t('page_title');
   if (lastData) {
     updateChartLabels();
     renderSummaries(lastData);

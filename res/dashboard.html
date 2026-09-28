@@ -21,9 +21,9 @@
       <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
     </div>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
-    <button class="btn-sm" onclick="showProfiles()" id="btnProfiles"></button>
-    <button class="btn-sm" onclick="loadStats()" id="btnRefresh"></button>
-    <button class="btn-sm danger" onclick="doLogout()" id="btnLogout"></button>
+    <button class="btn-sm" onclick="showProfiles()" id="btnProfiles" data-t="profiles"></button>
+    <button class="btn-sm" onclick="loadStats()" id="btnRefresh" data-t="refresh"></button>
+    <button class="btn-sm danger" onclick="doLogout()" id="btnLogout" data-t="logout"></button>
   </div>
 </div>
 
@@ -39,7 +39,7 @@
     <div class="card-title" data-t="subscription"></div>
     <div class="sub-link-wrap">
       <div class="sub-link-box" id="subLink">—</div>
-      <button class="btn-copy" onclick="copyLink()" id="btnCopy"></button>
+      <button class="btn-copy" onclick="copyLink()" id="btnCopy" data-t="copy"></button>
       <button class="btn-copy" onclick="showQrCode()" id="btnQr" data-t="qr"></button>
     </div>
     <div class="qr-section" id="qrSection" style="display: none;">
@@ -96,8 +96,8 @@
   <div class="card">
     <div class="card-title" data-t="bonus_code"></div>
     <div class="bonus-row">
-      <input type="text" class="bonus-input" id="bonusInput" spellcheck="false" maxlength="64">
-      <button class="btn-copy" onclick="applyBonus()" id="btnApply"></button>
+      <input type="text" class="bonus-input" id="bonusInput" spellcheck="false" maxlength="64" data-t-ph="enter_code">
+      <button class="btn-copy" onclick="applyBonus()" id="btnApply" data-t="apply"></button>
     </div>
     <div class="bonus-msg" id="bonusMsg"></div>
   </div>
@@ -110,25 +110,25 @@
       <div class="settings-row">
         <label data-t="username"></label>
         <div style="flex:1">
-          <input type="text" id="setUser" oninput="validateSettingsUsername()" style="width:100%" maxlength="32" pattern="[A-Za-z0-9_\-]+">
+          <input type="text" id="setUser" oninput="validateSettingsUsername()" style="width:100%" maxlength="32" pattern="[A-Za-z0-9_\-]+" data-t-ph="keep_empty">
           <div class="username-hint" id="setUserHint"></div>
         </div>
       </div>
       <div class="settings-row"><label data-t="password"></label>
         <div class="pass-wrap">
-          <input type="password" id="setPass" autocomplete="new-password">
+          <input type="password" id="setPass" autocomplete="new-password" data-t-ph="keep_empty">
           <button class="pass-toggle" onclick="togglePass('setPass', this)" type="button" data-t-aria="toggle_password"></button>
         </div>
       </div>
       <div class="settings-row"><label data-t="current_password"></label>
         <div class="pass-wrap">
-          <input type="password" id="setCurPass" autocomplete="current-password">
+          <input type="password" id="setCurPass" autocomplete="current-password" data-t-ph="keep_empty">
           <button class="pass-toggle" onclick="togglePass('setCurPass', this)" type="button" data-t-aria="toggle_password"></button>
         </div>
       </div>
     </div>
     <div class="settings-actions">
-      <button class="btn btn-primary" style="width:auto;padding:8px 24px" onclick="saveSettings()" id="btnSave"></button>
+      <button class="btn btn-primary" style="width:auto;padding:8px 24px" onclick="saveSettings()" id="btnSave" data-t="save"></button>
     </div>
     <div class="settings-msg" id="settingsMsg"></div>
   </div>
@@ -145,18 +145,18 @@
   <div class="card danger-zone">
     <div class="card-title" style="color:var(--red)" data-t="danger_zone"></div>
     <div class="danger-actions">
-      <button class="btn-danger" onclick="doReset()" id="btnReset"></button>
-      <button class="btn-danger" onclick="doDelete()" id="btnDelete"></button>
+      <button class="btn-danger" onclick="doReset()" id="btnReset" data-t="reset_uuid"></button>
+      <button class="btn-danger" onclick="doDelete()" id="btnDelete" data-t="delete_account"></button>
     </div>
   </div>
 </div>
 
 <div class="modal-overlay" id="profilesOverlay">
   <div class="modal" style="max-width:500px;width:100%">
-    <div class="modal-title" id="profilesTitle"></div>
+    <div class="modal-title" id="profilesTitle" data-t="profiles_title"></div>
     <div class="profiles-list" id="profilesList"></div>
     <div class="modal-actions">
-      <button class="modal-btn" id="profilesClose"></button>
+      <button class="modal-btn" id="profilesClose" data-t="close"></button>
     </div>
   </div>
 </div>

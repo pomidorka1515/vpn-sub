@@ -1,22 +1,5 @@
 function renderLang() {
   applyStaticLang();
-  document.getElementById('btnProfiles').textContent = t('profiles');
-  document.getElementById('btnRefresh').textContent = t('refresh');
-  document.getElementById('btnLogout').textContent = t('logout');
-  document.getElementById('profilesTitle').textContent = t('profiles_title');
-  document.getElementById('profilesClose').textContent = t('close');
-  document.getElementById('btnCopy').textContent = t('copy');
-  document.getElementById('btnQr').textContent = t('qr');
-  document.getElementById('btnApply').textContent = t('apply');
-  document.getElementById('btnSave').textContent = t('save');
-  document.getElementById('btnReset').textContent = t('reset_uuid');
-  document.getElementById('btnDelete').textContent = t('delete_account');
-  document.getElementById('qrBtnLink').textContent = t('qr_link');
-  document.getElementById('qrBtnHapp').textContent = t('qr_happ');
-  document.getElementById('bonusInput').placeholder = t('enter_code');
-  document.getElementById('setUser').placeholder = t('keep_empty');
-  document.getElementById('setPass').placeholder = t('keep_empty');
-  document.getElementById('setCurPass').placeholder = t('keep_empty');
   if (currentStats) renderStats(currentStats);
 }
 
@@ -136,7 +119,7 @@ function copyLink() {
   navigator.clipboard.writeText(link).then(() => {
     const btn = document.getElementById('btnCopy');
     btn.textContent = t('copied'); btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = t('copy'); btn.classList.remove('copied'); }, 1500);
+    setTimeout(() => { applyStaticLang(); btn.classList.remove('copied'); }, 1500);
   });
 }
 
