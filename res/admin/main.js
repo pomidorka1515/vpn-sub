@@ -17,26 +17,39 @@ import { fetchLeaderboard } from './leaderboard.js';
 
 
 
+function bootActions() {
+  return document.querySelectorAll('.topbar .btn-sm');
+}
+
+function finishBoot() {
+  document.getElementById('bootOverlay').hidden = true;
+  document.querySelector('.admin-content').inert = false;
+  bootActions().forEach(btn => { btn.disabled = false; });
+}
+
+function failBoot(key) {
+  state.authBlocked = true;
+  document.getElementById('bootOverlay').textContent = t(key);
+}
+
 async function bootstrap() {
   const tokenUrl = location.pathname.replace(/\/+$/, '') + '/token';
   try {
     const res = await fetch(tokenUrl);
     if (res.status === 401) {
-      state.authBlocked = true;
-      toast(t('reload_reauth'), 'error');
+      failBoot('reload_reauth');
       return;
     }
     const data = await res.json();
     if (!res.ok || !data.success || !data.obj || !data.obj.token || !data.obj.api_root) {
-      state.authBlocked = true;
-      toast(t('reload_reauth'), 'error');
+      failBoot('reload_reauth');
       return;
     }
     state.apiToken = data.obj.token;
     state.baseUrl = location.origin + data.obj.api_root;
+    finishBoot();
   } catch (e) {
-    state.authBlocked = true;
-    toast(t('network_err'), 'error');
+    failBoot('network_err');
   }
 }
 
@@ -87,6 +100,7 @@ Object.assign(window, {
 
 applyTheme();
 initLang();
+document.getElementById('bootOverlay').textContent = t('loading');
 document.getElementById('healthText').textContent = t('not_checked');
 document.getElementById('teapotStatus').textContent = t('teapot_question');
 bootstrap();

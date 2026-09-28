@@ -1,5 +1,12 @@
 .btn-sm.success:hover { border-color: var(--green); color: var(--green); }
-.admin-content { max-width: 900px; margin: 0 auto; padding: 32px 20px; }
+.admin-content { max-width: 900px; margin: 0 auto; padding: 32px 20px; position: relative; }
+.boot-overlay {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 48px 20px; background: var(--bg); color: var(--text2);
+  font-size: 13px;
+}
+.boot-overlay[hidden] { display: none; }
 
 .config-bar {
   display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;

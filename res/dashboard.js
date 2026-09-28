@@ -6,6 +6,8 @@ function renderLang() {
 window.apiConfig = {
   baseUrl: window.API,
   on401: () => { window.location.href = window.AUTH_PAGE; },
+  networkError: 'toast',
+  networkMessage: () => t('network_err'),
 };
 
 
@@ -21,11 +23,22 @@ function getBwColor(pct) {
 let currentStats = null;
 
 async function loadStats() {
-  const res = await api('GET', '/stats');
-  if (!res) return;
-  if (!res.success) { toast(res.msg || t('network_err'), 'error'); return; }
-  currentStats = res.obj;
-  renderStats(res.obj);
+  const btn = document.getElementById('btnRefresh');
+  const dash = document.querySelector('.dash-content');
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  dash.setAttribute('aria-busy', 'true');
+  try {
+    const res = await api('GET', '/stats');
+    if (!res) return;
+    if (!res.success) { toast(res.msg || t('network_err'), 'error'); return; }
+    currentStats = res.obj;
+    renderStats(res.obj);
+  } finally {
+    btn.disabled = false;
+    btn.setAttribute('aria-busy', 'false');
+    dash.setAttribute('aria-busy', 'false');
+  }
 }
 
 function renderStats(s) {

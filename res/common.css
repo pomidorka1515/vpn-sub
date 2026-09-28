@@ -6,6 +6,7 @@
   --text: #e4e4e7; --text2: #8e8e96;
   --accent: #6366f1; --accent-dim: #4f46e5; --accent-light: #a5b4fc;
   --wl: #0ea5e9; --wl-light: #7dd3fc;
+  --grid: rgba(255,255,255,0.04);
   --green: #22c55e; --yellow: #eab308; --orange: #f59e0b; --red: #ef4444; --red-dark: #dc2626;
   --cyan: #06b6d4; --purple: #a855f7;
   --radius: 10px;
@@ -14,6 +15,7 @@
   --bg: #f5f5f7; --surface: #ffffff; --surface2: #eaeaec;
   --border: #d8d8dc; --border-h: #b8b8be;
   --text: #1a1a1f; --text2: #6e6e76;
+  --grid: rgba(0,0,0,0.06);
 }
 body {
   font-family: 'Outfit', sans-serif;
@@ -54,6 +56,7 @@ body {
   cursor: pointer; transition: all .2s;
 }
 .btn-sm:hover { border-color: var(--border-h); color: var(--text); }
+.btn-sm:disabled { opacity: .5; cursor: not-allowed; }
 .btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
 
 .card {

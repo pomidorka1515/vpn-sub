@@ -71,10 +71,53 @@ function updateChartLabels() {
   }
 }
 
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function chartColors() {
+  return {
+    text: cssVar('--text'),
+    text2: cssVar('--text2'),
+    border: cssVar('--border'),
+    surface2: cssVar('--surface2'),
+    grid: cssVar('--grid'),
+    accent: cssVar('--accent'),
+    accentLight: cssVar('--accent-light'),
+    wl: cssVar('--wl'),
+    wlLight: cssVar('--wl-light'),
+  };
+}
+
+function applyChartTheme(chart, colors) {
+  if (!chart) return;
+  const o = chart.options;
+  o.scales.x.ticks.color = colors.text2;
+  o.scales.x.border.color = colors.border;
+  o.scales.y.grid.color = colors.grid;
+  o.scales.y.ticks.color = colors.text2;
+  o.plugins.legend.labels.color = colors.text;
+  o.plugins.tooltip.backgroundColor = colors.surface2;
+  o.plugins.tooltip.borderColor = colors.border;
+  o.plugins.tooltip.titleColor = colors.text;
+  o.plugins.tooltip.bodyColor = colors.text;
+  chart.update('none');
+}
+
+function repaintCharts() {
+  const colors = chartColors();
+  applyChartTheme(regChart, colors);
+  applyChartTheme(wlChart, colors);
+}
+
 function makeChart(ctx, data, downColor, upColor) {
   if (typeof Chart === 'undefined') {
     throw new Error('Chart.js not loaded');
   }
+  const c = chartColors();
+  downColor = downColor || c.accent;
+  upColor = upColor || c.accentLight;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   return new Chart(ctx, {
     type: 'bar',
     data: {
@@ -101,26 +144,26 @@ function makeChart(ctx, data, downColor, upColor) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 250 },
+      animation: { duration: reduceMotion ? 0 : 250 },
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: {
           stacked: true,
           grid: { display: false },
           ticks: {
-            color: '#8e8e96',
+            color: c.text2,
             font: { family: 'JetBrains Mono', size: 10 },
             maxRotation: 0,
             autoSkip: true,
             maxTicksLimit: 12,
           },
-          border: { color: '#252529' },
+          border: { color: c.border },
         },
         y: {
           stacked: true,
-          grid: { color: 'rgba(255,255,255,0.04)' },
+          grid: { color: c.grid },
           ticks: {
-            color: '#8e8e96',
+            color: c.text2,
             font: { family: 'JetBrains Mono', size: 10 },
             callback: v => fmtBytes(v),
           },
@@ -131,18 +174,18 @@ function makeChart(ctx, data, downColor, upColor) {
         legend: {
           position: 'bottom',
           labels: {
-            color: '#e4e4e7',
+            color: c.text,
             font: { family: 'Outfit', size: 12 },
             boxWidth: 10, boxHeight: 10,
             padding: 14, usePointStyle: true, pointStyle: 'rectRounded',
           },
         },
         tooltip: {
-          backgroundColor: '#1a1a1f',
-          borderColor: '#252529',
+          backgroundColor: c.surface2,
+          borderColor: c.border,
           borderWidth: 1,
-          titleColor: '#e4e4e7',
-          bodyColor: '#e4e4e7',
+          titleColor: c.text,
+          bodyColor: c.text,
           titleFont: { family: 'Outfit', size: 12, weight: '600' },
           bodyFont: { family: 'JetBrains Mono', size: 11 },
           padding: 10,
@@ -202,13 +245,13 @@ function renderCharts(filled) {
     if (regHasData) {
       regChart = makeChart(
         document.getElementById('regChart').getContext('2d'),
-        reg, '#6366f1', '#a5b4fc'
+        reg, cssVar('--accent'), cssVar('--accent-light')
       );
     }
     if (wlHasData) {
       wlChart = makeChart(
         document.getElementById('wlChart').getContext('2d'),
-        wl, '#0ea5e9', '#7dd3fc'
+        wl, cssVar('--wl'), cssVar('--wl-light')
       );
     }
   } catch (e) {
@@ -267,6 +310,11 @@ rangeEl.addEventListener('input', () => {
   dbT = setTimeout(loadHistory, window.DEBOUNCE_MS);
 });
 
+const _applyTheme = applyTheme;
+applyTheme = function () {
+  _applyTheme();
+  if (regChart || wlChart) repaintCharts();
+};
 applyTheme();
 initLang();
 renderLang();
