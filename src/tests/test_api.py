@@ -152,6 +152,7 @@ def test_admin_ui_requires_basic_auth(database: Database, flask_app: Flask) -> N
     assert b"<html" in response.data.lower()
     assert b'href="/sub/common.css?v=' in response.data
     assert b'href="/sub/admin.css?v=' in response.data
+    assert b'src="/sub/admin.js?v=' in response.data
 
 
 def test_admin_token_returns_secret_and_api_root(database: Database, flask_app: Flask) -> None:
