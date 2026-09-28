@@ -1,10 +1,13 @@
-from .common import Route, BaseApi, RES_DIR, ResponseType, asset_version, web_lang_tables
+from .common import (
+    Route, BaseApi, RES_DIR, ResponseType, admin_module_names, asset_version, web_lang_tables,
+)
 from flask import Flask, request, Response, make_response, redirect, render_template, send_file, g
 from config import ConfigLike
 from core import Subscription
 from bwatch import BWatch
 from loggers import Logger
 from util import ok, err, sanitize, make_qr, parse_bool, generate_token
+from collections.abc import Callable
 from typing import cast
 from uuid import uuid4
 from dataclasses import asdict
@@ -12,8 +15,21 @@ from .decorators import requires_fields_strict, requires_fields, requires_webapi
 
 __all__ = ["WebApi"]
 
+def _admin_module_method(name: str) -> Callable[[WebApi], ResponseType]:
+    def handler(self: WebApi) -> ResponseType:
+        version = asset_version()
+        source = (RES_DIR / 'admin' / f'{name}.js').read_text(encoding='utf-8')
+        body = source.replace(".js';", f".js?v={version}';")
+        return self._static(f'admin/{name}.js', 'text/javascript', body.encode('utf-8'))
+    handler.__name__ = f'admin_{name}_js'
+    return handler
+
 class WebApi(BaseApi):
     """Public, user-facing API."""
+    for _admin_module in admin_module_names():
+        locals()[f'admin_{_admin_module}_js'] = _admin_module_method(_admin_module)
+    del _admin_module
+
     ROUTES: list[Route] = [
         Route('GET', '/redirect', 'redirect_page'),
         Route('GET', '/common.js', 'common_js'),
@@ -22,7 +38,7 @@ class WebApi(BaseApi):
         Route('GET', '/dashboard.css', 'dashboard_css'),
         Route('GET', '/history.css', 'history_css'),
         Route('GET', '/admin.css', 'admin_css'),
-        Route('GET', '/admin.js', 'admin_js'),
+        *(Route('GET', f'/admin/{name}.js', f'admin_{name}_js') for name in admin_module_names()),
         Route('GET', '/dashboard.js', 'dashboard_js'),
         Route('GET', '/history.js', 'history_js'),
         Route('POST', '/webapi/register', 'register', 5),
@@ -87,9 +103,15 @@ class WebApi(BaseApi):
             return err("Prefix too long", 400)
         return make_response(send_file(RES_DIR / 'redirect.html', etag=False))
 
-    def _static(self, name: str, mimetype: str) -> ResponseType:
+    def _static(self, name: str, mimetype: str, body: bytes | None = None) -> ResponseType:
         # url is versioned via ?v= (asset_version), so long caching is safe
-        response = make_response(send_file(RES_DIR / name, mimetype=mimetype, etag=True, max_age=31536000))
+        if body is None:
+            response = make_response(send_file(RES_DIR / name, mimetype=mimetype, etag=True, max_age=31536000))
+        else:
+            response = make_response(body)
+            response.mimetype = mimetype
+            response.cache_control.max_age = 31536000
+            response.cache_control.public = True
         response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
         return response
 
@@ -110,9 +132,6 @@ class WebApi(BaseApi):
 
     def admin_css(self) -> ResponseType:
         return self._static('admin.css', 'text/css')
-
-    def admin_js(self) -> ResponseType:
-        return self._static('admin.js', 'text/javascript')
 
     def dashboard_js(self) -> ResponseType:
         return self._static('dashboard.js', 'text/javascript')
@@ -359,4 +378,3 @@ class WebApi(BaseApi):
             samesite='Lax'
         )
         return r, code
-   

@@ -1,6 +1,7 @@
 from pathlib import Path
 from custom_types import HTTPMethod
 from typing import NamedTuple, cast
+import re
 from abc import ABC
 from collections.abc import Mapping
 from functools import lru_cache
@@ -23,10 +24,23 @@ _ASSET_FILES: tuple[str, ...] = (
     'dashboard.css',
     'history.css',
     'admin.css',
-    'admin.js',
     'dashboard.js',
     'history.js',
 )
+
+_ADMIN_MODULE_RE = re.compile(r'^[a-z0-9_-]+$')
+
+
+def admin_module_names() -> tuple[str, ...]:
+    """Basenames of res/admin/*.js, used as static routes and cache-bust inputs."""
+    folder = RES_DIR / 'admin'
+    if not folder.is_dir():
+        return ()
+    return tuple(sorted(
+        path.stem
+        for path in folder.glob('*.js')
+        if path.is_file() and _ADMIN_MODULE_RE.fullmatch(path.stem)
+    ))
 
 
 @lru_cache(maxsize=1)
@@ -35,6 +49,8 @@ def asset_version() -> str:
     digest = sha1()
     for name in _ASSET_FILES:
         digest.update((RES_DIR / name).read_bytes())
+    for name in admin_module_names():
+        digest.update((RES_DIR / 'admin' / f'{name}.js').read_bytes())
     return digest.hexdigest()[:12]
 
 

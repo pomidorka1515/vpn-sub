@@ -152,7 +152,8 @@ def test_admin_ui_requires_basic_auth(database: Database, flask_app: Flask) -> N
     assert b"<html" in response.data.lower()
     assert b'href="/sub/common.css?v=' in response.data
     assert b'href="/sub/admin.css?v=' in response.data
-    assert b'src="/sub/admin.js?v=' in response.data
+    assert b'type="module"' in response.data
+    assert b'src="/sub/admin/main.js?v=' in response.data
 
 
 def test_admin_token_returns_secret_and_api_root(database: Database, flask_app: Flask) -> None:
@@ -267,6 +268,13 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert history_js.status_code == 200
     assert history_js.mimetype == "text/javascript"
     assert b"function loadHistory" in history_js.data
+
+    admin_js = client.get("/custom/admin/main.js")
+    assert admin_js.status_code == 200
+    assert admin_js.mimetype == "text/javascript"
+    assert b"from './state.js?v=" in admin_js.data
+    assert "immutable" in admin_js.headers["Cache-Control"]
+    assert client.get("/custom/admin/not-a-module.js").status_code == 404
 
 
 def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) -> None:
