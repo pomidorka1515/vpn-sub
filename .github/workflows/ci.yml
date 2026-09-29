@@ -1,4 +1,4 @@
-name: ci
+name: ci
 
 on:
   push:
@@ -7,6 +7,11 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        command: [pytest, mypy, pyright]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -18,13 +23,7 @@ jobs:
       - name: install
         run: pip install -e ".[dev]"
 
-      - name: pytest
-        run: pytest
-
-      - name: mypy
-        run: mypy
-
-      - name: pyright
-        run: pyright
+      - name: run ${{ matrix.command }}
+        run: ${{ matrix.command }}
         env:
           PYRIGHT_PYTHON_IGNORE_WARNINGS: 1

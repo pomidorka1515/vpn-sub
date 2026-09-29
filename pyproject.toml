@@ -28,6 +28,8 @@ dev = [
     "pyright",
     "pytest>=8.0",
     "types-gunicorn",
+    "types-psutil",
+    "types-qrcode",
     "types-requests>=2.31",
     "types-jsonschema>=4.23",
     "types-Pillow>=10.2",
