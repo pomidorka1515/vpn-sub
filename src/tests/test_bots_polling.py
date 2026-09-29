@@ -8,6 +8,7 @@ import pytest
 
 import telebot.apihelper as apihelper
 
+from bots import polling as polling_module
 from bots.polling import (
     TelegramPollingMixin,
     _PollingExceptionHandler,
@@ -99,8 +100,9 @@ def test_stop_polling_is_idempotent_and_does_not_join_without_thread(
 
 
 def test_stop_polling_logs_timeout(
-    polling_bot: _TestBot, stop_event: threading.Event,
+    polling_bot: _TestBot, stop_event: threading.Event, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(polling_module, "_POLLING_STOP_TIMEOUT", 0.2)
     polling_bot.start_polling()
     assert polling_bot.polling_thread is not None
     thread = polling_bot.polling_thread
