@@ -127,6 +127,9 @@ Response (error):
   
 ### POST /bonus  
 Description: Apply a bonus code to your account.  
+A stored limit of 0 is no allowance, not unlimited. Added GB is always summed onto the current monthly and whitelist limits, including when they are 0.  
+Expiry 0 stays unlimited and is not changed by a day grant. A lapsed finite expiry restarts from now, then the granted days are added. A still-active expiry is extended from its current timestamp. A code with 0 days does not change expiry, so it does not revive a lapsed subscription.  
+The account is not re-enabled in this request. The bandwidth watcher turns time, quota, and whitelist back on on its next poll once expiry and the matching limit allow it.  
 Rate limit: 15  
 Authentication: cookie  
 Body:  
@@ -143,9 +146,13 @@ Response (success):
     "msg": null,  
     "obj": {  
         "perma": false, // bool, whether code is permanent (reusable)  
-        "days": 0, // int, days added  
-        "gb": 0, // int, GB added to monthly limit  
-        "wl_gb": 0 // int, GB added to whitelist limit  
+        "days": 0, // int, days on the code (0 leaves expiry unchanged)  
+        "gb": 0, // int, GB added to monthly limit (0-limit users gain this quota)  
+        "wl_gb": 0, // int, GB added to whitelist limit  
+        "uses": 0, // int, uses left (-1 if perma)  
+        "time": 0, // int, expiry unix timestamp after apply (0 = unlimited)  
+        "limit": 0, // int, monthly GB limit after apply  
+        "wl_limit": 0 // int, whitelist GB limit after apply  
     }  
 }  
 ```  

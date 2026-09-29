@@ -118,15 +118,16 @@ Description: User's UUID was updated.
 Description: A user consumed a bonus code.  
 ```json  
 {  
-    "days": 0,      // int, days added  
-    "gb": 0,        // int, GB, gigabytes added  
-    "wl_gb": 0,     // int, GB, gigabytes added to whitelist bandwidth limit  
+    "days": 0,      // int, days on the code (0 leaves expiry unchanged)  
+    "gb": 0,        // int, GB added onto the monthly limit, including a 0 limit  
+    "wl_gb": 0,     // int, GB added onto the whitelist limit, including a 0 limit  
     "perma": false, // bool, whether the code used was permanent  
-    "uses": 1,      // int, amount of uses  
-                    // NOTE: usually -1 (or omitted) when perma == true  
-    "time": 0,      // int, timestamp, new time limit  
-    "limit": 0,     // int, GB, new limit  
-    "wl_limit": 0   // int, GB, new whitelist limit  
+    "uses": 1,      // int, uses left after consume  
+                    // NOTE: -1 when perma == true  
+    "time": 0,      // int, expiry unix timestamp after apply (0 stays unlimited;  
+                    // a lapsed finite expiry restarts from now, then days are added)  
+    "limit": 0,     // int, GB, monthly limit after apply (0 was no allowance, not unlimited)  
+    "wl_limit": 0   // int, GB, whitelist limit after apply  
 }  
 ```  
   

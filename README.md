@@ -16,7 +16,7 @@ Database-backed config, designed to run on a single small VPS.
 ## Key features
 
 - Multi-panel user lifecycle: create, update, reset, delete, with panel writes rolled back if the database commit fails
-- Invite codes and bonus codes (days, monthly GB, whitelist GB; one-shot or reusable)
+- Invite codes and bonus codes (days, monthly GB, whitelist GB; one-shot or reusable). A bonus sums GB onto a 0 limit (no allowance, not unlimited). Expiry 0 stays unlimited; a lapsed finite expiry restarts from now. Re-enable waits for the bandwidth watcher.
 - Optional dedicated whitelist panel, separate from the main traffic quota
 - Subscription endpoint at `/{uri}`: VLESS links, JSON profiles, QR, language and fingerprint selection
 - Public web dashboard (`res/`) and WebAPI: register, login, stats, history, settings, account delete

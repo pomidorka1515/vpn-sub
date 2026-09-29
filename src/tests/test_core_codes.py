@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from core import Subscription
@@ -41,6 +43,42 @@ def test_apply_bonus_code_updates_user_limits(
     assert record["wl_limit_gb"] == 6
     with pytest.raises(NotFoundError):
         subscription.code_svc.get_code("bonus1")
+
+
+def test_apply_bonus_code_grants_quota_on_zero_limit(
+    database: Database, subscription: Subscription,
+) -> None:
+    create_alice(database, bw_limit_gb=0, wl_limit_gb=0, expires_at=0)
+    database.update_user("alice", status=False, status_time=False, status_wl=False)
+    subscription.code_svc.add_code(
+        "bonus1", "bonus", days=0, gb=3, wl_gb=4, uses=1,
+    )
+    result = subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
+    record = database.get_user("alice")
+    assert record is not None
+    assert result.limit == 3
+    assert result.wl_limit == 4
+    assert record["bw_limit_gb"] == 3
+    assert record["wl_limit_gb"] == 4
+    assert record["expires_at"] == 0
+
+
+def test_apply_bonus_code_restarts_lapsed_expiry(
+    database: Database, subscription: Subscription,
+) -> None:
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=1, expires_at=1)
+    database.update_user("alice", status=False, status_time=False)
+    subscription.code_svc.add_code(
+        "bonus1", "bonus", days=2, gb=0, wl_gb=0, uses=1,
+    )
+    before = int(time.time())
+    result = subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
+    after = int(time.time())
+    record = database.get_user("alice")
+    assert record is not None
+    assert before + 2 * 86400 <= result.time <= after + 2 * 86400
+    assert record["expires_at"] == result.time
+    assert record["bw_limit_gb"] == 1
 
 
 def test_apply_bonus_code_rejects_unknown_user(

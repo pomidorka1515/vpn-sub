@@ -502,12 +502,13 @@ Body:
     "code": "",      // str, code string (required)  
     "action": "",    // str, only 'register' or 'bonus', code action (required)  
     "perma": false,  // OPTIONAL bool-like (true, 'yes', '1', 'on', 'y'), reusable (default: false)  
-    "days": 0,       // OPTIONAL int, days to add  
-    "gb": 0,         // OPTIONAL int, GB to add to monthly limit  
-    "wl_gb": 0,      // OPTIONAL int, GB to add to whitelist limit  
+    "days": 0,       // OPTIONAL int, days to add (0 leaves an existing expiry unchanged)  
+    "gb": 0,         // OPTIONAL int, GB added onto the monthly limit, including a 0 limit  
+    "wl_gb": 0,      // OPTIONAL int, GB added onto the whitelist limit, including a 0 limit  
     "uses": 0        // OPTIONAL int, amount of uses. ignored if perma == true, defaults to 1 use  
 }  
 ```  
+For `action: "bonus"`, a stored user limit of 0 is no allowance. Added GB is summed onto it. Expiry 0 stays unlimited. A lapsed finite expiry restarts from now before the granted days are added. A code with 0 days does not revive a lapsed expiry. Re-enable is deferred to the bandwidth watcher.  
 Response (success):  
 ```jsonc  
 // HTTP 201  

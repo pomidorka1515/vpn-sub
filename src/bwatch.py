@@ -151,9 +151,12 @@ class BWatch:
             state = self.sub.user_svc.get_user_state(i)
             states[i] = state
             # Main bandwidth
-            if int(state['expires_at']) != 0:
-                if (int(state['expires_at']) - int(time.time())) >= 0 and not bool(state['enabled_time']):
-                    self._update_user(username=i, enable=True, timee=True)
+            expires_at = int(state['expires_at'])
+            time_ok = expires_at == 0 or (expires_at - int(time.time())) >= 0
+            if time_ok and not bool(state['enabled_time']):
+                self._update_user(username=i, enable=True, timee=True)
+                state = self.sub.user_svc.get_user_state(i)
+                states[i] = state
 
             main_required = int(state['bw_limit_gb']) != 0
             wl_required = int(state['wl_limit_gb']) != 0

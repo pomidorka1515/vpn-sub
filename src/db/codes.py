@@ -107,10 +107,24 @@ class CodesMixin(ConnectionMixin):
                 conn.execute("DELETE FROM codes WHERE code = ?", (code,))
             else:
                 conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
+            now = int(time.time())
+            added_days = int(code_row["days"])
+            added_gb = int(code_row["gb"])
+            added_wl_gb = int(code_row["wl_gb"])
             current_time = int(user["expires_at"])
-            new_time = 0 if current_time == 0 else current_time + int(code_row["days"]) * 86400
-            new_limit = 0 if int(user["bw_limit_gb"]) == 0 else int(user["bw_limit_gb"]) + int(code_row["gb"])
-            new_wl_limit = 0 if int(user["wl_limit_gb"]) == 0 else int(user["wl_limit_gb"]) + int(code_row["wl_gb"])
+            # 0 means unlimited and stays unlimited. A lapsed finite expiry
+            # restarts from now so the grant is usable, not stacked on a
+            # date that already passed.
+            if current_time == 0 or added_days == 0:
+                new_time = current_time
+            elif current_time < now:
+                new_time = now + added_days * 86400
+            else:
+                new_time = current_time + added_days * 86400
+            # A 0 quota is "no allowance", not a sticky unlimited flag.
+            # Adding GB must raise it or a disabled account never comes back.
+            new_limit = int(user["bw_limit_gb"]) + added_gb
+            new_wl_limit = int(user["wl_limit_gb"]) + added_wl_gb
             conn.execute("UPDATE users SET expires_at = ?, bw_limit_gb = ?, wl_limit_gb = ? WHERE username = ?",
                          (new_time, new_limit, new_wl_limit, username))
             return {

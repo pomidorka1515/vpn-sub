@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from bwatch import BWatch
 from core import Subscription
 from custom_types import BandwidthInfo
@@ -42,6 +44,76 @@ def test_no_traffic_disabled_notification_when_panel_update_fails(
 
     # the disable never happened; the user must not be told it did
     assert bot.sent == []
+
+
+def test_bonus_on_zero_quota_reenables_on_next_poll(
+    database: Database, subscription: Subscription, watch: BWatch,
+) -> None:
+    create_alice(database, bw_limit_gb=0, wl_limit_gb=0, expires_at=0)
+    database.update_user("alice", status=False, status_time=False, status_wl=False, bw_used=5 * 10**9)
+    subscription.code_svc.add_code("bonus1", "bonus", gb=3, wl_gb=1, uses=1)
+    subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
+
+    enabled: list[tuple[str, bool | None, bool | None]] = []
+
+    def record_update(
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+    ) -> bool:
+        enabled.append((username, enable, wl_enable))
+        fields: dict[str, bool] = {}
+        if enable is not None:
+            fields["status"] = enable
+        if timee is not None:
+            fields["status_time"] = timee
+        if wl_enable is not None:
+            fields["status_wl"] = wl_enable
+        database.update_user(username, **fields)
+        return True
+
+    watch._update_user = record_update  # type: ignore[method-assign]
+    watch.bandwidth_check()
+
+    record = database.get_user("alice")
+    assert record is not None
+    assert ("alice", True, None) in enabled
+    assert ("alice", None, True) in enabled
+    assert (record["enabled"], record["enabled_time"], record["enabled_wl"]) == (1, 1, 1)
+
+
+def test_lapsed_bonus_renewal_reenables_time(
+    database: Database, subscription: Subscription, watch: BWatch,
+) -> None:
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=0, expires_at=1)
+    database.update_user("alice", status=False, status_time=False)
+    subscription.code_svc.add_code("bonus1", "bonus", days=7, uses=1)
+    subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
+
+    def record_update(
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+    ) -> bool:
+        fields: dict[str, bool] = {}
+        if enable is not None:
+            fields["status"] = enable
+        if timee is not None:
+            fields["status_time"] = timee
+        if wl_enable is not None:
+            fields["status_wl"] = wl_enable
+        database.update_user(username, **fields)
+        return True
+
+    watch._update_user = record_update  # type: ignore[method-assign]
+    watch.bandwidth_check()
+
+    record = database.get_user("alice")
+    assert record is not None
+    assert record["expires_at"] > int(time.time())
+    assert (record["enabled"], record["enabled_time"]) == (1, 1)
 
 
 def test_no_expiry_disabled_notification_when_panel_update_fails(
