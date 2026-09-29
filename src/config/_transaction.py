@@ -9,7 +9,7 @@ from typing import overload, Self, TYPE_CHECKING, Any, Literal, cast
 
 from ._constants import JsonValue, JsonDict
 from ._protocols import MISSING, MISSING_TYPE, MissingValue
-from ._atomic import _file_signature, _atomic_write_json, _ensure_parent_dir, _lockfile_path
+from ._atomic import _file_signature, _atomic_write_json, _ensure_parent_dir
 if TYPE_CHECKING:
     from ._core import Config
     
@@ -44,7 +44,8 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]): # pyright: ignore[repo
                 raise RuntimeError("Nested batch edits are not supported.")
 
             _ensure_parent_dir(cfg._path)
-            lock_fp = open(_lockfile_path(cfg._path), "a+b")
+            _ensure_parent_dir(cfg._lockfile_path)
+            lock_fp = open(cfg._lockfile_path, "a+b")
             fcntl.flock(lock_fp, fcntl.LOCK_EX)
 
             signature = _file_signature(cfg._path)

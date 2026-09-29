@@ -87,7 +87,7 @@ class AppPaths:
             database=Path(os.getenv("PATH_DB", data / "state.sqlite3")),
             log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
             audit=Path(os.getenv("PATH_AUDIT", data / "audit.jsonl")),
-            primary_lock=data / ".primary.lock",
+            primary_lock=Path("/run/lock") / ".primary.lock",
         )
 
 
@@ -272,6 +272,7 @@ def _build_configs(paths: AppPaths) -> tuple[
     LinesConfig # audit
 ]:
     paths.data.mkdir(parents=True, exist_ok=True)
+    lock_dir = Path("/run/lock")
     cfg = Config(
         path=paths.config,
         indent=4,
@@ -280,6 +281,7 @@ def _build_configs(paths: AppPaths) -> tuple[
         sync_mode="data",
         isolate_commits=True,
         backup_dir=paths.backups,
+        lockfile_path=lock_dir,
     )
     lang_cfg = Config(
         path=paths.language,
@@ -287,9 +289,14 @@ def _build_configs(paths: AppPaths) -> tuple[
         read_only=True,
         read_only_jsonc=True,
         strict_schema=True,
+        lockfile_path=lock_dir,
     )
-    log_cfg = LinesConfig(path=paths.log, sync_mode="data", backup_dir=paths.backups)
-    audit_cfg = LinesConfig(path=paths.audit, sync_mode="data", backup_dir=paths.backups)
+    log_cfg = LinesConfig(
+        path=paths.log, sync_mode="data", backup_dir=paths.backups, lockfile_path=lock_dir,
+    )
+    audit_cfg = LinesConfig(
+        path=paths.audit, sync_mode="data", backup_dir=paths.backups, lockfile_path=lock_dir,
+    )
     return cfg, lang_cfg, log_cfg, audit_cfg
 
 

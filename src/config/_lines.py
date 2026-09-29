@@ -10,7 +10,7 @@ from types import TracebackType
 from typing import Callable, Literal, Self
 
 from ._constants import SYNC_MODES, JsonValue, JsonDict
-from ._atomic import CompactReturn, _ensure_parent_dir, _locked_file, _fsync_parent_dir
+from ._atomic import CompactReturn, _ensure_parent_dir, _locked_file, _fsync_parent_dir, resolve_lockfile_path
 from ._backup import _make_backup_thread, _instance_backup_dir, _do_backup, _prune_backups
 
 from errors import ConfigError
@@ -24,7 +24,7 @@ class LinesConfig:
     can iterate from the beginning or tail. Suitable for JSONL/NDJSON logs.
 
     Notes:
-    - Uses a dedicated `.lock` file for inter-process locking.
+    - Uses a dedicated lock file for inter-process locking.
     - Sync behavior is consistent with Config (full/data/none via sync_mode).
     - Automatic backup support with configurable interval and retention.
     """
@@ -36,6 +36,7 @@ class LinesConfig:
         backup_dir: str | Path | None = None,
         backup_interval: int | float = 7200,
         backup_retention: int = 3,
+        lockfile_path: str | Path | None = None,
     ) -> None:
         """
         Args:
@@ -46,6 +47,11 @@ class LinesConfig:
             backup_dir: Backup directory. Backups are disabled if set to None.
             backup_interval: Interval in seconds for backups.
             backup_retention: Amount of concurrent backups kept on disk.
+            lockfile_path: Inter-process lock location. None keeps it beside the
+                data file as ``{path}.lock``. A directory places
+                ``{basename}.{sha1(abspath)[:8]}.lock`` inside it so same-named
+                files do not collide. A file path is used as-is
+                (``/x/lock.file`` -> ``/x/lock.file``).
         """
         self.log = Logger(type(self).__name__)
         path_str = str(path)
@@ -53,6 +59,10 @@ class LinesConfig:
             if not path_str.endswith('.jsonl'):
                 self.log.warning("path doesnt end with .jsonl, did you specify the correct path?")
             self._path: str = path_str
+            self._lockfile_path: str = resolve_lockfile_path(
+                path_str,
+                str(lockfile_path) if lockfile_path is not None else None,
+            )
             self._sync_mode: SYNC_MODES = sync_mode
             self._lock = threading.RLock()
 
@@ -85,6 +95,10 @@ class LinesConfig:
         return self._path
 
     @property
+    def lockfile_path(self) -> str:
+        return self._lockfile_path
+
+    @property
     def size(self) -> int:
         return os.path.getsize(self.path)
 
@@ -92,7 +106,7 @@ class LinesConfig:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
         with self._lock:
-            with _locked_file(self._path, exclusive=True):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 with open(self._path, "a", encoding="utf-8") as f:
                     f.write(line)
                     if self._sync_mode != "none":
@@ -109,7 +123,7 @@ class LinesConfig:
         """
         lines = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
         with self._lock:
-            with _locked_file(self._path, exclusive=True):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 with open(self._path, "a", encoding="utf-8") as f:
                     f.write(lines)
                     if self._sync_mode != "none":
@@ -121,7 +135,7 @@ class LinesConfig:
     def __iter__(self) -> Iterator[JsonDict]:
         """Iterate over all lines. Thread-safe at read-time."""
         with self._lock:
-            with _locked_file(self._path, exclusive=False):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         for line in f:
@@ -135,7 +149,7 @@ class LinesConfig:
         """Iterate over the last n lines. Thread-safe at read-time."""
         raw_lines: bytes = b""
         with self._lock:
-            with _locked_file(self._path, exclusive=False):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "rb") as f:
                         f.seek(0, io.SEEK_END)
@@ -174,7 +188,7 @@ class LinesConfig:
         """
         result: list[JsonDict] = []
         with self._lock:
-            with _locked_file(self._path, exclusive=False):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         for line in f:
@@ -190,7 +204,7 @@ class LinesConfig:
     def count(self) -> int:
         """Count total lines. Thread-safe at read-time."""
         with self._lock:
-            with _locked_file(self._path, exclusive=False):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         return sum(1 for line in f if line.strip())
@@ -205,7 +219,7 @@ class LinesConfig:
         block on a process mid-append/compact/clear that holds it.
         """
         with self._lock:
-            with _locked_file(self._path, exclusive=False):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 # 'r+' acquires a shared (advisory) lock on the data fd.
                 # This is the minimum lock level needed for truncation —
                 # unlike 'w' mode, it won't deadlock if another process is
@@ -235,7 +249,7 @@ class LinesConfig:
         """
         dir_path = os.path.dirname(self._path) or "."
         with self._lock:
-            with _locked_file(self._path, exclusive=True):
+            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         records = [json.loads(line) for line in f if line.strip()]

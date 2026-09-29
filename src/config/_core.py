@@ -10,7 +10,7 @@ from typing import Any, overload, cast, Callable, Literal
 from ._constants import JsonValue, SYNC_MODES
 from ._protocols import MISSING, MISSING_TYPE, MissingValue
 from ._protocols import _ConfigTransactionLike
-from ._atomic import FileSignature, _file_signature, _locked_file, _atomic_write_json
+from ._atomic import FileSignature, _file_signature, _locked_file, _atomic_write_json, resolve_lockfile_path
 from ._backup import _prune_backups, _do_backup, _make_backup_thread, _instance_backup_dir
 from ._schema import _load_schema, _validate_schema, _read_json_object
 from ._transaction import _ConfigTransaction
@@ -23,7 +23,7 @@ class Config(MutableMapping[str, JsonValue]):
     Thread-safe, process-safe JSON config manager.
 
     Notes:
-    - Uses a dedicated `.lock` file for inter-process locking.
+    - Uses a dedicated lock file for inter-process locking.
     - Uses atomic replace for writes.
     - `with cfg as tx:` returns a transaction object backed by a working copy.
     - Top-level JSON must be an object.
@@ -42,7 +42,8 @@ class Config(MutableMapping[str, JsonValue]):
         isolate_commits: bool = True,
         backup_dir: str | Path | None = None,
         backup_interval: int | float = 7200,
-        backup_retention: int = 3
+        backup_retention: int = 3,
+        lockfile_path: str | Path | None = None,
     ) -> None:
         """
         Args:
@@ -63,6 +64,11 @@ class Config(MutableMapping[str, JsonValue]):
             backup_dir: Backup directory. Backups are disabled if set to None.
             backup_interval: Interval in seconds for the backups, in seconds.
             backup_retention: Amount of concurrent backups kept on disk.
+            lockfile_path: Inter-process lock location. None keeps it beside the
+                data file as ``{path}.lock``. A directory places
+                ``{basename}.{sha1(abspath)[:8]}.lock`` inside it so same-named
+                files do not collide. A file path is used as-is
+                (``/x/lock.file`` -> ``/x/lock.file``).
         """
         self.log = Logger(type(self).__name__)
         path_str = str(path)
@@ -73,6 +79,10 @@ class Config(MutableMapping[str, JsonValue]):
         if not path_str.endswith(valid_exts):
             self.log.warning(f"path doesnt end with .json{"c" if read_only else ""}, did you specify the correct path?")
         self._path: str = path_str
+        self._lockfile_path: str = resolve_lockfile_path(
+            path_str,
+            str(lockfile_path) if lockfile_path is not None else None,
+        )
         self._indent: int = indent
         self._minify: bool = minify
         self._strict_schema: bool = strict_schema
@@ -129,6 +139,10 @@ class Config(MutableMapping[str, JsonValue]):
     @property
     def path(self) -> str:
         return self._path
+
+    @property
+    def lockfile_path(self) -> str:
+        return self._lockfile_path
 
     @property
     def size(self) -> int:
@@ -452,7 +466,7 @@ class Config(MutableMapping[str, JsonValue]):
         return _validate_schema(self, data)
 
     def _reload_locked(self, *, create_if_missing: bool, exclusive: bool) -> bool:
-        with _locked_file(self._path, exclusive=exclusive):
+        with _locked_file(self._path, exclusive=exclusive, lockfile_path=self._lockfile_path):
             signature = _file_signature(self._path)
 
             if signature is None:
@@ -487,7 +501,7 @@ class Config(MutableMapping[str, JsonValue]):
         Called before every read to guarantee consistency in multi-process
         deployments where another worker may have committed a write.
         """
-        with _locked_file(self._path, exclusive=False):
+        with _locked_file(self._path, exclusive=False, lockfile_path=self._lockfile_path):
             signature = _file_signature(self._path)
             if signature is None:
                 raise ConfigError(

@@ -1,3 +1,4 @@
+import hashlib
 import os
 import fcntl
 import json
@@ -27,14 +28,35 @@ def _ensure_parent_dir(path: str) -> None:
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
 
-def _lockfile_path(path: str) -> str:
-    return f"{path}.lock"
+def resolve_lockfile_path(data_path: str, lockfile_path: str | None = None) -> str:
+    """Resolve an inter-process lock path.
+
+    None keeps the lock beside the data file as ``{data_path}.lock``.
+    A directory (existing, or a path ending in a separator) places
+    ``{basename}.{sha1(abspath)[:8]}.lock`` inside it so two files that share
+    a basename do not collide. Any other path is used as the lock file.
+    """
+    if lockfile_path is None:
+        return f"{data_path}.lock"
+    if lockfile_path.endswith(("/", os.sep)) or os.path.isdir(lockfile_path):
+        absolute = os.path.abspath(data_path)
+        digest = hashlib.sha1(absolute.encode()).hexdigest()[:8]
+        name = f"{os.path.basename(data_path)}.{digest}.lock"
+        return os.path.join(lockfile_path, name)
+    return lockfile_path
 
 @contextmanager
-def _locked_file(path: str, *, exclusive: bool) -> Generator[None, None, None]:
+def _locked_file(
+    path: str,
+    *,
+    exclusive: bool,
+    lockfile_path: str | None = None,
+) -> Generator[None, None, None]:
     _ensure_parent_dir(path)
+    resolved = lockfile_path if lockfile_path is not None else resolve_lockfile_path(path)
+    _ensure_parent_dir(resolved)
     mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-    with open(_lockfile_path(path), "a+b") as lock_fp:
+    with open(resolved, "a+b") as lock_fp:
         fcntl.flock(lock_fp, mode)
         try:
             yield

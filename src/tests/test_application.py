@@ -84,7 +84,7 @@ def test_from_env_defaults_to_project_root() -> None:
         database=data / "state.sqlite3",
         log=data / "log.jsonl",
         audit=data / "audit.jsonl",
-        primary_lock=data / ".primary.lock",
+        primary_lock=Path("/run/lock") / ".primary.lock",
     )
 
 
