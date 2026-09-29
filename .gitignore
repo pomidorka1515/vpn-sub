@@ -2,6 +2,8 @@ data/
 *.lock
 .*
 .*/
+!.github/
+!.github/**
 __pycache__/
 *.pyc
 *.pyo
