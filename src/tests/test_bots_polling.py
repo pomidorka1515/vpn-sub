@@ -6,7 +6,13 @@ from typing import Any, cast
 
 import pytest
 
-from bots.polling import TelegramPollingMixin
+import telebot.apihelper as apihelper
+
+from bots.polling import (
+    TelegramPollingMixin,
+    _PollingExceptionHandler,
+    configure_telegram_api,
+)
 
 
 _STOP_WAIT_SECONDS = 30
@@ -145,3 +151,44 @@ def test_polling_errors_are_logged_without_token_or_traceback(
 
     stop_event.set()
     polling_bot.stop_polling()
+
+
+def test_transient_polling_errors_are_left_to_library_backoff() -> None:
+    logger = _NullLogger()
+    handler = _PollingExceptionHandler(cast(Any, logger), None)
+    reset = ConnectionError(
+        "('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
+    )
+    gateway = cast(Any, apihelper).ApiTelegramException(
+        "getUpdates", None, {"error_code": 502, "description": "Bad Gateway"},
+    )
+    limited = cast(Any, apihelper).ApiTelegramException(
+        "getUpdates", None, {"error_code": 429, "description": "Too Many Requests"},
+    )
+
+    assert handler.handle(reset) is False
+    assert handler.handle(gateway) is False
+    assert handler.handle(limited) is False
+    assert logger.warnings == []
+
+
+def test_handler_errors_stay_inside_polling() -> None:
+    logger = _NullLogger()
+    handler = _PollingExceptionHandler(cast(Any, logger), "123456:secret-token-value")
+
+    assert handler.handle(RuntimeError("handler exploded 123456:secret-token-value")) is True
+    assert len(logger.warnings) == 1
+    assert "secret-token-value" not in logger.warnings[0]
+    assert logger.errors == []
+
+
+def test_configure_telegram_api_disables_session_recycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(apihelper, "RETRY_ON_ERROR", False)
+    monkeypatch.setattr(apihelper, "SESSION_TIME_TO_LIVE", 600)
+    monkeypatch.setattr(apihelper, "CONNECT_TIMEOUT", 15)
+
+    configure_telegram_api()
+
+    assert apihelper.RETRY_ON_ERROR is True
+    assert cast(int | None, apihelper.SESSION_TIME_TO_LIVE) is None
+    assert apihelper.CONNECT_TIMEOUT == 20

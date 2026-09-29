@@ -2,19 +2,37 @@ from __future__ import annotations
 
 import re
 import telebot
+import telebot.apihelper as apihelper
 import time
 import threading
 from typing import cast
 
+from requests.exceptions import RequestException
+
 from loggers import Logger
-__all__ = ['TelegramPollingMixin']
+__all__ = ['TelegramPollingMixin', 'configure_telegram_api']
 
 
-_POLLING_CONNECT_TIMEOUT = 5
-_POLLING_LONG_TIMEOUT = 5
+_POLLING_CONNECT_TIMEOUT = 20
+_POLLING_LONG_TIMEOUT = 20
 _POLLING_STOP_TIMEOUT = 6
 _POLLING_RETRY_DELAY = 3
+_TRANSIENT_API_CODES = frozenset({429, 500, 502, 503, 504})
 _BOT_TOKEN_IN_URL = re.compile(r"/bot\d+:[A-Za-z0-9_-]+", re.IGNORECASE)
+
+
+def configure_telegram_api() -> None:
+    """Tune the process-wide pyTelegramBotAPI client before either bot starts.
+
+    Both bots share one session. Recycling it every 10 minutes, and failing
+    the first dropped long-poll with no retry, is what surfaces as errno 104.
+    """
+    apihelper.RETRY_ON_ERROR = True
+    apihelper.RETRY_TIMEOUT = 1
+    apihelper.MAX_RETRIES = 3
+    apihelper.CONNECT_TIMEOUT = _POLLING_CONNECT_TIMEOUT
+    # pyTelegramBotAPI types this as int; None disables the 10-minute recycle.
+    apihelper.SESSION_TIME_TO_LIVE = cast(int, None)
 
 
 def _sanitize_polling_error(error: BaseException, token: object) -> str:
@@ -95,11 +113,25 @@ class TelegramPollingMixin:
             )
 
 
+def _is_transient_polling_error(error: BaseException) -> bool:
+    """Errors the library must back off itself. Handling them skips that backoff."""
+    if isinstance(error, (RequestException, TimeoutError, ConnectionError, OSError)):
+        return True
+    error_code = getattr(error, "error_code", None)
+    if isinstance(error_code, int) and error_code in _TRANSIENT_API_CODES:
+        return True
+    result = getattr(error, "result", None)
+    status = getattr(result, "status_code", None)
+    return isinstance(status, int) and status in _TRANSIENT_API_CODES
+
+
 class _PollingExceptionHandler:
     def __init__(self, log: Logger, token: object) -> None:
         self._log = log
         self._token = token
 
     def handle(self, exception: Exception) -> bool:
+        if _is_transient_polling_error(exception):
+            return False
         _log_polling_error(self._log, exception, self._token)
         return True

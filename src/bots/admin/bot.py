@@ -9,6 +9,7 @@ import telebot
 from config import ConfigLike
 from core import Subscription
 from loggers import Logger
+from bots.polling import configure_telegram_api
 
 from .common import AdminCommonMixin
 from .users import AdminUsersMixin
@@ -33,6 +34,7 @@ class AdminBot(
     def __init__(self, sub: Subscription, lang_cfg: ConfigLike, cfg: ConfigLike):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
+            configure_telegram_api()
             self.cfg = cfg
             self.sub = sub
             self.lang_cfg = lang_cfg

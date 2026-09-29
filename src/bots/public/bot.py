@@ -11,6 +11,7 @@ import telebot
 from config import ConfigLike
 from core import Subscription
 from loggers import Logger
+from bots.polling import configure_telegram_api
 
 from .common import PublicCommonMixin
 from .login import PublicLoginMixin
@@ -35,6 +36,7 @@ class PublicBot(
     def __init__(self, sub: Subscription, cfg: ConfigLike, lang_cfg: ConfigLike):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
+            configure_telegram_api()
             self.cfg = cfg
             self.lang_cfg = lang_cfg
             self.sub = sub
