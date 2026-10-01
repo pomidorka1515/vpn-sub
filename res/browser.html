@@ -1,19 +1,46 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ forbidden_title }}</title>
-    <style>
-body{font-family:'Segoe UI', system-ui, -apple-system, sans-serif;background:linear-gradient(135deg, #0892d0 0%, #4b0082 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0;color:white;text-align:center}.container{background:rgba(255, 255, 255, 0.1);backdrop-filter: blur(15px);border:1px solid rgba(255, 255, 255, 0.2);border-radius:24px;padding:50px;box-shadow:0 20px 40px rgba(0,0,0,0.3);max-width:400px}h1{font-size:80px;margin:0;opacity:0.8}h2{font-size:20px;font-weight:400;margin:10px 0;letter-spacing:1px}.line{height:1px;background:rgba(255,255,255,0.2);margin:25px 0}p{font-size:13px;opacity:0.6;line-height:1.6}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>{{ forbidden_title }}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #0a0a0b; --surface: #131316;
+  --border: #252529;
+  --text: #e4e4e7; --text2: #8e8e96;
+  --accent: #6366f1;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; -webkit-font-smoothing: antialiased;
+}
+.box {
+  width: 100%; max-width: 360px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 36px 28px;
+}
+.code {
+  font-size: 13px; font-weight: 600; letter-spacing: 1px;
+  color: var(--accent); margin-bottom: 10px;
+}
+h1 {
+  font-size: 18px; font-weight: 500; letter-spacing: .3px;
+  margin-bottom: 8px;
+}
+p { font-size: 13px; color: var(--text2); line-height: 1.5; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>403</h1>
-        <h2>{{ use_vpn_client }}</h2>
-        <div class="line"></div>
-        <p>{{ use_vpn_client_hint }}</p>
-    </div>
+<div class="box">
+  <div class="code">403</div>
+  <h1>{{ use_vpn_client }}</h1>
+  <p>{{ use_vpn_client_hint }}</p>
+</div>
 </body>
 </html>
