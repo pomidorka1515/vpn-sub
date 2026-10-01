@@ -75,6 +75,10 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+function isNarrow() {
+  return window.matchMedia('(max-width: 500px)').matches;
+}
+
 function chartColors() {
   return {
     text: cssVar('--text'),
@@ -115,6 +119,7 @@ function makeChart(ctx, data, downColor, upColor) {
     throw new Error('Chart.js not loaded');
   }
   const c = chartColors();
+  const narrow = isNarrow();
   downColor = downColor || c.accent;
   upColor = upColor || c.accentLight;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -155,7 +160,7 @@ function makeChart(ctx, data, downColor, upColor) {
             font: { family: 'JetBrains Mono', size: 10 },
             maxRotation: 0,
             autoSkip: true,
-            maxTicksLimit: 12,
+            maxTicksLimit: narrow ? 6 : 12,
           },
           border: { color: c.border },
         },
@@ -166,6 +171,7 @@ function makeChart(ctx, data, downColor, upColor) {
             color: c.text2,
             font: { family: 'JetBrains Mono', size: 10 },
             callback: v => fmtBytes(v),
+            maxTicksLimit: narrow ? 5 : 8,
           },
           border: { display: false },
         },
@@ -176,8 +182,9 @@ function makeChart(ctx, data, downColor, upColor) {
           labels: {
             color: c.text,
             font: { family: 'Outfit', size: 12 },
-            boxWidth: 10, boxHeight: 10,
-            padding: 14, usePointStyle: true, pointStyle: 'rectRounded',
+            boxWidth: 10, boxHeight: 10, boxPadding: 0,
+            padding: narrow ? 10 : 14,
+            usePointStyle: true, pointStyle: 'rectRounded',
           },
         },
         tooltip: {
@@ -188,7 +195,7 @@ function makeChart(ctx, data, downColor, upColor) {
           bodyColor: c.text,
           titleFont: { family: 'Outfit', size: 12, weight: '600' },
           bodyFont: { family: 'JetBrains Mono', size: 11 },
-          padding: 10,
+          padding: narrow ? 8 : 10,
           cornerRadius: 6,
           callbacks: {
             label: c => ' ' + c.dataset.label + ': ' + fmtBytes(c.parsed.y),
@@ -273,11 +280,23 @@ function renderSummaries(filled) {
   }
   const sumHtml = (up, down) =>
     '↑ <span class="up-val">' + fmtBytes(up) + '</span>' +
-    '   ↓ <span class="down-val">' + fmtBytes(down) + '</span>' +
-    '   · ' + t('total') + ' ' + fmtBytes(up + down);
+    ' <span class="sep">·</span> ↓ <span class="down-val">' + fmtBytes(down) + '</span>' +
+    ' <span class="sep">·</span> ' + t('total') + ' ' + fmtBytes(up + down);
   document.getElementById('regSummary').innerHTML = sumHtml(regUp, regDown);
   document.getElementById('wlSummary').innerHTML = sumHtml(wlUp, wlDown);
 }
+
+let resizeT;
+let narrowLayout = isNarrow();
+window.addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => {
+    const next = isNarrow();
+    if (next === narrowLayout || !lastData) return;
+    narrowLayout = next;
+    renderCharts(lastData);
+  }, 200);
+});
 
 async function loadHistory() {
   const btnRefresh = document.getElementById('btnRefresh');
