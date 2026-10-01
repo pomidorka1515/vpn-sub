@@ -124,6 +124,15 @@
 .danger-actions { display: flex; gap: 8px; }
 .danger-actions .btn-danger { min-width: 0; }
 
+.info-grid { min-width: 0; }
+.info-row { min-width: 0; gap: 12px; }
+.info-label { flex-shrink: 0; }
+.info-value {
+  min-width: 0; max-width: none; flex: 1;
+  overflow: visible; text-overflow: unset; white-space: normal;
+  overflow-wrap: anywhere; word-break: break-all; text-align: right;
+}
+
 .profile-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .profile-item:last-child { border-bottom: none; }
 .profile-name { font-size: 13px; font-weight: 500; color: var(--accent); margin-bottom: 4px; }
@@ -184,7 +193,7 @@
   .settings-actions .btn { width: 100%; min-height: 44px; }
   .info-row { align-items: flex-start; gap: 12px; }
   .info-label { flex-shrink: 0; }
-  .info-value { max-width: 58%; text-align: right; overflow-wrap: anywhere; }
+  .info-value { text-align: right; }
   .danger-actions { flex-direction: column; }
   .danger-actions .btn-danger { width: 100%; min-height: 44px; text-align: center; }
   .modal { padding: 18px; }
