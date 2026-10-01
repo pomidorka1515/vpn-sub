@@ -3,7 +3,7 @@
 <head>
 <script src="{{ prefix }}/common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title data-t="page_title">Admin Panel</title>
 <link rel="stylesheet" href="{{ prefix }}/common.css?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ prefix }}/admin.css?v={{ asset_version }}">
@@ -43,7 +43,7 @@
   <div id="tab-users" class="tab-content active">
     <div class="card">
       <div class="card-title" data-t="user_list">User List</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="toolbar">
         <button class="btn-secondary" onclick="loadUsers()" id="btnLoadUsers" data-t="load_users">Load Users</button>
         <button class="btn-secondary" onclick="showAddUser()" id="btnShowAdd" data-t="add_user_btn">+ Add User</button>
       </div>
@@ -130,7 +130,7 @@
     <div class="card" id="userDetailCard" style="display:none">
       <div class="card-title" data-t="user_details">User Details</div>
       <div class="info-grid" id="userDetailInfo"></div>
-      <div style="display:flex;gap:8px;margin-top:16px">
+      <div class="detail-actions">
         <button class="btn-danger" onclick="doResetUser()" id="btnDoReset" data-t="reset">Reset</button>
         <button class="btn-danger" onclick="doDeleteUser()" id="btnDoDelete" data-t="delete">Delete</button>
         <button class="btn-secondary" onclick="hideUserDetail()" id="btnCloseDetail" data-t="close">Close</button>
@@ -142,7 +142,7 @@
   <div id="tab-codes" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="bonus_codes">Bonus Codes</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="toolbar">
         <button class="btn-secondary" onclick="loadCodes()" id="btnLoadCodes" data-t="load_codes">Load Codes</button>
         <button class="btn-secondary" onclick="showAddCode()" id="btnShowAddCode" data-t="add_code_btn">+ Add Code</button>
       </div>
@@ -217,8 +217,8 @@
   <div id="tab-logs" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="audit_logs">Audit Logs</div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px">
+      <div class="toolbar">
+        <div class="toolbar-field">
           <input type="number" id="logCount" value="50" min="1" class="dark-num-input">
           <span style="font-size:12px;color:var(--text2)" data-t="log_count_label">rows</span>
         </div>
@@ -259,8 +259,8 @@
   <div id="tab-snapshots" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="snapshots">Snapshots</div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px">
+      <div class="toolbar">
+        <div class="toolbar-field">
           <span style="font-size:12px;color:var(--text2)" data-t="cutoff_days">Cutoff (days)</span>
           <input type="number" id="snapCutoff" value="7" min="1" class="dark-num-input">
         </div>
@@ -275,7 +275,7 @@
   <div id="tab-health" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="operations_recovery">Operational Recovery</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="toolbar">
         <button class="btn-secondary" onclick="loadOperationsStatus()" id="btnLoadOperations" data-t="load_operations">Load Status</button>
       </div>
       <div class="table-wrap" id="operationsStatusWrap">
@@ -297,7 +297,7 @@
 
     <div class="card">
       <div class="card-title" data-t="online_users">Online Users</div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+      <div class="toolbar">
         <button class="btn-secondary" onclick="loadOnlineUsers()" id="btnLoadOnline" data-t="load_online">Load Online</button>
         <label class="dark-check">
           <input type="checkbox" id="onlineKeyed" onchange="loadOnlineUsers()">
@@ -334,19 +334,19 @@
     <div class="card">
       <div class="card-title" data-t="leaderboard">Leaderboard</div>
       <div class="config-bar" style="gap:10px;align-items:flex-end;margin-bottom:16px">
-        <div class="config-row" style="flex:0 0 auto;min-width:160px">
+        <div class="config-row lb-type">
           <label data-t="bw_type">Type</label>
-          <select id="lbType" style="flex:1;min-width:0;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:12px;outline:none;cursor:pointer">
+          <select id="lbType">
             <option value="total" data-t="lb_total">Total (All-time)</option>
             <option value="monthly" data-t="lb_monthly">Monthly</option>
             <option value="wl_monthly" data-t="lb_wl_monthly">WL Monthly</option>
           </select>
         </div>
-        <div class="config-row" style="flex:0 0 auto;min-width:130px">
+        <div class="config-row lb-cutoff">
           <label data-t="cutoff">Cutoff</label>
-          <input type="number" id="lbCutoff" data-t-ph="cutoff_all" placeholder="0 = all" min="0" style="padding:8px 10px">
+          <input type="number" id="lbCutoff" data-t-ph="cutoff_all" placeholder="0 = all" min="0">
         </div>
-        <div class="config-row" style="flex:1;min-width:180px">
+        <div class="config-row lb-flags">
           <label>&nbsp;</label>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <label class="dark-check">
