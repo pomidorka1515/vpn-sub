@@ -374,20 +374,39 @@ Response (error):
   
 ---  
   
-## Admin UI
+## Admin UI  
 
-Pages are mounted on the service URI, not under the admin API prefix. Both require HTTP Basic (`api_admin_ui_auth` user and password from config). The browser caches those credentials and resends them; the API token is never stored in `localStorage`.
+Pages are mounted on the service URI, not under the admin API prefix. The UI uses a login form (no Register tab) against `api_admin_ui_auth`. There is one admin account. A successful login replaces the stored session and sets an HttpOnly `admin_ui` cookie on `/{uri}/admin`; the API token is never stored in `localStorage`. Logout clears that session, which also signs out any other browser still using it.  
 
 ### GET /{uri}/admin  
 Description: Admin HTML UI.  
-Authentication: HTTP Basic  
+Authentication: `admin_ui` cookie  
 Body: none  
 Response (success): HTML document (`admin.html`).  
-Response (error): HTTP 401 with `WWW-Authenticate: Basic realm="Admin UI"`.
+Response (error): HTTP 302 to `/{uri}/admin/login`.  
+
+### GET /{uri}/admin/login  
+Description: Admin login form. Same fields as the user login form, without a Register tab.  
+Authentication: none  
+Body: none  
+Response (success): HTML document (`admin-auth.html`).  
+
+### POST /{uri}/admin/session  
+Description: Sign in with the configured admin UI username and password. Replaces the single stored session, so a new login signs out the previous one. Rate-limited.  
+Authentication: none  
+Body: `{"username": "...", "password": "..."}`  
+Response (success): HTTP 200 and `Set-Cookie: admin_ui=...; HttpOnly; Secure; SameSite=Lax; Path=/{uri}/admin`.  
+Response (error): HTTP 401 `{"success": false, "msg": "Invalid credentials.", "obj": null}`. A missing, empty, or non-string username or password is also 401, not 500. A body that is not a JSON object is HTTP 400.  
+
+### POST /{uri}/admin/logout  
+Description: Clear the stored admin UI session and expire the cookie.  
+Authentication: none (the stored session is cleared either way)  
+Body: none  
+Response (success): HTTP 200 and `Set-Cookie: admin_ui=; Max-Age=0; Path=/{uri}/admin`.  
 
 ### GET /{uri}/admin/token  
 Description: Bootstrap the admin UI. Returns the admin API token and the already-computed API root so the page does not guess paths. Token and `api_root` stay in memory only.  
-Authentication: HTTP Basic  
+Authentication: `admin_ui` cookie  
 Body: none  
 Response (success):  
 ```jsonc  
@@ -401,9 +420,9 @@ Response (success):
 	}  
 }  
 ```  
-Response (error): HTTP 401 with `WWW-Authenticate: Basic realm="Admin UI"`. On 401 the UI shows a reload-to-re-auth toast and blocks further API calls.  
+Response (error): HTTP 401. The UI redirects to `/{uri}/admin/login`.  
   
----  
+---    
   
 ### GET /api/panel/status  
 Description: Get status of one or all panels.  

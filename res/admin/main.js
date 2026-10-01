@@ -18,7 +18,7 @@ import { fetchLeaderboard } from './leaderboard.js';
 
 
 function bootActions() {
-  return document.querySelectorAll('.topbar .btn-sm');
+  return document.querySelectorAll('.topbar .btn-sm:not(#btnLogout)');
 }
 
 function finishBoot() {
@@ -32,12 +32,17 @@ function failBoot(key) {
   document.getElementById('bootOverlay').textContent = t(key);
 }
 
+function adminPath(suffix) {
+  return location.pathname.replace(/\/+$/, '') + suffix;
+}
+
 async function bootstrap() {
-  const tokenUrl = location.pathname.replace(/\/+$/, '') + '/token';
+  const tokenUrl = adminPath('/token');
+  const loginUrl = adminPath('/login');
   try {
-    const res = await fetch(tokenUrl);
+    const res = await fetch(tokenUrl, { credentials: 'same-origin' });
     if (res.status === 401) {
-      failBoot('reload_reauth');
+      window.location.href = loginUrl;
       return;
     }
     const data = await res.json();
@@ -58,10 +63,20 @@ window.apiConfig = {
   headers: () => ({ 'Authorization': state.apiToken }),
   guard: () => state.authBlocked || !state.baseUrl || !state.apiToken,
   guardMessage: () => t('reload_reauth'),
-  on401: () => { state.authBlocked = true; toast(t('reload_reauth'), 'error'); },
+  on401: () => {
+    state.authBlocked = true;
+    window.location.href = adminPath('/login');
+  },
   networkError: 'toast',
   networkMessage: () => t('network_err'),
 };
+
+async function doLogout() {
+  try {
+    await fetch(adminPath('/logout'), { method: 'POST', credentials: 'same-origin' });
+  } catch {}
+  window.location.href = adminPath('/login');
+}
 
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -72,6 +87,7 @@ function showTab(name) {
 
 Object.assign(window, {
   showTab,
+  doLogout,
   loadUsers,
   hideUserDetail,
   doResetUser,

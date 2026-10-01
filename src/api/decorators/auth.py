@@ -1,33 +1,22 @@
 from ._common import Decorated, DecoratedInject, WrappedReturn
 from typing import cast, TYPE_CHECKING
-from flask import request, Response
+from flask import request
 from functools import wraps
 from util import err, compare
 
 from ..common import BaseApi
-import base64
-import binascii
+import secrets
 
 if TYPE_CHECKING:
     from ..admin import Api
     from ..web import WebApi
 
-def _parse_basic_auth(header: str) -> tuple[str, str] | None:
-    """Parse 'Basic <base64>' header. 
-    
-    Returns:
-        (username, password) or None
-    """
-    if not header.startswith("Basic "):
-        return None
-    try:
-        decoded = base64.b64decode(header[6:]).decode()
-        if ":" not in decoded:
-            return None
-        user, pw = decoded.split(":", 1)
-        return user, pw
-    except (ValueError, UnicodeError, binascii.Error):
-        return None
+ADMIN_UI_COOKIE = "admin_ui"
+ADMIN_UI_SESSION_LEN = 100
+
+def new_admin_ui_session() -> str:
+    """Random session id for the single admin UI account. Not derived from credentials."""
+    return secrets.token_hex(ADMIN_UI_SESSION_LEN // 2)
 
 def requires_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]:
     """
@@ -37,22 +26,6 @@ def requires_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]
         provided = request.headers.get('Authorization', '')
         if not provided or not compare(provided, self.token):
             return err("Unauthorized", 401)
-        return f(self, *args, **kwargs)
-    return cast(Decorated[BaseApi, P, R], wrapper)
-def requires_basic_admin_auth[**P, R](f: Decorated[Api, P, R]) -> Decorated[Api, P, R]:
-    """Admin API auth via Basic auth header. Returns 401 on failure."""
-    @wraps(f)
-    def wrapper(self: Api, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
-        provided = request.headers.get("Authorization", "")
-        creds = _parse_basic_auth(provided)
-        valid: tuple[str, str] = tuple(self.cfg["api_admin_ui_auth"])
-        err = Response("Unauthorized")
-        err.headers["WWW-Authenticate"] = 'Basic realm="Admin UI"'
-        if not creds:
-            return err, 401
-        user, pw = creds
-        if (not compare(user, valid[0])) or (not compare(pw, valid[1])):
-            return err, 401
         return f(self, *args, **kwargs)
     return cast(Decorated[BaseApi, P, R], wrapper)
 def requires_webapi_auth[**P, R](f: DecoratedInject[WebApi, str, P, R]) -> Decorated[WebApi, P, R]:

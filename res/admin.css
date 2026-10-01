@@ -338,7 +338,11 @@
   .topbar { padding: 10px 12px; gap: 8px; }
   .topbar-name { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .topbar-right { gap: 6px; }
-  .topbar-right > .btn-sm { display: none; }
+  .topbar-right > .btn-sm:not(#btnLogout) { display: none; }
+  #btnLogout {
+    min-height: 36px; padding: 6px 10px; flex-shrink: 0;
+    color: var(--red); border-color: var(--red);
+  }
   .card { padding: 16px; }
   .toolbar .btn-secondary,
   .toolbar .btn,

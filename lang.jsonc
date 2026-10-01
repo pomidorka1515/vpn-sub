@@ -681,6 +681,7 @@
                 "error": "Error",
                 "loading": "Loading…",
                 "reload_reauth": "Reload to re-auth",
+                "logout": "Log out",
 
                 // health
                 "health_status": "Health Status",
@@ -905,6 +906,7 @@
                 "error": "Ошибка",
                 "loading": "Загрузка…",
                 "reload_reauth": "Перезагрузите страницу для повторной авторизации",
+                "logout": "Выйти",
 
                 // health
                 "health_status": "Статус",
@@ -1043,6 +1045,20 @@
                 "internal_user_required": "Укажите внутреннее имя",
                 "display_name_required": "Укажите отображаемое имя",
                 "status": "Статус"
+            }
+        },
+        "admin_auth": {
+            "en": {
+                "sign_in": "Sign in",
+                "username": "Username",
+                "password": "Password",
+                "invalid_credentials": "Invalid credentials"
+            },
+            "ru": {
+                "sign_in": "Вход",
+                "username": "Логин",
+                "password": "Пароль",
+                "invalid_credentials": "Неверные данные"
             }
         }
     }

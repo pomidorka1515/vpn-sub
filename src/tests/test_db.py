@@ -30,6 +30,16 @@ def test_schema_initialization_is_idempotent(db_path: Path) -> None:
     try:
         assert db.list_users() == []
         assert db.get_metadata("missing") is None
+        assert db.admin_ui_session() is None
+        with sqlite3.connect(db_path) as conn:
+            assert conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
+            assert conn.execute(
+                "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
+            ).fetchone()[0] == ""
+        db.set_admin_ui_session("a" * 100)
+        assert db.admin_ui_session() == "a" * 100
+        db.set_admin_ui_session(None)
+        assert db.admin_ui_session() is None
     finally:
         db.close()
 
@@ -48,7 +58,33 @@ def test_migration_repairs_negative_bandwidth_snapshot_values(
 ) -> None:
     database.close()
     connection = sqlite3.connect(db_path)
-    connection.execute("UPDATE schema_version SET version = 1")
+    connection.executescript(
+        """ALTER TABLE users RENAME TO old_users;
+        CREATE TABLE users (
+            username TEXT PRIMARY KEY,
+            uuid TEXT NOT NULL UNIQUE,
+            token TEXT NOT NULL UNIQUE,
+            fingerprint TEXT NOT NULL,
+            displayname TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            enabled_time INTEGER NOT NULL DEFAULT 1 CHECK (enabled_time IN (0, 1)),
+            enabled_wl INTEGER NOT NULL DEFAULT 1 CHECK (enabled_wl IN (0, 1)),
+            expires_at INTEGER NOT NULL DEFAULT 0 CHECK (expires_at >= 0),
+            bw_limit_gb INTEGER NOT NULL DEFAULT 0 CHECK (bw_limit_gb >= 0),
+            bw_used INTEGER NOT NULL DEFAULT 0 CHECK (bw_used >= 0),
+            wl_limit_gb INTEGER NOT NULL DEFAULT 0 CHECK (wl_limit_gb >= 0),
+            wl_used INTEGER NOT NULL DEFAULT 0 CHECK (wl_used >= 0),
+            ext_username TEXT UNIQUE,
+            ext_password_hash TEXT,
+            created_at INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT INTO users SELECT username, uuid, token, fingerprint, displayname,
+            enabled, enabled_time, enabled_wl, expires_at, bw_limit_gb, bw_used,
+            wl_limit_gb, wl_used, ext_username, ext_password_hash, created_at
+        FROM old_users;
+        DROP TABLE old_users;
+        UPDATE schema_version SET version = 1;"""
+    )
     connection.execute(
         """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
         VALUES ('alice', 20, -1, 2, -3, 4)"""
@@ -114,6 +150,29 @@ def test_auth_token_migration_and_lookup(database: Database, db_path: Path) -> N
         assert db.auth_token_to_user("b" * 100) is None
         db.set_auth_token("alice", None)
         assert db.auth_token_to_user("a" * 100) is None
+        assert db.admin_ui_session() is None
+    finally:
+        db.close()
+
+
+def test_admin_ui_session_migration_from_version_3(database: Database, db_path: Path) -> None:
+    database.close()
+    connection = sqlite3.connect(db_path)
+    connection.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session'")
+    connection.execute("UPDATE schema_version SET version = 3")
+    connection.commit()
+    connection.close()
+
+    db = Database(path=db_path)
+    try:
+        assert db.admin_ui_session() is None
+        with sqlite3.connect(db_path) as conn:
+            assert conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
+            assert conn.execute(
+                "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
+            ).fetchone()[0] == ""
+        db.set_admin_ui_session("c" * 100)
+        assert db.admin_ui_session() == "c" * 100
     finally:
         db.close()
 

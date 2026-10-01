@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, cast
 from unittest import mock
 
-import base64
 import pytest
 import uuid
 from argon2 import PasswordHasher
@@ -137,24 +136,98 @@ def _admin_api(
     )
 
 
-def _basic(user: str, password: str) -> dict[str, str]:
-    token = base64.b64encode(f"{user}:{password}".encode()).decode()
-    return {"Authorization": f"Basic {token}"}
-
-
-def test_admin_ui_requires_basic_auth(database: Database, flask_app: Flask) -> None:
+def test_admin_ui_requires_session(database: Database, flask_app: Flask) -> None:
     _admin_api(database, flask_app)
     client = flask_app.test_client()
     denied = client.get("/sub/admin")
-    assert denied.status_code == 401
-    assert denied.headers["WWW-Authenticate"] == 'Basic realm="Admin UI"'
-    response = client.get("/sub/admin", headers=_basic("admin", "panel-secret"))
+    assert denied.status_code == 302
+    assert denied.headers["Location"].endswith("/sub/admin/login")
+
+    login_page = client.get("/sub/admin/login")
+    assert login_page.status_code == 200
+    assert b'id="loginForm"' in login_page.data
+    assert b'id="tabRegister"' not in login_page.data
+    assert b'id="registerForm"' not in login_page.data
+    assert b"const SESSION = PANEL + '/session'" in login_page.data
+    assert b"PANEL + '/token'" in login_page.data
+    assert b"const API" not in login_page.data
+    assert b"window.location.href = PANEL;" in login_page.data
+    assert b"PANEL + '/'" not in login_page.data
+
+    bad = client.post("/sub/admin/session", json={"username": "admin", "password": "nope"})
+    assert bad.status_code == 401
+    short = client.post("/sub/admin/session", json={"username": "admin", "password": "x"})
+    assert short.status_code == 401
+    missing = client.post("/sub/admin/session", json={"username": "admin"})
+    assert missing.status_code == 401
+    empty = client.post("/sub/admin/session", json={"username": "", "password": ""})
+    assert empty.status_code == 401
+    not_json = client.post("/sub/admin/session", data="username=admin", content_type="text/plain")
+    assert not_json.status_code == 400
+
+    signed_in = client.post(
+        "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
+    )
+    assert signed_in.status_code == 200
+    assert "admin_ui=" in signed_in.headers["Set-Cookie"]
+    assert "Path=/sub/admin" in signed_in.headers["Set-Cookie"]
+    assert "HttpOnly" in signed_in.headers["Set-Cookie"]
+    first = database.admin_ui_session()
+    assert first is not None and len(first) == 100
+
+    response = client.get("/sub/admin")
     assert response.status_code == 200
+    assert client.get("/sub/admin/").status_code == 200
     assert b"<html" in response.data.lower()
     assert b'href="/sub/common.css?v=' in response.data
     assert b'href="/sub/admin.css?v=' in response.data
     assert b'type="module"' in response.data
     assert b'src="/sub/admin/main.js?v=' in response.data
+    assert b'id="btnLogout"' in response.data
+
+    again = client.post(
+        "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
+    )
+    assert again.status_code == 200
+    second = database.admin_ui_session()
+    assert second is not None and second != first
+    client.delete_cookie("admin_ui", path="/sub/admin")
+    client.set_cookie("admin_ui", first, path="/sub/admin")
+    assert client.get("/sub/admin").status_code == 302
+
+    logged_out = client.post("/sub/admin/logout")
+    assert logged_out.status_code == 200
+    assert "Path=/sub/admin" in logged_out.headers["Set-Cookie"]
+    assert "Max-Age=0" in logged_out.headers["Set-Cookie"]
+    assert database.admin_ui_session() is None
+    assert client.get("/sub/admin").status_code == 302
+    assert client.get("/sub/admin/token").status_code == 401
+
+
+def test_admin_logout_cookie_path_matches_login_when_uri_empty(
+    database: Database, flask_app: Flask,
+) -> None:
+    subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
+    Api(
+        app=flask_app,
+        cfg=cast(ConfigLike, subscription_config(
+            uri="",
+            api_uri="api",
+            api_token="secret",
+            api_admin_ui_auth=["admin", "panel-secret"],
+        )),
+        audit_cfg=cast(LinesConfigLike, _Audit()),
+        sub=subscription,
+        bw=make_watch(database, subscription),
+    )
+    client = flask_app.test_client()
+    signed_in = client.post("/admin/session", json={"username": "admin", "password": "panel-secret"})
+    assert signed_in.status_code == 200
+    assert "Path=/admin" in signed_in.headers["Set-Cookie"]
+    logged_out = client.post("/admin/logout")
+    assert logged_out.status_code == 200
+    assert "Path=/admin" in logged_out.headers["Set-Cookie"]
+    assert "Max-Age=0" in logged_out.headers["Set-Cookie"]
 
 
 def test_admin_token_returns_secret_and_api_root(database: Database, flask_app: Flask) -> None:
@@ -162,7 +235,8 @@ def test_admin_token_returns_secret_and_api_root(database: Database, flask_app: 
     client = flask_app.test_client()
     denied = client.get("/sub/admin/token")
     assert denied.status_code == 401
-    response = client.get("/sub/admin/token", headers=_basic("admin", "panel-secret"))
+    client.post("/sub/admin/session", json={"username": "admin", "password": "panel-secret"})
+    response = client.get("/sub/admin/token")
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["success"] is True
@@ -172,9 +246,9 @@ def test_admin_token_returns_secret_and_api_root(database: Database, flask_app: 
 
 def test_admin_token_api_root_omits_empty_api_uri(database: Database, flask_app: Flask) -> None:
     _admin_api(database, flask_app, api_uri="")
-    response = flask_app.test_client().get(
-        "/sub/admin/token", headers=_basic("admin", "panel-secret"),
-    )
+    client = flask_app.test_client()
+    client.post("/sub/admin/session", json={"username": "admin", "password": "panel-secret"})
+    response = client.get("/sub/admin/token")
     assert response.status_code == 200
     assert response.get_json()["obj"]["api_root"] == "/sub"
 

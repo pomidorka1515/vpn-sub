@@ -62,6 +62,13 @@ class StateMixin(ConnectionMixin):
         with self.transaction(immediate=True) as conn:
             conn.execute("DELETE FROM app_metadata WHERE key = ?", (key,))
 
+    def admin_ui_session(self) -> str | None:
+        value = self.get_metadata("admin_ui_session")
+        return value or None
+
+    def set_admin_ui_session(self, token: str | None) -> None:
+        self.set_metadata("admin_ui_session", token or "")
+
     def add_bandwidth_snapshot(self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int) -> None:
         with self.transaction(immediate=True) as conn:
             conn.execute("""INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)

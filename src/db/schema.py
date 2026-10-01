@@ -62,6 +62,7 @@ SCHEMA_STATEMENTS = (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     )""",
+    "INSERT INTO app_metadata(key, value) VALUES ('admin_ui_session', '')",
     """CREATE TABLE bandwidth_snapshots (
         username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
         ts INTEGER NOT NULL,
@@ -80,7 +81,7 @@ SCHEMA_STATEMENTS = (
 
 
 class SchemaMixin(ConnectionMixin):
-    SCHEMA_VERSION = 3
+    SCHEMA_VERSION = 4
 
     def initialize(self) -> None:
         """Apply the versioned schema migration exactly once."""
@@ -119,16 +120,24 @@ class SchemaMixin(ConnectionMixin):
                         raise MigrationError(f"unversioned database contains existing tables: {names}")
                     for statement in SCHEMA_STATEMENTS:
                         conn.execute(statement)
-                    version = 1
+                    version = self.SCHEMA_VERSION
                 if version == 1:
                     conn.execute(
                         """UPDATE bandwidth_snapshots
                         SET up = max(up, 0), down = max(down, 0),
                             wl_up = max(wl_up, 0), wl_down = max(wl_down, 0)"""
                     )
+                    version = 2
                 if version == 2:
                     conn.execute("ALTER TABLE users ADD COLUMN auth_token TEXT")
                     conn.execute("CREATE UNIQUE INDEX idx_users_auth_token ON users(auth_token)")
+                    version = 3
+                if version == 3:
+                    conn.execute(
+                        "INSERT INTO app_metadata(key, value) VALUES ('admin_ui_session', '') "
+                        "ON CONFLICT(key) DO NOTHING"
+                    )
+                    version = 4
                 conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,))
                 conn.execute("COMMIT")
             except sqlite3.Error:
