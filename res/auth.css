@@ -1,6 +1,8 @@
 body {
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 .auth-box {
   width: 100%; max-width: 380px;
@@ -22,6 +24,7 @@ body {
   flex: 1; padding: 8px; border: none; background: none;
   color: var(--text2); font-family: inherit; font-size: 13px;
   font-weight: 500; border-radius: 6px; cursor: pointer; transition: all .2s;
+  min-height: 36px;
 }
 .auth-tab.active { background: var(--surface2); color: var(--text); }
 .form-group { margin-bottom: 14px; position: relative; }
@@ -50,5 +53,30 @@ body {
   color: var(--red); padding: 8px 12px; border-radius: 8px;
   font-size: 13px; margin-bottom: 14px; display: none;
 }
-.auth-error.show { display: block; }
-@media (max-width: 500px) { .auth-box { padding: 28px 20px; } }
+.auth-error.show { display: block; overflow-wrap: anywhere; }
+@media (max-width: 500px) {
+  body {
+    align-items: flex-start;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+  .auth-box {
+    padding: 56px 16px 24px;
+    border-radius: 12px;
+  }
+  .auth-box h1 { margin-bottom: 20px; overflow-wrap: anywhere; }
+  .lang-toggle { top: max(12px, env(safe-area-inset-top)); right: 12px; }
+  .theme-btn {
+    top: max(12px, env(safe-area-inset-top)); left: 12px;
+    width: 36px; height: 36px;
+  }
+  .auth-tab { min-height: 44px; padding: 10px 8px; }
+  .lang-btn { min-height: 32px; min-width: 36px; }
+  .form-group input { font-size: 16px; padding-top: 12px; padding-bottom: 12px; }
+  .pass-toggle { width: 44px; height: 44px; right: 2px; }
+  .username-hint { overflow-wrap: anywhere; }
+  .btn { min-height: 44px; }
+}
