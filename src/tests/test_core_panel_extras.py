@@ -197,6 +197,21 @@ def test_list_clients_parses_numeric_tg_id(
     assert clients[0].tgId == 123
 
 
+def test_list_clients_treats_null_inbound_ids_as_unattached(
+    subscription: Subscription,
+) -> None:
+    attached = asdict(make_panel_client("alice", [1], up=1, down=2))
+    unattached = asdict(make_panel_client("bob", [], up=3, down=4))
+    unattached["inboundIds"] = None
+    panel = FakePanel(get_payload={"success": True, "msg": "", "obj": [attached, unattached]})
+    clients = subscription.panel_svc.list_clients(cast(XUiSession, panel))
+    assert [c.email for c in clients] == ["alice", "bob"]
+    assert clients[0].inboundIds == [1]
+    assert clients[1].inboundIds == []
+    assert clients[1].traffic is not None
+    assert (clients[1].traffic.up, clients[1].traffic.down) == (3, 4)
+
+
 def test_get_client_parses_numeric_tg_id(
     subscription: Subscription,
 ) -> None:

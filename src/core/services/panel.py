@@ -151,6 +151,15 @@ class PanelService(BaseService):
                     f"Panel {panel.name} client list query failed: "
                     f"{data.get('msg') or response.status_code}"
                 )
+            # unattached clients come back as inboundIds: null
+            # dacite rejects that against list[int] and would fail the
+            # whole listing including every attached client's traffic.
+            # clients/get already reports the same clients as [].
+            raw_obj: object = data.get("obj")
+            if isinstance(raw_obj, list):
+                for item in cast(list[object], raw_obj):
+                    if isinstance(item, dict) and item.get("inboundIds") is None:
+                        cast(dict[str, object], item)["inboundIds"] = []
             return from_dict(ClientListResponse, data).obj
         except AppError:
             raise
