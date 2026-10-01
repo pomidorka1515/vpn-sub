@@ -1,14 +1,24 @@
-body {
+.auth-page {
+  position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
-  min-height: 100vh;
-  min-height: 100dvh;
+  background: var(--bg);
+  overflow: auto;
 }
 .auth-box {
   width: 100%; max-width: 380px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; padding: 36px 32px;
   animation: fadeUp .4s ease; position: relative;
+  margin: auto;
+  flex: 0 0 auto;
+  box-shadow: 0 16px 48px rgba(0,0,0,.28);
+}
+[data-theme="light"] .auth-page { background: #fff; }
+[data-theme="light"] .auth-box {
+  background: #fff;
+  border-color: #e4e4e7;
+  box-shadow: 0 12px 40px rgba(24,24,27,.08);
 }
 .auth-box h1 {
   font-size: 18px; font-weight: 500; margin-bottom: 28px;
@@ -17,7 +27,7 @@ body {
 .lang-toggle { position: absolute; top: 16px; right: 16px; margin-right: 0; }
 .theme-btn { position: absolute; top: 16px; left: 16px; margin-right: 0; }
 .auth-tabs {
-  display: flex; gap: 4px; background: var(--bg);
+  display: flex; gap: 4px; background: var(--inset);
   border-radius: 8px; padding: 3px; margin-bottom: 24px;
 }
 .auth-tab {
@@ -30,7 +40,7 @@ body {
 .form-group { margin-bottom: 14px; position: relative; }
 .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
 .form-group input {
-  width: 100%; padding: 10px 40px 10px 12px; background: var(--bg);
+  width: 100%; padding: 10px 40px 10px 12px; background: var(--inset);
   border: 1px solid var(--border); border-radius: 8px;
   color: var(--text); font-family: inherit; font-size: 14px;
   outline: none; transition: border-color .2s;
@@ -55,8 +65,7 @@ body {
 }
 .auth-error.show { display: block; overflow-wrap: anywhere; }
 @media (max-width: 500px) {
-  body {
-    align-items: flex-start;
+  .auth-page {
     padding:
       max(12px, env(safe-area-inset-top))
       max(12px, env(safe-area-inset-right))

@@ -16,6 +16,24 @@ function handleChartJsError() {
   document.getElementById('wlWrap').innerHTML = '<div class="chart-empty">' + t('chart_load_err') + '</div>';
 }
 
+let chartJsPromise = null;
+function ensureChartJs() {
+  if (typeof Chart !== 'undefined') return Promise.resolve();
+  if (chartJsPromise) return chartJsPromise;
+  chartJsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = window.CHART_JS;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      chartJsPromise = null;
+      reject(new Error('Chart.js not loaded'));
+    };
+    document.head.appendChild(script);
+  });
+  return chartJsPromise;
+}
+
 window.apiConfig = {
   baseUrl: window.API,
   on401: () => { window.location.href = window.AUTH_PAGE; },
@@ -305,11 +323,18 @@ async function loadHistory() {
     const days = parseInt(document.getElementById('daysRange').value, 10);
     lastDays = days;
     setLoading(true);
-    const res = await api('GET', '/history?days=' + days);
+    const [res] = await Promise.all([
+      api('GET', '/history?days=' + days),
+      ensureChartJs().catch(() => null),
+    ]);
     if (!current()) return;
     if (!res || !res.success) {
       if (res) toast(res.msg || t('network_err'), 'error');
       setLoading(false);
+      return;
+    }
+    if (typeof Chart === 'undefined') {
+      handleChartJsError();
       return;
     }
     const filled = fillDays(res.obj || [], days);

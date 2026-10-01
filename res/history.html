@@ -63,7 +63,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" onerror="handleChartJsError()"></script>
 <script>
 window.BASE = '{{ prefix }}';
 window.API = window.BASE + '/webapi';
@@ -74,6 +73,7 @@ window.LANG = {{ L | tojson }};
 window.LANG_EN = {{ L_en | tojson }};
 window.LANG_CODE = '{{ lang }}';
 window.lang = window.LANG_CODE;
+window.CHART_JS = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
 </script>
 <script src="{{ prefix }}/history.js?v={{ asset_version }}"></script>
 </body>
