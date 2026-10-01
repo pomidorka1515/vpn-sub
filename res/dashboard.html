@@ -3,7 +3,7 @@
 <head>
 <script src="{{ prefix }}/common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title data-t="page_title">Panel</title>
 <link rel="stylesheet" href="{{ prefix }}/common.css?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ prefix }}/dashboard.css?v={{ asset_version }}">
@@ -88,8 +88,8 @@
         <div class="bw-bar-bg"><div class="bw-bar-fill wl" id="bwWlBar" style="width:0%"></div></div>
       </div>
     </div>
-    <div style="display:flex;justify-content:center;margin-top:14px">
-      <button class="btn" style="width:auto;padding:9px 20px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:13px" onclick="window.location.href=window.BASE+'/history'" data-t="extra_bw"></button>
+    <div class="history-link">
+      <button class="btn btn-history" onclick="window.location.href=window.BASE+'/history'" data-t="extra_bw"></button>
     </div>
   </div>
 
