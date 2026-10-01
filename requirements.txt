@@ -6,7 +6,6 @@ pyTelegramBotAPI>=4.15.0
 Flask
 qrcode
 pillow
-matplotlib
 gunicorn
 psutil
 dacite
@@ -15,7 +14,6 @@ discord.py>=2.4
 aiohttp
 
 # stubs
-matplotlib-stubs
 types-requests
 types-qrcode
 types-jsonschema

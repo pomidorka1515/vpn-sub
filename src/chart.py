@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import io
 from datetime import datetime, timezone
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
-from matplotlib.axes import Axes
-from matplotlib.patches import Rectangle
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont
+
 from custom_types import BandwidthSnapshot
 from util import fmt_bytes
-from typing import cast, TypedDict, Literal, Mapping
+from typing import Literal, Mapping
 
 __all__ = ['bandwidth_chart', 'leaderboard_chart']
 
@@ -26,38 +24,143 @@ _REG_UP   = '#d1d5db'
 _WL_DOWN  = '#6b7280'
 _WL_UP    = '#a1a1aa'
 
-# pyright: reportUnknownMemberType=false
+_FONT_PATH = Path(__file__).resolve().parent.parent / 'res' / 'fonts' / 'DejaVuSans.ttf'
 
-class _BarKwargs(TypedDict):
-    width: float
-    edgecolor: str
-    zorder: int
+_BW_SIZE = (1400, 980)
+_LB_SIZE = (1260, 840)
+
 
 def _calc_bar_width(n_bars: int, *, min_w: float = 0.4, max_w: float = 0.9) -> float:
     """Calculate bar width based on number of bars for stacked bar charts."""
     width = 1.0 - (n_bars - 1) * 0.03
     return max(min_w, min(max_w, width))
 
-def _format_ticks(v: float, pos: float | None) -> str:
-    return fmt_bytes(v) 
 
-def _style_axes(ax: Axes, title: str) -> None:
-    """Apply consistent gray-themed styling to a subplot."""
-    ax.set_facecolor(_PANEL)
-    ax.set_title(title, color=_TEXT, fontsize=11, fontweight='500', 
-                 loc='left', pad=10)
-    
-    ax.grid(axis='y', color=_GRID, linewidth=0.8, zorder=0)
-    ax.set_axisbelow(True)
-    
-    for side in ('top', 'right'):
-        ax.spines[side].set_visible(False)
-    for side in ('left', 'bottom'):
-        ax.spines[side].set_color(_BORDER)
-        ax.spines[side].set_linewidth(0.8)
-    
-    ax.tick_params(colors=_TEXT_DIM, labelsize=9, length=0)
-    ax.yaxis.set_major_formatter(FuncFormatter(_format_ticks))
+def _font(size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(str(_FONT_PATH), size)
+
+
+def _text_size(font: ImageFont.FreeTypeFont, text: str) -> tuple[int, int]:
+    width, height = font.getmask(text).size
+    return int(width), int(height)
+
+
+def _ellipsis(font: ImageFont.FreeTypeFont, text: str, max_width: int) -> str:
+    if _text_size(font, text)[0] <= max_width:
+        return text
+    trimmed = text
+    while trimmed and _text_size(font, trimmed + '…')[0] > max_width:
+        trimmed = trimmed[:-1]
+    return (trimmed + '…') if trimmed else '…'
+
+
+def _nice_ticks(max_value: float, count: int = 4) -> list[float]:
+    """Return 0 plus 1/2/5-scaled steps that cover max_value."""
+    if max_value <= 0:
+        return [0.0]
+    raw = max_value / count
+    exp = 0
+    probe = raw
+    while probe >= 10:
+        probe /= 10
+        exp += 1
+    while probe < 1:
+        probe *= 10
+        exp -= 1
+    base = 10.0
+    for candidate in (1.0, 2.0, 5.0, 10.0):
+        if probe <= candidate:
+            base = candidate
+            break
+    step = base * (10 ** exp)
+    if step <= 0:
+        return [0.0, max_value]
+    # step >= max/count, so count steps always cover the tallest bar
+    return [i * step for i in range(count + 1)]
+
+
+def _save(image: Image.Image) -> io.BytesIO:
+    buf = io.BytesIO()
+    image.save(buf, format='PNG')
+    buf.seek(0)
+    return buf
+
+
+def _draw_stacked(
+    draw: ImageDraw.ImageDraw,
+    *,
+    plot: tuple[int, int, int, int],
+    labels: list[str],
+    bottoms: list[int],
+    tops: list[int],
+    bottom_color: str,
+    top_color: str,
+    bar_frac: float,
+    title: str,
+    legend: tuple[str, str],
+    empty_label: str | None,
+    fonts: Mapping[str, ImageFont.FreeTypeFont],
+) -> None:
+    left, top, right, bottom = plot
+    draw.rectangle((left, top, right, bottom), fill=_PANEL)
+    draw.text((left, top - 28), title, font=fonts['title'], fill=_TEXT)
+
+    peak = max((b + t for b, t in zip(bottoms, tops)), default=0)
+    ticks = _nice_ticks(float(peak))
+    scale_max = ticks[-1] if ticks[-1] > 0 else 1.0
+    plot_h = bottom - top
+
+    for tick in ticks:
+        y = bottom - int((tick / scale_max) * plot_h)
+        draw.line((left, y, right, y), fill=_GRID, width=1)
+        label = fmt_bytes(tick)
+        tw, _ = _text_size(fonts['tick'], label)
+        draw.text((left - tw - 8, y - 7), label, font=fonts['tick'], fill=_TEXT_DIM)
+
+    draw.line((left, bottom, right, bottom), fill=_BORDER, width=1)
+    draw.line((left, top, left, bottom), fill=_BORDER, width=1)
+
+    n = max(len(labels), 1)
+    slot = (right - left) / n
+    bar_w = max(1, int(slot * bar_frac))
+    step = max(1, n // 10) if n > 15 else 1
+
+    for i, (label, down, up) in enumerate(zip(labels, bottoms, tops)):
+        cx = left + slot * (i + 0.5)
+        x0 = int(cx - bar_w / 2)
+        x1 = x0 + bar_w
+        down_h = int((down / scale_max) * plot_h)
+        up_h = int((up / scale_max) * plot_h)
+        if down_h:
+            draw.rectangle((x0, bottom - down_h, x1, bottom), fill=bottom_color)
+        if up_h:
+            draw.rectangle((x0, bottom - down_h - up_h, x1, bottom - down_h), fill=top_color)
+        if i % step == 0:
+            tw, _ = _text_size(fonts['tick'], label)
+            draw.text((int(cx - tw / 2), bottom + 8), label, font=fonts['tick'], fill=_TEXT_DIM)
+
+    if empty_label is not None:
+        tw, th = _text_size(fonts['body'], empty_label)
+        draw.text(
+            ((left + right - tw) // 2, (top + bottom - th) // 2),
+            empty_label,
+            font=fonts['body'],
+            fill=_TEXT_DIM,
+        )
+
+    sw = 14
+    gap = 8
+    down_name, up_name = legend
+    up_w, _ = _text_size(fonts['tick'], up_name)
+    down_w, _ = _text_size(fonts['tick'], down_name)
+    legend_w = sw + 6 + down_w + 16 + sw + 6 + up_w
+    lx = right - legend_w
+    ly = top + 8
+    draw.rectangle((lx, ly, lx + sw, ly + sw), fill=bottom_color)
+    draw.text((lx + sw + 6, ly - 1), down_name, font=fonts['tick'], fill=_TEXT_DIM)
+    ux = lx + sw + 6 + down_w + 16
+    draw.rectangle((ux, ly, ux + sw, ly + sw), fill=top_color)
+    draw.text((ux + sw + gap, ly - 1), up_name, font=fonts['tick'], fill=_TEXT_DIM)
 
 
 def bandwidth_chart(
@@ -83,89 +186,63 @@ def bandwidth_chart(
         return None
 
     snaps = sorted(snapshots, key=lambda s: s.ts)
-    
-    labels = [datetime.fromtimestamp(s.ts, tz=timezone.utc).strftime('%m/%d') 
-              for s in snaps]
-    
-    reg_up    = [s.up    for s in snaps]
-    reg_down  = [s.down  for s in snaps]
-    wl_up     = [s.wl_up for s in snaps]
-    wl_down   = [s.wl_down for s in snaps]
-    # fig, (ax_reg, ax_wl)
-    result = plt.subplots(
-        2, 1,
-        figsize=(10, 7),
-        dpi=140,
-        gridspec_kw={'hspace': 0.35},
-    )
-    fig = result[0]
-    ax_reg = cast(Axes, result[1][0])
-    ax_wl = cast(Axes, result[1][1])
+    labels = [
+        datetime.fromtimestamp(s.ts, tz=timezone.utc).strftime('%m/%d')
+        for s in snaps
+    ]
+    reg_up = [s.up for s in snaps]
+    reg_down = [s.down for s in snaps]
+    wl_up = [s.wl_up for s in snaps]
+    wl_down = [s.wl_down for s in snaps]
 
+    width, height = _BW_SIZE
+    image = Image.new('RGB', (width, height), _BG)
+    draw = ImageDraw.Draw(image)
+    fonts: dict[str, ImageFont.FreeTypeFont] = {
+        'header': _font(22),
+        'sub': _font(16),
+        'title': _font(18),
+        'body': _font(16),
+        'tick': _font(14),
+    }
 
-    fig.patch.set_facecolor(_BG)  # type: ignore[attr-defined]
-
-    header = f'{lang["bandwidth"]} — {label}' if label else lang["bandwidth"]
+    header = f'{lang["bandwidth"]} — {label}' if label else lang['bandwidth']
     period = f'{len(snaps)} {lang["day"]}' if len(snaps) == 1 else f'{len(snaps)} {lang["days"]}'
-    fig.suptitle(header, color=_TEXT, fontsize=13, fontweight='500',
-                 x=0.07, y=0.97, ha='left')
-    fig.text(0.07, 0.935, period, color=_TEXT_DIM, fontsize=10, ha='left')
-    
-    n = len(labels)
-    calculated_width = _calc_bar_width(n) if bar_width is None else bar_width
-    bar_kwargs = _BarKwargs(width=calculated_width, edgecolor='none', zorder=2)
-    _style_axes(ax_reg, lang["regular_traffic"])
-    ax_reg.bar(labels, reg_down, color=_REG_DOWN, label=lang["download"], **bar_kwargs)
-    ax_reg.bar(labels, reg_up, bottom=reg_down, color=_REG_UP,
-               label=lang["upload"], **bar_kwargs)
+    draw.text((40, 18), header, font=fonts['header'], fill=_TEXT)
+    draw.text((40, 48), period, font=fonts['sub'], fill=_TEXT_DIM)
 
-    _style_axes(ax_wl, lang["whitelist_traffic"])
-    ax_wl.bar(labels, wl_down, color=_WL_DOWN, label=lang["download"], **bar_kwargs)
-    ax_wl.bar(labels, wl_up, bottom=wl_down, color=_WL_UP,
-              label=lang["upload"], **bar_kwargs)
-    
-    if len(labels) > 15:
-        step = max(1, len(labels) // 10)
-        for ax in (ax_reg, ax_wl):
-            for i, lbl in enumerate(ax.get_xticklabels()):  # type: ignore[operator]
-                if i % step != 0:
-                    lbl.set_visible(False)
-    
-    legend_kwargs = dict(
-        loc='upper right',
-        frameon=False,
-        fontsize=9,
-        labelcolor=_TEXT_DIM,
-        handlelength=1.2,
-        handleheight=0.8,
-        columnspacing=1.0,
-        ncol=2,
+    n = len(labels)
+    bar_frac = _calc_bar_width(n) if bar_width is None else bar_width
+    legend = (lang['download'], lang['upload'])
+    margin_l, margin_r = 110, 36
+    panels = (
+        (lang['regular_traffic'], reg_down, reg_up, _REG_DOWN, _REG_UP, 130, 500),
+        (lang['whitelist_traffic'], wl_down, wl_up, _WL_DOWN, _WL_UP, 580, 930),
     )
-    ax_reg.legend(**legend_kwargs)
-    ax_wl.legend(**legend_kwargs)
-    
-    if not any(reg_up) and not any(reg_down):
-        ax_reg.text(0.5, 0.5, lang["no_data"], transform=ax_reg.transAxes,
-                    ha='center', va='center', color=_TEXT_DIM, fontsize=10)
-    if not any(wl_up) and not any(wl_down):
-        ax_wl.text(0.5, 0.5, lang["no_data"], transform=ax_wl.transAxes,
-                   ha='center', va='center', color=_TEXT_DIM, fontsize=10)
-    
-    fig.subplots_adjust(left=0.09, right=0.97, top=0.89, bottom=0.08)
-    
-    buf = io.BytesIO()
-    try:
-        fig.savefig(buf, format='png', facecolor=_BG, edgecolor='none')
-    finally:
-        plt.close(fig)
-    buf.seek(0)
-    return buf
+    for title, bottoms, tops, bottom_color, top_color, top, bottom in panels:
+        empty = lang['no_data'] if not any(bottoms) and not any(tops) else None
+        _draw_stacked(
+            draw,
+            plot=(margin_l, top, width - margin_r, bottom),
+            labels=labels,
+            bottoms=bottoms,
+            tops=tops,
+            bottom_color=bottom_color,
+            top_color=top_color,
+            bar_frac=bar_frac,
+            title=title,
+            legend=legend,
+            empty_label=empty,
+            fonts=fonts,
+        )
+    return _save(image)
+
 
 def leaderboard_chart(
     data: dict[str, int],
     *,
     bandwidth_type: Literal["total", "monthly", "wl_monthly"],
-    lang: Mapping[str, str]
+    lang: Mapping[str, str],
 ) -> io.BytesIO | None:
     """Render a leaderboard of users by bandwidth.
 
@@ -177,58 +254,57 @@ def leaderboard_chart(
     """
     if not data:
         return None
-    
 
-    bw_key = f"bw_type_{bandwidth_type}"
-    bw_label = lang.get(bw_key, lang["bw_type_total"])
-
-    # sort descending, take top 15
+    bw_key = f'bw_type_{bandwidth_type}'
+    bw_label = lang.get(bw_key, lang['bw_type_total'])
     sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)[:15]
-    usernames = [u for u, _ in sorted_users]
-    values = [v for _, v in sorted_users]
 
-    fig, ax = plt.subplots(figsize=(9, 6), dpi=140)
-    fig.patch.set_facecolor(_BG)  # type: ignore[attr-defined]
-    ax.set_facecolor(_PANEL)
+    width, height = _LB_SIZE
+    image = Image.new('RGB', (width, height), _BG)
+    draw = ImageDraw.Draw(image)
+    header_font = _font(22)
+    tick_font = _font(14)
 
     header = f'{lang["leaderboard"]} — {bw_label}'
-    fig.suptitle(header, color=_TEXT, fontsize=13, fontweight='500',
-                 x=0.07, y=0.97, ha='left')
+    draw.text((40, 18), header, font=header_font, fill=_TEXT)
 
-    colors = [_REG_DOWN] * len(usernames)
-    bars = ax.barh(usernames, values, color=colors, edgecolor='none', zorder=2)
+    label_col = 220
+    value_col = 130
+    left = 40 + label_col
+    right = width - 36 - value_col
+    top = 90
+    bottom = height - 70
+    draw.rectangle((left, top, right, bottom), fill=_PANEL)
 
-    ax.invert_yaxis()
-    ax.xaxis.set_major_formatter(FuncFormatter(_format_ticks))
+    peak = max((v for _, v in sorted_users), default=0)
+    ticks = _nice_ticks(float(peak))
+    scale_max = ticks[-1] if ticks[-1] > 0 else 1.0
+    plot_w = right - left
 
-    ax.grid(axis='x', color=_GRID, linewidth=0.8, zorder=0)
-    ax.set_axisbelow(True)
+    for tick in ticks:
+        x = left + int((tick / scale_max) * plot_w)
+        draw.line((x, top, x, bottom), fill=_GRID, width=1)
+        label = fmt_bytes(tick)
+        tw, _ = _text_size(tick_font, label)
+        draw.text((x - tw // 2, bottom + 10), label, font=tick_font, fill=_TEXT_DIM)
 
-    for side in ('top', 'right'):
-        ax.spines[side].set_visible(False)
-    for side in ('left', 'bottom'):
-        ax.spines[side].set_color(_BORDER)
-        ax.spines[side].set_linewidth(0.8)
+    draw.line((left, bottom, right, bottom), fill=_BORDER, width=1)
+    draw.line((left, top, left, bottom), fill=_BORDER, width=1)
 
-    ax.tick_params(colors=_TEXT_DIM, labelsize=9, length=0)
-    ax.set_xlabel('')
-    ax.set_ylabel('')
+    n = len(sorted_users)
+    slot = (bottom - top) / max(n, 1)
+    bar_h = max(8, int(slot * 0.62))
+    for i, (name, value) in enumerate(sorted_users):
+        cy = top + slot * (i + 0.5)
+        y0 = int(cy - bar_h / 2)
+        y1 = y0 + bar_h
+        bar_w = int((value / scale_max) * plot_w) if scale_max else 0
+        if bar_w:
+            draw.rectangle((left, y0, left + bar_w, y1), fill=_REG_DOWN)
+        shown = _ellipsis(tick_font, name, label_col - 16)
+        tw, th = _text_size(tick_font, shown)
+        draw.text((left - 12 - tw, int(cy - th / 2)), shown, font=tick_font, fill=_TEXT_DIM)
+        value_label = fmt_bytes(value)
+        draw.text((left + bar_w + 8, int(cy - th / 2)), value_label, font=tick_font, fill=_TEXT_DIM)
 
-    # value labels on bars
-    for bar, val in zip(bars, values): # pyright: ignore[reportUnknownVariableType]
-        bar = cast(Rectangle, bar)
-        ax.text(
-            bar.get_width(), bar.get_y() + bar.get_height() / 2,
-            f' {fmt_bytes(val)}',
-            va='center', ha='left', color=_TEXT_DIM, fontsize=9
-        )
-
-    fig.subplots_adjust(left=0.18, right=0.95, top=0.88, bottom=0.08)
-
-    buf = io.BytesIO()
-    try:
-        fig.savefig(buf, format='png', facecolor=_BG, edgecolor='none')
-    finally:
-        plt.close(fig)
-    buf.seek(0)
-    return buf
+    return _save(image)
