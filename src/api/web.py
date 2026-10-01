@@ -20,12 +20,13 @@ def _admin_module_method(name: str) -> Callable[[WebApi], ResponseType]:
         version = asset_version()
         source = (RES_DIR / 'admin' / f'{name}.js').read_text(encoding='utf-8')
         body = source.replace(".js';", f".js?v={version}';")
-        return self._static(f'admin/{name}.js', 'text/javascript', body.encode('utf-8'))
+        return self._static(f'admin/{name}.js', 'text/javascript', body.encode('utf-8'))  # pyright: ignore[reportPrivateUsage]
     handler.__name__ = f'admin_{name}_js'
     return handler
 
 class WebApi(BaseApi):
     """Public, user-facing API."""
+    _admin_module = ''
     for _admin_module in admin_module_names():
         locals()[f'admin_{_admin_module}_js'] = _admin_module_method(_admin_module)
     del _admin_module

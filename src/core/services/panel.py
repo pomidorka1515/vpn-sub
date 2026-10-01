@@ -158,7 +158,10 @@ class PanelService(BaseService):
             raw_obj: object = data.get("obj")
             if isinstance(raw_obj, list):
                 for item in cast(list[object], raw_obj):
-                    if isinstance(item, dict) and item.get("inboundIds") is None:
+                    if not isinstance(item, dict):
+                        continue
+                    client = cast(dict[object, object], item)
+                    if client.get("inboundIds") is None:
                         cast(dict[str, object], item)["inboundIds"] = []
             return from_dict(ClientListResponse, data).obj
         except AppError:

@@ -20,7 +20,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         t = self.TEXTS[lang]
         action = call.data
 
-        self.bot.answer_callback_query(call.id)
+        self._answer_callback(call.id)
 
         if action == "login_credentials":
             msg = self.bot.send_message(message.chat.id, t['enter_email'], reply_markup=types.ReplyKeyboardRemove())

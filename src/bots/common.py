@@ -20,6 +20,14 @@ class TelegramIOMixin:
     bot: telebot.TeleBot
     log: Logger
 
+    def _answer_callback(self, call_id: str, text: str | None = None) -> None:
+        # pyTelegramBotAPI annotates callback_query_id as int, but Telegram
+        # callback ids are strings (CallbackQuery.id: str).
+        if text is None:
+            self.bot.answer_callback_query(cast(Any, call_id))
+        else:
+            self.bot.answer_callback_query(cast(Any, call_id), text)
+
     def _send_message(self, chat_id: int, text: str, **kwargs: object) -> None:
         try:
             self.bot.send_message(chat_id, text, **cast(Any, kwargs))

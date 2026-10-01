@@ -91,7 +91,7 @@ class PublicCommonMixin(
         new_lang = data.split('_', 1)[1]
         self.set_lang(uid, new_lang)
 
-        self.bot.answer_callback_query(call.id)
+        self._answer_callback(call.id)
         t = self.TEXTS[new_lang]
         self.bot.send_message(message.chat.id, t['lang_set'], reply_markup=self.get_menu(uid))
 

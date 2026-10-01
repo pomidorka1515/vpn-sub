@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, Self, cast
+from typing import Any, BinaryIO, Self, cast
 
 from api import Api, WebApi
 from api.common import RES_DIR
@@ -215,7 +215,8 @@ class Application:
 def _build_flask_app(options: AppOptions) -> Flask:
     flask_app = Flask(__name__)
     # pages live in res/, not a flask-style templates/ directory
-    flask_app.jinja_loader = FileSystemLoader(str(RES_DIR))
+    # jinja_loader is a cached_property; assigning replaces the template lookup.
+    cast(Any, flask_app).jinja_loader = FileSystemLoader(str(RES_DIR))
     # should not be changed, 64KB is also plenty
     flask_app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     flask_app.config["JSON_SORT_KEYS"] = False

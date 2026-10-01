@@ -33,14 +33,14 @@ class PublicTrafficMixin(PublicFeatureMixin):
             if not 1 <= days <= 90:
                 raise ValueError
         except (ValueError, IndexError):
-            self.bot.answer_callback_query(call.id, t['chart_invalid_period'])
+            self._answer_callback(call.id, t['chart_invalid_period'])
             return
 
         username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str):
             return
 
-        self.bot.answer_callback_query(call.id, t['chart_generating'])
+        self._answer_callback(call.id, t['chart_generating'])
 
         try:
             self._executor.submit(

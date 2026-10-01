@@ -11,7 +11,7 @@ import telebot.apihelper as apihelper
 from bots import polling as polling_module
 from bots.polling import (
     TelegramPollingMixin,
-    _PollingExceptionHandler,
+    _PollingExceptionHandler,  # pyright: ignore[reportPrivateUsage]
     configure_telegram_api,
 )
 

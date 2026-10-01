@@ -22,7 +22,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         t = self.TEXTS[lang]
         action = call.data  # set_name, set_fp, set_pass, set_login
 
-        self.bot.answer_callback_query(call.id)
+        self._answer_callback(call.id)
         self._delete_message(message.chat.id, message.message_id)
 
         if action == "set_name":
@@ -55,7 +55,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str): return
 
-        self.bot.answer_callback_query(call.id)
+        self._answer_callback(call.id)
         try:
             self.sub.business_svc.update_params(username=username, fingerprint=fp)
         except AppError as error:

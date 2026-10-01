@@ -28,7 +28,8 @@ def _web_lang_cfg() -> ConfigLike:
 @pytest.fixture
 def flask_app() -> Flask:
     app = Flask(__name__)
-    app.jinja_loader = FileSystemLoader(str(RES_DIR))
+    # jinja_loader is a cached_property; assigning replaces the template lookup.
+    cast(Any, app).jinja_loader = FileSystemLoader(str(RES_DIR))
     return app
 
 

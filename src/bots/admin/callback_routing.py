@@ -55,7 +55,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         data = cast(str, call.data)
         message = cast(types.Message, call.message)
         chat_id = message.chat.id
-        self.bot.answer_callback_query(call.id)
+        self._answer_callback(call.id)
 
         try:
             for route, handler_name, is_prefix in self.ROUTES:
