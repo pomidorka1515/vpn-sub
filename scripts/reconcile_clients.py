@@ -57,6 +57,7 @@ from custom_types import (  # noqa: E402
     PanelClient,
 )
 from db import Database  # noqa: E402
+from paths import runtime_dir  # noqa: E402
 from session import XUiSession  # noqa: E402
 
 
@@ -136,7 +137,7 @@ def _load_uuid_map(database: Database) -> dict[str, str]:
     return mapping
 
 
-def _build_panel(name: str, panel_cfg: dict[str, Any]) -> XUiSession:
+def _build_panel(name: str, panel_cfg: dict[str, Any], *, stamp_dir: str) -> XUiSession:
     nginx_auth: tuple[str, str] | None = None
     nginx_raw: object = panel_cfg.get("nginx_auth")
     if isinstance(nginx_raw, (list, tuple)):
@@ -154,6 +155,7 @@ def _build_panel(name: str, panel_cfg: dict[str, Any]) -> XUiSession:
         inbounds_list=tuple(int(i) for i in panel_cfg["inbounds_list"]),
         mode=cast(Literal["whitelist", "blacklist"], panel_cfg["mode"]),
         inject_headers=panel_cfg.get("inject_headers"),
+        stamp_dir=stamp_dir,
     )
 
 
@@ -397,12 +399,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     database = Database(path=Path(args.database))
+    stamp_dir = str(runtime_dir())
     ledger: SeedLedger = DbSeedLedger(database)
     exit_code = 0
     try:
         uuid_map = _load_uuid_map(database)
         for key in selected_keys:
-            panel = _build_panel(key, panels_cfg[key])
+            panel = _build_panel(key, panels_cfg[key], stamp_dir=stamp_dir)
             try:
                 report = reconcile_panel(
                     panel, uuid_map, apply=args.apply, ledger=ledger,

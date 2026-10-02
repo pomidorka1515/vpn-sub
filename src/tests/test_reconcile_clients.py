@@ -173,7 +173,7 @@ def test_main_is_dry_run_by_default(
 ) -> None:
     panel = _legacy_panel()
 
-    def fake_build_panel(name: str, cfg: dict[str, Any]) -> XUiSession:
+    def fake_build_panel(name: str, cfg: dict[str, Any], *, stamp_dir: str) -> XUiSession:
         return cast(XUiSession, panel)
 
     monkeypatch.setattr(rc, "_build_panel", fake_build_panel)

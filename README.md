@@ -30,7 +30,7 @@ Database-backed config, designed to run on a single small VPS.
 ## Limitations
 
 - Single VPS, Linux only. `Subscription` refuses to import on anything else.
-- One gunicorn process. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`/run/lock/.primary.lock`) elects one primary; it is not a multi-node design.
+- One gunicorn process. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`<DIR_RUNTIME>/.primary.lock`) elects one primary; it is not a multi-node design.
 - Local Redis is required. The app pings it at startup and will not boot if it is down. A later outage fails rate-limited routes closed with 429.
 - Not highly available. Panel, database, and bots all live on the same box. A dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`). 2.x needs the one-time reconcile below. No other panel software.
@@ -125,16 +125,17 @@ venv/bin/python scripts/reconcile_clients.py --apply  # merge legacy clients
 
 All path variables are **optional**. If omitted, runtime data defaults to the `./data/` folder inside the project directory.
 
-| Variable        | Default                  | Description                                                         |
-| :---            | :---                     | :---                                                                |
-| `DIR_DATA`      | `./data/`                | Base directory for runtime data (DB, logs, config)                  |
-| `DIR_BACKUPS`   | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored                 |
-| `PATH_CONFIG`   | `<DIR_DATA>/config.json` | Path to the main application configuration                          |
-| `PATH_DB`       | `<DIR_DATA>/state.db`    | Path to the SQLite database                                         |
-| `PATH_LOG`      | `<DIR_DATA>/log.jsonl`   | Path to application event logs (JSONL)                              |
-| `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                    |
-| `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                              |
-| `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended) |
+| Variable        | Default                  | Description                                                             |
+| :---            | :---                     | :---                                                                    |
+| `DIR_DATA`      | `./data/`                | Base directory for runtime data (DB, logs, config)                      |
+| `DIR_RUNTIME`   | `<DIR_DATA>/run/`        | Local directory for the primary lock, config locks, and inbound stamps. |
+| `DIR_BACKUPS`   | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored                     |
+| `PATH_CONFIG`   | `<DIR_DATA>/config.json` | Path to the main application configuration                              |
+| `PATH_DB`       | `<DIR_DATA>/state.db`    | Path to the SQLite database                                             |
+| `PATH_LOG`      | `<DIR_DATA>/log.jsonl`   | Path to application event logs (JSONL)                                  |
+| `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
+| `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
+| `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
 
 ### Systemd service
 
@@ -151,6 +152,7 @@ Environment=PYTHONUNBUFFERED=1
 
 # --- optional path overrides ---
 # Environment="DIR_DATA=/var/lib/vpn-sub"
+# Environment="DIR_RUNTIME=/var/lib/vpn-sub/run"
 # Environment="DIR_BACKUPS=/var/backups/vpn-sub"
 # Environment="PATH_CONFIG=/etc/vpn-sub/config.json"
 # Environment="PATH_DB=/var/lib/vpn-sub/state.db"

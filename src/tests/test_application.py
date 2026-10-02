@@ -9,6 +9,7 @@ import pytest
 from requests import Response
 
 from app import AppOptions, AppPaths, Application, create_application
+from paths import runtime_dir
 from api.decorators.rate_limit import close_rate_limit
 
 
@@ -88,7 +89,7 @@ def test_from_env_defaults_to_project_root() -> None:
         database=data / "state.sqlite3",
         log=data / "log.jsonl",
         audit=data / "audit.jsonl",
-        primary_lock=Path("/run/lock") / ".primary.lock",
+        primary_lock=runtime_dir(data) / ".primary.lock",
     )
 
 

@@ -22,6 +22,7 @@ from flask import Flask, Response, request
 from jinja2 import FileSystemLoader
 from loggers import Logger
 from config import ConfigLike
+from paths import runtime_dir
 from session import XUiSession, XUiPanelTransport
 from util import err
 from werkzeug.exceptions import HTTPException
@@ -88,7 +89,7 @@ class AppPaths:
             database=Path(os.getenv("PATH_DB", data / "state.sqlite3")),
             log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
             audit=Path(os.getenv("PATH_AUDIT", data / "audit.jsonl")),
-            primary_lock=Path("/run/lock") / ".primary.lock",
+            primary_lock=runtime_dir(data) / ".primary.lock",
         )
 
 
@@ -275,7 +276,7 @@ def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
     LinesConfig # audit
 ]:
     paths.data.mkdir(parents=True, exist_ok=True)
-    lock_dir = Path("/run/lock")
+    lock_dir = paths.primary_lock.parent
     cfg = Config(
         path=paths.config,
         indent=4,
@@ -315,6 +316,7 @@ def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
 def _build_panels(
     cfg: Config,
     *,
+    stamp_dir: Path,
     transport_factory: PanelTransportFactory | None,
 ) -> tuple[list[XUiSession], XUiSession | None]:
     panels: list[XUiSession] = []
@@ -334,6 +336,7 @@ def _build_panels(
             mode=panel_cfg["mode"],
             inject_headers=panel_cfg.get("inject_headers"),
             transport=transport,
+            stamp_dir=str(stamp_dir),
         )
         if panel_cfg["whitelist"]:
             if whitelist is not None:
@@ -433,6 +436,7 @@ def create_application(
         )
         panels, whitelist = _build_panels(
             cfg,
+            stamp_dir=paths.primary_lock.parent,
             transport_factory=options.panel_transport_factory,
         )
         if not panels and whitelist is None:

@@ -12,6 +12,7 @@ from loggers import Logger
 from custom_types import Inbound, RequestKwargs
 from config import JsonValue
 from errors import XUiSessionError
+from paths import runtime_dir
 
 from collections.abc import Callable
 from typing import Unpack, cast, Any, Mapping, Protocol, Literal
@@ -20,15 +21,17 @@ __all__ = ['XUiSession', 'XUiPanelTransport', 'RequestsPanelTransport', 'XUiSess
 
 _HEALTH_CHECK_TIMEOUT = 5.0
 _DEFAULT_REQUEST_TIMEOUT = 5.0
-_INBOUND_STAMP_DIR = "/run/lock"
 
 
-def inbound_stamp_path(name: str, base_url: str, *, directory: str = _INBOUND_STAMP_DIR) -> str:
+def inbound_stamp_path(name: str, base_url: str, *, directory: str | None = None) -> str:
     """Per-panel generation file. A changed mtime drops every worker's inbound cache.
 
     The file stores no inbound data. ``name`` keeps two panels apart; the URL
-    digest keeps a weird name from escaping ``directory``.
+    digest keeps a weird name from escaping ``directory``. ``directory``
+    defaults to the service runtime dir (``DIR_RUNTIME``, else ``<DIR_DATA>/run``).
     """
+    if directory is None:
+        directory = str(runtime_dir())
     digest = hashlib.sha1(base_url.encode()).hexdigest()[:8]
     safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
     return os.path.join(directory, f"inbounds.{safe}.{digest}.stamp")
@@ -136,7 +139,7 @@ class XUiSession:
     Thread-safety and lifecycle:
       - ``dead`` is protected by an internal lock.
       - Cache reads return the stored list unchanged; callers must not mutate it.
-      - A stamp file beside the primary lock is the cross-process generation.
+      - A stamp file in the runtime dir is the cross-process generation.
         ``clear_cache`` bumps its mtime before dropping the local list, so a
         failed bump cannot leave other workers serving a stale list. The list
         itself stays in memory. A missing stamp is not generation 0.
@@ -165,6 +168,7 @@ class XUiSession:
         session: Session | None = None,
         clock: Callable[[], float] = time.monotonic,
         stamp_path: str | None = None,
+        stamp_dir: str | None = None,
     ):
         """
         Initialize the panel client.
@@ -188,7 +192,11 @@ class XUiSession:
             session: Session used by the default transport. Defaults to a new ``requests.Session``.
             clock: Monotonic clock used for cache timing.
             stamp_path: Generation file shared by every worker for this panel.
-                Defaults to a file under ``/run/lock``. Tests pass a temp path.
+                Defaults to a file under ``stamp_dir``. Tests pass a temp path.
+            stamp_dir: Directory for the default generation file. Defaults to
+                the service runtime dir (``DIR_RUNTIME``, else ``<DIR_DATA>/run``).
+                Ignored when ``stamp_path`` is set. Must be local: ``flock`` is
+                not reliable on NFS, and the stamp is only a cross-process mtime.
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -212,7 +220,9 @@ class XUiSession:
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
             self.cache_time: float = 0
-            self._stamp_path = stamp_path if stamp_path is not None else inbound_stamp_path(name, self.base_url)
+            self._stamp_path = stamp_path if stamp_path is not None else inbound_stamp_path(
+                name, self.base_url, directory=stamp_dir,
+            )
             self._cache_stamp: int | None = None
             self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
 

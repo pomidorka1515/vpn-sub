@@ -232,9 +232,9 @@ def test_cache_fill_does_not_revive_a_cleared_stamp(tmp_path: Path, clock: FakeC
 
 
 def test_inbound_stamp_path_stays_inside_its_directory() -> None:
-    path = inbound_stamp_path("../other", "http://127.0.0.1:1/a/", directory="/run/lock")
-    other = inbound_stamp_path("other", "http://127.0.0.1:2/a/", directory="/run/lock")
-    assert path.startswith("/run/lock/inbounds.")
+    path = inbound_stamp_path("../other", "http://127.0.0.1:1/a/", directory="/tmp/runtime")
+    other = inbound_stamp_path("other", "http://127.0.0.1:2/a/", directory="/tmp/runtime")
+    assert path.startswith("/tmp/runtime/inbounds.")
     assert ".." not in path
     assert path != other
 
