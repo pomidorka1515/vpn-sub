@@ -188,6 +188,21 @@ def _client_address(environ: MutableMapping[str, object]) -> str:
     return str(address) if address else "-"
 
 
+def _request_path(environ: MutableMapping[str, object]) -> str:
+    raw_uri = environ.get("RAW_URI")
+    if not isinstance(raw_uri, str) or not raw_uri:
+        raw_uri = str(environ.get("PATH_INFO") or "/")
+    return _safe_request_target(raw_uri).split("?", 1)[0]
+
+
+def _should_skip_access_log(environ: MutableMapping[str, object], status: str) -> bool:
+    """Drop routine dashboard polls. Failures stay visible."""
+    if status != "200":
+        return False
+    path = _request_path(environ).rstrip("/") or "/"
+    return path == "/api/state/polling" or path.endswith("/api/state/polling")
+
+
 class GunicornLogger(GunicornBaseLogger):
     """Compact, privacy-preserving access logs for the systemd journal."""
 
@@ -215,11 +230,14 @@ class GunicornLogger(GunicornBaseLogger):
             return
 
         atoms = self.atoms(resp, req, environ, request_time)
+        status = str(atoms.get("s") or "-")
+        if _should_skip_access_log(environ, status):
+            return
+
         method = str(atoms.get("m") or environ.get("REQUEST_METHOD") or "-")
         raw_uri = str(environ.get("RAW_URI") or environ.get("PATH_INFO") or "/")
         protocol = str(atoms.get("H") or environ.get("SERVER_PROTOCOL") or "HTTP/1.1")
         target = _safe_request_target(raw_uri)
-        status = str(atoms.get("s") or "-")
         sent = atoms.get("B")
         size = f"{sent}b" if sent is not None else "-"
         user_agent = str(environ.get("HTTP_USER_AGENT") or "-").replace('"', "\\\"")

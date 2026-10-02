@@ -29,6 +29,7 @@ _FONT_PATH = Path(__file__).resolve().parent.parent / 'res' / 'fonts' / 'DejaVuS
 _BW_SIZE = (1400, 980)
 _LB_SIZE = (1260, 840)
 
+# pyright: reportUnknownMemberType=False   # PIL things
 
 def _calc_bar_width(n_bars: int, *, min_w: float = 0.4, max_w: float = 0.9) -> float:
     """Calculate bar width based on number of bars for stacked bar charts."""
