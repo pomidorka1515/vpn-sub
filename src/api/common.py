@@ -27,6 +27,7 @@ _ASSET_FILES: tuple[str, ...] = (
     'charts.css',
     'dashboard.js',
     'history.js',
+    'vendor/chart.umd.min.js',
 )
 
 _ADMIN_MODULE_RE = re.compile(r'^[a-z0-9_-]+$')

@@ -53,6 +53,7 @@ class WebApi(BaseApi):
         *(Route('GET', f'/admin/{name}.js', 'admin_' + name.replace('/', '_') + '_js') for name in admin_module_names()),
         Route('GET', '/dashboard.js', 'dashboard_js'),
         Route('GET', '/history.js', 'history_js'),
+        Route('GET', '/chart.umd.min.js', 'chart_js'),
         Route('POST', '/webapi/register', 'register', 5),
         Route('POST', '/webapi/login', 'login', 10),
         Route('POST', '/webapi/bonus', 'bonus', 15),
@@ -153,6 +154,9 @@ class WebApi(BaseApi):
 
     def history_js(self) -> ResponseType:
         return self._static('history.js', 'text/javascript')
+
+    def chart_js(self) -> ResponseType:
+        return self._static('vendor/chart.umd.min.js', 'text/javascript')
 
     def gui_panel(self) -> ResponseType:
         auth_token = request.cookies.get('auth_token')

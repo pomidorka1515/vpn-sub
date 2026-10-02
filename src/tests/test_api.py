@@ -189,6 +189,8 @@ def test_admin_ui_requires_session(database: Database, flask_app: Flask) -> None
     assert b'type="module"' in response.data
     assert b'src="/sub/admin/main.js?v=' in response.data
     assert b'id="btnLogout"' in response.data
+    assert b"window.CHART_JS = '/sub/chart.umd.min.js?v=" in response.data
+    assert b"jsdelivr" not in response.data
 
     again = client.post(
         "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
@@ -436,6 +438,8 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert b"__SUB_URI__" not in history.data
     assert b"window.BASE = '/custom'" in history.data
     assert b'src="/custom/history.js?v=' in history.data
+    assert b"window.CHART_JS = '/custom/chart.umd.min.js?v=" in history.data
+    assert b"jsdelivr" not in history.data
 
     css = client.get("/custom/common.css")
     assert css.status_code == 200
@@ -451,6 +455,11 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert history_js.status_code == 200
     assert history_js.mimetype == "text/javascript"
     assert b"function loadHistory" in history_js.data
+    chart_js = client.get("/custom/chart.umd.min.js")
+    assert chart_js.status_code == 200
+    assert chart_js.mimetype == "text/javascript"
+    assert b"Chart.js v4.4.1" in chart_js.data
+    assert "immutable" in chart_js.headers["Cache-Control"]
 
     admin_js = client.get("/custom/admin/main.js")
     assert admin_js.status_code == 200

@@ -73,7 +73,7 @@ window.LANG = {{ L | tojson }};
 window.LANG_EN = {{ L_en | tojson }};
 window.LANG_CODE = '{{ lang }}';
 window.lang = window.LANG_CODE;
-window.CHART_JS = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+window.CHART_JS = '{{ prefix }}/chart.umd.min.js?v={{ asset_version }}';
 </script>
 <script src="{{ prefix }}/history.js?v={{ asset_version }}"></script>
 </body>
