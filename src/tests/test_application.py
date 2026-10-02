@@ -9,6 +9,7 @@ import pytest
 from requests import Response
 
 from app import AppOptions, AppPaths, Application, create_application
+from api.decorators.rate_limit import close_rate_limit
 
 
 def json_response(data: dict[str, Any], status_code: int = 200) -> Response:
@@ -63,14 +64,17 @@ def paths(tmp_path: Path) -> AppPaths:
 
 
 def factory(paths: AppPaths, **options: Any) -> Application:
-    return create_application(
-        paths=paths,
-        options=AppOptions(
-            start_background=False,
-            panel_transport_factory=lambda: RecordingTransport({"success": True}),
-            **options,
-        ),
-    )
+    with mock.patch("api.decorators.rate_limit.configure_rate_limit", return_value=mock.Mock()):
+        runtime = create_application(
+            paths=paths,
+            options=AppOptions(
+                start_background=False,
+                panel_transport_factory=lambda: RecordingTransport({"success": True}),
+                **options,
+            ),
+        )
+    close_rate_limit()
+    return runtime
 
 
 def test_from_env_defaults_to_project_root() -> None:
@@ -195,12 +199,14 @@ def test_panel_failure_closes_created_resources(paths: AppPaths) -> None:
 
     with mock.patch("app.Database") as database:
         database.return_value.close = mock.Mock()
-        with pytest.raises(RuntimeError):
-            create_application(
-                paths=paths,
-                options=AppOptions(
-                    start_background=False,
-                    panel_transport_factory=transport_factory,
-                ),
-            )
+        with mock.patch("api.decorators.rate_limit.configure_rate_limit", return_value=mock.Mock()):
+            with pytest.raises(RuntimeError, match="second panel"):
+                create_application(
+                    paths=paths,
+                    options=AppOptions(
+                        start_background=False,
+                        panel_transport_factory=transport_factory,
+                    ),
+                )
+        close_rate_limit()
         database.return_value.close.assert_called()

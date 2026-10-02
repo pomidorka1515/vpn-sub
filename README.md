@@ -25,16 +25,18 @@ Database-backed config, designed to run on a single small VPS.
 - Discord as a second process, one token, public commands plus `/admin`. See [src/discord/README.md](src/discord/README.md)
 - Bandwidth watcher (`BWatch`): quota enforcement, expiry, panel health alerts, daily bandwidth and state snapshots
 - Argon2id passwords, JSONL audit trail, schema-validated config, scheduled config backups
+- Shared Redis sliding-window rate limits. Every process uses the same counters.
 
 ## Limitations
 
 - Single VPS, Linux only. `Subscription` refuses to import on anything else.
 - One gunicorn process. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`data/.primary.lock`) elects one primary; it is not a multi-node design.
+- Local Redis is required. The app pings it at startup and will not boot if it is down. A later outage fails rate-limited routes closed with 429.
 - Not highly available. Panel, database, and bots all live on the same box. A dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`). 2.x needs the one-time reconcile below. No other panel software.
 - Discord does not share the process. It only talks to Flask over loopback. Start Flask first. Killing one does not stop the other.
 - Personal project. Untagged `main` is rolling development. Tests are for this repo, not a supported public suite.
-- Direct binds are blocked when `REQUIRE_PROXY=1`. TLS, rate limits, and public exposure belong on the reverse proxy.
+- Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure belong on the reverse proxy. Application rate limits live in Redis.
 
 ## Core principles
 
@@ -58,6 +60,7 @@ Startup order is fixed and handled by `create_application()`: configs, database,
 - `src/config/` — atomic JSON config with thread + cross-process locking
 - `src/db/` — SQLite. Users, codes, quotas, and bandwidth live here. `config.json` is deployment and presentation only
 - `src/api/` — Flask routes (`Api` for admin, `WebApi` for end users)
+- `src/api/decorators/rate_limit.py` — Redis sliding-window limiter, shared by every worker
 - `src/bots/` — Telegram `AdminBot` (management), `PublicBot` (user self-service)
 - `src/discord/` — Discord bots as a **separate process**. Not started by gunicorn or `create_application()`. One token serves public commands and `/admin`. See [src/discord/README.md](src/discord/README.md).
 - `res/` — admin and user HTML. `docs/` — [public API](docs/API.md), [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
@@ -67,6 +70,7 @@ Startup order is fixed and handled by `create_application()`: configs, database,
 ```bash
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
+apt install redis-server && systemctl enable --now redis-server
 mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel credentials, bot tokens, etc
 # optional Discord bots (one token, public commands plus /admin):
 cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token, private.whitelist, private.api_token
@@ -74,6 +78,25 @@ cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token, 
 ```
 
 Always use `venv/bin/...`, never system Python. Runtime state lives in `data/` and is gitignored.
+
+### Redis
+
+Rate limits are stored in Redis, not in process memory. One local instance is enough; do not expose it.
+
+```bash
+apt install redis-server
+systemctl enable --now redis-server
+```
+
+`config.json` must contain the URL the app connects to. `6379` is Redis's default port, not something this app chooses:
+
+```json
+"redis": {
+    "url": "redis://127.0.0.1:6379/0"
+}
+```
+
+Start Redis before gunicorn. Startup pings that URL and exits if it is down. If Redis dies later, rate-limited routes return 429.
 
 ### 3x-ui panel auth
 
@@ -118,8 +141,8 @@ All path variables are **optional**. If omitted, runtime data defaults to the `.
 ```ini
 [Unit]
 Description=subscription backend
-After=network.target
-Wants=network.target
+After=network.target redis-server.service
+Wants=network.target redis-server.service
 
 [Service]
 User=root
@@ -158,6 +181,7 @@ anything at import time, so `venv/bin/python -m src.wsgi` also works for a quick
 local run.
 
 Do not pass `-w` or `--workers`. The config file already forces one worker. A second process would start another `BWatch` and another pair of Telegram bots.
+Rate-limit counters are still shared if you do, because they live in Redis.
 
 ### Nginx location block
 ```
@@ -182,7 +206,7 @@ location /sub {
 ### Example Config
 **See [example config](docs/EXAMPLE.config.json)**
 
-`config.json` is validated against `config.schema.json` on load and on every commit. Remote `$schema` URLs are rejected. Put panel tokens, bot tokens, and `api_token` here; do not commit the filled file.
+`config.json` is validated against `config.schema.json` on load and on every commit. Remote `$schema` URLs are rejected. Put panel tokens, bot tokens, `api_token`, and the Redis URL here; do not commit the filled file.
 
 ### Seemingly useless casts to protocols
 All protocols in `src/custom_types.py` are fully compatible with their runtime classes.
@@ -196,9 +220,9 @@ but allows local requests made from `127.0.0.1` and `::1`.
 Override this at your own risk: it's always best to leave TLS, etc. to reverse proxies.
 
 ## Deployment
-- Meant to run under gunicorn behind nginx (in front of the service, rate-limiting and TLS)
+- Meant to run under gunicorn behind nginx (in front of the service, TLS). Application rate limits use local Redis.
 - Systemd unit recommended for persistence
-- Startup order matters: configs → DB → panels → Subscription → BWatch + Telegram bots (handled automatically by `create_application()`)
+- Startup order matters: Redis → configs → DB → panels → Subscription → BWatch + Telegram bots (the app steps are handled by `create_application()`)
 - Route every user mutation through `Subscription`. The admin API, WebAPI, and Telegram bots already do. Discord mutates users only by calling those HTTP APIs.
 
 ## Development

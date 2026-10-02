@@ -8,7 +8,7 @@
         "json_template", "bypass_packages", "domain", "ping_check_url",
         "publicbot", "3xui", "sub_name", "flags",
         "profiles", "json_profiles", "profileDescriptions", "whitelistProfiles",
-        "masterLinks", "profileNodes", "shortProfileDescriptions"
+        "masterLinks", "profileNodes", "shortProfileDescriptions", "redis"
     ],
     "additionalProperties": false,
     "properties": {
@@ -185,6 +185,25 @@
         "shortProfileDescriptions": {
             "type": "object",
             "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
+        },
+
+        "redis": {
+            "type": "object",
+            "description": "Shared rate-limit store. Every worker must use the same Redis.",
+            "additionalProperties": false,
+            "required": ["url"],
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Redis URL, for example redis://127.0.0.1:6379/0."
+                },
+                "socket_timeout": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Connect and command timeout in seconds."
+                }
+            }
         }
     },
 

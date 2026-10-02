@@ -11,6 +11,7 @@ from typing import Any, BinaryIO, Self, cast
 
 from api import Api, WebApi
 from api.common import RES_DIR
+from api.decorators.rate_limit import close_rate_limit, configure_rate_limit_from_config
 from bots import AdminBot, PublicBot
 from bwatch import BWatch
 from config import Config, LinesConfig
@@ -181,6 +182,7 @@ class Application:
                 thread.join(timeout=6)
 
         self._close_all()
+        close_rate_limit()
 
     def _close_all(self) -> None:
         resources: tuple[object, ...] = (
@@ -406,8 +408,10 @@ def create_application(
                     log.error("startup cleanup failed", exc_info=True)
         if lock_file is not None:
             lock_file.close()
+        close_rate_limit()
 
     try:
+        configure_rate_limit_from_config(runtime_cfg)
         primary, lock_file = _acquire_primary_lock(paths.primary_lock)
         db = Database(path=paths.database, backup_dir=paths.backups)
         panels, whitelist = _build_panels(
