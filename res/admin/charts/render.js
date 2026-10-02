@@ -55,7 +55,7 @@ function seriesPoints(rows, scope, spec) {
 }
 
 function pointRadiusFor(count) {
-  return count > (window.matchMedia('(max-width: 600px)').matches ? 16 : 24) ? 0 : 2;
+  return count > (window.matchMedia('(max-width: 600px)').matches ? 16 : 24) ? 0 : 1.5;
 }
 
 function windowedYs(rows, values, now, windowS) {
@@ -154,7 +154,7 @@ function buildDatasets(chart, rows, scope, mode, colors, heldMax, live) {
       tension: 0.25,
       spanGaps: false,
       pointRadius: radius,
-      pointHoverRadius: 3,
+      pointHoverRadius: 2.25,
       borderWidth: 1.5,
     };
   });
