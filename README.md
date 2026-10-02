@@ -30,7 +30,7 @@ Database-backed config, designed to run on a single small VPS.
 ## Limitations
 
 - Single VPS, Linux only. `Subscription` refuses to import on anything else.
-- One gunicorn process. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`data/.primary.lock`) elects one primary; it is not a multi-node design.
+- One gunicorn process. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`/run/lock/.primary.lock`) elects one primary; it is not a multi-node design.
 - Local Redis is required. The app pings it at startup and will not boot if it is down. A later outage fails rate-limited routes closed with 429.
 - Not highly available. Panel, database, and bots all live on the same box. A dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`). 2.x needs the one-time reconcile below. No other panel software.

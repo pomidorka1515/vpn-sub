@@ -683,8 +683,8 @@ Response (success):
       "udp": 18   // int, number of active UDP connections  
     },  
     "app_memory": {  
-      "ram": 524288000.0, // float, application RAM usage in bytes (500 MB)  
-      "swap": 0.0         // float, application swap usage in bytes  
+      "ram": 524288000.0, // float, RSS of this process and its children, in bytes (500 MB)  
+      "swap": 0.0         // float, swapped-out memory of this process and its children, in bytes  
     },  
     "app_uptime": 432000.0,  // float, application uptime in seconds (~5 days)  
     "app_thread_amount": 12, // int, total number of application threads  

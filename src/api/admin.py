@@ -555,6 +555,10 @@ class Api(BaseApi):
     @requires_admin_auth
     def health(self) -> ResponseType:
         status = SysUtil.health()
+        memory = {
+            "ram": round(status.memory.ram / 1024 / 1024, 2),
+            "swap": round(status.memory.swap / 1024 / 1024, 2),
+        }
         try:
             with self.sub.res.db.connection() as conn:
                 conn.execute("SELECT 1")
@@ -562,7 +566,7 @@ class Api(BaseApi):
             return err("Database unavailable", 503, obj={
                 "db": False,
                 "uptime": status.uptime,
-                "memory": {"ram": status.memory.ram, "swap": status.memory.swap},
+                "memory": memory,
                 "threads": status.threads,
             })
         snapshot_failure = self.bw.get_daily_snapshot_failure()
@@ -570,7 +574,7 @@ class Api(BaseApi):
         return ok(obj={
             "db": True,
             "uptime": status.uptime,
-            "memory": {"ram": status.memory.ram, "swap": status.memory.swap},
+            "memory": memory,
             "threads": status.threads,
             "degraded": snapshot_failure is not None or any(rollback_failures.values()),
             "daily_snapshot_failure": snapshot_failure,

@@ -10,6 +10,7 @@ import re
 import io
 import qrcode
 import secrets
+import ipaddress
 
 from pathlib import Path
 from flask import Response, jsonify
@@ -344,36 +345,51 @@ class SysUtil:
         )
     
     @staticmethod
-    def _get_ip_family(family: int) -> tuple[str, ...] | None:
+    def _ip_is_reportable(ip: str, family: int) -> bool:
         """
-        Resolves the local hostname to a list of unique IP addresses
-        for the given address family, excluding wildcard/unspecified addresses.
+        Keep globally reachable addresses. Loopback, link-local, and
+        unspecified addresses are not a public IP; a hosts-file mapping of
+        the hostname to 127.0.0.1 must not win over the real interface.
         """
         try:
-            hostname = socket.gethostname()
-            addr_info = socket.getaddrinfo(hostname, None, family=family)
-        except (socket.gaierror, OSError):
-            return None
+            addr = ipaddress.ip_address(ip.split("%", 1)[0])
+        except ValueError:
+            return False
+        if family == socket.AF_INET and not isinstance(addr, ipaddress.IPv4Address):
+            return False
+        if family == socket.AF_INET6 and not isinstance(addr, ipaddress.IPv6Address):
+            return False
+        return not (
+            addr.is_loopback
+            or addr.is_link_local
+            or addr.is_unspecified
+            or addr.is_multicast
+        )
 
-        unique_ips: set[str] = set()
-        for item in addr_info:
-            # item[4] is the sockaddr tuple, first element is always the IP string.
-            ip = item[4][0]
-            
-            if not isinstance(ip, str):
-                continue
+    @classmethod
+    def _interface_ips(cls, family: int) -> tuple[str, ...]:
+        found: list[str] = []
+        seen: set[str] = set()
+        for addrs in psutil.net_if_addrs().values():
+            for addr in addrs:
+                if addr.family != family or not isinstance(addr.address, str):
+                    continue
+                ip = addr.address.split("%", 1)[0]
+                if ip in seen or not cls._ip_is_reportable(ip, family):
+                    continue
+                seen.add(ip)
+                found.append(ip)
+        return tuple(found)
 
-            if ip not in ("0.0.0.0", "::"):
-                unique_ips.add(ip)
-
-        return tuple(unique_ips)
-    
-    @classmethod # get ip family needs to be called
+    @classmethod
     def ipaddr(cls) -> IPList:
-        ipv4 = cls._get_ip_family(socket.AF_INET)
-        ipv6 = cls._get_ip_family(socket.AF_INET6)
-        
-        return IPList(ipv4=ipv4, ipv6=ipv6)
+        """Assigned interface addresses, excluding loopback and link-local."""
+        ipv4 = cls._interface_ips(socket.AF_INET)
+        ipv6 = cls._interface_ips(socket.AF_INET6)
+        return IPList(
+            ipv4=ipv4 or None,
+            ipv6=ipv6 or None,
+        )
     
     @staticmethod
     def connections() -> ConnCount:
@@ -399,6 +415,11 @@ class SysUtil:
 
     @staticmethod
     def app_memory() -> AppMemory:
+        """RSS and swap of this process and its children, in bytes.
+
+        Callers format the values with `fmt_bytes`. Health uses the same
+        object and labels the unit itself.
+        """
         current_proc = psutil.Process()
         children = current_proc.children(recursive=True)
     
@@ -407,15 +428,15 @@ class SysUtil:
     
         for proc in [current_proc] + children:
             try:
-                mem = proc.memory_info()
+                mem = proc.memory_full_info()
                 total_rss += mem.rss
-                total_swap += getattr(mem, 'swap', 0)
-            except psutil.NoSuchProcess:
+                total_swap += mem.swap
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     
         return AppMemory(
-            ram=round(total_rss / 1024 / 1024, 2),
-            swap=round(total_swap / 1024 / 1024, 2)
+            ram=float(total_rss),
+            swap=float(total_swap),
         )
     
     @staticmethod
