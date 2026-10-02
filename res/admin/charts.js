@@ -2,7 +2,7 @@ import { chartsFor } from './charts/spec.js';
 import { destroyCharts, renderGroup, updateGroup } from './charts/render.js';
 
 const LIVE_KEEP = 1800;
-const LIVE_WINDOW_S = 180;
+const LIVE_WINDOW_S = 90;
 
 const state = {
   mode: 'snapshot',

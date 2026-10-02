@@ -1,6 +1,7 @@
-// Floor Y ranges so a quiet series does not fill the card. Below the ceiling
-// the held max only grows. Live mode slides inside that ceiling instead of
-// pinning a spike to the top of the plot.
+// Floor Y ranges so a quiet series still has room, but fills more of the card.
+// A sample past the floor raises Y; the time axis does not move. Percent stays
+// 0..100. Below the ceiling the held max only grows. Live mode slides inside
+// that ceiling instead of pinning a spike to the top of the plot.
 
 const BYTE = 1024;
 const MINUTE = 60;
@@ -10,11 +11,11 @@ const YEAR = 365 * DAY;
 
 export function defaultMax(unit) {
   if (unit === 'percent') return 100;
-  if (unit === 'count') return 200;
-  if (unit === 'float') return 8;
-  if (unit === 'seconds') return 7 * DAY;
-  if (unit === 'bytes') return 64 * BYTE * BYTE * BYTE;
-  if (unit === 'bytes_per_s') return 32 * BYTE * BYTE;
+  if (unit === 'count') return 100;
+  if (unit === 'float') return 4;
+  if (unit === 'seconds') return DAY;
+  if (unit === 'bytes') return 16 * BYTE * BYTE * BYTE;
+  if (unit === 'bytes_per_s') return 8 * BYTE * BYTE;
   return 100;
 }
 
