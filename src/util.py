@@ -19,6 +19,7 @@ from custom_types import (
     CPUInfo, LoadAverage, NetTrafficStats, SystemMemory,
     RamInfo, SwapInfo, IPList, ConnCount, AppMemory,
     GCStats, GCGenStats, ThreadInfo, FullSystemInfo, HealthStatus,
+    PollingSystemInfo,
 
     JsonifyValue
 )
@@ -226,33 +227,54 @@ class SysUtil:
         separate from the string/formatting utilities in this module.
     Not meant to be instantiated.
     """
+    _cpu_lock = threading.Lock()
+    _cpu_prev: tuple[int, int] | None = None
+
     def __init__(self) -> None:
         raise NotImplementedError("SysUtil is a namespace, not an instance")
     
+    @staticmethod
+    def _cpu_sample() -> tuple[int, int]:
+        """Total and idle jiffies from the aggregate `/proc/stat` line."""
+        with open('/proc/stat') as f:
+            cpu_line = f.readline()
+        # user, nice, system, idle, iowait, irq, softirq, steal
+        parts = cpu_line.split()
+        return sum(map(int, parts[1:])), int(parts[4])
+
+    @staticmethod
+    def _cpu_percent(previous: tuple[int, int], current: tuple[int, int]) -> float:
+        total = current[0] - previous[0]
+        idle = current[1] - previous[1]
+        if total <= 0:
+            return 0.0
+        return round((total - idle) / total * 100, 1)
+
     @staticmethod
     def cpu(sleep: int | float = 0.3) -> float:
         """CPU % over interval. Needs two reads
         
         Args:
             sleep: amount of time to wait between calls, defaults to 0.3"""
-        with open('/proc/stat') as f:
-            cpu_line = f.readline()
-        # user, nice, system, idle, iowait, irq, softirq, steal
-        cpu1 = sum(map(int, cpu_line.split()[1:]))
-        idle1 = int(cpu_line.split()[4])
-        
+        previous = SysUtil._cpu_sample()
         time.sleep(sleep)
-        
-        with open('/proc/stat') as f:
-            cpu_line = f.readline()
-        cpu2 = sum(map(int, cpu_line.split()[1:]))
-        idle2 = int(cpu_line.split()[4])
-        
-        total = cpu2 - cpu1
-        idle = idle2 - idle1
-        if total == 0:
+        return SysUtil._cpu_percent(previous, SysUtil._cpu_sample())
+
+    @staticmethod
+    def cpu_since_last() -> float:
+        """CPU % since the previous call. Does not sleep.
+
+        The first call has no baseline and returns 0.0 after storing one.
+        Later calls use the jiffies elapsed since that baseline, which is
+        the interval the poller actually waited.
+        """
+        current = SysUtil._cpu_sample()
+        with SysUtil._cpu_lock:
+            previous = SysUtil._cpu_prev
+            SysUtil._cpu_prev = current
+        if previous is None:
             return 0.0
-        return round((total - idle) / total * 100, 1)
+        return SysUtil._cpu_percent(previous, current)
 
     @staticmethod
     def cpu_info() -> CPUInfo:
@@ -533,4 +555,21 @@ class SysUtil:
             app_thread_amount=cls.app_thread_amount(),
             app_threads=cls.app_threads(),
             app_gc_stats=cls.app_gc_stats()
+        )
+
+    @classmethod
+    def polling_info(cls) -> PollingSystemInfo:
+        """Dynamic host fields only. CPU is since the last sample, no sleep."""
+        return PollingSystemInfo(
+            cpu=cls.cpu_since_last(),
+            process_count=cls.process_count(),
+            uptime=cls.uptime(),
+            loadavg=cls.loadavg(),
+            network=cls.network(),
+            memory=cls.memory(),
+            connections=cls.connections(),
+            app_memory=cls.app_memory(),
+            app_uptime=cls.app_uptime(),
+            app_thread_amount=cls.app_thread_amount(),
+            app_threads=cls.app_threads(),
         )

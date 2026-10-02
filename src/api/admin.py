@@ -4,7 +4,7 @@ from .decorators.auth import ADMIN_UI_COOKIE, ADMIN_UI_SESSION_LEN, new_admin_ui
 from .decorators.rate_limit import rate_limit
 
 from flask import Flask, Response, g, make_response, redirect, render_template, request
-from custom_types import JsonifyValue
+from custom_types import JsonifyValue, PollingPanelInfo
 from util import ok, err, parse_bool, SysUtil, compare
 from dataclasses import asdict
 from config import ConfigLike, LinesConfigLike
@@ -43,6 +43,7 @@ class Api(BaseApi):
         Route('POST', '/api/state/snapshots', 'snapshots'),
         Route('GET', '/api/state/all', 'full_info'),
         Route('GET', '/api/state/system', 'system_status'),
+        Route('GET', '/api/state/polling', 'polling_status'),
         
         Route('GET', '/api/logs/audit', 'audit'),
 
@@ -296,6 +297,39 @@ class Api(BaseApi):
     @requires_admin_auth
     def system_status(self) -> ResponseType:
         return ok(obj=asdict(SysUtil.full_info()))
+
+    @requires_admin_auth
+    def polling_status(self) -> ResponseType:
+        """Limited dynamic host and panel state for frequent GET polling.
+
+        Not a stream. Unknown panel status is `null` so one down panel
+        does not fail the poll. CPU does not sleep; it is since the last
+        sample.
+        """
+        panels_data: dict[str, dict[str, JsonifyValue] | None] = {}
+        for panel in self.sub.panels:
+            res = self.sub.panel_svc.getstatus(panel)
+            if res is None:
+                panels_data[panel.name] = None
+                continue
+            obj = res.obj
+            panels_data[panel.name] = asdict(PollingPanelInfo(
+                app_stats=obj.appStats,
+                cpu=obj.cpu,
+                disk=obj.disk,
+                loads=obj.loads,
+                mem=obj.mem,
+                netIO=obj.netIO,
+                netTraffic=obj.netTraffic,
+                swap=obj.swap,
+                tcpCount=obj.tcpCount,
+                udpCount=obj.udpCount,
+                uptime=obj.uptime,
+            ))
+        return ok(obj={
+            "host": asdict(SysUtil.polling_info()),
+            "panels": panels_data,
+        })
     
     @requires_admin_auth
     def full_info(self) -> ResponseType:

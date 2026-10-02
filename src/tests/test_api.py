@@ -258,6 +258,109 @@ def test_admin_token_api_root_omits_empty_api_uri(database: Database, flask_app:
     assert response.get_json()["obj"]["api_root"] == "/sub"
 
 
+def test_polling_status_returns_limited_dynamic_state(
+    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from custom_types import (
+        AppMemory, ConnCount, LoadAverage, NetTrafficStats,
+        PollingSystemInfo, RamInfo, SwapInfo, SystemMemory,
+    )
+    from helpers import FakePanel
+
+    host = PollingSystemInfo(
+        cpu=1.5,
+        process_count=4,
+        uptime=1000.5,
+        loadavg=LoadAverage(load_1m=0.1, load_5m=0.2, load_15m=0.3),
+        network=NetTrafficStats(sent=1, recv=2),
+        memory=SystemMemory(
+            ram=RamInfo(total=3, available=2, used=1),
+            swap=SwapInfo(total=0, free=0, used=0),
+        ),
+        connections=ConnCount(tcp=5, udp=6),
+        app_memory=AppMemory(ram=7, swap=0),
+        app_uptime=200.25,
+        app_thread_amount=1,
+        app_threads=(),
+    )
+    monkeypatch.setattr("api.admin.SysUtil.polling_info", lambda: host)
+
+    panel = FakePanel(
+        name="edge",
+        status_payload={
+            "success": True,
+            "msg": "",
+            "obj": {
+                "cpu": 12.5,
+                "cpuCores": 2,
+                "logicalPro": 4,
+                "cpuSpeedMhz": 2400,
+                "mem": {"current": 10, "total": 20},
+                "swap": {"current": 1, "total": 2},
+                "disk": {"current": 3, "total": 4},
+                "xray": {"state": "running", "errorMsg": "", "version": "1"},
+                "uptime": 99,
+                "loads": [0.1, 0.2, 0.3],
+                "tcpCount": 7,
+                "udpCount": 8,
+                "netIO": {"up": 1, "down": 2},
+                "netTraffic": {"sent": 9, "recv": 10},
+                "publicIP": {"ipv4": "1.1.1.1", "ipv6": "::1"},
+                "appStats": {"threads": 2, "mem": 3, "uptime": 4},
+            },
+        },
+    )
+    down = FakePanel(name="down", status_error=RuntimeError("down"))
+    subscription = make_subscription(
+        database, app=flask_app, lang_cfg=_web_lang_cfg(), panels=[panel, down],
+    )
+    Api(
+        app=flask_app,
+        cfg=cast(ConfigLike, subscription_config(api_uri="api", api_token="secret")),
+        audit_cfg=cast(LinesConfigLike, _Audit()),
+        sub=subscription,
+        bw=make_watch(database, subscription),
+    )
+    client = flask_app.test_client()
+    denied = client.get("/sub/api/api/state/polling")
+    assert denied.status_code == 401
+
+    response = client.get("/sub/api/api/state/polling", headers={"Authorization": "secret"})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    obj = payload["obj"]
+    assert set(obj) == {"host", "panels"}
+    assert set(obj["host"]) == {
+        "cpu", "connections", "network", "memory", "loadavg",
+        "app_memory", "app_threads", "app_thread_amount", "process_count",
+        "uptime", "app_uptime",
+    }
+    assert obj["host"]["cpu"] == 1.5
+    assert obj["host"]["network"] == {"sent": 1, "recv": 2}
+    assert obj["host"]["connections"] == {"tcp": 5, "udp": 6}
+    assert obj["host"]["uptime"] == 1000.5
+    assert obj["host"]["app_uptime"] == 200.25
+    assert "cpu_info" not in obj["host"]
+    assert "ip" not in obj["host"]
+    assert set(obj["panels"]) == {"edge", "down"}
+    assert obj["panels"]["down"] is None
+    edge = obj["panels"]["edge"]
+    assert set(edge) == {
+        "app_stats", "cpu", "disk", "loads", "mem",
+        "netIO", "netTraffic", "swap", "tcpCount", "udpCount", "uptime",
+    }
+    assert edge["cpu"] == 12.5
+    assert edge["netIO"] == {"up": 1, "down": 2}
+    assert edge["netTraffic"] == {"sent": 9, "recv": 10}
+    assert edge["tcpCount"] == 7
+    assert edge["udpCount"] == 8
+    assert edge["uptime"] == 99
+    assert edge["app_stats"] == {"threads": 2, "mem": 3, "uptime": 4}
+    assert "xray" not in edge
+    assert "publicIP" not in edge
+
+
 def test_health_reports_db_and_process_status(database: Database, flask_app: Flask) -> None:
     _admin_api(database, flask_app)
     client = flask_app.test_client()

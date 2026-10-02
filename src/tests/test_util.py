@@ -53,6 +53,20 @@ def test_ipaddr_returns_none_when_only_loopback(
     assert ips.ipv6 is None
 
 
+def test_cpu_since_last_does_not_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    samples = iter(((100, 80), (200, 150), (300, 200)))
+    monkeypatch.setattr(SysUtil, "_cpu_sample", staticmethod(lambda: next(samples)))
+    monkeypatch.setattr(SysUtil, "_cpu_prev", None)
+
+    def fail_sleep(_seconds: float) -> None:
+        raise AssertionError("polling cpu sample must not sleep")
+
+    monkeypatch.setattr("util.time.sleep", fail_sleep)
+    assert SysUtil.cpu_since_last() == 0.0
+    assert SysUtil.cpu_since_last() == 30.0
+    assert SysUtil.cpu_since_last() == 50.0
+
+
 def test_app_memory_returns_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Mem:
         rss = 20 * 1024 * 1024

@@ -34,7 +34,8 @@ __all__ = [
 
     'CPUInfo', 'LoadAverage', 'RamInfo', 'SwapInfo', 'SystemMemory',
     'IPList', 'ConnCount', 'AppMemory', 'GCGenStats', 'GCStats',
-    'ThreadInfo', 'FullSystemInfo',
+    'ThreadInfo', 'FullSystemInfo', 'PollingSystemInfo',
+    'PollingPanelInfo',
     'BandwidthSnapshot', 'StateSnapshot',
     'BandwidthInfo', 'BandwidthUpdate',
 
@@ -541,6 +542,46 @@ class FullSystemInfo:
     app_thread_amount: int
     app_threads: tuple[ThreadInfo, ...]
     app_gc_stats: GCStats
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class PollingSystemInfo:
+    """Dynamic host fields for frequent polling.
+
+    Static identity (`cpu_info`, `ip`, GC) stays on `full_info`.
+    `uptime` and `app_uptime` are seconds and change every poll.
+    """
+    cpu: float
+    process_count: int
+    uptime: float
+    loadavg: LoadAverage
+    network: NetTrafficStats
+    memory: SystemMemory
+    connections: ConnCount
+    app_memory: AppMemory
+    app_uptime: float
+    app_thread_amount: int
+    app_threads: tuple[ThreadInfo, ...]
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class PollingPanelInfo:
+    """Dynamic panel fields for frequent polling.
+
+    Static identity (`cpuCores`, `xray`, `publicIP`) stays on `getstatus`.
+    `cpu` is the panel host percentage, not this process. `uptime` is the
+    panel host seconds; `app_stats.uptime` is the panel app seconds.
+    `netIO` is the instantaneous up/down rate; `netTraffic` is totals.
+    """
+    app_stats: AppStats
+    cpu: int | float
+    disk: DiskStats
+    loads: list[float]
+    mem: MemoryStats
+    netIO: NetIOStats
+    netTraffic: NetTrafficStats
+    swap: SwapStats
+    tcpCount: int
+    udpCount: int
+    uptime: int
 
 ### Snapshots ###
 @dataclass(slots=True, frozen=True)

@@ -814,6 +814,71 @@ Response (success):
   
 ---  
   
+### GET /api/state/polling  
+Description: Limited dynamic host and panel state for frequent GET polling. Not a stream. Use `/api/state/system` or `/api/state/all` for static identity (`cpu_info`, `ip`, GC, `cpuCores`, `xray`, `publicIP`).  
+Authentication: header  
+Body: none  
+CPU does not sleep. Host `cpu` is the percentage since the previous sample on this process; the first call has no baseline and returns `0.0`. Panel `cpu` is that panel host's percentage, not this process.  
+Host `uptime` / `app_uptime` and panel `uptime` / `app_stats.uptime` are included because they change every poll. Host network is bytes since boot (`sent` out, `recv` in). Panel `netIO` is the instantaneous rate (bytes/s); panel `netTraffic` is totals (`sent` out, `recv` in).  
+A panel that does not answer is `null`. One down panel does not fail the poll.  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{  
+    "success": true,  
+    "msg": null,  
+    "obj": {  
+        "host": {  
+            "cpu": 1.5,              // float, % since the previous sample (0.0 on the first call)  
+            "process_count": 4,      // int  
+            "uptime": 1000.5,        // float, seconds since boot  
+            "loadavg": {  
+                "load_1m": 0.1,  
+                "load_5m": 0.2,  
+                "load_15m": 0.3  
+            },  
+            "network": {"sent": 1, "recv": 2}, // int, bytes since boot (sent = out, recv = in)  
+            "memory": {  
+                "ram": {"total": 3, "available": 2, "used": 1}, // int, bytes  
+                "swap": {"total": 0, "free": 0, "used": 0}  
+            },  
+            "connections": {"tcp": 5, "udp": 6},  
+            "app_memory": {"ram": 7.0, "swap": 0.0}, // float, bytes  
+            "app_uptime": 200.25,    // float, seconds since this process started  
+            "app_thread_amount": 1,  
+            "app_threads": [  
+                {  
+                    "tid": 1024,  
+                    "name": "MainThread",  
+                    "state": "sleeping",    // str | null  
+                    "cpu": 12.4,            // float | null, user + system CPU seconds  
+                    "ctx_switches": 4021,   // int | null  
+                    "stack": 65536          // int | null, stack reservation in bytes  
+                }  
+            ]  
+        },  
+        "panels": {  
+            "edge": {  
+                "app_stats": {"threads": 2, "mem": 3, "uptime": 4}, // uptime: panel app seconds  
+                "cpu": 12.5,                 // int | float, panel host %  
+                "disk": {"current": 3, "total": 4},  
+                "loads": [0.1, 0.2, 0.3],    // array[float], 1m, 5m, 15m  
+                "mem": {"current": 10, "total": 20},  
+                "netIO": {"up": 1, "down": 2},       // int, bytes/s  
+                "netTraffic": {"sent": 9, "recv": 10}, // int, total bytes (sent = out, recv = in)  
+                "swap": {"current": 1, "total": 2},  
+                "tcpCount": 7,  
+                "udpCount": 8,  
+                "uptime": 99                 // int, panel host seconds  
+            },  
+            "down": null // panel did not answer  
+        }  
+    }  
+}  
+```  
+  
+---  
+  
 ### POST /api/leaderboard  
 Description: Get leaderboard data for a specified bandwidth type.  
 Authorization: header  
