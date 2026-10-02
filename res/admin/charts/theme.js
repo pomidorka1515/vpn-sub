@@ -68,9 +68,11 @@ function dashedGrid(colors) {
   return { color: colors.grid, borderDash: [4, 4] };
 }
 
-export function baseOptions(colors, { live, beginAtZero, dual, unit, formatTick, formatTooltip, formatLabel }) {
+export function baseOptions(colors, { live, yMax, dual, unit, formatTick, formatTooltip, formatLabel }) {
   const y = {
-    beginAtZero: beginAtZero !== false,
+    min: 0,
+    max: yMax,
+    grace: 0,
     grid: dashedGrid(colors),
     border: axisBorder(colors),
     ticks: {

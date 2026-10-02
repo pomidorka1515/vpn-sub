@@ -73,7 +73,6 @@ const HOST_UPTIME = [
     id: 'host_uptime',
     titleKey: 'uptime_app',
     unit: 'seconds',
-    beginAtZero: false,
     series: [
       { key: 'sys', labelKey: 'sys_uptime', path: ['uptime'] },
       { key: 'app', labelKey: 'app_uptime', path: ['app_uptime'] },
@@ -183,7 +182,6 @@ const PANEL_UPTIME = [
     id: 'panel_uptime',
     titleKey: 'uptime_app',
     unit: 'seconds',
-    beginAtZero: false,
     series: [
       { key: 'sys', labelKey: 'sys_uptime', path: ['uptime'] },
       { key: 'app', labelKey: 'app_uptime', path: ['appStats', 'uptime'], altPath: ['app_stats', 'uptime'] },

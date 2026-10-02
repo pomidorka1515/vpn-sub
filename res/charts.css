@@ -1,4 +1,4 @@
-.charts { --charts-plot: 160px; }
+.charts { --charts-plot: 240px; }
 .charts-controls {
   display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;
 }
@@ -86,6 +86,6 @@
   .charts-grid { grid-template-columns: 1fr; }
   .charts-card { padding: 12px 10px 8px; }
   .charts-card-value { font-size: 18px; }
-  .charts-plot { height: 140px; }
+  .charts-plot { height: 200px; }
   .charts-status { overflow-wrap: anywhere; }
 }

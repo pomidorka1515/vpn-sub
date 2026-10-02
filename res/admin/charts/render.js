@@ -1,4 +1,5 @@
 import { readSeries } from './series.js';
+import { axisMax } from './scale.js';
 import { chartColors, seriesColor, seriesFill, baseOptions } from './theme.js';
 
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -91,14 +92,15 @@ function readoutText(chart, datasets) {
   return { text: formatValue(value, ds.unit || chart.unit), cls };
 }
 
-function buildDatasets(chart, rows, scope, mode, colors) {
+function buildDatasets(chart, rows, scope, mode, colors, heldMax) {
   const raw = chart.series.map(spec => seriesPoints(rows, scope, spec));
   const numeric = raw.flatMap((values, index) => (
     chart.series[index].axis === 'y1' ? [] : values.filter(v => v != null)
   ));
   const max = numeric.length ? Math.max(...numeric) : 0;
+  const yMax = axisMax(chart.unit, max, heldMax);
   const bytes = chart.unit === 'bytes' || chart.unit === 'bytes_per_s';
-  const scale = bytes ? axisBytes(max) : null;
+  const scale = bytes ? axisBytes(yMax) : null;
   return chart.series.map((spec, index) => {
     const color = seriesColor(index, colors);
     const values = raw[index];
@@ -107,6 +109,7 @@ function buildDatasets(chart, rows, scope, mode, colors) {
       label: t(spec.labelKey),
       labelKey: spec.labelKey,
       unit: spec.unit || chart.unit,
+      yMax,
       scale: spec.axis === 'y1' ? null : scale,
       data: rows.map((row, i) => ({ x: row.ts, y: values[i] })),
       borderColor: color,
@@ -126,6 +129,7 @@ function syncDataset(target, ds) {
   target.data = ds.data;
   target.label = ds.label;
   target.scale = ds.scale;
+  target.yMax = ds.yMax;
   target.unit = ds.unit;
   target.pointRadius = ds.pointRadius;
 }
@@ -138,7 +142,7 @@ function makeChart(canvas, chart, datasets, mode) {
   };
   const options = baseOptions(colors, {
     live: mode === 'live',
-    beginAtZero: chart.beginAtZero,
+    yMax: datasets.find(ds => ds.yAxisID !== 'y1')?.yMax,
     dual: chart.series.some(s => s.axis === 'y1'),
     unit: chart.unit,
     formatTick,
@@ -155,6 +159,20 @@ function makeChart(canvas, chart, datasets, mode) {
     data: { datasets },
     options,
   });
+}
+
+function scaleKey(scope, mode, id) {
+  return scope + '\0' + mode + '\0' + id;
+}
+
+function rememberMax(scales, scope, mode, id, yMax) {
+  if (!scales || !Number.isFinite(yMax)) return;
+  scales.set(scaleKey(scope, mode, id), yMax);
+}
+
+function rememberedMax(scales, scope, mode, id) {
+  const held = scales?.get(scaleKey(scope, mode, id));
+  return Number.isFinite(held) ? held : 0;
 }
 
 function cardFrame(chart) {
@@ -177,13 +195,14 @@ export function destroyCharts(map) {
   map.clear();
 }
 
-export function renderGroup(mount, charts, rows, scope, mode, map) {
+export function renderGroup(mount, charts, rows, scope, mode, map, scales) {
   destroyCharts(map);
   mount.replaceChildren();
   const colors = chartColors();
   for (const spec of charts) {
     const { card, value, plot } = cardFrame(spec);
-    const datasets = buildDatasets(spec, rows, scope, mode, colors);
+    const datasets = buildDatasets(spec, rows, scope, mode, colors, rememberedMax(scales, scope, mode, spec.id));
+    rememberMax(scales, scope, mode, spec.id, datasets.find(ds => ds.yAxisID !== 'y1')?.yMax);
     applyReadout(value, spec, datasets);
     const canvas = document.createElement('canvas');
     const empty = document.createElement('div');
@@ -198,13 +217,21 @@ export function renderGroup(mount, charts, rows, scope, mode, map) {
   }
 }
 
-export function updateGroup(charts, rows, scope, mode, map) {
+export function updateGroup(charts, rows, scope, mode, map, scales) {
   for (const spec of charts) {
     const instance = map.get(spec.id);
     if (!instance) return false;
-    const datasets = buildDatasets(spec, rows, scope, mode, chartColors());
+    const datasets = buildDatasets(spec, rows, scope, mode, chartColors(), rememberedMax(scales, scope, mode, spec.id));
+    const yMax = datasets.find(ds => ds.yAxisID !== 'y1')?.yMax;
+    rememberMax(scales, scope, mode, spec.id, yMax);
     if (datasets.length !== instance.data.datasets.length) return false;
     const scale = datasets.find(ds => ds.yAxisID !== 'y1' && ds.scale)?.scale || null;
+    const y = instance.options.scales?.y;
+    if (y) {
+      y.min = 0;
+      y.max = yMax;
+      y.grace = 0;
+    }
     const tick = instance.options.scales?.y?.ticks;
     if (tick) tick.callback = value => formatValue(value, spec.unit, scale);
     const tooltip = instance.options.plugins?.tooltip?.callbacks;

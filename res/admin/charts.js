@@ -16,6 +16,7 @@ const state = {
   inflight: false,
   errorStreak: 0,
   charts: new Map(),
+  scales: new Map(),
   built: false,
   cutoffTimer: null,
   gen: 0,
@@ -192,10 +193,10 @@ function showCharts() {
   const canUpdate = state.mode === 'live' && state.built && state.charts.size === specs.length
     && specs.every(spec => state.charts.has(spec.id));
   if (canUpdate) {
-    const ok = updateGroup(specs, state.rows, state.scope, state.mode, state.charts);
+    const ok = updateGroup(specs, state.rows, state.scope, state.mode, state.charts, state.scales);
     if (ok) return;
   }
-  renderGroup(mount, specs, state.rows, state.scope, state.mode, state.charts);
+  renderGroup(mount, specs, state.rows, state.scope, state.mode, state.charts, state.scales);
   state.built = true;
 }
 
