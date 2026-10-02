@@ -10,6 +10,7 @@ from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
 
 from loggers import GunicornLogger
+from loggers import _color_status
 
 
 class _Cfg:
@@ -70,3 +71,36 @@ def test_access_log_skips_successful_state_polling(monkeypatch: pytest.MonkeyPat
     )
     assert len(logged) == 1
     assert "200" in logged[0]
+
+
+def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> None:
+    logged: list[str] = []
+    logger = GunicornLogger.__new__(GunicornLogger)
+    logger.cfg = cast(Any, _Cfg())
+    logger.access_log = cast(Any, SimpleNamespace(info=logged.append))
+    atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 4}
+    monkeypatch.setattr(logger, "atoms", lambda *args: atoms)
+    req = cast(Request, SimpleNamespace())
+
+    expected = {
+        "100": "\033[90m",
+        "204": "\033[32m",
+        "302": "\033[36m",
+        "404": "\033[33m",
+        "503": "\033[31m",
+    }
+    for status, color in expected.items():
+        logged.clear()
+        atoms["s"] = status
+        logger.access(
+            cast(Response, SimpleNamespace(status=status, sent=4)),
+            req,
+            _environ("/health"),
+            timedelta(milliseconds=1),
+        )
+        assert logged == [
+            f'203.0.113.10 > "GET /health HTTP/1.1" {color}{status}\033[0m 4b "dashboard"'
+        ]
+
+    assert _color_status("-") == "-"
+    assert _color_status("999") == "999"

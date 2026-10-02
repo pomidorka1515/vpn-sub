@@ -203,6 +203,21 @@ def _should_skip_access_log(environ: MutableMapping[str, object], status: str) -
     return path == "/api/state/polling" or path.endswith("/api/state/polling")
 
 
+def _color_status(status: str) -> str:
+    """Color an HTTP status by class for journal access logs."""
+    colors = {
+        "1": "\033[90m",  # grey
+        "2": "\033[32m",  # green
+        "3": "\033[36m",  # cyan
+        "4": "\033[33m",  # yellow
+        "5": "\033[31m",  # red
+    }
+    color = colors.get(status[:1])
+    if color is None:
+        return status
+    return f"{color}{status}{Logger.RESET}"
+
+
 class GunicornLogger(GunicornBaseLogger):
     """Compact, privacy-preserving access logs for the systemd journal."""
 
@@ -241,5 +256,5 @@ class GunicornLogger(GunicornBaseLogger):
         sent = atoms.get("B")
         size = f"{sent}b" if sent is not None else "-"
         user_agent = str(environ.get("HTTP_USER_AGENT") or "-").replace('"', "\\\"")
-        message = f'{_client_address(environ)} > "{method} {target} {protocol}" {status} {size} "{user_agent}"'
+        message = f'{_client_address(environ)} > "{method} {target} {protocol}" {_color_status(status)} {size} "{user_agent}"'
         self.access_log.info(message)
