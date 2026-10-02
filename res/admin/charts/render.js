@@ -1,6 +1,6 @@
 import { readSeries } from './series.js';
-import { axisMax } from './scale.js';
-import { chartColors, seriesColor, seriesFill, baseOptions } from './theme.js';
+import { axisMax, windowedRange } from './scale.js';
+import { chartColors, seriesColor, seriesFill, baseOptions, reducedMotion } from './theme.js';
 
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
 
@@ -54,6 +54,39 @@ function seriesPoints(rows, scope, spec) {
   return rows.map(row => readSeries(sourceOf(row, scope), spec));
 }
 
+function pointRadiusFor(count) {
+  return count > (window.matchMedia('(max-width: 600px)').matches ? 16 : 24) ? 0 : 2;
+}
+
+function windowedYs(rows, values, now, windowS) {
+  const inWindow = Number.isFinite(now) && Number.isFinite(windowS);
+  const ys = [];
+  for (let i = 0; i < values.length; i++) {
+    const y = values[i];
+    if (y == null || !Number.isFinite(y)) continue;
+    if (inWindow) {
+      const x = rows[i]?.ts;
+      if (!Number.isFinite(x) || x < now - windowS || x > now) continue;
+    }
+    ys.push(y);
+  }
+  return ys;
+}
+
+function boundsOf(ys) {
+  if (!ys.length) return { min: 0, max: 0 };
+  return { min: Math.min(...ys), max: Math.max(...ys) };
+}
+
+function seriesBounds(spec, rows, raw, now, windowS) {
+  const ys = [];
+  spec.series.forEach((series, index) => {
+    if (series.axis === 'y1') return;
+    ys.push(...windowedYs(rows, raw[index], now, windowS));
+  });
+  return boundsOf(ys);
+}
+
 function labelFor(ts, mode) {
   const d = new Date(ts * 1000);
   if (mode === 'snapshot') {
@@ -92,15 +125,16 @@ function readoutText(chart, datasets) {
   return { text: formatValue(value, ds.unit || chart.unit), cls };
 }
 
-function buildDatasets(chart, rows, scope, mode, colors, heldMax) {
+function buildDatasets(chart, rows, scope, mode, colors, heldMax, live) {
   const raw = chart.series.map(spec => seriesPoints(rows, scope, spec));
-  const numeric = raw.flatMap((values, index) => (
-    chart.series[index].axis === 'y1' ? [] : values.filter(v => v != null)
-  ));
-  const max = numeric.length ? Math.max(...numeric) : 0;
-  const yMax = axisMax(chart.unit, max, heldMax);
+  const liveOn = mode === 'live' && live && Number.isFinite(live.now);
+  const bounds = seriesBounds(chart, rows, raw, liveOn ? live.now : undefined, liveOn ? live.windowS : undefined);
+  const range = liveOn
+    ? windowedRange(chart.unit, bounds.min, bounds.max, heldMax, true)
+    : { min: 0, max: axisMax(chart.unit, bounds.max, heldMax) };
   const bytes = chart.unit === 'bytes' || chart.unit === 'bytes_per_s';
-  const scale = bytes ? axisBytes(yMax) : null;
+  const scale = bytes ? axisBytes(range.max) : null;
+  const radius = pointRadiusFor(rows.length);
   return chart.series.map((spec, index) => {
     const color = seriesColor(index, colors);
     const values = raw[index];
@@ -109,7 +143,8 @@ function buildDatasets(chart, rows, scope, mode, colors, heldMax) {
       label: t(spec.labelKey),
       labelKey: spec.labelKey,
       unit: spec.unit || chart.unit,
-      yMax,
+      yMax: range.max,
+      yMin: range.min,
       scale: spec.axis === 'y1' ? null : scale,
       data: rows.map((row, i) => ({ x: row.ts, y: values[i] })),
       borderColor: color,
@@ -118,23 +153,29 @@ function buildDatasets(chart, rows, scope, mode, colors, heldMax) {
       fill: spec.axis === 'y1' ? false : 'origin',
       tension: 0.25,
       spanGaps: false,
-      pointRadius: rows.length > (window.matchMedia('(max-width: 600px)').matches ? 16 : 24) ? 0 : 2,
+      pointRadius: radius,
       pointHoverRadius: 3,
       borderWidth: 1.5,
     };
   });
 }
 
-function syncDataset(target, ds) {
-  target.data = ds.data;
-  target.label = ds.label;
-  target.scale = ds.scale;
-  target.yMax = ds.yMax;
-  target.unit = ds.unit;
-  target.pointRadius = ds.pointRadius;
+function appendPoint(target, point) {
+  const data = target.data;
+  const last = data[data.length - 1];
+  if (last && last.x === point.x) {
+    last.y = point.y;
+    return;
+  }
+  data.push({ x: point.x, y: point.y });
 }
 
-function makeChart(canvas, chart, datasets, mode) {
+function shiftTo(target, x) {
+  const data = target.data;
+  while (data.length && data[0].x < x) data.shift();
+}
+
+function makeChart(canvas, chart, datasets, mode, live) {
   const colors = chartColors();
   const scale = datasets.find(ds => ds.yAxisID !== 'y1' && ds.scale)?.scale || null;
   const formatTick = value => {
@@ -143,11 +184,14 @@ function makeChart(canvas, chart, datasets, mode) {
   const options = baseOptions(colors, {
     live: mode === 'live',
     yMax: datasets.find(ds => ds.yAxisID !== 'y1')?.yMax,
+    yMin: datasets.find(ds => ds.yAxisID !== 'y1')?.yMin,
     dual: chart.series.some(s => s.axis === 'y1'),
     unit: chart.unit,
     formatTick,
     formatTooltip: (value, tipUnit) => formatValue(value, tipUnit),
     formatLabel: value => labelFor(value, mode),
+    now: mode === 'live' ? live?.now : undefined,
+    windowS: mode === 'live' ? live?.windowS : undefined,
   });
   options.plugins.tooltip.callbacks.label = item => {
     const ds = datasets[item.datasetIndex] || {};
@@ -195,14 +239,15 @@ export function destroyCharts(map) {
   map.clear();
 }
 
-export function renderGroup(mount, charts, rows, scope, mode, map, scales) {
+export function renderGroup(mount, charts, rows, scope, mode, map, scales, live) {
   destroyCharts(map);
   mount.replaceChildren();
   const colors = chartColors();
   for (const spec of charts) {
     const { card, value, plot } = cardFrame(spec);
-    const datasets = buildDatasets(spec, rows, scope, mode, colors, rememberedMax(scales, scope, mode, spec.id));
-    rememberMax(scales, scope, mode, spec.id, datasets.find(ds => ds.yAxisID !== 'y1')?.yMax);
+    const datasets = buildDatasets(spec, rows, scope, mode, colors, rememberedMax(scales, scope, mode, spec.id), live);
+    const primary = datasets.find(ds => ds.yAxisID !== 'y1');
+    rememberMax(scales, scope, mode, spec.id, primary?.yMax);
     applyReadout(value, spec, datasets);
     const canvas = document.createElement('canvas');
     const empty = document.createElement('div');
@@ -212,50 +257,93 @@ export function renderGroup(mount, charts, rows, scope, mode, map, scales) {
     canvas.hidden = !hasData;
     empty.hidden = hasData;
     plot.append(canvas, empty);
-    map.set(spec.id, makeChart(canvas, spec, datasets, mode));
+    map.set(spec.id, makeChart(canvas, spec, datasets, mode, live));
     mount.append(card);
   }
 }
 
-export function updateGroup(charts, rows, scope, mode, map, scales) {
+export function updateGroup(charts, rows, scope, mode, map, scales, live) {
+  const liveMode = mode === 'live' && live && Number.isFinite(live.now);
   for (const spec of charts) {
     const instance = map.get(spec.id);
     if (!instance) return false;
-    const datasets = buildDatasets(spec, rows, scope, mode, chartColors(), rememberedMax(scales, scope, mode, spec.id));
-    const yMax = datasets.find(ds => ds.yAxisID !== 'y1')?.yMax;
-    rememberMax(scales, scope, mode, spec.id, yMax);
-    if (datasets.length !== instance.data.datasets.length) return false;
-    const scale = datasets.find(ds => ds.yAxisID !== 'y1' && ds.scale)?.scale || null;
+    if (spec.series.length !== instance.data.datasets.length) return false;
+    const raw = spec.series.map(series => seriesPoints(rows, scope, series));
+    const bounds = seriesBounds(spec, rows, raw, liveMode ? live.now : undefined, liveMode ? live.windowS : undefined);
+    const held = rememberedMax(scales, scope, mode, spec.id);
+    const range = liveMode
+      ? windowedRange(spec.unit, bounds.min, bounds.max, held, true)
+      : { min: 0, max: axisMax(spec.unit, bounds.max, held) };
+    rememberMax(scales, scope, mode, spec.id, range.max);
+    const bytes = spec.unit === 'bytes' || spec.unit === 'bytes_per_s';
+    const scale = bytes ? axisBytes(range.max) : null;
     const y = instance.options.scales?.y;
     if (y) {
-      y.min = 0;
-      y.max = yMax;
+      y.min = range.min;
+      y.max = range.max;
       y.grace = 0;
+    }
+    if (liveMode) {
+      const x = instance.options.scales?.x;
+      if (x) {
+        x.min = live.now - live.windowS;
+        x.max = live.now;
+      }
     }
     const tick = instance.options.scales?.y?.ticks;
     if (tick) tick.callback = value => formatValue(value, spec.unit, scale);
     const tooltip = instance.options.plugins?.tooltip?.callbacks;
     if (tooltip) {
       tooltip.label = item => {
-        const ds = datasets[item.datasetIndex] || {};
+        const ds = instance.data.datasets[item.datasetIndex] || {};
         const tipUnit = ds.unit || spec.unit;
         return ' ' + item.dataset.label + ': ' + formatValue(item.parsed.y, tipUnit, ds.scale);
       };
     }
-    datasets.forEach((ds, i) => {
+    const latest = rows[rows.length - 1];
+    const keepFrom = rows.length ? rows[0].ts : null;
+    const radius = pointRadiusFor(rows.length);
+    const built = spec.series.map((series, index) => ({
+      key: series.key,
+      label: t(series.labelKey),
+      unit: series.unit || spec.unit,
+      yMax: range.max,
+      yMin: range.min,
+      scale: series.axis === 'y1' ? null : scale,
+      pointRadius: radius,
+      point: latest ? { x: latest.ts, y: raw[index][raw[index].length - 1] } : null,
+    }));
+    built.forEach((ds, i) => {
       const target = instance.data.datasets[i];
       if (!target) return;
-      syncDataset(target, ds);
+      target.label = ds.label;
+      target.scale = ds.scale;
+      target.yMax = ds.yMax;
+      target.yMin = ds.yMin;
+      target.unit = ds.unit;
+      target.pointRadius = ds.pointRadius;
+      if (liveMode && ds.point) {
+        if (keepFrom != null) shiftTo(target, keepFrom);
+        appendPoint(target, ds.point);
+      } else {
+        target.data = rows.map((row, rowIndex) => ({ x: row.ts, y: raw[i][rowIndex] }));
+      }
     });
-    instance.update('none');
+    const duration = liveMode && !reducedMotion() && rows.length > 1 ? live.duration : 0;
+    const animation = instance.options.animation;
+    if (animation && animation.x && animation.y) {
+      animation.x.duration = duration;
+      animation.y.duration = duration;
+    }
+    instance.update(duration > 0 ? undefined : 'none');
     const plot = instance.canvas?.parentElement;
     const empty = plot?.querySelector('.charts-empty');
-    const hasData = chartHasData(datasets);
+    const hasData = chartHasData(instance.data.datasets);
     const wasHidden = instance.canvas.hidden;
     instance.canvas.hidden = !hasData;
     if (hasData && wasHidden) instance.resize();
     if (empty) empty.hidden = hasData;
-    applyReadout(mountOf(spec.id), spec, datasets);
+    applyReadout(mountOf(spec.id), spec, instance.data.datasets);
   }
   return true;
 }

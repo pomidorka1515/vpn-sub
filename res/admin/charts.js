@@ -1,7 +1,8 @@
 import { chartsFor } from './charts/spec.js';
 import { destroyCharts, renderGroup, updateGroup } from './charts/render.js';
 
-const LIVE_CAP = 60;
+const LIVE_KEEP = 1800;
+const LIVE_WINDOW_S = 180;
 
 const state = {
   mode: 'snapshot',
@@ -86,6 +87,20 @@ function delayMs() {
   const n = Number(state.delay);
   const seconds = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 2;
   return seconds * 1000;
+}
+
+function liveNow() {
+  const latest = state.rows[state.rows.length - 1];
+  return latest && Number.isFinite(latest.ts) ? latest.ts : Date.now() / 1000;
+}
+
+function liveOpts() {
+  if (state.mode !== 'live') return undefined;
+  return {
+    now: liveNow(),
+    windowS: LIVE_WINDOW_S,
+    duration: Math.min(delayMs() * 0.85, 700),
+  };
 }
 
 function scheduleLive() {
@@ -193,10 +208,10 @@ function showCharts() {
   const canUpdate = state.mode === 'live' && state.built && state.charts.size === specs.length
     && specs.every(spec => state.charts.has(spec.id));
   if (canUpdate) {
-    const ok = updateGroup(specs, state.rows, state.scope, state.mode, state.charts, state.scales);
+    const ok = updateGroup(specs, state.rows, state.scope, state.mode, state.charts, state.scales, liveOpts());
     if (ok) return;
   }
-  renderGroup(mount, specs, state.rows, state.scope, state.mode, state.charts, state.scales);
+  renderGroup(mount, specs, state.rows, state.scope, state.mode, state.charts, state.scales, liveOpts());
   state.built = true;
 }
 
@@ -283,7 +298,7 @@ async function pollLive() {
   };
   dropBaselineCpu(point);
   state.rows.push(point);
-  if (state.rows.length > LIVE_CAP) state.rows.splice(0, state.rows.length - LIVE_CAP);
+  if (state.rows.length > LIVE_KEEP) state.rows.splice(0, state.rows.length - LIVE_KEEP);
   const panels = panelNames(state.rows);
   if (!samePanels(panels)) {
     state.panels = panels;
@@ -371,6 +386,11 @@ function onDelay() {
   if (state.mode === 'live' && tabActive() && !state.chartJsFailed) scheduleLive();
 }
 
+function commitDelay() {
+  onDelay();
+  state.scales.clear();
+}
+
 function bind() {
   $('chartsMode')?.addEventListener('click', event => {
     const btn = event.target.closest('[data-mode]');
@@ -394,6 +414,7 @@ function bind() {
     onCutoff();
   });
   $('chartsDelay')?.addEventListener('input', onDelay);
+  $('chartsDelay')?.addEventListener('change', commitDelay);
   window.addEventListener('pagehide', stopTimer);
   window.addEventListener('pageshow', event => {
     if (!event.persisted || !tabActive() || state.mode !== 'live' || state.chartJsFailed) return;

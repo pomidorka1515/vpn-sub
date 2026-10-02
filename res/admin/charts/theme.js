@@ -68,9 +68,10 @@ function dashedGrid(colors) {
   return { color: colors.grid, borderDash: [4, 4] };
 }
 
-export function baseOptions(colors, { live, yMax, dual, unit, formatTick, formatTooltip, formatLabel }) {
+export function baseOptions(colors, { live, yMax, yMin, dual, unit, formatTick, formatTooltip, formatLabel, now, windowS }) {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const y = {
-    min: 0,
+    min: Number.isFinite(yMin) ? yMin : 0,
     max: yMax,
     grace: 0,
     grid: dashedGrid(colors),
@@ -101,6 +102,10 @@ export function baseOptions(colors, { live, yMax, dual, unit, formatTick, format
     },
     y,
   };
+  if (live && Number.isFinite(now) && Number.isFinite(windowS)) {
+    scales.x.min = now - windowS;
+    scales.x.max = now;
+  }
   if (dual) {
     scales.y1 = {
       position: 'right',
@@ -120,7 +125,10 @@ export function baseOptions(colors, { live, yMax, dual, unit, formatTick, format
   return {
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: live ? 0 : 250 },
+    animation: live && !reduced ? {
+      x: { duration: 0, easing: 'linear' },
+      y: { duration: 0, easing: 'easeOutQuad' },
+    } : { duration: live ? 0 : 250 },
     interaction: { mode: 'index', intersect: false },
     scales,
     plugins: {
@@ -154,4 +162,8 @@ export function baseOptions(colors, { live, yMax, dual, unit, formatTick, format
       },
     },
   };
+}
+
+export function reducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
