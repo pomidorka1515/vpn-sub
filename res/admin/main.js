@@ -14,6 +14,7 @@ import {
   bindOperations, checkTeapot,
 } from './health.js';
 import { fetchLeaderboard } from './leaderboard.js';
+import { chartsOnTab, chartsRefreshTheme, chartsStop } from './charts.js';
 
 
 
@@ -37,6 +38,7 @@ function adminPath(suffix) {
 }
 
 async function bootstrap() {
+  chartsStop();
   const tokenUrl = adminPath('/token');
   const loginUrl = adminPath('/login');
   try {
@@ -83,6 +85,7 @@ function showTab(name) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelector(`.tab[onclick*="${name}"]`)?.classList.add('active');
   document.getElementById('tab-' + name)?.classList.add('active');
+  chartsOnTab(name);
 }
 
 Object.assign(window, {
@@ -114,6 +117,11 @@ Object.assign(window, {
   fetchLeaderboard,
 });
 
+const _applyTheme = applyTheme;
+applyTheme = function () {
+  _applyTheme();
+  chartsRefreshTheme();
+};
 applyTheme();
 initLang();
 document.getElementById('bootOverlay').textContent = t('loading');

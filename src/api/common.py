@@ -24,6 +24,7 @@ _ASSET_FILES: tuple[str, ...] = (
     'dashboard.css',
     'history.css',
     'admin.css',
+    'charts.css',
     'dashboard.js',
     'history.js',
 )
@@ -32,15 +33,27 @@ _ADMIN_MODULE_RE = re.compile(r'^[a-z0-9_-]+$')
 
 
 def admin_module_names() -> tuple[str, ...]:
-    """Basenames of res/admin/*.js, used as static routes and cache-bust inputs."""
+    """Relative stems of res/admin/**/*.js, used as static routes and cache-bust inputs.
+
+    Basenames must be unique. A nested file is served at /admin/<relative>.js
+    and imported by that same relative path, so charts/spec.js stays charts/spec.js.
+    """
     folder = RES_DIR / 'admin'
     if not folder.is_dir():
         return ()
-    return tuple(sorted(
-        path.stem
-        for path in folder.glob('*.js')
-        if path.is_file() and _ADMIN_MODULE_RE.fullmatch(path.stem)
-    ))
+    names: list[str] = []
+    stems: set[str] = set()
+    for path in sorted(folder.rglob('*.js')):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(folder).with_suffix('')
+        if not all(_ADMIN_MODULE_RE.fullmatch(part) for part in relative.parts):
+            continue
+        if path.stem in stems:
+            raise ValueError(f'duplicate admin module basename: {path.stem}')
+        stems.add(path.stem)
+        names.append(relative.as_posix())
+    return tuple(names)
 
 
 @lru_cache(maxsize=1)

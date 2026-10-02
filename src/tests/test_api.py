@@ -458,6 +458,14 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert b"from './state.js?v=" in admin_js.data
     assert "immutable" in admin_js.headers["Cache-Control"]
     assert client.get("/custom/admin/not-a-module.js").status_code == 404
+    charts_js = client.get("/custom/admin/charts.js")
+    assert charts_js.status_code == 200
+    assert b"from './charts/spec.js?v=" in charts_js.data
+    assert b"from './charts/render.js?v=" in charts_js.data
+    render_js = client.get("/custom/admin/charts/render.js")
+    assert render_js.status_code == 200
+    assert b"from './series.js?v=" in render_js.data
+    assert b"from './theme.js?v=" in render_js.data
 
 
 def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) -> None:

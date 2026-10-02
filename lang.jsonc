@@ -842,6 +842,25 @@
                 "internal_user_required": "Internal user required",
                 "display_name_required": "Display name required",
                 "status": "Status"
+                ,
+
+                // charts
+                "charts": "Charts",
+                "snapshot_mode": "Snapshot",
+                "live_mode": "Live",
+                "main_system": "Main system",
+                "group_general": "General",
+                "poll_delay": "Poll delay",
+                "seconds_suffix": "s",
+                "poll_delay_aria": "Polling delay in seconds",
+                "chart_mode_aria": "Chart mode",
+                "chart_scope_aria": "Chart source",
+                "chart_group_aria": "Chart group",
+                "load_1m": "1m",
+                "load_5m": "5m",
+                "load_15m": "15m",
+                "panel_down": "Panel did not answer",
+                "chart_load_err": "Failed to load charting library"
             },
 
             "ru": {
@@ -1089,6 +1108,25 @@
                 "internal_user_required": "Укажите внутреннее имя",
                 "display_name_required": "Укажите отображаемое имя",
                 "status": "Статус"
+                ,
+
+                // charts
+                "charts": "Графики",
+                "snapshot_mode": "Снимок",
+                "live_mode": "Живой",
+                "main_system": "Система",
+                "group_general": "Общее",
+                "poll_delay": "Интервал опроса",
+                "seconds_suffix": "с",
+                "poll_delay_aria": "Интервал опроса в секундах",
+                "chart_mode_aria": "Режим графиков",
+                "chart_scope_aria": "Источник графиков",
+                "chart_group_aria": "Группа графиков",
+                "load_1m": "1 мин",
+                "load_5m": "5 мин",
+                "load_15m": "15 мин",
+                "panel_down": "Панель не ответила",
+                "chart_load_err": "Не удалось загрузить библиотеку графиков"
             }
         },
         "admin_auth": {

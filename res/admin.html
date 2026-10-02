@@ -7,6 +7,7 @@
 <title data-t="page_title">Admin Panel</title>
 <link rel="stylesheet" href="{{ prefix }}/common.css?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ prefix }}/admin.css?v={{ asset_version }}">
+<link rel="stylesheet" href="{{ prefix }}/charts.css?v={{ asset_version }}">
 </head>
 <body>
 
@@ -37,6 +38,7 @@
     <button class="tab" onclick="showTab('logs')" data-t="audit_logs">Audit Logs</button>
     <button class="tab" onclick="showTab('state')" data-t="state">State</button>
     <button class="tab" onclick="showTab('snapshots')" data-t="snapshots">Snapshots</button>
+    <button class="tab" onclick="showTab('charts')" data-t="charts">Charts</button>
     <button class="tab" onclick="showTab('health')" data-t="health">Health</button>
     <button class="tab" onclick="showTab('leaderboard')" data-t="leaderboard">Leaderboard</button>
   </div>
@@ -273,6 +275,38 @@
     </div>
   </div>
 
+  <div id="tab-charts" class="tab-content">
+    <div class="card charts">
+      <div class="charts-controls">
+        <div class="charts-switch-row">
+          <div class="charts-switch" id="chartsMode" role="group" data-t-aria="chart_mode_aria">
+            <button type="button" class="charts-switch-btn active" data-mode="snapshot" aria-pressed="true" data-t="snapshot_mode">Snapshot</button>
+            <button type="button" class="charts-switch-btn" data-mode="live" aria-pressed="false" data-t="live_mode">Live</button>
+          </div>
+          <div class="charts-field" id="chartsCutoffField">
+            <label for="chartsCutoff" data-t="cutoff_days">Cutoff (days)</label>
+            <input type="number" id="chartsCutoff" value="7" min="1" step="1" inputmode="numeric" class="dark-num-input" data-t-aria="cutoff_days" data-t-ph="cutoff_days" placeholder="Cutoff (days)">
+          </div>
+          <div class="charts-field charts-delay" id="chartsDelayField" hidden>
+            <label for="chartsDelay" data-t="poll_delay">Poll delay</label>
+            <input type="range" id="chartsDelay" min="1" max="10" step="0.1" value="2" data-t-aria="poll_delay_aria">
+            <span class="charts-readout"><span id="chartsDelayValue">2.0</span><span data-t="seconds_suffix">s</span></span>
+          </div>
+        </div>
+        <div class="charts-switch" id="chartsScope" role="group" data-t-aria="chart_scope_aria">
+          <button type="button" class="charts-switch-btn active" data-scope="host" aria-pressed="true" data-t="main_system">Main system</button>
+        </div>
+        <div class="charts-switch" id="chartsGroup" role="group" data-t-aria="chart_group_aria">
+          <button type="button" class="charts-switch-btn active" data-group="general" aria-pressed="true" data-t="group_general">General</button>
+          <button type="button" class="charts-switch-btn" data-group="network" aria-pressed="false" data-t="network">Network</button>
+          <button type="button" class="charts-switch-btn" data-group="uptime" aria-pressed="false" data-t="uptime_app">Uptime &amp; App</button>
+        </div>
+      </div>
+      <div class="charts-status" id="chartsStatus" hidden></div>
+      <div class="charts-grid" id="chartsMount"></div>
+    </div>
+  </div>
+
   <div id="tab-health" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="operations_recovery">Operational Recovery</div>
@@ -389,6 +423,8 @@ window.LANG = {{ L | tojson }};
 window.LANG_EN = {{ L_en | tojson }};
 window.LANG_CODE = '{{ lang }}';
 window.lang = window.LANG_CODE;
+window.CHART_JS = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+window.DEBOUNCE_MS = 1000;
 </script>
 <script type="module" src="{{ prefix }}/admin/main.js?v={{ asset_version }}"></script>
 </body>

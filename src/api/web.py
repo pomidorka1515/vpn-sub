@@ -10,6 +10,7 @@ from util import ok, err, sanitize, make_qr, parse_bool, generate_token
 from collections.abc import Callable
 from typing import cast
 from uuid import uuid4
+import re
 from dataclasses import asdict
 from .decorators import requires_fields_strict, requires_fields, requires_webapi_auth, requires_no_auth
 
@@ -19,16 +20,25 @@ def _admin_module_method(name: str) -> Callable[[WebApi], ResponseType]:
     def handler(self: WebApi) -> ResponseType:
         version = asset_version()
         source = (RES_DIR / 'admin' / f'{name}.js').read_text(encoding='utf-8')
-        body = source.replace(".js';", f".js?v={version}';")
+        # Version import specifiers only. A quote-suffix replace missed
+        # "./charts/spec.js" because nested modules do not end in .js'.
+        body = re.sub(
+            r'''(?P<lead>from\s+)(?P<quote>['"])(?P<path>\.{1,2}/[^'"]+\.js)(?P=quote)''',
+            lambda match: (
+                f"{match.group('lead')}{match.group('quote')}"
+                f"{match.group('path')}?v={version}{match.group('quote')}"
+            ),
+            source,
+        )
         return self._static(f'admin/{name}.js', 'text/javascript', body.encode('utf-8'))  # pyright: ignore[reportPrivateUsage]
-    handler.__name__ = f'admin_{name}_js'
+    handler.__name__ = 'admin_' + name.replace('/', '_') + '_js'
     return handler
 
 class WebApi(BaseApi):
     """Public, user-facing API."""
     _admin_module = ''
     for _admin_module in admin_module_names():
-        locals()[f'admin_{_admin_module}_js'] = _admin_module_method(_admin_module)
+        locals()['admin_' + _admin_module.replace('/', '_') + '_js'] = _admin_module_method(_admin_module)
     del _admin_module
 
     ROUTES: list[Route] = [
@@ -38,8 +48,9 @@ class WebApi(BaseApi):
         Route('GET', '/auth.css', 'auth_css'),
         Route('GET', '/dashboard.css', 'dashboard_css'),
         Route('GET', '/history.css', 'history_css'),
+        Route('GET', '/charts.css', 'charts_css'),
         Route('GET', '/admin.css', 'admin_css'),
-        *(Route('GET', f'/admin/{name}.js', f'admin_{name}_js') for name in admin_module_names()),
+        *(Route('GET', f'/admin/{name}.js', 'admin_' + name.replace('/', '_') + '_js') for name in admin_module_names()),
         Route('GET', '/dashboard.js', 'dashboard_js'),
         Route('GET', '/history.js', 'history_js'),
         Route('POST', '/webapi/register', 'register', 5),
@@ -130,6 +141,9 @@ class WebApi(BaseApi):
 
     def history_css(self) -> ResponseType:
         return self._static('history.css', 'text/css')
+
+    def charts_css(self) -> ResponseType:
+        return self._static('charts.css', 'text/css')
 
     def admin_css(self) -> ResponseType:
         return self._static('admin.css', 'text/css')
