@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -109,6 +110,30 @@ def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:
         assert paths.audit.exists()
         assert paths.primary_lock.exists()
         assert len(runtime.panels) == 2
+
+
+def test_browser_subscription_embeds_local_fonts(paths: AppPaths) -> None:
+    with factory(paths) as runtime:
+        token = "a" * 40
+        runtime.subscription.res.db.create_user(
+            username="alice",
+            uuid=str(uuid.uuid4()),
+            token=token,
+            fingerprint="chrome",
+            displayname="Alice",
+        )
+        client = runtime.app.test_client()
+        response = client.get(
+            f"/sub?token={token}&lang=en",
+            headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"},
+        )
+        assert response.status_code == 403
+        assert response.mimetype == "text/html"
+        assert b"fonts.googleapis" not in response.data
+        assert b"fonts.gstatic" not in response.data
+        assert b"url('/sub/fonts/outfit-latin.woff2')" in response.data
+        assert b"__FONT_BASE__" not in response.data
+        assert b"/* __FONTS__ */" not in response.data
 
 
 def test_background_components_are_not_started(paths: AppPaths) -> None:

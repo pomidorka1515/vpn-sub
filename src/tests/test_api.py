@@ -186,6 +186,8 @@ def test_admin_ui_requires_session(database: Database, flask_app: Flask) -> None
     assert b"<html" in response.data.lower()
     assert b'href="/sub/common.css?v=' in response.data
     assert b'href="/sub/admin.css?v=' in response.data
+    assert b"fonts.googleapis" not in response.data
+    assert b"fonts.gstatic" not in response.data
     assert b'type="module"' in response.data
     assert b'src="/sub/admin/main.js?v=' in response.data
     assert b'id="btnLogout"' in response.data
@@ -426,6 +428,8 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert b"/sub/" not in auth.data
     assert b'href="/custom/common.css?v=' in auth.data
     assert b'href="/custom/auth.css?v=' in auth.data
+    assert b"fonts.googleapis" not in auth.data
+    assert b"fonts.gstatic" not in auth.data
 
     client.set_cookie("auth_token", "a" * 100)
     panel = client.get("/custom/panel")
@@ -445,7 +449,21 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert css.status_code == 200
     assert css.mimetype == "text/css"
     assert b"--accent:" in css.data
+    assert b"fonts.googleapis" not in css.data
+    assert b"fonts.gstatic" not in css.data
+    assert b"url('/custom/fonts/outfit-latin.woff2')" in css.data
+    assert b"url('/custom/fonts/jetbrains-mono-cyrillic.woff2')" in css.data
+    assert b"__FONT_BASE__" not in css.data
+    assert b"/* __FONTS__ */" not in css.data
     assert "immutable" in css.headers["Cache-Control"]
+
+    font = client.get("/custom/fonts/outfit-latin.woff2")
+    assert font.status_code == 200
+    assert font.mimetype == "font/woff2"
+    assert font.data[:4] == b"wOF2"
+    assert "immutable" in font.headers["Cache-Control"]
+    assert client.get("/custom/fonts/DejaVuSans.ttf").status_code == 404
+    assert client.get("/custom/fonts/../common.css").status_code == 404
 
     dashboard_js = client.get("/custom/dashboard.js")
     assert dashboard_js.status_code == 200

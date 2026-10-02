@@ -11,6 +11,7 @@ from core import Subscription
 from bwatch import BWatch
 from flask import Flask, Response, request
 from loggers import Logger
+from fonts import FONT_FILES
 
 type ResponseType = tuple[Response, int] | Response
 
@@ -20,6 +21,7 @@ RES_DIR = Path(__file__).resolve().parent.parent.parent / 'res'
 _ASSET_FILES: tuple[str, ...] = (
     'common.js',
     'common.css',
+    'fonts.css',
     'auth.css',
     'dashboard.css',
     'history.css',
@@ -28,6 +30,7 @@ _ASSET_FILES: tuple[str, ...] = (
     'dashboard.js',
     'history.js',
     'vendor/chart.umd.min.js',
+    *(f'fonts/{name}' for name in sorted(FONT_FILES)),
 )
 
 _ADMIN_MODULE_RE = re.compile(r'^[a-z0-9_-]+$')
@@ -61,7 +64,7 @@ def admin_module_names() -> tuple[str, ...]:
 def asset_version() -> str:
     """Cache-busting version for static assets, derived from shared frontend files."""
     digest = sha1()
-    for name in _ASSET_FILES:
+    for name in (*_ASSET_FILES, 'browser.html'):
         digest.update((RES_DIR / name).read_bytes())
     for name in admin_module_names():
         digest.update((RES_DIR / 'admin' / f'{name}.js').read_bytes())

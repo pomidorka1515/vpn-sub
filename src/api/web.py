@@ -1,5 +1,6 @@
 from .common import (
-    Route, BaseApi, RES_DIR, ResponseType, admin_module_names, asset_version, web_lang_tables,
+    Route, BaseApi, RES_DIR, ResponseType,
+    admin_module_names, asset_version, web_lang_tables,
 )
 from flask import Flask, request, Response, make_response, redirect, render_template, send_file, g
 from config import ConfigLike
@@ -7,6 +8,7 @@ from core import Subscription
 from bwatch import BWatch
 from loggers import Logger
 from util import ok, err, sanitize, make_qr, parse_bool, generate_token
+from fonts import FONT_FILES, embed_font_faces
 from collections.abc import Callable
 from typing import cast
 from uuid import uuid4
@@ -45,6 +47,7 @@ class WebApi(BaseApi):
         Route('GET', '/redirect', 'redirect_page'),
         Route('GET', '/common.js', 'common_js'),
         Route('GET', '/common.css', 'common_css'),
+        Route('GET', '/fonts/<name>', 'font_file'),
         Route('GET', '/auth.css', 'auth_css'),
         Route('GET', '/dashboard.css', 'dashboard_css'),
         Route('GET', '/history.css', 'history_css'),
@@ -132,7 +135,14 @@ class WebApi(BaseApi):
         return self._static('common.js', 'text/javascript')
 
     def common_css(self) -> ResponseType:
-        return self._static('common.css', 'text/css')
+        source = (RES_DIR / 'common.css').read_text(encoding='utf-8')
+        body = embed_font_faces(source, self.prefix)
+        return self._static('common.css', 'text/css', body.encode('utf-8'))
+
+    def font_file(self, name: str) -> ResponseType:
+        if name not in FONT_FILES:
+            return err('Not found', 404)
+        return self._static(f'fonts/{name}', 'font/woff2')
 
     def auth_css(self) -> ResponseType:
         return self._static('auth.css', 'text/css')

@@ -14,6 +14,7 @@ from collections import deque
 from flask import Response, render_template
 
 from util import fmt_bytes, format, isbrowser, err
+from fonts import embed_font_faces
 from custom_types import (
     BandwidthInfo, 
 )
@@ -285,6 +286,8 @@ def get_subscription(
 
     if isbrowser(ua=ua):
         html = render_template("browser.html", **_browser_strings(obj, lang))
+        prefix = '/' + '/'.join(p for p in str(obj.res.cfg['uri']).split('/') if p)
+        html = embed_font_faces(html, prefix)
         return Response(html, mimetype="text/html"), 403
 
     bandwidths = obj.bandwidth_svc.bandwidth(username)
