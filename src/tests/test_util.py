@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 from types import SimpleNamespace
 
 import psutil
@@ -88,3 +89,99 @@ def test_app_memory_skips_dead_children(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(psutil, "Process", lambda: _Proc())
     assert SysUtil.app_memory().ram == 1024
+
+
+def test_app_threads_uses_psutil(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Switches:
+        voluntary = 4000
+        involuntary = 21
+
+    class _Native:
+        def __init__(self, tid: int) -> None:
+            self.tid = tid
+
+        def name(self) -> str:
+            return "MainThread" if self.tid == 1024 else "Thread-1"
+
+        def status(self) -> str:
+            return "sleeping" if self.tid == 1024 else "waiting"
+
+        def num_ctx_switches(self) -> _Switches:
+            return _Switches()
+
+    class _Current:
+        pid = 7
+
+        def num_threads(self) -> int:
+            return 2
+
+        def threads(self) -> list[SimpleNamespace]:
+            return [
+                SimpleNamespace(id=1024, user_time=10.2, system_time=2.2),
+                SimpleNamespace(id=1025, user_time=0.1, system_time=0.1),
+            ]
+
+    def process(pid: int | None = None) -> _Current | _Native:
+        if pid is None:
+            return _Current()
+        return _Native(pid)
+
+    monkeypatch.setattr(psutil, "Process", process)
+    monkeypatch.setattr(psutil, "PROCFS_PATH", "/missing-proc")
+
+    threads = SysUtil.app_threads()
+    assert SysUtil.app_thread_amount() == 2
+    assert [(item.tid, item.name, item.state, item.cpu, item.ctx_switches) for item in threads] == [
+        (1024, "MainThread", "sleeping", 12.4, 4021),
+        (1025, "Thread-1", "waiting", 0.2, 4021),
+    ]
+    assert all(item.stack is None for item in threads)
+
+
+def test_app_threads_reads_stack_and_skips_dead(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    task = tmp_path / "9" / "task" / "1024"
+    task.mkdir(parents=True)
+    (task / "status").write_text("Name:\tMainThread\nVmStk:\t64 kB\n", encoding="utf-8")
+
+    class _Switches:
+        voluntary = 1
+        involuntary = 0
+
+    class _Live:
+        def name(self) -> str:
+            return "MainThread"
+
+        def status(self) -> str:
+            return "running"
+
+        def num_ctx_switches(self) -> _Switches:
+            return _Switches()
+
+    class _Dead:
+        def num_ctx_switches(self) -> _Switches:
+            raise psutil.NoSuchProcess(1026)
+
+    class _Current:
+        pid = 9
+
+        def threads(self) -> list[SimpleNamespace]:
+            return [
+                SimpleNamespace(id=1024, user_time=1.0, system_time=0.0),
+                SimpleNamespace(id=1026, user_time=0.0, system_time=0.0),
+            ]
+
+    def process(pid: int | None = None) -> _Current | _Live | _Dead:
+        if pid is None:
+            return _Current()
+        return _Live() if pid == 1024 else _Dead()
+
+    monkeypatch.setattr(psutil, "Process", process)
+    monkeypatch.setattr(psutil, "PROCFS_PATH", str(tmp_path))
+
+    threads = SysUtil.app_threads()
+    assert len(threads) == 1
+    assert threads[0].stack == 64 * 1024
+    assert threads[0].state == "running"

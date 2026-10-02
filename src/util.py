@@ -452,18 +452,51 @@ class SysUtil:
 
     @staticmethod
     def app_thread_amount() -> int:
-        with open(f'/proc/{os.getpid()}/stat') as f:
-            return int(f.read().split()[19])
+        return psutil.Process().num_threads()
+
+    @staticmethod
+    def _thread_stack(pid: int, tid: int) -> int | None:
+        """Stack reservation from the thread status file, in bytes.
+
+        psutil has no per-thread stack field. `VmStk` is the only size
+        that belongs to the thread rather than the shared process maps.
+        """
+        path = f"{psutil.PROCFS_PATH}/{pid}/task/{tid}/status"
+        try:
+            with open(path, encoding="utf-8", errors="replace") as status:
+                for line in status:
+                    if not line.startswith("VmStk:"):
+                        continue
+                    return int(line.split()[1]) * 1024
+        except (OSError, ValueError, IndexError):
+            return None
+        return None
 
     @staticmethod
     def app_threads() -> tuple[ThreadInfo, ...]:
-        return tuple(
-            ThreadInfo(
-                name=t.name,
-                ident=t.ident,
-                daemon=t.daemon
-            ) for t in threading.enumerate()
-        )
+        """OS threads of this process, ordered by tid.
+
+        Name, state, CPU, and context switches come from psutil. Stack
+        size is the one field psutil does not expose, so it is read from
+        the thread status file. A thread that exits mid-read is skipped.
+        """
+        current = psutil.Process()
+        found: list[ThreadInfo] = []
+        for thread in current.threads():
+            try:
+                native = psutil.Process(thread.id)
+                switches = native.num_ctx_switches()
+                found.append(ThreadInfo(
+                    tid=thread.id,
+                    name=native.name(),
+                    state=native.status(),
+                    cpu=round(thread.user_time + thread.system_time, 1),
+                    ctx_switches=switches.voluntary + switches.involuntary,
+                    stack=SysUtil._thread_stack(current.pid, thread.id),
+                ))
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+        return tuple(found)
     
     @staticmethod
     def health() -> HealthStatus:

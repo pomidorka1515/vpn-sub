@@ -505,9 +505,18 @@ class GCStats:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ThreadInfo:
+    """One OS thread of this process.
+
+    `cpu` is user + system seconds. `ctx_switches` is voluntary plus
+    involuntary. `stack` is the thread stack reservation in bytes.
+    Missing OS fields stay None so older snapshots still hydrate.
+    """
+    tid: int
     name: str
-    ident: int | None
-    daemon: bool
+    state: str | None = None
+    cpu: float | None = None
+    ctx_switches: int | None = None
+    stack: int | None = None
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class HealthStatus:

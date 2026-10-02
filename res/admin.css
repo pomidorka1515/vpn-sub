@@ -268,6 +268,7 @@
   border-top: 1px solid var(--border);
 }
 .panel-card.open > .panel-card-body { display: block; }
+.thread-card { margin-top: 16px; }
 .panel-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px; padding-top: 16px;

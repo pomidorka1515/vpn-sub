@@ -690,9 +690,12 @@ Response (success):
     "app_thread_amount": 12, // int, total number of application threads  
     "app_threads": [  
       {  
-        "name": "MainThread",  // str, thread name  
-        "ident": 140234567890, // int, thread identifier  
-        "daemon": false        // bool, whether thread is a daemon thread  
+        "tid": 1024,            // int, OS thread id  
+        "name": "MainThread",   // str, kernel thread name  
+        "state": "sleeping",    // str | null, psutil status  
+        "cpu": 12.4,            // float | null, user + system CPU seconds  
+        "ctx_switches": 4021,   // int | null, voluntary + involuntary  
+        "stack": 65536          // int | null, stack reservation in bytes  
       }  
       // ...  
     ],  

@@ -22,7 +22,7 @@ async function loadSystemStatusRequest(result, current) {
   }
 }
 
-export function renderSystemStatus(s) {
+export function renderSystemStatus(s, keyPrefix) {
   if (!s) return `<div class="table-empty">${t('no_data')}</div>`;
 
   const cpuPct = s.cpu != null ? Math.round(s.cpu * 100) / 100 : null;
@@ -54,6 +54,7 @@ export function renderSystemStatus(s) {
   const appUptime = fmtUptime(s.app_uptime);
   const threads = s.app_thread_amount ?? t('na');
   const procs = s.process_count ?? t('na');
+  const threadRows = Array.isArray(s.app_threads) ? s.app_threads : [];
 
   const ipRows = (label, list) => {
     const arr = Array.isArray(list) ? list.filter(Boolean) : [];
@@ -105,6 +106,73 @@ export function renderSystemStatus(s) {
         <div class="panel-metric"><span class="panel-metric-label">${t('app_mem')}</span><span class="panel-metric-value">${appMem}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('app_swap')}</span><span class="panel-metric-value">${appSwap}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${threads}</span></div>
+      </div>
+    </div>
+    ${renderThreadTable(threadRows, threads, keyPrefix || '')}
+  `;
+}
+
+function threadState(state) {
+  if (!state) return t('na');
+  const key = 'thread_' + String(state).replace(/-/g, '_');
+  const label = t(key);
+  return label === key ? state : label;
+}
+
+function threadCpu(seconds) {
+  if (seconds == null || isNaN(seconds)) return t('na');
+  return Number(seconds).toFixed(1);
+}
+
+function threadStack(bytes) {
+  if (bytes == null || isNaN(bytes)) return t('na');
+  return String(Math.round(Number(bytes) / 1024));
+}
+
+function renderThreadTable(rows, count, keyPrefix) {
+  const shown = count ?? rows.length;
+  const key = (keyPrefix || '') + 'threads';
+  const body = rows.length
+    ? rows.map(row => `
+        <tr>
+          <td class="mono">${escapeHtml(row.tid ?? t('na'))}</td>
+          <td class="mono">${escapeHtml(row.name || t('na'))}</td>
+          <td>${escapeHtml(threadState(row.state))}</td>
+          <td class="mono">${escapeHtml(threadCpu(row.cpu))}</td>
+          <td class="mono">${escapeHtml(row.ctx_switches ?? t('na'))}</td>
+          <td class="mono">${escapeHtml(threadStack(row.stack))}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="6" class="table-empty">${t('no_threads')}</td></tr>`;
+  return `
+    <div class="panel-card thread-card" id="pc-${key}">
+      <div class="panel-card-header" onclick="togglePanelCard('${key}')">
+        <div class="panel-card-title">
+          <span class="panel-card-name">${t('threads')}</span>
+        </div>
+        <div class="panel-card-meta">
+          <span style="font-size:12px;color:var(--text2)">${escapeHtml(shown)}</span>
+          <svg class="panel-card-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4,6 8,10 12,6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="panel-card-body">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>${t('tid')}</th>
+                <th>${t('thread_name')}</th>
+                <th>${t('state')}</th>
+                <th>${t('cpu_seconds')}</th>
+                <th>${t('ctx_switches')}</th>
+                <th>${t('stack_kb')}</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;
@@ -164,7 +232,7 @@ function renderSnapshots(snaps) {
             </div>
             <div class="panel-card-body">
               <div class="panel-section-label" style="margin:16px 0 4px">${t('host_system_status')}</div>
-              ${snap.host ? renderSystemStatus(snap.host) : `<div class="table-empty">${t('no_data')}</div>`}
+              ${snap.host ? renderSystemStatus(snap.host, key + '-') : `<div class="table-empty">${t('no_data')}</div>`}
               <div class="panel-section-label" style="margin:20px 0 4px">${t('panel_status')}</div>
               ${renderPanelCards(wrappedPanels, key + '-')}
             </div>
@@ -174,4 +242,3 @@ function renderSnapshots(snaps) {
     </div>
   `;
 }
-
