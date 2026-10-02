@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from typing import Any
+from pathlib import Path
 
 import pytest
 from requests import ConnectionError, Response, Timeout
 
 from helpers import json_http, make_inbound
-from session import XUiSession
+from session import XUiSession, inbound_stamp_path
 
 class FakeClock:
     def __init__(self, now: float = 1000.0) -> None:
@@ -173,6 +174,69 @@ def test_cache_age_uses_the_session_clock(panel: XUiSession, clock: FakeClock) -
     assert panel.cache_age == 0.0
     clock.advance(5)
     assert panel.cache_age == 5.0
+
+
+def test_clear_cache_invalidates_another_session(tmp_path: Path, clock: FakeClock) -> None:
+    stamp = tmp_path / "inbounds.stamp"
+    first = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    second = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    try:
+        first.cache = [make_inbound(1)]
+        second.cache = [make_inbound(1)]
+        assert first.cache_current is True
+        assert second.cache_current is True
+        first.clear_cache()
+        assert first.cache is None
+        assert second.cache is not None
+        assert second.cache_current is False
+    finally:
+        first.close()
+        second.close()
+
+
+def test_clear_cache_keeps_the_list_when_the_stamp_cannot_move(panel: XUiSession) -> None:
+    panel.cache = [make_inbound(1)]
+    panel._stamp_path = "/proc/does-not-exist/inbounds.stamp"  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(OSError):
+        panel.clear_cache()
+    assert panel.cache is not None
+
+
+def test_fresh_cache_misses_when_the_stamp_moves(tmp_path: Path, clock: FakeClock) -> None:
+    stamp = tmp_path / "inbounds.stamp"
+    first = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    second = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    try:
+        first.cache = [make_inbound(1)]
+        assert first.fresh_cache(15) is not None
+        second.clear_cache()
+        assert first.fresh_cache(15) is None
+        assert first.cache is not None
+    finally:
+        first.close()
+        second.close()
+
+
+def test_cache_fill_does_not_revive_a_cleared_stamp(tmp_path: Path, clock: FakeClock) -> None:
+    stamp = tmp_path / "inbounds.stamp"
+    session = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    try:
+        session.cache = [make_inbound(1)]
+        seen = session._cache_stamp  # pyright: ignore[reportPrivateUsage]
+        session.clear_cache()
+        session._cache_stamp = seen  # pyright: ignore[reportPrivateUsage]
+        session.cache = [make_inbound(2)]
+        assert session.cache is None
+    finally:
+        session.close()
+
+
+def test_inbound_stamp_path_stays_inside_its_directory() -> None:
+    path = inbound_stamp_path("../other", "http://127.0.0.1:1/a/", directory="/run/lock")
+    other = inbound_stamp_path("other", "http://127.0.0.1:2/a/", directory="/run/lock")
+    assert path.startswith("/run/lock/inbounds.")
+    assert ".." not in path
+    assert path != other
 
 
 def test_rejects_transport_and_session_together(transport: RecordingTransport) -> None:

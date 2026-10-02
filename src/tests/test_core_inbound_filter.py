@@ -49,3 +49,11 @@ def test_getinbounds_requeries_after_ttl_expiry(subscription: Subscription) -> N
     panel._cache_set_at -= 10  # pyright: ignore[reportPrivateUsage]
     subscription.panel_svc.getinbounds(cast(XUiSession, panel))
     assert panel.gets.count("panel/api/inbounds/list") == 2
+
+
+def test_getinbounds_requeries_when_another_worker_drops_the_stamp(subscription: Subscription) -> None:
+    panel = FakePanel(inbounds=[make_inbound(1), make_inbound(2)])
+    subscription.panel_svc.getinbounds(cast(XUiSession, panel))
+    panel._cache_generation += 1  # pyright: ignore[reportPrivateUsage]
+    subscription.panel_svc.getinbounds(cast(XUiSession, panel))
+    assert panel.gets.count("panel/api/inbounds/list") == 2

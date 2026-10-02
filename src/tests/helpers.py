@@ -164,6 +164,8 @@ class FakePanel:
         self._cache: list[Inbound] | None = None
         self._cache_set_at: float = 0.0
         self.cache_time: float = 0
+        self._cache_generation: int = 0
+        self._seen_generation: int = 0
         self.name = name
         self._inbounds = inbounds or []
         self.clients: list[PanelClient] = clients or []
@@ -189,6 +191,12 @@ class FakePanel:
         self._cache = value
         self._cache_set_at = time.monotonic() if value is not None else 0.0
         self.cache_time = self._cache_set_at
+        if value is not None:
+            self._seen_generation = self._cache_generation
+
+    @property
+    def cache_current(self) -> bool:
+        return self._cache is not None and self._seen_generation == self._cache_generation
 
     @property
     def cache_age(self) -> float:
@@ -196,7 +204,13 @@ class FakePanel:
             return float("inf")
         return time.monotonic() - self._cache_set_at
 
+    def fresh_cache(self, ttl: float) -> list[Inbound] | None:
+        if not self.cache_current or self.cache_age >= ttl:
+            return None
+        return self._cache
+
     def clear_cache(self) -> None:
+        self._cache_generation += 1
         self.cache = None
 
     def close(self) -> None:

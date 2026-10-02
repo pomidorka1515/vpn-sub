@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import threading
 import time
 import json
@@ -18,6 +20,49 @@ __all__ = ['XUiSession', 'XUiPanelTransport', 'RequestsPanelTransport', 'XUiSess
 
 _HEALTH_CHECK_TIMEOUT = 5.0
 _DEFAULT_REQUEST_TIMEOUT = 5.0
+_INBOUND_STAMP_DIR = "/run/lock"
+
+
+def inbound_stamp_path(name: str, base_url: str, *, directory: str = _INBOUND_STAMP_DIR) -> str:
+    """Per-panel generation file. A changed mtime drops every worker's inbound cache.
+
+    The file stores no inbound data. ``name`` keeps two panels apart; the URL
+    digest keeps a weird name from escaping ``directory``.
+    """
+    digest = hashlib.sha1(base_url.encode()).hexdigest()[:8]
+    safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
+    return os.path.join(directory, f"inbounds.{safe}.{digest}.stamp")
+
+
+def _bump_stamp(path: str) -> None:
+    """Move the stamp's mtime. A same-nanosecond utime is pushed forward."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    flags = os.O_CREAT | os.O_APPEND
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    fd = os.open(path, flags, 0o644)
+    try:
+        previous = os.fstat(fd).st_mtime_ns
+        os.utime(fd)
+        current = os.fstat(fd).st_mtime_ns
+        if current <= previous:
+            os.utime(fd, ns=(current + 1, current + 1))
+    finally:
+        os.close(fd)
+
+
+def _read_stamp(path: str) -> int:
+    """Current generation, creating the stamp when this worker is first.
+
+    A missing file is not generation 0. Two workers can both observe "absent"
+    and would then treat each other's later fills as still current.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path, os.O_CREAT | os.O_APPEND | getattr(os, "O_CLOEXEC", 0), 0o644)
+    try:
+        return os.fstat(fd).st_mtime_ns
+    finally:
+        os.close(fd)
 
 
 
@@ -91,6 +136,10 @@ class XUiSession:
     Thread-safety and lifecycle:
       - ``dead`` is protected by an internal lock.
       - Cache reads return the stored list unchanged; callers must not mutate it.
+      - A stamp file beside the primary lock is the cross-process generation.
+        ``clear_cache`` bumps its mtime before dropping the local list, so a
+        failed bump cannot leave other workers serving a stale list. The list
+        itself stays in memory. A missing stamp is not generation 0.
       - ``close`` stops the client-managed health-check thread and closes the
         default session. If a transport or session is injected, its lifecycle
         remains the injector's responsibility. Do not issue requests while or
@@ -115,6 +164,7 @@ class XUiSession:
         transport: XUiPanelTransport | None = None,
         session: Session | None = None,
         clock: Callable[[], float] = time.monotonic,
+        stamp_path: str | None = None,
     ):
         """
         Initialize the panel client.
@@ -137,6 +187,8 @@ class XUiSession:
             transport: Replacement HTTP transport. If omitted, a transport is built around session.
             session: Session used by the default transport. Defaults to a new ``requests.Session``.
             clock: Monotonic clock used for cache timing.
+            stamp_path: Generation file shared by every worker for this panel.
+                Defaults to a file under ``/run/lock``. Tests pass a temp path.
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -160,6 +212,8 @@ class XUiSession:
             self._cache_lock = threading.Lock()
             self._cache: list[Inbound] | None = None
             self.cache_time: float = 0
+            self._stamp_path = stamp_path if stamp_path is not None else inbound_stamp_path(name, self.base_url)
+            self._cache_stamp: int | None = None
             self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
 
             self._session: Session | None = None
@@ -316,9 +370,15 @@ class XUiSession:
 
     @cache.setter
     def cache(self, value: list[Inbound], /) -> None:
+        # read before the lock so a clear that bumps during the panel query
+        # is visible here instead of being overwritten by this fill
+        stamp = _read_stamp(self._stamp_path)
         with self._cache_lock:
+            if self._cache_stamp is not None and stamp != self._cache_stamp:
+                return
             self._cache = value
             self.cache_time = self._clock()
+            self._cache_stamp = stamp
 
     @property
     def cache_age(self) -> float:
@@ -326,10 +386,45 @@ class XUiSession:
         with self._cache_lock:
             return self._clock() - self.cache_time
 
+    @property
+    def cache_current(self) -> bool:
+        """True when this process's list still matches the shared stamp."""
+        with self._cache_lock:
+            if self._cache is None or self._cache_stamp is None:
+                return False
+            try:
+                return _read_stamp(self._stamp_path) == self._cache_stamp
+            except OSError:
+                return False
+
+    def fresh_cache(self, ttl: float) -> list[Inbound] | None:
+        """Return the cached list only when age and stamp still agree.
+
+        The three checks share one lock so a clear cannot land between them
+        and hand back a list that was just dropped.
+        """
+        with self._cache_lock:
+            cached = self._cache
+            seen = self._cache_stamp
+            if cached is None or seen is None or self._clock() - self.cache_time >= ttl:
+                return None
+            try:
+                current = _read_stamp(self._stamp_path) == seen
+            except OSError:
+                return None
+            return cached if current else None
+
     def clear_cache(self) -> None:
+        """Bump the shared stamp first, then drop the local list.
+
+        If the bump fails the local list stays. Dropping it first would hide
+        the failure from this worker while every other worker kept serving it.
+        """
+        _bump_stamp(self._stamp_path)
         with self._cache_lock:
             self._cache = None
             self.cache_time = 0
+            self._cache_stamp = None
 
     def close(self) -> None:
         self._health_check_event.set()

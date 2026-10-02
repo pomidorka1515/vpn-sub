@@ -40,8 +40,8 @@ class PanelService(BaseService):
         """
         ttl = 2 if panel.local else 15  # fast local, slow remote
 
-        cached = panel.cache
-        if cached is not None and panel.cache_age < ttl:
+        cached = panel.fresh_cache(ttl)
+        if cached is not None:
             return cached # NOTE: cache stores dataclasses!
         
         try:
