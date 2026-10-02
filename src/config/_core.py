@@ -44,6 +44,7 @@ class Config(MutableMapping[str, JsonValue]):
         backup_interval: int | float = 7200,
         backup_retention: int = 3,
         lockfile_path: str | Path | None = None,
+        start_backup: bool = True,
     ) -> None:
         """
         Args:
@@ -64,6 +65,8 @@ class Config(MutableMapping[str, JsonValue]):
             backup_dir: Backup directory. Backups are disabled if set to None.
             backup_interval: Interval in seconds for the backups, in seconds.
             backup_retention: Amount of concurrent backups kept on disk.
+            start_backup: Start the scheduled backup thread. False keeps
+                backup_dir configured so backup_now() still works.
             lockfile_path: Inter-process lock location. None keeps it beside the
                 data file as ``{path}.lock``. A directory places
                 ``{basename}.{sha1(abspath)[:8]}.lock`` inside it so same-named
@@ -119,7 +122,7 @@ class Config(MutableMapping[str, JsonValue]):
         with self.log.loading():
             self.reload()
 
-        if self._backup_dir:
+        if self._backup_dir and start_backup:
             self._backup_t: threading.Thread | None = _make_backup_thread(
                 path=self._path,
                 indent=self._indent,

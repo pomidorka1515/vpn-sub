@@ -30,6 +30,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
         backup_dir: str | Path | None = None,
         backup_interval: int | float = 7200,
         backup_retention: int = 3,
+        start_backup: bool = True,
     ) -> None:
         """
         Args:
@@ -38,6 +39,8 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
             backup_dir: Backup directory. Backups are disabled if set to None.
             backup_interval: Interval in seconds for the backups.
             backup_retention: Amount of concurrent backups kept on disk.
+            start_backup: Start the scheduled backup thread. False keeps
+                backup_dir configured so backup_now() still works.
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -57,7 +60,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
             except OSError as exc:
                 raise DatabaseError(f"unable to create database directory {parent}: {exc}") from exc
             self.initialize()
-            if self._backup_dir:
+            if self._backup_dir and start_backup:
                 self._backup_t = make_backup_thread(
                     path=self.path,
                     timeout=self.timeout,

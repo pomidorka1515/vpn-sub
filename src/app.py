@@ -268,8 +268,8 @@ def _acquire_primary_lock(path: Path) -> tuple[bool, BinaryIO | None]:
     return True, handle
 
 
-def _build_configs(paths: AppPaths) -> tuple[
-    Config, # main 
+def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
+    Config, # main
     Config, # lang
     LinesConfig, # log
     LinesConfig # audit
@@ -285,6 +285,7 @@ def _build_configs(paths: AppPaths) -> tuple[
         isolate_commits=True,
         backup_dir=paths.backups,
         lockfile_path=lock_dir,
+        start_backup=start_backup,
     )
     lang_cfg = Config(
         path=paths.language,
@@ -295,10 +296,18 @@ def _build_configs(paths: AppPaths) -> tuple[
         lockfile_path=lock_dir,
     )
     log_cfg = LinesConfig(
-        path=paths.log, sync_mode="data", backup_dir=paths.backups, lockfile_path=lock_dir,
+        path=paths.log,
+        sync_mode="data",
+        backup_dir=paths.backups,
+        lockfile_path=lock_dir,
+        start_backup=start_backup,
     )
     audit_cfg = LinesConfig(
-        path=paths.audit, sync_mode="data", backup_dir=paths.backups, lockfile_path=lock_dir,
+        path=paths.audit,
+        sync_mode="data",
+        backup_dir=paths.backups,
+        lockfile_path=lock_dir,
+        start_backup=start_backup,
     )
     return cfg, lang_cfg, log_cfg, audit_cfg
 
@@ -367,12 +376,13 @@ def create_application(
     options = options or AppOptions()
 
     flask_app = _build_flask_app(options)
-    cfg, lang_cfg, log_cfg, audit_cfg = _build_configs(paths)
-    runtime_cfg = cast(ConfigLike, cfg)
-    runtime_lang_cfg = cast(ConfigLike, lang_cfg)
-
     primary = False
     lock_file: BinaryIO | None = None
+    cfg: Config | None = None
+    lang_cfg: Config | None = None
+    log_cfg: LinesConfig | None = None
+    audit_cfg: LinesConfig | None = None
+
     db: Database | None = None
     panels: list[XUiSession] = []
     whitelist: XUiSession | None = None
@@ -411,9 +421,16 @@ def create_application(
         close_rate_limit()
 
     try:
-        configure_rate_limit_from_config(runtime_cfg)
         primary, lock_file = _acquire_primary_lock(paths.primary_lock)
-        db = Database(path=paths.database, backup_dir=paths.backups)
+        cfg, lang_cfg, log_cfg, audit_cfg = _build_configs(paths, start_backup=primary)
+        runtime_cfg = cast(ConfigLike, cfg)
+        runtime_lang_cfg = cast(ConfigLike, lang_cfg)
+        configure_rate_limit_from_config(runtime_cfg)
+        db = Database(
+            path=paths.database,
+            backup_dir=paths.backups,
+            start_backup=primary,
+        )
         panels, whitelist = _build_panels(
             cfg,
             transport_factory=options.panel_transport_factory,

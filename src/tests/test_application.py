@@ -177,6 +177,12 @@ def test_secondary_process_does_not_recover_or_start_bots(paths: AppPaths) -> No
         fcntl.flock(lock, fcntl.LOCK_EX)
         with factory(paths) as runtime:
             assert not runtime.primary
+            assert runtime.db.backup_dir is not None
+            assert runtime.cfg.backup_dir is not None
+            assert runtime.db._backup_t is None  # pyright: ignore[reportPrivateUsage]
+            assert runtime.cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
+            assert runtime.log_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
+            assert runtime.audit_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
             with mock.patch.object(runtime.subscription.business_code_svc, "recover_rollback_failures") as recover:
                 with mock.patch.object(runtime.bandwidth_watcher, "start") as watcher_start:
                     with mock.patch.object(runtime.admin_bot, "start") as admin_start:
@@ -186,6 +192,15 @@ def test_secondary_process_does_not_recover_or_start_bots(paths: AppPaths) -> No
             watcher_start.assert_not_called()
             admin_start.assert_not_called()
             public_start.assert_not_called()
+
+
+def test_primary_starts_backup_threads_once(paths: AppPaths) -> None:
+    with factory(paths) as runtime:
+        assert runtime.primary
+        assert runtime.db._backup_t is not None and runtime.db._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
+        assert runtime.cfg._backup_t is not None and runtime.cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
+        assert runtime.log_cfg._backup_t is not None and runtime.log_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
+        assert runtime.audit_cfg._backup_t is not None and runtime.audit_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_panel_failure_closes_created_resources(paths: AppPaths) -> None:
