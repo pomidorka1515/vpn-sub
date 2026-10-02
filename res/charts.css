@@ -32,8 +32,38 @@
 }
 .charts-field .dark-num-input { width: 72px; }
 .charts-delay input[type="range"] {
-  width: 140px; max-width: 100%; accent-color: var(--green);
-  cursor: pointer; touch-action: pan-x;
+  -webkit-appearance: none; appearance: none;
+  width: 140px; max-width: 100%; height: 28px; margin: 0; padding: 0;
+  background: transparent; border: none; border-radius: 0;
+  outline: none; cursor: pointer; touch-action: pan-x;
+}
+.charts-delay input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 3px;
+}
+.charts-delay input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  border: 2px solid var(--surface);
+  margin-top: -6px;
+  transition: transform .15s;
+}
+.charts-delay input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.charts-delay input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.charts-delay input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  border: 2px solid var(--surface);
+}
+.charts-delay input[type="range"]::-moz-range-track {
+  height: 6px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 3px;
+}
+.charts-delay input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .charts-readout {
   font-family: 'JetBrains Mono', monospace; font-size: 13px;
@@ -82,6 +112,11 @@
   .charts-field .dark-num-input { flex: 1; width: auto; min-width: 0; min-height: 36px; }
   .charts-delay { flex-wrap: wrap; }
   .charts-delay input[type="range"] { flex: 1 1 120px; width: auto; min-width: 0; height: 36px; }
+  .charts-delay input[type="range"]::-webkit-slider-thumb {
+    width: 22px; height: 22px; margin-top: -9px;
+  }
+  .charts-delay input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; }
+  .charts-delay input[type="range"]::-moz-range-track { height: 8px; }
   .charts-readout { flex: 0 0 auto; }
   .charts-grid { grid-template-columns: 1fr; }
   .charts-card { padding: 12px 10px 8px; }
