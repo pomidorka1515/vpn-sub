@@ -9,11 +9,12 @@ import uuid
 import pytest
 
 from db import Database
-from errors import PanelUnavailableError
+from errors import PanelRejectedError, PanelUnavailableError
 from helpers import (
     USER_UUID,
     FakePanel,
     create_alice,
+    make_inbound,
     make_panel_client,
     make_subscription,
 )
@@ -163,3 +164,84 @@ def test_all_traffic_keeps_fast_panel_when_slow_raises(database: Database) -> No
     assert subscription.bandwidth_svc.all_traffic() == {
         "alice": BandwidthInfo(7, 8, 15),
     }
+
+
+class HoldPanel(FakePanel):
+    """Holds the first request of a call until every panel has entered it."""
+
+    def __init__(self, gate: threading.Barrier, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._gate = gate
+        self._held = False
+
+    def _hold_once(self) -> None:
+        if self._held:
+            return
+        self._held = True
+        self._gate.wait(timeout=2)
+
+    def get(self, url: str) -> Response:
+        self._hold_once()
+        return super().get(url)
+
+    def post(self, url: str, **kwargs: object) -> Response:
+        self._hold_once()
+        return super().post(url, **kwargs)
+
+
+def test_user_mutations_overlap(database: Database) -> None:
+    # Each call does several requests per panel. A per-request sleep can
+    # finish one panel's first request before the other panel starts, so
+    # overlap is the first request of the call, not each HTTP round trip.
+    def panels() -> list[object]:
+        gate = threading.Barrier(2)
+        return [
+            HoldPanel(
+                gate, name="one",
+                inbounds=[make_inbound(1), make_inbound(2)],
+                clients=[make_panel_client("alice", [1])],
+            ),
+            HoldPanel(
+                gate, name="two",
+                inbounds=[make_inbound(3), make_inbound(4)],
+                clients=[make_panel_client("alice", [3])],
+            ),
+        ]
+
+    create_alice(database)
+    make_subscription(database, panels=panels()).business_svc.add_users("alice")
+    make_subscription(database, panels=panels()).business_svc.update_user(
+        "alice", enable=False,
+    )
+    make_subscription(database, panels=panels()).business_svc.update_uuid(
+        "alice", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    )
+    make_subscription(database, panels=panels()).business_svc.delete_user("alice")
+
+
+def test_update_uuid_marks_first_panel_when_later_fails_first(database: Database) -> None:
+    span = _Span()
+    slow = TimedPanel(
+        span, 0.05, name="slow",
+        inbounds=[make_inbound(1)],
+        clients=[make_panel_client("alice", [1])],
+        post_payload={"success": False, "msg": "slow rejected", "obj": None},
+    )
+    fast = TimedPanel(
+        span, 0.0, name="fast",
+        inbounds=[make_inbound(2)],
+        clients=[make_panel_client("alice", [2])],
+        post_payload={"success": False, "msg": "fast rejected", "obj": None},
+    )
+    subscription = make_subscription(
+        database, panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
+    )
+    create_alice(database)
+
+    with pytest.raises(PanelRejectedError, match="slow rejected"):
+        subscription.business_svc.update_uuid(
+            "alice", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        )
+
+    failures = subscription.business_code_svc.get_rollback_failures()
+    assert failures["uuid"]["alice"]["reason"].startswith("slow:")

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 import uuid
 import time
@@ -95,8 +97,8 @@ class BusinessUserService(BaseService):
     def _drop_cache(self, panel: XUiSession | None = None) -> None:
         """Drop cached inbounds. Call after mutations."""
         targets = [panel] if panel else list(self.panels)
-        for p in targets:
-            p.clear_cache()
+        # Cache clears are local and independent. One panel per worker.
+        self.panel_svc.map_panels(targets, lambda p: p.clear_cache())
 
 
     def get_info(self, username: str, pretty: bool = False) -> UserInfo:
@@ -155,16 +157,18 @@ class BusinessUserService(BaseService):
         """
         userid = str(self.user_svc.user(username)["uuid"])
 
-        for panel in self.panels:
+        def sync(panel: XUiSession) -> list[str]:
+            """Create or attach on one panel. Debug notes return to the caller."""
+            notes: list[str] = []
             inbounds = self.panel_svc.getinbounds(panel)
             inbound_ids: list[int] = []
             for i in inbounds:
                 if i.protocol != "vless":
-                    self.log.debug(f"Non-VLESS inbound found ({i.protocol}). Ignoring.")
+                    notes.append(f"Non-VLESS inbound found ({i.protocol}). Ignoring.")
                     continue
                 inbound_ids.append(i.id)
             if not inbound_ids:
-                continue
+                return notes
 
             existing = self.panel_svc.get_client(panel, username)
             if existing is None:
@@ -204,6 +208,13 @@ class BusinessUserService(BaseService):
                         {"inboundIds": missing},
                         "user attach",
                     )
+            return notes
+
+        # First failing panel in list order still raises. Sibling writes
+        # may already have landed; they are not cancelled.
+        for notes in self.panel_svc.map_panels(self.panels, sync):
+            for note in notes:
+                self.log.debug(note)
         if not _called_internally: self.audit_svc.audit(name="user_refresh", info={"username":username})
         self._drop_cache()
 
@@ -214,17 +225,19 @@ class BusinessUserService(BaseService):
         """Delete a user, either from panels or from storage too."""
         self.user_svc.user(username)
 
-        for panel in self.panels:
+        def delete(panel: XUiSession) -> None:
             # add_users skips panels with no managed VLESS inbounds, so a
             # client absent there is expected — deleting must not fail on it
             if self.panel_svc.get_client(panel, username) is None:
-                continue
+                return
             _panel_post_json(
                 panel,
                 f"panel/api/clients/del/{quote(username, safe='')}",
                 {},
                 "user delete",
             )
+
+        self.panel_svc.map_panels(self.panels, delete)
         if perma:
             self.db.delete_user(username)
 
@@ -265,8 +278,9 @@ class BusinessUserService(BaseService):
         audit_info: dict[str, str | bool] = {"username": username}
         if enable is not None:
             panels = [p for p in self.panels if p != self.whitelist_panel]
-            for panel in panels:
-                self._set_enabled(panel, username, enable)
+            self.panel_svc.map_panels(
+                panels, lambda panel: self._set_enabled(panel, username, enable)
+            )
             
             fields: dict[str, object] = {"status": enable}
             if timee is not None:
@@ -463,11 +477,11 @@ class BusinessUserService(BaseService):
             raise ValidationError("Invalid UUID")
         self.user_svc.user(username)
 
-        for panel in self.panels:
+        def write(panel: XUiSession) -> AppError | None:
             try:
                 current = self.panel_svc.get_client(panel, username)
                 if current is None:
-                    continue  # not synced to this panel yet
+                    return None  # not synced to this panel yet
                 payload = _client_payload_from(current)
                 payload.id = uid
                 _panel_post_json(
@@ -477,11 +491,23 @@ class BusinessUserService(BaseService):
                     "UUID update",
                 )
             except AppError as exc:
-                self.log.critical(
-                    "update_uuid failed on panel %s", panel.name, exc_info=True,
-                )
-                self._mark_rollback_failure(username, f"{panel.name}: {exc.message}")
-                raise
+                return exc
+            return None
+
+        # Parallel writes, sequential failure handling. The marker names
+        # the first failing panel in list order, same as the old loop.
+        # Later panels may already hold the new UUID; that is the recorded
+        # state, not something this method rolls back.
+        for panel, exc in zip(
+            self.panels, self.panel_svc.map_panels(self.panels, write), strict=True
+        ):
+            if exc is None:
+                continue
+            self.log.critical(
+                "update_uuid failed on panel %s", panel.name, exc_info=exc,
+            )
+            self._mark_rollback_failure(username, f"{panel.name}: {exc.message}")
+            raise exc
 
         try:
             self.db.update_user(username, uuid=uid)
