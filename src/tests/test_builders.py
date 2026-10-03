@@ -1,0 +1,289 @@
+from __future__ import annotations
+
+import base64
+import json
+from types import SimpleNamespace
+from typing import Any, cast
+from unittest.mock import MagicMock
+
+import pytest
+
+from flask import Flask
+
+from builders import build_description, build_json, build_link_array, get_subscription
+from custom_types import BandwidthInfo
+
+
+DESC = {
+        "en": {
+            "bw_label": "usage ",
+        "main": "{username} up {up} down {down}{slot_time}{slot_bw}{slot_wl_bw}",
+        "main_exceeded": "{username} exceeded {used}/{limit}",
+        "date": " until {date} ({days}d)",
+        "date_expired": " expired {date} ({days}d ago)",
+        "bw": " bw {used}/{limit}",
+        "wl_bw": " wl {used}/{limit}",
+        "wl_bw_exceeded": " wl exceeded {used}/{limit}",
+    }
+}
+
+
+def _bandwidth() -> BandwidthInfo:
+    return BandwidthInfo(upload=1_500_000_000, download=500_000_000, total=2_000_000_000)
+
+
+def test_description_fills_active_and_disabled_slots() -> None:
+    active = build_description(
+        {"description": DESC}, "Alice", "en", _bandwidth(),
+        status=True, statusTime=True, ts=1_700_000_000,
+        bw_limit=5, bw_used=1_000_000_000, wl_limit=1, wl_used=2_000_000_000,
+    )
+    assert active.startswith("Alice")
+    assert "1.50 GB" in active
+    assert "until 14.11.23" in active
+    assert "bw 1.00 GB/5GB" in active
+    assert "wl exceeded" in active
+
+    unlimited = build_description(
+        {"description": DESC}, "Alice", "en", _bandwidth(),
+        status=True, statusTime=True, ts=0,
+        bw_limit=0, bw_used=0, wl_limit=0, wl_used=0,
+    )
+    assert unlimited == "Alice up 1.50 GB down 500.00 MB"
+
+    disabled = build_description(
+        {"description": DESC}, "Alice", "en", _bandwidth(),
+        status=False, statusTime=True, ts=1_700_000_000,
+        bw_limit=0, bw_used=0, wl_limit=0, wl_used=0,
+    )
+    assert disabled == "Alice up 1.50 GB down 500.00 MB"
+
+    expired = build_description(
+        {"description": DESC}, "Alice", "en", _bandwidth(),
+        status=False, statusTime=False, ts=1_700_000_000,
+        bw_limit=2, bw_used=3_000_000_000, wl_limit=0, wl_used=0,
+    )
+    assert "exceeded" in expired
+    assert "expired" not in expired
+
+    with pytest.raises(ValueError, match="unformatted"):
+        build_description(
+            {"description": {"en": {**DESC["en"], "main": "{username} {missing}"}}},
+            "Alice", "en", _bandwidth(),
+            status=True, statusTime=True, ts=0,
+            bw_limit=0, bw_used=0, wl_limit=0, wl_used=0,
+        )
+
+
+def _link_config() -> dict[str, Any]:
+    return {
+        "profiles": {"fast": ["Fast", "Быстрый"], "wl": ["WL", "ВЛ"]},
+        "whitelistProfiles": ["wl"],
+        "masterLinks": {
+            "fast": "vless://UUID@DOMAIN:443?fp=FINGERPRINT&extra=EXTRA#NAME",
+            "wl": "vless://UUID@DOMAIN:443?fp=FINGERPRINT#NAME",
+        },
+        "flags": {"fast": "⚡", "wl": "🛡"},
+        "profileNodes": {"fast": "edge", "wl": "wl-node"},
+        "nodes": {"edge": "edge.example", "wl-node": "wl.example"},
+        "xhttpExtra": {"fast": {"path": "/x"}},
+    }
+
+
+def test_link_array_filters_profiles_and_encodes_extra() -> None:
+    encoded = build_link_array(
+        _link_config(), status=True, statusWl=False, lang="ru", is_happ=True,
+        user_uuid="user-uuid", bandwidths=_bandwidth(), need_dummy_link=True,
+        fingerprint="chrome", lang_cfg={"description": {"ru": DESC["en"], "en": DESC["en"]}},
+    )
+    lines = base64.b64decode(encoded).decode("utf-8").splitlines()
+    assert lines[0].startswith("vless://0@localhost:1")
+    assert "user-uuid@edge.example" in lines[1]
+    assert "fp=chrome" in lines[1]
+    assert "%7B%22path%22%3A%22/x%22%7D" in lines[1]
+    assert "⚡Быстрый" in lines[1]
+    assert len(lines) == 2
+
+    disabled = build_link_array(
+        _link_config(), status=False, statusWl=True, lang="en", is_happ=False,
+        user_uuid="user-uuid", bandwidths=_bandwidth(), need_dummy_link=False,
+        fingerprint="chrome", lang_cfg={"description": DESC},
+    )
+    assert base64.b64decode(disabled) == b""
+
+    config = _link_config()
+    config["xhttpExtra"] = {}
+    encoded = build_link_array(
+        config, status=True, statusWl=True, lang="en", is_happ=False,
+        user_uuid="uuid", bandwidths=_bandwidth(), need_dummy_link=False,
+        fingerprint="edge", lang_cfg={"description": DESC},
+    )
+    text = base64.b64decode(encoded).decode("utf-8")
+    assert "extra=" not in text
+    assert "WL" in text
+    assert "🛡" not in text
+
+
+def _json_template() -> dict[str, Any]:
+    return {
+        "remarks": "",
+        "meta": {},
+        "outbounds": [{
+            "settings": {"vnext": [{"address": "", "users": [{"id": ""}]}]},
+            "streamSettings": {},
+        }],
+    }
+
+
+def _profile(stream: dict[str, Any]) -> dict[str, Any]:
+    profile = _json_template()["outbounds"][0]
+    profile = json.loads(json.dumps(profile))
+    profile["streamSettings"] = stream
+    return cast(dict[str, Any], profile)
+
+
+def test_json_profiles_fill_transport_hosts() -> None:
+    cfg = {
+        "json_template": _json_template(),
+        "profiles": {"tls": ["TLS", "ТЛС"], "ws": ["WS", "ВС"]},
+        "flags": {"tls": "", "ws": ""},
+        "profileNodes": {"tls": "edge", "ws": "edge"},
+        "nodes": {"edge": "edge.example"},
+        "shortProfileDescriptions": {"tls": ["tls en", "tls ru"], "ws": ["ws en", "ws ru"]},
+        "json_profiles": {
+            "tls": _profile({
+                "tlsSettings": {"serverName": "", "fingerprint": ""},
+                "xhttpSettings": {"host": ""},
+                "grpcSettings": {"authority": ""},
+                "realitySettings": {"fingerprint": ""},
+            }),
+            "ws": _profile({
+                "wsSettings": {},
+                "httpupgradeSettings": {"host": ""},
+            }),
+        },
+    }
+    built = build_json(cfg, "user-uuid", "en", "chrome")
+    tls = built[0]["outbounds"]
+    assert isinstance(tls, list)
+    stream = cast(dict[str, Any], tls[0])["streamSettings"]
+    assert stream["tlsSettings"]["serverName"] == "edge.example"
+    assert stream["tlsSettings"]["fingerprint"] == "chrome"
+    assert "host" not in stream["xhttpSettings"] or stream["xhttpSettings"]["host"] == ""
+    assert stream["realitySettings"]["fingerprint"] == "chrome"
+    ws = cast(dict[str, Any], cast(list[object], built[1]["outbounds"])[0])["streamSettings"]
+    assert ws["wsSettings"]["headers"]["Host"] == "edge.example"
+    assert ws["httpupgradeSettings"]["host"] == "edge.example"
+    assert built[0]["meta"] == {"serverDescription": "tls en"}
+
+
+def _subscription(**overrides: Any) -> Any:
+    user = {
+        "displayname": "Alice",
+        "enabled": 1,
+        "enabled_time": 1,
+        "enabled_wl": 1,
+        "expires_at": 0,
+        "bw_limit_gb": 0,
+        "bw_used": 0,
+        "wl_limit_gb": 0,
+        "wl_used": 0,
+        "uuid": "user-uuid",
+        "fingerprint": "chrome",
+    }
+    user.update(overrides.pop("user", {}))
+    cfg = {
+        "uri": "/sub/",
+        "sub_name": "VPN",
+        "provider_id": "",
+        "fallback_domain": None,
+        "bypass_packages": ["com.example"],
+        "ping_check_url": "https://example.test/204",
+        "profiles": {},
+        "description": DESC,
+    }
+    cfg.update(overrides.pop("cfg", {}))
+    subscription = SimpleNamespace(
+        user_svc=MagicMock(),
+        audit_svc=MagicMock(),
+        bandwidth_svc=MagicMock(),
+        res=SimpleNamespace(
+            cfg=MagicMock(),
+            lang_cfg=MagicMock(),
+        ),
+    )
+    subscription.user_svc.usertotoken.return_value = overrides.get("username", "alice")
+    subscription.user_svc.user.return_value = user
+    subscription.bandwidth_svc.bandwidth.return_value = _bandwidth()
+    subscription.res.cfg.copy.return_value = cfg
+    subscription.res.lang_cfg.copy.return_value = {"description": DESC, "web": {}}
+    subscription.res.lang_cfg.get.return_value = {
+        "shared": {"en": {"forbidden_title": "No browser"}}
+    }
+    subscription.res.cfg.__getitem__.side_effect = lambda key: cfg[key]
+    return subscription
+
+
+def test_subscription_rejects_bad_input_and_browser_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    subscription = _subscription()
+    app = Flask(__name__)
+    with app.app_context():
+        response, status = get_subscription(
+            subscription, token="", lang="en", ua="v2ray", ip="1.1.1.1", force_json="",
+        )
+        assert status == 401
+
+        subscription.user_svc.usertotoken.return_value = ""
+        response, status = get_subscription(
+            subscription, token="bad", lang="en", ua="v2ray", ip="1.1.1.1", force_json="",
+        )
+        assert status == 401
+        subscription.audit_svc.audit.assert_called()
+
+        subscription = _subscription()
+        response, status = get_subscription(
+            subscription, token="tok", lang="de", ua="v2ray", ip="1.1.1.1", force_json="",
+        )
+        assert status == 400
+
+        monkeypatch.setattr("builders.isbrowser", lambda ua: True)
+        monkeypatch.setattr("builders.render_template", lambda name, **kwargs: f"{name}:{kwargs['forbidden_title']}")
+        monkeypatch.setattr("builders.embed_font_faces", lambda html, prefix: f"{prefix}|{html}")
+        response, status = get_subscription(
+            subscription, token="tok", lang="en", ua="Mozilla", ip="1.1.1.1", force_json="",
+        )
+        assert status == 403
+        assert response.get_data(as_text=True) == "/sub|browser.html:No browser"
+
+
+def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("builders.isbrowser", lambda ua: False)
+    monkeypatch.setattr("builders.build_description", lambda **kwargs: "desc")
+    monkeypatch.setattr("builders.build_link_array", lambda **kwargs: "links")
+    monkeypatch.setattr("builders.build_json", lambda **kwargs: [{"remarks": kwargs["lang"]}])
+
+    subscription = _subscription(user={"bw_limit_gb": 2, "bw_used": 1_000_000_000, "enabled": 0})
+    response, status = get_subscription(
+        subscription, token="tok", lang="en", ua="v2rayN", ip="1.1.1.1", force_json="",
+    )
+    assert status == 200
+    assert response.get_data(as_text=True) == "links"
+    assert response.headers["Profile-Title"] == "VPN"
+    assert "total=" in response.headers["Subscription-Userinfo"]
+
+    subscription = _subscription(cfg={
+        "provider_id": "provider",
+        "fallback_domain": "https://fallback.test/",
+        "uri": "sub",
+        "sub_name": "VPN",
+        "bypass_packages": ["a", "b"],
+    })
+    response, status = get_subscription(
+        subscription, token="tok", lang="ru", ua="Happ/1.0", ip="1.1.1.1", force_json="1",
+    )
+    assert status == 200
+    assert response.mimetype == "application/json"
+    assert json.loads(response.get_data(as_text=True)) == [{"remarks": "ru"}]
+    assert response.headers["providerid"] == "provider"
+    assert "force_json=1" in response.headers["fallback-url"]
+    assert response.headers["per-app-proxy-list"] == "a,b"
