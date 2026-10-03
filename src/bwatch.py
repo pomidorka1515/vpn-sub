@@ -215,11 +215,13 @@ class BWatch:
 
     def panel_health_check(self) -> None:
         """Check each panel's Xray status and resource usage. Alert on issues."""
-        for panel in self.sub.panels:
-            if panel.dead:
-                continue
+        live = [panel for panel in self.sub.panels if not panel.dead]
+        # Dead panels stay out so they do not pick up getstatus's error log.
+        # Alert math stays on this thread; _panel_alerts is single-threaded.
+        for panel, status in zip(
+            live, self.sub.panel_svc.statuses(live), strict=True
+        ):
             try:
-                status = self.sub.panel_svc.getstatus(panel)
                 if not status:
                     continue
                 
@@ -337,8 +339,9 @@ class BWatch:
         """Record one state snapshot (`SysUtil` + panels) for today."""
         panels_data: dict[str, object] = {}
         panel_errors: list[str] = []
-        for panel in self.sub.panels:
-            status = self.sub.panel_svc.getstatus(panel)
+        for panel, status in zip(
+            self.sub.panels, self.sub.panel_svc.statuses(), strict=True
+        ):
             if status is None:
                 panel_errors.append(panel.name)
             else:

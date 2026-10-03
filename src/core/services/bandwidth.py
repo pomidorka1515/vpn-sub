@@ -6,6 +6,7 @@ from .panel import PanelService
 from .user.common import CommonUserService
 from session import XUiSession
 from custom_types import BandwidthInfo, BandwidthSnapshot, StateSnapshot
+from custom_types import PanelClient
 from errors import AppError, PanelUnavailableError
 
 __all__ = ["BandwidthService"]
@@ -48,8 +49,13 @@ class BandwidthService(BaseService):
 
         up_total = 0
         down_total = 0
-        for panel in self._target_panels(whitelist):
-            traffic = self.panel_svc.client_traffic(panel, username)
+        panels = self._target_panels(whitelist)
+        # First failing panel in list order still raises. Sibling requests
+        # may finish in the background; they are not cancelled.
+        rows = self.panel_svc.map_panels(
+            panels, lambda panel: self.panel_svc.client_traffic(panel, username)
+        )
+        for traffic in rows:
             if traffic is not None:
                 up_total += traffic.up
                 down_total += traffic.down
@@ -70,15 +76,22 @@ class BandwidthService(BaseService):
             return {}
         totals: dict[str, list[int]] = {}
         queried = 0
-        for panel in panels:
+
+        def fetch(panel: XUiSession) -> list[PanelClient] | AppError:
             try:
-                clients = self.panel_svc.list_clients(panel)
-            except AppError:
+                return self.panel_svc.list_clients(panel)
+            except AppError as exc:
+                return exc
+
+        # A raising map would skip a live later panel when the first fails.
+        for panel, outcome in zip(panels, self.panel_svc.map_panels(panels, fetch), strict=True):
+            if isinstance(outcome, AppError):
                 self.log.error(
                     "client traffic listing failed for panel %s",
-                    panel.name, exc_info=True,
+                    panel.name, exc_info=outcome,
                 )
                 continue
+            clients = outcome
             queried += 1
             for client in clients:
                 traffic = client.traffic

@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from concurrent.futures import Future, ThreadPoolExecutor
+from collections.abc import Callable, Sequence
 from urllib.parse import quote
 from dacite import from_dict
 from typing import Literal, cast, overload
@@ -18,7 +22,42 @@ from errors import AppError, PanelRejectedError, PanelUnavailableError
 
 __all__ = ["PanelService"]
 
+_PANEL_POOL_WORKERS = 8
+_PANEL_POOL = ThreadPoolExecutor(
+    max_workers=_PANEL_POOL_WORKERS, thread_name_prefix="panel"
+)
+
 class PanelService(BaseService):
+    def map_panels[T](
+        self,
+        panels: Sequence[XUiSession],
+        fn: Callable[[XUiSession], T],
+    ) -> list[T]:
+        """Run ``fn`` on each panel. Results follow ``panels`` order.
+
+        Wall time is the slowest call, not the sum. An exception is raised
+        from the first failing panel in list order and does not cancel the
+        others. ``fn`` must not call ``map_panels`` (one shared pool; a
+        worker that waits on the same pool deadlocks once it is full).
+        Zero or one panel runs on the caller thread.
+        """
+        if len(panels) <= 1:
+            return [fn(panel) for panel in panels]
+        futures: list[Future[T]] = [
+            _PANEL_POOL.submit(fn, panel) for panel in panels
+        ]
+        # result() in input order: Executor.map would cancel not-yet-started
+        # siblings on the first exception and drop a later panel's work.
+        return [future.result() for future in futures]
+
+    def statuses(
+        self,
+        panels: Sequence[XUiSession] | None = None,
+    ) -> list[ServerMetricsResponse | None]:
+        """Fan out ``getstatus``. Results align with the input sequence."""
+        target = self.panels if panels is None else panels
+        return self.map_panels(target, self.getstatus)
+
     def getstatus(self, panel: XUiSession) -> ServerMetricsResponse | None:
         """Get panel status, or ``None`` when the panel status is unknown."""
         try:
@@ -201,6 +240,48 @@ class PanelService(BaseService):
                 f"Panel {panel.name} traffic query failed: {exc}"
             ) from exc
 
+    def _fetch_onlines(self, panel: XUiSession) -> Response | BaseException:
+        """POST the onlines route. Exceptions travel back as values."""
+        try:
+            return panel.post("panel/api/clients/onlines")
+        except Exception as exc:
+            return exc
+
+    def _classify_onlines(
+        self,
+        panel: XUiSession,
+        response: Response,
+        online_users: dict[str, None],
+    ) -> Literal["ok", "unavailable", "invalid"]:
+        """Classify one onlines payload. Accepted emails stay even on a later break."""
+        data: dict[str, object] = response.json()
+        if response.status_code not in (200, 201) or not data.get("success"):
+            self.log.error(
+                "Online check failed for panel %s: %s",
+                panel.name,
+                data.get("msg") or response.status_code,
+            )
+            return "unavailable"
+        raw_online = data.get("obj", [])
+        if not isinstance(raw_online, list):
+            self.log.error(
+                "Online check returned invalid payload for panel %s",
+                panel.name,
+            )
+            return "invalid"
+        raw_emails: list[object] = cast(list[object], raw_online)
+        for raw_email in raw_emails:
+            if not isinstance(raw_email, str):
+                self.log.error(
+                    "Online check returned a non-string email for panel %s",
+                    panel.name,
+                )
+                return "invalid"
+            if self.db.user_exists(raw_email):
+                # dict, not set: free-threaded sets do not keep first-seen order.
+                online_users.setdefault(raw_email, None)
+        return "ok"
+
     @overload
     def get_online_status(self, new: Literal[False] = False) -> OnlineStatus: ...
 
@@ -216,7 +297,8 @@ class PanelService(BaseService):
         An empty result is valid only when every configured panel reports
         a successful empty response.
         """
-        online_users: set[str] = set()
+        # First-seen order is panel list order, then payload order.
+        online_users: dict[str, None] = {}
         panel_health: dict[str, Literal["ok", "unavailable", "invalid"]] = {}
 
         if not self.panels:
@@ -224,47 +306,41 @@ class PanelService(BaseService):
                 return OnlineStatus({}, panel_health)
             return OnlineStatus([], panel_health)
 
+        # Skip dead panels before submit. Workers only fetch; classification
+        # and logging stay on the caller so order follows self.panels.
+        live = [panel for panel in self.panels if not panel.dead]
+        fetched: dict[str, Response | BaseException] = {}
+        if live:
+            fetched = dict(zip(
+                (panel.name for panel in live),
+                self.map_panels(live, self._fetch_onlines),
+                strict=True,
+            ))
+
         for panel in self.panels:
             if panel.dead:
                 panel_health[panel.name] = "unavailable"
                 continue
+            outcome = fetched[panel.name]
+            if isinstance(outcome, BaseException):
+                panel_health[panel.name] = "unavailable"
+                self.log.error(
+                    "Online check failed for panel %s", panel.name, exc_info=outcome
+                )
+                continue
             try:
-                response = panel.post("panel/api/clients/onlines")
-                data: dict[str, object] = response.json()
-                if response.status_code not in (200, 201) or not data.get('success'):
-                    panel_health[panel.name] = "unavailable"
-                    self.log.error(
-                        "Online check failed for panel %s: %s",
-                        panel.name,
-                        data.get('msg') or response.status_code,
-                    )
-                    continue
-                raw_online = data.get('obj', [])
-                if not isinstance(raw_online, list):
-                    panel_health[panel.name] = "invalid"
-                    self.log.error(
-                        "Online check returned invalid payload for panel %s",
-                        panel.name,
-                    )
-                    continue
-                raw_emails: list[object] = cast(list[object], raw_online)
-                for raw_email in raw_emails:
-                    if not isinstance(raw_email, str):
-                        panel_health[panel.name] = "invalid"
-                        self.log.error(
-                            "Online check returned a non-string email for panel %s",
-                            panel.name,
-                        )
-                        break
-                    if self.db.user_exists(raw_email):
-                        online_users.add(raw_email)
-                else:
-                    panel_health[panel.name] = "ok"
+                panel_health[panel.name] = self._classify_onlines(
+                    panel, outcome, online_users
+                )
             except Exception as exc:
                 panel_health[panel.name] = "unavailable"
-                self.log.error("Online check failed for panel %s", panel.name, exc_info=exc)
+                self.log.error(
+                    "Online check failed for panel %s", panel.name, exc_info=exc
+                )
 
-        if all(health == "unavailable" for health in panel_health.values()):
+        if panel_health and all(
+            health == "unavailable" for health in panel_health.values()
+        ):
             raise PanelUnavailableError("No panel could be queried for online users")
 
         users: list[str] | dict[str, str | None]

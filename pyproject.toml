@@ -173,9 +173,12 @@ include = [
     "scripts/"
 ]
 exclude = [
-    "venv",
-    ".venv",
-    "**/__pycache__"
+    "**/venv/**",
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/node_modules/**",
+    "**/.*/**",
+    "**/*.egg-info/**"
 ]
 typeCheckingMode = "strict"
 reportDeprecated = false
@@ -199,6 +202,7 @@ reportUnusedFunction = false
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src", "src/tests"]
 root = "src/tests"
+reportPrivateUsage = false
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src/discord/src", "src"]

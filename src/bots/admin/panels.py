@@ -3,14 +3,20 @@ from __future__ import annotations
 
 from ..composition import AdminFeatureMixin
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, cast
 
 from util import fmt_time
+from custom_types import ServerMetricsResponse
 __all__ = ["AdminPanelsMixin"]
 
 
 if TYPE_CHECKING:
     from session import XUiSession
+
+class _UNFETCHED_SENTINEL:
+    def __repr__(self) -> str:
+        return "<unfetched panel>"
+_UNFETCHED: Final[_UNFETCHED_SENTINEL] = _UNFETCHED_SENTINEL()
 
 class AdminPanelsMixin(AdminFeatureMixin):
     """Panel status and aggregation workflows."""
@@ -18,12 +24,15 @@ class AdminPanelsMixin(AdminFeatureMixin):
     def _cb_panel_info(self,
                        chat_id: int,
                        panel: XUiSession,
-                       last: bool) -> None:
-        info = self.sub.panel_svc.getstatus(panel)
-        if info is None:
+                       last: bool,
+                       info: ServerMetricsResponse | _UNFETCHED_SENTINEL | None = _UNFETCHED) -> None:
+        if info is _UNFETCHED:
+            info = self.sub.panel_svc.getstatus(panel)
+        fetched = cast(ServerMetricsResponse | None, info)
+        if fetched is None:
             self._send_message(chat_id, f"❌ Статус панели {panel.name} неизвестен", reply_markup=self.get_main_menu())
             return
-        obj = info.obj
+        obj = fetched.obj
         obj.format()
         sys_up = fmt_time(obj.uptime)
         app_up = fmt_time(obj.appStats.uptime)
@@ -62,13 +71,12 @@ class AdminPanelsMixin(AdminFeatureMixin):
     def _cb_all_panels_status(self, chat_id: int) -> None:
         msg = self.bot.send_message(chat_id, "⏳ Получение статуса панелей...")
         panels = list(self.sub.panels)
-        for i, panel in enumerate(panels):
+        statuses = self.sub.panel_svc.statuses(panels)
+        for i, (panel, status) in enumerate(zip(panels, statuses, strict=True)):
             last = i == len(panels) - 1
             try:
-                self._cb_panel_info(chat_id, panel, last)
+                self._cb_panel_info(chat_id, panel, last, status)
             except Exception:
                 self.log.error("panel operation failed for %s", panel.name, exc_info=True)
                 self._send_message(chat_id, "❌ Внутренняя ошибка", parse_mode="HTML")
         self._delete_message(chat_id, msg.message_id)
-
-

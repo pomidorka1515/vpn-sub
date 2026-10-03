@@ -276,8 +276,10 @@ class Api(BaseApi):
         query = request.args.get('name', None)
         if query is None:
             result: dict[str, dict[str, JsonifyValue] | None] = {}
-            for panel in self.sub.panels:
-                _ = self.sub.panel_svc.getstatus(panel)
+            for panel, status in zip(
+                self.sub.panels, self.sub.panel_svc.statuses(), strict=True
+            ):
+                _ = status
                 if _ is None:
                     self.log.error(f"getstatus: {panel.name} returned None")
                 else:
@@ -307,8 +309,9 @@ class Api(BaseApi):
         sample.
         """
         panels_data: dict[str, dict[str, JsonifyValue] | None] = {}
-        for panel in self.sub.panels:
-            res = self.sub.panel_svc.getstatus(panel)
+        for panel, res in zip(
+            self.sub.panels, self.sub.panel_svc.statuses(), strict=True
+        ):
             if res is None:
                 panels_data[panel.name] = None
                 continue
@@ -334,8 +337,9 @@ class Api(BaseApi):
     @requires_admin_auth
     def full_info(self) -> ResponseType:
         panels_data: dict[str, JsonifyValue] = {}
-        for panel in self.sub.panels:
-            res = self.sub.panel_svc.getstatus(panel)
+        for panel, res in zip(
+            self.sub.panels, self.sub.panel_svc.statuses(), strict=True
+        ):
             if res is None:
                 panels_data[panel.name] = {"status": "unknown"}
             else:

@@ -283,6 +283,7 @@ def test_all_panels_status_continues_after_failure(
         if cast(Any, panel).name == "one":
             raise RuntimeError("down")
 
+    subscription.panel_svc.statuses.return_value = [None, None]
     with patch.object(AdminPanelsMixin, "_cb_panel_info", side_effect=status):
         mixin._cb_all_panels_status(7)
     assert "Внутренняя ошибка" in cast(MagicMock, mixin._send_message).call_args.args[1]
