@@ -45,7 +45,7 @@ def test_all_daily_snapshot_failures_raise_and_persist_counts(
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
 
-    def fail_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def fail_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         raise RuntimeError("panel unavailable")
 
     subscription.bandwidth_svc.all_traffic = fail_traffic  # type: ignore[method-assign]
@@ -62,7 +62,7 @@ def test_successful_daily_snapshot_clears_previous_failure(
     create_alice(database, uuid=str(uuid.uuid4()), bw_limit_gb=1, wl_limit_gb=1)
     database.set_metadata("daily_bw_snapshot_failures", "123:1:1")
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         return {"alice": BandwidthInfo(1, 2, 3)}
 
     subscription.bandwidth_svc.all_traffic = all_traffic  # type: ignore[method-assign]
@@ -80,7 +80,7 @@ def test_partial_daily_snapshot_failure_is_visible(
             displayname=username.title(), bw_limit_gb=1, wl_limit_gb=1,
         )
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         if whitelist:
             raise RuntimeError("panel unavailable")
         return {"bob": BandwidthInfo(1, 2, 3)}
@@ -114,7 +114,7 @@ def test_partial_daily_snapshot_failure_does_not_advance_failed_baseline(
         "bob": BandwidthInfo(upload=10, download=20, total=30),
     }
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         if whitelist:
             raise RuntimeError("panel unavailable")
         return readings

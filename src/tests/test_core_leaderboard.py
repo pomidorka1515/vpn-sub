@@ -26,8 +26,9 @@ def test_leaderboard_total_and_monthly_ranking(database: Database) -> None:
 
     totals = {"alice": 100, "bob": 50, "cara": 300}
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         assert whitelist is False
+        assert pool is not None
         return {
             user: BandwidthInfo(total, 0, total)
             for user, total in totals.items()

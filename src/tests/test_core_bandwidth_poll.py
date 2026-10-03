@@ -157,7 +157,7 @@ def test_counter_failure_does_not_advance_either_baseline(
     second = BandwidthInfo(upload=200, download=200, total=400)
     calls: list[bool] = []
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         calls.append(whitelist)
         if whitelist:
             raise RuntimeError("whitelist panel failed")
@@ -182,7 +182,7 @@ def test_bandwidth_check_reads_one_map_per_side(
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
     calls: list[bool] = []
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         calls.append(whitelist)
         return {"alice": BandwidthInfo(400, 400, 800)} if not whitelist else {}
 
@@ -203,7 +203,7 @@ def test_bandwidth_check_skips_unrequired_side(
     create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
     calls: list[bool] = []
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         calls.append(whitelist)
         return {"alice": BandwidthInfo(300, 300, 600)}
 
@@ -225,7 +225,7 @@ def test_daily_snapshot_accumulates_repeated_days(
     ]
     calls = 0
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         nonlocal calls
         current = readings[min(calls, len(readings) - 1)]
         if not whitelist:
@@ -249,7 +249,7 @@ def test_daily_snapshot_clamps_counter_reset_deltas(
     baseline = BandwidthInfo(upload=1000, download=2000, total=3000)
     reset = BandwidthInfo(upload=100, download=200, total=300)
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         return {"alice": reset}
 
     watch.snap_mem["alice"] = baseline
@@ -271,7 +271,7 @@ def test_daily_snapshot_ignores_poller_baseline(
     current = BandwidthInfo(upload=400, download=600, total=1000)
     poller = BandwidthInfo(upload=399, download=599, total=998)
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         return {"alice": current}
 
     watch.mem["alice"] = poller
@@ -295,7 +295,7 @@ def test_daily_snapshot_skips_unused_counter(
     create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
     calls: list[bool] = []
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         calls.append(whitelist)
         if whitelist:
             raise RuntimeError("whitelist panel failed")
@@ -323,7 +323,7 @@ def test_bandwidth_check_reads_users_once_and_writes_once(
     watch.wl_mem["alice"] = BandwidthInfo(0, 0, 0)
     watch.mem["bob"] = BandwidthInfo(0, 0, 0)
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         total = 20 if whitelist else 10
         return {"alice": BandwidthInfo(total, 0, total), "bob": BandwidthInfo(5, 0, 5)}
 
@@ -374,7 +374,7 @@ def test_daily_snapshot_writes_rows_in_one_transaction(
         bw_limit_gb=1, wl_limit_gb=0,
     )
 
-    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         return {
             "alice": BandwidthInfo(upload=1, download=2, total=3),
             "bob": BandwidthInfo(upload=4, download=5, total=9),

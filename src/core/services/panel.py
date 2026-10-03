@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from collections.abc import Callable, Sequence
 from urllib.parse import quote
 from dacite import from_dict
@@ -20,31 +20,45 @@ from custom_types import (
 )
 from errors import AppError, PanelRejectedError, PanelUnavailableError
 
-__all__ = ["PanelService"]
+__all__ = ["BG_POOL", "PanelService"]
 
-_PANEL_POOL_WORKERS = 8
+_PANEL_POOL_WORKERS = 4
+_BG_POOL_WORKERS = 4
 _PANEL_POOL = ThreadPoolExecutor(
-    max_workers=_PANEL_POOL_WORKERS, thread_name_prefix="panel"
+    max_workers=_PANEL_POOL_WORKERS, thread_name_prefix="panel-req"
 )
+_BG_POOL = ThreadPoolExecutor(
+    max_workers=_BG_POOL_WORKERS, thread_name_prefix="panel-bg"
+)
+BG_POOL: Executor = _BG_POOL
 
 class PanelService(BaseService):
     def map_panels[T](
         self,
         panels: Sequence[XUiSession],
         fn: Callable[[XUiSession], T],
+        pool: Executor | None = None,
     ) -> list[T]:
         """Run ``fn`` on each panel. Results follow ``panels`` order.
 
         Wall time is the slowest call, not the sum. An exception is raised
         from the first failing panel in list order and does not cancel the
-        others. ``fn`` must not call ``map_panels`` (one shared pool; a
-        worker that waits on the same pool deadlocks once it is full).
-        Zero or one panel runs on the caller thread.
+        others. ``fn`` must not call ``map_panels`` on either pool: a worker
+        that waits still occupies its slot, and a nested submit deadlocks
+        once that pool is full. Cross-pool waiting is safe only one way
+        (request never waits on background, background never waits on
+        request). Zero or one panel runs on the caller thread and does not
+        occupy a worker.
+
+        ``pool`` defaults to the request executor. Background callers
+        (BWatch, admin leaderboard) pass ``BG_POOL``. Request handlers
+        pass nothing.
         """
         if len(panels) <= 1:
             return [fn(panel) for panel in panels]
+        executor = _PANEL_POOL if pool is None else pool
         futures: list[Future[T]] = [
-            _PANEL_POOL.submit(fn, panel) for panel in panels
+            executor.submit(fn, panel) for panel in panels
         ]
         # result() in input order: Executor.map would cancel not-yet-started
         # siblings on the first exception and drop a later panel's work.
@@ -53,10 +67,11 @@ class PanelService(BaseService):
     def statuses(
         self,
         panels: Sequence[XUiSession] | None = None,
+        pool: Executor | None = None,
     ) -> list[ServerMetricsResponse | None]:
         """Fan out ``getstatus``. Results align with the input sequence."""
         target = self.panels if panels is None else panels
-        return self.map_panels(target, self.getstatus)
+        return self.map_panels(target, self.getstatus, pool)
 
     def getstatus(self, panel: XUiSession) -> ServerMetricsResponse | None:
         """Get panel status, or ``None`` when the panel status is unknown."""
@@ -284,15 +299,26 @@ class PanelService(BaseService):
         return "ok"
 
     @overload
-    def get_online_status(self, new: Literal[False] = False) -> OnlineStatus: ...
+    def get_online_status(
+        self, new: Literal[False] = False, *, pool: Executor | None = None,
+    ) -> OnlineStatus: ...
 
     @overload
-    def get_online_status(self, new: Literal[True]) -> OnlineStatus: ...
+    def get_online_status(
+        self, new: Literal[True], *, pool: Executor | None = None,
+    ) -> OnlineStatus: ...
 
     @overload
-    def get_online_status(self, new: bool) -> OnlineStatus: ...
+    def get_online_status(
+        self, new: bool, *, pool: Executor | None = None,
+    ) -> OnlineStatus: ...
 
-    def get_online_status(self, new: bool = False) -> OnlineStatus:
+    def get_online_status(
+        self,
+        new: bool = False,
+        *,
+        pool: Executor | None = None,
+    ) -> OnlineStatus:
         """Get online users and per-panel query health.
 
         An empty result is valid only when every configured panel reports
@@ -316,7 +342,7 @@ class PanelService(BaseService):
         if live:
             fetched = dict(zip(
                 (panel.name for panel in live),
-                self.map_panels(live, self._fetch_onlines),
+                self.map_panels(live, self._fetch_onlines, pool),
                 strict=True,
             ))
 

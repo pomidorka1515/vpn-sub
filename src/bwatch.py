@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Literal
@@ -75,8 +76,9 @@ class BWatch:
         initial_snap_wl_mem: dict[str, BandwidthInfo] = {}
         # One batched read per map (whitelist + main); per-user seeding from
         # the two maps. Absent clients seed zero baselines, like before.
-        wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True)
-        main_map = self.sub.bandwidth_svc.all_traffic()
+        pool = self._panel_pool()
+        wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True, pool=pool)
+        main_map = self.sub.bandwidth_svc.all_traffic(pool=pool)
         for i in self.sub.user_svc.list_users():
             wl_current = wl_map.get(i, BandwidthInfo(0, 0, 0))
             initial_wl_mem[i] = wl_current
@@ -173,10 +175,11 @@ class BWatch:
         main_map: dict[str, BandwidthInfo] = {}
         wl_map: dict[str, BandwidthInfo] = {}
         try:
+            pool = self._panel_pool()
             if need_main:
-                main_map = self.sub.bandwidth_svc.all_traffic()
+                main_map = self.sub.bandwidth_svc.all_traffic(pool=pool)
             if need_wl:
-                wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True)
+                wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True, pool=pool)
         except Exception:
             self.log.error("bandwidth poll failed", exc_info=True)
             return
@@ -222,7 +225,7 @@ class BWatch:
         # Dead panels stay out so they do not pick up getstatus's error log.
         # Alert math stays on this thread; _panel_alerts is single-threaded.
         for panel, status in zip(
-            live, self.sub.panel_svc.statuses(live), strict=True
+            live, self.sub.panel_svc.statuses(live, self._panel_pool()), strict=True
         ):
             try:
                 if not status:
@@ -345,7 +348,7 @@ class BWatch:
         panels_data: dict[str, object] = {}
         panel_errors: list[str] = []
         for panel, status in zip(
-            self.sub.panels, self.sub.panel_svc.statuses(), strict=True
+            self.sub.panels, self.sub.panel_svc.statuses(pool=self._panel_pool()), strict=True
         ):
             if status is None:
                 panel_errors.append(panel.name)
@@ -434,10 +437,11 @@ class BWatch:
         main_map: dict[str, BandwidthInfo] = {}
         wl_map: dict[str, BandwidthInfo] = {}
         try:
+            pool = self._panel_pool()
             if need_main:
-                main_map = self.sub.bandwidth_svc.all_traffic()
+                main_map = self.sub.bandwidth_svc.all_traffic(pool=pool)
             if need_wl:
-                wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True)
+                wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True, pool=pool)
         except Exception:
             self.log.error(
                 "failed to record daily bandwidth snapshot",
@@ -511,6 +515,14 @@ class BWatch:
             return None
 
     ### Helper functions ###
+    @staticmethod
+    def _panel_pool() -> Executor:
+        """Background panel executor. Imported lazily: app imports BWatch
+        before ``core`` has finished loading ``panel``.
+        """
+        from core.services.panel import BG_POOL
+        return BG_POOL
+
     def _guarded(self, what: str, operation: Callable[[], object]) -> None:
         """Run one periodic operation; a crash must not kill the loop thread."""
         try:

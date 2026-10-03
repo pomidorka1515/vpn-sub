@@ -7,6 +7,7 @@ import time
 import json
 
 from requests import Session, Response, Timeout, ConnectionError, RequestException
+from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
 from loggers import Logger
 from custom_types import Inbound, RequestKwargs
@@ -21,6 +22,9 @@ __all__ = ['XUiSession', 'XUiPanelTransport', 'RequestsPanelTransport', 'XUiSess
 
 _HEALTH_CHECK_TIMEOUT = 5.0
 _DEFAULT_REQUEST_TIMEOUT = 5.0
+# panel-req (4) + panel-bg (4). urllib3's default of 10 discards a
+# connection once both sides are in flight against the same panel.
+_SESSION_POOL_MAXSIZE = 8
 
 
 def inbound_stamp_path(name: str, base_url: str, *, directory: str | None = None) -> str:
@@ -229,7 +233,7 @@ class XUiSession:
             self._session: Session | None = None
             self._owns_session = session is None and transport is None
             if transport is None:
-                self._session = session if session is not None else Session()
+                self._session = session if session is not None else self._new_session()
                 transport = RequestsPanelTransport(self._session, nginx_auth)
             elif session is not None:
                 raise ValueError("pass either transport or session, not both")
@@ -251,6 +255,22 @@ class XUiSession:
             self._health_check_event = threading.Event()
 
             self._health_check_thread.start()
+
+    @staticmethod
+    def _new_session() -> Session:
+        """Session whose pool can hold one connection per panel worker.
+
+        Both executors can hit the same panel at once. ``pool_maxsize`` is
+        their sum so urllib3 does not discard a live connection to make room.
+        """
+        session = Session()
+        adapter = HTTPAdapter(
+            pool_connections=_SESSION_POOL_MAXSIZE,
+            pool_maxsize=_SESSION_POOL_MAXSIZE,
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
 
     @property
     def dead(self) -> bool:

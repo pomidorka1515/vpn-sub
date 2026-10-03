@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import Executor
 from dacite import from_dict, Config as DConfig
 
 from ..common import BaseService, SharedCoreResources
@@ -34,9 +35,12 @@ class BandwidthService(BaseService):
             return [self.whitelist_panel]
         return [p for p in self.panels if p != self.whitelist_panel]
 
-    def bandwidth(self,
-                  username: str,
-                  whitelist: bool = False
+    def bandwidth(
+        self,
+        username: str,
+        whitelist: bool = False,
+        *,
+        pool: Executor | None = None,
     ) -> BandwidthInfo:
         """Get bandwidth info about a user. Returns BandwidthInfo(upload, download, total). In bytes.
 
@@ -53,7 +57,9 @@ class BandwidthService(BaseService):
         # First failing panel in list order still raises. Sibling requests
         # may finish in the background; they are not cancelled.
         rows = self.panel_svc.map_panels(
-            panels, lambda panel: self.panel_svc.client_traffic(panel, username)
+            panels,
+            lambda panel: self.panel_svc.client_traffic(panel, username),
+            pool,
         )
         for traffic in rows:
             if traffic is not None:
@@ -62,7 +68,12 @@ class BandwidthService(BaseService):
 
         return BandwidthInfo(up_total, down_total, up_total + down_total)
 
-    def all_traffic(self, whitelist: bool = False) -> dict[str, BandwidthInfo]:
+    def all_traffic(
+        self,
+        whitelist: bool = False,
+        *,
+        pool: Executor | None = None,
+    ) -> dict[str, BandwidthInfo]:
         """Batch path for pollers: one ``clients/list`` per target panel.
 
         Reduces every panel client into ``email -> BandwidthInfo`` summed
@@ -85,7 +96,9 @@ class BandwidthService(BaseService):
                 return exc
 
         # A raising map would skip a live later panel when the first fails.
-        for panel, outcome in zip(panels, self.panel_svc.map_panels(panels, fetch), strict=True):
+        for panel, outcome in zip(
+            panels, self.panel_svc.map_panels(panels, fetch, pool), strict=True,
+        ):
             if isinstance(outcome, AppError):
                 self.log.error(
                     "client traffic listing failed for panel %s",

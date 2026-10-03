@@ -3,6 +3,7 @@ from typing import Literal
 from ..common import BaseService, SharedCoreResources
 from .user.common import CommonUserService
 from .bandwidth import BandwidthService
+from .panel import BG_POOL
 
 class LeaderboardService(BaseService):
     def __init__(
@@ -21,7 +22,7 @@ class LeaderboardService(BaseService):
         *,
         top_n: int = 0,
         use_displaynames: bool = False,
-        flip: bool = False
+        flip: bool = False,
     ) -> dict[str, int]:
         """
         Dict of top-n users by specified bandwidth type, in order.
@@ -51,7 +52,10 @@ class LeaderboardService(BaseService):
         match category:
             case 'total':
                 # One batched read instead of a per-user panel poll.
-                totals = self.bandwidth_svc.all_traffic()
+                # Admin bot and the HTTP admin route share the background
+                # pool with BWatch. A whitelist-only read is one panel and
+                # stays inline; this path is the multi-panel total.
+                totals = self.bandwidth_svc.all_traffic(pool=BG_POOL)
                 for user, display in zip(users, display_users):
                     info = totals.get(user)
                     raw[display] = int(info.total) if info is not None else 0
