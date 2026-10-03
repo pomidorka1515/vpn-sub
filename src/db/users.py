@@ -16,8 +16,15 @@ class UsersMixin(ConnectionMixin):
             return cast(UserRecord, dict(row)) if row is not None else None
 
     def list_users(self) -> list[str]:
+        return [user["username"] for user in self.list_user_records()]
+
+    def list_user_records(self) -> list[UserRecord]:
+        """One SELECT of every user, in username order."""
         with self.connection() as conn:
-            return [str(row[0]) for row in conn.execute("SELECT username FROM users ORDER BY username")]
+            return [
+                cast(UserRecord, dict(row))
+                for row in conn.execute("SELECT * FROM users ORDER BY username")
+            ]
 
     def all_users(self) -> list[str]:
         return self.list_users()
@@ -25,6 +32,19 @@ class UsersMixin(ConnectionMixin):
     def user_exists(self, username: str) -> bool:
         with self.connection() as conn:
             return conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone() is not None
+
+    def usernames(self) -> set[str]:
+        """Known usernames, loaded once for batch membership checks."""
+        with self.connection() as conn:
+            return {str(row[0]) for row in conn.execute("SELECT username FROM users")}
+
+    def username_exts(self) -> dict[str, str | None]:
+        """username -> ext_username, loaded once for batch lookups."""
+        with self.connection() as conn:
+            return {
+                str(row[0]): None if row[1] is None else str(row[1])
+                for row in conn.execute("SELECT username, ext_username FROM users")
+            }
 
     def create_user(
         self,

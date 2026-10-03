@@ -30,6 +30,10 @@ class CommonUserService(BaseService):
         """Return users in deterministic username order."""
         return self.db.list_users()
 
+    def list_user_states(self) -> list[UserRecord]:
+        """Return every user's persisted state in one query."""
+        return self.db.list_user_records()
+
     def get_token(self, username: str) -> str:
         return str(self.user(username)["token"])
 
@@ -53,4 +57,3 @@ class CommonUserService(BaseService):
 
     def external_username_exists(self, ext_username: str) -> bool:
         return self.db.ext_to_user(ext_username) is not None
-

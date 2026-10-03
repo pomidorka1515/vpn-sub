@@ -12,6 +12,24 @@ class StateMixin(ConnectionMixin):
             conn.execute("UPDATE users SET bw_used = bw_used + ?, wl_used = wl_used + ? WHERE username = ?",
                          (regular, whitelist, username))
 
+    def increment_usages(self, updates: Mapping[str, tuple[int, int]]) -> None:
+        """Apply (regular, whitelist) deltas in one transaction.
+
+        Empty input is a no-op and does not open a write transaction.
+        """
+        rows = [
+            (regular, whitelist, username)
+            for username, (regular, whitelist) in updates.items()
+            if regular or whitelist
+        ]
+        if not rows:
+            return
+        with self.transaction(immediate=True) as conn:
+            conn.executemany(
+                "UPDATE users SET bw_used = bw_used + ?, wl_used = wl_used + ? WHERE username = ?",
+                rows,
+            )
+
     def reset_monthly(self, month: str, today: str) -> bool:
         with self.transaction(immediate=True) as conn:
             current = conn.execute("SELECT value FROM app_metadata WHERE key = 'last_reset_month'").fetchone()
@@ -76,6 +94,26 @@ class StateMixin(ConnectionMixin):
                 up=up + excluded.up, down=down + excluded.down,
                 wl_up=wl_up + excluded.wl_up, wl_down=wl_down + excluded.wl_down""",
                          (username, ts, up, down, wl_up, wl_down))
+
+    def add_bandwidth_snapshots(
+        self,
+        rows: list[tuple[str, int, int, int, int, int]],
+    ) -> None:
+        """Upsert many daily snapshots in one transaction.
+
+        Each row is (username, ts, up, down, wl_up, wl_down). Empty input is
+        a no-op and does not open a write transaction.
+        """
+        if not rows:
+            return
+        with self.transaction(immediate=True) as conn:
+            conn.executemany(
+                """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
+                VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(username, ts) DO UPDATE SET
+                up=up + excluded.up, down=down + excluded.down,
+                wl_up=wl_up + excluded.wl_up, wl_down=wl_down + excluded.wl_down""",
+                rows,
+            )
 
     def get_bandwidth_snapshots(self, username: str, cutoff: int) -> list[dict[str, int]]:
         with self.connection() as conn:

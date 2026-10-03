@@ -252,6 +252,7 @@ class PanelService(BaseService):
         panel: XUiSession,
         response: Response,
         online_users: dict[str, None],
+        known: set[str],
     ) -> Literal["ok", "unavailable", "invalid"]:
         """Classify one onlines payload. Accepted emails stay even on a later break."""
         data: dict[str, object] = response.json()
@@ -277,7 +278,7 @@ class PanelService(BaseService):
                     panel.name,
                 )
                 return "invalid"
-            if self.db.user_exists(raw_email):
+            if raw_email in known:
                 # dict, not set: free-threaded sets do not keep first-seen order.
                 online_users.setdefault(raw_email, None)
         return "ok"
@@ -300,6 +301,8 @@ class PanelService(BaseService):
         # First-seen order is panel list order, then payload order.
         online_users: dict[str, None] = {}
         panel_health: dict[str, Literal["ok", "unavailable", "invalid"]] = {}
+        known = self.db.usernames()
+        exts = self.db.username_exts() if new else {}
 
         if not self.panels:
             if new:
@@ -330,7 +333,7 @@ class PanelService(BaseService):
                 continue
             try:
                 panel_health[panel.name] = self._classify_onlines(
-                    panel, outcome, online_users
+                    panel, outcome, online_users, known
                 )
             except Exception as exc:
                 panel_health[panel.name] = "unavailable"
@@ -347,7 +350,7 @@ class PanelService(BaseService):
         if not new:
             users = list(online_users)
         else:
-            users = {name: self.db.user_to_ext(name) for name in online_users}
+            users = {name: exts.get(name) for name in online_users}
         return OnlineStatus(users, panel_health)
 
     @overload

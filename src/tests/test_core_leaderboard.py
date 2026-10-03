@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from custom_types import BandwidthInfo
 from db import Database
 from helpers import create_alice, make_subscription
@@ -51,3 +53,29 @@ def test_leaderboard_total_and_monthly_ranking(database: Database) -> None:
     assert subscription.leaderboard_svc.leaderboard(
         "monthly", use_displaynames=True,
     ) == {"Bob": 30, "Alice": 10}
+
+
+def test_monthly_leaderboard_reads_users_once(database: Database) -> None:
+    subscription = make_subscription(database)
+    create_alice(database, bw_limit_gb=1)
+    database.create_user(
+        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40, fingerprint="chrome", displayname="Bob",
+        bw_limit_gb=1,
+    )
+    seen: list[str] = []
+    original = database._connect
+
+    def traced() -> sqlite3.Connection:
+        conn = original()
+        conn.set_trace_callback(seen.append)
+        return conn
+
+    database._connect = traced  # type: ignore[method-assign]
+    try:
+        ranked = subscription.leaderboard_svc.leaderboard("monthly", use_displaynames=True)
+    finally:
+        database._connect = original  # type: ignore[method-assign]
+
+    assert ranked == {"Bob": 0, "Alice": 0}
+    assert len([q for q in seen if q.startswith("SELECT")]) == 1

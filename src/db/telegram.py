@@ -40,6 +40,14 @@ class TelegramMixin(ConnectionMixin):
             row = conn.execute("SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,)).fetchone()
             return str(row[0]) if row else None
 
+    def user_tgids(self) -> dict[str, str]:
+        """username -> telegram_id, loaded once for batch lookups."""
+        with self.connection() as conn:
+            return {
+                str(row[0]): str(row[1])
+                for row in conn.execute("SELECT username, telegram_id FROM telegram_mappings")
+            }
+
     def get_telegram_language(self, telegram_id: str | int, default: str = "ru") -> str:
         with self.connection() as conn:
             row = conn.execute("SELECT language FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),)).fetchone()

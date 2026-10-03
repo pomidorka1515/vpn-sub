@@ -40,9 +40,10 @@ class LeaderboardService(BaseService):
             where key is the username and value is bandwidth in bytes.
         """
         raw: dict[str, int] = {}
-        users = self.user_svc.list_users()
+        records = self.user_svc.list_user_states()
+        users = [record["username"] for record in records]
         if use_displaynames:
-            display_users = [str(self.user_svc.user(user)["displayname"]) for user in users]
+            display_users = [str(record["displayname"]) for record in records]
         else:
             display_users = users
         # display_users is what we use in dict keys
@@ -55,14 +56,13 @@ class LeaderboardService(BaseService):
                     info = totals.get(user)
                     raw[display] = int(info.total) if info is not None else 0
             case 'monthly' | 'wl_monthly':
-                for user, display in zip(users, display_users):
-                    state = self.user_svc.user(user)
+                for record, display in zip(records, display_users):
                     if category == "monthly":
-                        limit = state["bw_limit_gb"]
-                        used = state["bw_used"]
+                        limit = record["bw_limit_gb"]
+                        used = record["bw_used"]
                     else:
-                        limit = state["wl_limit_gb"]
-                        used = state["wl_used"]
+                        limit = record["wl_limit_gb"]
+                        used = record["wl_used"]
                     if limit == 0:
                         continue # skip users who dont have bandwidth
                     raw[display] = used

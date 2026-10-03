@@ -281,3 +281,45 @@ def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
     database.upsert_state_snapshot(10, {"ts": 10, "host": {"new": True}, "panels": {}})
     assert database.get_state_snapshots(0)[0]["host"] == {"new": True}
     assert database.prune_state_snapshots(20) == 1
+
+
+def test_bulk_usage_and_snapshots_commit_once(database: Database) -> None:
+    create_user(database, "alice")
+    create_user(database, "bob")
+    database.set_telegram("alice", "11")
+    begins = 0
+
+    def trace(query: str) -> None:
+        nonlocal begins
+        if query == "BEGIN IMMEDIATE":
+            begins += 1
+
+    original_connect = database._connect
+
+    def traced_connect() -> sqlite3.Connection:
+        conn = original_connect()
+        conn.set_trace_callback(trace)
+        return conn
+
+    database._connect = traced_connect  # type: ignore[method-assign]
+    try:
+        database.increment_usages({"alice": (3, 0), "bob": (0, 4), "cara": (0, 0)})
+        database.add_bandwidth_snapshots([
+            ("alice", 10, 1, 2, 0, 0),
+            ("bob", 10, 0, 0, 5, 6),
+        ])
+        database.increment_usages({})
+        database.add_bandwidth_snapshots([])
+    finally:
+        database._connect = original_connect  # type: ignore[method-assign]
+
+    assert begins == 2
+    alice = database.get_user("alice")
+    bob = database.get_user("bob")
+    assert alice is not None and bob is not None
+    assert (alice["bw_used"], bob["wl_used"]) == (3, 4)
+    assert database.get_bandwidth_snapshots("bob", 0)[0]["wl_up"] == 5
+    assert database.usernames() == {"alice", "bob"}
+    assert database.username_exts()["alice"] == "alice@example.test"
+    assert database.user_tgids() == {"alice": "11"}
+    assert [row["username"] for row in database.list_user_records()] == ["alice", "bob"]

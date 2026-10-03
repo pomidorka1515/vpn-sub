@@ -76,6 +76,7 @@ class BandwidthService(BaseService):
             return {}
         totals: dict[str, list[int]] = {}
         queried = 0
+        known = self.db.usernames()
 
         def fetch(panel: XUiSession) -> list[PanelClient] | AppError:
             try:
@@ -95,7 +96,7 @@ class BandwidthService(BaseService):
             queried += 1
             for client in clients:
                 traffic = client.traffic
-                if traffic is None or not self.db.user_exists(client.email):
+                if traffic is None or client.email not in known:
                     continue
                 acc = totals.setdefault(client.email, [0, 0])
                 acc[0] += traffic.up

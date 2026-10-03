@@ -147,15 +147,15 @@ class BWatch:
         states: dict[str, UserRecord] = {}
         need_main = False
         need_wl = False
-        for i in self.sub.user_svc.list_users():
-            state = self.sub.user_svc.get_user_state(i)
+        for state in self.sub.user_svc.list_user_states():
+            i = state["username"]
             states[i] = state
             # Main bandwidth
             expires_at = int(state['expires_at'])
             time_ok = expires_at == 0 or (expires_at - int(time.time())) >= 0
             if time_ok and not bool(state['enabled_time']):
                 self._update_user(username=i, enable=True, timee=True)
-                state = self.sub.user_svc.get_user_state(i)
+                state = self.sub.user_svc.get_user_state(i)  # re-read after the mutation
                 states[i] = state
 
             main_required = int(state['bw_limit_gb']) != 0
@@ -205,13 +205,16 @@ class BWatch:
         if not updates and not wl_updates:
             return
 
+        usage: dict[str, tuple[int, int]] = {}
         with self._mem_lock:
             for i, update in updates.items():
-                self.db.increment_usage(i, regular=update.delta)
+                usage[i] = (update.delta, 0)
                 self.mem[i] = update.current
             for i, update in wl_updates.items():
-                self.db.increment_usage(i, whitelist=update.delta)
+                regular, _whitelist = usage.get(i, (0, 0))
+                usage[i] = (regular, update.delta)
                 self.wl_mem[i] = update.current
+        self.db.increment_usages(usage)
 
     def panel_health_check(self) -> None:
         """Check each panel's Xray status and resource usage. Alert on issues."""
@@ -263,9 +266,11 @@ class BWatch:
                 self.log.error("health check failed for panel %s (%s)", panel.name, panel.address, exc_info=True)
 
     def check(self) -> None:
-        for i in self.sub.user_svc.list_users():
-            state = self.sub.user_svc.get_user_state(i)
-            tg_user = self.sub.telegram_svc.get_username_telegram(tgid=i, reverse=True)
+        tgids = self.db.user_tgids()
+        for state in self.sub.user_svc.list_user_states():
+            i = state["username"]
+            mapped = tgids.get(i)
+            tg_user = int(mapped) if mapped is not None else None
             expires_at = int(state['expires_at'])
             bw_limit = int(state['bw_limit_gb'])
             bw_used = int(state['bw_used'])
@@ -414,8 +419,8 @@ class BWatch:
         states: dict[str, UserRecord] = {}
         need_main = False
         need_wl = False
-        for username in self.sub.user_svc.list_users():
-            state = self.sub.user_svc.get_user_state(username)
+        for state in self.sub.user_svc.list_user_states():
+            username = state["username"]
             bw_limit = int(state['bw_limit_gb'])
             wl_limit = int(state['wl_limit_gb'])
             if bw_limit == 0 and wl_limit == 0:
@@ -470,6 +475,7 @@ class BWatch:
                 current, wl_current, up, down, wl_up, wl_down, next_main, next_wl,
             )
 
+        snapshot_rows: list[tuple[str, int, int, int, int, int]] = []
         with self._mem_lock:
             for username, (
                 _current, _wl_current, up, down, wl_up, wl_down, next_main, next_wl,
@@ -478,7 +484,8 @@ class BWatch:
                     self.snap_mem[username] = next_main
                 if next_wl is not None:
                     self.snap_wl_mem[username] = next_wl
-                self.db.add_bandwidth_snapshot(username, midnight, up, down, wl_up, wl_down)
+                snapshot_rows.append((username, midnight, up, down, wl_up, wl_down))
+        self.db.add_bandwidth_snapshots(snapshot_rows)
 
         self.prune_old_bw_snapshots()
         self.db.delete_metadata("daily_bw_snapshot_failures")

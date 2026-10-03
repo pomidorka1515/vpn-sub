@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+import sqlite3
+from collections.abc import Callable
 
 from bwatch import BWatch
 from core import Subscription
@@ -8,6 +10,21 @@ from custom_types import BandwidthInfo
 from db import Database
 from errors import PanelRejectedError
 from helpers import create_alice, make_watch
+
+
+def _count_queries(
+    database: Database,
+) -> tuple[list[str], Callable[[], sqlite3.Connection]]:
+    seen: list[str] = []
+    original = database._connect
+
+    def traced() -> sqlite3.Connection:
+        conn = original()
+        conn.set_trace_callback(seen.append)
+        return conn
+
+    database._connect = traced  # type: ignore[method-assign]
+    return seen, original
 
 
 def test_periodic_loop_guard_swallows_crashes(
@@ -291,3 +308,91 @@ def test_daily_snapshot_skips_unused_counter(
     assert calls == [False]
     row = database.get_bandwidth_snapshots("alice", 0)[0]
     assert (row["up"], row["down"], row["wl_up"], row["wl_down"]) == (10, 20, 0, 0)
+
+
+def test_bandwidth_check_reads_users_once_and_writes_once(
+    database: Database, subscription: Subscription, watch: BWatch,
+) -> None:
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
+    database.create_user(
+        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40, fingerprint="chrome", displayname="Bob",
+        bw_limit_gb=1, wl_limit_gb=0,
+    )
+    watch.mem["alice"] = BandwidthInfo(0, 0, 0)
+    watch.wl_mem["alice"] = BandwidthInfo(0, 0, 0)
+    watch.mem["bob"] = BandwidthInfo(0, 0, 0)
+
+    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+        total = 20 if whitelist else 10
+        return {"alice": BandwidthInfo(total, 0, total), "bob": BandwidthInfo(5, 0, 5)}
+
+    subscription.bandwidth_svc.all_traffic = all_traffic  # type: ignore[method-assign]
+    seen, original = _count_queries(database)
+    try:
+        watch.bandwidth_check()
+    finally:
+        database._connect = original  # type: ignore[method-assign]
+
+    selects = [q for q in seen if q.startswith("SELECT")]
+    updates = [q for q in seen if q.startswith("UPDATE users SET bw_used")]
+    assert len(selects) == 1
+    assert len(updates) == 2
+    assert seen.count("BEGIN IMMEDIATE") == 1
+    assert int(database.get_user("alice")["bw_used"]) == 10  # type: ignore[index]
+    assert int(database.get_user("alice")["wl_used"]) == 20  # type: ignore[index]
+    assert int(database.get_user("bob")["bw_used"]) == 5  # type: ignore[index]
+
+
+def test_check_reads_users_and_telegram_once(
+    database: Database, subscription: Subscription, watch: BWatch,
+) -> None:
+    create_alice(database, bw_limit_gb=0, wl_limit_gb=0)
+    database.create_user(
+        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40, fingerprint="chrome", displayname="Bob",
+    )
+    seen, original = _count_queries(database)
+    try:
+        watch.check()
+    finally:
+        database._connect = original  # type: ignore[method-assign]
+
+    selects = [q for q in seen if q.startswith("SELECT")]
+    assert len(selects) == 2
+    assert any("FROM users" in q for q in selects)
+    assert any("FROM telegram_mappings" in q for q in selects)
+
+
+def test_daily_snapshot_writes_rows_in_one_transaction(
+    database: Database, subscription: Subscription, watch: BWatch,
+) -> None:
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
+    database.create_user(
+        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40, fingerprint="chrome", displayname="Bob",
+        bw_limit_gb=1, wl_limit_gb=0,
+    )
+
+    def all_traffic(whitelist: bool = False) -> dict[str, BandwidthInfo]:
+        return {
+            "alice": BandwidthInfo(upload=1, download=2, total=3),
+            "bob": BandwidthInfo(upload=4, download=5, total=9),
+        }
+
+    subscription.bandwidth_svc.all_traffic = all_traffic  # type: ignore[method-assign]
+    seen, original = _count_queries(database)
+    try:
+        watch.record_daily_snapshot()
+    finally:
+        database._connect = original  # type: ignore[method-assign]
+
+    user_selects = [q for q in seen if "FROM users" in q]
+    assert len(user_selects) == 1
+    insert_at = next(
+        i for i, q in enumerate(seen) if q.startswith("INSERT INTO bandwidth_snapshots")
+    )
+    # both rows share the snapshot transaction; prune/metadata are later
+    assert seen[insert_at - 1] == "BEGIN IMMEDIATE"
+    assert seen[insert_at + 1].startswith("INSERT INTO bandwidth_snapshots")
+    assert seen[insert_at + 2] == "COMMIT"
