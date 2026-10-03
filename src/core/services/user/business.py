@@ -106,10 +106,17 @@ class BusinessUserService(BaseService):
         self.bandwidth_svc: BandwidthService = bandwidth_svc
     
     def _drop_cache(self, panel: XUiSession | None = None) -> None:
-        """Drop cached inbounds. Call after mutations."""
+        """Drop cached inbounds. Call after mutations, on the caller.
+
+        ``clear_cache`` is a stamp bump and three local assignments. It does
+        not talk to the panel, so it must not occupy a request-pool worker
+        or be callable as a nested ``map_panels`` from one. A failed bump
+        still fails the mutation: swallowing it would leave other processes
+        on the old inbound list for the TTL.
+        """
         targets = [panel] if panel else list(self.panels)
-        # Cache clears are local and independent. One panel per worker.
-        self.panel_svc.map_panels(targets, lambda p: p.clear_cache())
+        for item in targets:
+            item.clear_cache()
 
 
     def _invalidate_clients(self, panel: XUiSession) -> None:
