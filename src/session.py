@@ -10,7 +10,7 @@ from requests import Session, Response, Timeout, ConnectionError, RequestExcepti
 from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
 from loggers import Logger
-from custom_types import Inbound, RequestKwargs
+from custom_types import Inbound, PanelClient, RequestKwargs
 from config import JsonValue
 from errors import XUiSessionError
 from paths import runtime_dir
@@ -39,6 +39,20 @@ def inbound_stamp_path(name: str, base_url: str, *, directory: str | None = None
     digest = hashlib.sha1(base_url.encode()).hexdigest()[:8]
     safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
     return os.path.join(directory, f"inbounds.{safe}.{digest}.stamp")
+
+
+def _client_stamp_path(name: str, base_url: str, *, directory: str | None = None) -> str:
+    """Per-panel generation file for the client list. Not the inbound stamp.
+
+    A client write and an inbound write invalidate different caches. Sharing
+    one stamp would drop the client map on every inbound clear, and the other
+    way around. The file stores no client rows.
+    """
+    if directory is None:
+        directory = str(runtime_dir())
+    digest = hashlib.sha1(base_url.encode()).hexdigest()[:8]
+    safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
+    return os.path.join(directory, f"clients.{safe}.{digest}.stamp")
 
 
 def _bump_stamp(path: str) -> None:
@@ -132,7 +146,7 @@ class RequestsPanelTransport:
 
 class XUiSession:
     """
-    3x-ui panel client with Bearer-token auth, health checks, and inbound caching.
+    3x-ui panel client with Bearer-token auth, health checks, and two caches.
 
     Authentication is a static admin-scoped API token sent as
     ``Authorization: Bearer <token>`` on every request. There is no login and no
@@ -147,6 +161,9 @@ class XUiSession:
         ``clear_cache`` bumps its mtime before dropping the local list, so a
         failed bump cannot leave other workers serving a stale list. The list
         itself stays in memory. A missing stamp is not generation 0.
+      - The client map has its own stamp, lock, and clock. Dropping inbounds
+        must not drop clients, and the reverse. Client rows are never written
+        to the stamp file.
       - ``close`` stops the client-managed health-check thread and closes the
         default session. If a transport or session is injected, its lifecycle
         remains the injector's responsibility. Do not issue requests while or
@@ -173,6 +190,7 @@ class XUiSession:
         clock: Callable[[], float] = time.monotonic,
         stamp_path: str | None = None,
         stamp_dir: str | None = None,
+        client_stamp_path: str | None = None,
     ):
         """
         Initialize the panel client.
@@ -199,8 +217,12 @@ class XUiSession:
                 Defaults to a file under ``stamp_dir``. Tests pass a temp path.
             stamp_dir: Directory for the default generation file. Defaults to
                 the service runtime dir (``DIR_RUNTIME``, else ``<DIR_DATA>/run``).
-                Ignored when ``stamp_path`` is set. Must be local: ``flock`` is
+                Ignored when ``stamp_path`` / ``client_stamp_path`` is set for
+                that cache. Must be local: ``flock`` is
                 not reliable on NFS, and the stamp is only a cross-process mtime.
+            client_stamp_path: Generation file for the client map. Defaults to
+                a sibling of the inbound stamp. Tests pass a temp path. Must
+                not be the inbound stamp: the two caches invalidate apart.
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -228,6 +250,16 @@ class XUiSession:
                 name, self.base_url, directory=stamp_dir,
             )
             self._cache_stamp: int | None = None
+            self._clients_lock = threading.Lock()
+            self._clients: dict[str, PanelClient] | None = None
+            self._clients_time: float = 0
+            resolved_client_stamp = client_stamp_path
+            if resolved_client_stamp is None:
+                resolved_client_stamp = _client_stamp_path(name, self.base_url, directory=stamp_dir)
+            self._client_stamp_path = resolved_client_stamp
+            if os.path.abspath(self._client_stamp_path) == os.path.abspath(self._stamp_path):
+                raise ValueError("client stamp must not be the inbound stamp")
+            self._clients_stamp: int | None = None
             self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
 
             self._session: Session | None = None
@@ -455,6 +487,54 @@ class XUiSession:
             self._cache = None
             self.cache_time = 0
             self._cache_stamp = None
+
+    @property
+    def clients_cache(self) -> dict[str, PanelClient] | None:
+        with self._clients_lock:
+            return self._clients
+
+    @clients_cache.setter
+    def clients_cache(self, value: dict[str, PanelClient], /) -> None:
+        # read before the lock so a clear that bumps during the panel query
+        # is visible here instead of being overwritten by this fill
+        stamp = _read_stamp(self._client_stamp_path)
+        with self._clients_lock:
+            if self._clients_stamp is not None and stamp != self._clients_stamp:
+                return
+            self._clients = value
+            self._clients_time = self._clock()
+            self._clients_stamp = stamp
+
+    def fresh_clients(self, ttl: float) -> dict[str, PanelClient] | None:
+        """Return the cached client map only when age and stamp still agree.
+
+        Separate from ``fresh_cache``: an inbound clear must not expire this
+        map, and a client clear must not expire inbounds. The three checks
+        share one lock so a clear cannot land between them.
+        """
+        with self._clients_lock:
+            cached = self._clients
+            seen = self._clients_stamp
+            if cached is None or seen is None or self._clock() - self._clients_time >= ttl:
+                return None
+            try:
+                current = _read_stamp(self._client_stamp_path) == seen
+            except OSError:
+                return None
+            return cached if current else None
+
+    def clear_clients(self) -> None:
+        """Bump the client stamp first, then drop the local map.
+
+        Same failure rule as ``clear_cache``: a failed bump leaves the local
+        map in place so this worker cannot hide a stamp other workers still
+        trust. Does not touch the inbound cache.
+        """
+        _bump_stamp(self._client_stamp_path)
+        with self._clients_lock:
+            self._clients = None
+            self._clients_time = 0
+            self._clients_stamp = None
 
     def close(self) -> None:
         self._health_check_event.set()

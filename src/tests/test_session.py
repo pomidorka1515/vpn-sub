@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 from requests import ConnectionError, Response, Timeout
 
-from helpers import json_http, make_inbound
-from session import XUiSession, inbound_stamp_path
+from helpers import json_http, make_inbound, make_panel_client
+from session import XUiSession, _client_stamp_path, inbound_stamp_path
 
 class FakeClock:
     def __init__(self, now: float = 1000.0) -> None:
@@ -237,6 +237,43 @@ def test_inbound_stamp_path_stays_inside_its_directory() -> None:
     assert path.startswith("/tmp/runtime/inbounds.")
     assert ".." not in path
     assert path != other
+    clients = _client_stamp_path("../other", "http://127.0.0.1:1/a/", directory="/tmp/runtime")
+    assert clients.startswith("/tmp/runtime/clients.")
+    assert clients != path
+
+
+def test_client_cache_uses_its_own_stamp(tmp_path: Path, clock: FakeClock) -> None:
+    inbound_stamp = tmp_path / "inbounds.stamp"
+    client_stamp = tmp_path / "clients.stamp"
+    session = XUiSession(**session_kwargs(
+        transport=RecordingTransport(),
+        clock=clock,
+        stamp_path=str(inbound_stamp),
+        client_stamp_path=str(client_stamp),
+    ))
+    try:
+        session.cache = [make_inbound(1)]
+        session.clients_cache = {"alice": make_panel_client("alice", [1])}
+        assert session.fresh_cache(15) is not None
+        assert session.fresh_clients(4) is not None
+        session.clear_cache()
+        assert session.fresh_cache(15) is None
+        assert session.fresh_clients(4) is not None
+        session.clear_clients()
+        assert session.clients_cache is None
+        assert session.fresh_clients(4) is None
+    finally:
+        session.close()
+
+
+def test_client_stamp_must_not_be_the_inbound_stamp(tmp_path: Path) -> None:
+    stamp = tmp_path / "shared.stamp"
+    with pytest.raises(ValueError, match="client stamp"):
+        XUiSession(**session_kwargs(
+            transport=RecordingTransport(),
+            stamp_path=str(stamp),
+            client_stamp_path=str(stamp),
+        ))
 
 
 def test_rejects_transport_and_session_together(transport: RecordingTransport) -> None:

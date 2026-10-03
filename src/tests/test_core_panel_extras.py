@@ -187,6 +187,35 @@ def test_list_clients_parses_attachments(
     assert panel.gets[-1] == "panel/api/clients/list"
 
 
+def test_clients_snapshot_lists_once_within_ttl(subscription: Subscription) -> None:
+    panel = FakePanel(clients=[
+        make_panel_client("alice", [1]),
+        make_panel_client("bob", [2]),
+    ])
+    first = subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
+    second = subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
+    assert first["alice"].inboundIds == [1]
+    assert second["bob"].email == "bob"
+    assert panel.gets.count("panel/api/clients/list") == 1
+    assert not any("clients/get/" in url for url in panel.gets)
+
+
+def test_clients_snapshot_refills_after_invalidate(subscription: Subscription) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1])])
+    subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
+    subscription.panel_svc.invalidate_clients(cast(XUiSession, panel))
+    subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
+    assert panel.gets.count("panel/api/clients/list") == 2
+
+
+def test_clients_snapshot_ignores_inbound_cache_clear(subscription: Subscription) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1])])
+    subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
+    panel.clear_cache()
+    subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
+    assert panel.gets.count("panel/api/clients/list") == 1
+
+
 def test_list_clients_parses_numeric_tg_id(
     subscription: Subscription,
 ) -> None:

@@ -41,7 +41,12 @@ def test_registration_rollback_failure_preserves_sync_error(database: Database) 
     database.add_code("invite", "register", days=1, gb=1, wl_gb=0, permanent=False, uses=1)
     sync_error = RuntimeError("panel transport failed")
 
-    def fail_sync(username: str, _called_internally: bool = False) -> None:
+    def fail_sync(
+        username: str,
+        _called_internally: bool = False,
+        *,
+        known_clients: object = None,
+    ) -> None:
         raise sync_error
 
     def fail_rollback(username: str) -> None:

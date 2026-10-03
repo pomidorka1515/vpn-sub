@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import uuid
 import time
+from collections.abc import Mapping
 from dataclasses import asdict
 from typing import cast
 from urllib.parse import quote
@@ -67,6 +68,16 @@ def _panel_post_json(
     return content
 
 
+def _already_exists(exc: PanelRejectedError) -> bool:
+    """True when an add lost a race with a client the snapshot had not seen.
+
+    A stale miss must not be treated as "already attached": the duplicate
+    still needs its missing inbounds, and that requires a fresh row.
+    """
+    message = exc.message.lower()
+    return "duplicate" in message or "already exist" in message
+
+
 class BusinessUserService(BaseService):
     """User lifecycle mutations against the 3x-ui clients-first API.
 
@@ -100,6 +111,25 @@ class BusinessUserService(BaseService):
         # Cache clears are local and independent. One panel per worker.
         self.panel_svc.map_panels(targets, lambda p: p.clear_cache())
 
+
+    def _invalidate_clients(self, panel: XUiSession) -> None:
+        """Drop one panel's client map after a successful client POST.
+
+        A later panel that fails must still see this panel's write as gone
+        from the cache. Inbound cache is a different stamp and stays.
+        """
+        self.panel_svc.invalidate_clients(panel)
+
+    def _client_maps(
+        self, panels: list[XUiSession] | tuple[XUiSession, ...],
+    ) -> dict[str, Mapping[str, PanelClient]]:
+        """One client list per panel, filled before the writes.
+
+        Captured on the caller so workers only read. With more than one panel
+        the lists themselves go through ``map_panels``; a worker must not
+        call it again. Keyed by panel name, which is unique in config.
+        """
+        return self.panel_svc.client_maps(panels)
 
     def get_info(self, username: str, pretty: bool = False) -> UserInfo:
         """Get all info about a user. Raises NotFoundError if it does not exist."""
@@ -146,7 +176,13 @@ class BusinessUserService(BaseService):
         )
 
 
-    def add_users(self, username: str, _called_internally: bool = False) -> None:
+    def add_users(
+        self,
+        username: str,
+        _called_internally: bool = False,
+        *,
+        known_clients: Mapping[str, Mapping[str, PanelClient]] | None = None,
+    ) -> None:
         """Sync a user to every panel (idempotent).
 
         Creates the panel client once per panel with ``email == username``
@@ -154,10 +190,21 @@ class BusinessUserService(BaseService):
         the existing client is missing (resync path). The panel normalizes
         ``flow`` per inbound, so vision is sent once and stripped where the
         inbound cannot do TLS flow.
+
+        ``known_clients`` is an optional per-panel snapshot from a bulk caller
+        (reconcile, admin refresh). It is read-only: this call copies the
+        user's row out and does not write the POST back into it, so the next
+        user still sees the list taken at the start of the cycle. Omit it
+        for a single user; the list is filled here, before the panel workers.
         """
         userid = str(self.user_svc.user(username)["uuid"])
+        # Fill before submit. Workers must not call map_panels, and a list
+        # taken after this user's own POST must not be reused in this call.
+        known: Mapping[str, Mapping[str, PanelClient]] = (
+            self._client_maps(tuple(self.panels)) if known_clients is None else known_clients
+        )
 
-        def sync(panel: XUiSession) -> list[str]:
+        def sync(panel: XUiSession, clients: Mapping[str, PanelClient]) -> list[str]:
             """Create or attach on one panel. Debug notes return to the caller."""
             notes: list[str] = []
             inbounds = self.panel_svc.getinbounds(panel)
@@ -170,7 +217,7 @@ class BusinessUserService(BaseService):
             if not inbound_ids:
                 return notes
 
-            existing = self.panel_svc.get_client(panel, username)
+            existing = clients.get(username)
             if existing is None:
                 payload = ClientPayload(
                     email=username,
@@ -191,6 +238,7 @@ class BusinessUserService(BaseService):
                     {"client": asdict(payload), "inboundIds": inbound_ids},
                     "user add",
                 )
+                self._invalidate_clients(panel)
             elif existing.uuid != userid:
                 # Shared-panel collision: the email is owned by a foreign
                 # client. Attach would graft our inbounds onto someone
@@ -208,11 +256,42 @@ class BusinessUserService(BaseService):
                         {"inboundIds": missing},
                         "user attach",
                     )
+                    self._invalidate_clients(panel)
             return notes
+
+        def run(panel: XUiSession) -> list[str]:
+            try:
+                return sync(panel, known[panel.name])
+            except PanelRejectedError as exc:
+                if not _already_exists(exc):
+                    raise
+                # Snapshot missed a client another writer just added. One
+                # live get, then attach whatever that row still lacks. Do
+                # not treat the duplicate as fully attached.
+                self._invalidate_clients(panel)
+                live = self.panel_svc.get_client(panel, username)
+                if live is None or live.uuid != userid:
+                    raise
+                inbounds = self.panel_svc.getinbounds(panel)
+                missing = [
+                    i.id for i in inbounds
+                    if i.protocol == "vless" and i.id not in live.inboundIds
+                ]
+                if missing:
+                    _panel_post_json(
+                        panel,
+                        f"panel/api/clients/{quote(username, safe='')}/attach",
+                        {"inboundIds": missing},
+                        "user attach",
+                    )
+                    self._invalidate_clients(panel)
+                return [
+                    f"Panel {panel.name} client already existed; attached missing inbounds."
+                ]
 
         # First failing panel in list order still raises. Sibling writes
         # may already have landed; they are not cancelled.
-        for notes in self.panel_svc.map_panels(self.panels, sync):
+        for notes in self.panel_svc.map_panels(self.panels, run):
             for note in notes:
                 self.log.debug(note)
         if not _called_internally: self.audit_svc.audit(name="user_refresh", info={"username":username})
@@ -224,11 +303,12 @@ class BusinessUserService(BaseService):
     ) -> None:
         """Delete a user, either from panels or from storage too."""
         self.user_svc.user(username)
+        known = self._client_maps(tuple(self.panels))
 
         def delete(panel: XUiSession) -> None:
             # add_users skips panels with no managed VLESS inbounds, so a
             # client absent there is expected — deleting must not fail on it
-            if self.panel_svc.get_client(panel, username) is None:
+            if known[panel.name].get(username) is None:
                 return
             _panel_post_json(
                 panel,
@@ -236,6 +316,7 @@ class BusinessUserService(BaseService):
                 {},
                 "user delete",
             )
+            self._invalidate_clients(panel)
 
         self.panel_svc.map_panels(self.panels, delete)
         if perma:
@@ -244,7 +325,13 @@ class BusinessUserService(BaseService):
         self.audit_svc.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
 
-    def _set_enabled(self, panel: XUiSession, username: str, enabled: bool) -> None:
+    def _set_enabled(
+        self,
+        panel: XUiSession,
+        username: str,
+        enabled: bool,
+        clients: Mapping[str, PanelClient],
+    ) -> None:
         """Flip a panel client's enable flag via the bulk endpoints.
 
         One email per call; bulkEnable/bulkDisable preserve every other
@@ -256,8 +343,11 @@ class BusinessUserService(BaseService):
         panels with no managed VLESS inbounds — so there is nothing to
         flip there. Without this skip, one absent-panel rejection would
         block the disable everywhere and BWatch would retry forever.
+
+        ``clients`` is the caller's snapshot, captured before ``map_panels``.
+        A worker must not fill it: that would nest a submit on the same pool.
         """
-        if self.panel_svc.get_client(panel, username) is None:
+        if clients.get(username) is None:
             return
         action = "bulkEnable" if enabled else "bulkDisable"
         _panel_post_json(
@@ -266,6 +356,7 @@ class BusinessUserService(BaseService):
             {"emails": [username]},
             "user update",
         )
+        self._invalidate_clients(panel)
 
     def update_user(self, 
                     username: str, 
@@ -278,8 +369,12 @@ class BusinessUserService(BaseService):
         audit_info: dict[str, str | bool] = {"username": username}
         if enable is not None:
             panels = [p for p in self.panels if p != self.whitelist_panel]
+            known = self._client_maps(panels)
             self.panel_svc.map_panels(
-                panels, lambda panel: self._set_enabled(panel, username, enable)
+                panels,
+                lambda panel: self._set_enabled(
+                    panel, username, enable, known[panel.name],
+                ),
             )
             
             fields: dict[str, object] = {"status": enable}
@@ -297,7 +392,10 @@ class BusinessUserService(BaseService):
             # and BWatch.check() would keep re-triggering the same disable/enable
             # every cycle since `statusWl` never flips.
             if self.whitelist_panel:
-                self._set_enabled(self.whitelist_panel, username, wl_enable)
+                wl_known = self.panel_svc.clients_snapshot(self.whitelist_panel)
+                self._set_enabled(
+                    self.whitelist_panel, username, wl_enable, wl_known,
+                )
 
             self.db.update_user(username, status_wl=wl_enable)
 
@@ -477,6 +575,7 @@ class BusinessUserService(BaseService):
             raise ValidationError("Invalid UUID")
         self.user_svc.user(username)
 
+        # Single-user path. get_client stays; the list cache is for loops.
         def write(panel: XUiSession) -> AppError | None:
             try:
                 current = self.panel_svc.get_client(panel, username)
@@ -490,6 +589,7 @@ class BusinessUserService(BaseService):
                     asdict(payload),
                     "UUID update",
                 )
+                self._invalidate_clients(panel)
             except AppError as exc:
                 return exc
             return None

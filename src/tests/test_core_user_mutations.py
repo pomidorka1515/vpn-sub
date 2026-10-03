@@ -82,6 +82,51 @@ def test_add_users_is_noop_when_fully_attached(database: Database) -> None:
     assert panel.posts == []
 
 
+def test_add_users_uses_one_client_list_not_per_user_gets(database: Database) -> None:
+    panel = FakePanel(
+        name="panel",
+        inbounds=[make_inbound(1)],
+        clients=[
+            make_panel_client("alice", [1]),
+            make_panel_client("bob", [1], uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+        ],
+    )
+    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
+    create_alice(database)
+    database.create_user(
+        username="bob", uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        token="b" * 40, fingerprint="chrome", displayname="Bob",
+    )
+
+    known = subscription.panel_svc.client_maps([cast(XUiSession, panel)])
+    subscription.business_svc.add_users("alice", known_clients=known)
+    subscription.business_svc.add_users("bob", known_clients=known)
+
+    assert panel.gets.count("panel/api/clients/list") == 1
+    assert not any("clients/get/" in url for url in panel.gets)
+    assert panel.posts == []
+
+
+def test_add_users_duplicate_add_attaches_from_a_live_get(database: Database) -> None:
+    panel = FakePanel(
+        name="panel",
+        inbounds=[make_inbound(1), make_inbound(2)],
+        clients=[make_panel_client("alice", [1])],
+        post_queue=[
+            {"success": False, "msg": "duplicate email", "obj": None},
+        ],
+    )
+    # list said absent; the live row is missing inbound 2
+    panel.clients_cache = {}
+    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
+    create_alice(database)
+
+    subscription.business_svc.add_users("alice")
+
+    assert any("clients/get/" in url for url in panel.gets)
+    assert _post_bodies(panel, "/attach") == [{"inboundIds": [2]}]
+
+
 def test_add_users_skips_panel_without_vless_inbounds(database: Database) -> None:
     panel = FakePanel(name="panel", inbounds=[make_inbound(1, protocol="trojan")])
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])

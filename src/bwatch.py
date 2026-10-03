@@ -312,11 +312,19 @@ class BWatch:
         existing clients lack (e.g. after an admin adds an inbound to a
         panel). One user's panel rejection must not abort the rest; the
         next cycle retries the failures.
+
+        One client list per panel for the whole cycle, filled here — not one
+        ``clients/get`` per user. Users stay serial: each ``add_users``
+        already waits on the panel pool, and a user worker on that same pool
+        would deadlock.
         """
         failures: list[str] = []
+        known = self.sub.panel_svc.client_maps(self.sub.panels)
         for username in self.sub.user_svc.list_users():
             try:
-                self.sub.business_svc.add_users(username, _called_internally=True)
+                self.sub.business_svc.add_users(
+                    username, _called_internally=True, known_clients=known,
+                )
             except AppError:
                 self.log.error("inbound reconcile failed for %s", username, exc_info=True)
                 failures.append(username)

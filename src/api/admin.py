@@ -168,9 +168,10 @@ class Api(BaseApi):
     def user_refresh(self) -> ResponseType:
         users = self.sub.user_svc.list_users()
         failures: list[str] = []
+        known = self.sub.panel_svc.client_maps(self.sub.panels)
         for cc in users:
             try:
-                self.sub.business_svc.add_users(cc)
+                self.sub.business_svc.add_users(cc, known_clients=known)
             except PanelUnavailableError:
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)

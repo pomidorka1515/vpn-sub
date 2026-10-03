@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from urllib.parse import quote
 from dacite import from_dict
 from typing import Literal, cast, overload
@@ -24,6 +24,7 @@ __all__ = ["BG_POOL", "PanelService"]
 
 _PANEL_POOL_WORKERS = 4
 _BG_POOL_WORKERS = 4
+_CLIENTS_TTL = 4.0
 _PANEL_POOL = ThreadPoolExecutor(
     max_workers=_PANEL_POOL_WORKERS, thread_name_prefix="panel-req"
 )
@@ -121,6 +122,51 @@ class PanelService(BaseService):
             raise PanelUnavailableError(
                 f"Panel {panel.name} inbound query failed: {exc}"
             ) from exc
+
+    def clients_snapshot(self, panel: XUiSession) -> Mapping[str, PanelClient]:
+        """Cached email-to-client map for "does this client exist, which inbounds".
+
+        One ``clients/list`` per panel per TTL, not one ``clients/get`` per
+        user. The map is built once when filling. TTL is a few seconds: long
+        enough that one reconcile shares a list, short enough that a missed
+        invalidation cannot keep a just-deleted user enabled. Not the inbound
+        cache, and not a traffic source — ``client_traffic`` stays live.
+
+        Callers that mutate must ``invalidate_clients`` after the POST. A
+        later read in the same call must not be served the pre-write map.
+        """
+        cached = panel.fresh_clients(_CLIENTS_TTL)
+        if cached is not None:
+            return cached
+        clients = self.list_clients(panel)
+        snapshot = {client.email: client for client in clients}
+        panel.clients_cache = snapshot
+        stored = panel.fresh_clients(_CLIENTS_TTL)
+        # a clear that landed during the list wins: do not hand back the map
+        # this fill just refused to store
+        return stored if stored is not None else snapshot
+
+    def invalidate_clients(self, panel: XUiSession) -> None:
+        """Drop this panel's client map. Call after every successful client POST."""
+        panel.clear_clients()
+
+    def client_maps(
+        self, panels: Sequence[XUiSession],
+    ) -> dict[str, Mapping[str, PanelClient]]:
+        """One client list per panel, filled on this thread before any writes.
+
+        Bulk callers (reconcile, admin refresh) capture this once and pass
+        the maps into each user. Workers only read. With more than one panel
+        the lists themselves go through ``map_panels``; a worker must not
+        call this. Keyed by panel name, which is unique in config.
+        """
+        if not panels:
+            return {}
+        snapshots = self.map_panels(panels, self.clients_snapshot)
+        return {
+            panel.name: snapshot
+            for panel, snapshot in zip(panels, snapshots, strict=True)
+        }
 
     def _status_error(self, panel: XUiSession, what: str, response: Response) -> PanelUnavailableError:
         """Classify a non-200 response as unavailability.

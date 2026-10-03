@@ -57,9 +57,10 @@ class AdminUsersMixin(AdminFeatureMixin):
     def _cb_refresh(self, chat_id: int) -> None:
         failures: list[str] = []
         users = self.sub.user_svc.list_users()
+        known = self.sub.panel_svc.client_maps(self.sub.panels)
         for cc in users:
             try:
-                self.sub.business_svc.add_users(cc)
+                self.sub.business_svc.add_users(cc, known_clients=known)
             except PanelUnavailableError:
                 failures.append(cc)
                 self.log.error("user refresh failed for %s", cc, exc_info=True)
@@ -352,5 +353,3 @@ class AdminUsersMixin(AdminFeatureMixin):
         if text.startswith('/'): return
         username = text.strip()
         self._cb_info_user(message.chat.id, username)
-
-

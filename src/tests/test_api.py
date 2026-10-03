@@ -94,7 +94,12 @@ def test_user_refresh_aborts_on_non_panel_error(database: Database, flask_app: F
         fingerprint="chrome", displayname="Bob",
     )
 
-    def add_users(username: str, _called_internally: bool = False) -> None:
+    def add_users(
+        username: str,
+        _called_internally: bool = False,
+        *,
+        known_clients: object = None,
+    ) -> None:
         del _called_internally
         if username == "bob":
             raise AppError("panel rejected")

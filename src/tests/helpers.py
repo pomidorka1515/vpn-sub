@@ -166,6 +166,10 @@ class FakePanel:
         self.cache_time: float = 0
         self._cache_generation: int = 0
         self._seen_generation: int = 0
+        self._clients_cache: dict[str, PanelClient] | None = None
+        self._clients_set_at: float = 0.0
+        self._clients_generation: int = 0
+        self._clients_seen: int = 0
         self.name = name
         self._inbounds = inbounds or []
         self.clients: list[PanelClient] = clients or []
@@ -212,6 +216,28 @@ class FakePanel:
     def clear_cache(self) -> None:
         self._cache_generation += 1
         self.cache = None
+
+    @property
+    def clients_cache(self) -> dict[str, PanelClient] | None:
+        return self._clients_cache
+
+    @clients_cache.setter
+    def clients_cache(self, value: dict[str, PanelClient] | None) -> None:
+        self._clients_cache = value
+        self._clients_set_at = time.monotonic() if value is not None else 0.0
+        if value is not None:
+            self._clients_seen = self._clients_generation
+
+    def fresh_clients(self, ttl: float) -> dict[str, PanelClient] | None:
+        if self._clients_cache is None or self._clients_seen != self._clients_generation:
+            return None
+        if time.monotonic() - self._clients_set_at >= ttl:
+            return None
+        return self._clients_cache
+
+    def clear_clients(self) -> None:
+        self._clients_generation += 1
+        self.clients_cache = None
 
     def close(self) -> None:
         pass

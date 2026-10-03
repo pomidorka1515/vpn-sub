@@ -99,8 +99,9 @@ def test_online_users_and_refresh_failures(
     assert "bob" in text
 
     subscription.user_svc.list_users.return_value = ["alice", "bob", "carol"]
+    subscription.panel_svc.client_maps.return_value = {}
 
-    def refresh(username: str) -> None:
+    def refresh(username: str, *args: object, **kwargs: object) -> None:
         if username == "bob":
             raise PanelUnavailableError("down")
         if username == "carol":

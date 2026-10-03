@@ -92,7 +92,12 @@ def test_reconcile_continues_after_user_failure_and_alerts(
 
     calls: list[str] = []
 
-    def add_users(username: str, _called_internally: bool = False) -> None:
+    def add_users(
+        username: str,
+        _called_internally: bool = False,
+        *,
+        known_clients: object = None,
+    ) -> None:
         calls.append(username)
         if username == "alice":
             raise PanelRejectedError("foreign client owns the email")
