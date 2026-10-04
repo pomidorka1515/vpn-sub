@@ -77,8 +77,12 @@ jobs:
           export CCACHE_DIR="$HOME/.cache/ccache"
           ccache --set-config=max_size=2G
           ccache --zero-stats
+          version="${GITHUB_REF_NAME#v}"
+          version="${version%%-*}"
+          version="${version%%+*}"
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}' \
+            --product-version="${version}" \
             --lto=yes \
             --static-libpython=yes \
             --output-filename=${{ matrix.name }} \
