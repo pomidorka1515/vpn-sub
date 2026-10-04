@@ -55,7 +55,7 @@ Startup order is fixed and handled by `create_application()`: configs, database,
 - `src/app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, Telegram bots, Flask app) and wires everything together
 - `src/wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application and registers shutdown at exit
 - `src/core/` — `Subscription` and the user, code, panel, bandwidth, and audit services
-- `src/bwatch.py` — `BWatch`: quota, expiry, panel health, snapshots
+- `src/bwatch/` — `BWatch`: quota, expiry, panel health, snapshots
 - `src/session.py` — `XUiSession` panel HTTP client
 - `src/config/` — atomic JSON config with thread + cross-process locking
 - `src/db/` — SQLite. Users, codes, quotas, and bandwidth live here. `config.json` is deployment and presentation only
