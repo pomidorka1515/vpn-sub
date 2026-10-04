@@ -262,6 +262,16 @@ def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
     create_user(database)
     assert database.mark_notification("regular", 123)
     assert not database.mark_notification("regular", 123)
+    database.mark_notification("alice:traffic_exhausted:1", "123")
+    database.mark_notification("alice:traffic_exhausted:1", "")
+    database.sync_notifications(
+        {"alice:traffic_exhausted:1"},
+        {"alice:restored"},
+    )
+    assert database.notification_markers() == {"alice:restored"}
+    # a legacy row sharing the kind string must survive a marker delete
+    assert database.notification_seen("alice:traffic_exhausted:1", 123)
+    assert not database.notification_seen("alice:traffic_exhausted:1", "")
     database.increment_usage("alice", regular=1234, whitelist=2345)
     assert database.reset_monthly("2026-09", "2026-09-01")
     assert not database.reset_monthly("2026-09", "2026-09-01")
@@ -269,6 +279,7 @@ def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
     assert user is not None
     assert (user["bw_used"], user["wl_used"]) == (0, 0)
     assert not database.notification_seen("regular", 123)
+    assert database.notification_markers() == set()
 
     database.add_bandwidth_snapshot("alice", 10, 1, 2, 3, 4)
     database.add_bandwidth_snapshot("alice", 10, 5, 6, 7, 8)

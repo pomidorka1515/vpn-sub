@@ -5,6 +5,13 @@ import time
 
 from custom_types import BandwidthInfo, BandwidthUpdate, UserRecord
 from errors import AppError
+from notify import (
+    Notice,
+    Notifier,
+    classify,
+    restored,
+)
+from notify.kinds import Kind, Scope
 
 from .host import BWatchHost
 
@@ -25,20 +32,89 @@ class QuotaMixin(BWatchHost):
             self.log.error("background user update failed", exc_info=True)
             return False
 
+    def _notifier(self) -> Notifier | None:
+        bot = self.bot
+        if bot is None:
+            return None
+        def send(tgid: int, text: str) -> None:
+            bot.bot.send_message(tgid, text, parse_mode="HTML")
+        return Notifier(
+            texts=bot.TEXTS,
+            send=send,
+            language=bot.get_lang,
+            log=self.log,
+        )
+
+    def _deliver(
+        self,
+        notifier: Notifier | None,
+        username: str,
+        telegram_id: int | None,
+        notices: tuple[Notice, ...],
+        seen: set[str],
+    ) -> None:
+        """Send notices, recording each one in ``seen`` only after it is accepted.
+
+        ``seen`` is the cycle's stored-key set. ``Notifier`` mutates it in
+        place, so the caller persists exactly what Telegram accepted.
+        """
+        if notifier is None or not notices:
+            return
+        for notice in notices:
+            notifier.notify(username, telegram_id, notice, seen)
+
+    def _disable_for(self, notice: Notice, username: str) -> bool:
+        """Apply the panel disable a terminal notice describes.
+
+        False means the disable did not happen, so the notice must not be sent.
+        """
+        if notice.kind is Kind.EXPIRED:
+            return self._update_user(username=username, enable=False, timee=False)
+        if notice.kind is Kind.TRAFFIC_EXHAUSTED:
+            return self._update_user(username=username, enable=False, timee=True)
+        if notice.kind is Kind.WHITELIST_EXHAUSTED:
+            return self._update_user(username=username, wl_enable=False)
+        return False
+
+    def _announce_recoveries(
+        self,
+        recoveries: dict[str, tuple[Notice, ...]],
+        states: dict[str, UserRecord],
+    ) -> None:
+        if not recoveries:
+            return
+        notifier = self._notifier()
+        if notifier is None:
+            return
+        tgids = self.db.user_tgids()
+        seen = self.db.notification_markers()
+        before = set(seen)
+        for username, notices in recoveries.items():
+            if username not in states:
+                continue
+            mapped = tgids.get(username)
+            telegram_id = int(mapped) if mapped is not None else None
+            self._deliver(notifier, username, telegram_id, notices, seen)
+        self.db.sync_notifications(before, seen)
+
     def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
         wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
         states: dict[str, UserRecord] = {}
+        recoveries: dict[str, tuple[Notice, ...]] = {}
         need_main = False
         need_wl = False
         for state in self.sub.user_svc.list_user_states():
             i = state["username"]
             states[i] = state
+            reenabled_time = False
+            reenabled_main = False
+            reenabled_wl = False
             # Main bandwidth
             expires_at = int(state['expires_at'])
             time_ok = expires_at == 0 or (expires_at - int(time.time())) >= 0
             if time_ok and not bool(state['enabled_time']):
-                self._update_user(username=i, enable=True, timee=True)
+                reenabled_time = self._update_user(username=i, enable=True, timee=True)
                 state = self.sub.user_svc.get_user_state(i)  # re-read after the mutation
                 states[i] = state
 
@@ -47,9 +123,19 @@ class QuotaMixin(BWatchHost):
             need_main = need_main or main_required
             need_wl = need_wl or wl_required
             if main_required and int(state['bw_used']) < int(int(state['bw_limit_gb']) * 10**9) and not bool(state['enabled']):
-                self._update_user(username=i, enable=True)
+                reenabled_main = self._update_user(username=i, enable=True)
             if wl_required and int(state['wl_used']) < int(int(state['wl_limit_gb']) * 10**9) and not bool(state['enabled_wl']):
-                self._update_user(username=i, wl_enable=True)
+                reenabled_wl = self._update_user(username=i, wl_enable=True)
+            if reenabled_time or reenabled_main or reenabled_wl:
+                recoveries[i] = restored(
+                    main=reenabled_main,
+                    whitelist=reenabled_wl,
+                    time=reenabled_time,
+                )
+
+        # Re-enables already happened. A failed traffic read must not swallow
+        # the message, and neither must a cycle with no usage delta.
+        self._announce_recoveries(recoveries, states)
 
         # One batched read per side (clients/list per panel). Read both
         # before committing either: if either required read fails, commit
@@ -103,37 +189,20 @@ class QuotaMixin(BWatchHost):
 
     def check(self) -> None:
         tgids = self.db.user_tgids()
+        notifier = self._notifier()
+        seen = self.db.notification_markers()
+        before = set(seen)
+        now = int(time.time())
         for state in self.sub.user_svc.list_user_states():
             i = state["username"]
             mapped = tgids.get(i)
             tg_user = int(mapped) if mapped is not None else None
-            expires_at = int(state['expires_at'])
-            bw_limit = int(state['bw_limit_gb'])
-            bw_used = int(state['bw_used'])
-            wl_limit = int(state['wl_limit_gb'])
-            wl_used = int(state['wl_used'])
-            if expires_at != 0:
-                if (expires_at - int(time.time())) <= 0:
-                    if bool(state['enabled_time']):
-                        disabled = self._update_user(username=i, enable=False, timee=False)
-                        if disabled and self.bot: self.bot.msg(tg_user, 'warning_disabled') # sub expired
-                    continue
-                else:
-                    days = (expires_at - int(time.time())) // 86400
-                    if days <= 2 and tg_user is not None and self.db.mark_notification("regular", tg_user):
-                            if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
-            if wl_limit != 0 and wl_used > int(wl_limit * 10**9):
-                if bool(state['enabled_wl']):
-                    disabled = self._update_user(username=i, wl_enable=False)
-                    if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=wl_limit)
-            elif wl_limit != 0 and wl_used > int(wl_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("whitelist", tg_user):
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(wl_used / 10**6, 0)), available=wl_limit)
-            if not bool(state['enabled']):
-                continue
-            if bw_limit == 0:
-                continue
-            if bw_used > int(bw_limit * 10**9):
-                disabled = self._update_user(username=i, enable=False, timee=True)
-                if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=bw_limit)
-            elif bw_used > int(bw_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("regular", tg_user):
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(bw_used / 10**6, 0)), available=bw_limit)
+            notices = classify(state, now)
+            applied: list[Notice] = []
+            for notice in notices:
+                if notice.kind.scope is Scope.EPISODE:
+                    if not self._disable_for(notice, i):
+                        continue
+                applied.append(notice)
+            self._deliver(notifier, i, tg_user, tuple(applied), seen)
+        self.db.sync_notifications(before, seen)

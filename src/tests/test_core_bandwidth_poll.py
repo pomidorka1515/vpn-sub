@@ -39,10 +39,27 @@ def test_periodic_loop_guard_swallows_crashes(
 
 class _RecordingBot:
     def __init__(self) -> None:
-        self.sent: list[tuple[int | str | None, str]] = []
+        self.sent: list[tuple[int, str]] = []
+        self.TEXTS = {
+            "en": {
+                "warning_expired": "expired",
+                "warning_expiry_soon": "{days}",
+                "warning_traffic_soon": "{used_gb}/{limit_gb}",
+                "warning_traffic_exhausted": "off {limit_gb}",
+                "warning_whitelist_soon": "wl {used_gb}",
+                "warning_whitelist_exhausted": "wl off {limit_gb}",
+                "warning_restored": "back",
+                "warning_whitelist_restored": "wl back",
+            },
+            "ru": {},
+        }
+        self.bot = self
 
-    def msg(self, tgid: int | str | None, key: str, **kwargs: object) -> None:
-        self.sent.append((tgid, key))
+    def get_lang(self, uid: int) -> str:
+        return "en"
+
+    def send_message(self, tgid: int, text: str, parse_mode: str = "HTML") -> None:
+        self.sent.append((tgid, text))
 
 
 def test_no_traffic_disabled_notification_when_panel_update_fails(
@@ -61,6 +78,176 @@ def test_no_traffic_disabled_notification_when_panel_update_fails(
 
     # the disable never happened; the user must not be told it did
     assert bot.sent == []
+    assert database.notification_markers() == set()
+
+
+def test_exhausted_warning_is_not_repeated(
+    database: Database, subscription: Subscription,
+) -> None:
+    """Two checks while the user is still over quota send one warning.
+
+    The second cycle must be silent because the marker was stored, not
+    because the user was already disabled and therefore unclassified.
+    """
+    bot = _RecordingBot()
+    watch = make_watch(database, subscription, bot=bot)
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
+    database.set_telegram("alice", "7")
+    database.update_user("alice", bw_used=2 * 10**9)
+
+    def disable_panel_only(
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+    ) -> None:
+        return None
+
+    subscription.business_svc.update_user = disable_panel_only  # type: ignore[method-assign]
+    watch.check()
+    watch.check()
+
+    assert bot.sent == [(7, "off 1")]
+    assert database.notification_seen("alice:traffic_exhausted:1", "")
+    assert database.get_user("alice")["enabled"] == 1  # type: ignore[index]
+
+
+def test_near_limit_warning_is_not_repeated(
+    database: Database, subscription: Subscription,
+) -> None:
+    bot = _RecordingBot()
+    watch = make_watch(database, subscription, bot=bot)
+    create_alice(database, bw_limit_gb=10, wl_limit_gb=0)
+    database.set_telegram("alice", "7")
+    database.update_user("alice", bw_used=int(8.1 * 10**9))
+
+    watch.check()
+    watch.check()
+
+    assert bot.sent == [(7, "8/10")]
+    assert database.notification_seen("alice:traffic_soon:80", "")
+
+
+def test_failed_send_retries_and_then_sticks(
+    database: Database, subscription: Subscription,
+) -> None:
+    bot = _RecordingBot()
+    watch = make_watch(database, subscription, bot=bot)
+    create_alice(database, bw_limit_gb=10, wl_limit_gb=0)
+    database.set_telegram("alice", "7")
+    database.update_user("alice", bw_used=int(8.1 * 10**9))
+
+    def fail_once(tgid: int, text: str, parse_mode: str = "HTML") -> None:
+        raise RuntimeError("blocked")
+
+    bot.send_message = fail_once  # type: ignore[method-assign]
+    watch.check()
+    assert database.notification_markers() == set()
+
+    bot.send_message = _RecordingBot.send_message.__get__(bot, _RecordingBot)  # type: ignore[method-assign]
+    watch.check()
+    watch.check()
+    assert bot.sent == [(7, "8/10")]
+    assert database.notification_seen("alice:traffic_soon:80", "")
+
+
+def test_recovery_is_sent_only_through_deliver(
+    database: Database, subscription: Subscription,
+) -> None:
+    """A re-enable announces recovery only when the outage marker is stored."""
+    bot = _RecordingBot()
+    watch = make_watch(database, subscription, bot=bot)
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
+    database.set_telegram("alice", "7")
+    database.update_user("alice", status=False, bw_used=0)
+
+    def reenable(
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+    ) -> None:
+        database.update_user(username, status=True)
+
+    subscription.business_svc.update_user = reenable  # type: ignore[method-assign]
+    def no_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
+        return {}
+
+    subscription.bandwidth_svc.all_traffic = no_traffic  # type: ignore[method-assign]
+    watch.bandwidth_check()
+    assert bot.sent == []
+
+    database.mark_notification("alice:traffic_exhausted:1", "")
+    database.update_user("alice", status=False, bw_used=0)
+    watch.bandwidth_check()
+    watch.bandwidth_check()
+
+    assert bot.sent == [(7, "back")]
+    assert not database.notification_seen("alice:traffic_exhausted:1", "")
+    assert database.notification_seen("alice:restored", "")
+
+
+def test_second_recovery_is_not_swallowed_by_the_first(
+    database: Database, subscription: Subscription,
+) -> None:
+    bot = _RecordingBot()
+    watch = make_watch(database, subscription, bot=bot)
+    create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
+    database.set_telegram("alice", "7")
+    database.update_user("alice", bw_used=2 * 10**9)
+
+    def disable_panel_only(
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+    ) -> None:
+        return None
+
+    subscription.business_svc.update_user = disable_panel_only  # type: ignore[method-assign]
+    watch.check()
+    assert database.notification_seen("alice:traffic_exhausted:1", "")
+
+    def reenable(
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+    ) -> None:
+        database.update_user(username, status=True)
+
+    subscription.business_svc.update_user = reenable  # type: ignore[method-assign]
+    def no_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
+        return {}
+
+    subscription.bandwidth_svc.all_traffic = no_traffic  # type: ignore[method-assign]
+    database.update_user("alice", status=False, bw_used=0)
+    watch.bandwidth_check()
+    assert bot.sent == [(7, "off 1"), (7, "back")]
+
+    # Still classified as exhausted: the panel disable does not flip the row.
+    database.update_user("alice", status=True, bw_used=2 * 10**9)
+    subscription.business_svc.update_user = disable_panel_only  # type: ignore[method-assign]
+    watch.check()
+    database.update_user("alice", status=False, bw_used=0)
+    subscription.business_svc.update_user = reenable  # type: ignore[method-assign]
+    watch.bandwidth_check()
+
+    assert bot.sent == [(7, "off 1"), (7, "back"), (7, "off 1"), (7, "back")]
+
+
+def test_daily_snapshot_job_does_not_clear_episode_markers(
+    database: Database, subscription: Subscription, watch: BWatch,
+) -> None:
+    database.mark_notification("alice:traffic_exhausted:1", "")
+    database.mark_notification("regular", 123)
+    watch._run_jobs(watch._INTERVALS[-1][2])  # pyright: ignore[reportPrivateUsage]
+    assert database.notification_seen("alice:traffic_exhausted:1", "")
+    assert database.notification_seen("regular", 123)
+
+    assert database.reset_monthly("2026-10", "2026-10-01")
+    assert database.notification_markers() == set()
+    assert not database.notification_seen("regular", 123)
 
 
 def test_bonus_on_zero_quota_reenables_on_next_poll(
@@ -359,9 +546,10 @@ def test_check_reads_users_and_telegram_once(
         database._connect = original  # type: ignore[method-assign]
 
     selects = [q for q in seen if q.startswith("SELECT")]
-    assert len(selects) == 2
+    assert len(selects) == 3
     assert any("FROM users" in q for q in selects)
     assert any("FROM telegram_mappings" in q for q in selects)
+    assert any("FROM notification_state" in q for q in selects)
 
 
 def test_daily_snapshot_writes_rows_in_one_transaction(

@@ -113,18 +113,6 @@ def test_language_menu_and_notifications(
     mixin.set_lang(42, "ru")
     subscription.telegram_svc.set_telegram_language.assert_called_once_with(42, "ru")
 
-    mixin.msg(None, "notify")
-    mixin.msg("42", "notify")
-    mixin.msg(42, "missing")
-    telegram.send_message.assert_not_called()
-
-    mixin.msg(42, "notify", name="Ann")
-    telegram.send_message.assert_called_once_with(42, "hello Ann", parse_mode="HTML")
-    telegram.send_message.side_effect = RuntimeError("blocked")
-    mixin.msg(42, "notify", name="Ann")
-    cast(MagicMock, mixin.log).error.assert_called()
-    telegram.send_message.side_effect = None
-
     subscription.telegram_svc.is_registered.return_value = False
     guest = mixin.get_menu(42)
     labels = [_button_text(button) for row in guest.keyboard for button in row]

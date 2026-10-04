@@ -57,6 +57,7 @@ packages = [
     "bots",
     "bots.admin",
     "bots.public",
+    "notify",
     "db",
     "bwatch",
     "session",
@@ -83,6 +84,7 @@ files = [
     "src/session/",
     "src/chart/",
     "src/bwatch/",
+    "src/notify/",
     "src/api/",
     "src/app.py",
     "src/util.py",
@@ -173,6 +175,7 @@ include = [
     "src/chart/",
     "src/paths.py",
     "src/bwatch/",
+    "src/notify/",
     "src/api/",
     "src/app.py",
     "src/util.py",
@@ -214,6 +217,12 @@ reportUnusedFunction = false
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]
 root = "src/bwatch"
+reportPrivateUsage = false
+reportUnusedFunction = false
+
+[[tool.pyright.executionEnvironments]]
+extraPaths = ["src"]
+root = "src/notify"
 reportPrivateUsage = false
 reportUnusedFunction = false
 

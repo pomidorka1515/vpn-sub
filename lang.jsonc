@@ -147,12 +147,14 @@
             "support_text": "💬 По всем вопросам обращайтесь: @pomidorka_1515",
 
             // subscription warnings
-            "warning_disabled": "⚠ Ваша подписка истекла.",
-            "warning_days": "⚠ Осталось <b>{days}</b> дней до конца подписки.",
-            "warning_traffic": "⚠ Вы использовали <b>{used}</b> ГБ из <b>{available}</b> ГБ доступных вам.",
-            "warning_traffic_disabled": "⚠ Вы использовали весь доступный вам трафик ({available} ГБ). Подписка была отключена.",
-            "warning_traffic_whitelist": "⚠ Вы использовали <b>{used}</b> MB из <b>{available}</b> GB на БС локациях.",
-            "warning_traffic_whitelist_disabled": "⚠ Вы использовали весь доступный Вам трафик на БС локациях ({available} ГБ). Они были отключены для вас.",
+            "warning_expired": "⚠ Ваша подписка истекла.",
+            "warning_expiry_soon": "⚠ До конца подписки осталось <b>{days}</b> дн.",
+            "warning_traffic_soon": "⚠ Использовано <b>{used_gb}</b> ГБ из <b>{limit_gb}</b> ГБ ({percent}%).",
+            "warning_traffic_exhausted": "⚠ Трафик израсходован ({limit_gb} ГБ). Подписка отключена.",
+            "warning_whitelist_soon": "⚠ На БС локациях использовано <b>{used_gb}</b> ГБ из <b>{limit_gb}</b> ГБ ({percent}%).",
+            "warning_whitelist_exhausted": "⚠ Трафик БС локаций израсходован ({limit_gb} ГБ). Они отключены.",
+            "warning_restored": "✅ Доступ восстановлен.",
+            "warning_whitelist_restored": "✅ БС локации снова доступны.",
 
             // generic errors and misc
             "error_generic": "⚠️ Ошибка",
@@ -252,12 +254,14 @@
             "support_text": "💬 For any questions contact: @pomidorka_1515",
 
             // subscription warnings
-            "warning_disabled": "⚠ Your subscripiton has expired.",
-            "warning_days": "⚠ There are <b>{days}</b> days left until your subscription expires.",
-            "warning_traffic": "⚠ You have used <b>{used}</b> GB out of <b>{available}</b> GB available to you.",
-            "warning_traffic_disabled": "⚠ You have used all bandwidth available to you ({available} ГБ). Subscription has been disabled.",
-            "warning_traffic_whitelist": "⚠ You have used <b>{used}</b> MB out of <b>{available}</b> GB on whitelist locations.",
-            "warning_traffic_whitelist_disabled": "⚠ You have used all bandwidth available to you on whitelist locations ({available} ГБ). Whitelist locations have been disabled for you.",
+            "warning_expired": "⚠ Your subscription has expired.",
+            "warning_expiry_soon": "⚠ <b>{days}</b> day(s) left until your subscription expires.",
+            "warning_traffic_soon": "⚠ You have used <b>{used_gb}</b> GB of <b>{limit_gb}</b> GB ({percent}%).",
+            "warning_traffic_exhausted": "⚠ You have used all available bandwidth ({limit_gb} GB). The subscription has been disabled.",
+            "warning_whitelist_soon": "⚠ You have used <b>{used_gb}</b> GB of <b>{limit_gb}</b> GB on whitelist locations ({percent}%).",
+            "warning_whitelist_exhausted": "⚠ Whitelist bandwidth is used up ({limit_gb} GB). Those locations have been disabled.",
+            "warning_restored": "✅ Access has been restored.",
+            "warning_whitelist_restored": "✅ Whitelist locations are available again.",
 
             // generic errors and misc
             "error_generic": "⚠️ Error",

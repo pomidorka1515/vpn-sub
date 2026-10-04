@@ -45,6 +45,44 @@ class StateMixin(ConnectionMixin):
         with self.transaction(immediate=True) as conn:
             conn.execute("DELETE FROM notification_state")
 
+    def notification_markers(self) -> set[str]:
+        """Every stored marker. One read for a quota cycle.
+
+        Legacy rows keyed by Telegram id are not markers. A monthly reset
+        deletes those; the quota diff must not treat them as live state.
+        """
+        with self.connection() as conn:
+            return {
+                str(row[0])
+                for row in conn.execute(
+                    "SELECT kind FROM notification_state WHERE telegram_id = ''"
+                )
+            }
+
+    def sync_notifications(self, before: set[str], after: set[str]) -> None:
+        """Apply the marker diff from one quota cycle.
+
+        Markers this cycle did not load are left alone. A failed send is
+        absent from ``after`` and is therefore not inserted.
+        Both columns identify a row: deleting by ``kind`` alone would also
+        remove a legacy Telegram-id row that happens to share the kind.
+        """
+        added = after - before
+        removed = before - after
+        if not added and not removed:
+            return
+        with self.transaction(immediate=True) as conn:
+            if removed:
+                conn.executemany(
+                    "DELETE FROM notification_state WHERE kind = ? AND telegram_id = ''",
+                    [(kind,) for kind in sorted(removed)],
+                )
+            if added:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO notification_state(kind, telegram_id) VALUES (?, '')",
+                    [(kind,) for kind in sorted(added)],
+                )
+
     def notification_seen(self, kind: str, telegram_id: int | str) -> bool:
         with self.connection() as conn:
             return conn.execute("SELECT 1 FROM notification_state WHERE kind = ? AND telegram_id = ?", (kind, str(telegram_id))).fetchone() is not None

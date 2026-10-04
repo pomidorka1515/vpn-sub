@@ -28,24 +28,6 @@ class PublicCommonMixin(
     def set_lang(self, uid: int, lang: str) -> None:
         self.sub.telegram_svc.set_telegram_language(uid, lang)
 
-    def msg(self, tgid: int | str | None, key: str, **kwargs: str | int | float | bool) -> None:
-        if tgid is None or isinstance(tgid, str):
-            return
-        lang = self.get_lang(tgid)
-        t = self.TEXTS[lang]
-        text = t.get(key, None)
-        if not text:
-            return
-        if kwargs:
-            text = text.format(**kwargs)
-        try:
-            self.bot.send_message(tgid, text, parse_mode="HTML")
-        except Exception as error:
-            self.log.error(
-                f"failed to send notification {key!r} to user {tgid}: {error}",
-                exc_info=True,
-            )
-
     def get_menu(self, uid: int) -> types.ReplyKeyboardMarkup:
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
@@ -103,5 +85,4 @@ class PublicCommonMixin(
     def stop(self) -> None:
         self.stop_polling()
         self._executor.shutdown(wait=False, cancel_futures=True)
-
 

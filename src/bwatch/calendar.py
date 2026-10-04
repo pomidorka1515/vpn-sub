@@ -6,7 +6,12 @@ from .host import BWatchHost
 
 
 class CalendarMixin(BWatchHost):
-    """Monthly quota reset and notification-marker clear."""
+    """Monthly quota reset.
+
+    Notification markers are cleared inside ``reset_monthly``, when usage
+    actually resets. A daily wipe would re-send episode warnings to users
+    who are still disabled.
+    """
 
     def is_first(self) -> None:
         # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
@@ -21,6 +26,3 @@ class CalendarMixin(BWatchHost):
         # doesn't accidentally re-trigger a reset that already happened.
         current_month = now.strftime("%Y-%m")
         self.db.reset_monthly(current_month, today)
-
-    def reset(self) -> None:
-        self.db.clear_notifications()

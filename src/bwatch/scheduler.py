@@ -21,7 +21,6 @@ class SchedulerMixin(BWatchHost):
             ("inbound reconcile", "reconcile_inbounds"),
         )),
         ("Snapshots", 86400, (
-            ("notification reset", "reset"),
             ("bandwidth snapshot pruning", "prune_old_bw_snapshots"),
             ("state snapshot pruning", "prune_old_snap_snapshots"),
         )),
