@@ -42,13 +42,14 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = [
-    "app", "chart", "builders",
+    "app", "chart",
     "custom_types",
     "session", "util", "errors"
 ]
 packages = [
     "api",
     "api.decorators",
+    "builders",
     "config",
     "core",
     "loggers",
@@ -84,7 +85,7 @@ files = [
     "src/util.py",
     "src/paths.py",
     "src/errors.py",
-    "src/builders.py",
+    "src/builders/",
     "src/fonts.py",
     "src/tests/",
     "src/core/",
@@ -172,7 +173,7 @@ include = [
     "src/app.py",
     "src/util.py",
     "src/errors.py",
-    "src/builders.py",
+    "src/builders/",
     "src/fonts.py",
     "src/tests/",
     "src/core/",
@@ -209,6 +210,12 @@ reportUnusedFunction = false
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]
 root = "src/bwatch"
+reportPrivateUsage = false
+reportUnusedFunction = false
+
+[[tool.pyright.executionEnvironments]]
+extraPaths = ["src"]
+root = "src/builders"
 reportPrivateUsage = false
 reportUnusedFunction = false
 
