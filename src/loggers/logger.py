@@ -71,7 +71,7 @@ class Logger(logging.Logger):
         try:
             yield
             dt = (time.monotonic() - t0) * 1000
-            self.info(f"Loaded {self.name}! ({dt:.1f}ms)")
+            self.info(f"Loaded {Colors.BOLD}{self.name}{Colors.RESET}! {Colors.ITALIC}({dt:.1f}ms)")
         except Exception:
             self.error(f"Failed to load {self.name}.")
             raise
@@ -83,7 +83,7 @@ class Logger(logging.Logger):
         try:
             yield
             dt = (time.monotonic() - t0) * 1000
-            self.info(f"Executed: {name} ({dt:.1f}ms)")
+            self.info(f"Executed: {name} {Colors.ITALIC}({dt:.1f}ms)")
         except Exception as e:
             self.error(f"Fail when executing {name}: {e}")
             raise

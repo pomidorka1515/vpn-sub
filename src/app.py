@@ -20,7 +20,7 @@ from db import Database
 from errors import AppError
 from flask import Flask, Response, request
 from jinja2 import FileSystemLoader
-from loggers import Logger
+from loggers import Logger, Colors
 from config import ConfigLike
 from paths import runtime_dir
 from session import XUiSession, XUiPanelTransport
@@ -157,7 +157,7 @@ class Application:
         else:
             log.info("Free-threading active!")
 
-        log.info("Launch successful!")
+        log.info(f"{Colors.BOLD}Launch successful!")
     
     def stop(self) -> None:
         if self._stop_event.is_set():
