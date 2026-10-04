@@ -12,7 +12,26 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-__all__ = ["runtime_dir"]
+__all__ = ["bundled_root", "runtime_dir"]
+
+
+def bundled_root() -> Path:
+    """Directory that contains ``res/`` and ``lang.jsonc``.
+
+    A normal checkout is the repository root, two levels above this module.
+    Nuitka onefile extracts included data next to the compiled entry module,
+    whose ``__file__`` is inside the payload rather than the checkout. Walk
+    up from this module until those files are found, so both layouts resolve
+    without an environment variable.
+
+    ``DIR_DATA`` and ``PATH_*`` still override mutable runtime files. This
+    only locates files that ship with the program.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "lang.jsonc").is_file() and (parent / "res").is_dir():
+            return parent
+    return here.parents[1]
 
 
 def runtime_dir(data: Path | None = None) -> Path:
@@ -29,6 +48,6 @@ def runtime_dir(data: Path | None = None) -> Path:
     if override:
         return Path(override)
     if data is None:
-        root = Path(__file__).resolve().parent.parent
+        root = bundled_root()
         data = Path(os.getenv("DIR_DATA", root / "data"))
     return data / "run"

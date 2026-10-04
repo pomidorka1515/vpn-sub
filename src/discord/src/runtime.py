@@ -17,6 +17,7 @@ from loggers import Logger
 from public import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
+from paths import bundled_root
 
 __all__ = [
     "DiscordApplication",
@@ -26,6 +27,18 @@ __all__ = [
 ]
 
 log = Logger("discord")
+
+
+def _language_path(root: Path) -> Path:
+    """Discord strings live under ``src/discord/`` in a checkout.
+
+    A frozen payload includes that file at the bundle root, next to the
+    entry module, because Nuitka does not keep the repository layout.
+    """
+    checkout = root / "src" / "discord" / "lang.jsonc"
+    if checkout.is_file():
+        return checkout
+    return root / "lang.jsonc"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -42,12 +55,12 @@ class DiscordPaths:
 
     @classmethod
     def from_env(cls) -> DiscordPaths:
-        root = Path(__file__).resolve().parents[3]
+        root = bundled_root()
         data = Path(os.getenv("DIR_DATA", root / "data"))
         return cls(
             data=data,
             config=Path(os.getenv("PATH_DISCORD_CONFIG", data / "discord.json")),
-            language=Path(os.getenv("PATH_DISCORD_LANG", root / "src" / "discord" / "lang.jsonc")),
+            language=Path(os.getenv("PATH_DISCORD_LANG", _language_path(root))),
             log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
             sessions=Path(os.getenv("PATH_DISCORD_SESSIONS", data / "discord-sessions.json")),
             backups=data / "backup",

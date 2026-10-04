@@ -11,8 +11,7 @@ import pytest
 from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
 
-from loggers import GunicornLogger
-from loggers import _color_status
+from loggers.access import GunicornLogger, _color_status
 from loggers import Colors
 from loggers import Logger
 from loggers.handlers import _JSONLinesLogger

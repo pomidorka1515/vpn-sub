@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from custom_types import HTTPMethod
 from typing import NamedTuple, cast
 import re
@@ -12,10 +13,11 @@ from bwatch import BWatch
 from flask import Flask, Response, request
 from loggers import Logger
 from fonts import FONT_FILES
+from paths import bundled_root
 
 type ResponseType = tuple[Response, int] | Response
 
-RES_DIR = Path(__file__).resolve().parent.parent.parent / 'res'
+RES_DIR = bundled_root() / "res"
 
 
 _ASSET_FILES: tuple[str, ...] = (

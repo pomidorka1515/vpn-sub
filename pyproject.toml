@@ -44,7 +44,8 @@ package-dir = {"" = "src"}
 py-modules = [
     "app",
     "custom_types",
-    "util", "errors"
+    "util", "errors",
+    "paths", "serve", "main", "wsgi"
 ]
 packages = [
     "api",

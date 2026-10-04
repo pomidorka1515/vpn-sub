@@ -1,7 +1,7 @@
 """Self-hosted webfonts. Kept out of api/ so builders can use it without a cycle."""
-from pathlib import Path
+from paths import bundled_root
 
-RES_DIR = Path(__file__).resolve().parent.parent / 'res'
+RES_DIR = bundled_root() / "res"
 
 FONT_FILES: frozenset[str] = frozenset({
     'outfit-latin.woff2',

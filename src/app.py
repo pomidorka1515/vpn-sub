@@ -22,7 +22,7 @@ from flask import Flask, Response, request
 from jinja2 import FileSystemLoader
 from loggers import Logger, Colors
 from config import ConfigLike
-from paths import runtime_dir
+from paths import bundled_root, runtime_dir
 from session import XUiSession, XUiPanelTransport
 from util import err
 from werkzeug.exceptions import HTTPException
@@ -79,7 +79,7 @@ class AppPaths:
 
     @classmethod
     def from_env(cls) -> AppPaths:
-        root = Path(__file__).resolve().parent.parent
+        root = bundled_root()
         data = Path(os.getenv("DIR_DATA", root / "data"))
         return cls(
             data=data,

@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import io
-from pathlib import Path
 from typing import Mapping
 
 from PIL import Image, ImageDraw, ImageFont
 
 from util import fmt_bytes
+from paths import bundled_root
 
 # pyright: reportUnknownMemberType=false
 
@@ -23,7 +23,7 @@ REG_UP   = '#d1d5db'
 WL_DOWN  = '#6b7280'
 WL_UP    = '#a1a1aa'
 
-_FONT_PATH = Path(__file__).resolve().parent.parent.parent / 'res' / 'fonts' / 'DejaVuSans.ttf'
+_FONT_PATH = bundled_root() / "res" / "fonts" / "DejaVuSans.ttf"
 
 BW_SIZE = (1400, 980)
 LB_SIZE = (1260, 840)
