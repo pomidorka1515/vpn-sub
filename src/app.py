@@ -157,7 +157,7 @@ class Application:
         else:
             log.info("Free-threading active!")
 
-        log.info(f"{Colors.BOLD}Launch successful!")
+        log.info(f"{Colors.BOLD}Launch successful!{Colors.RESET}")
     
     def stop(self) -> None:
         if self._stop_event.is_set():

@@ -22,15 +22,13 @@ __all__ = ["BWatch"]
 
 
 class BWatch:
-    def _alert_admin(self, message: str) -> None:
-        if self.admin_bot:
-            self.admin_bot.msg(message)
+    ### Lifecycle ###
 
     def __init__(
-        self, 
-        cfg: ConfigLike, 
+        self,
+        cfg: ConfigLike,
         db: Database,
-        sub: Subscription, 
+        sub: Subscription,
         bot: PublicBot | None = None,
         admin_bot: AdminBot | None = None
     ):
@@ -48,25 +46,27 @@ class BWatch:
             self.snap_mem: dict[str, BandwidthInfo] = {}
             self.snap_wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
-            self._panel_alerts: dict[str, int | float] = {} # only used by 1 thread, no lock needed yet
+            self._panel_alerts: dict[str, int | float] = {}  # only used by 1 thread, no lock needed yet
             self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', as_type=int) or 3600
             self._snapshot_failures: dict[Literal["bandwidth", "state"], int] = {}
             self._snapshot_due_at: dict[Literal["bandwidth", "state"], float] = {
                 "bandwidth": 0.0,
                 "state": 0.0,
             }
-
-            _threads: tuple[tuple[Callable[[], None], str], ...] = (
-                (self._every_120s, "Quota & Notifs"),
-                (self._every_2h, "Date check & reconcile"),
-                (self._every_15s, "Bandwidth"),
-                (self._every_24h, "Snapshots"),
-                (self._every_5m, "Panels check"),
-                (self._every_24h_snapshot, "Daily snapshots"),
-            )
             self._threads: tuple[threading.Thread, ...] = tuple(
-                threading.Thread(target=target, name=name, daemon=True)
-                for target, name in _threads
+                threading.Thread(
+                    target=self._loop,
+                    args=(interval, jobs),
+                    name=name,
+                    daemon=True,
+                )
+                for name, interval, jobs in self._INTERVALS
+            ) + (
+                threading.Thread(
+                    target=self._every_24h_snapshot,
+                    name="Daily snapshots",
+                    daemon=True,
+                ),
             )
 
     def start(self) -> None:
@@ -117,7 +117,9 @@ class BWatch:
         for thread in self._threads:
             if thread.is_alive():
                 thread.join(timeout=5)
-        
+
+    ### Quota and expiry ###
+
     def _update_user(self, *args: Any, **kwargs: Any) -> bool:
         """Run a background user update. Returns False when it failed.
 
@@ -130,19 +132,7 @@ class BWatch:
         except AppError:
             self.log.error("background user update failed", exc_info=True)
             return False
-    
-    # prune_old_<cfg name>_snapshots
 
-    def prune_old_bw_snapshots(self) -> None:
-        retention = int(self.db.get_metadata("bw_retention_days", "30") or 30)
-        cutoff = int(time.time()) - retention * 86400
-        self.db.prune_bandwidth_snapshots(cutoff)
-    
-    def prune_old_snap_snapshots(self) -> None:
-        retention = int(self.db.get_metadata("state_retention_days", "30") or 30)
-        cutoff = int(time.time()) - retention * 86400
-        self.db.prune_state_snapshots(cutoff)
-    
     def bandwidth_check(self) -> None:
         updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
         wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
@@ -219,6 +209,45 @@ class BWatch:
                 self.wl_mem[i] = update.current
         self.db.increment_usages(usage)
 
+    def check(self) -> None:
+        tgids = self.db.user_tgids()
+        for state in self.sub.user_svc.list_user_states():
+            i = state["username"]
+            mapped = tgids.get(i)
+            tg_user = int(mapped) if mapped is not None else None
+            expires_at = int(state['expires_at'])
+            bw_limit = int(state['bw_limit_gb'])
+            bw_used = int(state['bw_used'])
+            wl_limit = int(state['wl_limit_gb'])
+            wl_used = int(state['wl_used'])
+            if expires_at != 0:
+                if (expires_at - int(time.time())) <= 0:
+                    if bool(state['enabled_time']):
+                        disabled = self._update_user(username=i, enable=False, timee=False)
+                        if disabled and self.bot: self.bot.msg(tg_user, 'warning_disabled') # sub expired
+                    continue
+                else:
+                    days = (expires_at - int(time.time())) // 86400
+                    if days <= 2 and tg_user is not None and self.db.mark_notification("regular", tg_user):
+                            if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
+            if wl_limit != 0 and wl_used > int(wl_limit * 10**9):
+                if bool(state['enabled_wl']):
+                    disabled = self._update_user(username=i, wl_enable=False)
+                    if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=wl_limit)
+            elif wl_limit != 0 and wl_used > int(wl_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("whitelist", tg_user):
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(wl_used / 10**6, 0)), available=wl_limit)
+            if not bool(state['enabled']):
+                continue
+            if bw_limit == 0:
+                continue
+            if bw_used > int(bw_limit * 10**9):
+                disabled = self._update_user(username=i, enable=False, timee=True)
+                if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=bw_limit)
+            elif bw_used > int(bw_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("regular", tg_user):
+                    if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(bw_used / 10**6, 0)), available=bw_limit)
+
+    ### Panels ###
+
     def panel_health_check(self) -> None:
         """Check each panel's Xray status and resource usage. Alert on issues."""
         live = [panel for panel in self.sub.panels if not panel.dead]
@@ -268,43 +297,6 @@ class BWatch:
             except Exception:
                 self.log.error("health check failed for panel %s (%s)", panel.name, panel.address, exc_info=True)
 
-    def check(self) -> None:
-        tgids = self.db.user_tgids()
-        for state in self.sub.user_svc.list_user_states():
-            i = state["username"]
-            mapped = tgids.get(i)
-            tg_user = int(mapped) if mapped is not None else None
-            expires_at = int(state['expires_at'])
-            bw_limit = int(state['bw_limit_gb'])
-            bw_used = int(state['bw_used'])
-            wl_limit = int(state['wl_limit_gb'])
-            wl_used = int(state['wl_used'])
-            if expires_at != 0:
-                if (expires_at - int(time.time())) <= 0:
-                    if bool(state['enabled_time']):
-                        disabled = self._update_user(username=i, enable=False, timee=False)
-                        if disabled and self.bot: self.bot.msg(tg_user, 'warning_disabled') # sub expired
-                    continue
-                else:
-                    days = (expires_at - int(time.time())) // 86400
-                    if days <= 2 and tg_user is not None and self.db.mark_notification("regular", tg_user):
-                            if self.bot: self.bot.msg(tg_user, 'warning_days', days=days)
-            if wl_limit != 0 and wl_used > int(wl_limit * 10**9):
-                if bool(state['enabled_wl']):
-                    disabled = self._update_user(username=i, wl_enable=False)
-                    if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist_disabled', available=wl_limit)
-            elif wl_limit != 0 and wl_used > int(wl_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("whitelist", tg_user):
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic_whitelist', used=int(round(wl_used / 10**6, 0)), available=wl_limit)
-            if not bool(state['enabled']):
-                continue
-            if bw_limit == 0:
-                continue
-            if bw_used > int(bw_limit * 10**9):
-                disabled = self._update_user(username=i, enable=False, timee=True)
-                if disabled and self.bot: self.bot.msg(tg_user, 'warning_traffic_disabled', available=bw_limit)
-            elif bw_used > int(bw_limit * 10**9 * 0.95) and tg_user is not None and self.db.mark_notification("regular", tg_user):
-                    if self.bot: self.bot.msg(tg_user, 'warning_traffic', used=int(round(bw_used / 10**6, 0)), available=bw_limit)
-
     def reconcile_inbounds(self) -> None:
         """Re-sync every user to every panel (idempotent).
 
@@ -334,22 +326,17 @@ class BWatch:
                 f"⚠️ Inbound reconcile failed for {len(failures)} user(s): {shown}"
             )
 
-    def is_first(self) -> None:
-        # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
-        # NOTE: Exclusive to one thread only.
-        now = datetime.now(timezone.utc)
-        if now.day != 1:
-            return
-        today = now.strftime("%Y-%m-%d")
+    ### Snapshots ###
 
-        # Restart-safe: compare against stored month key, not just the date string.
-        # '_last_reset_month' stores "YYYY-MM" so a process restart on day 2
-        # doesn't accidentally re-trigger a reset that already happened.
-        current_month = now.strftime("%Y-%m")
-        self.db.reset_monthly(current_month, today)
+    def prune_old_bw_snapshots(self) -> None:
+        retention = int(self.db.get_metadata("bw_retention_days", "30") or 30)
+        cutoff = int(time.time()) - retention * 86400
+        self.db.prune_bandwidth_snapshots(cutoff)
     
-    def reset(self) -> None:
-        self.db.clear_notifications()
+    def prune_old_snap_snapshots(self) -> None:
+        retention = int(self.db.get_metadata("state_retention_days", "30") or 30)
+        cutoff = int(time.time()) - retention * 86400
+        self.db.prune_state_snapshots(cutoff)
 
     def record_snap_snapshot(self) -> None:
         """Record one state snapshot (`SysUtil` + panels) for today."""
@@ -522,7 +509,44 @@ class BWatch:
         except ValueError:
             return None
 
-    ### Helper functions ###
+    ### Calendar ###
+
+    def is_first(self) -> None:
+        # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
+        # NOTE: Exclusive to one thread only.
+        now = datetime.now(timezone.utc)
+        if now.day != 1:
+            return
+        today = now.strftime("%Y-%m-%d")
+
+        # Restart-safe: compare against stored month key, not just the date string.
+        # '_last_reset_month' stores "YYYY-MM" so a process restart on day 2
+        # doesn't accidentally re-trigger a reset that already happened.
+        current_month = now.strftime("%Y-%m")
+        self.db.reset_monthly(current_month, today)
+    
+    def reset(self) -> None:
+        self.db.clear_notifications()
+
+    ### Scheduler ###
+
+    # (thread name, seconds, ((log label, method name), ...))
+    # Daily snapshots are not here: they retry per kind with backoff.
+    _INTERVALS: tuple[tuple[str, float, tuple[tuple[str, str], ...]], ...] = (
+        ("Bandwidth", 15, (("bandwidth poll", "bandwidth_check"),)),
+        ("Quota & Notifs", 120, (("periodic user check", "check"),)),
+        ("Panels check", 300, (("panel health check", "panel_health_check"),)),
+        ("Date check & reconcile", 7200, (
+            ("monthly reset check", "is_first"),
+            ("inbound reconcile", "reconcile_inbounds"),
+        )),
+        ("Snapshots", 86400, (
+            ("notification reset", "reset"),
+            ("bandwidth snapshot pruning", "prune_old_bw_snapshots"),
+            ("state snapshot pruning", "prune_old_snap_snapshots"),
+        )),
+    )
+
     @staticmethod
     def _panel_pool() -> Executor:
         """Background panel executor. Imported lazily: app imports BWatch
@@ -531,6 +555,10 @@ class BWatch:
         from core.services.panel import BG_POOL
         return BG_POOL
 
+    def _alert_admin(self, message: str) -> None:
+        if self.admin_bot:
+            self.admin_bot.msg(message)
+
     def _guarded(self, what: str, operation: Callable[[], object]) -> None:
         """Run one periodic operation; a crash must not kill the loop thread."""
         try:
@@ -538,21 +566,15 @@ class BWatch:
         except Exception:
             self.log.error("%s crashed", what, exc_info=True)
 
-    def _every_120s(self) -> None:
-        while not self._stop_event.wait(120):
-            self._guarded("periodic user check", self.check)
-    def _every_2h(self) -> None:
-        while not self._stop_event.wait(7200):
-            self._guarded("monthly reset check", self.is_first)
-            self._guarded("inbound reconcile", self.reconcile_inbounds)
-    def _every_15s(self) -> None:
-        while not self._stop_event.wait(15):
-            self._guarded("bandwidth poll", self.bandwidth_check)
-    def _every_24h(self) -> None:
-        while not self._stop_event.wait(86400):
-            self._guarded("notification reset", self.reset)
-            self._guarded("bandwidth snapshot pruning", self.prune_old_bw_snapshots)
-            self._guarded("state snapshot pruning", self.prune_old_snap_snapshots)
+    def _run_jobs(self, jobs: tuple[tuple[str, str], ...]) -> None:
+        for label, name in jobs:
+            operation = getattr(self, name)
+            self._guarded(label, operation)
+
+    def _loop(self, interval: float, jobs: tuple[tuple[str, str], ...]) -> None:
+        while not self._stop_event.wait(interval):
+            self._run_jobs(jobs)
+
     def _run_daily_snapshot(
         self,
         kind: Literal["bandwidth", "state"],
@@ -574,19 +596,6 @@ class BWatch:
                 )
             return min(3600.0 * failures, 86400.0)
 
-    def _every_24h_snapshot(self) -> None:
-        while True:
-            now = time.monotonic()
-            self._run_due_daily_snapshots(now)
-            due_snapshots = tuple(
-                kind for kind, due_at in self._snapshot_due_at.items() if due_at <= now
-            )
-            if not due_snapshots:
-                next_delay = min(self._snapshot_due_at.values()) - now
-                if self._stop_event.wait(next_delay):
-                    return
-                continue
-
     def _run_due_daily_snapshots(self, now: float) -> None:
         due_snapshots: tuple[Literal["bandwidth", "state"], ...] = tuple(
             kind for kind, due_at in self._snapshot_due_at.items() if due_at <= now
@@ -600,6 +609,13 @@ class BWatch:
             delay = self._run_daily_snapshot(kind, operation)
             self._snapshot_due_at[kind] = now + delay
 
-    def _every_5m(self) -> None:
-        while not self._stop_event.wait(300):
-            self._guarded("panel health check", self.panel_health_check)
+    def _every_24h_snapshot(self) -> None:
+        while True:
+            now = time.monotonic()
+            self._run_due_daily_snapshots(now)
+            next_due = min(self._snapshot_due_at.values())
+            if next_due <= now:
+                continue
+            next_delay = next_due - now
+            if self._stop_event.wait(next_delay):
+                return
