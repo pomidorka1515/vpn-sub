@@ -270,8 +270,9 @@ def test_admin_token_api_root_omits_empty_api_uri(database: Database, flask_app:
 def test_polling_status_returns_limited_dynamic_state(
     database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from custom_types import (
-        AppMemory, ConnCount, LoadAverage, NetTrafficStats,
+    from custom_types import NetTrafficStats
+    from sysutil import (
+        AppMemory, ConnCount, LoadAverage,
         PollingSystemInfo, RamInfo, SwapInfo, SystemMemory,
     )
     from helpers import FakePanel

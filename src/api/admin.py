@@ -5,7 +5,8 @@ from .decorators.rate_limit import rate_limit
 
 from flask import Flask, Response, g, make_response, redirect, render_template, request
 from custom_types import JsonifyValue, PollingPanelInfo
-from util import ok, err, parse_bool, SysUtil, compare
+from util import ok, err, parse_bool, compare
+from sysutil import SysUtil
 from dataclasses import asdict
 from config import ConfigLike, LinesConfigLike
 from core import Subscription

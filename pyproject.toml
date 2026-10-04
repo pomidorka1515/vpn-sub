@@ -60,6 +60,7 @@ packages = [
     "db",
     "bwatch",
     "session",
+    "sysutil",
 ]
 
 # ---------------------------------------------------------------------------
@@ -85,6 +86,7 @@ files = [
     "src/api/",
     "src/app.py",
     "src/util.py",
+    "src/sysutil/",
     "src/paths.py",
     "src/errors.py",
     "src/builders/",

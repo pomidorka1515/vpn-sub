@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import psutil
 import pytest
 
-from util import SysUtil
+from sysutil import SysUtil
 
 
 def test_ipaddr_uses_interface_addresses_not_hosts_file(
@@ -61,7 +61,7 @@ def test_cpu_since_last_does_not_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_sleep(_seconds: float) -> None:
         raise AssertionError("polling cpu sample must not sleep")
 
-    monkeypatch.setattr("util.time.sleep", fail_sleep)
+    monkeypatch.setattr("sysutil.util.time.sleep", fail_sleep)
     assert SysUtil.cpu_since_last() == 0.0
     assert SysUtil.cpu_since_last() == 30.0
     assert SysUtil.cpu_since_last() == 50.0

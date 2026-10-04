@@ -5,7 +5,7 @@ import time
 
 from custom_types import BandwidthInfo, UserRecord
 from errors import PanelUnavailableError
-from util import SysUtil
+from sysutil import SysUtil
 
 from .host import BWatchHost
 

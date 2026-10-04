@@ -6,9 +6,10 @@ from ..common import BaseService, SharedCoreResources
 from .panel import PanelService
 from .user.common import CommonUserService
 from session import XUiSession
-from custom_types import BandwidthInfo, BandwidthSnapshot, StateSnapshot
+from custom_types import BandwidthInfo, BandwidthSnapshot
 from custom_types import PanelClient
 from errors import AppError, PanelUnavailableError
+from sysutil import StateSnapshot
 
 __all__ = ["BandwidthService"]
 
