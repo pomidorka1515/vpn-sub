@@ -512,8 +512,9 @@ class Api(BaseApi):
         content = request.get_json(silent=True)
         if not isinstance(content, dict):
             return err("Body must be a JSON dict.", 400)
-        username = content.get("username")
-        password = content.get("password")
+        body = cast(dict[str, object], content)
+        username = body.get("username")
+        password = body.get("password")
         if (
             not isinstance(username, str) or not isinstance(password, str)
             or not username or not password

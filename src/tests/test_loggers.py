@@ -44,7 +44,12 @@ def test_access_log_skips_successful_state_polling(monkeypatch: pytest.MonkeyPat
     logger.cfg = cast(Any, _Cfg())
     logger.access_log = cast(Any, SimpleNamespace(info=logged.append))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 12}
-    monkeypatch.setattr(logger, "atoms", lambda *args: atoms)
+
+    def atoms_for(*args: object) -> dict[str, object]:
+        del args
+        return atoms
+
+    monkeypatch.setattr(logger, "atoms", atoms_for)
     req = cast(Request, SimpleNamespace())
 
     logger.access(
@@ -84,7 +89,12 @@ def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> N
     logger.cfg = cast(Any, _Cfg())
     logger.access_log = cast(Any, SimpleNamespace(info=logged.append))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 4}
-    monkeypatch.setattr(logger, "atoms", lambda *args: atoms)
+
+    def atoms_for(*args: object) -> dict[str, object]:
+        del args
+        return atoms
+
+    monkeypatch.setattr(logger, "atoms", atoms_for)
     req = cast(Request, SimpleNamespace())
 
     expected = {

@@ -89,7 +89,7 @@ def configure_rate_limit(url: str, socket_timeout: float = _REDIS_SOCKET_TIMEOUT
         raise ValueError("redis url must not be empty")
     if socket_timeout <= 0:
         raise ValueError(f"socket_timeout must be positive, got {socket_timeout}")
-    client = cast(_RateLimitClient, Redis.from_url(
+    client = cast(_RateLimitClient, Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
         url,
         socket_connect_timeout=socket_timeout,
         socket_timeout=socket_timeout,

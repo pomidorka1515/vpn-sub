@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from typing import TYPE_CHECKING, Literal
 import threading
 
@@ -34,3 +35,18 @@ class BWatchHost:
     _snapshot_failures: dict[Literal["bandwidth", "state"], int]
     _snapshot_due_at: dict[Literal["bandwidth", "state"], float]
     _threads: tuple[threading.Thread, ...]
+
+    # Implemented by SchedulerMixin / SnapshotsMixin. Declared here so sibling
+    # mixins can call them; pyright does not see methods across mixin classes.
+    @staticmethod
+    def _panel_pool() -> Executor:
+        raise NotImplementedError
+
+    def _alert_admin(self, message: str) -> None:
+        raise NotImplementedError
+
+    def record_daily_snapshot(self) -> None:
+        raise NotImplementedError
+
+    def record_snap_snapshot(self) -> None:
+        raise NotImplementedError

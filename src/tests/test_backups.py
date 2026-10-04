@@ -6,7 +6,7 @@ import os
 from typing import IO, Any, cast
 import sqlite3
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -110,12 +110,17 @@ def test_config_backup_thread_retries_then_succeeds(tmp_path: Path) -> None:
         if calls["count"] == 1:
             raise OSError("locked")
 
-    waits = iter((False, False, True))
     stop = threading.Event()
+    waits = iter((False, False, True))
+
+    def wait(timeout: float | None = None) -> bool:
+        del timeout
+        return next(waits)
+
     with (
         patch("config._backup._do_backup", side_effect=fail_once),
         patch("config._backup._prune_backups"),
-        patch.object(threading.Event, "wait", side_effect=lambda _timeout: next(waits)),
+        patch.object(threading.Event, "wait", staticmethod(wait)),
     ):
         thread = _make_backup_thread(
             path=str(source), indent=2, backup_dir=str(tmp_path / "out"),
@@ -129,11 +134,16 @@ def test_config_backup_thread_retries_then_succeeds(tmp_path: Path) -> None:
 def test_config_backup_thread_logs_repeated_failures(tmp_path: Path) -> None:
     source = tmp_path / "config.json"
     source.write_text("{}", encoding="utf-8")
-    waits = iter((False, False, False, True))
     stop = threading.Event()
+    waits = iter((False, False, False, True))
+
+    def wait(timeout: float | None = None) -> bool:
+        del timeout
+        return next(waits)
+
     with (
         patch("config._backup._do_backup", side_effect=OSError("full")),
-        patch.object(threading.Event, "wait", side_effect=lambda _timeout: next(waits)),
+        patch.object(threading.Event, "wait", staticmethod(wait)),
         patch.object(Logger, "error") as error,
         patch.object(Logger, "critical") as critical,
     ):
@@ -197,11 +207,10 @@ def test_database_backup_thread_retries(tmp_path: Path) -> None:
         if calls["count"] < 3:
             raise sqlite3.OperationalError("locked")
 
-    waits = iter((False, False, False, True))
     with (
         patch("db.backup.do_backup", side_effect=fail_once),
         patch("db.backup.prune_backups"),
-        patch.object(threading.Event, "wait", side_effect=lambda _timeout: next(waits)),
+        patch.object(threading.Event, "wait", side_effect=[False, False, False, True]),
         patch.object(Logger, "error") as error,
         patch.object(Logger, "critical") as critical,
     ):

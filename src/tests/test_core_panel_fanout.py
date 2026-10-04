@@ -11,7 +11,6 @@ import pytest
 from db import Database
 from errors import PanelRejectedError, PanelUnavailableError
 from helpers import (
-    USER_UUID,
     FakePanel,
     create_alice,
     make_inbound,

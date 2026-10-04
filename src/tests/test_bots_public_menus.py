@@ -261,8 +261,15 @@ def test_send_link_builds_qr_and_happ_redirect() -> None:
     telegram.send_photo.assert_not_called()
 
     subscription.telegram_svc.get_info_telegram.return_value = SimpleNamespace(token="tok")
+
+    def qr(link: str) -> bytes:
+        return b"qr:" + link.encode()
+
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setattr("bots.public.subscription.make_qr", lambda link: b"qr:" + link.encode())
+        monkeypatch.setattr(
+            "bots.public.subscription.make_qr",
+            qr,
+        )
         mixin.send_link(7, 42, "en")
     photo = telegram.send_photo.call_args.args[1]
     assert b"token=tok&lang=en" in photo

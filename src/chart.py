@@ -42,8 +42,8 @@ def _font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def _text_size(font: ImageFont.FreeTypeFont, text: str) -> tuple[int, int]:
-    width, height = font.getmask(text).size
-    return int(width), int(height)
+    left, top, right, bottom = font.getbbox(text)
+    return int(right - left), int(bottom - top)
 
 
 def _ellipsis(font: ImageFont.FreeTypeFont, text: str, max_width: int) -> str:

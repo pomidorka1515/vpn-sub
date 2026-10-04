@@ -394,7 +394,7 @@ class SysUtil:
         seen: set[str] = set()
         for addrs in psutil.net_if_addrs().values():
             for addr in addrs:
-                if addr.family != family or not isinstance(addr.address, str):
+                if addr.family != family:
                     continue
                 ip = addr.address.split("%", 1)[0]
                 if ip in seen or not cls._ip_is_reportable(ip, family):

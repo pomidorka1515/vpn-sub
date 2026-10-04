@@ -220,7 +220,11 @@ def _subscription(**overrides: Any) -> Any:
     subscription.res.lang_cfg.get.return_value = {
         "shared": {"en": {"forbidden_title": "No browser"}}
     }
-    subscription.res.cfg.__getitem__.side_effect = lambda key: cfg[key]
+
+    def cfg_item(key: object) -> object:
+        return cfg[str(key)]
+
+    subscription.res.cfg.__getitem__.side_effect = cfg_item
     return subscription
 
 
@@ -246,9 +250,22 @@ def test_subscription_rejects_bad_input_and_browser_clients(monkeypatch: pytest.
         )
         assert status == 400
 
-        monkeypatch.setattr("builders.isbrowser", lambda ua: True)
-        monkeypatch.setattr("builders.render_template", lambda name, **kwargs: f"{name}:{kwargs['forbidden_title']}")
-        monkeypatch.setattr("builders.embed_font_faces", lambda html, prefix: f"{prefix}|{html}")
+        def is_browser(ua: str) -> bool:
+            del ua
+            return True
+
+        def render(name: str, **kwargs: object) -> str:
+            return f"{name}:{kwargs['forbidden_title']}"
+
+        def embed(html: str, prefix: str) -> str:
+            return f"{prefix}|{html}"
+
+        monkeypatch.setattr("builders.isbrowser", is_browser)
+        monkeypatch.setattr(
+            "builders.render_template",
+            render,
+        )
+        monkeypatch.setattr("builders.embed_font_faces", embed)
         response, status = get_subscription(
             subscription, token="tok", lang="en", ua="Mozilla", ip="1.1.1.1", force_json="",
         )
@@ -257,10 +274,25 @@ def test_subscription_rejects_bad_input_and_browser_clients(monkeypatch: pytest.
 
 
 def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("builders.isbrowser", lambda ua: False)
-    monkeypatch.setattr("builders.build_description", lambda **kwargs: "desc")
-    monkeypatch.setattr("builders.build_link_array", lambda **kwargs: "links")
-    monkeypatch.setattr("builders.build_json", lambda **kwargs: [{"remarks": kwargs["lang"]}])
+    def not_browser(ua: str) -> bool:
+        del ua
+        return False
+
+    def description(**kwargs: object) -> str:
+        del kwargs
+        return "desc"
+
+    def links(**kwargs: object) -> str:
+        del kwargs
+        return "links"
+
+    def happ_json(**kwargs: object) -> list[dict[str, object]]:
+        return [{"remarks": kwargs["lang"]}]
+
+    monkeypatch.setattr("builders.isbrowser", not_browser)
+    monkeypatch.setattr("builders.build_description", description)
+    monkeypatch.setattr("builders.build_link_array", links)
+    monkeypatch.setattr("builders.build_json", happ_json)
 
     subscription = _subscription(user={"bw_limit_gb": 2, "bw_used": 1_000_000_000, "enabled": 0})
     response, status = get_subscription(

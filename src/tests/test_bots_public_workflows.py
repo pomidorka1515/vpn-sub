@@ -8,11 +8,8 @@ import pytest
 from telebot import types
 
 from bots.public.account import PublicAccountMixin
-from bots.public.common import PublicCommonMixin
 from bots.public.login import PublicLoginMixin
 from bots.public.settings import PublicSettingsMixin
-from bots.public.subscription import PublicSubscriptionMixin
-from bots.public.text_routing import PublicTextRoutingMixin
 from bots.public.traffic import PublicTrafficMixin
 from errors import AppError, NotFoundError
 
