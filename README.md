@@ -137,6 +137,7 @@ All path variables are **optional**. If omitted, runtime data defaults to the `.
 | `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
 | `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
 | `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
+| `GUNICORN_BIND` | `127.0.0.1:5550`         | Address gunicorn listens on (`src/gunicorn.conf.py`). Loopback only.    |
 
 ### Systemd service
 
@@ -160,9 +161,9 @@ Environment=PYTHONUNBUFFERED=1
 # Environment="PATH_LOG=/var/log/vpn-sub/log.jsonl"
 # Environment="PATH_AUDIT=/var/log/vpn-sub/audit.jsonl"
 # Environment="PATH_LANG=/path/to/vpn-sub/lang.jsonc"
+# Environment="GUNICORN_BIND=127.0.0.1:5550"
 
 ExecStart=X/venv/bin/gunicorn \
-    --bind 127.0.0.1:X \
     --config src/gunicorn.conf.py
 
 TimeoutStopSec=35
@@ -176,7 +177,7 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 ```
-*(replace `X` with your path/port/etc)*
+*(replace `X` with your path)*
 
 `src/gunicorn.conf.py` loads `src.wsgi:app` (module `src/wsgi.py`, which calls
 `create_application()` and registers shutdown at exit). `src/app.py` no longer runs

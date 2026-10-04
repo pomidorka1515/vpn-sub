@@ -1,5 +1,7 @@
-from gunicorn.workers.gthread import ThreadWorker
+import os
 from concurrent import futures
+
+from gunicorn.workers.gthread import ThreadWorker
 
 from loggers import GunicornLogger
 
@@ -21,3 +23,4 @@ errorlog="-"
 logger_class = GunicornLogger
 wsgi_app="wsgi:app"
 graceful_timeout = 10
+bind = os.getenv("GUNICORN_BIND", "127.0.0.1:5550")
