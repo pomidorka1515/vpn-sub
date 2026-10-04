@@ -95,7 +95,10 @@ class GunicornLogger(GunicornBaseLogger):
                 color = Logger.COLORS.get(original_level, Colors.RESET)
                 record.levelname = f"{color}{original_level}{Colors.RESET}"
                 try:
-                    return super().format(record)
+                    val = super().format(record)
+                    if not val.endswith(Colors.RESET):
+                        val = f"{val}{Colors.RESET}"
+                    return val
                 finally:
                     record.levelname = original_level
 
