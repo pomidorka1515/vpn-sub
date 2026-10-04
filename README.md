@@ -1,42 +1,43 @@
 # vpn-sub
 
-VPN subscription management service. Flask + Telegram bots + Discord bots + 3x-ui panel glue.  
+VPN subscription management service. Flask + Telegram bots + a Discord bot + 3x-ui panel glue.  
 Flask and Telegram are fully synchronous. Discord is a separate asyncio process.  
-Database-backed config, designed to run on a single small VPS.
+SQLite holds users, codes, and quotas. `config.json` is deployment and presentation only.  
+Designed to run on a single small VPS.
 
 ## What it does
 
 - Manages users across multiple [3x-ui](https://github.com/MHSanaei/3x-ui) panels from one place
-- Serves VLESS subscription links with custom per-user traffic and expiry info
-- Tracks bandwidth and auto-disables users who exceed quota or expire
-- Two Telegram bots: admin panel and public user-facing bot
-- Discord bots (public and admin) as a separate process; talks to Flask over loopback
-- SQLite database as a source of truth
+- Serves VLESS subscription links and JSON profiles, with per-user traffic and expiry in the client
+- Tracks bandwidth and auto-disables users who exceed quota or expire, including a separate whitelist quota
+- Telegram admin bot and public user bot, plus one Discord bot (public commands and `/admin`) that talks to Flask over loopback
+- SQLite is the source of truth for users, codes, quotas, and bandwidth
 
 ## Key features
 
-- Multi-panel user lifecycle: create, update, reset, delete, with panel writes rolled back if the database commit fails
-- Invite codes and bonus codes (days, monthly GB, whitelist GB; one-shot or reusable). A bonus sums GB onto a 0 limit (no allowance, not unlimited). Expiry 0 stays unlimited; a lapsed finite expiry restarts from now. Re-enable waits for the bandwidth watcher.
-- Optional dedicated whitelist panel, separate from the main traffic quota
-- Subscription endpoint at `/{uri}`: VLESS links, JSON profiles, QR, language and fingerprint selection
-- Public web dashboard (`res/`) and WebAPI: register, login, stats, history, settings, account delete
-- Admin API (token header): users, codes, panel health, audit log, snapshots, leaderboard
-- Telegram admin bot (whitelist) and public bot (link account, traffic, subscription, settings)
-- Discord as a second process, one token, public commands plus `/admin`. See [src/discord/README.md](src/discord/README.md)
-- Bandwidth watcher (`BWatch`): quota enforcement, expiry, panel health alerts, daily bandwidth and state snapshots
-- Argon2id passwords, JSONL audit trail, schema-validated config, scheduled config backups
-- Shared Redis sliding-window rate limits. Every process uses the same counters.
+- **Multi-panel lifecycle.** Create, update, reset, and delete users on every configured panel. Panel writes are rolled back if the database commit fails. A failed registration rollback is marked and retried at the next startup. UUID updates are not rolled back the same way: the first failing panel is recorded, and later panels may already hold the new UUID.
+- **Invite and bonus codes.** Register codes and bonus codes grant days, monthly GB, and whitelist GB. One-shot or reusable. A bonus adds GB onto a 0 limit (no allowance, not unlimited). Expiry 0 stays unlimited. A lapsed finite expiry restarts from now. Re-enable waits for the bandwidth watcher.
+- **Whitelist panel.** Optional dedicated panel with its own quota, separate from the main traffic limit. Inbound lists can be whitelist or blacklist.
+- **Subscription endpoint.** `GET /{uri}?token=&lang=` returns VLESS links, or a JSON profile for Happ and `force_json=1`. Language is `ru` or `en`. Per-user uTLS fingerprint. Browsers get an HTML page instead of a profile. QR is a separate WebAPI route.
+- **Public web UI.** `res/` dashboard, history, and charts. WebAPI: register, login, bonus, stats, history, settings, logout, account delete. Cookie `auth_token`.
+- **Admin UI and API.** Browser admin at `/{uri}/admin` (username/password session). Token API at `/{uri}/{api_uri}/api/...`: users, codes, panel health, audit log, snapshots, leaderboard, system status, and stuck-rollback markers. Header `Authorization`.
+- **Telegram.** Admin bot is UID-whitelisted: users, codes, panels, traffic, leaderboard. Public bot: link account, traffic, charts, subscription, bonus, settings, reset, delete.
+- **Discord.** Separate process, one token. Public slash commands plus `/admin` for a Discord-ID whitelist. See [src/discord/README.md](src/discord/README.md).
+- **Bandwidth watcher (`BWatch`).** Polls traffic about every 15s, checks quota and expiry about every 2 minutes, panel health about every 5 minutes. Daily bandwidth and state snapshots, with retry and admin alerts. Monthly reset check and inbound reconcile about every 2 hours. Panel polls fan out on a background thread pool.
+- **Auth, audit, backups.** Argon2id passwords (legacy salted hashes still verify). JSONL audit trail. `config.json` validated against `config.schema.json` on load and commit; remote schemas are rejected. Scheduled backups of config and the SQLite database.
+- **Shared rate limits.** Redis sliding window. Every gunicorn thread uses the same counters.
 
 ## Limitations
 
 - Single VPS, Linux only. `Subscription` refuses to import on anything else.
-- One gunicorn process. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`<DIR_RUNTIME>/.primary.lock`) elects one primary; it is not a multi-node design.
+- One gunicorn worker. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`. Extra workers duplicate background threads and Telegram bots. A file lock (`<DIR_RUNTIME>/.primary.lock`) elects one primary; a process that loses the lock still serves HTTP but does not start `BWatch` or the bots. Not a multi-node design.
 - Local Redis is required. The app pings it at startup and will not boot if it is down. A later outage fails rate-limited routes closed with 429.
 - Not highly available. Panel, database, and bots all live on the same box. A dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`). 2.x needs the one-time reconcile below. No other panel software.
 - Discord does not share the process. It only talks to Flask over loopback. Start Flask first. Killing one does not stop the other.
 - Personal project. Untagged `main` is rolling development. Tests are for this repo, not a supported public suite.
 - Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure belong on the reverse proxy. Application rate limits live in Redis.
+- Python 3.12+ to start. Built for 3.13+. A free-threading build is optional and only logged at startup.
 
 ## Core principles
 
@@ -131,7 +132,7 @@ All path variables are **optional**. If omitted, runtime data defaults to the `.
 | `DIR_RUNTIME`   | `<DIR_DATA>/run/`        | Local directory for the primary lock, config locks, and inbound stamps. |
 | `DIR_BACKUPS`   | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored                     |
 | `PATH_CONFIG`   | `<DIR_DATA>/config.json` | Path to the main application configuration                              |
-| `PATH_DB`       | `<DIR_DATA>/state.db`    | Path to the SQLite database                                             |
+| `PATH_DB`       | `<DIR_DATA>/state.sqlite3` | Path to the SQLite database                                           |
 | `PATH_LOG`      | `<DIR_DATA>/log.jsonl`   | Path to application event logs (JSONL)                                  |
 | `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
 | `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
@@ -155,7 +156,7 @@ Environment=PYTHONUNBUFFERED=1
 # Environment="DIR_RUNTIME=/var/lib/vpn-sub/run"
 # Environment="DIR_BACKUPS=/var/backups/vpn-sub"
 # Environment="PATH_CONFIG=/etc/vpn-sub/config.json"
-# Environment="PATH_DB=/var/lib/vpn-sub/state.db"
+# Environment="PATH_DB=/var/lib/vpn-sub/state.sqlite3"
 # Environment="PATH_LOG=/var/log/vpn-sub/log.jsonl"
 # Environment="PATH_AUDIT=/var/log/vpn-sub/audit.jsonl"
 # Environment="PATH_LANG=/path/to/vpn-sub/lang.jsonc"
@@ -182,7 +183,7 @@ WantedBy=multi-user.target
 anything at import time, so `venv/bin/python -m src.wsgi` also works for a quick
 local run.
 
-Do not pass `-w` or `--workers`. The config file already forces one worker. A second process would start another `BWatch` and another pair of Telegram bots.
+Do not pass `-w` or `--workers`. The config file already forces one worker. A second process that wins the primary lock would start another `BWatch` and another pair of Telegram bots.
 Rate-limit counters are still shared if you do, because they live in Redis.
 
 ### Nginx location block
