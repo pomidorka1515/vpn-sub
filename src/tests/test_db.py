@@ -323,3 +323,31 @@ def test_bulk_usage_and_snapshots_commit_once(database: Database) -> None:
     assert database.username_exts()["alice"] == "alice@example.test"
     assert database.user_tgids() == {"alice": "11"}
     assert [row["username"] for row in database.list_user_records()] == ["alice", "bob"]
+
+
+def test_connection_is_reused_until_close(database: Database) -> None:
+    with database.connection() as first:
+        pass
+    with database.connection() as second:
+        assert second is first
+
+    other: list[sqlite3.Connection] = []
+
+    def open_other() -> None:
+        with database.connection() as conn:
+            other.append(conn)
+
+    thread = threading.Thread(target=open_other)
+    thread.start()
+    thread.join()
+    assert len(other) == 1
+    assert other[0] is not first
+
+    database.close()
+    try:
+        with database.connection() as third:
+            assert third is not first
+            with database.connection() as fourth:
+                assert fourth is third
+    finally:
+        database.close()

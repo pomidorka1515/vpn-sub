@@ -46,8 +46,9 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
         with self.log.loading():
             self.path = os.path.abspath(path)
             self.timeout = timeout
-            self._connections: set[sqlite3.Connection] = set()
+            self._connections: dict[int, sqlite3.Connection] = {}
             self._connections_lock = threading.Lock()
+            self._local = threading.local()
             self._backup_dir: str | None = str(backup_dir) if backup_dir else None
             self._backup_interval: int | float = backup_interval
             self._backup_retention: int = backup_retention
@@ -71,6 +72,38 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
                 )
                 self._backup_t.start()
 
+    def _thread_id(self) -> int:
+        return threading.get_ident()
+
+    def _cached(self) -> sqlite3.Connection | None:
+        conn: sqlite3.Connection | None = getattr(self._local, "conn", None)
+        opener = getattr(self._local, "opener", None)
+        if conn is None:
+            return None
+        # Tests replace ``_connect`` with a plain function. A bound method is
+        # a new object on every access, so compare the underlying function.
+        if opener is not self._opener():
+            self._discard(conn)
+            return None
+        return conn
+
+    def _opener(self) -> object:
+        connect = self._connect
+        return getattr(connect, "__func__", connect)
+
+    def _discard(self, conn: sqlite3.Connection) -> None:
+        if getattr(self._local, "conn", None) is conn:
+            self._local.conn = None
+            self._local.opener = None
+        with self._connections_lock:
+            current = self._connections.get(self._thread_id())
+            if current is conn:
+                del self._connections[self._thread_id()]
+        try:
+            conn.close()
+        except sqlite3.Error:
+            pass
+
     def _connect(self) -> sqlite3.Connection:
         conn: sqlite3.Connection | None = None
         try:
@@ -78,7 +111,6 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
                 self.path,
                 timeout=self.timeout,
                 isolation_level=None,
-                check_same_thread=False,
             )
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
@@ -86,24 +118,37 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
             conn.execute("PRAGMA journal_mode = WAL")
             conn.execute("PRAGMA synchronous = NORMAL")
             with self._connections_lock:
-                self._connections.add(conn)
+                previous = self._connections.get(self._thread_id())
+                self._connections[self._thread_id()] = conn
+            if previous is not None and previous is not conn:
+                try:
+                    previous.close()
+                except sqlite3.Error:
+                    pass
             return conn
         except sqlite3.Error as exc:
             if conn is not None:
                 conn.close()
             raise DatabaseError(f"unable to open database {self.path}: {exc}") from exc
 
+    def _connection(self) -> sqlite3.Connection:
+        cached = self._cached()
+        if cached is not None:
+            return cached
+        conn = self._connect()
+        self._local.conn = conn
+        self._local.opener = self._opener()
+        return conn
+
     @contextmanager
     def connection(self) -> Generator[sqlite3.Connection, None, None]:
-        conn = self._connect()
+        conn = self._connection()
         try:
             yield conn
         except sqlite3.Error as exc:
+            if conn.in_transaction or self._dead(exc):
+                self._discard(conn)
             raise DatabaseError(str(exc)) from exc
-        finally:
-            with self._connections_lock:
-                self._connections.discard(conn)
-            conn.close()
 
     @contextmanager
     def transaction(self, *, immediate: bool = False) -> Generator[sqlite3.Connection, None, None]:
@@ -117,13 +162,24 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
                     conn.execute("ROLLBACK")
                 except sqlite3.Error:
                     pass
+                if conn.in_transaction or self._dead(exc):
+                    self._discard(conn)
                 raise DatabaseError(str(exc)) from exc
             except Exception:
                 try:
                     conn.execute("ROLLBACK")
                 except sqlite3.Error:
                     pass
+                if conn.in_transaction:
+                    self._discard(conn)
                 raise
+
+    @staticmethod
+    def _dead(exc: sqlite3.Error) -> bool:
+        if isinstance(exc, sqlite3.ProgrammingError):
+            return True
+        message = str(exc).lower()
+        return "closed" in message or "disk i/o" in message
 
     @staticmethod
     def _row(row: sqlite3.Row | None) -> dict[str, object] | None:
@@ -160,7 +216,12 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
         if self._backup_t is not None:
             self._backup_t.join(timeout=5)
         with self._connections_lock:
-            connections = tuple(self._connections)
+            connections = tuple(self._connections.values())
             self._connections.clear()
+        self._local.conn = None
+        self._local.opener = None
         for conn in connections:
-            conn.close()
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
