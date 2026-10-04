@@ -59,7 +59,7 @@ class _JSONLinesLogger(logging.Handler):
             level = record.levelname
             log_name = record.name
             thread_name = record.threadName
-            text = record.getMessage()
+            text = self.ansi_escape.sub("", record.getMessage())
 
             to_log: dict[str, str | float | None] = {
                 "ts": timestamp,

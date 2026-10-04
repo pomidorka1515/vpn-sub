@@ -6,6 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
+from .colors import Colors
 from .common import _ANSI_ESCAPE
 from .handlers import _JSONLinesLogger, _TelegramLogger
 
@@ -18,13 +19,13 @@ __all__ = ["Logger"]
 
 class Logger(logging.Logger):
     COLORS = {
-        'DEBUG': '\033[36m',
-        'INFO': '\033[32m',
-        'WARNING': '\033[33m',
-        'ERROR': '\033[31m',
-        'CRITICAL': '\033[35m',
+        "DEBUG": Colors.CYAN,
+        "INFO": Colors.GREEN,
+        "WARNING": Colors.YELLOW,
+        "ERROR": Colors.RED,
+        "CRITICAL": Colors.MAGENTA,
     }
-    RESET = '\033[0m'
+    RESET = Colors.RESET
 
     def __init__(self, name: str, level: int = logging.DEBUG):
         super().__init__(name, level)
@@ -39,8 +40,8 @@ class Logger(logging.Logger):
         class Fmt(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
                 orig_level = record.levelname
-                color = parent.COLORS.get(record.levelname, parent.RESET)
-                record.levelname = f"{color}{record.levelname}{parent.RESET}"
+                color = parent.COLORS.get(record.levelname, Colors.RESET)
+                record.levelname = f"{color}{record.levelname}{Colors.RESET}"
                 val = super().format(record)
                 record.levelname = orig_level
                 return val

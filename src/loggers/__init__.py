@@ -15,12 +15,14 @@ from .access import (
     _safe_request_target,
     _should_skip_access_log,
 )
+from .colors import Colors
 from .common import _ANSI_ESCAPE, _safe_handle_error
 from .handlers import _JSONLinesLogger, _TelegramLogger
 from .logger import Logger
 
 __all__ = [
     "Logger",
+    "Colors",
     "GunicornLogger",
     "_ANSI_ESCAPE",
     "_JSONLinesLogger",

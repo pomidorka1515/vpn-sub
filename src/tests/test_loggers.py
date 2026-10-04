@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from types import SimpleNamespace
+from collections.abc import Mapping
 from typing import Any, cast
 
 import pytest
@@ -11,6 +12,9 @@ from gunicorn.http.wsgi import Response
 
 from loggers import GunicornLogger
 from loggers import _color_status
+from loggers import Colors
+from loggers import Logger
+from loggers.handlers import _JSONLinesLogger
 
 
 class _Cfg:
@@ -83,11 +87,11 @@ def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> N
     req = cast(Request, SimpleNamespace())
 
     expected = {
-        "100": "\033[90m",
-        "204": "\033[32m",
-        "302": "\033[36m",
-        "404": "\033[33m",
-        "503": "\033[31m",
+        "100": Colors.GREY,
+        "204": Colors.GREEN,
+        "302": Colors.CYAN,
+        "404": Colors.YELLOW,
+        "503": Colors.RED,
     }
     for status, color in expected.items():
         logged.clear()
@@ -99,8 +103,41 @@ def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> N
             timedelta(milliseconds=1),
         )
         assert logged == [
-            f'203.0.113.10 > "GET /health HTTP/1.1" {color}{status}\033[0m 4b "dashboard"'
+            f'203.0.113.10 > "GET /health HTTP/1.1" {color}{status}{Colors.RESET} 4b "dashboard"'
         ]
 
     assert _color_status("-") == "-"
     assert _color_status("999") == "999"
+
+
+def test_colors_are_ansi_strings() -> None:
+    message = f"{Colors.RED}Hello {Colors.GREEN}World!{Colors.RESET} regular"
+    assert message == "\033[31mHello \033[32mWorld!\033[0m regular"
+    assert Colors.BOLD == "\033[1m"
+    assert Colors.DIM == "\033[2m"
+    assert Colors.ITALIC == "\033[3m"
+    assert Colors.UNDERLINE == "\033[4m"
+    assert Colors.REVERSE == "\033[7m"
+    assert Colors.STRIKE == "\033[9m"
+    assert Logger.RESET is Colors.RESET
+    assert Logger.COLORS["ERROR"] is Colors.RED
+
+
+def test_jsonl_strips_message_colors() -> None:
+    stored: list[Mapping[str, Any]] = []
+
+    class _Lines:
+        def append(self, record: Mapping[str, Any]) -> None:
+            stored.append(record)
+
+    handler = _JSONLinesLogger(cast(Any, _Lines()))
+    logger = Logger("colors")
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    logger.propagate = False
+
+    logger.info(
+        f"{Colors.BOLD}{Colors.ITALIC}{Colors.RED}Hello {Colors.GREEN}World!{Colors.RESET} regular"
+    )
+
+    assert stored[0]["text"] == "Hello World! regular"

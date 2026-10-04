@@ -11,6 +11,7 @@ from gunicorn.glogging import Logger as GunicornBaseLogger
 from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
 
+from .colors import Colors
 from .logger import Logger
 
 __all__ = [
@@ -71,16 +72,16 @@ def _should_skip_access_log(environ: MutableMapping[str, object], status: str) -
 def _color_status(status: str) -> str:
     """Color an HTTP status by class for journal access logs."""
     colors = {
-        "1": "\033[90m",  # grey
-        "2": "\033[32m",  # green
-        "3": "\033[36m",  # cyan
-        "4": "\033[33m",  # yellow
-        "5": "\033[31m",  # red
+        "1": Colors.GREY,
+        "2": Colors.GREEN,
+        "3": Colors.CYAN,
+        "4": Colors.YELLOW,
+        "5": Colors.RED,
     }
     color = colors.get(status[:1])
     if color is None:
         return status
-    return f"{color}{status}{Logger.RESET}"
+    return f"{color}{status}{Colors.RESET}"
 
 
 class GunicornLogger(GunicornBaseLogger):
@@ -91,8 +92,8 @@ class GunicornLogger(GunicornBaseLogger):
         class AccessFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
                 original_level = record.levelname
-                color = Logger.COLORS.get(original_level, Logger.RESET)
-                record.levelname = f"{color}{original_level}{Logger.RESET}"
+                color = Logger.COLORS.get(original_level, Colors.RESET)
+                record.levelname = f"{color}{original_level}{Colors.RESET}"
                 try:
                     return super().format(record)
                 finally:
