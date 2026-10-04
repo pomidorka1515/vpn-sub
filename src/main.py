@@ -8,6 +8,8 @@ no interpreter and no config file to hand it.
 
 from __future__ import annotations
 
+import sys
+
 from gunicorn.app.base import BaseApplication
 from gunicorn.util import import_app
 from wsgiref.types import WSGIApplication
@@ -30,5 +32,27 @@ def main() -> None:
     Application("%(prog)s", prog="vpn-sub").run()
 
 
+def probe() -> None:
+    """Prove the payload can see shipped files, then exit.
+
+    Does not import ``wsgi``. That module calls ``create_application()`` and
+    would require Redis, ``config.json``, and a panel. A missing import fails
+    before this function runs, because this module imports gunicorn. A payload
+    that cannot see ``res/`` or ``lang.jsonc`` fails here.
+    """
+    from paths import bundled_root
+
+    root = bundled_root()
+    language = root / "lang.jsonc"
+    fonts = root / "res"
+    if not language.is_file():
+        raise SystemExit(f"language file not found: {language}")
+    if not fonts.is_dir():
+        raise SystemExit(f"res directory not found: {fonts}")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--probe":
+        probe()
+    else:
+        main()

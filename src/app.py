@@ -22,7 +22,7 @@ from flask import Flask, Response, request
 from jinja2 import FileSystemLoader
 from loggers import Logger, Colors
 from config import ConfigLike
-from paths import bundled_root, runtime_dir
+from paths import bundled_root, program_dir, runtime_dir
 from session import XUiSession, XUiPanelTransport
 from util import err
 from werkzeug.exceptions import HTTPException
@@ -79,13 +79,13 @@ class AppPaths:
 
     @classmethod
     def from_env(cls) -> AppPaths:
-        root = bundled_root()
-        data = Path(os.getenv("DIR_DATA", root / "data"))
+        shipped = bundled_root()
+        data = Path(os.getenv("DIR_DATA", program_dir() / "data"))
         return cls(
             data=data,
             backups=Path(os.getenv("DIR_BACKUPS", data / "backup")),
             config=Path(os.getenv("PATH_CONFIG", data / "config.json")),
-            language=Path(os.getenv("PATH_LANG", root / "lang.jsonc")),
+            language=Path(os.getenv("PATH_LANG", shipped / "lang.jsonc")),
             database=Path(os.getenv("PATH_DB", data / "state.sqlite3")),
             log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
             audit=Path(os.getenv("PATH_AUDIT", data / "audit.jsonl")),
@@ -151,12 +151,6 @@ class Application:
             case _:
                 raise RuntimeError(f"Error: Python 3.12+ required (detected {sys.version})")
         
-        # actually way safer than a direct call
-        if getattr(sys, "_is_gil_enabled", lambda: True)():
-            log.warning("Free-threading disabled. Use a free-threading build for better performance.")
-        else:
-            log.info("Free-threading active!")
-
         log.info(f"{Colors.BOLD}Launch successful!{Colors.RESET}")
     
     def stop(self) -> None:

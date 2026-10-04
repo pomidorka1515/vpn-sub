@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -17,7 +18,7 @@ from loggers import Logger
 from public import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
-from paths import bundled_root
+from paths import bundled_root, program_dir
 
 __all__ = [
     "DiscordApplication",
@@ -55,12 +56,12 @@ class DiscordPaths:
 
     @classmethod
     def from_env(cls) -> DiscordPaths:
-        root = bundled_root()
-        data = Path(os.getenv("DIR_DATA", root / "data"))
+        shipped = bundled_root()
+        data = Path(os.getenv("DIR_DATA", program_dir() / "data"))
         return cls(
             data=data,
             config=Path(os.getenv("PATH_DISCORD_CONFIG", data / "discord.json")),
-            language=Path(os.getenv("PATH_DISCORD_LANG", _language_path(root))),
+            language=Path(os.getenv("PATH_DISCORD_LANG", _language_path(shipped))),
             log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
             sessions=Path(os.getenv("PATH_DISCORD_SESSIONS", data / "discord-sessions.json")),
             backups=data / "backup",
@@ -230,3 +231,22 @@ async def _run() -> None:
 
 def main() -> None:
     asyncio.run(_run())
+
+
+def probe() -> None:
+    """Prove the payload can see the packed language file, then exit.
+
+    Does not log in to Discord and does not require ``discord.json``. Importing
+    this module already loads the service, so a missing module fails before
+    this function runs. A payload that cannot see ``lang.jsonc`` fails here.
+    """
+    language = _language_path(bundled_root())
+    if not language.is_file():
+        raise SystemExit(f"discord language file not found: {language}")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--probe":
+        probe()
+    else:
+        main()

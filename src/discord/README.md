@@ -17,8 +17,12 @@ One Discord application / one bot token. Public slash commands stay as they are;
 pip install -r requirements.txt
 mkdir -p data && cp src/discord/docs/EXAMPLE.config.json data/discord.json
 # fill public.token, private.whitelist, private.api_token
-PYTHONPATH=src/discord/src:src venv/bin/python -m app
+PYTHONPATH=src/discord/src:src venv/bin/python -m runtime
 ```
+
+`runtime` is the process entry for a checkout and for a Nuitka binary. Do not
+compile `app.py`: it rewrites `sys.path` from the checkout layout, which does
+not exist inside the payload.
 
 The example already has `$schema` set for `data/discord.json`.
 
@@ -37,7 +41,7 @@ All path variables are **optional**.
 | `DIR_DATA` | `./data/` | Runtime directory |
 | `PATH_LOG` | `<DIR_DATA>/log.jsonl` | Shared JSONL with Flask |
 | `PATH_DISCORD_CONFIG` | `<DIR_DATA>/discord.json` | This service's config |
-| `PATH_DISCORD_LANG` | `src/discord/lang.jsonc` | Strings (relative to project root) |
+| `PATH_DISCORD_LANG` | checkout: `<root>/src/discord/lang.jsonc`; binary: packed `lang.jsonc` | Strings. A checkout walks up to the repository root. A Nuitka payload includes that file next to the compiled entry. |
 | `PATH_DISCORD_SESSIONS` | `<DIR_DATA>/discord-sessions.json` | Auth cookies per Discord user |
 | `SUB_HTTP_URL` | `http://127.0.0.1:5550` | Flask bind (loopback) |
 | `SUB_URI` | `sub` | Same as main `cfg["uri"]` |
@@ -62,8 +66,9 @@ WorkingDirectory=X
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=src/discord/src:src
 Environment=SUB_HTTP_URL=http://127.0.0.1:X
+Environment=SUB_URI=sub
 Environment=SUB_API_URI=privapi
-ExecStart=X/venv/bin/python -m app
+ExecStart=X/venv/bin/python -m runtime
 TimeoutStopSec=35
 KillMode=mixed
 KillSignal=SIGTERM
@@ -77,3 +82,5 @@ WantedBy=multi-user.target
 *(replace `X` with your values)*
 
 The Flask unit should already be up so WebAPI / admin API exist at boot.
+
+A release binary is `vpn-sub-discord` from the same tag as `vpn-sub`. It does not need `PYTHONPATH`. `DIR_DATA` defaults to `data/` next to the executable, not to a directory inside the unpack tree. `vpn-sub-discord --probe` checks that the packed language file opens. It does not log in and does not require `discord.json`. `$schema` in `data/discord.json` is still resolved relative to that file (`../src/discord/config.schema.json` from a checkout `data/`). If you move `data/`, copy the schema next to the config or fix `$schema`.

@@ -1,0 +1,198 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: vpn-sub
+            pythonpath: src
+            entry: src/main.py
+            extra: >-
+              --include-module=wsgi
+              --include-module=serve
+              --include-module=paths
+              --include-module=gunicorn.workers.gthread
+              --include-data-dir=res=res
+              --include-data-files=lang.jsonc=lang.jsonc
+          - name: vpn-sub-discord
+            pythonpath: src/discord/src:src
+            entry: src/discord/src/runtime.py
+            extra: >-
+              --nofollow-import-to=flask
+              --nofollow-import-to=gunicorn
+              --nofollow-import-to=telebot
+              --include-module=paths
+              --include-data-files=src/discord/lang.jsonc=lang.jsonc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: require a normal CPython
+        run: |
+          python -c 'import sys; raise SystemExit(0 if sys.abiflags == "" else f"refusing free-threading build: sys.abiflags={sys.abiflags!r}")'
+          python -c 'import sys; print(sys.version)'
+          getconf GNU_LIBC_VERSION
+
+      - name: install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ccache patchelf
+
+      - name: restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.name }}-
+
+      - name: install runtime dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install nuitka ordered-set zstandard
+          python -m pip install -r requirements.txt
+
+      - name: build ${{ matrix.name }}
+        env:
+          NUITKA_CCACHE_BINARY: ccache
+        run: |
+          # actions/cache restores to ~/.cache/ccache; point ccache there.
+          mkdir -p "$HOME/.cache/ccache"
+          export CCACHE_DIR="$HOME/.cache/ccache"
+          ccache --set-config=max_size=2G
+          ccache --zero-stats
+          PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
+            --onefile --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}' \
+            --onefile-compression=zstd \
+            --lto=yes \
+            --static-libpython=yes \
+            --output-filename=${{ matrix.name }} \
+            --output-dir=build/dist \
+            --nofollow-import-to=tests \
+            --nofollow-import-to=pytest \
+            --nofollow-import-to=unittest \
+            --nofollow-import-to=_pytest \
+            --nofollow-import-to=py \
+            --nofollow-import-to=matplotlib \
+            --nofollow-import-to=numpy \
+            --nofollow-import-to=pandas \
+            --include-package-data=certifi \
+            ${{ matrix.extra }} \
+            ${{ matrix.entry }}
+          ccache --show-stats
+
+      - name: inspect payload
+        run: |
+          set -euo pipefail
+          # Diagnostic only. Do not fail the release on a hit; this is so the
+          # log shows what leaked. Nuitka names the payload after the entry
+          # script (main.dist, runtime.dist), not after --output-filename.
+          # --onefile still leaves that directory next to the binary.
+          echo "=== build/dist ==="
+          find build/dist -maxdepth 2 -printf '%y %s %p\n' | sort
+          echo
+          shopt -s nullglob
+          dists=(build/dist/*.dist)
+          if [ "${#dists[@]}" -eq 0 ]; then
+            echo "no *.dist payload under build/dist"
+          fi
+          for dist in "${dists[@]}"; do
+            echo "=== $dist (top) ==="
+            find "$dist" -maxdepth 2 \( -type d -o -type f \) -printf '%y %s %p\n' | sort
+            echo
+            echo "=== $dist tree ==="
+            find "$dist" -printf '%y %s %P\n' | sort
+            echo
+            echo "=== $dist interesting names ==="
+            find "$dist" \( \
+              -name '*.py' -o -name '*.pyi' -o -name '*.pyc' -o -name '*.so' \
+              -o -name '*.json' -o -name '*.jsonc' -o -name '*.html' -o -name '*.js' \
+              -o -name '*.md' -o -name '*.txt' -o -name '*.yml' -o -name '*.yaml' \
+              -o -name 'config.json' -o -name '.env' -o -name '*.pem' -o -name '*.key' \
+              \) -printf '%s %p\n' | sort || true
+            echo
+          done
+          if [ "${{ matrix.name }}" = "vpn-sub-discord" ]; then
+            bin="build/dist/vpn-sub-discord"
+            echo
+            echo "=== $bin ==="
+            ls -l "$bin"
+            file "$bin" || true
+            echo
+            echo "=== discord binary: source-like strings ==="
+            # Nuitka keeps module names and some constants in the binary.
+            # Surface paths and tokens that should not have been packed.
+            strings -a -n 8 "$bin" | grep -E -i \
+              '(^|/)(src/|\.git/|tests/|venv/|data/|config\.json|discord\.json|\.env|id_rsa|\.pem|token|secret|password|api_key)' \
+              | sort -u | head -n 400 || true
+            echo
+            echo "=== discord binary: packed data filenames ==="
+            strings -a -n 6 "$bin" | grep -E \
+              '\.(py|pyi|json|jsonc|html|js|md|yml|yaml|pem|key|env)([^A-Za-z0-9_]|$)' \
+              | sort -u | head -n 400 || true
+          fi
+
+      - name: smoke test
+        if: matrix.name == 'vpn-sub'
+        run: |
+          set -euo pipefail
+          # --probe imports gunicorn and checks that res/ and lang.jsonc were
+          # packed. It does not boot the service: a missing config or Redis
+          # must not look like a bad binary, and a crash must not look like
+          # success. Exit 0 is the only pass.
+          build/dist/vpn-sub --probe
+
+      - name: smoke test
+        if: matrix.name == 'vpn-sub-discord'
+        run: |
+          set -euo pipefail
+          # Same contract as the Flask probe. A missing discord.json or a
+          # Discord login is not this test. Exit 0 is the only pass; a crash
+          # is not.
+          build/dist/vpn-sub-discord --probe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: build/dist/${{ matrix.name }}
+          if-no-files-found: error
+
+  publish:
+    needs: binaries
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: build/dist
+          merge-multiple: true
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x build/dist/vpn-sub build/dist/vpn-sub-discord
+          test -x build/dist/vpn-sub
+          test -x build/dist/vpn-sub-discord
+          gh release create "${GITHUB_REF_NAME}" \
+            build/dist/vpn-sub \
+            build/dist/vpn-sub-discord \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-from-tag \
+            --verify-tag

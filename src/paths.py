@@ -10,26 +10,52 @@ can be squatted. The data directory is already owned by the service user.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
-__all__ = ["bundled_root", "runtime_dir"]
+__all__ = ["bundled_root", "program_dir", "runtime_dir"]
+
+
+def program_dir() -> Path:
+    """Directory that holds ``data/`` when ``DIR_DATA`` is unset.
+
+    A checkout uses the working directory. ``python -m`` puts the module file
+    in ``sys.argv[0]``, which is not the install directory.
+
+    A Nuitka onefile binary is the directory of ``sys.argv[0]``. Included data
+    is extracted next to the compiled module, so ``__file__`` is inside the
+    payload and must not be used for configs the operator keeps beside the
+    executable. Nuitka does not set ``sys.frozen``. ``__compiled__`` is how a
+    compiled module is detected.
+
+    ``DIR_DATA`` still overrides this.
+    """
+    if "__compiled__" in sys.modules["__main__"].__dict__:
+        argv0 = sys.argv[0] if sys.argv and sys.argv[0] else ""
+        if argv0 and argv0 != "-":
+            return Path(argv0).resolve().parent
+    return Path.cwd()
 
 
 def bundled_root() -> Path:
-    """Directory that contains ``res/`` and ``lang.jsonc``.
+    """Directory that contains files shipped with this program.
 
     A normal checkout is the repository root, two levels above this module.
     Nuitka onefile extracts included data next to the compiled entry module,
     whose ``__file__`` is inside the payload rather than the checkout. Walk
-    up from this module until those files are found, so both layouts resolve
-    without an environment variable.
+    up from this module until a shipped marker is found.
+
+    The main binary ships both ``res/`` and ``lang.jsonc``. The Discord binary
+    ships only its own ``lang.jsonc``, so either marker is enough. Requiring
+    both would miss the Discord payload and fall through to a parent of the
+    unpack tree.
 
     ``DIR_DATA`` and ``PATH_*`` still override mutable runtime files. This
     only locates files that ship with the program.
     """
     here = Path(__file__).resolve()
     for parent in here.parents:
-        if (parent / "lang.jsonc").is_file() and (parent / "res").is_dir():
+        if (parent / "lang.jsonc").is_file() or (parent / "res").is_dir():
             return parent
     return here.parents[1]
 
@@ -48,6 +74,5 @@ def runtime_dir(data: Path | None = None) -> Path:
     if override:
         return Path(override)
     if data is None:
-        root = bundled_root()
-        data = Path(os.getenv("DIR_DATA", root / "data"))
+        data = Path(os.getenv("DIR_DATA", program_dir() / "data"))
     return data / "run"

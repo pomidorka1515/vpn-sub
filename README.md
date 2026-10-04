@@ -55,6 +55,8 @@ Startup order is fixed and handled by `create_application()`: configs, database,
 
 - `src/app.py` — `create_application()` factory: builds the `Application` runtime (paths, configs, DB, panels, subscription, watcher, Telegram bots, Flask app) and wires everything together
 - `src/wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application and registers shutdown at exit
+- `src/main.py` — process entry for a checkout (`python -m main`) and for the Nuitka binary. Runs gunicorn in-process with the same settings as `src/gunicorn.conf.py`
+- `src/serve.py` — those gunicorn settings. The config file and `main` both read them
 - `src/core/` — `Subscription` and the user, code, panel, bandwidth, and audit services
 - `src/bwatch/` — `BWatch`: quota, expiry, panel health, snapshots
 - `src/session/` — `XUiSession` panel HTTP client
@@ -79,6 +81,7 @@ cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token, 
 ```
 
 Always use `venv/bin/...`, never system Python. Runtime state lives in `data/` and is gitignored.
+`requirements.txt` is runtime only. Tests and type checkers are `pip install -e ".[dev]"`.
 
 ### Redis
 
@@ -139,6 +142,8 @@ All path variables are **optional**. If omitted, runtime data defaults to the `.
 | `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
 | `GUNICORN_BIND` | `127.0.0.1:5550`         | Address gunicorn listens on (`src/gunicorn.conf.py`). Loopback only.    |
 
+Shipped files (`res/`, `lang.jsonc`) are found by walking up from the module until one of those markers exists. In a checkout that is the repository root. In a Nuitka payload it is the unpack directory, next to the compiled entry, not next to the binary. `DIR_DATA` and the `PATH_*` variables still override runtime files. When `DIR_DATA` is unset, a checkout uses `./data` in the working directory. A frozen binary uses `data/` next to the executable (`sys.argv[0]`), because the working directory is not the install directory and `__file__` is inside the payload.
+
 ### Systemd service
 
 ```ini
@@ -151,6 +156,7 @@ Wants=network.target redis-server.service
 User=root
 WorkingDirectory=X
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=src
 
 # --- optional path overrides ---
 # Environment="DIR_DATA=/var/lib/vpn-sub"
@@ -179,10 +185,11 @@ WantedBy=multi-user.target
 ```
 *(replace `X` with your path)*
 
-`src/gunicorn.conf.py` loads `src.wsgi:app` (module `src/wsgi.py`, which calls
-`create_application()` and registers shutdown at exit). `src/app.py` no longer runs
-anything at import time, so `venv/bin/python -m src.wsgi` also works for a quick
-local run.
+`src/gunicorn.conf.py` loads `wsgi:app` (module `src/wsgi.py`, which calls
+`create_application()` and registers shutdown at exit). The unit's working
+directory must be the checkout. `PYTHONPATH=src` is what lets gunicorn import
+`wsgi` and `serve`. `src/app.py` no longer runs anything at import time. A
+quick local run is `PYTHONPATH=src venv/bin/python -m main`.
 
 Do not pass `-w` or `--workers`. The config file already forces one worker. A second process that wins the primary lock would start another `BWatch` and another pair of Telegram bots.
 Rate-limit counters are still shared if you do, because they live in Redis.
@@ -228,6 +235,27 @@ Override this at your own risk: it's always best to leave TLS, etc. to reverse p
 - Systemd unit recommended for persistence
 - Startup order matters: Redis → configs → DB → panels → Subscription → BWatch + Telegram bots (the app steps are handled by `create_application()`)
 - Route every user mutation through `Subscription`. The admin API, WebAPI, and Telegram bots already do. Discord mutates users only by calling those HTTP APIs.
+- A tag `v*` builds two onefile binaries on `ubuntu-22.04` with CPython 3.14 (GIL build, empty `sys.abiflags`) and attaches them to the GitHub release. `vpn-sub` is this service. `vpn-sub-discord` is the Discord process. See [Binaries](#binaries).
+
+### Binaries
+
+The release binaries are Nuitka onefile builds. The host that runs them needs glibc at least as new as Ubuntu 22.04 (`>=2.35`). Do not build them with a free-threading interpreter (`python3.14t`, `sys.abiflags == "t"`). The workflow refuses that ABI.
+
+`vpn-sub --probe` and `vpn-sub-discord --probe` only check that the packed `lang.jsonc` (and, for the main binary, `res/`) can be opened. They do not boot the service. A missing config, a down Redis, or a Discord login failure is not a probe failure.
+
+Configs and schemas stay outside the binary. `$schema` is resolved relative to the config file, not the payload. From `data/config.json` the example `../config.schema.json` still works if `data/` sits next to the checkout. If you move `data/`, copy the schema next to the config or fix `$schema`.
+
+```ini
+[Service]
+WorkingDirectory=X
+Environment=DIR_DATA=X/data
+Environment=GUNICORN_BIND=127.0.0.1:5550
+ExecStart=X/vpn-sub
+```
+
+No `PYTHONPATH` and no `venv/bin/gunicorn`. Do not add `--workers`. The frozen entry already sets `workers = 1` and `threads = 3`. Stop with SIGTERM. Do not send SIGUSR2: gunicorn's graceful re-exec would launch the onefile stub again. SIGHUP reloads gunicorn config in-process and is fine.
+
+The Discord unit is the same shape, with `ExecStart=X/vpn-sub-discord` and `SUB_HTTP_URL`, `SUB_URI`, and `SUB_API_URI` set to the Flask side. Start Flask first.
 
 ## Development
 
