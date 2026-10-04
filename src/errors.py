@@ -75,7 +75,7 @@ class MigrationError(DatabaseError):
     def __init__(self, message: str = "Legacy data could not be parsed or imported.") -> None: super().__init__(message, status=500)
 
 # ------------------------------------------------------------
-# `session.py` / 3X-UI related
+# `session/` / 3X-UI related
 # ------------------------------------------------------------
 
 class XUiSessionError(AppError): pass

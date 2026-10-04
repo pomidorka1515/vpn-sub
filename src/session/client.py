@@ -1,147 +1,27 @@
+"""3x-ui panel client: Bearer auth, health checks, and two generation caches."""
+
 from __future__ import annotations
 
-import hashlib
 import os
 import threading
 import time
-import json
+from collections.abc import Callable, Mapping
+from typing import Any, Literal, Unpack, cast
 
-from requests import Session, Response, Timeout, ConnectionError, RequestException
-from requests.adapters import HTTPAdapter
-from requests.structures import CaseInsensitiveDict
-from loggers import Logger
+from requests import ConnectionError, RequestException, Response, Session, Timeout
+
 from custom_types import Inbound, PanelClient, RequestKwargs
-from config import JsonValue
-from errors import XUiSessionError
-from paths import runtime_dir
+from loggers import Logger
 
-from collections.abc import Callable
-from typing import Unpack, cast, Any, Mapping, Protocol, Literal
+from .cache import GenerationCache
+from .stamp import client_stamp_path as default_client_stamp_path
+from .stamp import inbound_stamp_path as default_inbound_stamp_path
+from .transport import FakeResponse, RequestsPanelTransport, XUiPanelTransport, new_session
 
-__all__ = ['XUiSession', 'XUiPanelTransport', 'RequestsPanelTransport', 'XUiSessionError']
+__all__ = ["XUiSession"]
 
 _HEALTH_CHECK_TIMEOUT = 5.0
 _DEFAULT_REQUEST_TIMEOUT = 5.0
-# panel-req (4) + panel-bg (4). urllib3's default of 10 discards a
-# connection once both sides are in flight against the same panel.
-_SESSION_POOL_MAXSIZE = 8
-
-
-def inbound_stamp_path(name: str, base_url: str, *, directory: str | None = None) -> str:
-    """Per-panel generation file. A changed mtime drops every worker's inbound cache.
-
-    The file stores no inbound data. ``name`` keeps two panels apart; the URL
-    digest keeps a weird name from escaping ``directory``. ``directory``
-    defaults to the service runtime dir (``DIR_RUNTIME``, else ``<DIR_DATA>/run``).
-    """
-    if directory is None:
-        directory = str(runtime_dir())
-    digest = hashlib.sha1(base_url.encode()).hexdigest()[:8]
-    safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
-    return os.path.join(directory, f"inbounds.{safe}.{digest}.stamp")
-
-
-def _client_stamp_path(name: str, base_url: str, *, directory: str | None = None) -> str:
-    """Per-panel generation file for the client list. Not the inbound stamp.
-
-    A client write and an inbound write invalidate different caches. Sharing
-    one stamp would drop the client map on every inbound clear, and the other
-    way around. The file stores no client rows.
-    """
-    if directory is None:
-        directory = str(runtime_dir())
-    digest = hashlib.sha1(base_url.encode()).hexdigest()[:8]
-    safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
-    return os.path.join(directory, f"clients.{safe}.{digest}.stamp")
-
-
-def _bump_stamp(path: str) -> None:
-    """Move the stamp's mtime. A same-nanosecond utime is pushed forward."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    flags = os.O_CREAT | os.O_APPEND
-    if hasattr(os, "O_CLOEXEC"):
-        flags |= os.O_CLOEXEC
-    fd = os.open(path, flags, 0o644)
-    try:
-        previous = os.fstat(fd).st_mtime_ns
-        os.utime(fd)
-        current = os.fstat(fd).st_mtime_ns
-        if current <= previous:
-            os.utime(fd, ns=(current + 1, current + 1))
-    finally:
-        os.close(fd)
-
-
-def _read_stamp(path: str) -> int:
-    """Current generation, creating the stamp when this worker is first.
-
-    A missing file is not generation 0. Two workers can both observe "absent"
-    and would then treat each other's later fills as still current.
-    """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd = os.open(path, os.O_CREAT | os.O_APPEND | getattr(os, "O_CLOEXEC", 0), 0o644)
-    try:
-        return os.fstat(fd).st_mtime_ns
-    finally:
-        os.close(fd)
-
-
-
-class _FakeResponse(Response):
-    def __init__(self, json_data: Mapping[str, JsonValue], status_code: int):
-        super().__init__()
-        self._content = json.dumps(json_data).encode('utf-8')
-        self.status_code = status_code
-        self.headers = CaseInsensitiveDict({'Content-Type': 'application/json'})
-
-
-class XUiPanelTransport(Protocol):
-    """Transport used to communicate with a 3x-ui panel.
-
-    Implementations must support concurrent calls from client-managed threads.
-    """
-
-    def request(
-        self,
-        method: str,
-        url: str,
-        **kwargs: Unpack[RequestKwargs],
-    ) -> Response:
-        """Send a request and return the raw panel response."""
-        ...
-
-
-class RequestsPanelTransport:
-    """Transport around a wrapped ``requests.Session``.
-
-    The session is not modified or closed by this transport. ``requests.Session``
-    can generally be used concurrently for request submission, but callers sharing
-    a session remain responsible for its lifecycle and connection-pool limits.
-    """
-
-    def __init__(self, session: Session, auth: tuple[str, str] | None = None):
-        self._session: Session = session
-        self._auth: tuple[str, str] | None = auth
-
-    def request(
-        self,
-        method: str,
-        url: str,
-        **kwargs: Unpack[RequestKwargs],
-    ) -> Response:
-        if self._auth is not None:
-            kwargs.setdefault('auth', self._auth)
-        headers = cast(Mapping[str, str | bytes | None] | None, kwargs.get('headers'))
-        if (
-            kwargs.get('auth') is not None
-            and headers is not None
-            and any(str(key).lower() == 'authorization' for key in headers.keys())
-        ):
-            raise XUiSessionError(
-                'refusing to send basic auth alongside an Authorization header: '
-                'requests would silently overwrite the header'
-            )
-        return self._session.request(method, url, **cast(Any, kwargs))
 
 
 class XUiSession:
@@ -238,34 +118,29 @@ class XUiSession:
             self.port = str(port)
             self.address = address
             self.name = name
-            self.local = self.address in ('localhost', '::1', '127.0.0.1', '0.0.0.0')
+            self.local = self.address in ("localhost", "::1", "127.0.0.1", "0.0.0.0")
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
 
-            self._clock = clock
-
-            self._cache_lock = threading.Lock()
-            self._cache: list[Inbound] | None = None
-            self.cache_time: float = 0
-            self._stamp_path = stamp_path if stamp_path is not None else inbound_stamp_path(
+            resolved_stamp = stamp_path if stamp_path is not None else default_inbound_stamp_path(
                 name, self.base_url, directory=stamp_dir,
             )
-            self._cache_stamp: int | None = None
-            self._clients_lock = threading.Lock()
-            self._clients: dict[str, PanelClient] | None = None
-            self._clients_time: float = 0
             resolved_client_stamp = client_stamp_path
             if resolved_client_stamp is None:
-                resolved_client_stamp = _client_stamp_path(name, self.base_url, directory=stamp_dir)
-            self._client_stamp_path = resolved_client_stamp
-            if os.path.abspath(self._client_stamp_path) == os.path.abspath(self._stamp_path):
+                resolved_client_stamp = default_client_stamp_path(
+                    name, self.base_url, directory=stamp_dir,
+                )
+            if os.path.abspath(resolved_client_stamp) == os.path.abspath(resolved_stamp):
                 raise ValueError("client stamp must not be the inbound stamp")
-            self._clients_stamp: int | None = None
+            self._inbounds: GenerationCache[list[Inbound]] = GenerationCache(resolved_stamp, clock)
+            self._clients: GenerationCache[dict[str, PanelClient]] = GenerationCache(
+                resolved_client_stamp, clock,
+            )
             self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
 
             self._session: Session | None = None
             self._owns_session = session is None and transport is None
             if transport is None:
-                self._session = session if session is not None else self._new_session()
+                self._session = session if session is not None else new_session()
                 transport = RequestsPanelTransport(self._session, nginx_auth)
             elif session is not None:
                 raise ValueError("pass either transport or session, not both")
@@ -281,7 +156,7 @@ class XUiSession:
             self._health_check_lock = threading.Lock()
             self._health_check_thread = threading.Thread(
                 target=self._health_check,
-                name="XUi healthcheck", # NOTE: intended, <= 15 chars
+                name="XUi healthcheck",  # NOTE: intended, <= 15 chars
                 daemon=True,
             )
             self._health_check_event = threading.Event()
@@ -290,19 +165,8 @@ class XUiSession:
 
     @staticmethod
     def _new_session() -> Session:
-        """Session whose pool can hold one connection per panel worker.
-
-        Both executors can hit the same panel at once. ``pool_maxsize`` is
-        their sum so urllib3 does not discard a live connection to make room.
-        """
-        session = Session()
-        adapter = HTTPAdapter(
-            pool_connections=_SESSION_POOL_MAXSIZE,
-            pool_maxsize=_SESSION_POOL_MAXSIZE,
-        )
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        return session
+        """Session whose pool can hold one connection per panel worker."""
+        return new_session()
 
     @property
     def dead(self) -> bool:
@@ -315,8 +179,8 @@ class XUiSession:
             self._dead = value
 
     def _format_url(self, url: str, /) -> str:
-        base = self.base_url.rstrip('/')
-        panel_prefix = '/panel'
+        base = self.base_url.rstrip("/")
+        panel_prefix = "/panel"
         if base.endswith(panel_prefix):
             base = base[:-len(panel_prefix)]
         if not url.startswith(base):
@@ -364,7 +228,7 @@ class XUiSession:
                 return
 
             content = response.json()
-            if not content.get('success'):
+            if not content.get("success"):
                 self._mark_dead(f"panel returned message: {content.get('msg')}")
                 return
 
@@ -381,7 +245,7 @@ class XUiSession:
             self._perform_health_check()
 
     def _down_response(self, reason: str) -> Response:
-        return _FakeResponse(
+        return FakeResponse(
             {"success": False, "msg": f"Panel {self.name} is down: {reason}", "obj": None},
             503,
         )
@@ -393,16 +257,16 @@ class XUiSession:
         **kwargs: Unpack[RequestKwargs],
     ) -> Response:
         if self.dead:
-            return self._down_response('unavailable')
+            return self._down_response("unavailable")
 
         request_url = self._format_url(url)
-        kwargs['headers'] = {
-            **cast(Any, kwargs.get('headers', {})),
+        kwargs["headers"] = {
+            **cast(Any, kwargs.get("headers", {})),
             **self._inject_headers,
             # set last: the panel Authorization must not be overridable by accident
             **self._auth_header(),
         }
-        kwargs.setdefault('timeout', _DEFAULT_REQUEST_TIMEOUT)
+        kwargs.setdefault("timeout", _DEFAULT_REQUEST_TIMEOUT)
 
         try:
             return self._transport.request(method, request_url, **cast(Any, kwargs))
@@ -420,121 +284,88 @@ class XUiSession:
             return self._down_response(reason)
 
     def get(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
-        return self.request('GET', url, **kwargs)
+        return self.request("GET", url, **kwargs)
 
     def post(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
-        return self.request('POST', url, **kwargs)
+        return self.request("POST", url, **kwargs)
+
+    @property
+    def _stamp_path(self) -> str:
+        return self._inbounds.path
+
+    @_stamp_path.setter
+    def _stamp_path(self, value: str) -> None:
+        self._inbounds.path = value
+
+    @property
+    def _cache_stamp(self) -> int | None:
+        return self._inbounds.stamp
+
+    @_cache_stamp.setter
+    def _cache_stamp(self, value: int | None) -> None:
+        self._inbounds.stamp = value
+
+    @property
+    def _client_stamp_path(self) -> str:
+        return self._clients.path
+
+    @_client_stamp_path.setter
+    def _client_stamp_path(self, value: str) -> None:
+        self._clients.path = value
+
+    @property
+    def _clients_stamp(self) -> int | None:
+        return self._clients.stamp
+
+    @_clients_stamp.setter
+    def _clients_stamp(self, value: int | None) -> None:
+        self._clients.stamp = value
 
     @property
     def cache(self) -> list[Inbound] | None:
-        with self._cache_lock:
-            return self._cache
+        return self._inbounds.get()
 
     @cache.setter
     def cache(self, value: list[Inbound], /) -> None:
-        # read before the lock so a clear that bumps during the panel query
-        # is visible here instead of being overwritten by this fill
-        stamp = _read_stamp(self._stamp_path)
-        with self._cache_lock:
-            if self._cache_stamp is not None and stamp != self._cache_stamp:
-                return
-            self._cache = value
-            self.cache_time = self._clock()
-            self._cache_stamp = stamp
+        self._inbounds.set(value)
+
+    @property
+    def cache_time(self) -> float:
+        return self._inbounds.time
+
+    @cache_time.setter
+    def cache_time(self, value: float, /) -> None:
+        self._inbounds.time = value
 
     @property
     def cache_age(self) -> float:
-        """Seconds since the inbound cache was last populated (own clock domain)."""
-        with self._cache_lock:
-            return self._clock() - self.cache_time
+        return self._inbounds.age()
 
     @property
     def cache_current(self) -> bool:
-        """True when this process's list still matches the shared stamp."""
-        with self._cache_lock:
-            if self._cache is None or self._cache_stamp is None:
-                return False
-            try:
-                return _read_stamp(self._stamp_path) == self._cache_stamp
-            except OSError:
-                return False
+        return self._inbounds.current()
 
     def fresh_cache(self, ttl: float) -> list[Inbound] | None:
-        """Return the cached list only when age and stamp still agree.
-
-        The three checks share one lock so a clear cannot land between them
-        and hand back a list that was just dropped.
-        """
-        with self._cache_lock:
-            cached = self._cache
-            seen = self._cache_stamp
-            if cached is None or seen is None or self._clock() - self.cache_time >= ttl:
-                return None
-            try:
-                current = _read_stamp(self._stamp_path) == seen
-            except OSError:
-                return None
-            return cached if current else None
+        return self._inbounds.fresh(ttl)
 
     def clear_cache(self) -> None:
-        """Bump the shared stamp first, then drop the local list.
-
-        If the bump fails the local list stays. Dropping it first would hide
-        the failure from this worker while every other worker kept serving it.
-        """
-        _bump_stamp(self._stamp_path)
-        with self._cache_lock:
-            self._cache = None
-            self.cache_time = 0
-            self._cache_stamp = None
+        self._inbounds.clear()
 
     @property
     def clients_cache(self) -> dict[str, PanelClient] | None:
-        with self._clients_lock:
-            return self._clients
+        return self._clients.get()
 
     @clients_cache.setter
     def clients_cache(self, value: dict[str, PanelClient], /) -> None:
-        # read before the lock so a clear that bumps during the panel query
-        # is visible here instead of being overwritten by this fill
-        stamp = _read_stamp(self._client_stamp_path)
-        with self._clients_lock:
-            if self._clients_stamp is not None and stamp != self._clients_stamp:
-                return
-            self._clients = value
-            self._clients_time = self._clock()
-            self._clients_stamp = stamp
+        self._clients.set(value)
 
     def fresh_clients(self, ttl: float) -> dict[str, PanelClient] | None:
-        """Return the cached client map only when age and stamp still agree.
-
-        Separate from ``fresh_cache``: an inbound clear must not expire this
-        map, and a client clear must not expire inbounds. The three checks
-        share one lock so a clear cannot land between them.
-        """
-        with self._clients_lock:
-            cached = self._clients
-            seen = self._clients_stamp
-            if cached is None or seen is None or self._clock() - self._clients_time >= ttl:
-                return None
-            try:
-                current = _read_stamp(self._client_stamp_path) == seen
-            except OSError:
-                return None
-            return cached if current else None
+        """Client map when its own stamp still agrees. An inbound clear does not expire it."""
+        return self._clients.fresh(ttl)
 
     def clear_clients(self) -> None:
-        """Bump the client stamp first, then drop the local map.
-
-        Same failure rule as ``clear_cache``: a failed bump leaves the local
-        map in place so this worker cannot hide a stamp other workers still
-        trust. Does not touch the inbound cache.
-        """
-        _bump_stamp(self._client_stamp_path)
-        with self._clients_lock:
-            self._clients = None
-            self._clients_time = 0
-            self._clients_stamp = None
+        """Drop the client map only. Does not touch the inbound cache."""
+        self._clients.clear()
 
     def close(self) -> None:
         self._health_check_event.set()

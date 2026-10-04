@@ -44,7 +44,7 @@ package-dir = {"" = "src"}
 py-modules = [
     "app", "chart",
     "custom_types",
-    "session", "util", "errors"
+    "util", "errors"
 ]
 packages = [
     "api",
@@ -58,6 +58,7 @@ packages = [
     "bots.public",
     "db",
     "bwatch",
+    "session",
 ]
 
 # ---------------------------------------------------------------------------
@@ -77,7 +78,7 @@ files = [
     "src/db/",
     "src/custom_types.py",
     "src/loggers/",
-    "src/session.py",
+    "src/session/",
     "src/chart.py",
     "src/bwatch/",
     "src/api/",
@@ -165,7 +166,7 @@ include = [
     "src/db/",
     "src/custom_types.py",
     "src/loggers/",
-    "src/session.py",
+    "src/session/",
     "src/chart.py",
     "src/paths.py",
     "src/bwatch/",
