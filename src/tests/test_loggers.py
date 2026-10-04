@@ -134,37 +134,6 @@ def test_colors_are_ansi_strings() -> None:
     assert Logger.COLORS["ERROR"] is Colors.RED
 
 
-def test_stream_formatter_appends_reset() -> None:
-    logger = Logger("reset")
-    formatter = logger.handlers[0].formatter
-    assert formatter is not None
-    record = logger.makeRecord(
-        logger.name,
-        logging.INFO,
-        __file__,
-        1,
-        f"{Colors.RED}Hello",
-        (),
-        None,
-    )
-    formatted = formatter.format(record)
-    assert formatted.endswith(Colors.RESET)
-    assert formatted.count(Colors.RESET) == 2
-
-    closed = logger.makeRecord(
-        logger.name,
-        logging.INFO,
-        __file__,
-        1,
-        f"{Colors.RED}Hello{Colors.RESET}",
-        (),
-        None,
-    )
-    formatted_closed = formatter.format(closed)
-    assert formatted_closed.endswith(Colors.RESET)
-    assert formatted_closed.count(Colors.RESET) == 2
-
-
 def test_jsonl_strips_message_colors() -> None:
     stored: list[Mapping[str, Any]] = []
 

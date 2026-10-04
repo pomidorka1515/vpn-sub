@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from collections.abc import Callable, Mapping, Sequence
+from threading import Condition
+from time import monotonic
 from urllib.parse import quote
 from dacite import from_dict
 from typing import Literal, cast, overload
 
 from requests import Response
 
-from ..common import BaseService
+from ..common import BaseService, SharedCoreResources
 from session import XUiSession
 from custom_types import (
     ClientListResponse,
@@ -25,6 +27,7 @@ __all__ = ["BG_POOL", "PanelService"]
 _PANEL_POOL_WORKERS = 4
 _BG_POOL_WORKERS = 4
 _CLIENTS_TTL = 4.0
+_ONLINES_TTL = 4.0
 _PANEL_POOL = ThreadPoolExecutor(
     max_workers=_PANEL_POOL_WORKERS, thread_name_prefix="panel-req"
 )
@@ -33,7 +36,29 @@ _BG_POOL = ThreadPoolExecutor(
 )
 BG_POOL: Executor = _BG_POOL
 
+class _OnlineSnapshot:
+    """Classified online set. Ext names are applied later, so a rename is live."""
+
+    __slots__ = ("users", "panel_health", "stored_at")
+
+    def __init__(
+        self,
+        users: dict[str, None],
+        panel_health: dict[str, Literal["ok", "unavailable", "invalid"]],
+        stored_at: float,
+    ) -> None:
+        self.users = users
+        self.panel_health = panel_health
+        self.stored_at = stored_at
+
+
 class PanelService(BaseService):
+    def __init__(self, res: SharedCoreResources) -> None:
+        super().__init__(res)
+        self._onlines_lock = Condition()
+        self._onlines: _OnlineSnapshot | None = None
+        self._onlines_loading = False
+
     def map_panels[T](
         self,
         panels: Sequence[XUiSession],
@@ -346,17 +371,29 @@ class PanelService(BaseService):
 
     @overload
     def get_online_status(
-        self, new: Literal[False] = False, *, pool: Executor | None = None,
+        self,
+        new: Literal[False] = False,
+        *,
+        pool: Executor | None = None,
+        fresh: bool = False,
     ) -> OnlineStatus: ...
 
     @overload
     def get_online_status(
-        self, new: Literal[True], *, pool: Executor | None = None,
+        self,
+        new: Literal[True],
+        *,
+        pool: Executor | None = None,
+        fresh: bool = False,
     ) -> OnlineStatus: ...
 
     @overload
     def get_online_status(
-        self, new: bool, *, pool: Executor | None = None,
+        self,
+        new: bool,
+        *,
+        pool: Executor | None = None,
+        fresh: bool = False,
     ) -> OnlineStatus: ...
 
     def get_online_status(
@@ -364,22 +401,74 @@ class PanelService(BaseService):
         new: bool = False,
         *,
         pool: Executor | None = None,
+        fresh: bool = False,
     ) -> OnlineStatus:
         """Get online users and per-panel query health.
 
         An empty result is valid only when every configured panel reports
         a successful empty response.
+
+        A finished classification is reused for ``_ONLINES_TTL`` seconds.
+        ``fresh`` skips that copy and replaces it. A total outage is not
+        stored, so the next call tries the panels again.
         """
+        if not self.panels:
+            panel_health: dict[str, Literal["ok", "unavailable", "invalid"]] = {}
+            if new:
+                return OnlineStatus({}, panel_health)
+            return OnlineStatus([], panel_health)
+
+        snapshot = self._online_snapshot(pool, fresh)
+        return self._status_from_snapshot(snapshot, new)
+
+    def _online_snapshot(
+        self, pool: Executor | None, fresh: bool,
+    ) -> _OnlineSnapshot:
+        """One in-flight classification. Waiters share the leader's result.
+
+        The fetch runs outside the condition. Holding it across panel HTTP
+        would stall every other online read for the slowest panel, and a
+        worker must not take this lock: ``map_panels`` can run on a pool
+        thread only as the ``fn``, never as a nested online read.
+        """
+        with self._onlines_lock:
+            if not fresh:
+                cached = self._fresh_onlines()
+                if cached is not None:
+                    return cached
+            while self._onlines_loading:
+                self._onlines_lock.wait()
+                cached = self._fresh_onlines()
+                if cached is not None and not fresh:
+                    return cached
+                # A fresh caller does not take the copy a non-fresh leader
+                # just stored. It loads after that leader finishes.
+            self._onlines_loading = True
+        try:
+            snapshot = self._load_online_snapshot(pool)
+        except BaseException:
+            with self._onlines_lock:
+                self._onlines_loading = False
+                self._onlines_lock.notify_all()
+            raise
+        with self._onlines_lock:
+            self._onlines = snapshot
+            self._onlines_loading = False
+            self._onlines_lock.notify_all()
+        return snapshot
+
+    def _fresh_onlines(self) -> _OnlineSnapshot | None:
+        """Caller holds ``_onlines_lock``."""
+        cached = self._onlines
+        if cached is None or monotonic() - cached.stored_at >= _ONLINES_TTL:
+            return None
+        return cached
+
+    def _load_online_snapshot(self, pool: Executor | None) -> _OnlineSnapshot:
         # First-seen order is panel list order, then payload order.
         online_users: dict[str, None] = {}
         panel_health: dict[str, Literal["ok", "unavailable", "invalid"]] = {}
         known = self.db.usernames()
-        exts = self.db.username_exts() if new else {}
-
-        if not self.panels:
-            if new:
-                return OnlineStatus({}, panel_health)
-            return OnlineStatus([], panel_health)
 
         # Skip dead panels before submit. Workers only fetch; classification
         # and logging stay on the caller so order follows self.panels.
@@ -417,13 +506,16 @@ class PanelService(BaseService):
             health == "unavailable" for health in panel_health.values()
         ):
             raise PanelUnavailableError("No panel could be queried for online users")
+        return _OnlineSnapshot(online_users, panel_health, monotonic())
 
-        users: list[str] | dict[str, str | None]
+    def _status_from_snapshot(self, snapshot: _OnlineSnapshot, new: bool) -> OnlineStatus:
+        health = dict(snapshot.panel_health)
         if not new:
-            users = list(online_users)
-        else:
-            users = {name: exts.get(name) for name in online_users}
-        return OnlineStatus(users, panel_health)
+            return OnlineStatus(list(snapshot.users), health)
+        exts = self.db.username_exts()
+        return OnlineStatus(
+            {name: exts.get(name) for name in snapshot.users}, health,
+        )
 
     @overload
     def get_online_users(self, new: Literal[False] = False) -> list[str]: ...
