@@ -79,7 +79,6 @@ jobs:
           ccache --zero-stats
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}' \
-            --onefile-compression=zstd \
             --lto=yes \
             --static-libpython=yes \
             --output-filename=${{ matrix.name }} \
