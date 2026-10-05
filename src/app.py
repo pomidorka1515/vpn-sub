@@ -22,7 +22,7 @@ from flask import Flask, Response, request
 from jinja2 import FileSystemLoader
 from loggers import Logger, Colors
 from config import ConfigLike
-from paths import bundled_root, program_dir, runtime_dir
+from paths import bundled_root, compiled, program_dir, runtime_dir
 from session import XUiSession, XUiPanelTransport
 from util import err
 from werkzeug.exceptions import HTTPException
@@ -276,6 +276,7 @@ def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
         indent=4,
         read_only=False,
         strict_schema=True,
+        schema_path=bundled_root() / "config.schema.json" if compiled() else None,
         sync_mode="data",
         isolate_commits=True,
         backup_dir=paths.backups,

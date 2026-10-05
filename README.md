@@ -241,11 +241,11 @@ Override this at your own risk: it's always best to leave TLS, etc. to reverse p
 
 The release binaries are Nuitka onefile builds. The host that runs them needs glibc at least as new as Ubuntu 22.04 (`>=2.35`). Do not build them with a free-threading interpreter (`python3.14t`, `sys.abiflags == "t"`). The workflow refuses that ABI.
 
-`vpn-sub --probe` and `vpn-sub-discord --probe` only check that the packed `lang.jsonc` (and, for the main binary, `res/`) can be opened. They do not boot the service. A missing config, a down Redis, or a Discord login failure is not a probe failure.
+`vpn-sub --probe` and `vpn-sub-discord --probe` only check that the packed `lang.jsonc` and `config.schema.json` (and, for the main binary, `res/`) can be opened. They do not boot the service. A missing config, a down Redis, or a Discord login failure is not a probe failure.
 
 `vpn-sub --update` and `vpn-sub-discord --update` replace the installed binaries from the latest GitHub release of `pomidorka1515/vpn-sub`. They only run from a compiled binary, and only in a terminal. The command asks before it downloads. If either service is running, it asks you to stop both and continues only after they are gone. It does not stop or start them. A checkout (`python -m main`) refuses. At boot a compiled binary logs one line when a newer release exists. It does not download anything and it does not prompt.
 
-Configs and schemas stay outside the binary. `$schema` is resolved relative to the config file, not the payload. From `data/config.json` the example `../config.schema.json` still works if `data/` sits next to the checkout. If you move `data/`, copy the schema next to the config or fix `$schema`.
+A compiled binary ignores `$schema` and validates `config.json` against the packed `config.schema.json`. A checkout still resolves `$schema` relative to the config file. From `data/config.json` the example `../config.schema.json` works if `data/` sits next to the checkout. If you move `data/`, copy the schema next to the config or fix `$schema`.
 
 ```ini
 [Service]

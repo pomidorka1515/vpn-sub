@@ -62,6 +62,24 @@ def test_empty_public_token_fails(discord_env: Path) -> None:
         create_application()
 
 
+def test_compiled_binary_forces_bundled_schema(discord_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (discord_env / "discord.json").write_text(
+        json.dumps({"public": {"token": "bot-token"}, "private": {"whitelist": [], "api_token": "t"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("runtime.compiled", lambda: True)
+    schema = Path(__file__).resolve().parents[2] / "config.schema.json"
+    monkeypatch.setattr("runtime.bundled_root", lambda: schema.parent)
+    from runtime import create_application
+
+    app = create_application()
+    try:
+        assert app.cfg.schema_path == str(schema.resolve())
+    finally:
+        for resource in (app.sessions, app.cfg, app.lang_cfg, app.log_cfg):
+            resource.close()
+
+
 def test_run_stops_when_public_connect_task_finishes(discord_env: Path) -> None:
     del discord_env
     import asyncio
@@ -223,4 +241,3 @@ def test_stop_closes_sessions_when_runner_is_cancelled(discord_env: Path) -> Non
         assert app._runner.cancelled()
 
     asyncio.run(scenario())
-

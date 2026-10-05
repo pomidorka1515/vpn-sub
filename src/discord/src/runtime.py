@@ -18,7 +18,7 @@ from loggers import Logger
 from public import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
-from paths import bundled_root, program_dir
+from paths import bundled_root, compiled, program_dir
 
 __all__ = [
     "DiscordApplication",
@@ -133,6 +133,7 @@ def create_application(paths: DiscordPaths | None = None) -> DiscordApplication:
         indent=4,
         read_only=False,
         strict_schema=True,
+        schema_path=bundled_root() / "config.schema.json" if compiled() else None,
         sync_mode="data",
         isolate_commits=True,
         backup_dir=paths.backups,
@@ -241,11 +242,16 @@ def probe() -> None:
 
     Does not log in to Discord and does not require ``discord.json``. Importing
     this module already loads the service, so a missing module fails before
-    this function runs. A payload that cannot see ``lang.jsonc`` fails here.
+    this function runs. A payload that cannot see ``lang.jsonc`` or
+    ``config.schema.json`` fails here.
     """
     language = _language_path(bundled_root())
     if not language.is_file():
         raise SystemExit(f"discord language file not found: {language}")
+    if compiled():
+        schema = bundled_root() / "config.schema.json"
+        if not schema.is_file():
+            raise SystemExit(f"discord schema file not found: {schema}")
 
 
 if __name__ == "__main__":

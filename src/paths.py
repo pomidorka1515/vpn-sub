@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-__all__ = ["bundled_root", "program_dir", "runtime_dir"]
+__all__ = ["bundled_root", "compiled", "program_dir", "runtime_dir"]
 
 
 def program_dir() -> Path:
@@ -46,6 +46,17 @@ def program_dir() -> Path:
         if isinstance(containing, str) and containing:
             return Path(containing)
     return Path.cwd()
+
+
+def compiled() -> bool:
+    """True when this process was started from a Nuitka binary.
+
+    Nuitka injects ``__compiled__`` on the entry module. A checkout does not
+    have it. Imported modules must not look at their own globals: ``paths`` is
+    compiled into both binaries, but tests and ``python -m`` import it as a
+    normal module. The entry module is ``__main__``.
+    """
+    return sys.modules["__main__"].__dict__.get("__compiled__") is not None
 
 
 def bundled_root() -> Path:

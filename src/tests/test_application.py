@@ -112,6 +112,19 @@ def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:
         assert len(runtime.panels) == 2
 
 
+def test_compiled_binary_forces_bundled_schema(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> None:
+    from paths import bundled_root
+
+    monkeypatch.setattr("app.compiled", lambda: True)
+    with factory(paths) as runtime:
+        assert runtime.cfg.schema_path == str((bundled_root() / "config.schema.json").resolve())
+
+
+def test_checkout_does_not_force_schema(paths: AppPaths) -> None:
+    with factory(paths) as runtime:
+        assert runtime.cfg.schema_path is None
+
+
 def test_browser_subscription_embeds_local_fonts(paths: AppPaths) -> None:
     with factory(paths) as runtime:
         token = "a" * 40

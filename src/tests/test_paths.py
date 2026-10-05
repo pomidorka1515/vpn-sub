@@ -46,3 +46,16 @@ def test_program_dir_falls_back_to_containing_dir(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(sys, "argv", ["-"])
     _compiled_main(monkeypatch, SimpleNamespace(original_argv0=None, containing_dir=str(tmp_path)))
     assert program_dir() == tmp_path
+
+
+def test_compiled_is_false_for_a_checkout() -> None:
+    from paths import compiled
+
+    assert compiled() is False
+
+
+def test_compiled_reads_the_entry_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    from paths import compiled
+
+    _compiled_main(monkeypatch, SimpleNamespace())
+    assert compiled() is True

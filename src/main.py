@@ -14,6 +14,7 @@ from gunicorn.app.base import BaseApplication
 from gunicorn.util import import_app
 from wsgiref.types import WSGIApplication
 
+from paths import compiled
 from serve import options
 
 
@@ -42,7 +43,7 @@ def probe() -> None:
     Does not import ``wsgi``. That module calls ``create_application()`` and
     would require Redis, ``config.json``, and a panel. A missing import fails
     before this function runs, because this module imports gunicorn. A payload
-    that cannot see ``res/`` or ``lang.jsonc`` fails here.
+    that cannot see ``res/``, ``lang.jsonc``, or ``config.schema.json`` fails here.
     """
     from paths import bundled_root
 
@@ -53,6 +54,10 @@ def probe() -> None:
         raise SystemExit(f"language file not found: {language}")
     if not fonts.is_dir():
         raise SystemExit(f"res directory not found: {fonts}")
+    if compiled():
+        schema = root / "config.schema.json"
+        if not schema.is_file():
+            raise SystemExit(f"schema file not found: {schema}")
 
 
 if __name__ == "__main__":
