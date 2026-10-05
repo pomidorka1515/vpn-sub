@@ -68,6 +68,27 @@ jobs:
           python -m pip install nuitka ordered-set zstandard
           python -m pip install -r requirements.txt
 
+      - name: patch nuitka onefile compression
+        run: |
+          python - <<'PY'
+          """Force single-threaded onefile compression.
+
+          CPython 3.14's compression.zstd rejects nb_workers outside [0, 0].
+          Nuitka still passes the job limit (4 on these runners), which crashes
+          attachOnefilePayload before the binary is packed.
+          """
+          import pathlib
+          import nuitka.tools.onefile_compressor.OnefileCompressor as compressor
+
+          path = pathlib.Path(compressor.__file__)
+          source = path.read_text()
+          old = "effective_threads = 0 if low_memory or is32BitPython() else job_limit"
+          new = "effective_threads = 0  # CPython 3.14 stdlib zstd: nb_workers must be 0"
+          if old not in source:
+              raise SystemExit(f"nuitka compressor patch missed its target in {path}")
+          path.write_text(source.replace(old, new, 1))
+          PY
+
       - name: build ${{ matrix.name }}
         env:
           NUITKA_CCACHE_BINARY: ccache
