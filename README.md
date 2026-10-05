@@ -71,17 +71,22 @@ Startup order is fixed and handled by `create_application()`: configs, database,
 ## Setup
 
 ```bash
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
+getconf GNU_LIBC_VERSION # ensure its >= 2.35
+mkdir -p /opt/vpn-sub && cd /opt/vpn-sub
+curl -fsSL -o vpn-sub https://github.com/pomidorka1515/vpn-sub/releases/latest/download/vpn-sub && chmod +x vpn-sub
+curl -fsSL -o vpn-sub-discord https://github.com/pomidorka1515/vpn-sub/releases/latest/download/vpn-sub-discord && chmod +x vpn-sub-discord
+mkdir -p data
+curl -fsSL -o data/config.json https://raw.githubusercontent.com/pomidorka1515/vpn-sub/main/docs/EXAMPLE.config.json
+curl -fsSL -o data/discord.json https://raw.githubusercontent.com/pomidorka1515/vpn-sub/main/src/discord/docs/EXAMPLE.config.json
 apt install redis-server && systemctl enable --now redis-server
-mkdir -p data && cp docs/EXAMPLE.config.json data/config.json  # fill in panel credentials, bot tokens, etc
-# optional Discord bots (one token, public commands plus /admin):
-cp src/discord/docs/EXAMPLE.config.json data/discord.json  # fill public.token, private.whitelist, private.api_token
-# run systemd services; explained below
+# fill in panel credentials, bot tokens, etc, then start the systemd units below
 ```
 
-Always use `venv/bin/...`, never system Python. Runtime state lives in `data/` and is gitignored.
-`requirements.txt` is runtime only. Tests and type checkers are `pip install -e ".[dev]"`.
+Prefer the release binaries. No venv, no checkout, no `requirements.txt`.  
+The host needs glibc at least as new as Ubuntu 22.04 (`>=2.35`).  
+`data/` next to the binaries is runtime state. Fill `data/config.json` before the first start. `data/discord.json` is only needed if you run the Discord process.  
+A compiled binary ignores `$schema` and validates against the packed schema, so the example's relative `$schema` is fine here.  
+A git checkout is for development. See [Development](#development).
 
 ### Redis
 
