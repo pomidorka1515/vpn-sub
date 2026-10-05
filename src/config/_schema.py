@@ -36,25 +36,32 @@ def _read_json_object(cfg: Config, /) -> dict[str, JsonValue]:
 
 def _load_schema(cfg: Config, data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
     schema_ref = data.get("$schema")
-    if not schema_ref:
+    forced = cfg.schema_path
+    if forced is not None:
+        if schema_ref:
+            cfg.log.warning(
+                f"$schema {schema_ref!r} ignored; using schema_path {forced!r}"
+            )
+        schema_path = forced
+    elif not schema_ref:
         return None
+    else:
+        if not isinstance(schema_ref, str):
+            raise SchemaValidationError("'$schema' must be a string.")
 
-    if not isinstance(schema_ref, str):
-        raise SchemaValidationError("'$schema' must be a string.")
+        if schema_ref.startswith(("http://", "https://")):
+            message = (
+                "Remote JSON schemas are not supported for security/reliability reasons."
+            )
+            if cfg.strict_schema:
+                raise SchemaValidationError(message)
+            cfg.log.warning(message)
 
-    if schema_ref.startswith(("http://", "https://")):
-        message = (
-            "Remote JSON schemas are not supported for security/reliability reasons."
+            return None
+
+        schema_path = os.path.normpath(
+            os.path.join(os.path.dirname(cfg.path), schema_ref)
         )
-        if cfg.strict_schema:
-            raise SchemaValidationError(message)
-        cfg.log.warning(message)
-
-        return None
-
-    schema_path = os.path.normpath(
-        os.path.join(os.path.dirname(cfg.path), schema_ref)
-    )
     schema_sig = _stat_signature(schema_path)
 
     if (

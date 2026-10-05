@@ -38,6 +38,7 @@ class Config(MutableMapping[str, JsonValue]):
         read_only: bool = False,
         read_only_jsonc: bool = False,
         strict_schema: bool = True,
+        schema_path: str | Path | None = None,
         sync_mode: SYNC_MODES = 'data',
         isolate_commits: bool = True,
         backup_dir: str | Path | None = None,
@@ -58,6 +59,9 @@ class Config(MutableMapping[str, JsonValue]):
             read_only_jsonc: Parse JSONC comments and trailing commas. This is only
                 supported for read-only configs so the source file is never reformatted.
             strict_schema: If True, schema errors raise; if False, they log a warning.
+            schema_path: Local schema file to validate against, regardless of any
+                ``$schema`` value in the JSON. If both are set and differ, a warning
+                is logged and this argument wins.
             sync_mode: 'full' fsyncs file + parent directory, 'data' fsyncs file only,
                 'none' skips fsync entirely.
             isolate_commits: If True, deep-copies data after commit so any references
@@ -89,6 +93,7 @@ class Config(MutableMapping[str, JsonValue]):
         self._indent: int = indent
         self._minify: bool = minify
         self._strict_schema: bool = strict_schema
+        self._schema_path: str | None = os.path.normpath(str(schema_path)) if schema_path else None
 
         if sync_mode not in ("full", "data", "none"):
             raise ValueError("sync_mode must be 'full', 'data', or 'none'")
@@ -170,6 +175,10 @@ class Config(MutableMapping[str, JsonValue]):
     @property
     def strict_schema(self) -> bool:
         return self._strict_schema
+
+    @property
+    def schema_path(self) -> str | None:
+        return self._schema_path
 
     @property
     def sync_mode(self) -> SYNC_MODES:
