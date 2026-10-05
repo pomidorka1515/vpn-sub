@@ -230,6 +230,9 @@ async def _run() -> None:
 
 
 def main() -> None:
+    from updater import notice
+
+    notice(log)
     asyncio.run(_run())
 
 
@@ -248,5 +251,9 @@ def probe() -> None:
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--probe":
         probe()
+    elif len(sys.argv) > 1 and sys.argv[1] == "--update":
+        from updater import update
+
+        raise SystemExit(update(log))
     else:
         main()

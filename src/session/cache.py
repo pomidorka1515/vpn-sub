@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from typing import Generic
-
 from .stamp import bump_stamp, read_stamp
 
 __all__ = ["GenerationCache"]

@@ -35,7 +35,7 @@ __all__ = [
     'BandwidthSnapshot',
     'BandwidthInfo', 'BandwidthUpdate',
 
-    'JsonifyValue', 'HTTPMethod', 'ResponseType',
+    'JsonifyValue', 'HTTPMethod',
 
     'RequestKwargs'
 ]

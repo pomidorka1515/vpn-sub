@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from custom_types import HTTPMethod
 from typing import NamedTuple, cast
 import re

@@ -9,6 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from custom_types import BandwidthSnapshot
 
+# pyright: reportUnknownMemberType=false
+
 from .draw import (
     BG,
     BW_SIZE,

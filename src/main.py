@@ -29,6 +29,10 @@ class Application(BaseApplication):
 
 
 def main() -> None:
+    from loggers import Logger
+    from updater import notice
+
+    notice(Logger("updater"))
     Application("%(prog)s", prog="vpn-sub").run()
 
 
@@ -54,5 +58,10 @@ def probe() -> None:
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--probe":
         probe()
+    elif len(sys.argv) > 1 and sys.argv[1] == "--update":
+        from loggers import Logger
+        from updater import update
+
+        raise SystemExit(update(Logger("updater")))
     else:
         main()

@@ -8,6 +8,8 @@ from PIL import Image, ImageDraw
 
 from util import fmt_bytes
 
+# pyright: reportUnknownMemberType=false
+
 from .draw import (
     BG,
     BORDER,

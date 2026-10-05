@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from collections.abc import Mapping
 from typing import Any, cast
 
-import logging
 import pytest
 
 from gunicorn.http.message import Request
