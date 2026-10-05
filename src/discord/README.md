@@ -1,11 +1,14 @@
 # Discord bot service
 
-This is a **separate process**. It is not started by gunicorn or `create_application()`. Killing Flask does not kill this unit, and vice versa.
+This is a **separate process**. It is not started by gunicorn or
+`create_application()`. Killing Flask does not kill this unit, and vice versa.
 
 Independent Discord bots for the VPN subscription service.
-Same venv, project root cwd, `PYTHONPATH=src/discord/src:src`. Talks to Flask over loopback HTTP.
+Same venv, project root cwd, `PYTHONPATH=src/discord/src:src`. Talks to Flask
+over loopback HTTP.
 
-One Discord application / one bot token. Public slash commands stay as they are; `/admin` is an extra command on the same identity.
+One Discord application / one bot token. Public slash commands stay as they are;
+`/admin` is an extra command on the same identity.
 
 ## Core principles
 
@@ -28,9 +31,11 @@ The example already has `$schema` set for `data/discord.json`.
 
 - `public.token` — Discord bot token (one client).
 - `private.whitelist` — Discord user IDs allowed to use `/admin`.
-- `private.api_token` — same value as Flask `cfg["api_token"]`. Sent as the `Authorization` header to the admin API.
+- `private.api_token` — same value as Flask `cfg["api_token"]`. Sent as the
+  `Authorization` header to the admin API.
 
-HTTP contract: see root [docs/API.md](../../docs/API.md) and [docs/API_ADMIN.md](../../docs/API_ADMIN.md).
+HTTP contract: see root [docs/API.md](../../docs/API.md)
+and [docs/API_ADMIN.md](../../docs/API_ADMIN.md).
 
 ## Environment Variables
 
@@ -49,8 +54,10 @@ All path variables are **optional**.
 
 WebAPI prefix: `{SUB_HTTP_URL}/{SUB_URI}/webapi`.  
 Admin API prefix: `{SUB_HTTP_URL}/{SUB_URI}/{SUB_API_URI}`.  
-The admin API class is `src/api/admin.py` `Api`; its mount is `/{uri}/{api_uri}`, not `/privapi` as a hardcoded name.  
-Empty `SUB_API_URI` is omitted, which hits `/api/...` instead of `/{api_uri}/api/...`.
+The admin API class is `src/api/admin.py` `Api`; its mount is
+`/{uri}/{api_uri}`, not `/privapi` as a hardcoded name.  
+Empty `SUB_API_URI` is omitted, which hits `/api/...` instead of
+`/{api_uri}/api/...`.
 
 ## Systemd service
 
@@ -83,4 +90,11 @@ WantedBy=multi-user.target
 
 The Flask unit should already be up so WebAPI / admin API exist at boot.
 
-A release binary is `vpn-sub-discord` from the same tag as `vpn-sub`. It does not need `PYTHONPATH`. `DIR_DATA` defaults to `data/` next to the executable, not to a directory inside the unpack tree. `vpn-sub-discord --probe` checks that the packed language file and schema open. It does not log in and does not require `discord.json`. A compiled binary ignores `$schema` and validates against the packed schema. A checkout still resolves `$schema` relative to `data/discord.json` (`../src/discord/config.schema.json`). If you move `data/`, copy the schema next to the config or fix `$schema`.
+A release binary is `vpn-sub-discord` from the same tag as `vpn-sub`. It does
+not need `PYTHONPATH`. `DIR_DATA` defaults to `data/` next to the executable,
+not to a directory inside the unpack tree. `vpn-sub-discord --probe` checks that
+the packed language file and schema open. It does not log in and does not
+require `discord.json`. A compiled binary ignores `$schema` and validates
+against the packed schema. A checkout still resolves `$schema` relative to
+`data/discord.json` (`../src/discord/config.schema.json`). If you move `data/`,
+copy the schema next to the config or fix `$schema`.
