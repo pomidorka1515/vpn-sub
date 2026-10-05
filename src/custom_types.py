@@ -8,7 +8,6 @@ from typing import (
 from collections.abc import MutableMapping, Mapping, Iterator, Iterable
 
 from dataclasses import dataclass, field
-from flask import Response as FlaskResponse
 from requests import Response
 from requests.cookies import RequestsCookieJar
 from requests.auth import AuthBase
@@ -44,7 +43,6 @@ __all__ = [
 
 type JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Sequence['JsonifyValue'] | tuple['JsonifyValue', ...] | None
 type HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
-type ResponseType = tuple[FlaskResponse, int] | FlaskResponse
 
 class BandwidthInfo(NamedTuple):
     """

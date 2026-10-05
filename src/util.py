@@ -4,10 +4,12 @@ import re
 import io
 import qrcode
 import secrets
+from typing import TYPE_CHECKING, cast, Literal
 
-from flask import Response, jsonify
 from custom_types import JsonifyValue
-from typing import cast, Literal
+
+if TYPE_CHECKING:
+    from flask import Response
 
 __all__ = [
     "compare", "isuuid", "isusername", "isbrowser", "sanitize",
@@ -77,6 +79,8 @@ def ok(
     obj: JsonifyValue = None
 ) -> tuple[Response, int]:
     """Internal helper function to return a successful Response."""
+    from flask import jsonify
+
     return jsonify({"success": True, "msg": msg, "obj": obj}), code
 
 def err(
@@ -85,6 +89,8 @@ def err(
     obj: JsonifyValue = None
 ) -> tuple[Response, int]:
     """Internal helper function to return an error Response."""
+    from flask import jsonify
+
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
 
