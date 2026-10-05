@@ -25,6 +25,21 @@ jobs:
               --include-module=gunicorn.workers.gthread
               --include-data-dir=res=res
               --include-data-files=lang.jsonc=lang.jsonc
+              --nofollow-import-to=PIL.ImageQt
+              --nofollow-import-to=PIL.ImageTk
+              --nofollow-import-to=PIL.ImageShow
+              --nofollow-import-to=PIL.ImageGrab
+              --nofollow-import-to=PIL.ImageWin
+              --nofollow-import-to=PIL.SpiderImagePlugin
+              --nofollow-import-to=PIL.DdsImagePlugin
+              --nofollow-import-to=PIL.BlpImagePlugin
+              --nofollow-import-to=PIL.BmpImagePlugin
+              --nofollow-import-to=PIL.PpmImagePlugin
+              --nofollow-import-to=PIL.ImImagePlugin
+              --nofollow-import-to=PIL.PsdImagePlugin
+              --nofollow-import-to=PIL.AvifImagePlugin
+              --nofollow-import-to=PIL.WebPImagePlugin
+              --nofollow-import-to=PIL.GifImagePlugin
           - name: vpn-sub-discord
             pythonpath: src/discord/src:src
             entry: src/discord/src/runtime.py
@@ -98,14 +113,36 @@ jobs:
           export CCACHE_DIR="$HOME/.cache/ccache"
           ccache --set-config=max_size=2G
           ccache --zero-stats
+          # GitHub ubuntu-22.04 runners are 2 vCPU. Nuitka's default job count
+          # oversubscribes them once --lto=yes is linking.
+          jobs="$(nproc)"
           version="${GITHUB_REF_NAME#v}"
           version="${version%%-*}"
           version="${version%%+*}"
+          export CCFLAGS="${CCFLAGS:--O3 -fno-plt -fdata-sections -ffunction-sections}"
+          export LDFLAGS="${LDFLAGS:--Wl,--gc-sections -Wl,-O1 -Wl,--as-needed}"
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}' \
             --product-version="${version}" \
+            --deployment \
             --lto=yes \
+            --jobs="${jobs}" \
             --static-libpython=yes \
+            --python-flag=no_docstrings \
+            --python-flag=no_site \
+            --python-flag=isolated \
+            --noinclude-setuptools-mode=nofollow \
+            --noinclude-pytest-mode=nofollow \
+            --noinclude-unittest-mode=nofollow \
+            --noinclude-IPython-mode=nofollow \
+            --noinclude-pydoc-mode=nofollow \
+            --nofollow-import-to=doctest \
+            --nofollow-import-to=pydoc_data \
+            --nofollow-import-to=idlelib \
+            --nofollow-import-to=tkinter \
+            --nofollow-import-to=turtle \
+            --nofollow-import-to=xmlrpc \
+            --nofollow-import-to=lib2to3 \
             --output-filename=${{ matrix.name }} \
             --output-dir=build/dist \
             --nofollow-import-to=tests \
