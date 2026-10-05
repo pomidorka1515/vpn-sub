@@ -9,6 +9,8 @@ __pycache__/
 *.pyo
 venv/
 out/
+bin/
+build/
 *.log
 *.swp
 *.md

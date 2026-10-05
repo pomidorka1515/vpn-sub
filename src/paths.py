@@ -28,12 +28,23 @@ def program_dir() -> Path:
     executable. Nuitka does not set ``sys.frozen``. ``__compiled__`` is how a
     compiled module is detected.
 
+    The bootstrap gives the child an absolute, resolved ``sys.argv[0]``, so a
+    PATH invocation still lands on the install directory.
+    ``__compiled__.original_argv0`` is the operator's argv as typed and must
+    not be used: a bare name resolves against the working directory. When argv
+    is missing or stdin, ``containing_dir`` is the binary's directory. Do not
+    use ``sys.executable``: onefile points it at the unpacked payload binary.
+
     ``DIR_DATA`` still overrides this.
     """
-    if "__compiled__" in sys.modules["__main__"].__dict__:
+    compiled = sys.modules["__main__"].__dict__.get("__compiled__")
+    if compiled is not None:
         argv0 = sys.argv[0] if sys.argv and sys.argv[0] else ""
         if argv0 and argv0 != "-":
             return Path(argv0).resolve().parent
+        containing = getattr(compiled, "containing_dir", None)
+        if isinstance(containing, str) and containing:
+            return Path(containing)
     return Path.cwd()
 
 

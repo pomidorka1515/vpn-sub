@@ -122,7 +122,9 @@ jobs:
           export CCFLAGS="${CCFLAGS:--O3 -fno-plt -fdata-sections -ffunction-sections}"
           export LDFLAGS="${LDFLAGS:--Wl,--gc-sections -Wl,-O1 -Wl,--as-needed}"
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
-            --onefile --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}' \
+            --onefile \
+            --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}/{PID}_{TIME_US}_{RANDOM}' \
+            --onefile-child-grace-time=infinity \
             --product-version="${version}" \
             --deployment \
             --lto=yes \

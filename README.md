@@ -253,7 +253,9 @@ Environment=GUNICORN_BIND=127.0.0.1:5550
 ExecStart=X/vpn-sub
 ```
 
-No `PYTHONPATH` and no `venv/bin/gunicorn`. Do not add `--workers`. The frozen entry already sets `workers = 1` and `threads = 3`. Stop with SIGTERM. Do not send SIGUSR2: gunicorn's graceful re-exec would launch the onefile stub again. SIGHUP reloads gunicorn config in-process and is fine.
+No `PYTHONPATH` and no `venv/bin/gunicorn`. Do not add `--workers`. The frozen entry already sets `workers = 1` and `threads = 3`. Stop with SIGTERM. Do not send SIGUSR2: gunicorn's graceful re-exec launches `sys.executable`, which inside the payload is the unpacked child, not the onefile stub, so the new process has no bootstrap and no packed files. SIGHUP reloads gunicorn config in-process and is fine.
+
+The unpack directory is `{CACHE_DIR}/<name>/{VERSION}/{PID}_{TIME_US}_{RANDOM}` and is removed only after the child has exited. It is not shared across restarts. A shared cache would be truncated by the next start while the running process still had those `.so` files mapped. `--onefile-child-grace-time=infinity` keeps the bootstrap from deleting that directory during the 5s default grace window; systemd's `TimeoutStopSec` is what bounds a stuck stop.
 
 The Discord unit is the same shape, with `ExecStart=X/vpn-sub-discord` and `SUB_HTTP_URL`, `SUB_URI`, and `SUB_API_URI` set to the Flask side. Start Flask first.
 
