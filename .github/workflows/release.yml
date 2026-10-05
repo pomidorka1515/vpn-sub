@@ -127,7 +127,7 @@ jobs:
           # Diagnostic only. Do not fail the release on a hit; this is so the
           # log shows what leaked. Nuitka names the payload after the entry
           # script (main.dist, runtime.dist), not after --output-filename.
-          # --onefile still leaves that directory next to the binary.
+          # --onefile still leaves that directory next to the binary.onefile
           echo "=== build/dist ==="
           find build/dist -maxdepth 2 -printf '%y %s %p\n' | sort
           echo
@@ -213,10 +213,22 @@ jobs:
           chmod +x build/dist/vpn-sub build/dist/vpn-sub-discord
           test -x build/dist/vpn-sub
           test -x build/dist/vpn-sub-discord
+          # --notes-from-tag reads a local annotated tag and refuses --repo.
+          # Fetch the tag object itself; a checkout of the tagged commit is
+          # not an annotated tag, so its message would be lost.
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --quiet origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          notes="$(git tag --list "${GITHUB_REF_NAME}" --format='%(contents)')"
+          if [ -z "${notes}" ]; then
+            echo "tag ${GITHUB_REF_NAME} has no annotation" >&2
+            exit 1
+          fi
+          printf '%s\n' "${notes}" > notes.md
           gh release create "${GITHUB_REF_NAME}" \
             build/dist/vpn-sub \
             build/dist/vpn-sub-discord \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
-            --notes-from-tag \
+            --notes-file notes.md \
             --verify-tag
