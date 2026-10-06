@@ -73,10 +73,10 @@ def _is_object(value: object) -> bool:
 
 
 def _is_bilingual(value: object) -> bool:
-    if not isinstance(value, list) or len(value) != 2:
+    if not isinstance(value, list):
         return False
     pair = cast(list[object], value)
-    return all(isinstance(item, str) for item in pair)
+    return len(pair) == 2 and all(isinstance(item, str) for item in pair)
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -223,11 +223,12 @@ def rewrite(data: Mapping[str, Any], profiles: Mapping[str, Any]) -> dict[str, A
 def _validate(data: Mapping[str, Any]) -> None:
     try:
         with _SCHEMA_PATH.open(encoding="utf-8") as handle:
-            schema = cast(dict[str, Any], json.load(handle))
+            loaded: object = json.load(handle)
     except (OSError, json.JSONDecodeError) as exc:
         raise MigrateError(f"cannot load schema {_SCHEMA_PATH}: {exc}") from exc
-    if not isinstance(schema, dict):
+    if not _is_object(loaded):
         raise MigrateError(f"schema {_SCHEMA_PATH} must be a JSON object")
+    schema = cast(dict[str, Any], loaded)
     try:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as exc:

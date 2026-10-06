@@ -4,7 +4,8 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
 import pytest
 
@@ -81,7 +82,7 @@ def _write(tmp_path: Path, data: dict[str, Any], name: str = "config.json") -> P
 def _read(path: Path) -> dict[str, Any]:
     loaded: object = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict)
-    return loaded
+    return cast(dict[str, Any], loaded)
 
 
 def test_apply_joins_maps_and_preserves_key_order(tmp_path: Path) -> None:
@@ -175,22 +176,54 @@ def test_existing_pre_v6_backup_is_not_overwritten(tmp_path: Path) -> None:
     assert "flags" not in _read(path)
 
 
+def _drop_flag(data: dict[str, Any]) -> None:
+    cast(dict[str, Any], data["flags"]).pop("fast")
+
+
+def _add_orphan_profile(data: dict[str, Any]) -> None:
+    cast(dict[str, Any], data["json_profiles"])["orphan"] = {}
+
+
+def _add_orphan_whitelist(data: dict[str, Any]) -> None:
+    cast(list[str], data["whitelistProfiles"]).append("nope")
+
+
+def _add_orphan_xhttp(data: dict[str, Any]) -> None:
+    cast(dict[str, Any], data["xhttpExtra"])["nope"] = {}
+
+
+def _point_at_missing_node(data: dict[str, Any]) -> None:
+    cast(dict[str, Any], data["profileNodes"])["fast"] = "missing"
+
+
+def _make_json_not_object(data: dict[str, Any]) -> None:
+    cast(dict[str, Any], data["json_profiles"])["fast"] = "not-object"
+
+
+def _mix_profile_shapes(data: dict[str, Any]) -> None:
+    cast(dict[str, Any], data["profiles"])["fast"] = {"flag": ""}
+
+
+def _drop_profiles(data: dict[str, Any]) -> None:
+    data.pop("profiles")
+
+
 @pytest.mark.parametrize(
     ("mutate", "match"),
     [
-        (lambda data: data["flags"].pop("fast"), "flags is missing"),
-        (lambda data: data["json_profiles"].__setitem__("orphan", {}), "not in profiles"),
-        (lambda data: data["whitelistProfiles"].append("nope"), "whitelistProfiles"),
-        (lambda data: data["xhttpExtra"].__setitem__("nope", {}), "xhttpExtra"),
-        (lambda data: data["profileNodes"].__setitem__("fast", "missing"), "not a key of nodes"),
-        (lambda data: data["json_profiles"].__setitem__("fast", "not-object"), "must be an object"),
-        (lambda data: data["profiles"].__setitem__("fast", {"flag": ""}), "mixed config"),
-        (lambda data: data.pop("profiles"), "profiles must be an object"),
+        (_drop_flag, "flags is missing"),
+        (_add_orphan_profile, "not in profiles"),
+        (_add_orphan_whitelist, "whitelistProfiles"),
+        (_add_orphan_xhttp, "xhttpExtra"),
+        (_point_at_missing_node, "not a key of nodes"),
+        (_make_json_not_object, "must be an object"),
+        (_mix_profile_shapes, "mixed config"),
+        (_drop_profiles, "profiles must be an object"),
     ],
 )
 def test_refuses_without_writing(
     tmp_path: Path,
-    mutate: Any,
+    mutate: Callable[[dict[str, Any]], object],
     match: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:

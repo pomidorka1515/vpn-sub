@@ -112,11 +112,18 @@ jobs:
 
       - name: build ${{ matrix.name }}
         env:
-          NUITKA_CCACHE_BINARY: ccache
+          # Must be an existing file. Nuitka does os.path.exists() on this
+          # value and does not search PATH, so a bare "ccache" is ignored
+          # and the compiler runs uncached.
+          NUITKA_CCACHE_BINARY: /usr/bin/ccache
         run: |
-          # actions/cache restores to ~/.cache/ccache; point ccache there.
+          # actions/cache restores to ~/.cache/ccache. Nuitka honors
+          # CCACHE_DIR only when it is already in the environment; otherwise
+          # it stores objects under its own cache and the restore is unused.
           mkdir -p "$HOME/.cache/ccache"
           export CCACHE_DIR="$HOME/.cache/ccache"
+          export CCACHE_COMPILERCHECK=content
+          export CCACHE_BASEDIR="$GITHUB_WORKSPACE"
           ccache --set-config=max_size=2G
           ccache --zero-stats
           # GitHub ubuntu-22.04 runners are 2 vCPU. Nuitka's default job count
