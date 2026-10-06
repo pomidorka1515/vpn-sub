@@ -309,7 +309,7 @@ def test_polling_status_returns_limited_dynamic_state(
         app_thread_amount=1,
         app_threads=(),
     )
-    monkeypatch.setattr("api.admin.SysUtil.polling_info", lambda: host)
+    monkeypatch.setattr("api.admin.state.SysUtil.polling_info", lambda: host)
 
     panel = FakePanel(
         name="edge",

@@ -54,7 +54,7 @@ All path variables are **optional**.
 
 WebAPI prefix: `{SUB_HTTP_URL}/{SUB_URI}/webapi`.  
 Admin API prefix: `{SUB_HTTP_URL}/{SUB_URI}/{SUB_API_URI}`.  
-The admin API class is `src/api/admin.py` `Api`; its mount is
+The admin API class is `src/api/admin` `Api`; its mount is
 `/{uri}/{api_uri}`, not `/privapi` as a hardcoded name.  
 Empty `SUB_API_URI` is omitted, which hits `/api/...` instead of
 `/{api_uri}/api/...`.

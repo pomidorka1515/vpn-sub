@@ -1,23 +1,21 @@
-from typing import Callable, Concatenate, TYPE_CHECKING
+from typing import Callable, Concatenate
 from flask import Response
-if TYPE_CHECKING:
-    from ..common import BaseApi
 
 type Decorated[
-    API_T: BaseApi, 
-    **P = ..., 
+    API_T,
+    **P = ...,
     R = object
 ] = Callable[Concatenate[API_T, P], R]
 
 type DecoratedInject[
-    API_T: BaseApi, 
+    API_T,
     I: object,
-    **P = ..., 
+    **P = ...,
     R = object
 ] = Callable[Concatenate[API_T, I, P], R]
 
 type DecoratedReturn[
-    API_T: BaseApi,
+    API_T,
     **P = ...,
     R = object
 ] = Callable[Concatenate[API_T, P], WrappedReturn[R]]
