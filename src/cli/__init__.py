@@ -34,7 +34,7 @@ def dispatch(prog: str, probe: Callable[[], None], log: Logger) -> None:
         raise SystemExit(0)
     if flag == "--probe":
         probe()
-        return
+        raise SystemExit(0)
     if flag == "--update":
         from cli.updater import update
 
