@@ -660,14 +660,13 @@ class Api(BaseApi):
 
     @requires_admin_auth
     def config_set(self) -> ResponseType:
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict):
-            return err("Body must be a JSON object")
+        body = g.json_obj
         base = body.get("base")
         values = body.get("values")
         if not isinstance(base, str) or not isinstance(values, dict):
             return err("base must be a string and values must be an object")
-        if any(not isinstance(key, str) for key in values):
+
+        if any(not isinstance(key, str) for key in  cast(dict[object, object], values)):
             return err("values must be an object")
         base = base.strip().removeprefix("W/").strip().strip('"')
 
@@ -685,7 +684,7 @@ class Api(BaseApi):
                 if conflict is None:
                     status, changed, restart = apply_config_patch(
                         cast(MutableMapping[str, JsonValue], tx),
-                        values,
+                        values, # pyright: ignore
                     )
                     if status == "updated":
                         # Fail before commit. __exit__ validates again, then replaces.

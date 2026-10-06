@@ -9,6 +9,8 @@ from typing import Literal, cast
 from config import JsonValue
 from errors import ValidationError
 
+# pyright: reportUnnecessaryIsInstance=false
+
 # Captured once at process start. A change is reported; this module does not restart.
 RESTART_KEYS: tuple[str, ...] = (
     "uri",
@@ -81,9 +83,11 @@ def check_config_document(data: Mapping[str, object]) -> None:
     profiles = data.get("profiles")
     nodes = data.get("nodes")
     if isinstance(profiles, Mapping) and isinstance(nodes, Mapping):
+        profiles, nodes = cast(Mapping[str, object], profiles), cast(Mapping[str, object], nodes)
         for profile_id, profile in profiles.items():
             if not isinstance(profile, Mapping):
                 continue
+            profile = cast(Mapping[str, object], profile)
             node = profile.get("node")
             if isinstance(node, str) and node not in nodes:
                 raise ValidationError(
@@ -91,11 +95,11 @@ def check_config_document(data: Mapping[str, object]) -> None:
                 )
 
     panels = data.get("3xui")
-    if isinstance(panels, Mapping) and len(panels) == 0:
+    if isinstance(panels, Mapping) and len(cast(Mapping[str, object], panels)) == 0:
         raise ValidationError("3xui must contain at least one panel")
 
     publicbot = data.get("publicbot")
-    if isinstance(publicbot, Mapping) and not _nonempty_str(publicbot.get("token")):
+    if isinstance(publicbot, Mapping) and not _nonempty_str(cast(Mapping[str, object], publicbot).get("token")):
         raise ValidationError("publicbot.token must not be empty")
 
     if not _nonempty_str(data.get("api_token")):
@@ -104,8 +108,11 @@ def check_config_document(data: Mapping[str, object]) -> None:
     auth = data.get("api_admin_ui_auth")
     if (
         isinstance(auth, list)
-        and len(auth) == 2
-        and (not _nonempty_str(auth[0]) or not _nonempty_str(auth[1]))
+        and len(cast(list[object], auth)) == 2
+        and (
+            not _nonempty_str(cast(list[object], auth)[0]) or
+            not _nonempty_str(cast(list[object], auth)[1])
+        )
     ):
         raise ValidationError("api_admin_ui_auth entries must not be empty")
 
@@ -122,7 +129,7 @@ def apply_config_patch(
     """
     if not isinstance(values, Mapping):
         raise ValidationError("values must be an object")
-
+    
     required = set(REQUIRED_KEYS)
     for key in values:
         if key == "$schema":
@@ -162,9 +169,9 @@ def _is_json_value(value: object) -> bool:
     if isinstance(value, float):
         return math.isfinite(value)
     if isinstance(value, Mapping):
-        return all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
+        return all(isinstance(key, str) and _is_json_value(item) for key, item in cast(Mapping[str, object], value).items())
     if isinstance(value, list):
-        return all(_is_json_value(item) for item in value)
+        return all(_is_json_value(item) for item in cast(list[object], value))
     return False
 
 
@@ -173,10 +180,12 @@ def _json_equal(left: object, right: object) -> bool:
     if type(left) is not type(right):
         return False
     if isinstance(left, Mapping) and isinstance(right, Mapping):
+        left, right = cast(Mapping[object, object], left), cast(Mapping[object, object], right)
         if left.keys() != right.keys():
             return False
         return all(_json_equal(left[key], right[key]) for key in left)
     if isinstance(left, list) and isinstance(right, list):
+        left, right = cast(list[object], left), cast(list[object], right)
         if len(left) != len(right):
             return False
         return all(_json_equal(item, other) for item, other in zip(left, right, strict=True))
