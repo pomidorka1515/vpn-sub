@@ -13,6 +13,7 @@ AUDIT_VALUES = Literal[
     'user_update', 'user_update_params', 'user_add', 
     'user_update_uuid', 'user_consume_code', 
     'code_add', 'code_delete',
+    'config_update',
 
 ]
 

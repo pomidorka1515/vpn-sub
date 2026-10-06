@@ -2,18 +2,20 @@ from .common import BaseApi, Route, ResponseType, asset_version, web_lang_tables
 from .decorators import requires_args, requires_fields_strict, requires_admin_auth
 from .decorators.auth import ADMIN_UI_COOKIE, ADMIN_UI_SESSION_LEN, new_admin_ui_session
 from .decorators.rate_limit import rate_limit
+from .config_patch import apply_config_patch, config_etag
 
 from flask import Flask, Response, g, make_response, redirect, render_template, request
 from custom_types import JsonifyValue, PollingPanelInfo
 from util import ok, err, parse_bool, compare
 from sysutil import SysUtil
 from dataclasses import asdict
-from config import ConfigLike, LinesConfigLike
+from config import ConfigLike, JsonValue, LinesConfigLike
 from core import Subscription
 from bwatch import BWatch
 from loggers import Logger
+from collections.abc import MutableMapping
 from typing import cast, Literal
-from errors import DatabaseError, PanelUnavailableError
+from errors import ConfigError, DatabaseError, PanelUnavailableError, SchemaValidationError, ValidationError
 from random import random
 
 __all__ = ["Api"]
@@ -51,6 +53,8 @@ class Api(BaseApi):
         Route('GET', '/api/health', 'health'),
         Route('GET', '/api/operations/status', 'operation_status'),
         Route('POST', '/api/operations/rollback/resolve', 'operation_rollback_resolve'),
+        Route('GET', '/api/config/get', 'config_get'),
+        Route('POST', '/api/config/set', 'config_set'),
         Route('GET', '/api/teapot', 'teapot')
     ]
 
@@ -645,3 +649,72 @@ class Api(BaseApi):
 
     def teapot(self) -> ResponseType:
         return err("I'm a teapot", 418, obj={"teapot": True if random() < 0.01 else False }) # is it really an error?
+
+    @requires_admin_auth
+    def config_get(self) -> ResponseType:
+        data = cast(dict[str, JsonValue], self.cfg.copy())
+        response, code = ok(obj=cast(JsonifyValue, data))
+        response.headers["ETag"] = f'"{config_etag(data)}"'
+        response.headers["Cache-Control"] = "no-store"
+        return response, code
+
+    @requires_admin_auth
+    def config_set(self) -> ResponseType:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return err("Body must be a JSON object")
+        base = body.get("base")
+        values = body.get("values")
+        if not isinstance(base, str) or not isinstance(values, dict):
+            return err("base must be a string and values must be an object")
+        if any(not isinstance(key, str) for key in values):
+            return err("values must be an object")
+        base = base.strip().removeprefix("W/").strip().strip('"')
+
+        conflict: str | None = None
+        status: Literal["updated", "unchanged"] = "unchanged"
+        changed: list[str] = []
+        restart: list[str] = []
+        written: dict[str, JsonValue] | None = None
+        try:
+            with self.cfg.edit() as tx:
+                current = cast(dict[str, JsonValue], tx.copy())
+                current_hash = config_etag(current)
+                if current_hash != base:
+                    conflict = current_hash
+                if conflict is None:
+                    status, changed, restart = apply_config_patch(
+                        cast(MutableMapping[str, JsonValue], tx),
+                        values,
+                    )
+                    if status == "updated":
+                        # Fail before commit. __exit__ validates again, then replaces.
+                        self.cfg.validate_document(cast(dict[str, JsonValue], tx.copy()))
+                        written = cast(dict[str, JsonValue], tx.copy())
+        except ValidationError as exc:
+            return err(exc.message)
+        except SchemaValidationError as exc:
+            # Message includes the path. Do not log it: jsonschema echoes the value.
+            return err(exc.message)
+
+        if conflict is not None:
+            return err("Config changed since it was loaded", 409, {"base": conflict})
+
+        if status == "updated":
+            if written is None:
+                raise ConfigError("Config update was not committed")
+            # The file is already replaced. A backup failure must not turn a
+            # committed edit into a 500, and must not skip the audit.
+            try:
+                self.cfg.backup_data(written)
+            except Exception:
+                self.log.error("config backup failed after commit", exc_info=True)
+            self.sub.audit_svc.audit(
+                name="config_update",
+                info={"keys": changed},
+            )
+        new_hash = config_etag(cast(dict[str, JsonValue], self.cfg.copy()))
+        return ok(
+            "Updated" if status == "updated" else "Unchanged",
+            obj={"base": new_hash, "restart": restart},
+        )

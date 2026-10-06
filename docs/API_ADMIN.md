@@ -910,6 +910,93 @@ Response (success):
   
 ---  
   
+### GET /api/config/get  
+Description: Return the on-disk config object, including `$schema` and secrets. The caller already holds `api_token`. Do not log the body.  
+Authentication: header  
+Body: none  
+`obj` is the config itself, not a wrapper. The content revision is the `ETag` response header, a quoted SHA-256 hex of the canonical config, not a field of `obj`. The same algorithm is used by `POST /api/config/set`. `base` accepts the quoted header or the bare hex. A whitespace-only edit is not a new revision.  
+These routes are not rate-limited. The limiter fails closed when Redis errors, and `redis.url` is one of the fields this editor writes.  
+Response (success):  
+```jsonc  
+// HTTP 200  
+// ETag: "<sha-256 hex of the canonical config>"  
+{  
+    "success": true,  
+    "msg": null,  
+    "obj": { } // config.json object, compact, key order preserved  
+}  
+```  
+  
+---  
+  
+### POST /api/config/set  
+Description: Apply a top-level patch under the config lock, then validate the full document before any write. There is no restart endpoint.  
+Authentication: header  
+Body:  
+```jsonc  
+{  
+    "base": "",    // str, ETag from GET /api/config/get, quoted or bare (required)  
+    "values": { }  // object, top-level keys to replace (required)  
+}  
+```  
+Patch rules:  
+- An omitted key is unchanged.  
+- A key in `values` replaces that top-level value wholesale. There is no deep merge. Editing one inbound sends the whole `profiles` object.  
+- `null` deletes an optional key (`api_uri`, `fallback_domain`, `funny_strings`). `null` on a required key is HTTP 400.  
+- `$schema` is not patchable. A different value is HTTP 400. The on-disk value stays.  
+- Unknown top-level keys are HTTP 400.  
+- `base` is checked inside the edit lock after the file is reloaded. A mismatch is HTTP 409 and no write. There is no force flag.  
+- Failed validation leaves the file untouched. Disk stays indent 4.  
+- A patch that does not change the document does not write, back up, or audit.  
+Semantic checks, beyond the schema: every `profiles.*.node` must be a key of `nodes`. The document must also be one this process can boot: non-empty `3xui`, non-empty `publicbot.token`, non-empty `api_token`, and non-empty `api_admin_ui_auth` entries. The schema is not tightened for that.  
+A successful write is audited as `config_update`. `info.keys` is the changed key names, never the values.  
+`restart` lists the keys from the table below whose value actually changed. Empty means nothing to restart. The process is not restarted. Restart is an operator action (`systemctl restart`, graceful-timeout 30).  
+  
+| Key | Why a restart is required |  
+| --- | --- |  
+| `uri` | Flask routes are registered once. Link builders read `uri` live, so new links 404 until restart. |  
+| `api_uri` | Baked into the admin API prefix. `/admin/token` returns that cached root. |  
+| `api_token` | Copied at bootstrap. Saving a new token does not lock out this process; the next restart will. |  
+| `3xui` | Panel sessions copy address, port, token, and the rest at startup. |  
+| `redis` | The rate-limit client is configured once. |  
+| `bot` | Token is inside TeleBot. `admin_uids` is a detached copy of `whitelist`. |  
+| `publicbot` | Token captured at init. An empty token raises on next boot. |  
+| `panel_alert_cooldown` | Stored on the bandwidth watcher at init. |  
+| `salt` | Copied to the legacy salt. Argon2id passwords ignore it. After restart, leftover SHA256 hashes stop matching. |  
+  
+Live on the next request, no restart: `profiles`, `nodes`, `json_template`, `domain`, `fallback_domain`, `ping_check_url`, `provider_id`, `sub_name`, `bypass_packages`, `funny_strings`, `fingerprints`, and `api_admin_ui_auth` for the next login. The current admin UI cookie stays valid.  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{  
+    "success": true,  
+    "msg": "Updated",          // or "Unchanged"  
+    "obj": {  
+        "base": "",            // str, new ETag  
+        "restart": ["3xui"]    // array[str], changed restart keys, or []  
+    }  
+}  
+```  
+Response (error):  
+```jsonc  
+// HTTP 400  
+{  
+    "success": false,  
+    "msg": "Unknown key: nope", // or a schema path, or another patch error  
+    "obj": null  
+}  
+// HTTP 409  
+{  
+    "success": false,  
+    "msg": "Config changed since it was loaded",  
+    "obj": {  
+        "base": "" // str, current ETag; re-GET  
+    }  
+}  
+```  
+  
+---  
+  
 ### GET /api/teapot  
 Description: Verify the server cannot brew coffee because it is a teapot.  
 Authorization: None  

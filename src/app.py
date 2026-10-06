@@ -28,6 +28,7 @@ from util import err
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from wsgiref.types import WSGIApplication, StartResponse, WSGIEnvironment
+from flask.json.provider import DefaultJSONProvider
 
 threading.main_thread().name = "main"
 
@@ -42,6 +43,12 @@ __all__ = [
     "PanelTransportFactory",
     "create_application",
 ]
+
+
+class _OrderedJSONProvider(DefaultJSONProvider):
+    """Keep object key order. Flask 3 ignores JSON_SORT_KEYS."""
+
+    sort_keys = False
 
 
 class _ProxyGuard:
@@ -211,12 +218,14 @@ class Application:
 
 def _build_flask_app(options: AppOptions) -> Flask:
     flask_app = Flask(__name__)
+    flask_app.json_provider_class = _OrderedJSONProvider
+    flask_app.json = _OrderedJSONProvider(flask_app)
     # pages live in res/, not a flask-style templates/ directory
     # jinja_loader is a cached_property; assigning replaces the template lookup.
     cast(Any, flask_app).jinja_loader = FileSystemLoader(str(RES_DIR))
-    # should not be changed, 64KB is also plenty
-    flask_app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
-    flask_app.config["JSON_SORT_KEYS"] = False
+    # 1 MiB: the config editor posts whole xray profile objects. Werkzeug
+    # applies this before the view, so it cannot be per-route.
+    flask_app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
     if options.proxy_hops > 0:
         flask_app.wsgi_app = ProxyFix( # type: ignore[method-assign]
             flask_app.wsgi_app,

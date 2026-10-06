@@ -8,7 +8,7 @@ import threading
 from datetime import datetime, timezone
 
 from ._jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
-from ._constants import CONFIG_TYPES
+from ._constants import CONFIG_TYPES, JsonValue
 
 from loggers import Logger
 
@@ -25,6 +25,7 @@ def _do_backup(
     minify: bool = False,
     raw: bool = False,
     jsonc: bool = False,
+    data: dict[str, JsonValue] | None = None,
 ) -> None:
     """Take a snapshot and write it to a per-instance subdirectory.
 
@@ -35,6 +36,8 @@ def _do_backup(
              json.load() would raise JSONDecodeError on them.
         jsonc: When True, parse JSONC comments and trailing commas before
                writing the normalized backup.
+        data: When set, snapshot this document instead of reading path. The
+              scheduled thread leaves it unset so a backup still matches disk.
     """
     os.makedirs(instance_dir, exist_ok=True)
 
@@ -61,19 +64,24 @@ def _do_backup(
             raise
     else:
         backup_path = os.path.join(instance_dir, f"{timestamp}.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-            if jsonc:
-                content = _strip_jsonc_comments(content)
-                content = _strip_jsonc_trailing_commas(content)
-            data = json.loads(content)
-        except FileNotFoundError:
-            return
-        except json.JSONDecodeError as e:
-            if jsonc:
-                log.warning(f"skipping backup: failed to parse JSONC in {path}: {e}")
-            return
+        if data is None:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if jsonc:
+                    content = _strip_jsonc_comments(content)
+                    content = _strip_jsonc_trailing_commas(content)
+                loaded = json.loads(content)
+            except FileNotFoundError:
+                return
+            except json.JSONDecodeError as e:
+                if jsonc:
+                    log.warning(f"skipping backup: failed to parse JSONC in {path}: {e}")
+                return
+            if not isinstance(loaded, dict):
+                log.warning(f"skipping backup: {path} is not a JSON object")
+                return
+            data = loaded
         fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
         os.close(fd)
         try:
@@ -168,4 +176,3 @@ def _make_backup_thread(
                 failures += 1
                 log_failure(log, failures, retry_exc)
     return threading.Thread(target=loop, daemon=True, name="Backup")
-

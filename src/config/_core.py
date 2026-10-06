@@ -216,6 +216,15 @@ class Config(MutableMapping[str, JsonValue]):
         """
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
+        self._write_backup(None)
+
+    def backup_data(self, data: Mapping[str, JsonValue]) -> None:
+        """Snapshot a document that is not yet the file. Same retention as backup_now()."""
+        self._write_backup(dict(data))
+
+    def _write_backup(self, data: dict[str, JsonValue] | None) -> None:
+        if self._backup_dir is None:
+            raise ConfigError("backup_now() requires a backup_dir to be configured.")
         instance_dir = _instance_backup_dir(self._path, self._backup_dir)
         _do_backup(
             self._path,
@@ -224,8 +233,13 @@ class Config(MutableMapping[str, JsonValue]):
             self.log,
             minify=self._minify,
             jsonc=self._read_only_jsonc,
+            data=data,
         )
         _prune_backups(instance_dir, self._backup_retention, self.log, config_type='json')
+
+    def validate_document(self, data: Mapping[str, JsonValue]) -> None:
+        """Schema-check a document without writing. Raises SchemaValidationError."""
+        self._validate_schema(dict(data))
 
     def _raise_if_read_only(self) -> None:
         if self._read_only:

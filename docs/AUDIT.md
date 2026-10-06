@@ -2,7 +2,7 @@
   
 ## Introduction  
 Audit config location is usually `../audit.jsonl` unless edited.  
-There are currently **11** possible actions in the audit log.  
+There are currently **12** possible actions in the audit log.  
 The base format is:  
 ```json  
 {  
@@ -25,6 +25,7 @@ The base format is:
 - `user_consume_code`  
 - `code_add`  
 - `code_delete`  
+- `config_update`  
   
 ## Action info  
   
@@ -155,6 +156,16 @@ Description: A code was deleted.
 ```json  
 {  
     "code": "" // str, code name  
+}  
+```  
+  
+---  
+  
+### `config_update`  
+Description: The admin config editor wrote a top-level patch. Values are not logged.  
+```json  
+{  
+    "keys": ["sub_name"] // array[str], top-level keys whose value changed  
 }  
 ```  
   
