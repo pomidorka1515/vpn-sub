@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-import scripts_load
+import cli.scripts as scripts_load
 from loggers import Logger
-from scripts_load import load_scripts
+from cli.scripts import load_scripts
 
 
 class _Log(Logger):

@@ -44,8 +44,8 @@ package-dir = {"" = "src"}
 py-modules = [
     "app",
     "custom_types",
-    "util", "errors", "scripts_load",
-    "paths", "serve", "main", "wsgi", "help"
+    "util", "errors",
+    "paths", "serve", "main", "wsgi"
 ]
 packages = [
     "api",
@@ -63,6 +63,7 @@ packages = [
     "bwatch",
     "session",
     "sysutil",
+    "cli",
 ]
 
 # ---------------------------------------------------------------------------
@@ -91,10 +92,8 @@ files = [
     "src/util.py",
     "src/sysutil/",
     "src/paths.py",
-    "src/updater.py",
+    "src/cli/",
     "src/version.py",
-    "src/scripts_load.py",
-    "src/help.py",
     "src/errors.py",
     "src/builders/",
     "src/fonts.py",
@@ -179,7 +178,7 @@ include = [
     "src/session/",
     "src/chart/",
     "src/paths.py",
-    "src/updater.py",
+    "src/cli/",
     "src/version.py",
     "src/bwatch/",
     "src/notify/",
@@ -187,8 +186,6 @@ include = [
     "src/app.py",
     "src/util.py",
     "src/errors.py",
-    "src/scripts_load.py",
-    "src/help.py",
     "src/builders/",
     "src/fonts.py",
     "src/tests/",

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -231,7 +230,7 @@ async def _run() -> None:
 
 
 def main() -> None:
-    from updater import notice
+    from cli.updater import notice
 
     notice(log)
     asyncio.run(_run())
@@ -255,20 +254,7 @@ def probe() -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
-        from help import print_help
+    from cli import dispatch
 
-        print_help("vpn-sub-discord")
-        raise SystemExit(0)
-    if len(sys.argv) > 1 and sys.argv[1] == "--probe":
-        probe()
-    elif len(sys.argv) > 1 and sys.argv[1] == "--update":
-        from updater import update
-
-        raise SystemExit(update(log))
-    elif len(sys.argv) > 1 and sys.argv[1] == "--load-scripts":
-        from scripts_load import load_scripts
-
-        raise SystemExit(load_scripts(log))
-    else:
-        main()
+    dispatch("vpn-sub-discord", probe, log)
+    main()

@@ -11,9 +11,9 @@ from typing import Any
 
 import pytest
 
-import updater
+import cli.updater as updater
 from loggers import Logger
-from updater import notice, update
+from cli.updater import notice, update
 
 
 class _Log(Logger):

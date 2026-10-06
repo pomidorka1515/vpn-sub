@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from help import print_help, usage
+from cli.help import print_help, usage
 from version import VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,7 +47,7 @@ def test_main_short_help_exits(monkeypatch: pytest.MonkeyPatch, capsys: pytest.C
 
 
 def test_discord_help_exits_before_boot(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.syspath_prepend(str(DISCORD))
+    monkeypatch.syspath_prepend(str(DISCORD)) # pyright: ignore
     monkeypatch.setattr(sys, "argv", ["vpn-sub-discord", "--help"])
     with pytest.raises(SystemExit) as caught:
         runpy.run_path(str(DISCORD / "runtime.py"), run_name="__main__")

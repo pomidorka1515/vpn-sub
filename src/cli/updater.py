@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from requests import Response
 
 from loggers import Logger
-from paths import program_dir
+from paths import compiled, program_dir
 from version import VERSION
 
 __all__ = ["notice", "update"]
@@ -67,7 +67,7 @@ def notice(log: Logger) -> None:
     A timeout or a bad response is not an error. Boot must not wait on GitHub
     and must not ask a question: a systemd unit has no TTY to answer it.
     """
-    if not _compiled():
+    if not compiled():
         return
     try:
         release = _latest(NOTICE_TIMEOUT)
@@ -87,7 +87,7 @@ def update(log: Logger) -> int:
     after they are gone. Does not stop or start anything itself. Returns a
     process exit code.
     """
-    if not _compiled():
+    if not compiled():
         log.error("updater only runs from the vpn-sub binary")
         return 1
     if not _interactive():
@@ -155,10 +155,6 @@ def update(log: Logger) -> int:
         return 1
     log.info(f"updated to {release.tag}")
     return 0
-
-
-def _compiled() -> bool:
-    return sys.modules["__main__"].__dict__.get("__compiled__") is not None
 
 
 def _interactive() -> bool:

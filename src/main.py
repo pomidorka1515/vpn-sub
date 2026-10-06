@@ -8,8 +8,6 @@ no interpreter and no config file to hand it.
 
 from __future__ import annotations
 
-import sys
-
 from gunicorn.app.base import BaseApplication
 from gunicorn.util import import_app
 from wsgiref.types import WSGIApplication
@@ -30,8 +28,8 @@ class Application(BaseApplication):
 
 
 def main() -> None:
+    from cli.updater import notice
     from loggers import Logger
-    from updater import notice
 
     notice(Logger("updater"))
     Application("%(prog)s", prog="vpn-sub").run()
@@ -61,22 +59,8 @@ def probe() -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
-        from help import print_help
+    from cli import dispatch
+    from loggers import Logger
 
-        print_help("vpn-sub")
-        raise SystemExit(0)
-    if len(sys.argv) > 1 and sys.argv[1] == "--probe":
-        probe()
-    elif len(sys.argv) > 1 and sys.argv[1] == "--update":
-        from loggers import Logger
-        from updater import update
-
-        raise SystemExit(update(Logger("updater")))
-    elif len(sys.argv) > 1 and sys.argv[1] == "--load-scripts":
-        from loggers import Logger
-        from scripts_load import load_scripts
-
-        raise SystemExit(load_scripts(Logger("scripts")))
-    else:
-        main()
+    dispatch("vpn-sub", probe, Logger("updater"))
+    main()
