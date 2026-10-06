@@ -77,16 +77,25 @@ def test_description_fills_active_and_disabled_slots() -> None:
 
 def _link_config() -> dict[str, Any]:
     return {
-        "profiles": {"fast": ["Fast", "Быстрый"], "wl": ["WL", "ВЛ"]},
-        "whitelistProfiles": ["wl"],
-        "masterLinks": {
-            "fast": "vless://UUID@DOMAIN:443?fp=FINGERPRINT&extra=EXTRA#NAME",
-            "wl": "vless://UUID@DOMAIN:443?fp=FINGERPRINT#NAME",
+        "profiles": {
+            "fast": {
+                "name": ["Fast", "Быстрый"],
+                "whitelist": False,
+                "masterLink": "vless://UUID@DOMAIN:443?fp=FINGERPRINT&extra=EXTRA#NAME",
+                "flag": "⚡",
+                "node": "edge",
+                "xhttpExtra": {"path": "/x"},
+            },
+            "wl": {
+                "name": ["WL", "ВЛ"],
+                "whitelist": True,
+                "masterLink": "vless://UUID@DOMAIN:443?fp=FINGERPRINT#NAME",
+                "flag": "🛡",
+                "node": "wl-node",
+                "xhttpExtra": {},
+            },
         },
-        "flags": {"fast": "⚡", "wl": "🛡"},
-        "profileNodes": {"fast": "edge", "wl": "wl-node"},
         "nodes": {"edge": "edge.example", "wl-node": "wl.example"},
-        "xhttpExtra": {"fast": {"path": "/x"}},
     }
 
 
@@ -112,7 +121,7 @@ def test_link_array_filters_profiles_and_encodes_extra() -> None:
     assert base64.b64decode(disabled) == b""
 
     config = _link_config()
-    config["xhttpExtra"] = {}
+    config["profiles"]["fast"]["xhttpExtra"] = {}
     encoded = build_link_array(
         config, status=True, statusWl=True, lang="en", is_happ=False,
         user_uuid="uuid", bandwidths=_bandwidth(), need_dummy_link=False,
@@ -145,23 +154,31 @@ def _profile(stream: dict[str, Any]) -> dict[str, Any]:
 def test_json_profiles_fill_transport_hosts() -> None:
     cfg = {
         "json_template": _json_template(),
-        "profiles": {"tls": ["TLS", "ТЛС"], "ws": ["WS", "ВС"]},
-        "flags": {"tls": "", "ws": ""},
-        "profileNodes": {"tls": "edge", "ws": "edge"},
-        "nodes": {"edge": "edge.example"},
-        "shortProfileDescriptions": {"tls": ["tls en", "tls ru"], "ws": ["ws en", "ws ru"]},
-        "json_profiles": {
-            "tls": _profile({
-                "tlsSettings": {"serverName": "", "fingerprint": ""},
-                "xhttpSettings": {"host": ""},
-                "grpcSettings": {"authority": ""},
-                "realitySettings": {"fingerprint": ""},
-            }),
-            "ws": _profile({
-                "wsSettings": {},
-                "httpupgradeSettings": {"host": ""},
-            }),
+        "profiles": {
+            "tls": {
+                "name": ["TLS", "ТЛС"],
+                "flag": "",
+                "node": "edge",
+                "shortProfileDescription": ["tls en", "tls ru"],
+                "json": _profile({
+                    "tlsSettings": {"serverName": "", "fingerprint": ""},
+                    "xhttpSettings": {"host": ""},
+                    "grpcSettings": {"authority": ""},
+                    "realitySettings": {"fingerprint": ""},
+                }),
+            },
+            "ws": {
+                "name": ["WS", "ВС"],
+                "flag": "",
+                "node": "edge",
+                "shortProfileDescription": ["ws en", "ws ru"],
+                "json": _profile({
+                    "wsSettings": {},
+                    "httpupgradeSettings": {"host": ""},
+                }),
+            },
         },
+        "nodes": {"edge": "edge.example"},
     }
     built = build_json(cfg, "user-uuid", "en", "chrome")
     tls = built[0]["outbounds"]

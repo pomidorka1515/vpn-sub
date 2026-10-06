@@ -6,9 +6,7 @@
     "required": [
         "uri", "api_token", "api_admin_ui_auth", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot",
         "json_template", "bypass_packages", "domain", "ping_check_url",
-        "publicbot", "3xui", "sub_name", "flags",
-        "profiles", "json_profiles", "profileDescriptions", "whitelistProfiles",
-        "masterLinks", "profileNodes", "shortProfileDescriptions", "redis"
+        "publicbot", "3xui", "sub_name", "profiles", "redis"
     ],
     "additionalProperties": false,
     "properties": {
@@ -145,46 +143,10 @@
             }
         },
 
-        "flags": {
-            "type": "object",
-            "additionalProperties": { "type": "string" }
-        },
-
         "profiles": {
             "type": "object",
-            "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
-        },
-        
-        "json_profiles": { "type": "object" },
-
-        "profileDescriptions": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
-        },
-
-        "whitelistProfiles": {
-            "type": "array",
-            "items": { "type": "string" }
-        },
-
-        "xhttpExtra": {
-            "type": "object",
-            "additionalProperties": { "type": "object" }
-        },
-
-        "masterLinks": {
-            "type": "object",
-            "additionalProperties": { "type": "string" }
-        },
-
-        "profileNodes": {
-            "type": "object",
-            "additionalProperties": { "type": "string" }
-        },
-
-        "shortProfileDescriptions": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#/$defs/bilingualPair" }
+            "description": "One object per inbound. The map key is the inbound id.",
+            "additionalProperties": { "$ref": "#/$defs/profile" }
         },
 
         "redis": {
@@ -213,6 +175,28 @@
             "items": { "type": "string" },
             "minItems": 2,
             "maxItems": 2
+        },
+        "profile": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "flag", "name", "json", "description", "whitelist",
+                "xhttpExtra", "masterLink", "node", "shortProfileDescription"
+            ],
+            "properties": {
+                "flag": { "type": "string", "description": "Emoji shown beside the profile name. Empty is valid." },
+                "name": { "$ref": "#/$defs/bilingualPair" },
+                "json": { "type": "object", "description": "Xray outbound. Not schema-checked beyond being an object." },
+                "description": { "$ref": "#/$defs/bilingualPair" },
+                "whitelist": { "type": "boolean" },
+                "xhttpExtra": { "type": "object" },
+                "masterLink": { "type": "string" },
+                "node": {
+                    "type": "string",
+                    "description": "Must be a key of the top-level nodes object. JSON Schema cannot express that; a wrong key raises KeyError at runtime."
+                },
+                "shortProfileDescription": { "$ref": "#/$defs/bilingualPair" }
+            }
         },
         "langStrings": {
             "type": "object",

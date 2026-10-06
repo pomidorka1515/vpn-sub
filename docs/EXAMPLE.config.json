@@ -67,35 +67,23 @@
         }
     },
     "sub_name": "pomi's VPN",
-    "flags": {
-        "profile1": "🇫🇮"
-    },
     "profiles": {
-        "profile1": ["English", "Russian"]
-    },
-    "json_profiles": {
-        "wstls": {
-            "tag": "proxy",
-            "protocol": "vless",
-            "settings": {},
-            "streamSettings": {}
+        "profile1": {
+            "flag": "🇫🇮",
+            "name": ["English", "Russian"],
+            "json": {
+                "tag": "proxy",
+                "protocol": "vless",
+                "settings": {},
+                "streamSettings": {}
+            },
+            "description": ["English", "Russian"],
+            "whitelist": false,
+            "xhttpExtra": {},
+            "masterLink": "vless://...",
+            "node": "n1",
+            "shortProfileDescription": ["English", "Russian"]
         }
-    },
-    "profileDescriptions": {
-        "profile1": ["English", "Russian"]
-    },
-    "whitelistProfiles": [
-        "profile1"
-    ],
-    "xhttpExtra": {},
-    "masterLinks": {
-        "profile1": "vless://..."
-    },
-    "profileNodes": {
-        "profile1": "n1"
-    },
-    "shortProfileDescriptions": {
-        "profile1": ["English", "Russian"]
     },
     "redis": {
         "url": "redis://127.0.0.1:6379/0"

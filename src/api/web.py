@@ -244,9 +244,9 @@ class WebApi(BaseApi):
 
         index = 0 if lang == 'en' else 1
         obj: dict[str, str] = {}
-        for i_name, name in self.cfg['profiles'].items():
-            name = name[index]
-            desc = self.cfg['profileDescriptions'][i_name][index]
+        for profile in self.cfg['profiles'].values():
+            name = profile['name'][index]
+            desc = profile['description'][index]
             obj[name] = desc
         return ok(obj=obj)
     @requires_webapi_auth

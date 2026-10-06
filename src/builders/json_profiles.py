@@ -20,10 +20,10 @@ def build_json(
     index = 0 if lang == "en" else 1
     profiles: list[dict[str, object]] = []
 
-    for key, names in cfg["profiles"].items():
-        node = cfg["profileNodes"][key]
+    for profile in cfg["profiles"].values():
+        node = profile["node"]
         domain = cfg["nodes"][node]
-        outbound: dict[str, Any] = cfg["json_profiles"][key]
+        outbound: dict[str, Any] = profile["json"]
         vnext: dict[str, Any] = outbound["settings"]["vnext"][0]
         vnext["users"][0]["id"] = user_uuid
         vnext["address"] = domain
@@ -49,11 +49,11 @@ def build_json(
             upgrade["host"] = domain
 
         result: dict[str, Any] = copy.deepcopy(cfg["json_template"])
-        result["remarks"] = cfg["flags"][key] + names[index]
+        result["remarks"] = profile["flag"] + profile["name"][index]
         result["outbounds"][0] = outbound
         # only shown when a provider id is set, but written regardless
         meta = result.setdefault("meta", {})
-        meta["serverDescription"] = cfg["shortProfileDescriptions"][key][index]
+        meta["serverDescription"] = profile["shortProfileDescription"][index]
         profiles.append(result)
 
     return profiles

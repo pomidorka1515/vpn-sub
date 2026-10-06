@@ -27,22 +27,22 @@ def build_link_array(
     """Build a base64-encoded link array."""
     generated_links: deque[str] = deque()
 
-    for p_key, p_name in cfg['profiles'].items():
-        if p_key in cfg['whitelistProfiles'] and not statusWl:
+    for profile in cfg['profiles'].values():
+        if profile['whitelist'] and not statusWl:
             continue
         if not status:
             break
-        link: str = cfg['masterLinks'][p_key]
-        flag: str = cfg['flags'][p_key] if is_happ else ""
-        node: str = cfg['profileNodes'][p_key]
+        link: str = profile['masterLink']
+        flag: str = profile['flag'] if is_happ else ""
+        node: str = profile['node']
         domain: str = cfg['nodes'][node]
-        name: str = flag + p_name[0 if lang == "en" else 1]
+        name: str = flag + profile['name'][0 if lang == "en" else 1]
         link = link.replace("DOMAIN", domain)
         link = link.replace("FINGERPRINT", fingerprint)
         link = link.replace("UUID", user_uuid)
         link = link.replace("NAME", name)
         if "EXTRA" in link:
-            extra_data = cfg['xhttpExtra'].get(p_key)
+            extra_data = profile['xhttpExtra']
             if extra_data:
                 json_str = json.dumps(extra_data, separators=(',', ':'))
                 encoded_extra = urllib.parse.quote(json_str)

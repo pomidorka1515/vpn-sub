@@ -197,6 +197,22 @@ venv/bin/python scripts/reconcile_clients.py          # dry-run report
 venv/bin/python scripts/reconcile_clients.py --apply  # merge legacy clients
 ```
 
+### Upgrading config to v6
+
+v6 folds flags, links, nodes, and the other per-inbound maps into one object  
+per profile. There is no compat path: the first start fails schema validation  
+until `config.json` has been migrated. `vpn-sub --update` replaces the binary  
+and does not touch the file. Stop the service first — a running v5 process  
+reloads on file change and will misread the new objects.
+
+```bash
+python scripts/migrate_profiles.py            # dry-run
+python scripts/migrate_profiles.py --apply    # rewrite config.json
+```
+
+The original is copied to `config.json.pre-v6` beside the file. A second  
+`--apply` leaves that backup alone.
+
 ### Environment Variables
 
 All path variables are **optional**. If omitted, runtime data defaults to the

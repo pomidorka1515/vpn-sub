@@ -154,8 +154,16 @@ def routing() -> tuple[PublicTextRoutingMixin, MagicMock, MagicMock]:
     mixin.sub = cast(Any, subscription)
     mixin.TEXTS = TEXTS
     mixin.cfg = cast(Any, {
-        "profileDescriptions": {"fast": ["fast en", "fast ru"]},
-        "profiles": {"fast": ["Fast", "Быстрый"], "broken": ["Broken", "Сломан"]},
+        "profiles": {
+            "fast": {
+                "name": ["Fast", "Быстрый"],
+                "description": ["fast en", "fast ru"],
+            },
+            "broken": {
+                "name": ["Broken", "Сломан"],
+                "description": ["broken en", "broken ru"],
+            },
+        },
     })
     mixin.get_lang = MagicMock(return_value="en")  # type: ignore[method-assign]
     mixin.get_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]

@@ -122,8 +122,12 @@ def _wire(mixin: Any) -> tuple[Any, MagicMock, MagicMock]:
         "fingerprints": ["chrome", "firefox"],
         "uri": "/sub/",
         "domain": "https://example.test/",
-        "profileDescriptions": {"fast": ["fast en", "fast ru"]},
-        "profiles": {"fast": ["Fast", "Быстрый"]},
+        "profiles": {
+            "fast": {
+                "name": ["Fast", "Быстрый"],
+                "description": ["fast en", "fast ru"],
+            },
+        },
     })
     mixin.get_lang = MagicMock(return_value="en")
     mixin.get_menu = MagicMock(return_value="menu")

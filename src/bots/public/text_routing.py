@@ -155,10 +155,10 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     def _handle_help(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
         descriptions = ""
-        for profile, desc in self.cfg["profileDescriptions"].items():
+        for profile in self.cfg["profiles"].values():
             index = 0 if lang == "en" else 1
-            profile_name = self.cfg["profiles"][profile][index]
-            profile_desc = desc[index]
+            profile_name = profile["name"][index]
+            profile_desc = profile["description"][index]
             descriptions += f"<code>{profile_name}</code> — {profile_desc}\n"
         self.bot.send_message(
             message.chat.id,
