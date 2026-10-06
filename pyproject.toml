@@ -44,7 +44,7 @@ package-dir = {"" = "src"}
 py-modules = [
     "app",
     "custom_types",
-    "util", "errors",
+    "util", "errors", "scripts_load",
     "paths", "serve", "main", "wsgi"
 ]
 packages = [
@@ -93,6 +93,7 @@ files = [
     "src/paths.py",
     "src/updater.py",
     "src/version.py",
+    "src/scripts_load.py",
     "src/errors.py",
     "src/builders/",
     "src/fonts.py",
@@ -185,6 +186,7 @@ include = [
     "src/app.py",
     "src/util.py",
     "src/errors.py",
+    "src/scripts_load.py",
     "src/builders/",
     "src/fonts.py",
     "src/tests/",

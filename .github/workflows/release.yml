@@ -24,6 +24,7 @@ jobs:
               --include-module=paths
               --include-module=updater
               --include-module=version
+              --include-module=scripts_load
               --include-module=gunicorn.workers.gthread
               --include-data-dir=res=res
               --include-data-files=lang.jsonc=lang.jsonc
@@ -53,6 +54,7 @@ jobs:
               --include-module=paths
               --include-module=updater
               --include-module=version
+              --include-module=scripts_load
               --include-data-files=src/discord/lang.jsonc=lang.jsonc
               --include-data-files=src/discord/config.schema.json=config.schema.json
     steps:

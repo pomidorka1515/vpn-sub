@@ -366,6 +366,14 @@ they are gone. It does not stop or start them. A checkout (`python -m main`)
 refuses. At boot a compiled binary logs one line when a newer release exists. It
 does not download anything and it does not prompt.
 
+`vpn-sub --load-scripts` and `vpn-sub-discord --load-scripts` write the packed
+`config.schema.json` beside the binary and download `scripts/` from the tag
+this binary was built from. They only run from a compiled binary. A checkout
+already has both and refuses. An existing file is replaced. The schema is the
+one packed into that binary, so the main binary and the Discord binary each
+write their own. The scripts are not packed; they are fetched and checked
+against the tag's blob sha before they are written.
+
 A compiled binary ignores `$schema` and validates `config.json` against the
 packed `config.schema.json`. A checkout still resolves `$schema` relative to the
 config file. From `data/config.json` the example `../config.schema.json` works

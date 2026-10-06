@@ -261,5 +261,9 @@ if __name__ == "__main__":
         from updater import update
 
         raise SystemExit(update(log))
+    elif len(sys.argv) > 1 and sys.argv[1] == "--load-scripts":
+        from scripts_load import load_scripts
+
+        raise SystemExit(load_scripts(log))
     else:
         main()

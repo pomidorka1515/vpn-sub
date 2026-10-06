@@ -98,3 +98,7 @@ require `discord.json`. A compiled binary ignores `$schema` and validates
 against the packed schema. A checkout still resolves `$schema` relative to
 `data/discord.json` (`../src/discord/config.schema.json`). If you move `data/`,
 copy the schema next to the config or fix `$schema`.
+
+`vpn-sub-discord --load-scripts` writes that packed schema beside the binary
+and downloads `scripts/` from the tag it was built from. Same flag as
+`vpn-sub --load-scripts`. A checkout refuses.
