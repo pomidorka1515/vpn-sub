@@ -250,7 +250,7 @@ def _running(log: Logger, paths: dict[str, Path]) -> list[Running] | None:
         return None
     for unit, pid, name in units:
         found[pid] = Running(name=name, pid=pid, unit=unit)
-    for pid, name in _processes(wanted):
+    for pid, name in _processes(wanted, _self_pids(wanted)):
         found.setdefault(pid, Running(name=name, pid=pid, unit=None))
     return [found[pid] for pid in sorted(found)]
 
@@ -341,12 +341,11 @@ def _exec_path(text: str) -> str | None:
     return None
 
 
-def _processes(wanted: dict[Path, str]) -> list[tuple[int, str]]:
+def _processes(wanted: dict[Path, str], own: set[int]) -> list[tuple[int, str]]:
     found: list[tuple[int, str]] = []
-    own = os.getpid()
     for entry in Path("/proc").iterdir():
         pid = _pid(entry.name)
-        if pid is None or pid == own:
+        if pid is None or pid in own:
             continue
         name = _process_name(entry, wanted)
         if name is not None:
@@ -390,6 +389,26 @@ def _argv0(entry: Path) -> str:
     except OSError:
         return ""
     return raw.split(b"\0", 1)[0].decode("utf-8", "replace")
+
+
+def _self_pids(wanted: dict[Path, str]) -> set[int]:
+    """PIDs of this update command, including the onefile bootstrap.
+
+    ``os.getpid()`` is the unpacked child. The parent that executed the
+    installed stub stays alive until this process exits, and ``/proc/<pid>/exe``
+    is the binary being replaced. Counting it makes the second check always
+    fail after the services are stopped. ``NUITKA_ONEFILE_PARENT`` is that
+    parent; ``getppid`` covers a bootstrap that did not export it. A parent
+    counts only when it is one of the installed binaries, so a service that
+    happens to be this process's parent is still reported.
+    """
+    pids = {os.getpid()}
+    for pid in (os.getppid(), _pid(os.environ.get("NUITKA_ONEFILE_PARENT", ""))):
+        if pid is None or pid <= 1 or pid in pids:
+            continue
+        if _process_name(Path("/proc") / str(pid), wanted) is not None:
+            pids.add(pid)
+    return pids
 
 
 def _download(log: Logger, release: Release, present: dict[str, Path]) -> dict[str, Path] | None:
