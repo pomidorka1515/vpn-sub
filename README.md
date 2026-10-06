@@ -358,6 +358,9 @@ refuses that ABI.
 opened. They do not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.
 
+`vpn-sub --help` and `vpn-sub-discord --help` print usage and exit. They do not  
+boot the service. `-h` is the same flag. A checkout accepts it too.
+
 `vpn-sub --update` and `vpn-sub-discord --update` replace the installed binaries
 from the latest GitHub release of `pomidorka1515/vpn-sub`. They only run from a
 compiled binary, and only in a terminal. The command asks before it downloads.

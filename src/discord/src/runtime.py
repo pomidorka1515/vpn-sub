@@ -255,6 +255,11 @@ def probe() -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
+        from help import print_help
+
+        print_help("vpn-sub-discord")
+        raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == "--probe":
         probe()
     elif len(sys.argv) > 1 and sys.argv[1] == "--update":

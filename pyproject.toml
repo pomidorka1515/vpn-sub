@@ -45,7 +45,7 @@ py-modules = [
     "app",
     "custom_types",
     "util", "errors", "scripts_load",
-    "paths", "serve", "main", "wsgi"
+    "paths", "serve", "main", "wsgi", "help"
 ]
 packages = [
     "api",
@@ -94,6 +94,7 @@ files = [
     "src/updater.py",
     "src/version.py",
     "src/scripts_load.py",
+    "src/help.py",
     "src/errors.py",
     "src/builders/",
     "src/fonts.py",
@@ -187,6 +188,7 @@ include = [
     "src/util.py",
     "src/errors.py",
     "src/scripts_load.py",
+    "src/help.py",
     "src/builders/",
     "src/fonts.py",
     "src/tests/",
