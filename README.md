@@ -83,17 +83,6 @@ Designed to run on a single small VPS.
   belong on the reverse proxy. Application rate limits live in Redis.
 - Python 3.12+ to start. Built for 3.13+.
 
-## Core principles
-
-- **"No tag on commit = don't expect stability."**
-  - Untagged commits on `main` are rolling development. If you want stability,
-    only check out released tags.
-- **"Works fine on my machine"**
-  - Self-explanatory. This is primarily built and tested for my own setup.
-  - Doesn't start? Something broke? Feel free to open an issue and I'll likely
-    look into it when I can.
-- **Tests are intended only for me.**
-  - They contain hardcoded paths, etc. That's intentional.
 
 ## Architecture
 
@@ -174,6 +163,11 @@ default port, not something this app chooses:
 Start Redis before gunicorn. Startup pings that URL and exits if it is down. If
 Redis dies later, rate-limited routes return 429.
 
+### Scripts
+To load scripts for migration (3x-ui, config, etc), run `./vpn-sub --load-scripts`.
+Works from either binary. The scripts themselves do not depend on anything,
+only stdlib — use system python to run them.
+
 ### 3x-ui panel auth
 
 Each panel in `3xui.*` authenticates with an **admin-scoped API token**
@@ -193,8 +187,8 @@ one client per user with `email == username`). Upgrading the panel from 2.x?
 After the panel upgrade, run the one-time reconciliation (service stopped):
 
 ```bash
-venv/bin/python scripts/reconcile_clients.py          # dry-run report
-venv/bin/python scripts/reconcile_clients.py --apply  # merge legacy clients
+python scripts/reconcile_clients.py          # dry-run report
+python scripts/reconcile_clients.py --apply  # merge legacy clients
 ```
 
 ### Upgrading config to v6
