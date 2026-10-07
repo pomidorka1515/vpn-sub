@@ -7,6 +7,7 @@ import uuid
 import pytest
 from argon2 import PasswordHasher
 from flask import Flask
+from flask.testing import FlaskClient
 from pathlib import Path
 from flask.json.provider import DefaultJSONProvider
 
@@ -84,7 +85,7 @@ def web_api(database: Database, flask_app: Flask) -> tuple[Flask, Database]:
     return flask_app, database
 
 
-def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask) -> None:
+def _prefixed_client(database: Database, flask_app: Flask) -> FlaskClient:
     subscription = make_subscription(database, app=flask_app, uri="custom", lang_cfg=_web_lang_cfg())
     database.create_user(
         username="alice", uuid=str(uuid.uuid4()), token="a" * 40,
@@ -97,11 +98,19 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
         sub=subscription,
         bw=make_watch(database, subscription),
     )
-    client = flask_app.test_client()
+    return flask_app.test_client()
+
+
+def test_prefixed_panel_redirects_unauthenticated(database: Database, flask_app: Flask) -> None:
+    client = _prefixed_client(database, flask_app)
 
     denied = client.get("/custom/panel")
     assert denied.status_code == 302
     assert denied.headers["Location"].endswith("/custom/auth")
+
+
+def test_prefixed_pages_embed_uri(database: Database, flask_app: Flask) -> None:
+    client = _prefixed_client(database, flask_app)
 
     auth = client.get("/custom/auth")
     assert auth.status_code == 200
@@ -126,6 +135,10 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert b'src="/custom/history.js?v=' in history.data
     assert b"window.CHART_JS = '/custom/chart.umd.min.js?v=" in history.data
     assert b"jsdelivr" not in history.data
+
+
+def test_prefixed_static_assets(database: Database, flask_app: Flask) -> None:
+    client = _prefixed_client(database, flask_app)
 
     css = client.get("/custom/common.css")
     assert css.status_code == 200
@@ -160,6 +173,10 @@ def test_webapi_uses_configured_uri_prefix(database: Database, flask_app: Flask)
     assert chart_js.mimetype == "text/javascript"
     assert b"Chart.js v4.4.1" in chart_js.data
     assert "immutable" in chart_js.headers["Cache-Control"]
+
+
+def test_prefixed_admin_modules(database: Database, flask_app: Flask) -> None:
+    client = _prefixed_client(database, flask_app)
 
     admin_js = client.get("/custom/admin/main.js")
     assert admin_js.status_code == 200
