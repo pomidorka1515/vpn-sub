@@ -5,7 +5,7 @@ from typing import (
 from types import TracebackType
 from collections.abc import Mapping, MutableMapping, Iterator, Iterable, Sequence
 
-from ._constants import JsonValue, JsonDict
+from .constants import JsonValue, JsonDict
 
 class MISSING_TYPE:
     """Sentinel for missing default values."""

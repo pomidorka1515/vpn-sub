@@ -7,13 +7,13 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, overload, cast, Callable, Literal
 
-from ._constants import JsonValue, SYNC_MODES
-from ._protocols import MISSING, MISSING_TYPE, MissingValue
-from ._protocols import _ConfigTransactionLike
-from ._atomic import FileSignature, _file_signature, _locked_file, _atomic_write_json, resolve_lockfile_path
-from ._backup import _prune_backups, _do_backup, _make_backup_thread, _instance_backup_dir
-from ._schema import _load_schema, _validate_schema, _read_json_object
-from ._transaction import _ConfigTransaction
+from .constants import JsonValue, SYNC_MODES
+from .protocols import MISSING, MISSING_TYPE, MissingValue
+from .protocols import _ConfigTransactionLike
+from .atomic import FileSignature, _file_signature, _locked_file, _atomic_write_json, resolve_lockfile_path
+from .backup import _prune_backups, _do_backup, _make_backup_thread, _instance_backup_dir
+from .schema import _load_schema, _validate_schema, _read_json_object
+from .transaction import _ConfigTransaction
 
 from errors import ConfigError, ReadOnlyConfigError
 from loggers import Logger

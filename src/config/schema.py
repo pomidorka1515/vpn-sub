@@ -4,12 +4,12 @@ import os
 
 from collections.abc import Mapping
 from typing import cast, TYPE_CHECKING
-from ._constants import JsonValue
-from ._atomic import _stat_signature
-from ._jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
+from .constants import JsonValue
+from .atomic import _stat_signature
+from .jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
 
 if TYPE_CHECKING:
-    from ._core import Config
+    from .core import Config
 
 from errors import SchemaValidationError, ConfigError, FileCorruptionError
 

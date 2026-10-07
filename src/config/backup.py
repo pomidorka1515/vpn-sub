@@ -8,8 +8,8 @@ import threading
 from datetime import datetime, timezone
 from typing import cast, Any
 
-from ._jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
-from ._constants import CONFIG_TYPES, JsonValue
+from .jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
+from .constants import CONFIG_TYPES, JsonValue
 
 from loggers import Logger
 

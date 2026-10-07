@@ -9,9 +9,9 @@ from collections.abc import Mapping, Iterator, Sequence
 from types import TracebackType
 from typing import Callable, Literal, Self
 
-from ._constants import SYNC_MODES, JsonValue, JsonDict
-from ._atomic import CompactReturn, _ensure_parent_dir, _locked_file, _fsync_parent_dir, resolve_lockfile_path
-from ._backup import _make_backup_thread, _instance_backup_dir, _do_backup, _prune_backups
+from .constants import SYNC_MODES, JsonValue, JsonDict
+from .atomic import CompactReturn, _ensure_parent_dir, _locked_file, _fsync_parent_dir, resolve_lockfile_path
+from .backup import _make_backup_thread, _instance_backup_dir, _do_backup, _prune_backups
 
 from errors import ConfigError
 from loggers import Logger

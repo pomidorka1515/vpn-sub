@@ -1,7 +1,7 @@
-from ._core import Config
-from ._lines import LinesConfig
-from ._atomic import FileSignature, CompactReturn
-from ._protocols import ConfigLike, LinesConfigLike, JsonValue, JsonDict
+from .core import Config
+from .lines import LinesConfig
+from .atomic import FileSignature, CompactReturn
+from .protocols import ConfigLike, LinesConfigLike, JsonValue, JsonDict
 
 __all__ = [
     "Config", "LinesConfig",

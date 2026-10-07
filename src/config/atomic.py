@@ -8,7 +8,7 @@ from typing import NamedTuple
 from contextlib import contextmanager
 from collections.abc import Mapping, Generator
 
-from ._constants import SYNC_MODES, JsonValue
+from .constants import SYNC_MODES, JsonValue
 
 class FileSignature(NamedTuple):
     """Unique file identifier after atomic write."""

@@ -7,11 +7,11 @@ from collections.abc import Mapping, MutableMapping, Iterator, Iterable
 from types import TracebackType
 from typing import overload, Self, TYPE_CHECKING, Any, Literal, cast
 
-from ._constants import JsonValue, JsonDict
-from ._protocols import MISSING, MISSING_TYPE, MissingValue
-from ._atomic import _file_signature, _atomic_write_json, _ensure_parent_dir
+from .constants import JsonValue, JsonDict
+from .protocols import MISSING, MISSING_TYPE, MissingValue
+from .atomic import _file_signature, _atomic_write_json, _ensure_parent_dir
 if TYPE_CHECKING:
-    from ._core import Config
+    from .core import Config
     
 from errors import ConfigError
 

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from config._backup import _do_backup, _make_backup_thread, _prune_backups
+from config.backup import _do_backup, _make_backup_thread, _prune_backups
 from db.backup import do_backup, make_backup_thread, prune_backups
 from loggers import Logger
 
@@ -54,7 +54,7 @@ def test_config_raw_backup_copies_jsonl_and_cleans_temp(tmp_path: Path) -> None:
     _do_backup(str(missing), 2, str(instance), _log(), raw=True)
     assert list(instance.glob(".tmp-*")) == []
 
-    with patch("config._backup.shutil.copy2", side_effect=OSError("disk")):
+    with patch("config.backup.shutil.copy2", side_effect=OSError("disk")):
         with pytest.raises(OSError, match="disk"):
             _do_backup(str(source), 2, str(instance), _log(), raw=True)
     assert list(instance.glob(".tmp-*")) == []
@@ -71,7 +71,7 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
             raise OSError("unwritable")
         return cast(IO[Any], real_open(path, *args, **kwargs))
 
-    with patch("config._backup.open", side_effect=fail_temp):
+    with patch("config.backup.open", side_effect=fail_temp):
         with pytest.raises(OSError, match="unwritable"):
             _do_backup(str(source), 2, str(instance), _log(), minify=True)
     assert list(instance.glob(".tmp-*")) == []
@@ -118,8 +118,8 @@ def test_config_backup_thread_retries_then_succeeds(tmp_path: Path) -> None:
         return next(waits)
 
     with (
-        patch("config._backup._do_backup", side_effect=fail_once),
-        patch("config._backup._prune_backups"),
+        patch("config.backup._do_backup", side_effect=fail_once),
+        patch("config.backup._prune_backups"),
         patch.object(threading.Event, "wait", staticmethod(wait)),
     ):
         thread = _make_backup_thread(
@@ -142,7 +142,7 @@ def test_config_backup_thread_logs_repeated_failures(tmp_path: Path) -> None:
         return next(waits)
 
     with (
-        patch("config._backup._do_backup", side_effect=OSError("full")),
+        patch("config.backup._do_backup", side_effect=OSError("full")),
         patch.object(threading.Event, "wait", staticmethod(wait)),
         patch.object(Logger, "error") as error,
         patch.object(Logger, "critical") as critical,
