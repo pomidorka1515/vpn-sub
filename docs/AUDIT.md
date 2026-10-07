@@ -4,7 +4,7 @@
 Audit config location is usually `../audit.jsonl` unless edited.  
 There are currently **12** possible actions in the audit log.  
 The base format is:  
-```json  
+```jsonc  
 {  
     "ts": 1778089999.296969,       // float, precise timestamp  
     "date": "06.05.2026 15:44:30", // str, string in "%d.%m.%Y %H:%M:%S" format, UTC as always  
@@ -33,7 +33,7 @@ The base format is:
   
 ### `sub_hit`  
 Description: A subscription hit.  
-```json  
+```jsonc  
 {  
     "username": "",          // str, internal username  
     "lang": "ru",            // str, the language, 'ru' or 'en'  
@@ -46,7 +46,7 @@ Description: A subscription hit.
   
 ### `user_refresh`  
 Description: A user was refreshed on all panels. This isnt logged when a user is created, see `user_add`.  
-```json  
+```jsonc  
 {  
     "username": "" // str, internal username  
 }  
@@ -56,7 +56,7 @@ Description: A user was refreshed on all panels. This isnt logged when a user is
   
 ### `user_add`  
 Description: A new user was created.  
-```json  
+```jsonc  
 {  
     "username": "",    // str, new internal username  
     "ext_username": "" // OPTIONAL str, new external username  
@@ -67,7 +67,7 @@ Description: A new user was created.
   
 ### `user_delete`  
 Description: A user was deleted.  
-```json  
+```jsonc  
 {  
     "username": "", // str, internal username  
     "perma": true   // bool, true = deleted from DB too  
@@ -78,7 +78,7 @@ Description: A user was deleted.
   
 ### `user_update`  
 Description: A user's status was updated.  
-```json  
+```jsonc  
 {  
     "username": "",   // str, internal username  
     "enable": false,  // OPTIONAL bool, new status on regular panels  
@@ -90,7 +90,7 @@ Description: A user's status was updated.
   
 ### `user_update_params`  
 Description: User's params were updated.  
-```json  
+```jsonc  
 {  
     "username": "",     // str, internal username  
     "displayname": "",  // OPTIONAL str, new display name  
@@ -106,7 +106,7 @@ Description: User's params were updated.
   
 ### `user_update_uuid`  
 Description: User's UUID was updated.  
-```json  
+```jsonc  
 {  
     "username": "", // str, internal username  
     "uuid": "",     // str, new UUID  
@@ -117,7 +117,7 @@ Description: User's UUID was updated.
   
 ### `user_consume_code`  
 Description: A user consumed a bonus code.  
-```json  
+```jsonc  
 {  
     "days": 0,      // int, days on the code (0 leaves expiry unchanged)  
     "gb": 0,        // int, GB added onto the monthly limit, including a 0 limit  
@@ -136,7 +136,7 @@ Description: A user consumed a bonus code.
   
 ### `code_add`  
 Description: A code was added.  
-```json  
+```jsonc  
 {  
     "code": "",    // str, code name  
     "action": "",  // str, code type, 'register' or 'bonus'  
@@ -153,7 +153,7 @@ Description: A code was added.
   
 ### `code_delete`  
 Description: A code was deleted.  
-```json  
+```jsonc  
 {  
     "code": "" // str, code name  
 }  
@@ -163,7 +163,7 @@ Description: A code was deleted.
   
 ### `config_update`  
 Description: The admin config editor wrote a top-level patch. Values are not logged.  
-```json  
+```jsonc  
 {  
     "keys": ["sub_name"] // array[str], top-level keys whose value changed  
 }  
