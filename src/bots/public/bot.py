@@ -43,7 +43,7 @@ class PublicBot(
             self.sub = sub
             token: str = self.cfg["publicbot"].get("token")
             if not token:
-                raise RuntimeError("public bot token not found in config.json")
+                raise RuntimeError("publicbot.token must not be empty")
             step_backend = LockedHandlerBackend()
             self.bot = telebot.TeleBot(
                 token,
@@ -70,4 +70,3 @@ class PublicBot(
                 max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart"
             )
             self.polling_thread: threading.Thread | None = None
-

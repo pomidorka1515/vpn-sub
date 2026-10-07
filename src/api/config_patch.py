@@ -35,12 +35,10 @@ REQUIRED_KEYS: tuple[str, ...] = (
     "salt",
     "fingerprints",
     "nodes",
-    "bot",
     "json_template",
     "bypass_packages",
     "domain",
     "ping_check_url",
-    "publicbot",
     "3xui",
     "sub_name",
     "profiles",
@@ -50,6 +48,8 @@ REQUIRED_KEYS: tuple[str, ...] = (
 SCHEMA_PROPERTIES: frozenset[str] = frozenset((
     "$schema",
     *REQUIRED_KEYS,
+    "bot",
+    "publicbot",
     "api_uri",
     "fallback_domain",
     "funny_strings",
@@ -99,8 +99,16 @@ def check_config_document(data: Mapping[str, object]) -> None:
         raise ValidationError("3xui must contain at least one panel")
 
     publicbot = data.get("publicbot")
-    if isinstance(publicbot, Mapping) and not _nonempty_str(cast(Mapping[str, object], publicbot).get("token")):
-        raise ValidationError("publicbot.token must not be empty")
+    if isinstance(publicbot, Mapping):
+        token = cast(Mapping[str, object], publicbot).get("token")
+        if not isinstance(token, str):
+            raise ValidationError("publicbot.token must be a string")
+
+    bot = data.get("bot")
+    if isinstance(bot, Mapping):
+        token = cast(Mapping[str, object], bot).get("token")
+        if not isinstance(token, str):
+            raise ValidationError("bot.token must be a string")
 
     if not _nonempty_str(data.get("api_token")):
         raise ValidationError("api_token must not be empty")

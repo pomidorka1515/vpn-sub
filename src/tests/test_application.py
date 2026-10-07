@@ -151,9 +151,25 @@ def test_browser_subscription_embeds_local_fonts(paths: AppPaths) -> None:
 
 def test_background_components_are_not_started(paths: AppPaths) -> None:
     with factory(paths) as runtime:
-        assert runtime.admin_bot.polling_thread is None
-        assert runtime.public_bot.polling_thread is None
+        assert runtime.admin_bot is not None and runtime.admin_bot.polling_thread is None
+        assert runtime.public_bot is not None and runtime.public_bot.polling_thread is None
         assert not runtime.bandwidth_watcher._threads[0].is_alive()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_omitted_or_empty_bot_is_not_started(paths: AppPaths) -> None:
+    config = json.loads(paths.config.read_text(encoding="utf-8"))
+    del config["bot"]
+    config["publicbot"]["token"] = ""
+    paths.config.write_text(json.dumps(config), encoding="utf-8")
+    with factory(paths) as runtime:
+        assert runtime.admin_bot is None
+        assert runtime.public_bot is None
+        assert runtime.bandwidth_watcher.admin_bot is None
+        assert runtime.bandwidth_watcher.bot is None
+        client = runtime.app.test_client()
+        assert client.get(
+            "/sub/api/api/health", headers={"Authorization": "secret"},
+        ).status_code == 200
 
 
 def test_stop_is_idempotent(paths: AppPaths) -> None:
@@ -224,6 +240,8 @@ def test_secondary_process_does_not_recover_or_start_bots(paths: AppPaths) -> No
             assert runtime.audit_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
             with mock.patch.object(runtime.subscription.business_code_svc, "recover_rollback_failures") as recover:
                 with mock.patch.object(runtime.bandwidth_watcher, "start") as watcher_start:
+                    assert runtime.admin_bot is not None
+                    assert runtime.public_bot is not None
                     with mock.patch.object(runtime.admin_bot, "start") as admin_start:
                         with mock.patch.object(runtime.public_bot, "start") as public_start:
                             runtime.start()

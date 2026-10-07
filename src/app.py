@@ -121,8 +121,8 @@ class Application:
     whitelist_panel: XUiSession | None
     subscription: Subscription
     bandwidth_watcher: BWatch
-    admin_bot: AdminBot
-    public_bot: PublicBot
+    admin_bot: AdminBot | None
+    public_bot: PublicBot | None
     primary: bool
 
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
@@ -144,8 +144,10 @@ class Application:
         self.subscription.business_code_svc.recover_rollback_failures()
         self.bandwidth_watcher.start()
         if self._start_bots:
-            self.admin_bot.start()
-            self.public_bot.start()
+            if self.admin_bot is not None:
+                self.admin_bot.start()
+            if self.public_bot is not None:
+                self.public_bot.start()
 
         
         match sys.version_info[:2]:
@@ -177,6 +179,7 @@ class Application:
                     self.admin_bot,
                     self.public_bot,
                 )
+                if component is not None
             )
             for thread in shutdown_threads:
                 thread.start()
@@ -357,22 +360,33 @@ def _wire_loggers(
     api: Api,
     webapi: WebApi,
 ) -> None:
-    for logger in (
+    loggers: list[Logger] = [
         log,
         runtime.subscription.res.log,
         runtime.bandwidth_watcher.log,
         api.log,
         webapi.log,
-        runtime.admin_bot.log,
-        runtime.public_bot.log,
         runtime.cfg.log,
         runtime.lang_cfg.log,
         runtime.log_cfg.log,
         runtime.audit_cfg.log,
         runtime.db.log,
-    ):
-        logger.set_tg_bot(runtime.admin_bot)
+    ]
+    if runtime.admin_bot is not None:
+        loggers.append(runtime.admin_bot.log)
+    if runtime.public_bot is not None:
+        loggers.append(runtime.public_bot.log)
+    for logger in loggers:
+        if runtime.admin_bot is not None:
+            logger.set_tg_bot(runtime.admin_bot)
         logger.set_jsonl_handler(runtime.log_cfg)
+
+
+def _nonempty_token(section: object) -> bool:
+    if not isinstance(section, dict):
+        return False
+    token = cast(dict[str, object], section).get("token")
+    return isinstance(token, str) and token != ""
 
 
 def create_application(
@@ -455,8 +469,16 @@ def create_application(
             panels=panels,
             whitelist_panel=whitelist,
         )
-        admin_bot = AdminBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
-        public_bot = PublicBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
+        admin_bot = (
+            AdminBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
+            if _nonempty_token(runtime_cfg.get("bot", None))
+            else None
+        )
+        public_bot = (
+            PublicBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
+            if _nonempty_token(runtime_cfg.get("publicbot", None))
+            else None
+        )
         bandwidth_watcher = BWatch(
             cfg=runtime_cfg,
             db=db,

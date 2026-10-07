@@ -91,9 +91,9 @@ def test_required_keys_match_schema() -> None:
 def test_config_get_requires_token(tmp_path: Path, flask_app: Flask) -> None:
     cfg, _path, _audit = _config_api(tmp_path, flask_app)
     try:
-        denied = flask_app.test_client().get("/sub/api/config/get")
+        denied = flask_app.test_client().get("/sub/privapi/api/config/get")
         assert denied.status_code == 401
-        denied_set = flask_app.test_client().post("/sub/api/config/set", json={"base": "x", "values": {}})
+        denied_set = flask_app.test_client().post("/sub/privapi/api/config/set", json={"base": "x", "values": {}})
         assert denied_set.status_code == 401
     finally:
         cfg.close()
@@ -105,8 +105,8 @@ def test_config_get_returns_file_and_stable_etag(tmp_path: Path, flask_app: Flas
     try:
         client = flask_app.test_client()
         headers = {"Authorization": "secret-token"}
-        first = client.get("/sub/api/config/get", headers=headers)
-        second = client.get("/sub/api/config/get", headers=headers)
+        first = client.get("/sub/privapi/api/config/get", headers=headers)
+        second = client.get("/sub/privapi/api/config/get", headers=headers)
         assert first.status_code == 200
         payload = first.get_json()
         on_disk = json.loads(path.read_text(encoding="utf-8"))
@@ -131,7 +131,7 @@ def _set(
     values: dict[str, Any],
 ) -> Any:
     return flask_app.test_client().post(
-        "/sub/api/config/set",
+        "/sub/privapi/api/config/set",
         json={"base": base, "values": values},
         headers={"Authorization": "secret-token"},
     )
@@ -228,9 +228,9 @@ def test_config_set_rejects_a_non_object_body(tmp_path: Path, flask_app: Flask) 
         before = path.read_bytes()
         client = flask_app.test_client()
         headers = {"Authorization": "secret-token"}
-        missing = client.post("/sub/api/config/set", json={"values": {}}, headers=headers)
+        missing = client.post("/sub/privapi/api/config/set", json={"values": {}}, headers=headers)
         assert missing.status_code == 400
-        listed = client.post("/sub/api/config/set", json=["nope"], headers=headers)
+        listed = client.post("/sub/privapi/api/config/set", json=["nope"], headers=headers)
         assert listed.status_code == 400
         assert path.read_bytes() == before
         quoted = _set(
@@ -263,6 +263,13 @@ def test_config_set_null_deletes_optional_and_rejects_required(
         assert "funny_strings" not in updated
         assert updated["domain"] == "https://example.test"
         assert updated["sub_name"] == "before"
+
+        base = removed.get_json()["obj"]["base"]
+        bots = _set(flask_app, base, {"bot": None, "publicbot": None})
+        assert bots.status_code == 200
+        without_bots = json.loads(path.read_text(encoding="utf-8"))
+        assert "bot" not in without_bots
+        assert "publicbot" not in without_bots
     finally:
         cfg.close()
 

@@ -942,13 +942,13 @@ Body:
 Patch rules:  
 - An omitted key is unchanged.  
 - A key in `values` replaces that top-level value wholesale. There is no deep merge. Editing one inbound sends the whole `profiles` object.  
-- `null` deletes an optional key (`api_uri`, `fallback_domain`, `funny_strings`). `null` on a required key is HTTP 400.  
+- `null` deletes an optional key (`api_uri`, `fallback_domain`, `funny_strings`, `bot`, `publicbot`). `null` on a required key is HTTP 400.  
 - `$schema` is not patchable. A different value is HTTP 400. The on-disk value stays.  
 - Unknown top-level keys are HTTP 400.  
 - `base` is checked inside the edit lock after the file is reloaded. A mismatch is HTTP 409 and no write. There is no force flag.  
 - Failed validation leaves the file untouched. Disk stays indent 4.  
 - A patch that does not change the document does not write, back up, or audit.  
-Semantic checks, beyond the schema: every `profiles.*.node` must be a key of `nodes`. The document must also be one this process can boot: non-empty `3xui`, non-empty `publicbot.token`, non-empty `api_token`, and non-empty `api_admin_ui_auth` entries. The schema is not tightened for that.  
+Semantic checks, beyond the schema: every `profiles.*.node` must be a key of `nodes`. The document must also be one this process can boot: non-empty `3xui`, non-empty `api_token`, and non-empty `api_admin_ui_auth` entries. `bot` and `publicbot` may be omitted. A present object with an empty `token` is valid and does not start that bot. The schema is not tightened for that.  
 A successful write is audited as `config_update`. `info.keys` is the changed key names, never the values.  
 `restart` lists the keys from the table below whose value actually changed. Empty means nothing to restart. The process is not restarted. Restart is an operator action (`systemctl restart`, graceful-timeout 30).  
   
@@ -959,8 +959,8 @@ A successful write is audited as `config_update`. `info.keys` is the changed key
 | `api_token` | Copied at bootstrap. Saving a new token does not lock out this process; the next restart will. |  
 | `3xui` | Panel sessions copy address, port, token, and the rest at startup. |  
 | `redis` | The rate-limit client is configured once. |  
-| `bot` | Token is inside TeleBot. `admin_uids` is a detached copy of `whitelist`. |  
-| `publicbot` | Token captured at init. An empty token raises on next boot. |  
+| `bot` | Token is inside TeleBot. `admin_uids` is a detached copy of `whitelist`. Adding, removing, or emptying the key takes effect on next boot: no object, or an empty token, does not start the admin bot. |  
+| `publicbot` | Token captured at init. Adding, removing, or emptying the key takes effect on next boot: no object, or an empty token, does not start the public bot. |  
 | `panel_alert_cooldown` | Stored on the bandwidth watcher at init. |  
 | `salt` | Copied to the legacy salt. Argon2id passwords ignore it. After restart, leftover SHA256 hashes stop matching. |  
   

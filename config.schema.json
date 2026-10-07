@@ -4,9 +4,9 @@
     "description": "Static deployment and presentation settings. Mutable user, quota, code, notification, Telegram, and snapshot state is stored in SQLite.",
     "type": "object",
     "required": [
-        "uri", "api_token", "api_admin_ui_auth", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot",
+        "uri", "api_token", "api_admin_ui_auth", "provider_id", "panel_alert_cooldown", "salt", "fingerprints", "nodes",
         "json_template", "bypass_packages", "domain", "ping_check_url",
-        "publicbot", "3xui", "sub_name", "profiles", "redis"
+        "3xui", "sub_name", "profiles", "redis"
     ],
     "additionalProperties": false,
     "properties": {
@@ -50,7 +50,7 @@
             "type": "object",
             "required": ["token", "whitelist"],
             "additionalProperties": false,
-            "description": "Admin bot configuration object.",
+            "description": "Optional admin bot. Omit the key, or leave token empty, to not start it.",
             "properties": {
                 "token": { "type": "string", "description": "Token for your admin bot." },
                 "whitelist": {
@@ -101,7 +101,7 @@
 
         "publicbot": {
             "type": "object",
-            "description": "Object for the public bot.",
+            "description": "Optional public bot. Omit the key, or leave token empty, to not start it.",
             "required": ["token"],
             "additionalProperties": false,
             "properties": {

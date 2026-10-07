@@ -43,9 +43,11 @@ Designed to run on a single small VPS.
   session). Token API at `/{uri}/{api_uri}/api/...`: users, codes, panel health,
   audit log, snapshots, leaderboard, system status, and stuck-rollback markers.
   Header `Authorization`.
-- **Telegram.** Admin bot is UID-whitelisted: users, codes, panels, traffic,
-  leaderboard. Public bot: link account, traffic, charts, subscription, bonus,
-  settings, reset, delete.
+- **Telegram.** Both bots are optional. Omit `bot` or `publicbot`, or leave its
+  token empty, and that bot is not started. Admin bot is UID-whitelisted: users,
+  codes, panels, traffic, leaderboard. Public bot: link account, traffic, charts,
+  subscription, bonus, settings, reset, delete. Quota notices and admin log
+  alerts are skipped when the matching bot is off.
 - **Discord.** Separate process, one token. Public slash commands plus `/admin`
   for a Discord-ID whitelist.
   See [src/discord/README.md](src/discord/README.md).
@@ -312,6 +314,8 @@ location /sub {
 `config.json` is validated against `config.schema.json` on load and on every
 commit. Remote `$schema` URLs are rejected. Put panel tokens, bot tokens,
 `api_token`, and the Redis URL here; do not commit the filled file.
+`bot` and `publicbot` are optional. Omit either key, or leave its token empty,
+to run without that bot.
 
 ### Seemingly useless casts to protocols
 All protocols in `src/custom_types.py` are fully compatible with their runtime
