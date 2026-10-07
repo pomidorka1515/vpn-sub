@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Mapping, cast
 
 import discord
@@ -50,6 +51,26 @@ _AUTH_COMMANDS = (
 
 
 class PublicRoutingMixin(PublicFeatureMixin):
+    async def _show_lang_menu(self, interaction: discord.Interaction) -> None:
+        await self._respond(
+            interaction,
+            self.text(self.get_lang(interaction.user.id), "choose_lang"),
+            view=self.language_view(),
+        )
+
+    async def _show_account_menu(self, interaction: discord.Interaction) -> None:
+        await self._reply_key(interaction, "welcome_reg", view=self.account_menu_view(self.get_lang(interaction.user.id)))
+
+    async def _show_sub_menu(self, interaction: discord.Interaction) -> None:
+        await self._reply_key(
+            interaction,
+            "welcome_reg",
+            view=self.subscription_menu_view(self.get_lang(interaction.user.id)),
+        )
+
+    async def _cancel(self, interaction: discord.Interaction) -> None:
+        await self._reply_key(interaction, "cancelled")
+
     def _custom_id(self, interaction: discord.Interaction) -> str:
         data = cast(Mapping[str, object] | None, interaction.data)
         if not data:
@@ -102,99 +123,30 @@ class PublicRoutingMixin(PublicFeatureMixin):
         custom_id = self._custom_id(interaction)
         if not custom_id:
             return
-        uid = interaction.user.id
-        if self._requires_auth(custom_id) and not self.is_logged_in(uid):
+        if self._requires_auth(custom_id) and not self.is_logged_in(interaction.user.id):
             await self._reply_key(interaction, "not_logged_in")
             return
         if custom_id.startswith("lang_"):
             await self.set_lang_callback(interaction, custom_id.split("_", 1)[1])
             return
-        if custom_id == "login_credentials":
-            await self.cmd_login(interaction)
+        handler_name = _EXACT_HANDLERS.get(custom_id)
+        if handler_name is None:
             return
-        if custom_id == "login_register":
-            await self.cmd_register(interaction)
+        handler = cast(Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name))
+        await handler(interaction)
+
+    async def _dispatch_fp_select(self, interaction: discord.Interaction) -> None:
+        value = self._select_value(interaction) or ""
+        if value:
+            await self.apply_fingerprint(interaction, value)
+
+    async def _dispatch_chart_select(self, interaction: discord.Interaction) -> None:
+        raw = self._select_value(interaction) or ""
+        try:
+            days = int(raw)
+        except ValueError:
             return
-        if custom_id == "menu_lang":
-            await self._respond(
-                interaction,
-                self.text(self.get_lang(uid), "choose_lang"),
-                view=self.language_view(),
-            )
-            return
-        if custom_id == "menu_support":
-            await self.cmd_support(interaction)
-            return
-        if custom_id == "menu_account":
-            await self._reply_key(interaction, "welcome_reg", view=self.account_menu_view(self.get_lang(uid)))
-            return
-        if custom_id == "menu_sub":
-            await self._reply_key(interaction, "welcome_reg", view=self.subscription_menu_view(self.get_lang(uid)))
-            return
-        if custom_id == "menu_main":
-            await self.cmd_start(interaction)
-            return
-        if custom_id == "menu_info":
-            await self.cmd_info(interaction)
-            return
-        if custom_id == "menu_get_sub":
-            await self.cmd_sub(interaction)
-            return
-        if custom_id == "menu_bonus":
-            await self.cmd_bonus(interaction)
-            return
-        if custom_id == "menu_reset":
-            await self.cmd_reset(interaction)
-            return
-        if custom_id == "menu_chart":
-            await self.cmd_chart(interaction)
-            return
-        if custom_id == "menu_settings":
-            await self.cmd_settings(interaction)
-            return
-        if custom_id == "menu_logout":
-            await self.cmd_logout(interaction)
-            return
-        if custom_id == "menu_help":
-            await self.cmd_help(interaction)
-            return
-        if custom_id == "menu_delete":
-            await self.cmd_delete(interaction)
-            return
-        if custom_id == "set_name":
-            await self.open_name_modal(interaction)
-            return
-        if custom_id == "set_fp":
-            await self.open_fingerprint_menu(interaction)
-            return
-        if custom_id == "set_login":
-            await self.open_login_modal(interaction)
-            return
-        if custom_id == "set_pass":
-            await self.open_pass_modal(interaction)
-            return
-        if custom_id == "fp_select":
-            value = self._select_value(interaction) or ""
-            if value:
-                await self.apply_fingerprint(interaction, value)
-            return
-        if custom_id == "chart_select":
-            raw = self._select_value(interaction) or ""
-            try:
-                days = int(raw)
-            except ValueError:
-                return
-            await self.render_chart(interaction, days)
-            return
-        if custom_id == "confirm_logout":
-            await self.confirm_logout(interaction)
-            return
-        if custom_id == "confirm_reset":
-            await self.confirm_reset(interaction)
-            return
-        if custom_id == "confirm_cancel":
-            await self._reply_key(interaction, "cancelled")
-            return
+        await self.render_chart(interaction, days)
 
     async def dispatch_modal(self, interaction: discord.Interaction) -> None:
         custom_id = self._custom_id(interaction)
@@ -225,3 +177,32 @@ class PublicRoutingMixin(PublicFeatureMixin):
 
     def command_requires_auth(self, name: str) -> bool:
         return name in _AUTH_COMMANDS
+
+
+_EXACT_HANDLERS: dict[str, str] = {
+    "login_credentials": "cmd_login",
+    "login_register": "cmd_register",
+    "menu_lang": "_show_lang_menu",
+    "menu_support": "cmd_support",
+    "menu_account": "_show_account_menu",
+    "menu_sub": "_show_sub_menu",
+    "menu_main": "cmd_start",
+    "menu_info": "cmd_info",
+    "menu_get_sub": "cmd_sub",
+    "menu_bonus": "cmd_bonus",
+    "menu_reset": "cmd_reset",
+    "menu_chart": "cmd_chart",
+    "menu_settings": "cmd_settings",
+    "menu_logout": "cmd_logout",
+    "menu_help": "cmd_help",
+    "menu_delete": "cmd_delete",
+    "set_name": "open_name_modal",
+    "set_fp": "open_fingerprint_menu",
+    "set_login": "open_login_modal",
+    "set_pass": "open_pass_modal",
+    "fp_select": "_dispatch_fp_select",
+    "chart_select": "_dispatch_chart_select",
+    "confirm_logout": "confirm_logout",
+    "confirm_reset": "confirm_reset",
+    "confirm_cancel": "_cancel",
+}
