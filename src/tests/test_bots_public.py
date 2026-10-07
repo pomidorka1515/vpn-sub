@@ -10,6 +10,7 @@ import pytest
 from telebot import types
 
 from bots import PublicBot
+from config import ConfigLike
 
 
 def _public_message(text: str) -> types.Message:
@@ -120,3 +121,22 @@ def test_public_bot_stop_does_not_wait_for_running_chart() -> None:
     assert not future.done()
     release.set()
     bot.close()
+
+
+def test_public_bot_uses_three_worker_threads() -> None:
+    with patch("bots.public.bot.telebot.TeleBot") as telebot_cls, patch(
+        "bots.public.bot.configure_telegram_api"
+    ):
+        PublicBot(
+            sub=MagicMock(),
+            cfg=cast(ConfigLike, {"publicbot": {"token": "1:token"}}),
+            lang_cfg=cast(ConfigLike, {"publicbot": {}}),
+        )
+    _args, kwargs = telebot_cls.call_args
+    assert kwargs["threaded"] is True
+    assert kwargs["num_threads"] == 3
+    backend = kwargs["next_step_backend"]
+    assert kwargs["reply_backend"] is backend
+    backend.register_handler(7, "step")
+    assert backend.get_handlers(7) == ["step"]
+    assert backend.get_handlers(7) is None

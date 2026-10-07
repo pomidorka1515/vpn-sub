@@ -12,6 +12,7 @@ from config import ConfigLike
 from core import Subscription
 from loggers import Logger
 from bots.polling import configure_telegram_api
+from bots.handler_backend import LockedHandlerBackend
 
 from .common import PublicCommonMixin
 from .login import PublicLoginMixin
@@ -43,7 +44,14 @@ class PublicBot(
             token: str = self.cfg["publicbot"].get("token")
             if not token:
                 raise RuntimeError("public bot token not found in config.json")
-            self.bot = telebot.TeleBot(token)
+            step_backend = LockedHandlerBackend()
+            self.bot = telebot.TeleBot(
+                token,
+                threaded=True,
+                num_threads=3,
+                next_step_backend=step_backend,
+                reply_backend=step_backend,
+            )
             self.TEXTS: dict[str, dict[str, str]] = lang_cfg["publicbot"]
             self.bot.message_handler(commands=["start", "menu"])(self.cmd_start)  # pyright: ignore[reportUnknownMemberType]
             callbacks: tuple[tuple[str, Callable[..., Any]], ...] = (
@@ -62,5 +70,4 @@ class PublicBot(
                 max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart"
             )
             self.polling_thread: threading.Thread | None = None
-
 
