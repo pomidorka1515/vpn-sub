@@ -160,12 +160,16 @@ def test_admin_ui_requires_session(
     database: Database, flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
-    client = flask_app.test_client()
-    denied = client.get("/sub/admin")
+    denied = flask_app.test_client().get("/sub/admin")
     assert denied.status_code == 302
     assert denied.headers["Location"].endswith("/sub/admin/login")
 
-    login_page = client.get("/sub/admin/login")
+
+def test_admin_login_page_omits_register_and_api(
+    database: Database, flask_app: Flask,
+) -> None:
+    _admin_api(database, flask_app)
+    login_page = flask_app.test_client().get("/sub/admin/login")
     assert login_page.status_code == 200
     assert b'id="loginForm"' in login_page.data
     assert b'id="tabRegister"' not in login_page.data
@@ -176,6 +180,12 @@ def test_admin_ui_requires_session(
     assert b"window.location.href = PANEL;" in login_page.data
     assert b"PANEL + '/'" not in login_page.data
 
+
+def test_admin_session_rejects_invalid_login(
+    database: Database, flask_app: Flask,
+) -> None:
+    _admin_api(database, flask_app)
+    client = flask_app.test_client()
     bad = client.post("/sub/admin/session", json={"username": "admin", "password": "nope"})
     assert bad.status_code == 401
     short = client.post("/sub/admin/session", json={"username": "admin", "password": "x"})
@@ -187,16 +197,28 @@ def test_admin_ui_requires_session(
     not_json = client.post("/sub/admin/session", data="username=admin", content_type="text/plain")
     assert not_json.status_code == 400
 
-    signed_in = client.post(
+
+def test_admin_session_sets_httponly_cookie(
+    database: Database, flask_app: Flask,
+) -> None:
+    _admin_api(database, flask_app)
+    signed_in = flask_app.test_client().post(
         "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
     )
     assert signed_in.status_code == 200
     assert "admin_ui=" in signed_in.headers["Set-Cookie"]
     assert "Path=/sub/admin" in signed_in.headers["Set-Cookie"]
     assert "HttpOnly" in signed_in.headers["Set-Cookie"]
-    first = database.admin_ui_session()
-    assert first is not None and len(first) == 100
+    session = database.admin_ui_session()
+    assert session is not None and len(session) == 100
 
+
+def test_admin_page_uses_local_assets(
+    database: Database, flask_app: Flask,
+) -> None:
+    _admin_api(database, flask_app)
+    client = flask_app.test_client()
+    client.post("/sub/admin/session", json={"username": "admin", "password": "panel-secret"})
     response = client.get("/sub/admin")
     assert response.status_code == 200
     assert client.get("/sub/admin/").status_code == 200
@@ -211,16 +233,31 @@ def test_admin_ui_requires_session(
     assert b"window.CHART_JS = '/sub/chart.umd.min.js?v=" in response.data
     assert b"jsdelivr" not in response.data
 
+
+def test_admin_relogin_invalidates_previous_cookie(
+    database: Database, flask_app: Flask,
+) -> None:
+    _admin_api(database, flask_app)
+    client = flask_app.test_client()
+    client.post("/sub/admin/session", json={"username": "admin", "password": "panel-secret"})
+    first = database.admin_ui_session()
     again = client.post(
         "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
     )
     assert again.status_code == 200
     second = database.admin_ui_session()
-    assert second is not None and second != first
+    assert first is not None and second is not None and second != first
     client.delete_cookie("admin_ui", path="/sub/admin")
     client.set_cookie("admin_ui", first, path="/sub/admin")
     assert client.get("/sub/admin").status_code == 302
 
+
+def test_admin_logout_clears_session(
+    database: Database, flask_app: Flask,
+) -> None:
+    _admin_api(database, flask_app)
+    client = flask_app.test_client()
+    client.post("/sub/admin/session", json={"username": "admin", "password": "panel-secret"})
     logged_out = client.post("/sub/admin/logout")
     assert logged_out.status_code == 200
     assert "Path=/sub/admin" in logged_out.headers["Set-Cookie"]
