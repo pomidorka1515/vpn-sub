@@ -8,7 +8,7 @@ import secrets
 
 if TYPE_CHECKING:
     from ..admin._base import AdminApiMixin
-    from ..web import WebApi
+    from ..web._base import WebApiMixin
 
 ADMIN_UI_COOKIE = "admin_ui"
 ADMIN_UI_SESSION_LEN = 100
@@ -29,23 +29,27 @@ def requires_admin_auth[API_T: AdminApiMixin, **P, R](
             return err("Unauthorized", 401)
         return f(self, *args, **kwargs)
     return cast(Decorated[API_T, P, R], wrapper)
-def requires_webapi_auth[**P, R](f: DecoratedInject[WebApi, str, P, R]) -> Decorated[WebApi, P, R]:
+def requires_webapi_auth[API_T: WebApiMixin, **P, R](
+    f: DecoratedInject[API_T, str, P, R],
+) -> Decorated[API_T, P, R]:
     """WebApi auth via token cookie. Injects `username` as first arg after self.
     Returns 401 on failure."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
+    def wrapper(self: API_T, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
         auth_token = request.cookies.get('auth_token')
         username = self.validate_auth_token(auth_token)
         if not username:
             return err("Invalid auth token.", 401)
         return f(self, username, *args, **kwargs)
-    return cast("Decorated[WebApi, P, R]", wrapper)
-def requires_no_auth[**P, R](f: Decorated[WebApi, P, R]) -> Decorated[WebApi, P, R]:
+    return cast(Decorated[API_T, P, R], wrapper)
+def requires_no_auth[API_T: WebApiMixin, **P, R](
+    f: Decorated[API_T, P, R],
+) -> Decorated[API_T, P, R]:
     """WebApi: reject if already authenticated (for register). Returns 403."""
     @wraps(f)
-    def wrapper(self: WebApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
+    def wrapper(self: API_T, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
         auth_token = request.cookies.get('auth_token')
         if auth_token and self.validate_auth_token(auth_token):
             return err("Must not be authorized.", 403)
         return f(self, *args, **kwargs)
-    return cast("Decorated[WebApi, P, R]", wrapper)
+    return cast(Decorated[API_T, P, R], wrapper)
