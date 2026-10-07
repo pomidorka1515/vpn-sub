@@ -97,20 +97,20 @@ class QuotaMixin(BWatchHost):
             self._deliver(notifier, username, telegram_id, notices, seen)
         self.db.sync_notifications(before, seen)
 
-    def bandwidth_check(self) -> None:
-        updates: dict[str, BandwidthUpdate] = {}    # username -> (delta, current) for main
-        wl_updates: dict[str, BandwidthUpdate] = {} # username -> (delta, current) for whitelist
+    def _reenable_under_quota(self) -> dict[str, UserRecord]:
+        """Turn time and under-quota sides back on, then announce recoveries.
+
+        Returns the post-re-enable states. Callers must reuse them instead of
+        listing users again.
+        """
         states: dict[str, UserRecord] = {}
         recoveries: dict[str, tuple[Notice, ...]] = {}
-        need_main = False
-        need_wl = False
         for state in self.sub.user_svc.list_user_states():
             i = state["username"]
             states[i] = state
             reenabled_time = False
             reenabled_main = False
             reenabled_wl = False
-            # Main bandwidth
             expires_at = int(state['expires_at'])
             time_ok = expires_at == 0 or (expires_at - int(time.time())) >= 0
             if time_ok and not bool(state['enabled_time']):
@@ -120,8 +120,6 @@ class QuotaMixin(BWatchHost):
 
             main_required = int(state['bw_limit_gb']) != 0
             wl_required = int(state['wl_limit_gb']) != 0
-            need_main = need_main or main_required
-            need_wl = need_wl or wl_required
             if main_required and int(state['bw_used']) < int(int(state['bw_limit_gb']) * 10**9) and not bool(state['enabled']):
                 reenabled_main = self._update_user(username=i, enable=True)
             if wl_required and int(state['wl_used']) < int(int(state['wl_limit_gb']) * 10**9) and not bool(state['enabled_wl']):
@@ -136,10 +134,18 @@ class QuotaMixin(BWatchHost):
         # Re-enables already happened. A failed traffic read must not swallow
         # the message, and neither must a cycle with no usage delta.
         self._announce_recoveries(recoveries, states)
+        return states
 
-        # One batched read per side (clients/list per panel). Read both
-        # before committing either: if either required read fails, commit
-        # nothing this cycle so no partial delta is recorded.
+    def _read_traffic(
+        self, states: dict[str, UserRecord],
+    ) -> tuple[dict[str, BandwidthInfo], dict[str, BandwidthInfo]] | None:
+        """Read one map per required side.
+
+        None means a required read failed. Both maps are read before either
+        is committed, so a partial delta is never recorded.
+        """
+        need_main = any(int(state['bw_limit_gb']) != 0 for state in states.values())
+        need_wl = any(int(state['wl_limit_gb']) != 0 for state in states.values())
         main_map: dict[str, BandwidthInfo] = {}
         wl_map: dict[str, BandwidthInfo] = {}
         try:
@@ -150,8 +156,18 @@ class QuotaMixin(BWatchHost):
                 wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True, pool=pool)
         except Exception:
             self.log.error("bandwidth poll failed", exc_info=True)
-            return
+            return None
+        return main_map, wl_map
 
+    def _commit_usage(
+        self,
+        states: dict[str, UserRecord],
+        maps: tuple[dict[str, BandwidthInfo], dict[str, BandwidthInfo]],
+    ) -> None:
+        """Record positive deltas, then advance baselines and persist together."""
+        main_map, wl_map = maps
+        updates: dict[str, BandwidthUpdate] = {}
+        wl_updates: dict[str, BandwidthUpdate] = {}
         with self._mem_lock:
             for i, state in states.items():
                 main_required = int(state['bw_limit_gb']) != 0
@@ -186,6 +202,13 @@ class QuotaMixin(BWatchHost):
                 usage[i] = (regular, update.delta)
                 self.wl_mem[i] = update.current
         self.db.increment_usages(usage)
+
+    def bandwidth_check(self) -> None:
+        states = self._reenable_under_quota()
+        maps = self._read_traffic(states)
+        if maps is None:
+            return
+        self._commit_usage(states, maps)
 
     def check(self) -> None:
         tgids = self.db.user_tgids()
