@@ -320,9 +320,9 @@ def test_admin_token_api_root_omits_empty_api_uri(
     assert response.get_json()["obj"]["api_root"] == "/sub"
 
 
-def test_polling_status_returns_limited_dynamic_state(
+def _polling_api(
     database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
-) -> None:
+) -> Any:
     from custom_types import NetTrafficStats
     from sysutil import (
         AppMemory, ConnCount, LoadAverage,
@@ -384,10 +384,21 @@ def test_polling_status_returns_limited_dynamic_state(
         sub=subscription,
         bw=make_watch(database, subscription),
     )
-    client = flask_app.test_client()
+    return flask_app.test_client()
+
+
+def test_polling_status_requires_admin_auth(
+    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _polling_api(database, flask_app, monkeypatch)
     denied = client.get("/sub/api/api/state/polling")
     assert denied.status_code == 401
 
+
+def test_polling_status_returns_limited_host_state(
+    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _polling_api(database, flask_app, monkeypatch)
     response = client.get("/sub/api/api/state/polling", headers={"Authorization": "secret"})
     assert response.status_code == 200
     payload = response.get_json()
@@ -406,9 +417,14 @@ def test_polling_status_returns_limited_dynamic_state(
     assert obj["host"]["app_uptime"] == 200.25
     assert "cpu_info" not in obj["host"]
     assert "ip" not in obj["host"]
-    assert set(obj["panels"]) == {"edge", "down"}
-    assert obj["panels"]["down"] is None
-    edge = obj["panels"]["edge"]
+
+
+def test_polling_status_returns_limited_panel_state(
+    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _polling_api(database, flask_app, monkeypatch)
+    response = client.get("/sub/api/api/state/polling", headers={"Authorization": "secret"})
+    edge = response.get_json()["obj"]["panels"]["edge"]
     assert set(edge) == {
         "app_stats", "cpu", "disk", "loads", "mem",
         "netIO", "netTraffic", "swap", "tcpCount", "udpCount", "uptime",
@@ -422,6 +438,18 @@ def test_polling_status_returns_limited_dynamic_state(
     assert edge["app_stats"] == {"threads": 2, "mem": 3, "uptime": 4}
     assert "xray" not in edge
     assert "publicIP" not in edge
+
+
+def test_polling_status_nulls_unknown_panel(
+    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _polling_api(database, flask_app, monkeypatch)
+
+    panels = client.get(
+        "/sub/api/api/state/polling", headers={"Authorization": "secret"},
+    ).get_json()["obj"]["panels"]
+    assert set(panels) == {"edge", "down"}
+    assert panels["down"] is None
 
 
 def test_health_reports_db_and_process_status(database: Database, flask_app: Flask) -> None:
