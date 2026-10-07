@@ -25,7 +25,7 @@ def _admin_module_method(name: str) -> Callable[[WebApiMixin], ResponseType]:
             ),
             source,
         )
-        return self._static(f'admin/{name}.js', 'text/javascript', body.encode('utf-8'))
+        return self._static(f'admin/{name}.js', 'text/javascript', body.encode('utf-8')) # pyright: ignore[reportPrivateUsage]
     handler.__name__ = 'admin_' + name.replace('/', '_') + '_js'
     return handler
 

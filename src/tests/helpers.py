@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
-from typing import Any, cast
+from typing import Any, Callable, cast
 from urllib.parse import unquote
 
 import json
@@ -18,6 +18,8 @@ from session import XUiSession
 
 USER_UUID = "01234567-89ab-cdef-0123-456789abcdef"
 TOKEN_A = "a" * 40
+
+type _PostHandler = Callable[[FakePanel, str, dict[str, Any]], Response]
 
 
 def subscription_config(**overrides: Any) -> dict[str, Any]:
@@ -311,104 +313,126 @@ class FakePanel:
     def _find(self, email: str) -> PanelClient | None:
         return next((c for c in self.clients if c.email == email), None)
 
+    def _post_add(self, url: str, body: dict[str, Any]) -> Response:
+        del url
+        raw: object = body.get("client")
+        if not isinstance(raw, dict):
+            return json_http({"success": False, "msg": "missing client", "obj": None}, 200)
+        client = cast(dict[str, Any], raw)
+        email = str(client.get("email", ""))
+        if self._find(email) is not None:
+            return json_http({"success": False, "msg": "duplicate email", "obj": None}, 200)
+        inbound_ids = [int(i) for i in cast(list[Any], body.get("inboundIds", []))]
+        uuid_value = str(client.get("id", ""))
+        sub_id = str(client.get("subId", ""))
+        self.clients.append(PanelClient(
+            email=email, uuid=uuid_value, subId=sub_id,
+            enable=bool(client.get("enable", True)),
+            flow=str(client.get("flow", "")),
+            limitIp=int(client.get("limitIp", 0)),
+            totalGB=int(client.get("totalGB", 0)),
+            expiryTime=int(client.get("expiryTime", 0)),
+            tgId=client.get("tgId", ""),
+            comment=str(client.get("comment", "")),
+            reset=int(client.get("reset", 0)),
+            inboundIds=inbound_ids,
+            traffic=ClientTraffic(
+                id=0, inboundId=0, enable=True, email=email, uuid=uuid_value,
+                subId=sub_id, up=0, down=0, expiryTime=0, total=0, reset=0,
+            ),
+        ))
+        return json_http({"success": True, "msg": "", "obj": None}, 200)
+
+    def _post_bulk(self, url: str, body: dict[str, Any]) -> Response:
+        enable = "bulkEnable" in url
+        emails = [str(e) for e in cast(list[Any], body.get("emails", []))]
+        missing = [e for e in emails if self._find(e) is None]
+        if missing:
+            return json_http(
+                {"success": False, "msg": f"client not found: {missing[0]}", "obj": None},
+                200,
+            )
+        self.clients = [
+            replace(c, enable=enable) if c.email in emails else c
+            for c in self.clients
+        ]
+        return json_http({"success": True, "msg": "", "obj": {"changed": len(emails)}}, 200)
+
+    def _post_del(self, url: str, body: dict[str, Any]) -> Response:
+        del body
+        email = unquote(url.rsplit("/", 1)[-1])
+        found = self._find(email)
+        if found is None:
+            return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
+        self.clients.remove(found)
+        return json_http({"success": True, "msg": "", "obj": None}, 200)
+
+    def _post_update_traffic(self, url: str, body: dict[str, Any]) -> Response:
+        email = unquote(url.rsplit("/", 1)[-1])
+        found = self._find(email)
+        if found is None or found.traffic is None:
+            return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
+        updated = replace(
+            found,
+            traffic=replace(
+                found.traffic,
+                up=int(body.get("upload", 0)),
+                down=int(body.get("download", 0)),
+            ),
+        )
+        self.clients = [updated if c.email == email else c for c in self.clients]
+        return json_http({"success": True, "msg": "", "obj": None}, 200)
+
+    def _post_update(self, url: str, body: dict[str, Any]) -> Response:
+        email = unquote(url.rsplit("/", 1)[-1])
+        found = self._find(email)
+        if found is None:
+            return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
+        updated = replace(
+            found,
+            uuid=str(body.get("id", found.uuid)),
+            subId=str(body.get("subId", found.subId)),
+            enable=bool(body.get("enable", found.enable)),
+            flow=str(body.get("flow", found.flow)),
+            limitIp=int(body.get("limitIp", found.limitIp)),
+            totalGB=int(body.get("totalGB", found.totalGB)),
+            expiryTime=int(body.get("expiryTime", found.expiryTime)),
+            tgId=body.get("tgId", found.tgId),
+            comment=str(body.get("comment", found.comment)),
+            reset=int(body.get("reset", found.reset)),
+        )
+        self.clients = [updated if c.email == email else c for c in self.clients]
+        return json_http({"success": True, "msg": "", "obj": None}, 200)
+
+    def _post_attach(self, url: str, body: dict[str, Any]) -> Response:
+        email = unquote(url.rsplit("/", 2)[-2])
+        found = self._find(email)
+        if found is None:
+            return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
+        ids = {int(i) for i in cast(list[Any], body.get("inboundIds", []))}
+        if "/attach" in url:
+            merged = list(found.inboundIds) + sorted(ids - set(found.inboundIds))
+            updated = replace(found, inboundIds=merged)
+        else:
+            updated = replace(found, inboundIds=[i for i in found.inboundIds if i not in ids])
+        self.clients = [updated if c.email == email else c for c in self.clients]
+        return json_http({"success": True, "msg": "", "obj": None}, 200)
+
     def _route_post(self, url: str, body: dict[str, Any]) -> Response:
-        if "clients/add" in url:
-            raw: object = body.get("client")
-            if not isinstance(raw, dict):
-                return json_http({"success": False, "msg": "missing client", "obj": None}, 200)
-            client = cast(dict[str, Any], raw)
-            email = str(client.get("email", ""))
-            if self._find(email) is not None:
-                return json_http({"success": False, "msg": "duplicate email", "obj": None}, 200)
-            inbound_ids = [int(i) for i in cast(list[Any], body.get("inboundIds", []))]
-            uuid_value = str(client.get("id", ""))
-            sub_id = str(client.get("subId", ""))
-            self.clients.append(PanelClient(
-                email=email, uuid=uuid_value, subId=sub_id,
-                enable=bool(client.get("enable", True)),
-                flow=str(client.get("flow", "")),
-                limitIp=int(client.get("limitIp", 0)),
-                totalGB=int(client.get("totalGB", 0)),
-                expiryTime=int(client.get("expiryTime", 0)),
-                tgId=client.get("tgId", ""),
-                comment=str(client.get("comment", "")),
-                reset=int(client.get("reset", 0)),
-                inboundIds=inbound_ids,
-                traffic=ClientTraffic(
-                    id=0, inboundId=0, enable=True, email=email, uuid=uuid_value,
-                    subId=sub_id, up=0, down=0, expiryTime=0, total=0, reset=0,
-                ),
-            ))
-            return json_http({"success": True, "msg": "", "obj": None}, 200)
-        if "bulkEnable" in url or "bulkDisable" in url:
-            enable = "bulkEnable" in url
-            emails = [str(e) for e in cast(list[Any], body.get("emails", []))]
-            missing = [e for e in emails if self._find(e) is None]
-            if missing:
-                return json_http(
-                    {"success": False, "msg": f"client not found: {missing[0]}", "obj": None},
-                    200,
-                )
-            self.clients = [
-                replace(c, enable=enable) if c.email in emails else c
-                for c in self.clients
-            ]
-            return json_http({"success": True, "msg": "", "obj": {"changed": len(emails)}}, 200)
-        if "clients/del/" in url:
-            email = unquote(url.rsplit("/", 1)[-1])
-            found = self._find(email)
-            if found is None:
-                return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
-            self.clients.remove(found)
-            return json_http({"success": True, "msg": "", "obj": None}, 200)
-        if "clients/updateTraffic/" in url:
-            email = unquote(url.rsplit("/", 1)[-1])
-            found = self._find(email)
-            if found is None or found.traffic is None:
-                return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
-            updated = replace(
-                found,
-                traffic=replace(
-                    found.traffic,
-                    up=int(body.get("upload", 0)),
-                    down=int(body.get("download", 0)),
-                ),
-            )
-            self.clients = [updated if c.email == email else c for c in self.clients]
-            return json_http({"success": True, "msg": "", "obj": None}, 200)
-        if "clients/update/" in url:
-            email = unquote(url.rsplit("/", 1)[-1])
-            found = self._find(email)
-            if found is None:
-                return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
-            client = body
-            updated = replace(
-                found,
-                uuid=str(client.get("id", found.uuid)),
-                subId=str(client.get("subId", found.subId)),
-                enable=bool(client.get("enable", found.enable)),
-                flow=str(client.get("flow", found.flow)),
-                limitIp=int(client.get("limitIp", found.limitIp)),
-                totalGB=int(client.get("totalGB", found.totalGB)),
-                expiryTime=int(client.get("expiryTime", found.expiryTime)),
-                tgId=client.get("tgId", found.tgId),
-                comment=str(client.get("comment", found.comment)),
-                reset=int(client.get("reset", found.reset)),
-            )
-            self.clients = [updated if c.email == email else c for c in self.clients]
-            return json_http({"success": True, "msg": "", "obj": None}, 200)
-        if "/attach" in url or "/detach" in url:
-            email = unquote(url.rsplit("/", 2)[-2])
-            found = self._find(email)
-            if found is None:
-                return json_http({"success": False, "msg": "client not found", "obj": None}, 200)
-            ids = {int(i) for i in cast(list[Any], body.get("inboundIds", []))}
-            if "/attach" in url:
-                merged = list(found.inboundIds) + sorted(ids - set(found.inboundIds))
-                updated = replace(found, inboundIds=merged)
-            else:
-                updated = replace(found, inboundIds=[i for i in found.inboundIds if i not in ids])
-            self.clients = [updated if c.email == email else c for c in self.clients]
-            return json_http({"success": True, "msg": "", "obj": None}, 200)
+        for needle, handler in _POST_ROUTES:
+            if needle in url:
+                return handler(self, url, body)
         fallback: dict[str, Any] = {"success": True, "obj": []}
         return json_http(fallback, self._post_status)
+
+
+_POST_ROUTES: tuple[tuple[str, _PostHandler], ...] = (
+    ("clients/add", FakePanel._post_add),
+    ("bulkEnable", FakePanel._post_bulk),
+    ("bulkDisable", FakePanel._post_bulk),
+    ("clients/del/", FakePanel._post_del),
+    ("clients/updateTraffic/", FakePanel._post_update_traffic),
+    ("clients/update/", FakePanel._post_update),
+    ("/attach", FakePanel._post_attach),
+    ("/detach", FakePanel._post_attach),
+)

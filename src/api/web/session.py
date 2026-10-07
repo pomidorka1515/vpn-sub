@@ -33,8 +33,7 @@ class SessionRoutes(WebApiMixin):
             return _v(auth_token)
         return _v(request.cookies.get('auth_token'))
 
-    @staticmethod
-    def _clear_auth_cookies(response: Response) -> None:
+    def _clear_auth_cookies(self, response: Response) -> None:
         for name in ('auth_token', 'token'):
             response.set_cookie(
                 name,
