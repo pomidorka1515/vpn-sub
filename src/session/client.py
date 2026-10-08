@@ -11,7 +11,7 @@ from typing import Any, Literal, Unpack, cast
 from requests import ConnectionError, RequestException, Response, Session, Timeout
 
 from custom_types import Inbound, PanelClient, RequestKwargs
-from loggers import Logger
+from loggers import Logger, color_status
 
 from .cache import GenerationCache
 from .stamp import client_stamp_path as default_client_stamp_path
@@ -65,6 +65,7 @@ class XUiSession:
         mode: Literal["whitelist", "blacklist"] = "blacklist",
         inject_headers: Mapping[str, str | bytes] | None = None,
         health_check_interval: int = 20,
+        verbose: bool = False,
         transport: XUiPanelTransport | None = None,
         session: Session | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -90,6 +91,11 @@ class XUiSession:
             inject_headers: Extra headers merged into every request.
                 Caller-supplied headers take precedence (except Authorization).
             health_check_interval: Interval in seconds between panel health checks.
+            verbose: When True, log every completed panel HTTP request at DEBUG.
+                The line matches the gunicorn access format, including status
+                color. Dead-panel short-circuits and transport failures are not
+                requests and are not logged this way. The secret URI prefix and
+                query string are omitted.
             transport: Replacement HTTP transport. If omitted, a transport is built around session.
             session: Session used by the default transport. Defaults to a new ``requests.Session``.
             clock: Monotonic clock used for cache timing.
@@ -136,6 +142,7 @@ class XUiSession:
                 resolved_client_stamp, clock,
             )
             self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
+            self.verbose = verbose
 
             self._session: Session | None = None
             self._owns_session = session is None and transport is None
@@ -187,6 +194,35 @@ class XUiSession:
             return f"{base}/{url.lstrip('/')}"
         return url
 
+    def _request_target(self, url: str, /) -> str:
+        """Panel route only. The secret URI prefix and query string stay out."""
+        path = url.split("?", 1)[0]
+        base = self.base_url.rstrip("/")
+        panel_prefix = "/panel"
+        if base.endswith(panel_prefix):
+            base = base[:-len(panel_prefix)]
+        if path.startswith(base):
+            path = path[len(base):]
+        if not path.startswith("/"):
+            path = f"/{path}"
+        return path or "/"
+
+    def _log_request(self, method: str, url: str, response: Response) -> None:
+        if not self.verbose:
+            return
+        status = str(response.status_code)
+        size = len(response.content)
+        raw = getattr(response, "raw", None)
+        version = getattr(raw, "version", None)
+        # urllib3 reports 10 for HTTP/1.0 and 11 for HTTP/1.1.
+        protocol = "HTTP/1.1"
+        if version == 10:
+            protocol = "HTTP/1.0"
+        target = self._request_target(url)
+        self.log.debug(
+            f'"{method} {target} {protocol}" {color_status(status)} {size}b'
+        )
+
     def _mark_dead(self, reason: str) -> None:
         with self._health_check_lock:
             was_alive = not self._dead
@@ -219,26 +255,31 @@ class XUiSession:
     def _perform_health_check(self) -> None:
         try:
             response = self._health_request()
-            if response.status_code in (401, 403):
-                self._mark_dead(f"token rejected (HTTP {response.status_code})")
-                return
-
-            if response.status_code != 200:
-                self._mark_dead(f"HTTP {response.status_code}")
-                return
-
-            content = response.json()
-            if not content.get("success"):
-                self._mark_dead(f"panel returned message: {content.get('msg')}")
-                return
-
-            self._mark_alive()
         except Timeout:
             self._mark_dead(f"timeout of {_HEALTH_CHECK_TIMEOUT:.0f} seconds exceeded")
+            return
         except ConnectionError as error:
             self._mark_dead(f"connection error: {error}")
+            return
         except RequestException as error:
             self._mark_dead(f"request error: {error}")
+            return
+
+        self._log_request("GET", "panel/api/inbounds/list", response)
+        if response.status_code in (401, 403):
+            self._mark_dead(f"token rejected (HTTP {response.status_code})")
+            return
+
+        if response.status_code != 200:
+            self._mark_dead(f"HTTP {response.status_code}")
+            return
+
+        content = response.json()
+        if not content.get("success"):
+            self._mark_dead(f"panel returned message: {content.get('msg')}")
+            return
+
+        self._mark_alive()
 
     def _health_check(self) -> None:
         while not self._health_check_event.wait(self._health_check_interval):
@@ -269,7 +310,7 @@ class XUiSession:
         kwargs.setdefault("timeout", _DEFAULT_REQUEST_TIMEOUT)
 
         try:
-            return self._transport.request(method, request_url, **cast(Any, kwargs))
+            response = self._transport.request(method, request_url, **cast(Any, kwargs))
         except Timeout:
             reason = f"timeout of {_DEFAULT_REQUEST_TIMEOUT:.0f} seconds exceeded"
             self._mark_dead(reason)
@@ -282,6 +323,8 @@ class XUiSession:
             reason = f"request error: {error}"
             self._mark_dead(reason)
             return self._down_response(reason)
+        self._log_request(method, request_url, response)
+        return response
 
     def get(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
         return self.request("GET", url, **kwargs)

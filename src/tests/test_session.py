@@ -8,6 +8,7 @@ import pytest
 from requests import ConnectionError, Response, Timeout
 
 from helpers import json_http, make_inbound, make_panel_client
+from loggers import Colors, color_status
 from session import XUiSession, _client_stamp_path, inbound_stamp_path
 
 class FakeClock:
@@ -346,3 +347,46 @@ def test_url_strips_panel_suffix_before_joining(
         assert session._format_url("panel/api/server/status") == "http://127.0.0.1:2053/secret/panel/api/server/status"  # pyright: ignore[reportPrivateUsage]
     finally:
         session.close()
+
+
+def test_verbose_logs_completed_requests(
+    transport: RecordingTransport, clock: FakeClock, caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = XUiSession(**session_kwargs(
+        transport=transport, clock=clock, uri="secret/panel", verbose=True,
+    ))
+    session.log.addHandler(caplog.handler)
+    try:
+        with caplog.at_level("DEBUG", logger=session.log.name):
+            response = session.get("panel/api/inbounds/list?token=secret")
+            session._perform_health_check()  # pyright: ignore[reportPrivateUsage]
+            session.dead = True
+            down = session.get("panel/api/inbounds/list")
+    finally:
+        session.log.removeHandler(caplog.handler)
+        session.close()
+
+    size = len(response.content)
+    expected = (
+        f'"GET /panel/api/inbounds/list HTTP/1.1" '
+        f"{color_status('200')} {size}b"
+    )
+    assert caplog.messages.count(expected) == 2
+    assert color_status("200") == f"{Colors.GREEN}200{Colors.RESET}"
+    assert "secret" not in "".join(caplog.messages)
+    assert down.status_code == 503
+    assert not any("503" in message for message in caplog.messages)
+
+
+def test_verbose_defaults_to_quiet(
+    panel: XUiSession, caplog: pytest.LogCaptureFixture,
+) -> None:
+    panel.log.addHandler(caplog.handler)
+    try:
+        with caplog.at_level("DEBUG", logger=panel.log.name):
+            panel.get("panel/api/server/status")
+    finally:
+        panel.log.removeHandler(caplog.handler)
+
+    assert panel.verbose is False
+    assert not any("HTTP/1.1" in message for message in caplog.messages)

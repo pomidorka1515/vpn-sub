@@ -12,6 +12,7 @@ from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
 
 from .colors import Colors
+from .colors import color_status as _color_status
 from .level import TRACE, env_level
 from .logger import Logger
 
@@ -73,21 +74,6 @@ def _access_log_level(environ: MutableMapping[str, object], status: str) -> int:
             return TRACE
         return logging.DEBUG
     return logging.INFO
-
-
-def _color_status(status: str) -> str:
-    """Color an HTTP status by class for journal access logs."""
-    colors = {
-        "1": Colors.GREY,
-        "2": Colors.GREEN,
-        "3": Colors.CYAN,
-        "4": Colors.YELLOW,
-        "5": Colors.RED,
-    }
-    color = colors.get(status[:1])
-    if color is None:
-        return status
-    return f"{color}{status}{Colors.RESET}"
 
 
 class GunicornLogger(GunicornBaseLogger):
