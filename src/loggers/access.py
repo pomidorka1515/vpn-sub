@@ -12,7 +12,7 @@ from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
 
 from .colors import Colors
-from .logger import Logger
+from .logger import TRACE, Logger
 
 __all__ = [
     "GunicornLogger",
@@ -20,7 +20,6 @@ __all__ = [
     "_color_status",
     "_request_path",
     "_safe_request_target",
-    "_should_skip_access_log",
 ]
 
 
@@ -61,12 +60,18 @@ def _request_path(environ: MutableMapping[str, object]) -> str:
     return _safe_request_target(raw_uri).split("?", 1)[0]
 
 
-def _should_skip_access_log(environ: MutableMapping[str, object], status: str) -> bool:
-    """Drop routine dashboard polls. Failures stay visible."""
-    if status != "200":
-        return False
+def _is_polling_path(environ: MutableMapping[str, object]) -> bool:
     path = _request_path(environ).rstrip("/") or "/"
     return path == "/api/state/polling" or path.endswith("/api/state/polling")
+
+
+def _access_log_level(environ: MutableMapping[str, object], status: str) -> int:
+    """2xx is DEBUG. A successful poll is TRACE. Anything else stays INFO."""
+    if len(status) == 3 and status.isdigit() and status.startswith("2"):
+        if _is_polling_path(environ):
+            return TRACE
+        return logging.DEBUG
+    return logging.INFO
 
 
 def _color_status(status: str) -> str:
@@ -115,9 +120,6 @@ class GunicornLogger(GunicornBaseLogger):
 
         atoms = self.atoms(resp, req, environ, request_time)
         status = str(atoms.get("s") or "-")
-        if _should_skip_access_log(environ, status):
-            return
-
         method = str(atoms.get("m") or environ.get("REQUEST_METHOD") or "-")
         raw_uri = str(environ.get("RAW_URI") or environ.get("PATH_INFO") or "/")
         protocol = str(atoms.get("H") or environ.get("SERVER_PROTOCOL") or "HTTP/1.1")
@@ -126,4 +128,4 @@ class GunicornLogger(GunicornBaseLogger):
         size = f"{sent}b" if sent is not None else "-"
         user_agent = str(environ.get("HTTP_USER_AGENT") or "-").replace('"', "\\\"")
         message = f'{_client_address(environ)} > "{method} {target} {protocol}" {_color_status(status)} {size} "{user_agent}"'
-        self.access_log.info(message)
+        self.access_log.log(_access_log_level(environ, status), message)

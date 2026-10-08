@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .colors import Colors
 from .common import _ANSI_ESCAPE
@@ -14,11 +14,15 @@ if TYPE_CHECKING:
     from bots import AdminBot
     from config import LinesConfigLike
 
-__all__ = ["Logger"]
+__all__ = ["Logger", "TRACE"]
+
+TRACE = 5
+logging.addLevelName(TRACE, "TRACE")
 
 
 class Logger(logging.Logger):
     COLORS = {
+        "TRACE": Colors.GREY,
         "DEBUG": Colors.CYAN,
         "INFO": Colors.GREEN,
         "WARNING": Colors.YELLOW,
@@ -26,14 +30,37 @@ class Logger(logging.Logger):
         "CRITICAL": Colors.MAGENTA,
     }
     RESET = Colors.RESET
+    TRACE = TRACE
 
     def __init__(self, name: str, level: int = logging.DEBUG):
         super().__init__(name, level)
+        logging.Logger.manager.loggerDict[name] = self
         self.ansi_escape = _ANSI_ESCAPE
         if not self.handlers:
             handler = logging.StreamHandler()
             handler.setFormatter(self._make_formatter())
             self.addHandler(handler)
+
+    def trace(
+        self,
+        msg: object,
+        *args: object,
+        exc_info: Any = None,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        extra: Mapping[str, object] | None = None,
+    ) -> None:
+        """Log ``msg % args`` at TRACE, below DEBUG."""
+        if self.isEnabledFor(TRACE):
+            self._log(
+                TRACE,
+                msg,
+                args,
+                exc_info=exc_info,
+                stack_info=stack_info,
+                stacklevel=stacklevel,
+                extra=extra,
+            )
 
     def _make_formatter(self) -> logging.Formatter:
         parent = self

@@ -11,10 +11,11 @@ from __future__ import annotations
 from .colors import Colors
 from .common import _ANSI_ESCAPE, _safe_handle_error
 from .handlers import _JSONLinesLogger, _TelegramLogger
-from .logger import Logger
+from .logger import TRACE, Logger
 
 __all__ = [
     "Logger",
+    "TRACE",
     "Colors",
     "_ANSI_ESCAPE",
     "_JSONLinesLogger",

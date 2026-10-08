@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from types import SimpleNamespace
 from collections.abc import Mapping
@@ -12,7 +13,7 @@ from gunicorn.http.wsgi import Response
 
 from loggers.access import GunicornLogger, _color_status
 from loggers import Colors
-from loggers import Logger
+from loggers import TRACE, Logger
 from loggers.handlers import _JSONLinesLogger
 
 
@@ -36,11 +37,11 @@ def _environ(path: str) -> dict[str, str]:
     }
 
 
-def test_access_log_skips_successful_state_polling(monkeypatch: pytest.MonkeyPatch) -> None:
-    logged: list[str] = []
+def test_access_log_levels_by_status_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    logged: list[tuple[int, str]] = []
     logger = GunicornLogger.__new__(GunicornLogger)
     logger.cfg = cast(Any, _Cfg())
-    logger.access_log = cast(Any, SimpleNamespace(info=logged.append))
+    logger.access_log = cast(Any, SimpleNamespace(log=lambda level, message: logged.append((level, message))))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 12}
 
     def atoms_for(*args: object) -> dict[str, object]:
@@ -56,7 +57,9 @@ def test_access_log_skips_successful_state_polling(monkeypatch: pytest.MonkeyPat
         _environ("/sub/api/api/state/polling"),
         timedelta(milliseconds=4),
     )
-    assert logged == []
+    assert len(logged) == 1
+    assert logged[0][0] == 5
+    assert "/api/state/polling" in logged[0][1]
 
     atoms.update(s="401", B=18)
     logger.access(
@@ -65,9 +68,10 @@ def test_access_log_skips_successful_state_polling(monkeypatch: pytest.MonkeyPat
         _environ("/sub/api/api/state/polling"),
         timedelta(milliseconds=4),
     )
-    assert len(logged) == 1
-    assert "401" in logged[0]
-    assert "/api/state/polling" in logged[0]
+    assert len(logged) == 2
+    assert logged[1][0] == logging.INFO
+    assert "401" in logged[1][1]
+    assert "/api/state/polling" in logged[1][1]
 
     logged.clear()
     atoms.update(s="200", B=8)
@@ -78,14 +82,35 @@ def test_access_log_skips_successful_state_polling(monkeypatch: pytest.MonkeyPat
         timedelta(milliseconds=4),
     )
     assert len(logged) == 1
-    assert "200" in logged[0]
+    assert logged[0][0] == logging.DEBUG
+    assert "200" in logged[0][1]
+
+    logged.clear()
+    atoms.update(s="201", B=8)
+    logger.access(
+        cast(Response, SimpleNamespace(status="201 CREATED", sent=8)),
+        req,
+        _environ("/sub/api/api/state/polling"),
+        timedelta(milliseconds=4),
+    )
+    assert logged[0][0] == 5
+
+    logged.clear()
+    atoms.update(s="500", B=8)
+    logger.access(
+        cast(Response, SimpleNamespace(status="500 ERROR", sent=8)),
+        req,
+        _environ("/sub/api/api/health"),
+        timedelta(milliseconds=4),
+    )
+    assert logged[0][0] == logging.INFO
 
 
 def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> None:
-    logged: list[str] = []
+    logged: list[tuple[int, str]] = []
     logger = GunicornLogger.__new__(GunicornLogger)
     logger.cfg = cast(Any, _Cfg())
-    logger.access_log = cast(Any, SimpleNamespace(info=logged.append))
+    logger.access_log = cast(Any, SimpleNamespace(log=lambda level, message: logged.append((level, message))))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 4}
 
     def atoms_for(*args: object) -> dict[str, object]:
@@ -111,7 +136,7 @@ def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> N
             _environ("/health"),
             timedelta(milliseconds=1),
         )
-        assert logged == [
+        assert [message for _, message in logged] == [
             f'203.0.113.10 > "GET /health HTTP/1.1" {color}{status}{Colors.RESET} 4b "dashboard"'
         ]
 
@@ -130,6 +155,29 @@ def test_colors_are_ansi_strings() -> None:
     assert Colors.STRIKE == "\033[9m"
     assert Logger.RESET is Colors.RESET
     assert Logger.COLORS["ERROR"] is Colors.RED
+    assert Logger.COLORS["TRACE"] is Colors.GREY
+    assert logging.getLevelName(TRACE) == "TRACE"
+
+
+def test_logger_trace_is_below_debug() -> None:
+    stored: list[tuple[int, str]] = []
+
+    class _Handler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            stored.append((record.levelno, record.getMessage()))
+
+    logger = Logger("trace")
+    logger.handlers.clear()
+    logger.addHandler(_Handler())
+    logger.propagate = False
+    logger.setLevel(TRACE)
+
+    logger.trace("poll %s", "ok")
+    assert stored == [(TRACE, "poll ok")]
+
+    logger.setLevel(logging.DEBUG)
+    assert not logger.isEnabledFor(TRACE)
+    assert logger.isEnabledFor(logging.DEBUG)
 
 
 def test_jsonl_strips_message_colors() -> None:
