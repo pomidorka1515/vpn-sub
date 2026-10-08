@@ -255,9 +255,7 @@ Wants=network.target redis-server.service
 
 [Service]
 User=root
-WorkingDirectory=X
-Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=src
+WorkingDirectory=/opt/vpn-sub
 
 # --- optional path overrides ---
 # Environment="DIR_DATA=/var/lib/vpn-sub"
@@ -272,8 +270,7 @@ Environment=PYTHONPATH=src
 # Environment="LOGLEVEL=INFO"  # recommended for prod
 # Environment="LOGLEVEL_GUNICORN=INFO"
 
-ExecStart=X/venv/bin/gunicorn \
-    --config src/gunicorn.conf.py
+ExecStart=/opt/vpn-sub/vpn-sub
 
 TimeoutStopSec=35
 KillMode=mixed
@@ -286,21 +283,9 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 ```
-*(replace `X` with your path)*
-
-`src/gunicorn.conf.py` loads `wsgi:app` (module `src/wsgi.py`, which calls
-`create_application()` and registers shutdown at exit). The unit's working
-directory must be the checkout. `PYTHONPATH=src` is what lets gunicorn import
-`wsgi` and `serve`. `src/app.py` no longer runs anything at import time. A
-quick local run is `PYTHONPATH=src venv/bin/python -m main`.
-
-Do not pass `-w` or `--workers`. The config file already forces one worker. A
-second process that wins the primary lock would start another `BWatch` and
-another pair of Telegram bots.
-Rate-limit counters are still shared if you do, because they live in Redis.
 
 ### Nginx location block
-```
+```nginx
 location /sub {
 	proxy_pass http://127.0.0.1:5550;
 
@@ -392,21 +377,6 @@ config file. From `data/config.json` the example `../config.schema.json` works
 if `data/` sits next to the checkout. If you move `data/`, copy the schema next
 to the config or fix `$schema`.
 
-```ini
-[Service]
-WorkingDirectory=X
-Environment=DIR_DATA=X/data
-Environment=GUNICORN_BIND=127.0.0.1:5550
-ExecStart=X/vpn-sub
-```
-
-No `PYTHONPATH` and no `venv/bin/gunicorn`. Do not add `--workers`. The frozen
-entry already sets `workers = 1` and `threads = 3`. Stop with SIGTERM. Do not
-send SIGUSR2: gunicorn's graceful re-exec launches `sys.executable`, which
-inside the payload is the unpacked child, not the onefile stub, so the new
-process has no bootstrap and no packed files. SIGHUP reloads gunicorn config
-in-process and is fine.
-
 The unpack directory is `{CACHE_DIR}/<name>/{VERSION}/{PID}_{TIME_US}_{RANDOM}`
 and is removed only after the child has exited. It is not shared across
 restarts. A shared cache would be truncated by the next start while the running
@@ -415,13 +385,15 @@ process still had those `.so` files mapped.
 directory during the 5s default grace window; systemd's `TimeoutStopSec` is what
 bounds a stuck stop.
 
-The Discord unit is the same shape, with `ExecStart=X/vpn-sub-discord` and
-`SUB_HTTP_URL`, `SUB_URI`, and `SUB_API_URI` set to the Flask side. Start Flask
-first.
+The Discord unit is the same shape as the main one, with `ExecStart=/opt/vpn-sub/vpn-sub-discord` and
+`SUB_HTTP_URL`, `SUB_URI`, and `SUB_API_URI` set to the Flask side. Start Flask first.
 
 ## Development
 
 ```bash
+# 3.13+
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt && venv/bin/pip install -e ".[dev]"
 venv/bin/pytest
 venv/bin/mypy && venv/bin/pyright
 venv/bin/python -m src.wsgi   # local run; production is the systemd unit above
@@ -431,7 +403,7 @@ HTTP contracts: [docs/API.md](docs/API.md) (cookie `auth_token`) and
 [docs/API_ADMIN.md](docs/API_ADMIN.md) (`Authorization` header).
 
 ## Status
-Personal project. Works in production for my small user base.
+Personal project. Deployable by anyone who is familiar with linux and python.
 
 ## License
 GPL v3
