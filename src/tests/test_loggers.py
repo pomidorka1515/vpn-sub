@@ -14,6 +14,7 @@ from gunicorn.http.wsgi import Response
 from loggers.access import GunicornLogger, _color_status
 from loggers import Colors
 from loggers import TRACE, Logger
+from loggers.level import env_level, parse_level
 from loggers.handlers import _JSONLinesLogger
 
 
@@ -178,6 +179,115 @@ def test_logger_trace_is_below_debug() -> None:
     logger.setLevel(logging.DEBUG)
     assert not logger.isEnabledFor(TRACE)
     assert logger.isEnabledFor(logging.DEBUG)
+
+
+def test_parse_level_accepts_names_and_floors_ints() -> None:
+    assert parse_level("trace") == TRACE
+    assert parse_level("DEBUG") == logging.DEBUG
+    assert parse_level("Info") == logging.INFO
+    assert parse_level("warn") == logging.WARNING
+    assert parse_level("warning") == logging.WARNING
+    assert parse_level("error") == logging.ERROR
+    assert parse_level("critical") == logging.CRITICAL
+    assert parse_level("fatal") == logging.CRITICAL
+    assert parse_level("  info  ") == logging.INFO
+
+    assert parse_level("0") == TRACE
+    assert parse_level("5") == TRACE
+    assert parse_level("9") == TRACE
+    assert parse_level("10") == logging.DEBUG
+    assert parse_level("15") == logging.DEBUG
+    assert parse_level("19.9") == logging.DEBUG
+    assert parse_level("20") == logging.INFO
+    assert parse_level("29") == logging.INFO
+    assert parse_level("30") == logging.WARNING
+    assert parse_level("40") == logging.ERROR
+    assert parse_level("50") == logging.CRITICAL
+    assert parse_level("99") == logging.CRITICAL
+    assert parse_level("-3") == TRACE
+
+    with pytest.raises(ValueError):
+        parse_level("")
+    with pytest.raises(ValueError):
+        parse_level("verbose")
+    with pytest.raises(ValueError):
+        parse_level("nan")
+
+
+def test_env_level_reads_loglevel(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LOGLEVEL", raising=False)
+    assert env_level("LOGLEVEL", logging.DEBUG) == logging.DEBUG
+
+    monkeypatch.setenv("LOGLEVEL", "warning")
+    assert env_level("LOGLEVEL", logging.DEBUG) == logging.WARNING
+
+    monkeypatch.setenv("LOGLEVEL", "15")
+    assert env_level("LOGLEVEL", logging.DEBUG) == logging.DEBUG
+
+    monkeypatch.setenv("LOGLEVEL", "nope")
+    assert env_level("LOGLEVEL", logging.INFO) == logging.INFO
+
+    monkeypatch.setenv("LOGLEVEL", "   ")
+    assert env_level("LOGLEVEL", logging.DEBUG) == logging.DEBUG
+
+
+def test_logger_uses_loglevel_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOGLEVEL", "warning")
+    logger = Logger("env-level")
+    assert logger.level == logging.WARNING
+    assert not logger.isEnabledFor(logging.INFO)
+
+    overridden = Logger("env-level-override", logging.DEBUG)
+    assert overridden.level == logging.DEBUG
+
+    monkeypatch.setenv("LOGLEVEL", "12")
+    floored = Logger("env-level-int")
+    assert floored.level == logging.DEBUG
+
+
+def test_gunicorn_access_level_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LOGLEVEL_GUNICORN replaces gunicorn's hardcoded INFO access threshold.
+
+    Error logs stay on gunicorn's own loglevel. A missing or bad value falls
+    back to DEBUG so 2xx lines (and TRACE polls) are not silently dropped.
+    """
+    from gunicorn.config import Config
+
+    error_log = logging.getLogger("gunicorn.error")
+    access_log = logging.getLogger("gunicorn.access")
+    previous = (error_log.level, access_log.level, list(error_log.handlers), list(access_log.handlers))
+
+    def restore() -> None:
+        error_log.setLevel(previous[0])
+        access_log.setLevel(previous[1])
+        error_log.handlers[:] = previous[2]
+        access_log.handlers[:] = previous[3]
+
+    cfg = Config()
+    cfg.set("loglevel", "info")
+    cfg.set("accesslog", None)
+    cfg.set("errorlog", "-")
+
+    try:
+        monkeypatch.delenv("LOGLEVEL_GUNICORN", raising=False)
+        logger = GunicornLogger(cfg)
+        assert logger.access_log.level == logging.DEBUG
+        assert logger.error_log.level == logging.INFO
+
+        monkeypatch.setenv("LOGLEVEL_GUNICORN", "warning")
+        logger.setup(cfg)
+        assert logger.access_log.level == logging.WARNING
+        assert logger.error_log.level == logging.INFO
+
+        monkeypatch.setenv("LOGLEVEL_GUNICORN", "7")
+        logger.setup(cfg)
+        assert logger.access_log.level == TRACE
+
+        monkeypatch.setenv("LOGLEVEL_GUNICORN", "nope")
+        logger.setup(cfg)
+        assert logger.access_log.level == logging.DEBUG
+    finally:
+        restore()
 
 
 def test_jsonl_strips_message_colors() -> None:

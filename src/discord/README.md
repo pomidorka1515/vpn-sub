@@ -51,6 +51,12 @@ All path variables are **optional**.
 | `SUB_HTTP_URL` | `http://127.0.0.1:5550` | Flask bind (loopback) |
 | `SUB_URI` | `sub` | Same as main `cfg["uri"]` |
 | `SUB_API_URI` | `privapi` | Same as main `cfg["api_uri"]` |
+| `LOGLEVEL` | `DEBUG` | Threshold for `Logger()`. Same variable as Flask. |
+
+`LOGLEVEL` is case-insensitive (`TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`,
+`ERROR`, `CRITICAL` / `FATAL`) or an integer rounded down to the nearest
+level. Unset, blank, or unrecognized values stay `DEBUG`. This process has no
+gunicorn access log, so `LOGLEVEL_GUNICORN` does nothing here.
 
 WebAPI prefix: `{SUB_HTTP_URL}/{SUB_URI}/webapi`.  
 Admin API prefix: `{SUB_HTTP_URL}/{SUB_URI}/{SUB_API_URI}`.  

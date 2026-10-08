@@ -226,6 +226,15 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
 | `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
 | `GUNICORN_BIND` | `127.0.0.1:5550`         | Address gunicorn listens on (`src/gunicorn.conf.py`). Loopback only.    |
+| `LOGLEVEL`      | `DEBUG`                  | Threshold for every `Logger()`. Does not affect gunicorn.               |
+| `LOGLEVEL_GUNICORN` | `DEBUG`              | HTTP access-log threshold.                                              |
+
+`LOGLEVEL` and `LOGLEVEL_GUNICORN` accept a level name or an integer. Names
+are case-insensitive: `TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`, `ERROR`,
+`CRITICAL` / `FATAL`. An integer is rounded down to the nearest level (`15`
+is `DEBUG`, `0` is `TRACE`, `99` is `CRITICAL`). Unset, blank, or unrecognized
+values use the default. `LOGLEVEL` does not change gunicorn's own error log.
+`LOGLEVEL_GUNICORN` only decides whether an access line is emitted.
 
 Shipped files (`res/`, `lang.jsonc`) are found by walking up from the module
 until one of those markers exists. In a checkout that is the repository root. In
@@ -260,6 +269,8 @@ Environment=PYTHONPATH=src
 # Environment="PATH_AUDIT=/var/log/vpn-sub/audit.jsonl"
 # Environment="PATH_LANG=/path/to/vpn-sub/lang.jsonc"
 # Environment="GUNICORN_BIND=127.0.0.1:5550"
+# Environment="LOGLEVEL=INFO"  # recommended for prod
+# Environment="LOGLEVEL_GUNICORN=INFO"
 
 ExecStart=X/venv/bin/gunicorn \
     --config src/gunicorn.conf.py

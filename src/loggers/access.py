@@ -12,7 +12,8 @@ from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
 
 from .colors import Colors
-from .logger import TRACE, Logger
+from .level import TRACE, env_level
+from .logger import Logger
 
 __all__ = [
     "GunicornLogger",
@@ -94,6 +95,12 @@ class GunicornLogger(GunicornBaseLogger):
 
     def setup(self, cfg: Config) -> None:
         super().setup(cfg)
+        # gunicorn pins access logs at INFO, which would drop every 2xx line
+        # this class emits at DEBUG or TRACE. LOGLEVEL_GUNICORN is that
+        # threshold only. Error logs stay on gunicorn's own loglevel, and
+        # ``_access_log_level`` is unchanged: a 2xx is still DEBUG, a
+        # successful poll is still TRACE, and anything else is still INFO.
+        self.access_log.setLevel(env_level("LOGLEVEL_GUNICORN", logging.DEBUG))
         class AccessFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
                 original_level = record.levelname

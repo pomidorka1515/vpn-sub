@@ -9,15 +9,13 @@ from typing import TYPE_CHECKING, Any
 from .colors import Colors
 from .common import _ANSI_ESCAPE
 from .handlers import _JSONLinesLogger, _TelegramLogger
+from .level import TRACE, env_level
 
 if TYPE_CHECKING:
     from bots import AdminBot
     from config import LinesConfigLike
 
 __all__ = ["Logger", "TRACE"]
-
-TRACE = 5
-logging.addLevelName(TRACE, "TRACE")
 
 
 class Logger(logging.Logger):
@@ -32,7 +30,15 @@ class Logger(logging.Logger):
     RESET = Colors.RESET
     TRACE = TRACE
 
-    def __init__(self, name: str, level: int = logging.DEBUG):
+    def __init__(self, name: str, level: int | None = None):
+        """Open a process logger.
+
+        ``level`` overrides the threshold for this logger only. When it is
+        omitted, ``LOGLEVEL`` applies (default DEBUG). Gunicorn access logs
+        are not ``Logger`` instances and do not read that variable.
+        """
+        if level is None:
+            level = env_level("LOGLEVEL", logging.DEBUG)
         super().__init__(name, level)
         logging.Logger.manager.loggerDict[name] = self
         self.ansi_escape = _ANSI_ESCAPE
