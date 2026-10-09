@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, cast
 import uuid
 
 import pytest
@@ -40,7 +39,7 @@ def flask_app() -> Flask:
     app.json_provider_class = _OrderedJSONProvider
     app.json = _OrderedJSONProvider(app)
     # jinja_loader is a cached_property; assigning replaces the template lookup.
-    cast(Any, app).jinja_loader = FileSystemLoader(str(RES_DIR))
+    app.jinja_env.loader = FileSystemLoader(str(RES_DIR))
     return app
 
 

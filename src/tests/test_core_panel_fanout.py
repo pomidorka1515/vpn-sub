@@ -1,7 +1,9 @@
 # Panel poll fan-out: overlap, order, and first-failure contracts.
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Unpack, cast
+from config import JsonValue
+from typing_contracts import FakePanelOptions
 import threading
 import time
 import uuid
@@ -21,7 +23,7 @@ from requests import Response
 from session import XUiSession
 
 
-def _status_obj() -> dict[str, Any]:
+def _status_obj() -> dict[str, JsonValue]:
     return {
         "cpu": 1.0,
         "cpuCores": 2,
@@ -56,7 +58,7 @@ class _Span:
 class TimedPanel(FakePanel):
     """Records start/end of get/post under a shared lock, then sleeps."""
 
-    def __init__(self, span: _Span, delay: float, **kwargs: Any) -> None:
+    def __init__(self, span: _Span, delay: float, **kwargs: Unpack[FakePanelOptions]) -> None:
         super().__init__(**kwargs)
         self._span = span
         self._delay = delay
@@ -168,7 +170,7 @@ def test_all_traffic_keeps_fast_panel_when_slow_raises(database: Database) -> No
 class HoldPanel(FakePanel):
     """Holds the first request of a call until every panel has entered it."""
 
-    def __init__(self, gate: threading.Barrier, **kwargs: Any) -> None:
+    def __init__(self, gate: threading.Barrier, **kwargs: Unpack[FakePanelOptions]) -> None:
         super().__init__(**kwargs)
         self._gate = gate
         self._held = False

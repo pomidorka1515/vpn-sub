@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Callable, cast
+from typing import Callable, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -112,24 +112,24 @@ def _message(text: str, user_id: int = 42) -> types.Message:
     )
 
 
-def _wire(mixin: Any) -> tuple[Any, MagicMock, MagicMock]:
+def _wire[M: (PublicSettingsMixin, PublicAccountMixin, PublicLoginMixin, PublicTrafficMixin)](mixin: M) -> tuple[M, MagicMock, MagicMock]:
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.log = MagicMock()
     mixin.TEXTS = TEXTS
     mixin.cfg = config_mock(subscription_config(
         fingerprints=["chrome", "firefox"], uri="/sub/", domain="https://example.test/",
         profiles={"fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"])},
     ))
-    mixin.get_lang = MagicMock(return_value="en")
-    mixin.get_menu = MagicMock(return_value="menu")
-    mixin.cmd_start = MagicMock()
-    mixin.send_info = MagicMock()
-    mixin._answer_callback = MagicMock()
-    mixin._delete_message = MagicMock()
-    mixin._send_message = MagicMock()
+    setattr(mixin, "get_lang", MagicMock(return_value="en"))
+    setattr(mixin, "get_menu", MagicMock(return_value="menu"))
+    setattr(mixin, "cmd_start", MagicMock())
+    setattr(mixin, "send_info", MagicMock())
+    setattr(mixin, "_answer_callback", MagicMock())
+    setattr(mixin, "_delete_message", MagicMock())
+    setattr(mixin, "_send_message", MagicMock())
     telegram.send_message.return_value = _message("next")
     return mixin, telegram, subscription
 

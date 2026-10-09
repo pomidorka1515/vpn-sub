@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, cast
+from typing import cast
+from flask.testing import FlaskClient
 
 import pytest
 from flask import Flask
@@ -38,7 +39,7 @@ def flask_app() -> Flask:
     app.json_provider_class = _OrderedJSONProvider
     app.json = _OrderedJSONProvider(app)
     # jinja_loader is a cached_property; assigning replaces the template lookup.
-    cast(Any, app).jinja_loader = FileSystemLoader(str(RES_DIR))
+    app.jinja_env.loader = FileSystemLoader(str(RES_DIR))
     return app
 
 
@@ -323,7 +324,7 @@ def test_admin_token_api_root_omits_empty_api_uri(
 
 def _polling_api(
     database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
-) -> Any:
+) -> FlaskClient:
     from custom_types import NetTrafficStats
     from sysutil import (
         AppMemory, ConnCount, LoadAverage,

@@ -1,19 +1,27 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Protocol, cast
+from collections.abc import Callable, Coroutine
+
+
+class SlashCommand(Protocol):
+    _callback: Callable[[object, FakeInteraction], Coroutine[object, object, object]]
+    binding: object
 
 from discord_helpers import FakeInteraction, FakeUser, json_ok, make_public_bot, run
 from public.routing import PublicRoutingMixin
 
 
-def _invoke_slash(command: Any, interaction: FakeInteraction) -> None:
+def _invoke_slash(command: object, interaction: FakeInteraction) -> None:
+    command = cast(SlashCommand, command)
     callback = command._callback
     binding = getattr(command, "binding", None)
     if binding is not None:
         run(callback(binding, interaction))
     else:
-        run(callback(interaction))
+        unbound = cast(Callable[[FakeInteraction], Coroutine[object, object, object]], callback)
+        run(unbound(interaction))
 
 
 def test_unauthenticated_users_cannot_hit_protected_handlers() -> None:

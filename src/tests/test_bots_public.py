@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from types import SimpleNamespace
-from typing import Any, Callable, cast
+from typing import Callable, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,8 +25,8 @@ def public_bot() -> tuple[PublicBot, MagicMock, MagicMock]:
     bot = PublicBot.__new__(PublicBot)
     telegram = MagicMock()
     subscription = MagicMock()
-    bot.bot = cast(Any, telegram)
-    bot.sub = cast(Any, subscription)
+    bot.bot = telegram
+    bot.sub = subscription
     subscription.telegram_svc.get_telegram_language.return_value = "en"
     bot.TEXTS = {
         lang: {button: f"{lang}:{button}" for button, _, _ in bot.ROUTES}

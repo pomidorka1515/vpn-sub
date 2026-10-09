@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
+from werkzeug.test import TestResponse
 import json
 
 import pytest
@@ -30,10 +31,10 @@ class _RecordingAudit:
         self.records.append(cast(dict[str, object], record))
 
 
-def _valid_config() -> dict[str, Any]:
+def _valid_config() -> dict[str, JsonValue]:
     data = json.loads(_EXAMPLE_PATH.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
-    data = cast(dict[str, object], data)
+    data = cast(dict[str, JsonValue], data)
     data["$schema"] = "../config.schema.json"
     data["api_token"] = "secret-token"
     data["api_admin_ui_auth"] = ["admin", "panel-secret"]
@@ -43,8 +44,9 @@ def _valid_config() -> dict[str, Any]:
     return data
 
 
-def _bad_node_profiles() -> dict[str, Any]:
-    profile = dict(_valid_config()["profiles"]["profile1"])
+def _bad_node_profiles() -> dict[str, JsonValue]:
+    profiles = cast(dict[str, JsonValue], _valid_config()["profiles"])
+    profile = dict(cast(dict[str, JsonValue], profiles["profile1"]))
     profile["node"] = "missing"
     return {"profile1": profile}
 
@@ -128,8 +130,8 @@ def test_config_get_returns_file_and_stable_etag(tmp_path: Path, flask_app: Flas
 def _set(
     flask_app: Flask,
     base: str,
-    values: dict[str, Any],
-) -> Any:
+    values: dict[str, JsonValue],
+) -> TestResponse:
     return flask_app.test_client().post(
         "/sub/privapi/api/config/set",
         json={"base": base, "values": values},
@@ -176,7 +178,7 @@ def test_config_set_one_key_keeps_indent_and_other_keys(tmp_path: Path, flask_ap
 def test_config_set_rejects_without_writing(
     tmp_path: Path,
     flask_app: Flask,
-    values: dict[str, Any],
+    values: dict[str, JsonValue],
     message: str,
 ) -> None:
     cfg, path, audit = _config_api(tmp_path, flask_app)

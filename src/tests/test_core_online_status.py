@@ -1,4 +1,5 @@
 from __future__ import annotations
+from config import JsonValue
 
 from typing import cast
 import sqlite3
@@ -56,7 +57,7 @@ def test_online_status_loads_users_once(
         username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         token="b" * 40, fingerprint="chrome", displayname="Bob",
     )
-    payload = {"success": True, "obj": ["alice", "stranger", "bob", "alice"]}
+    payload: dict[str, JsonValue] = {"success": True, "obj": ["alice", "stranger", "bob", "alice"]}
     subscription.panels.append(cast(XUiSession, FakePanel(name="a", post_payload=payload)))
     subscription.panels.append(cast(XUiSession, FakePanel(name="b", post_payload=payload)))
     seen: list[str] = []

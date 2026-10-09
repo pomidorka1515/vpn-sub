@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Unpack, cast
+from typing_contracts import CodeOverrides
 from unittest.mock import MagicMock
 
 import pytest
@@ -29,8 +30,8 @@ def _real_message(text: str, chat_id: int = 7) -> types.Message:
     return parsed
 
 
-def _code(**overrides: Any) -> CodeObject:
-    payload: dict[str, Any] = {
+def _code(**overrides: Unpack[CodeOverrides]) -> CodeObject:
+    payload: CodeOverrides = {
         "code": "WELCOME",
         "action": "register",
         "perma": False,
@@ -40,7 +41,10 @@ def _code(**overrides: Any) -> CodeObject:
         "wl_gb": 1,
     }
     payload.update(overrides)
-    return CodeObject(**payload)
+    return CodeObject(
+        code=payload["code"], action=payload["action"], perma=payload["perma"],
+        uses=payload["uses"], days=payload["days"], gb=payload["gb"], wl_gb=payload["wl_gb"],
+    )
 
 
 @pytest.fixture
@@ -48,8 +52,8 @@ def codes() -> tuple[AdminCodesMixin, MagicMock, MagicMock]:
     mixin = AdminCodesMixin.__new__(AdminCodesMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.log = MagicMock()
     mixin._pending_codes = {}
     mixin.get_codes_menu = MagicMock(return_value="codes")  # type: ignore[method-assign]

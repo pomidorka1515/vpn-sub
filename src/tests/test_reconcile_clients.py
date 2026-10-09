@@ -4,7 +4,9 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
+import pytest
+from config import PanelConfig
 
 from db import Database
 from helpers import USER_UUID, FakePanel, create_alice, make_inbound, make_panel_client
@@ -55,15 +57,16 @@ def test_reconcile_apply_merges_legacy_rows(database: Database) -> None:
 
     assert report.created == ["alice"]
     assert _post_urls(panel).count("panel/api/clients/add") == 1
-    add_body = cast(dict[str, Any], panel.posts[0][1]["json"])
-    assert add_body["client"]["email"] == "alice"
-    assert add_body["client"]["id"] == USER_UUID
-    assert add_body["client"]["flow"] == "xtls-rprx-vision"
-    assert (add_body["client"]["limitIp"], add_body["client"]["totalGB"]) == (0, 0)
+    add_body = cast(dict[str, object], panel.posts[0][1]["json"])
+    client = cast(dict[str, object], add_body["client"])
+    assert client["email"] == "alice"
+    assert client["id"] == USER_UUID
+    assert client["flow"] == "xtls-rprx-vision"
+    assert (client["limitIp"], client["totalGB"]) == (0, 0)
     # union of the group's inbounds
     assert add_body["inboundIds"] == [1, 2]
     assert "panel/api/clients/updateTraffic/alice" in _post_urls(panel)
-    seed_body = cast(dict[str, Any], panel.posts[1][1]["json"])
+    seed_body = cast(dict[str, object], panel.posts[1][1]["json"])
     assert (seed_body["upload"], seed_body["download"]) == (101, 202)
     assert "panel/api/clients/del/alice-aaaaaaaa" in _post_urls(panel)
     assert "panel/api/clients/del/alice-bbbbbbbb" in _post_urls(panel)
@@ -169,11 +172,11 @@ def _write_config(tmp_path: Path) -> Path:
 
 
 def test_main_is_dry_run_by_default(
-    tmp_path: Path, database: Database, db_path: Path, monkeypatch: Any,
+    tmp_path: Path, database: Database, db_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     panel = _legacy_panel()
 
-    def fake_build_panel(name: str, cfg: dict[str, Any], *, stamp_dir: str) -> XUiSession:
+    def fake_build_panel(name: str, cfg: PanelConfig, *, stamp_dir: str) -> XUiSession:
         return cast(XUiSession, panel)
 
     monkeypatch.setattr(rc, "_build_panel", fake_build_panel)
@@ -250,7 +253,7 @@ def test_rerun_after_failed_delete_folds_only_new_traffic(database: Database) ->
     seed_urls = [u for u, _ in panel.posts if "updateTraffic/alice" in u]
     assert len(seed_urls) == 1
     seed_body = cast(
-        dict[str, Any],
+        dict[str, object],
         next(kw["json"] for u, kw in panel.posts if "updateTraffic/alice" in u),
     )
     assert (seed_body["upload"], seed_body["download"]) == (111, 202)

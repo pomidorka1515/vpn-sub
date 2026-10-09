@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from flask.ctx import RequestContext
 from unittest import mock
 
 import pytest
@@ -20,7 +20,7 @@ def flask_app() -> Flask:
     return Flask(__name__)
 
 
-def app_context(app: Flask, remote_addr: str | None) -> Any:
+def app_context(app: Flask, remote_addr: str | None) -> RequestContext:
     return app.test_request_context(
         "/",
         environ_base={"REMOTE_ADDR": remote_addr} if remote_addr is not None else {},

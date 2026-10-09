@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import cast
+from session import XUiSession
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -92,8 +93,8 @@ def traffic() -> tuple[AdminTrafficMixin, MagicMock, MagicMock]:
     mixin = AdminTrafficMixin.__new__(AdminTrafficMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.log = MagicMock()
     lang_cfg = MagicMock()
     lang_cfg.view.return_value = {"description": {}, "publicbot": {}, "web": {}, "chart": {"ru": {"bandwidth": "bw"}}}
@@ -166,8 +167,8 @@ def leaderboard() -> tuple[AdminLeaderboardMixin, MagicMock, MagicMock]:
     mixin = AdminLeaderboardMixin.__new__(AdminLeaderboardMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     lang_cfg = MagicMock()
     lang_cfg.view.return_value = {"description": {}, "publicbot": {}, "web": {}, "chart": {"ru": {"leaderboard": "lb"}}}
     mixin.lang_cfg = lang_cfg
@@ -236,8 +237,8 @@ def panels() -> tuple[AdminPanelsMixin, MagicMock, MagicMock]:
     mixin = AdminPanelsMixin.__new__(AdminPanelsMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.log = MagicMock()
     mixin.get_main_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     mixin._send_message = MagicMock()  # type: ignore[method-assign]
@@ -252,18 +253,18 @@ def test_panel_status_renders_running_and_unknown(
     mixin, telegram, subscription = panels
     panel = SimpleNamespace(name="edge")
     subscription.panel_svc.getstatus.return_value = None
-    mixin._cb_panel_info(7, cast(Any, panel), True)
+    mixin._cb_panel_info(7, cast(XUiSession, panel), True)
     assert "неизвестен" in cast(MagicMock, mixin._send_message).call_args.args[1]
 
     subscription.panel_svc.getstatus.return_value = _metrics(ipv6="::1")
-    mixin._cb_panel_info(7, cast(Any, panel), True)
+    mixin._cb_panel_info(7, cast(XUiSession, panel), True)
     text = telegram.send_message.call_args.args[1]
     assert "🟢 Работает" in text
     assert "::1" in text
     assert telegram.send_message.call_args.kwargs["reply_markup"] == "menu"
 
     subscription.panel_svc.getstatus.return_value = _metrics(running=False)
-    mixin._cb_panel_info(7, cast(Any, panel), False)
+    mixin._cb_panel_info(7, cast(XUiSession, panel), False)
     text = telegram.send_message.call_args.args[1]
     assert "🔴 crashed" in text
     assert "Отключен" in text
@@ -280,7 +281,7 @@ def test_all_panels_status_continues_after_failure(
 
     def status(chat_id: int, panel: object, last: bool) -> None:
         del chat_id, last
-        if cast(Any, panel).name == "one":
+        if cast(XUiSession, panel).name == "one":
             raise RuntimeError("down")
 
     subscription.panel_svc.statuses.return_value = [None, None]

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any, cast
+from typing import cast
+from config import JsonValue
 
 import pytest
 
@@ -18,7 +19,7 @@ from helpers import (
 from session import XUiSession
 
 
-def _status_obj() -> dict[str, Any]:
+def _status_obj() -> dict[str, JsonValue]:
     return {
         "cpu": 1.234,
         "cpuCores": 2,

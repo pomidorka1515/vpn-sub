@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import cast
 
 from config import LinesConfigLike
 from db import Database
@@ -12,7 +12,7 @@ class RecordingAudit:
     def __init__(self) -> None:
         self.records: list[Mapping[str, object]] = []
 
-    def append(self, record: Mapping[str, Any]) -> None:
+    def append(self, record: Mapping[str, object]) -> None:
         self.records.append(record)
 
 

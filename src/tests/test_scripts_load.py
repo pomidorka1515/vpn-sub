@@ -6,7 +6,16 @@ import logging
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Any
+from typing import Protocol
+
+
+class StubResponse(Protocol):
+    def raise_for_status(self) -> None: ...
+    def json(self) -> object: ...
+
+
+class GetStub(Protocol):
+    def __call__(self, url: str, *_args: object, **_kwargs: object) -> StubResponse: ...
 
 import pytest
 
@@ -45,8 +54,8 @@ def _blob(body: bytes) -> dict[str, str]:
     }
 
 
-def _get_stub(files: dict[str, bytes]) -> Any:
-    def _get(url: str, *_args: object, **_kwargs: object) -> Any:
+def _get_stub(files: dict[str, bytes]) -> GetStub:
+    def _get(url: str, *_args: object, **_kwargs: object) -> StubResponse:
         name = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
         if name == "scripts":
             payload: object = [
@@ -131,7 +140,7 @@ def test_digest_mismatch_does_not_write_the_script(
     monkeypatch.setattr(scripts_load, "program_dir", lambda: install)
     monkeypatch.setattr(scripts_load, "bundled_root", lambda: bundled)
 
-    def _get(url: str, *_args: object, **_kwargs: object) -> Any:
+    def _get(url: str, *_args: object, **_kwargs: object) -> StubResponse:
         name = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
         if name == "scripts":
             payload: object = [

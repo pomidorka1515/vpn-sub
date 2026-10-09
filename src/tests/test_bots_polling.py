@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, cast
+from typing import cast, Callable
+from telebot import TeleBot
+from loggers import Logger
+from requests import Response
 
 import pytest
 
@@ -40,7 +43,7 @@ class _Poller:
         self.token: str | None = None
         self._stop_event = stop_event
 
-    def infinity_polling(self, **kwargs: Any) -> None:
+    def infinity_polling(self, *, timeout: int, long_polling_timeout: int, logger_level: int | None) -> None:
         self.polling_started.set()
         self._stop_event.wait(_STOP_WAIT_SECONDS)
 
@@ -52,8 +55,8 @@ class _TestBot(TelegramPollingMixin):
     def __init__(self, stop_event: threading.Event) -> None:
         self.poller = _Poller(stop_event)
         self.logger = _NullLogger()
-        self.bot = cast(Any, self.poller)
-        self.log = cast(Any, self.logger)
+        self.bot = cast(TeleBot, self.poller)
+        self.log = cast(Logger, self.logger)
 
 
 @pytest.fixture
@@ -124,7 +127,7 @@ def test_polling_errors_are_logged_without_token_or_traceback(
     polling_bot.poller.token = token
     raised = threading.Event()
 
-    def infinity_polling(**kwargs: Any) -> None:
+    def infinity_polling(*, timeout: int, long_polling_timeout: int, logger_level: int | None) -> None:
         if not raised.is_set():
             raised.set()
             raise ConnectionError(
@@ -157,15 +160,16 @@ def test_polling_errors_are_logged_without_token_or_traceback(
 
 def test_transient_polling_errors_are_left_to_library_backoff() -> None:
     logger = _NullLogger()
-    handler = _PollingExceptionHandler(cast(Any, logger), None)
+    handler = _PollingExceptionHandler(cast(Logger, logger), None)
     reset = ConnectionError(
         "('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
     )
-    gateway = cast(Any, apihelper).ApiTelegramException(
-        "getUpdates", None, {"error_code": 502, "description": "Bad Gateway"},
+    exception = cast(Callable[[str, Response, dict[str, object]], apihelper.ApiTelegramException], apihelper.ApiTelegramException)
+    gateway = exception(
+        "getUpdates", Response(), {"error_code": 502, "description": "Bad Gateway"},
     )
-    limited = cast(Any, apihelper).ApiTelegramException(
-        "getUpdates", None, {"error_code": 429, "description": "Too Many Requests"},
+    limited = exception(
+        "getUpdates", Response(), {"error_code": 429, "description": "Too Many Requests"},
     )
 
     assert handler.handle(reset) is False
@@ -176,7 +180,7 @@ def test_transient_polling_errors_are_left_to_library_backoff() -> None:
 
 def test_handler_errors_stay_inside_polling() -> None:
     logger = _NullLogger()
-    handler = _PollingExceptionHandler(cast(Any, logger), "123456:secret-token-value")
+    handler = _PollingExceptionHandler(cast(Logger, logger), "123456:secret-token-value")
 
     assert handler.handle(RuntimeError("handler exploded 123456:secret-token-value")) is True
     assert len(logger.warnings) == 1

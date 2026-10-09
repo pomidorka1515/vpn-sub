@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Unpack
+from typing_contracts import UserInfoOverrides
 from unittest.mock import MagicMock
 
 import pytest
@@ -62,14 +63,14 @@ def info_mixin() -> tuple[PublicSubscriptionMixin, MagicMock, MagicMock]:
     mixin = PublicSubscriptionMixin.__new__(PublicSubscriptionMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.TEXTS = INFO_TEXTS
     mixin.get_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     return mixin, telegram, subscription
 
 
-def _info(**overrides: Any) -> UserInfo:
+def _info(**overrides: Unpack[UserInfoOverrides]) -> UserInfo:
     bandwidth = UserInfoBandwidth(
         total=UserInfoBandwidthTotal(
             upload=13_785_700_000,
@@ -82,7 +83,7 @@ def _info(**overrides: Any) -> UserInfo:
         limit=0,
         wl_limit=5,
     )
-    payload: dict[str, Any] = {
+    payload: UserInfoOverrides = {
         "_": "test",
         "token": "t" * 40,
         "link": "https://example.test/sub?token=t",
@@ -96,7 +97,13 @@ def _info(**overrides: Any) -> UserInfo:
         "bandwidth": bandwidth,
     }
     payload.update(overrides)
-    return UserInfo(**payload)
+    return UserInfo(
+        _=payload["_"], token=payload["token"], link=payload["link"],
+        displayname=payload["displayname"], uuid=payload["uuid"],
+        fingerprint=payload["fingerprint"], enabled=payload["enabled"],
+        wl_enabled=payload["wl_enabled"], time=payload["time"],
+        online=payload["online"], bandwidth=payload["bandwidth"],
+    )
 
 
 def test_english_info_uses_auto_units_and_html(

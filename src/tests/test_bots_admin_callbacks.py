@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Callable, cast
+from typing import Callable, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,8 +28,8 @@ def admin() -> tuple[AdminBot, MagicMock, MagicMock]:
     bot = AdminBot.__new__(AdminBot)
     telegram = MagicMock()
     subscription = MagicMock()
-    bot.bot = cast(Any, telegram)
-    bot.sub = cast(Any, subscription)
+    bot.bot = telegram
+    bot.sub = subscription
     bot.log = MagicMock()
     bot.admin_uids = [42]
     bot._pending_edits = {}

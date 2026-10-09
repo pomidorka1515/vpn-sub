@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Unpack, cast
+from typing_contracts import UserInfoOverrides
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,7 +21,7 @@ def _message(text: str, chat_id: int = 7) -> types.Message:
     )
 
 
-def _info(**overrides: Any) -> UserInfo:
+def _info(**overrides: Unpack[UserInfoOverrides]) -> UserInfo:
     bandwidth = UserInfoBandwidth(
         total=UserInfoBandwidthTotal(upload=12, download=34, total=46),
         wl_total=UserInfoBandwidthTotal(upload=1, download=2, total=3),
@@ -29,7 +30,7 @@ def _info(**overrides: Any) -> UserInfo:
         limit=5,
         wl_limit=0,
     )
-    payload: dict[str, Any] = {
+    payload: UserInfoOverrides = {
         "_": "test",
         "token": "t" * 40,
         "link": "https://example.test/sub?token=t",
@@ -43,7 +44,13 @@ def _info(**overrides: Any) -> UserInfo:
         "bandwidth": bandwidth,
     }
     payload.update(overrides)
-    return UserInfo(**payload)
+    return UserInfo(
+        _=payload["_"], token=payload["token"], link=payload["link"],
+        displayname=payload["displayname"], uuid=payload["uuid"],
+        fingerprint=payload["fingerprint"], enabled=payload["enabled"],
+        wl_enabled=payload["wl_enabled"], time=payload["time"],
+        online=payload["online"], bandwidth=payload["bandwidth"],
+    )
 
 
 @pytest.fixture
@@ -51,8 +58,8 @@ def users() -> tuple[AdminUsersMixin, MagicMock, MagicMock]:
     mixin = AdminUsersMixin.__new__(AdminUsersMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.log = MagicMock()
     mixin.cfg = config_mock(subscription_config(fingerprints=["chrome", "firefox"]))
     mixin.USERS_PER_PAGE = 2
@@ -64,8 +71,8 @@ def users() -> tuple[AdminUsersMixin, MagicMock, MagicMock]:
 
 
 def _buttons(markup: object) -> list[str]:
-    keyboard = cast(Any, markup).inline_keyboard
-    return [button.callback_data for row in keyboard for button in row]
+    keyboard = cast(types.InlineKeyboardMarkup, markup).inline_keyboard
+    return [button.callback_data for row in keyboard for button in row if button.callback_data is not None]
 
 
 def test_list_users_empty_and_paginated(

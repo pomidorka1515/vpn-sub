@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Unpack, cast, Literal
+from config import JsonValue
+from custom_types import RequestKwargs
+from typing_contracts import SessionOptions, SessionExtras
 from pathlib import Path
 
 import pytest
@@ -24,15 +27,15 @@ class FakeClock:
 
 class RecordingTransport:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, dict[str, Any]]] = []
+        self.calls: list[tuple[str, str, RequestKwargs]] = []
         self.request_status = 200
-        self.request_payload: dict[str, Any] = {"success": True, "msg": "", "obj": []}
+        self.request_payload: dict[str, JsonValue] = {"success": True, "msg": "", "obj": []}
         self.request_error: BaseException | None = None
         self.health_status = 200
-        self.health_payload: dict[str, Any] = {"success": True, "msg": "", "obj": []}
+        self.health_payload: dict[str, JsonValue] = {"success": True, "msg": "", "obj": []}
         self.health_error: BaseException | None = None
 
-    def request(self, method: str, url: str, **kwargs: object) -> Response:
+    def request(self, method: str, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
         self.calls.append((method, url, kwargs))
         if url.endswith("panel/api/inbounds/list"):
             if self.health_error is not None:
@@ -43,8 +46,16 @@ class RecordingTransport:
         return json_http(self.request_payload, self.request_status)
 
 
-def session_kwargs(**overrides: object) -> dict[str, Any]:
-    values: dict[str, Any] = {
+class SessionArguments(SessionExtras):
+    name: str
+    address: str
+    port: int | str
+    uri: str
+    api_token: str
+
+
+def session_kwargs(**overrides: Unpack[SessionOptions]) -> SessionArguments:
+    values: SessionArguments = {
         "name": "local",
         "address": "127.0.0.1",
         "port": 2053,
@@ -88,7 +99,9 @@ def test_bearer_header_is_present_on_every_request(
     panel.get("panel/api/server/status")
     panel.post("panel/api/clients/add", json={"client": {}})
     for _method, _url, kwargs in transport.calls:
-        assert kwargs["headers"]["Authorization"] == f"Bearer {'x' * 40}"
+        headers = kwargs.get("headers")
+        assert headers is not None
+        assert headers["Authorization"] == f"Bearer {'x' * 40}"
 
 
 def test_authorization_is_not_overridable_by_caller_headers(
@@ -99,7 +112,8 @@ def test_authorization_is_not_overridable_by_caller_headers(
         "panel/api/server/status",
         headers={"Authorization": "Bearer attacker-token"},
     )
-    headers = transport.calls[0][2]["headers"]
+    headers = transport.calls[0][2].get("headers")
+    assert headers is not None
     assert headers["Authorization"] == f"Bearer {'x' * 40}"
 
 
@@ -150,10 +164,11 @@ def test_inject_headers_are_merged_into_requests(
     try:
         transport.calls.clear()
         session.get("panel/api/server/status", headers={"Accept": "application/json"})
-        headers = transport.calls[0][2]["headers"]
+        headers = transport.calls[0][2].get("headers")
+        assert headers is not None
         assert headers["X-Panel"] == "local"
         assert headers["Accept"] == "application/json"
-        assert headers["Authorization"].startswith("Bearer ")
+        assert str(headers["Authorization"]).startswith("Bearer ")
     finally:
         session.close()
 
@@ -286,7 +301,7 @@ def test_rejects_transport_and_session_together(transport: RecordingTransport) -
 
 def test_invalid_mode_is_rejected(transport: RecordingTransport) -> None:
     with pytest.raises(ValueError, match="whitelist"):
-        XUiSession(**session_kwargs(transport=transport, mode="both"))
+        XUiSession(**session_kwargs(transport=transport, mode=cast(Literal["whitelist", "blacklist"], "both")))
 
 
 def test_health_check_marks_dead_on_unsuccessful_payload(
@@ -328,7 +343,9 @@ def test_health_check_carries_bearer_header(
     transport.calls.clear()
     panel._perform_health_check()  # pyright: ignore[reportPrivateUsage]
     kwargs = transport.calls[0][2]
-    assert kwargs["headers"]["Authorization"] == f"Bearer {'x' * 40}"
+    headers = kwargs.get("headers")
+    assert headers is not None
+    assert headers["Authorization"] == f"Bearer {'x' * 40}"
 
 
 def test_close_stops_background_threads(panel: XUiSession) -> None:

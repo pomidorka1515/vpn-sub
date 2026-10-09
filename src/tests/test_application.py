@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Unpack, TypedDict
+from config import JsonValue
+from custom_types import RequestKwargs
 from unittest import mock
 
 import pytest
@@ -15,7 +17,7 @@ from paths import runtime_dir
 from api.decorators.rate_limit import close_rate_limit
 
 
-def json_response(data: dict[str, Any], status_code: int = 200) -> Response:
+def json_response(data: dict[str, JsonValue], status_code: int = 200) -> Response:
     response = Response()
     response.status_code = status_code
     response._content = json.dumps(data).encode("utf-8")
@@ -24,10 +26,10 @@ def json_response(data: dict[str, Any], status_code: int = 200) -> Response:
 
 
 class RecordingTransport:
-    def __init__(self, response: dict[str, Any]) -> None:
+    def __init__(self, response: dict[str, JsonValue]) -> None:
         self.response = response
 
-    def request(self, method: str, url: str, **kwargs: Any) -> Response:
+    def request(self, method: str, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
         return json_response(self.response)
 
 
@@ -66,7 +68,13 @@ def paths(tmp_path: Path) -> AppPaths:
     return paths
 
 
-def factory(paths: AppPaths, **options: Any) -> Application:
+class FactoryOptions(TypedDict, total=False):
+    start_bots: bool
+    proxy_hops: int
+    require_proxy: bool
+
+
+def factory(paths: AppPaths, **options: Unpack[FactoryOptions]) -> Application:
     with mock.patch("api.decorators.rate_limit.configure_rate_limit", return_value=mock.Mock()):
         runtime = create_application(
             paths=paths,

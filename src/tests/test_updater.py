@@ -7,7 +7,35 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Any
+from typing import Protocol, TypedDict, Callable
+
+
+class ReleaseAsset(TypedDict):
+    name: str
+    browser_download_url: str
+    size: int
+    digest: str
+
+
+class ReleasePayload(TypedDict):
+    tag_name: str
+    draft: bool
+    prerelease: bool
+    body: str
+    html_url: str
+    assets: list[ReleaseAsset]
+
+
+class StubResponse(Protocol):
+    def raise_for_status(self) -> None: ...
+    def json(self) -> object: ...
+    def iter_content(self, chunk_size: int) -> tuple[bytes, ...]: ...
+    def __enter__(self) -> StubResponse: ...
+    def __exit__(self, *_args: object) -> None: ...
+
+
+class GetStub(Protocol):
+    def __call__(self, *_args: object, **_kwargs: object) -> StubResponse: ...
 
 import pytest
 
@@ -37,7 +65,7 @@ def _plain(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "__main__", ModuleType("__main__"))
 
 
-def _release(tag: str = "v9.0.0", assets: tuple[str, ...] = ("vpn-sub", "vpn-sub-discord")) -> dict[str, Any]:
+def _release(tag: str = "v9.0.0", assets: tuple[str, ...] = ("vpn-sub", "vpn-sub-discord")) -> ReleasePayload:
     return {
         "tag_name": tag,
         "draft": False,
@@ -56,7 +84,7 @@ def _release(tag: str = "v9.0.0", assets: tuple[str, ...] = ("vpn-sub", "vpn-sub
     }
 
 
-def _response(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> Any:
+def _response(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> StubResponse:
     class _Response:
         def raise_for_status(self) -> None:
             return None
@@ -76,21 +104,21 @@ def _response(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> Any:
     return _Response()
 
 
-def _get_stub(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> Any:
-    def _get(*_args: object, **_kwargs: object) -> Any:
+def _get_stub(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> GetStub:
+    def _get(*_args: object, **_kwargs: object) -> StubResponse:
         return _response(payload, chunks)
 
     return _get
 
 
-def _bool_stub(value: bool) -> Any:
+def _bool_stub(value: bool) -> Callable[[object], bool]:
     def _answer(*_args: object) -> bool:
         return value
 
     return _answer
 
 
-def _empty_stub() -> Any:
+def _empty_stub() -> Callable[[object, object], list[object]]:
     def _empty(*_args: object) -> list[object]:
         return []
 
@@ -98,28 +126,28 @@ def _empty_stub() -> Any:
 
 
 
-def _units_stub() -> Any:
+def _units_stub() -> Callable[[object], list[tuple[str, int, str]]]:
     def _units(*_args: object) -> list[tuple[str, int, str]]:
         return [("vpn-sub.service", 10, "vpn-sub")]
 
     return _units
 
 
-def _processes_stub() -> Any:
+def _processes_stub() -> Callable[[object], list[tuple[int, str]]]:
     def _processes(*_args: object) -> list[tuple[int, str]]:
         return [(10, "vpn-sub"), (11, "vpn-sub-discord")]
 
     return _processes
 
 
-def _next_stub(answers: Iterator[bool]) -> Any:
+def _next_stub(answers: Iterator[bool]) -> Callable[[object], bool]:
     def _answer(*_args: object) -> bool:
         return next(answers)
 
     return _answer
 
 
-def _alive_stub() -> Any:
+def _alive_stub() -> Callable[[object, object], list[updater.Running]]:
     def _running(*_args: object) -> list[updater.Running]:
         return [updater.Running("vpn-sub", os.getpid(), "vpn-sub.service")]
 

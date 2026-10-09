@@ -4,7 +4,9 @@ import logging
 from datetime import timedelta
 from types import SimpleNamespace
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import cast
+from gunicorn.config import Config as GunicornConfig
+from config import LinesConfigLike
 
 import pytest
 
@@ -51,8 +53,8 @@ class _AccessLog:
 def test_access_log_levels_by_status_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
     logged: list[tuple[int, str]] = []
     logger = GunicornLogger.__new__(GunicornLogger)
-    logger.cfg = cast(Any, _Cfg())
-    logger.access_log = cast(Any, _AccessLog(logged))
+    logger.cfg = cast(GunicornConfig, _Cfg())
+    logger.access_log = cast(logging.Logger, _AccessLog(logged))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 12}
 
     def atoms_for(*args: object) -> dict[str, object]:
@@ -120,8 +122,8 @@ def test_access_log_levels_by_status_and_path(monkeypatch: pytest.MonkeyPatch) -
 def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> None:
     logged: list[tuple[int, str]] = []
     logger = GunicornLogger.__new__(GunicornLogger)
-    logger.cfg = cast(Any, _Cfg())
-    logger.access_log = cast(Any, _AccessLog(logged))
+    logger.cfg = cast(GunicornConfig, _Cfg())
+    logger.access_log = cast(logging.Logger, _AccessLog(logged))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 4}
 
     def atoms_for(*args: object) -> dict[str, object]:
@@ -301,13 +303,13 @@ def test_gunicorn_access_level_uses_env(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_jsonl_strips_message_colors() -> None:
-    stored: list[Mapping[str, Any]] = []
+    stored: list[Mapping[str, object]] = []
 
     class _Lines:
-        def append(self, record: Mapping[str, Any]) -> None:
+        def append(self, record: Mapping[str, object]) -> None:
             stored.append(record)
 
-    handler = _JSONLinesLogger(cast(Any, _Lines()))
+    handler = _JSONLinesLogger(cast(LinesConfigLike, _Lines()))
     logger = Logger("colors")
     logger.handlers.clear()
     logger.addHandler(handler)

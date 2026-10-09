@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, cast
+from typing import Unpack
+from typing_contracts import UserRecordOverrides
 
 from custom_types import UserRecord
 from db import Database
@@ -24,8 +25,8 @@ TEXTS = {
 }
 
 
-def _state(**overrides: Any) -> UserRecord:
-    row: dict[str, Any] = {
+def _state(**overrides: Unpack[UserRecordOverrides]) -> UserRecord:
+    row: UserRecord = {
         "username": "alice",
         "uuid": "u",
         "token": "t",
@@ -45,7 +46,7 @@ def _state(**overrides: Any) -> UserRecord:
         "created_at": 0,
     }
     row.update(overrides)
-    return cast(UserRecord, row)
+    return row
 
 
 def _kinds(state: UserRecord, now: int = 1_000_000) -> tuple[Kind, ...]:

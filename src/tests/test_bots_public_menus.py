@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -93,8 +93,8 @@ def common() -> tuple[PublicCommonMixin, MagicMock, MagicMock]:
     mixin = PublicCommonMixin.__new__(PublicCommonMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.log = MagicMock()
     mixin.TEXTS = TEXTS
     mixin.start_polling = MagicMock()  # type: ignore[method-assign]
@@ -151,8 +151,8 @@ def routing() -> tuple[PublicTextRoutingMixin, MagicMock, MagicMock]:
     mixin = PublicTextRoutingMixin.__new__(PublicTextRoutingMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.TEXTS = TEXTS
     mixin.cfg = config_mock(subscription_config(profiles={
         "fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"]),
@@ -170,7 +170,7 @@ def routing() -> tuple[PublicTextRoutingMixin, MagicMock, MagicMock]:
 
 
 def _labels(markup: object) -> list[str]:
-    keyboard = cast(Any, markup).keyboard
+    keyboard = cast(types.ReplyKeyboardMarkup, markup).keyboard
     return [
         button["text"] if isinstance(button, dict) else button.text
         for row in keyboard
@@ -240,8 +240,8 @@ def test_send_link_builds_qr_and_happ_redirect() -> None:
     mixin = PublicSubscriptionMixin.__new__(PublicSubscriptionMixin)
     telegram = MagicMock()
     subscription = MagicMock()
-    mixin.bot = cast(Any, telegram)
-    mixin.sub = cast(Any, subscription)
+    mixin.bot = telegram
+    mixin.sub = subscription
     mixin.TEXTS = TEXTS
     mixin.cfg = config_mock(subscription_config(uri="/sub/", domain="https://example.test/"))
     subscription.telegram_svc.get_info_telegram.return_value = None

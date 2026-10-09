@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, cast
+from typing import cast
 
 import pytest
 
@@ -21,9 +21,9 @@ from session import XUiSession
 NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 
-def _post_bodies(panel: FakePanel, fragment: str) -> list[dict[str, Any]]:
+def _post_bodies(panel: FakePanel, fragment: str) -> list[dict[str, object]]:
     return [
-        cast(dict[str, Any], kwargs.get("json"))
+        cast(dict[str, object], kwargs.get("json"))
         for url, kwargs in panel.posts
         if fragment in url
     ]
@@ -41,7 +41,7 @@ def test_add_users_creates_client_once_per_panel(database: Database) -> None:
 
     adds = _post_bodies(panel, "clients/add")
     assert len(adds) == 1
-    client = adds[0]["client"]
+    client = cast(dict[str, object], adds[0]["client"])
     assert client["email"] == "alice"
     assert client["id"] == USER_UUID
     assert client["flow"] == "xtls-rprx-vision"

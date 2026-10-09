@@ -3,7 +3,9 @@ from __future__ import annotations
 import base64
 import json
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import cast
+from core import Subscription
+from typing_contracts import AppOverrides, UserRecordOverrides
 from unittest.mock import MagicMock
 
 import pytest
@@ -192,19 +194,24 @@ def test_json_profiles_fill_transport_hosts() -> None:
     built = build_json(cfg, "user-uuid", "en", "chrome")
     tls = built[0]["outbounds"]
     assert isinstance(tls, list)
-    stream = cast(dict[str, Any], tls[0])["streamSettings"]
+    stream = cast(ProfileOutbound, tls[0])["streamSettings"]
+    assert "tlsSettings" in stream
+    assert "xhttpSettings" in stream
+    assert "realitySettings" in stream
     assert stream["tlsSettings"]["serverName"] == "edge.example"
     assert stream["tlsSettings"]["fingerprint"] == "chrome"
     assert "host" not in stream["xhttpSettings"] or stream["xhttpSettings"]["host"] == ""
     assert stream["realitySettings"]["fingerprint"] == "chrome"
-    ws = cast(dict[str, Any], cast(list[object], built[1]["outbounds"])[0])["streamSettings"]
+    ws = cast(ProfileTemplate, built[1])["outbounds"][0]["streamSettings"]
+    assert "wsSettings" in ws and "headers" in ws["wsSettings"]
+    assert "httpupgradeSettings" in ws and "host" in ws["httpupgradeSettings"]
     assert ws["wsSettings"]["headers"]["Host"] == "edge.example"
     assert ws["httpupgradeSettings"]["host"] == "edge.example"
     assert built[0]["meta"] == {"serverDescription": "tls en"}
 
 
-def _subscription(**overrides: Any) -> Any:
-    user = {
+def _subscription(*, user: UserRecordOverrides | None = None, cfg: AppOverrides | None = None, username: str = "alice") -> MagicMock:
+    user_data: UserRecordOverrides = {
         "displayname": "Alice",
         "enabled": 1,
         "enabled_time": 1,
@@ -217,9 +224,9 @@ def _subscription(**overrides: Any) -> Any:
         "uuid": "user-uuid",
         "fingerprint": "chrome",
     }
-    user.update(overrides.pop("user", {}))
-    cfg = subscription_config()
-    cfg.update({
+    user_data.update(user or {})
+    config = subscription_config()
+    config.update({
         "uri": "/sub/",
         "sub_name": "VPN",
         "provider_id": "",
@@ -227,8 +234,8 @@ def _subscription(**overrides: Any) -> Any:
         "ping_check_url": "https://example.test/204",
         "profiles": {},
     })
-    cfg.update(overrides.pop("cfg", {}))
-    subscription = SimpleNamespace(
+    config.update(cfg or {})
+    subscription = MagicMock(spec=Subscription,
         user_svc=MagicMock(),
         audit_svc=MagicMock(),
         bandwidth_svc=MagicMock(),
@@ -237,10 +244,10 @@ def _subscription(**overrides: Any) -> Any:
             lang_cfg=MagicMock(),
         ),
     )
-    subscription.user_svc.usertotoken.return_value = overrides.get("username", "alice")
-    subscription.user_svc.user.return_value = user
+    subscription.user_svc.usertotoken.return_value = username
+    subscription.user_svc.user.return_value = user_data
     subscription.bandwidth_svc.bandwidth.return_value = _bandwidth()
-    subscription.res.cfg = config_mock(cfg)
+    subscription.res.cfg = config_mock(config)
     language = _lang()
     language['web'] = {"shared": {"en": {"forbidden_title": "No browser"}}}
     subscription.res.lang_cfg = config_mock(language)

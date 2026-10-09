@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import os
-from typing import IO, Any, cast
+from typing import TextIO, Literal
 import sqlite3
 import threading
 from unittest.mock import patch
@@ -66,10 +66,10 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
     instance = tmp_path / "json"
     real_open = open
 
-    def fail_temp(path: str, *args: Any, **kwargs: Any) -> IO[Any]:
+    def fail_temp(path: str, mode: Literal["r", "w"] = "r", *, encoding: str | None = None) -> TextIO:
         if path.endswith(".tmp"):
             raise OSError("unwritable")
-        return cast(IO[Any], real_open(path, *args, **kwargs))
+        return real_open(path, mode, encoding=encoding)
 
     with patch("config.backup.open", side_effect=fail_temp):
         with pytest.raises(OSError, match="unwritable"):

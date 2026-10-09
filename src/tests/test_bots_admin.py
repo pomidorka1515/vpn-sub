@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,7 +26,7 @@ def _callback(data: str, user_id: int = 42) -> types.CallbackQuery:
 def admin_bot() -> tuple[AdminBot, MagicMock]:
     bot = AdminBot.__new__(AdminBot)
     telegram = MagicMock()
-    bot.bot = cast(Any, telegram)
+    bot.bot = telegram
     bot.admin_uids = [42]
     bot.log = MagicMock()
     return bot, telegram
