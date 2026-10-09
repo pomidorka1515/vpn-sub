@@ -5,7 +5,7 @@ from abc import ABC
 from collections.abc import Mapping
 from functools import lru_cache
 from hashlib import sha1
-from config import ConfigLike
+from config import AppConfig, Config, LangConfig
 from core import Subscription
 from bwatch import BWatch
 from flask import Flask, Response, request
@@ -101,12 +101,13 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
     return {}
 
 
-def web_lang_tables(lang_cfg: ConfigLike, page: str) -> tuple[str, dict[str, str], dict[str, str]]:
+def web_lang_tables(lang_cfg: Config[LangConfig], page: str) -> tuple[str, dict[str, str], dict[str, str]]:
     """Active page strings, plus the English table used when a key is missing."""
     if page not in _WEB_PAGES:
         raise ValueError(f"unknown web page '{page}'")
     lang = resolve_web_lang()
-    raw = lang_cfg.get('web')
+    language = lang_cfg.view()
+    raw = cast(object, language.get('web'))
     web: Mapping[str, object] = (
         cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
     )
@@ -158,7 +159,7 @@ class BaseApi(ABC):
     
     def __init__(self,
                  app: Flask, 
-                 cfg: ConfigLike, 
+                 cfg: Config[AppConfig],
                  sub: Subscription, 
                  bw: BWatch,
                  uri: str):

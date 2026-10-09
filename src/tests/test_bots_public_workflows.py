@@ -12,6 +12,7 @@ from bots.public.login import PublicLoginMixin
 from bots.public.settings import PublicSettingsMixin
 from bots.public.traffic import PublicTrafficMixin
 from errors import AppError, NotFoundError
+from helpers import config_mock, language_config, profile_config, subscription_config
 
 
 TEXTS = {
@@ -118,17 +119,10 @@ def _wire(mixin: Any) -> tuple[Any, MagicMock, MagicMock]:
     mixin.sub = cast(Any, subscription)
     mixin.log = MagicMock()
     mixin.TEXTS = TEXTS
-    mixin.cfg = cast(Any, {
-        "fingerprints": ["chrome", "firefox"],
-        "uri": "/sub/",
-        "domain": "https://example.test/",
-        "profiles": {
-            "fast": {
-                "name": ["Fast", "Быстрый"],
-                "description": ["fast en", "fast ru"],
-            },
-        },
-    })
+    mixin.cfg = config_mock(subscription_config(
+        fingerprints=["chrome", "firefox"], uri="/sub/", domain="https://example.test/",
+        profiles={"fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"])},
+    ))
     mixin.get_lang = MagicMock(return_value="en")
     mixin.get_menu = MagicMock(return_value="menu")
     mixin.cmd_start = MagicMock()
@@ -347,8 +341,9 @@ def test_login_flow(
 @pytest.fixture
 def traffic() -> tuple[PublicTrafficMixin, MagicMock, MagicMock]:
     mixin, telegram, subscription = _wire(PublicTrafficMixin.__new__(PublicTrafficMixin))
-    mixin.lang_cfg = cast(Any, MagicMock())
-    mixin.lang_cfg.get.return_value = {"en": {"bandwidth": "bw"}}
+    language = language_config()
+    language["chart"] = {"en": {"bandwidth": "bw"}}
+    mixin.lang_cfg = config_mock(language)
     mixin._executor = MagicMock()
     return mixin, telegram, subscription
 

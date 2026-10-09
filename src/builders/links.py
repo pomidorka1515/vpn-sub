@@ -5,7 +5,7 @@ from __future__ import annotations
 import urllib.parse
 import json
 import base64
-from typing import Any
+from config import AppConfig, LangConfig
 from collections import deque
 
 from util import fmt_bytes
@@ -13,7 +13,7 @@ from custom_types import BandwidthInfo
 
 
 def build_link_array(
-    cfg: dict[str, Any],
+    cfg: AppConfig,
     status: bool,
     statusWl: bool,
     lang: str,
@@ -22,7 +22,7 @@ def build_link_array(
     bandwidths: BandwidthInfo,
     need_dummy_link: bool,
     fingerprint: str,
-    lang_cfg: dict[str, Any],
+    lang_cfg: LangConfig,
 ) -> str:
     """Build a base64-encoded link array."""
     generated_links: deque[str] = deque()

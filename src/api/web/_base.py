@@ -4,7 +4,7 @@ from flask import Flask, Response
 
 from api.common import ResponseType
 from bwatch import BWatch
-from config import ConfigLike
+from config import AppConfig, Config
 from core import Subscription
 from loggers import Logger
 
@@ -13,7 +13,7 @@ class WebApiMixin:
     """Attributes every web route group reads from the composed WebApi."""
 
     app: Flask
-    cfg: ConfigLike
+    cfg: Config[AppConfig]
     sub: Subscription
     bw: BWatch
     uri: str

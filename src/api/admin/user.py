@@ -215,4 +215,5 @@ class UserRoutes(AdminApiMixin):
 
     @requires_admin_auth
     def fingerprints(self) -> ResponseType:
-        return ok(obj=self.cfg['fingerprints'])
+        conf = self.cfg.view()
+        return ok(obj=conf['fingerprints'])

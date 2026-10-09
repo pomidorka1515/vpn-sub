@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import jsonschema
 import json
 import os
@@ -13,7 +15,7 @@ if TYPE_CHECKING:
 
 from errors import SchemaValidationError, ConfigError, FileCorruptionError
 
-def _read_json_object(cfg: Config, /) -> dict[str, JsonValue]:
+def _read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
     try:
         with open(cfg.path, "r", encoding="utf-8") as handle:
             content = handle.read()
@@ -34,7 +36,7 @@ def _read_json_object(cfg: Config, /) -> dict[str, JsonValue]:
         )
     return cast(dict[str, JsonValue], data)
 
-def _load_schema(cfg: Config, data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
+def _load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
     schema_ref = data.get("$schema")
     forced = cfg.schema_path
     if forced is not None:
@@ -95,7 +97,7 @@ def _load_schema(cfg: Config, data: Mapping[str, JsonValue]) -> Mapping[str, Jso
     cfg._schema_cache = schema
     return schema
 
-def _validate_schema(cfg: Config, data: dict[str, JsonValue]) -> None:
+def _validate_schema[Doc](cfg: Config[Doc], data: dict[str, JsonValue]) -> None:
     schema = _load_schema(cfg, data)
     if schema is None:
         return

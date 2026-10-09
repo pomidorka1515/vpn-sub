@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 import fcntl
 import copy
@@ -8,7 +10,7 @@ from types import TracebackType
 from typing import overload, Self, TYPE_CHECKING, Any, Literal, cast
 
 from .constants import JsonValue, JsonDict
-from .protocols import MISSING, MISSING_TYPE, MissingValue
+from .protocols import MISSING, MISSING_TYPE
 from .atomic import _file_signature, _atomic_write_json, _ensure_parent_dir
 if TYPE_CHECKING:
     from .core import Config
@@ -16,7 +18,7 @@ if TYPE_CHECKING:
 from errors import ConfigError
 
 
-class _ConfigTransaction(MutableMapping[str, JsonValue]): # pyright: ignore[reportUnusedClass]
+class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyright: ignore[reportUnusedClass]
     """A batch edit working copy.
 
     Values returned here are live within the transaction on purpose, so nested
@@ -25,8 +27,8 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]): # pyright: ignore[repo
     the transaction ends.
     """
 
-    def __init__(self, config: Config) -> None:
-        self._config: Config = config
+    def __init__(self, config: Config[Doc]) -> None:
+        self._config: Config[Doc] = config
         self.data: dict[str, JsonValue] | None = None
         self.original: dict[str, JsonValue] | None = None
         self._lock_fp: io.BufferedRandom | None = None
@@ -34,7 +36,7 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]): # pyright: ignore[repo
         self._cfg_lock_acquired: bool = False
 
     def __enter__(self) -> Self:
-        cfg: Config = self._config
+        cfg: Config[Doc] = self._config
         cfg._lock.acquire()
         self._cfg_lock_acquired = True
         lock_fp: io.BufferedRandom | None = None
@@ -168,34 +170,22 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]): # pyright: ignore[repo
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
-
-    @overload
-    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T](self, key: str, default: MissingValue, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
+    def get[_T](self, key: str, default: _T) -> JsonValue | _T: ...
 
     def get[_T](
         self,
         key: str,
-        default: JsonValue | MISSING_TYPE = MISSING,
-        *,
-        as_type: type[_T] | None = None
-    ) -> Any:
+        default: _T | MISSING_TYPE = MISSING,
+    ) -> JsonValue | _T:
         data = self._require_active()
-        value = data.get(key) if default is MISSING else data.get(key, default)
-        if as_type is not None:
-            value = cast(as_type, value)  # type: ignore[valid-type]
-        return value # pyright: ignore[reportUnknownVariableType]
+        value = data.get(key) if default is MISSING else data.get(key, cast(_T, default))
+        return value
 
-    def copy(self) -> dict[str, Any]:
+    def view(self) -> Doc:
+        """Return the active working document; nested edits are live."""
+        return cast(Doc, self._require_active())
+
+    def copy(self) -> JsonDict:
         return copy.deepcopy(self._require_active())
 
     def clear(self) -> None:
@@ -247,4 +237,3 @@ class _ConfigTransaction(MutableMapping[str, JsonValue]): # pyright: ignore[repo
             data.update(__m, **kwargs)
         else:
             data.update(**kwargs)
-

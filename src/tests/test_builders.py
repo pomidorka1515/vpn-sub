@@ -12,6 +12,8 @@ from flask import Flask
 
 from builders import build_description, build_json, build_link_array, get_subscription
 from custom_types import BandwidthInfo
+from config import AppConfig, LangConfig, ProfileConfig
+from helpers import config_mock, language_config, subscription_config
 
 
 DESC = {
@@ -32,9 +34,15 @@ def _bandwidth() -> BandwidthInfo:
     return BandwidthInfo(upload=1_500_000_000, download=500_000_000, total=2_000_000_000)
 
 
+def _lang(description: dict[str, dict[str, str]] = DESC) -> LangConfig:
+    doc = language_config()
+    doc['description'] = description
+    return doc
+
+
 def test_description_fills_active_and_disabled_slots() -> None:
     active = build_description(
-        {"description": DESC}, "Alice", "en", _bandwidth(),
+        _lang(), "Alice", "en", _bandwidth(),
         status=True, statusTime=True, ts=1_700_000_000,
         bw_limit=5, bw_used=1_000_000_000, wl_limit=1, wl_used=2_000_000_000,
     )
@@ -45,21 +53,21 @@ def test_description_fills_active_and_disabled_slots() -> None:
     assert "wl exceeded" in active
 
     unlimited = build_description(
-        {"description": DESC}, "Alice", "en", _bandwidth(),
+        _lang(), "Alice", "en", _bandwidth(),
         status=True, statusTime=True, ts=0,
         bw_limit=0, bw_used=0, wl_limit=0, wl_used=0,
     )
     assert unlimited == "Alice up 1.50 GB down 500.00 MB"
 
     disabled = build_description(
-        {"description": DESC}, "Alice", "en", _bandwidth(),
+        _lang(), "Alice", "en", _bandwidth(),
         status=False, statusTime=True, ts=1_700_000_000,
         bw_limit=0, bw_used=0, wl_limit=0, wl_used=0,
     )
     assert disabled == "Alice up 1.50 GB down 500.00 MB"
 
     expired = build_description(
-        {"description": DESC}, "Alice", "en", _bandwidth(),
+        _lang(), "Alice", "en", _bandwidth(),
         status=False, statusTime=False, ts=1_700_000_000,
         bw_limit=2, bw_used=3_000_000_000, wl_limit=0, wl_used=0,
     )
@@ -68,15 +76,16 @@ def test_description_fills_active_and_disabled_slots() -> None:
 
     with pytest.raises(ValueError, match="unformatted"):
         build_description(
-            {"description": {"en": {**DESC["en"], "main": "{username} {missing}"}}},
+            _lang({"en": {**DESC["en"], "main": "{username} {missing}"}}),
             "Alice", "en", _bandwidth(),
             status=True, statusTime=True, ts=0,
             bw_limit=0, bw_used=0, wl_limit=0, wl_used=0,
         )
 
 
-def _link_config() -> dict[str, Any]:
-    return {
+def _link_config() -> AppConfig:
+    config = subscription_config()
+    config.update({
         "profiles": {
             "fast": {
                 "name": ["Fast", "Быстрый"],
@@ -85,6 +94,7 @@ def _link_config() -> dict[str, Any]:
                 "flag": "⚡",
                 "node": "edge",
                 "xhttpExtra": {"path": "/x"},
+                "json": {}, "description": ["", ""], "shortProfileDescription": ["", ""],
             },
             "wl": {
                 "name": ["WL", "ВЛ"],
@@ -93,17 +103,19 @@ def _link_config() -> dict[str, Any]:
                 "flag": "🛡",
                 "node": "wl-node",
                 "xhttpExtra": {},
+                "json": {}, "description": ["", ""], "shortProfileDescription": ["", ""],
             },
         },
         "nodes": {"edge": "edge.example", "wl-node": "wl.example"},
-    }
+    })
+    return config
 
 
 def test_link_array_filters_profiles_and_encodes_extra() -> None:
     encoded = build_link_array(
         _link_config(), status=True, statusWl=False, lang="ru", is_happ=True,
         user_uuid="user-uuid", bandwidths=_bandwidth(), need_dummy_link=True,
-        fingerprint="chrome", lang_cfg={"description": {"ru": DESC["en"], "en": DESC["en"]}},
+        fingerprint="chrome", lang_cfg=_lang({"ru": DESC["en"], "en": DESC["en"]}),
     )
     lines = base64.b64decode(encoded).decode("utf-8").splitlines()
     assert lines[0].startswith("vless://0@localhost:1")
@@ -116,7 +128,7 @@ def test_link_array_filters_profiles_and_encodes_extra() -> None:
     disabled = build_link_array(
         _link_config(), status=False, statusWl=True, lang="en", is_happ=False,
         user_uuid="user-uuid", bandwidths=_bandwidth(), need_dummy_link=False,
-        fingerprint="chrome", lang_cfg={"description": DESC},
+        fingerprint="chrome", lang_cfg=_lang(),
     )
     assert base64.b64decode(disabled) == b""
 
@@ -125,7 +137,7 @@ def test_link_array_filters_profiles_and_encodes_extra() -> None:
     encoded = build_link_array(
         config, status=True, statusWl=True, lang="en", is_happ=False,
         user_uuid="uuid", bandwidths=_bandwidth(), need_dummy_link=False,
-        fingerprint="edge", lang_cfg={"description": DESC},
+        fingerprint="edge", lang_cfg=_lang(),
     )
     text = base64.b64decode(encoded).decode("utf-8")
     assert "extra=" not in text
@@ -152,34 +164,31 @@ def _profile(stream: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_json_profiles_fill_transport_hosts() -> None:
-    cfg = {
-        "json_template": _json_template(),
-        "profiles": {
-            "tls": {
-                "name": ["TLS", "ТЛС"],
-                "flag": "",
-                "node": "edge",
-                "shortProfileDescription": ["tls en", "tls ru"],
-                "json": _profile({
-                    "tlsSettings": {"serverName": "", "fingerprint": ""},
-                    "xhttpSettings": {"host": ""},
-                    "grpcSettings": {"authority": ""},
-                    "realitySettings": {"fingerprint": ""},
-                }),
-            },
-            "ws": {
-                "name": ["WS", "ВС"],
-                "flag": "",
-                "node": "edge",
-                "shortProfileDescription": ["ws en", "ws ru"],
-                "json": _profile({
-                    "wsSettings": {},
-                    "httpupgradeSettings": {"host": ""},
-                }),
-            },
+    cfg = subscription_config()
+    profiles: dict[str, ProfileConfig] = {
+        "tls": {
+            "description": ["", ""], "whitelist": False, "xhttpExtra": {}, "masterLink": "",
+            "name": ["TLS", "ТЛС"], "flag": "", "node": "edge",
+            "shortProfileDescription": ["tls en", "tls ru"],
+            "json": _profile({
+                "tlsSettings": {"serverName": "", "fingerprint": ""},
+                "xhttpSettings": {"host": ""},
+                "grpcSettings": {"authority": ""},
+                "realitySettings": {"fingerprint": ""},
+            }),
         },
-        "nodes": {"edge": "edge.example"},
+        "ws": {
+            "description": ["", ""], "whitelist": False, "xhttpExtra": {}, "masterLink": "",
+            "name": ["WS", "ВС"], "flag": "", "node": "edge",
+            "shortProfileDescription": ["ws en", "ws ru"],
+            "json": _profile({"wsSettings": {}, "httpupgradeSettings": {"host": ""}}),
+        },
     }
+    cfg.update({
+        "json_template": _json_template(),
+        "profiles": profiles,
+        "nodes": {"edge": "edge.example"},
+    })
     built = build_json(cfg, "user-uuid", "en", "chrome")
     tls = built[0]["outbounds"]
     assert isinstance(tls, list)
@@ -209,16 +218,15 @@ def _subscription(**overrides: Any) -> Any:
         "fingerprint": "chrome",
     }
     user.update(overrides.pop("user", {}))
-    cfg = {
+    cfg = subscription_config()
+    cfg.update({
         "uri": "/sub/",
         "sub_name": "VPN",
         "provider_id": "",
-        "fallback_domain": None,
         "bypass_packages": ["com.example"],
         "ping_check_url": "https://example.test/204",
         "profiles": {},
-        "description": DESC,
-    }
+    })
     cfg.update(overrides.pop("cfg", {}))
     subscription = SimpleNamespace(
         user_svc=MagicMock(),
@@ -232,16 +240,10 @@ def _subscription(**overrides: Any) -> Any:
     subscription.user_svc.usertotoken.return_value = overrides.get("username", "alice")
     subscription.user_svc.user.return_value = user
     subscription.bandwidth_svc.bandwidth.return_value = _bandwidth()
-    subscription.res.cfg.copy.return_value = cfg
-    subscription.res.lang_cfg.copy.return_value = {"description": DESC, "web": {}}
-    subscription.res.lang_cfg.get.return_value = {
-        "shared": {"en": {"forbidden_title": "No browser"}}
-    }
-
-    def cfg_item(key: object) -> object:
-        return cfg[str(key)]
-
-    subscription.res.cfg.__getitem__.side_effect = cfg_item
+    subscription.res.cfg = config_mock(cfg)
+    language = _lang()
+    language['web'] = {"shared": {"en": {"forbidden_title": "No browser"}}}
+    subscription.res.lang_cfg = config_mock(language)
     return subscription
 
 

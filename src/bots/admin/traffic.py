@@ -4,7 +4,6 @@ from __future__ import annotations
 from ..composition import AdminFeatureMixin
 
 import threading
-from collections.abc import Mapping
 from typing import cast
 
 from telebot import types
@@ -94,12 +93,11 @@ class AdminTrafficMixin(AdminFeatureMixin):
 
 
             text = truncate_utf8(text, 1024)
+            language = self.lang_cfg.view()
             chart_img = bandwidth_chart(
                 snapshots,
                 label=info.displayname,
-                lang=self.lang_cfg.get('chart',
-                    as_type=Mapping[str, Mapping[str, str]]
-                )['ru']
+                lang=language['chart']['ru']
             )
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_main_menu())
@@ -110,5 +108,4 @@ class AdminTrafficMixin(AdminFeatureMixin):
         except Exception as e:
             self.log.error(f"Chart error for username {username}: {e}", exc_info=True)
             self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
-
 

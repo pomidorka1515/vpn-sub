@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from ..composition import PublicFeatureMixin
 
-from collections.abc import Mapping
 from typing import cast
 
 from telebot import types
@@ -98,12 +97,11 @@ class PublicTrafficMixin(PublicFeatureMixin):
 
             text = truncate_utf8(text, 1024)
 
+            language = self.lang_cfg.view()
             chart_img = bandwidth_chart(
                 snapshots,
                 label=info.displayname,
-                lang=self.lang_cfg.get('chart',
-                    as_type=Mapping[str, Mapping[str, str]]
-                )[lang]
+                lang=language['chart'][lang]
             )
             if chart_img is not None:
                 self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
@@ -114,5 +112,4 @@ class PublicTrafficMixin(PublicFeatureMixin):
         except Exception:
             self.log.error(f"Chart error for uid {uid}", exc_info=True)
             self._send_message(chat_id, t['error_generic'], reply_markup=self.get_menu(uid))
-
 

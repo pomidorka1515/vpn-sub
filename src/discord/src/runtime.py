@@ -11,7 +11,7 @@ import discord
 
 from admin import AdminBot
 from adminapi import AdminApiClient
-from config import Config, ConfigLike, LinesConfig
+from config import Config, DiscordConfig, DiscordLangConfig, LinesConfig
 from host import SharedDiscordClient
 from loggers import Logger
 from public import PublicBot
@@ -72,8 +72,8 @@ class DiscordPaths:
 
 @dataclass(slots=True, kw_only=True)
 class DiscordApplication:
-    cfg: Config
-    lang_cfg: Config
+    cfg: Config[DiscordConfig]
+    lang_cfg: Config[DiscordLangConfig]
     log_cfg: LinesConfig
     http: WebApiClient
     admin_http: AdminApiClient
@@ -127,7 +127,7 @@ def create_application(paths: DiscordPaths | None = None) -> DiscordApplication:
     paths.data.mkdir(parents=True, exist_ok=True)
     paths.backups.mkdir(parents=True, exist_ok=True)
 
-    cfg = Config(
+    cfg = Config[DiscordConfig](
         path=paths.config,
         indent=4,
         read_only=False,
@@ -137,7 +137,7 @@ def create_application(paths: DiscordPaths | None = None) -> DiscordApplication:
         isolate_commits=True,
         backup_dir=paths.backups,
     )
-    lang_cfg = Config(
+    lang_cfg = Config[DiscordLangConfig](
         path=paths.language,
         indent=4,
         read_only=True,
@@ -148,11 +148,12 @@ def create_application(paths: DiscordPaths | None = None) -> DiscordApplication:
     log.set_jsonl_handler(log_cfg)
 
     with log.loading():
-        token = cfg["public"]["token"]
+        conf = cfg.view()
+        token = cast(object, conf["public"]["token"])
         if not isinstance(token, str) or not token:
             raise RuntimeError("public discord bot token not found in discord.json")
-        private = cfg["private"]
-        api_token = private["api_token"]
+        private = conf["private"]
+        api_token = cast(object, private["api_token"])
         if not isinstance(api_token, str) or not api_token:
             raise RuntimeError("private discord api_token not found in discord.json")
         http = WebApiClient(base=paths.http_url, uri=paths.uri)
@@ -165,16 +166,16 @@ def create_application(paths: DiscordPaths | None = None) -> DiscordApplication:
         sessions = SessionStore(paths.sessions)
         client = SharedDiscordClient(intents=discord.Intents.default())
         public_bot = PublicBot(
-            cfg=cast(ConfigLike, cfg),
-            lang_cfg=cast(ConfigLike, lang_cfg),
+            cfg=cfg,
+            lang_cfg=lang_cfg,
             http=http,
             sessions=sessions,
             client=client,
             tree=client.tree,
         )
         admin_bot = AdminBot(
-            cfg=cast(ConfigLike, cfg),
-            lang_cfg=cast(ConfigLike, lang_cfg),
+            cfg=cfg,
+            lang_cfg=lang_cfg,
             http=admin_http,
             client=client,
             tree=client.tree,

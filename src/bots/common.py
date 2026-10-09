@@ -10,7 +10,7 @@ from typing import Any, cast
 import telebot
 
 from loggers import Logger
-from config import ConfigLike
+from config import AppConfig, Config, LangConfig
 from core import Subscription
 __all__ = ["AdminStateMixin", "BotStateMixin", "PublicStateMixin", "TelegramIOMixin"]
 
@@ -52,8 +52,8 @@ class TelegramIOMixin:
 class BotStateMixin:
     """Typing contract for state initialized by concrete bot composition roots."""
 
-    cfg: ConfigLike
-    lang_cfg: ConfigLike
+    cfg: Config[AppConfig]
+    lang_cfg: Config[LangConfig]
     sub: Subscription
     polling_thread: threading.Thread | None
 
@@ -69,5 +69,4 @@ class AdminStateMixin(BotStateMixin):
 class PublicStateMixin(BotStateMixin):
     TEXTS: dict[str, dict[str, str]]
     _executor: ThreadPoolExecutor
-
 

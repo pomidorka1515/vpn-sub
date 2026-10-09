@@ -4,7 +4,7 @@ import fcntl
 import os
 import sys
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO, Self, cast
@@ -14,14 +14,13 @@ from api.common import RES_DIR
 from api.decorators.rate_limit import close_rate_limit, configure_rate_limit_from_config
 from bots import AdminBot, PublicBot
 from bwatch import BWatch
-from config import Config, LinesConfig
+from config import AppConfig, Config, LangConfig, LinesConfig
 from core import Subscription
 from db import Database
 from errors import AppError
 from flask import Flask, Response, request
 from jinja2 import FileSystemLoader
 from loggers import Logger, Colors
-from config import ConfigLike
 from paths import bundled_root, compiled, program_dir, runtime_dir
 from session import XUiSession, XUiPanelTransport
 from util import err
@@ -127,8 +126,8 @@ class AppOptions:
 @dataclass(slots=True, kw_only=True)
 class Application:
     app: Flask
-    cfg: Config
-    lang_cfg: Config
+    cfg: Config[AppConfig]
+    lang_cfg: Config[LangConfig]
     log_cfg: LinesConfig
     audit_cfg: LinesConfig
     db: Database
@@ -291,14 +290,14 @@ def _acquire_primary_lock(path: Path) -> tuple[bool, BinaryIO | None]:
 
 
 def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
-    Config, # main
-    Config, # lang
+    Config[AppConfig], # main
+    Config[LangConfig], # lang
     LinesConfig, # log
     LinesConfig # audit
 ]:
     paths.data.mkdir(parents=True, exist_ok=True)
     lock_dir = paths.primary_lock.parent
-    cfg = Config(
+    cfg = Config[AppConfig](
         path=paths.config,
         indent=4,
         read_only=False,
@@ -310,7 +309,7 @@ def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
         lockfile_path=lock_dir,
         start_backup=start_backup,
     )
-    lang_cfg = Config(
+    lang_cfg = Config[LangConfig](
         path=paths.language,
         indent=4,
         read_only=True,
@@ -336,7 +335,7 @@ def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
 
 
 def _build_panels(
-    cfg: Config,
+    cfg: Config[AppConfig],
     *,
     stamp_dir: Path,
     transport_factory: PanelTransportFactory | None,
@@ -345,7 +344,8 @@ def _build_panels(
     panels: list[XUiSession] = []
     whitelist: XUiSession | None = None
 
-    for name, panel_cfg in cfg["3xui"].items():
+    conf = cfg.view()
+    for name, panel_cfg in conf["3xui"].items():
         transport = transport_factory() if transport_factory is not None else None
         session = XUiSession(
             name=panel_cfg["name"],
@@ -354,10 +354,12 @@ def _build_panels(
             uri=panel_cfg["uri"],
             api_token=panel_cfg["token"],
             https=panel_cfg["https"],
-            nginx_auth=tuple(panel_cfg.get("nginx_auth", [])) or None,
+            # The schema validates this array's length of two.
+            nginx_auth=cast(tuple[str, str] | None, tuple(panel_cfg.get("nginx_auth", [])) or None),
             inbounds_list=tuple(panel_cfg["inbounds_list"]),
             mode=panel_cfg["mode"],
-            inject_headers=panel_cfg.get("inject_headers"),
+            # The schema guarantees only an object; preserve the session boundary.
+            inject_headers=cast(Mapping[str, str | bytes] | None, panel_cfg.get("inject_headers")),
             transport=transport,
             stamp_dir=str(stamp_dir),
             verbose=verbose,
@@ -416,8 +418,8 @@ def create_application(
     flask_app = _build_flask_app(options)
     primary = False
     lock_file: BinaryIO | None = None
-    cfg: Config | None = None
-    lang_cfg: Config | None = None
+    cfg: Config[AppConfig] | None = None
+    lang_cfg: Config[LangConfig] | None = None
     log_cfg: LinesConfig | None = None
     audit_cfg: LinesConfig | None = None
 
@@ -461,9 +463,7 @@ def create_application(
     try:
         primary, lock_file = _acquire_primary_lock(paths.primary_lock)
         cfg, lang_cfg, log_cfg, audit_cfg = _build_configs(paths, start_backup=primary)
-        runtime_cfg = cast(ConfigLike, cfg)
-        runtime_lang_cfg = cast(ConfigLike, lang_cfg)
-        configure_rate_limit_from_config(runtime_cfg)
+        configure_rate_limit_from_config(cfg)
         db = Database(
             path=paths.database,
             backup_dir=paths.backups,
@@ -480,27 +480,28 @@ def create_application(
             raise RuntimeError("No panels initialized")
 
         subscription = Subscription(
-            cfg=runtime_cfg,
+            cfg=cfg,
             db=db,
-            lang_cfg=runtime_lang_cfg,
+            lang_cfg=lang_cfg,
             audit_cfg=audit_cfg,
             app=flask_app,
             panels=panels,
             whitelist_panel=whitelist,
             verbose="core" in overrides,
         )
+        conf = cfg.view()
         admin_bot = (
-            AdminBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
-            if _nonempty_token(runtime_cfg.get("bot", None))
+            AdminBot(sub=subscription, cfg=cfg, lang_cfg=lang_cfg)
+            if _nonempty_token(conf.get("bot"))
             else None
         )
         public_bot = (
-            PublicBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
-            if _nonempty_token(runtime_cfg.get("publicbot", None))
+            PublicBot(sub=subscription, cfg=cfg, lang_cfg=lang_cfg)
+            if _nonempty_token(conf.get("publicbot"))
             else None
         )
         bandwidth_watcher = BWatch(
-            cfg=runtime_cfg,
+            cfg=cfg,
             db=db,
             sub=subscription,
             bot=public_bot,
@@ -509,12 +510,12 @@ def create_application(
         )
         api = Api(
             app=flask_app,
-            cfg=runtime_cfg,
+                cfg=cfg,
             audit_cfg=audit_cfg,
             sub=subscription,
             bw=bandwidth_watcher,
         )
-        webapi = WebApi(app=flask_app, cfg=runtime_cfg, sub=subscription, bw=bandwidth_watcher)
+        webapi = WebApi(app=flask_app, cfg=cfg, sub=subscription, bw=bandwidth_watcher)
 
         runtime = Application(
             app=flask_app,

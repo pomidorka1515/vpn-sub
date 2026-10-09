@@ -16,11 +16,12 @@ __all__ = ["AdminLeaderboardMixin"]
 
 class AdminLeaderboardMixin(AdminFeatureMixin):
     def _chart_lang(self) -> Mapping[str, str]:
-        raw = self.lang_cfg.get("chart")
+        language = self.lang_cfg.view()
+        raw = cast(object, language.get("chart"))
         if isinstance(raw, dict):
-            ru = raw.get("ru")
+            ru = cast(dict[object, object], raw).get("ru")
             if isinstance(ru, dict):
-                return {str(k): str(v) for k, v in ru.items()}
+                return {str(k): str(v) for k, v in cast(dict[object, object], ru).items()}
         return {
             "leaderboard": "Таблица лидеров",
             "bw_type_total": "весь трафик",

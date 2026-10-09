@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 import telebot
 
-from config import ConfigLike
+from config import AppConfig, Config, LangConfig
 from core import Subscription
 from loggers import Logger
 from bots.polling import configure_telegram_api
@@ -34,14 +34,17 @@ class PublicBot(
 ):
     """Public bot assembled from the public feature workflows."""
 
-    def __init__(self, sub: Subscription, cfg: ConfigLike, lang_cfg: ConfigLike):
+    def __init__(self, sub: Subscription, cfg: Config[AppConfig], lang_cfg: Config[LangConfig]):
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             configure_telegram_api()
             self.cfg = cfg
             self.lang_cfg = lang_cfg
             self.sub = sub
-            token: str = self.cfg["publicbot"].get("token")
+            conf = self.cfg.view()
+            if "publicbot" not in conf:
+                raise KeyError("publicbot")
+            token = conf["publicbot"]["token"]
             if not token:
                 raise RuntimeError("publicbot.token must not be empty")
             step_backend = LockedHandlerBackend()
@@ -52,7 +55,8 @@ class PublicBot(
                 next_step_backend=step_backend,
                 reply_backend=step_backend,
             )
-            self.TEXTS: dict[str, dict[str, str]] = lang_cfg["publicbot"]
+            language = lang_cfg.view()
+            self.TEXTS: dict[str, dict[str, str]] = language["publicbot"]
             self.bot.message_handler(commands=["start", "menu"])(self.cmd_start)  # pyright: ignore[reportUnknownMemberType]
             callbacks: tuple[tuple[str, Callable[..., Any]], ...] = (
                 ("lang_", self.set_lang_callback),

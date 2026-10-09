@@ -25,7 +25,7 @@ class ConfigRoutes(AdminApiMixin):
 
     @requires_admin_auth
     def config_get(self) -> ResponseType:
-        data = cast(dict[str, JsonValue], self.cfg.copy())
+        data = self.cfg.copy()
         response, code = ok(obj=cast(JsonifyValue, data))
         response.headers["ETag"] = f'"{config_etag(data)}"'
         response.headers["Cache-Control"] = "no-store"
@@ -51,7 +51,7 @@ class ConfigRoutes(AdminApiMixin):
         written: dict[str, JsonValue] | None = None
         try:
             with self.cfg.edit() as tx:
-                current = cast(dict[str, JsonValue], tx.copy())
+                current = tx.copy()
                 current_hash = config_etag(current)
                 if current_hash != base:
                     conflict = current_hash
@@ -62,8 +62,8 @@ class ConfigRoutes(AdminApiMixin):
                     )
                     if status == "updated":
                         # Fail before commit. __exit__ validates again, then replaces.
-                        self.cfg.validate_document(cast(dict[str, JsonValue], tx.copy()))
-                        written = cast(dict[str, JsonValue], tx.copy())
+                        self.cfg.validate_document(tx.copy())
+                        written = tx.copy()
         except ValidationError as exc:
             return err(exc.message)
         except SchemaValidationError as exc:
@@ -86,7 +86,7 @@ class ConfigRoutes(AdminApiMixin):
                 name="config_update",
                 info={"keys": changed},
             )
-        new_hash = config_etag(cast(dict[str, JsonValue], self.cfg.copy()))
+        new_hash = config_etag(self.cfg.copy())
         return ok(
             "Updated" if status == "updated" else "Unchanged",
             obj={"base": new_hash, "restart": restart},

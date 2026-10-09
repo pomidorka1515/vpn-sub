@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, cast
+from typing import Any
 from collections.abc import Callable, Coroutine
 import discord
 from discord import app_commands
 from discord import Client, Interaction
 
-from config import ConfigLike
+from config import Config, DiscordConfig, DiscordLangConfig
 from loggers import Logger
 
 from webapi import WebApiClient
@@ -36,8 +36,8 @@ class PublicBot(
 ):
     def __init__(
         self,
-        cfg: ConfigLike,
-        lang_cfg: ConfigLike,
+        cfg: Config[DiscordConfig],
+        lang_cfg: Config[DiscordLangConfig],
         http: WebApiClient,
         sessions: SessionStore,
         *,
@@ -52,7 +52,8 @@ class PublicBot(
             self.sessions = sessions
             self.bot = client
             self.tree = tree
-            self.TEXTS = cast(dict[str, dict[str, str]], lang_cfg["public"])
+            language = lang_cfg.view()
+            self.TEXTS = language["public"]
             self._chart_locks: dict[int, asyncio.Lock] = {}
             self._chart_busy: set[int] = set()
             self._wire_commands()

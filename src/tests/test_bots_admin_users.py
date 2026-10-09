@@ -10,6 +10,7 @@ from telebot import types
 from bots.admin.users import AdminUsersMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
 from errors import AppError, NotFoundError, PanelUnavailableError
+from helpers import config_mock, subscription_config
 
 
 def _message(text: str, chat_id: int = 7) -> types.Message:
@@ -53,7 +54,7 @@ def users() -> tuple[AdminUsersMixin, MagicMock, MagicMock]:
     mixin.bot = cast(Any, telegram)
     mixin.sub = cast(Any, subscription)
     mixin.log = MagicMock()
-    mixin.cfg = cast(Any, {"fingerprints": ["chrome", "firefox"]})
+    mixin.cfg = config_mock(subscription_config(fingerprints=["chrome", "firefox"]))
     mixin.USERS_PER_PAGE = 2
     mixin._pending_edits = {}
     mixin.get_main_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]

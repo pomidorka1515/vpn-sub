@@ -96,7 +96,7 @@ def traffic() -> tuple[AdminTrafficMixin, MagicMock, MagicMock]:
     mixin.sub = cast(Any, subscription)
     mixin.log = MagicMock()
     lang_cfg = MagicMock()
-    lang_cfg.get.return_value = {"ru": {"bandwidth": "bw"}}
+    lang_cfg.view.return_value = {"description": {}, "publicbot": {}, "web": {}, "chart": {"ru": {"bandwidth": "bw"}}}
     mixin.lang_cfg = lang_cfg
     mixin.get_main_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     mixin._send_message = MagicMock()  # type: ignore[method-assign]
@@ -169,7 +169,7 @@ def leaderboard() -> tuple[AdminLeaderboardMixin, MagicMock, MagicMock]:
     mixin.bot = cast(Any, telegram)
     mixin.sub = cast(Any, subscription)
     lang_cfg = MagicMock()
-    lang_cfg.get.return_value = {"ru": {"leaderboard": "lb"}}
+    lang_cfg.view.return_value = {"description": {}, "publicbot": {}, "web": {}, "chart": {"ru": {"leaderboard": "lb"}}}
     mixin.lang_cfg = lang_cfg
     mixin.get_main_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     mixin._pending_leaderboard = {}

@@ -32,7 +32,8 @@ class PublicSettingsMixin(PublicFeatureMixin):
             markup = types.InlineKeyboardMarkup(row_width=2)
             username = self.sub.telegram_svc.get_username_telegram(uid)
             current_fp = self.sub.user_svc.get_fingerprint(username) if isinstance(username, str) else ''
-            for fp in self.cfg['fingerprints']:
+            conf = self.cfg.view()
+            for fp in conf['fingerprints']:
                 label = f"✅ {fp}" if fp == current_fp else fp
                 markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}"))  # pyright: ignore[reportUnknownMemberType]
             self.bot.send_message(message.chat.id, t['settings_fp_prompt'], reply_markup=markup)
@@ -135,5 +136,4 @@ class PublicSettingsMixin(PublicFeatureMixin):
             self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid))
         else:
             self.bot.send_message(message.chat.id, t['settings_pass_success'], reply_markup=self.get_menu(uid))
-
 

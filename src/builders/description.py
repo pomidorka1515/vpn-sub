@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from config import LangConfig
 from datetime import datetime, timezone
 
 from util import fmt_bytes, format
@@ -11,7 +11,7 @@ from custom_types import BandwidthInfo
 
 
 def build_description(
-    lang_cfg: dict[str, Any],
+    lang_cfg: LangConfig,
     name: str,
     lang: str,
     bandwidths: BandwidthInfo,

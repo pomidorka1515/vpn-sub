@@ -17,9 +17,9 @@ from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
     close_rate_limit,
 )
 from api.common import RES_DIR
-from config import Config, ConfigLike
+from config import Config, LangConfig
 from db import Database
-from helpers import make_subscription, make_watch, subscription_config
+from helpers import config_mock, make_subscription, make_watch, subscription_config
 from jinja2 import FileSystemLoader
 
 _LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
@@ -29,8 +29,8 @@ class _OrderedJSONProvider(DefaultJSONProvider):
     sort_keys = False
 
 
-def _web_lang_cfg() -> ConfigLike:
-    return cast(ConfigLike, Config(path=_LANG_PATH, read_only=True, read_only_jsonc=True))
+def _web_lang_cfg() -> Config[LangConfig]:
+    return Config[LangConfig](path=_LANG_PATH, read_only=True, read_only_jsonc=True)
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ def web_api(database: Database, flask_app: Flask) -> tuple[Flask, Database]:
     subscription.password_svc.hash = lambda value: password_hash  # type: ignore[assignment]
     watcher = make_watch(database, subscription)
     WebApi(
-        app=flask_app, cfg=cast(ConfigLike, subscription_config()),
+        app=flask_app, cfg=config_mock(subscription_config()),
         sub=subscription, bw=watcher,
     )
     return flask_app, database
@@ -94,7 +94,7 @@ def _prefixed_client(database: Database, flask_app: Flask) -> FlaskClient:
     database.set_auth_token("alice", "a" * 100)
     WebApi(
         app=flask_app,
-        cfg=cast(ConfigLike, subscription_config(uri="custom")),
+        cfg=config_mock(subscription_config(uri="custom")),
         sub=subscription,
         bw=make_watch(database, subscription),
     )
@@ -198,7 +198,7 @@ def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) 
     subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
     WebApi(
         app=flask_app,
-        cfg=cast(ConfigLike, subscription_config()),
+        cfg=config_mock(subscription_config()),
         sub=subscription,
         bw=make_watch(database, subscription),
     )

@@ -133,35 +133,27 @@ show_column_numbers = true
 show_error_context  = true
 
 # -- per-module relaxations ---------------------------------------------
-# config is split across private implementation modules that access each
-# other's private helpers during the refactor
+# Config exports are shared across its implementation modules.
 [[tool.mypy.overrides]]
 module = ["config", "config.*"]
 no_implicit_reexport           = false
-disable_error_code             = ["attr-defined", "override"]
 
-# Database mixins share connection/transaction helpers supplied by Database.
+# Config's snapshot tuples and mapping signatures differ from MutableMapping.
 [[tool.mypy.overrides]]
-module = ["db", "db.*"]
-disable_error_code             = ["attr-defined"]
+module = ["config.core", "config.transaction"]
+disable_error_code             = ["override"]
 
-# BWatch mixins share host state and cross-mixin methods supplied by BWatch.
-[[tool.mypy.overrides]]
-module = ["bwatch", "bwatch.*"]
-disable_error_code             = ["attr-defined"]
-
-# Bt feature mixins intentionally depend on attributes supplied by the concrete
-# composition roots; pyTelegramBotAPI is also only partially typed.
+# pyTelegramBotAPI is only partially typed.
 [[tool.mypy.overrides]]
 module = ["bots.*"]
 disallow_untyped_calls         = false
 disallow_any_expr              = false
-disable_error_code             = ["attr-defined", "no-any-return"]
+disable_error_code             = ["no-any-return"]
 
 [[tool.mypy.overrides]]
 module = ["public.*", "admin.*"]
 disallow_untyped_calls         = false
-disable_error_code             = ["attr-defined", "no-any-return"]
+disable_error_code             = ["no-any-return"]
 
 [[tool.mypy.overrides]]
 module = ["helpers"]
@@ -214,6 +206,7 @@ extraPaths = ["src"]
 root = "src/config"
 reportPrivateUsage = false
 reportUnusedFunction = false
+# Config's snapshot tuples and mapping signatures differ from MutableMapping
 reportIncompatibleMethodOverride = false
 
 [[tool.pyright.executionEnvironments]]

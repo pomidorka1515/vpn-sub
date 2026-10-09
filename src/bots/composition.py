@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import telebot
 from telebot import types
 
-from config import ConfigLike
+from config import AppConfig, Config, LangConfig
 from core import Subscription
 from loggers import Logger
 __all__ = ["AdminFeatureMixin", "PublicFeatureMixin"]
@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     class AdminFeatureMixin:
         bot: telebot.TeleBot
         log: Logger
-        cfg: ConfigLike
-        lang_cfg: ConfigLike
+        cfg: Config[AppConfig]
+        lang_cfg: Config[LangConfig]
         sub: Subscription
         USERS_PER_PAGE: int
         admin_uids: list[int]
@@ -64,8 +64,8 @@ if TYPE_CHECKING:
     class PublicFeatureMixin:
         bot: telebot.TeleBot
         log: Logger
-        cfg: ConfigLike
-        lang_cfg: ConfigLike
+        cfg: Config[AppConfig]
+        lang_cfg: Config[LangConfig]
         sub: Subscription
         TEXTS: dict[str, dict[str, str]]
         polling_thread: threading.Thread | None
@@ -88,4 +88,3 @@ else:
 
     class PublicFeatureMixin:
         """Runtime-neutral base for public feature mixins."""
-

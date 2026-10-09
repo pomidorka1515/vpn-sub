@@ -4,7 +4,7 @@ from flask import Flask
 
 from api.common import BaseApi, Route
 from bwatch import BWatch
-from config import ConfigLike, LinesConfigLike
+from config import AppConfig, Config, LinesConfigLike
 from core import Subscription
 from loggers import Logger
 
@@ -45,12 +45,13 @@ class Api(
 
     def __init__(self,
                  app: Flask,
-                 cfg: ConfigLike,
+                 cfg: Config[AppConfig],
                  audit_cfg: LinesConfigLike,
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        uri = '/' + '/'.join(p.strip('/ ') for p in (cfg['uri'], cfg['api_uri']) if p and p.strip('/ '))
-        self.token = cfg['api_token']
+        conf = cfg.view()
+        uri = '/' + '/'.join(p.strip('/ ') for p in (conf['uri'], conf.get('api_uri', '')) if p and p.strip('/ '))
+        self.token = conf['api_token']
         self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri)

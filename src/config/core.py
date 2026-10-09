@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import threading
 import os
 import copy
@@ -7,8 +9,8 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, overload, cast, Callable, Literal
 
-from .constants import JsonValue, SYNC_MODES
-from .protocols import MISSING, MISSING_TYPE, MissingValue
+from .constants import JsonValue, JsonDict, SYNC_MODES
+from .protocols import MISSING, MISSING_TYPE
 from .protocols import _ConfigTransactionLike
 from .atomic import FileSignature, _file_signature, _locked_file, _atomic_write_json, resolve_lockfile_path
 from .backup import _prune_backups, _do_backup, _make_backup_thread, _instance_backup_dir
@@ -18,9 +20,12 @@ from .transaction import _ConfigTransaction
 from errors import ConfigError, ReadOnlyConfigError
 from loggers import Logger
 
-class Config(MutableMapping[str, JsonValue]):
+class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     """
     Thread-safe, process-safe JSON config manager.
+
+    The document type is a caller-supplied static contract, independent of
+    runtime schema selection and validation.
 
     Notes:
     - Uses a dedicated lock file for inter-process locking.
@@ -107,8 +112,8 @@ class Config(MutableMapping[str, JsonValue]):
         self._last_signature: FileSignature | None = None
 
         self._lock = threading.RLock()
-        self._active_transaction: _ConfigTransaction | None = None
-        self._context_transaction: _ConfigTransaction | None = None
+        self._active_transaction: _ConfigTransaction[Doc] | None = None
+        self._context_transaction: _ConfigTransaction[Doc] | None = None
 
         self._schema_cache_path: str | None = None
         self._schema_cache_signature: FileSignature | None = None
@@ -258,7 +263,7 @@ class Config(MutableMapping[str, JsonValue]):
                 exclusive=True,
             )
 
-    def edit(self) -> _ConfigTransactionLike:
+    def edit(self) -> _ConfigTransactionLike[Doc]:
         """Open an explicit transaction.
 
         Usage:
@@ -267,7 +272,7 @@ class Config(MutableMapping[str, JsonValue]):
                 tx["count"] += 1
         """
         self._raise_if_read_only()
-        return cast(_ConfigTransactionLike, _ConfigTransaction(self))
+        return cast(_ConfigTransactionLike[Doc], _ConfigTransaction(self))
 
     def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
         """Run a callback inside a transaction and return its result.
@@ -283,13 +288,13 @@ class Config(MutableMapping[str, JsonValue]):
         """
         self._raise_if_read_only()
         with self.edit() as tx:
-            result = callback(cast(_ConfigTransaction, tx))
+            result = callback(cast(_ConfigTransaction[Doc], tx))
         return self._detach(result)
 
-    def __enter__(self) -> _ConfigTransactionLike:
+    def __enter__(self) -> _ConfigTransactionLike[Doc]:
         self._raise_if_read_only()
         tx = self.edit()
-        self._context_transaction = cast(_ConfigTransaction, tx)
+        self._context_transaction = cast(_ConfigTransaction[Doc], tx)
         try:
             return tx.__enter__()
         except Exception:
@@ -338,40 +343,18 @@ class Config(MutableMapping[str, JsonValue]):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
-
-    @overload
-    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T](self, key: str, default: MissingValue, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](
-        self,
-        key: str,
-        default: _TJ | MISSING_TYPE = MISSING,
-        *,
-        as_type: type[_T] | None = None
-    ) -> _TJ | _T: ...
+    def get[_T](self, key: str, default: _T) -> JsonValue | _T: ...
 
     def get[_T](
         self,
         key: str,
-        default: JsonValue | MISSING_TYPE = MISSING,
-        *,
-        as_type: type[_T] | None = None
-    ) -> Any:
+        default: _T | MISSING_TYPE = MISSING,
+    ) -> JsonValue | _T:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()
-            value = self._data.get(key) if default is MISSING else self._data.get(key, default)
-            if as_type is not None:
-                value = cast(as_type, value)  # type: ignore[valid-type]
-            return self._detach(value) # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+            value = self._data.get(key) if default is MISSING else self._data.get(key, cast(_T, default))
+            return self._detach(value)
 
     def __iter__(self) -> Iterator[str]:
         with self._lock:
@@ -397,7 +380,14 @@ class Config(MutableMapping[str, JsonValue]):
             self._ensure_recent_locked()
             return tuple((k, self._detach(v)) for k, v in self._data.items())
 
-    def copy(self) -> dict[str, Any]:
+    def view(self) -> Doc:
+        """Return a detached snapshot under the caller's document contract."""
+        with self._lock:
+            self._raise_if_used_inside_transaction()
+            self._ensure_recent_locked()
+            return self._detach(cast(Doc, self._data))
+
+    def copy(self) -> JsonDict:
         """Return a deep copy of the current config data as a plain dict."""
         with self._lock:
             self._raise_if_used_inside_transaction()
@@ -416,7 +406,7 @@ class Config(MutableMapping[str, JsonValue]):
 
     def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
         self._raise_if_read_only()
-        def action(tx: _ConfigTransaction) -> JsonValue:
+        def action(tx: _ConfigTransaction[Doc]) -> JsonValue:
             if default is MISSING:
                 return tx.pop(key)
             d: JsonValue = default  # type: ignore[assignment]
@@ -462,9 +452,9 @@ class Config(MutableMapping[str, JsonValue]):
 
         self._run_edit(lambda tx: tx.update(updates))
 
-    def _run_edit[_TJ: JsonValue](self, action: Callable[[_ConfigTransaction], _TJ]) -> _TJ:
+    def _run_edit[_TJ: JsonValue](self, action: Callable[[_ConfigTransaction[Doc]], _TJ]) -> _TJ:
         with self.edit() as tx:
-            result = action(cast(_ConfigTransaction, tx))
+            result = action(cast(_ConfigTransaction[Doc], tx))
         return self._detach(result)
 
     def _raise_if_used_inside_transaction(self) -> None:

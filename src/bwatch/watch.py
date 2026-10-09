@@ -10,7 +10,7 @@ from custom_types import BandwidthInfo
 from db import Database
 from loggers import Logger
 from bots import AdminBot, PublicBot
-from config import ConfigLike
+from config import AppConfig, Config
 
 from .calendar import CalendarMixin
 from .panels import PanelsMixin
@@ -29,7 +29,7 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
 
     def __init__(
         self,
-        cfg: ConfigLike,
+        cfg: Config[AppConfig],
         db: Database,
         sub: Subscription,
         bot: PublicBot | None = None,
@@ -38,7 +38,7 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.cfg: ConfigLike = cfg
+            self.cfg: Config[AppConfig] = cfg
             self.db = db
             self._stop_event = threading.Event()
             self._mem_lock = threading.Lock()  # single lock for all mem/wl_mem access
@@ -52,7 +52,8 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             self.snap_wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
             self._panel_alerts: dict[str, int | float] = {}  # only used by 1 thread, no lock needed yet
-            self._panel_alert_cooldown: int = self.cfg.get('panel_alert_cooldown', as_type=int) or 3600
+            conf = self.cfg.view()
+            self._panel_alert_cooldown: int = conf['panel_alert_cooldown'] or 3600
             self._snapshot_failures: dict[Literal["bandwidth", "state"], int] = {}
             self._snapshot_due_at: dict[Literal["bandwidth", "state"], float] = {
                 "bandwidth": 0.0,

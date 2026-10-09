@@ -62,8 +62,9 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not info:
             return
 
-        sub_uri = self.cfg['uri'].strip("/")
-        domain = self.cfg['domain'].rstrip("/")
+        conf = self.cfg.view()
+        sub_uri = conf['uri'].strip("/")
+        domain = conf['domain'].rstrip("/")
         
         link = f"{domain}/{sub_uri}?token={info.token}&lang={lang}"
             
@@ -73,7 +74,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             link=link
         )
 
-        domain = self.cfg['domain']
+        domain = conf['domain']
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton(t['get_sub_btn_link'], url=link),

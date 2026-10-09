@@ -10,6 +10,7 @@ from telebot import types
 from bots.public.common import PublicCommonMixin
 from bots.public.subscription import PublicSubscriptionMixin
 from bots.public.text_routing import PublicTextRoutingMixin
+from helpers import config_mock, profile_config, subscription_config
 
 
 def _button_text(button: types.KeyboardButton | dict[str, str]) -> str:
@@ -153,18 +154,10 @@ def routing() -> tuple[PublicTextRoutingMixin, MagicMock, MagicMock]:
     mixin.bot = cast(Any, telegram)
     mixin.sub = cast(Any, subscription)
     mixin.TEXTS = TEXTS
-    mixin.cfg = cast(Any, {
-        "profiles": {
-            "fast": {
-                "name": ["Fast", "Быстрый"],
-                "description": ["fast en", "fast ru"],
-            },
-            "broken": {
-                "name": ["Broken", "Сломан"],
-                "description": ["broken en", "broken ru"],
-            },
-        },
-    })
+    mixin.cfg = config_mock(subscription_config(profiles={
+        "fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"]),
+        "broken": profile_config(name=["Broken", "Сломан"], description=["broken en", "broken ru"]),
+    }))
     mixin.get_lang = MagicMock(return_value="en")  # type: ignore[method-assign]
     mixin.get_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     mixin.send_info = MagicMock()  # type: ignore[method-assign]
@@ -250,7 +243,7 @@ def test_send_link_builds_qr_and_happ_redirect() -> None:
     mixin.bot = cast(Any, telegram)
     mixin.sub = cast(Any, subscription)
     mixin.TEXTS = TEXTS
-    mixin.cfg = cast(Any, {"uri": "/sub/", "domain": "https://example.test/"})
+    mixin.cfg = config_mock(subscription_config(uri="/sub/", domain="https://example.test/"))
     subscription.telegram_svc.get_info_telegram.return_value = None
     mixin.send_info(7, 42, "en")
     mixin.send_link(7, 42, "en")

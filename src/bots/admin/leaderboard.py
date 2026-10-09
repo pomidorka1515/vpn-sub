@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from ..composition import AdminFeatureMixin
 
-from collections.abc import Mapping
 from typing import Literal, cast
 
 from telebot import types
@@ -77,11 +76,10 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             flip=True if order == "asc" else False
         )
 
+        language = self.lang_cfg.view()
         chart = leaderboard_chart(
             lb_data, bandwidth_type=bw_type,
-            lang=self.lang_cfg.get('chart',
-                as_type=Mapping[str, Mapping[str, str]]
-            )['ru']
+            lang=language['chart']['ru']
         )
 
         if chart is None:
@@ -105,5 +103,4 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             text = b.decode("utf-8", errors="ignore") + "..."
 
         self.bot.send_photo(chat_id, chart, text, parse_mode="HTML")
-
 

@@ -32,8 +32,9 @@ class AccountRoutes(WebApiMixin):
             lang = 'en'
 
         token = self.sub.user_svc.get_token(username)
-        domain = self.cfg['domain']
-        link = f"{domain}/{str(self.cfg['uri']).strip('/')}?token={token}&lang={lang}"
+        conf = self.cfg.view()
+        domain = conf['domain']
+        link = f"{domain}/{conf['uri'].strip('/')}?token={token}&lang={lang}"
 
         if parse_bool(request.args.get('happ')):
             link = f"happ://add/{link}"
@@ -55,7 +56,8 @@ class AccountRoutes(WebApiMixin):
 
         index = 0 if lang == 'en' else 1
         obj: dict[str, str] = {}
-        for profile in self.cfg['profiles'].values():
+        conf = self.cfg.view()
+        for profile in conf['profiles'].values():
             name = profile['name'][index]
             desc = profile['description'][index]
             obj[name] = desc
@@ -63,7 +65,8 @@ class AccountRoutes(WebApiMixin):
 
     @requires_webapi_auth
     def fps(self, username: str) -> ResponseType:
-        return ok(obj=self.cfg['fingerprints'])
+        conf = self.cfg.view()
+        return ok(obj=conf['fingerprints'])
 
     @requires_webapi_auth
     @requires_fields()
@@ -77,7 +80,8 @@ class AccountRoutes(WebApiMixin):
         ext_password: str | None = content.get('password', None)
         current_password: str | None = content.get('current_password', None)
         if fingerprint:
-            if fingerprint not in self.cfg['fingerprints']:
+            conf = self.cfg.view()
+            if fingerprint not in conf['fingerprints']:
                 return err("Unknown fingerprint")
         if displayname:
             if len(displayname) > 16:

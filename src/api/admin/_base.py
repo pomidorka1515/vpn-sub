@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import Flask
 
 from bwatch import BWatch
-from config import ConfigLike, LinesConfigLike
+from config import AppConfig, Config, LinesConfigLike
 from core import Subscription
 from loggers import Logger
 
@@ -12,7 +12,7 @@ class AdminApiMixin:
     """Attributes every admin route group reads from the composed Api."""
 
     app: Flask
-    cfg: ConfigLike
+    cfg: Config[AppConfig]
     sub: Subscription
     bw: BWatch
     uri: str

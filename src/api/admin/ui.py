@@ -15,7 +15,8 @@ class UiRoutes(AdminApiMixin):
     """Admin HTML pages and cookie session."""
 
     def reg_handles(self) -> None:
-        prefix = '/' + '/'.join(p.strip('/ ') for p in (self.cfg['uri'],) if p and p.strip('/ '))
+        conf = self.cfg.view()
+        prefix = '/' + '/'.join(p.strip('/ ') for p in (conf['uri'],) if p and p.strip('/ '))
         for path, handler in (
             ('/admin', 'admin_ui'),
             ('/admin/token', 'admin_token'),
@@ -35,9 +36,10 @@ class UiRoutes(AdminApiMixin):
         if not self._admin_cookie_ok():
             return make_response(redirect(self._admin_login_path()))
         lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, 'admin')
+        conf = self.cfg.view()
         html = render_template(
             'admin.html',
-            prefix='/' + '/'.join(p for p in self.cfg['uri'].split('/') if p),
+            prefix='/' + '/'.join(p for p in conf['uri'].split('/') if p),
             asset_version=asset_version(),
             lang=lang,
             L=strings,
@@ -96,7 +98,8 @@ class UiRoutes(AdminApiMixin):
         return response, code
 
     def _admin_prefix(self) -> str:
-        return '/' + '/'.join(p.strip('/ ') for p in (self.cfg['uri'],) if p and p.strip('/ '))
+        conf = self.cfg.view()
+        return '/' + '/'.join(p.strip('/ ') for p in (conf['uri'],) if p and p.strip('/ '))
 
     def _admin_login_path(self) -> str:
         return self._admin_prefix().rstrip('/') + '/admin/login'
@@ -106,9 +109,10 @@ class UiRoutes(AdminApiMixin):
         return (prefix + '/admin') if prefix else '/admin'
 
     def _admin_credentials_ok(self, username: str, password: str) -> bool:
-        configured = self.cfg["api_admin_ui_auth"]
-        expected_user = configured[0]
-        expected_password = configured[1]
+        conf = self.cfg.view()
+        configured = conf["api_admin_ui_auth"]
+        expected_user = cast(object, configured[0])
+        expected_password = cast(object, configured[1])
         if not isinstance(expected_user, str) or not isinstance(expected_password, str):
             return False
         return compare(username, expected_user) and compare(password, expected_password)
@@ -124,9 +128,10 @@ class UiRoutes(AdminApiMixin):
 
     def admin_login_page(self) -> ResponseType:
         lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, 'admin_auth')
+        conf = self.cfg.view()
         html = render_template(
             'admin-auth.html',
-            prefix='/' + '/'.join(p for p in self.cfg['uri'].split('/') if p),
+            prefix='/' + '/'.join(p for p in conf['uri'].split('/') if p),
             asset_version=asset_version(),
             lang=lang,
             L=strings,

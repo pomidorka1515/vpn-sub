@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, cast
+from config import AppConfig
 
 
 def build_json(
-    cfg: dict[str, Any],
+    cfg: AppConfig,
     user_uuid: str,
     lang: str,
     fingerprint: str,
@@ -23,7 +24,7 @@ def build_json(
     for profile in cfg["profiles"].values():
         node = profile["node"]
         domain = cfg["nodes"][node]
-        outbound: dict[str, Any] = profile["json"]
+        outbound = cast(dict[str, Any], profile["json"])
         vnext: dict[str, Any] = outbound["settings"]["vnext"][0]
         vnext["users"][0]["id"] = user_uuid
         vnext["address"] = domain
@@ -48,7 +49,7 @@ def build_json(
         if (upgrade := stream.get("httpupgradeSettings")) is not None:
             upgrade["host"] = domain
 
-        result: dict[str, Any] = copy.deepcopy(cfg["json_template"])
+        result = cast(dict[str, Any], copy.deepcopy(cfg["json_template"]))
         result["remarks"] = profile["flag"] + profile["name"][index]
         result["outbounds"][0] = outbound
         # only shown when a provider id is set, but written regardless

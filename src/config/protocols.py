@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import (
     Protocol, runtime_checkable, Self,
     Literal, Callable, Any, overload, Final
@@ -14,10 +16,8 @@ class MISSING_TYPE:
 
 MISSING: Final[MISSING_TYPE] = MISSING_TYPE()
 
-type MissingValue = Literal["<MISSING>"]
-
 @runtime_checkable
-class ConfigLike(Protocol):
+class ConfigLike[Doc = JsonDict](Protocol):
 
     @property
     def path(self) -> str: ...
@@ -35,11 +35,11 @@ class ConfigLike(Protocol):
 
     def reload(self) -> bool: ...
 
-    def edit(self) -> _ConfigTransactionLike: ...
+    def edit(self) -> _ConfigTransactionLike[Doc]: ...
 
     def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T: ...
 
-    def __enter__(self) -> _ConfigTransactionLike: ...
+    def __enter__(self) -> _ConfigTransactionLike[Doc]: ...
 
     def __exit__(
         self,
@@ -62,33 +62,13 @@ class ConfigLike(Protocol):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
-
-    @overload
-    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T](self, key: str, default: MissingValue, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](
-        self,
-        key: str,
-        default: _TJ | MISSING_TYPE = MISSING,
-        *,
-        as_type: type[_T] | None = None
-    ) -> _TJ | _T: ...
+    def get[_T](self, key: str, default: _T) -> JsonValue | _T: ...
 
     def get[_T](
         self,
         key: str,
-        default: JsonValue | MISSING_TYPE = MISSING,
-        *,
-        as_type: type[_T] | None = None
-    ) -> Any: ...
+        default: _T | MISSING_TYPE = MISSING,
+    ) -> JsonValue | _T: ...
 
     def __iter__(self) -> Iterator[str]: ...
 
@@ -98,7 +78,9 @@ class ConfigLike(Protocol):
 
     def items(self) -> tuple[tuple[str, JsonValue], ...]: ...
 
-    def copy(self) -> dict[str, Any]: ...
+    def view(self) -> Doc: ...
+
+    def copy(self) -> JsonDict: ...
 
     def clear(self) -> None: ...
 
@@ -137,7 +119,7 @@ class ConfigLike(Protocol):
 
 
 @runtime_checkable
-class _ConfigTransactionLike(Protocol):
+class _ConfigTransactionLike[Doc = JsonDict](Protocol):
 
     def __enter__(self) -> Self: ...
 
@@ -164,29 +146,17 @@ class _ConfigTransactionLike(Protocol):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get[_TJ: JsonValue](self, key: str, default: _TJ) -> _TJ: ...
-
-    @overload
-    def get[_T](self, key: str, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T](self, key: str, default: MissingValue, *, as_type: type[_T]) -> _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ, *, as_type: type[_T]) -> _TJ | _T: ...
-
-    @overload
-    def get[_T, _TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING, *, as_type: type[_T] | None = None) -> _TJ | _T: ...
+    def get[_T](self, key: str, default: _T) -> JsonValue | _T: ...
 
     def get[_T](
         self,
         key: str,
-        default: JsonValue | MISSING_TYPE = MISSING,
-        *,
-        as_type: type[_T] | None = None
-    ) -> Any: ...
+        default: _T | MISSING_TYPE = MISSING,
+    ) -> JsonValue | _T: ...
 
-    def copy(self) -> dict[str, Any]: ...
+    def view(self) -> Doc: ...
+
+    def copy(self) -> JsonDict: ...
 
     def clear(self) -> None: ...
 

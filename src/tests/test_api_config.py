@@ -9,7 +9,7 @@ from pathlib import Path
 
 from api import Api
 from api.config_patch import REQUIRED_KEYS, config_etag
-from config import Config, ConfigLike, JsonValue, LinesConfigLike
+from config import AppConfig, Config, JsonValue, LinesConfigLike
 from db import Database
 from helpers import make_subscription, make_watch
 
@@ -49,10 +49,10 @@ def _bad_node_profiles() -> dict[str, Any]:
     return {"profile1": profile}
 
 
-def _config_api(tmp_path: Path, flask_app: Flask) -> tuple[Config, Path, _RecordingAudit]:
+def _config_api(tmp_path: Path, flask_app: Flask) -> tuple[Config[AppConfig], Path, _RecordingAudit]:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(_valid_config(), indent=4) + "\n", encoding="utf-8")
-    cfg = Config(
+    cfg = Config[AppConfig](
         path=path,
         schema_path=_SCHEMA_PATH,
         backup_dir=tmp_path / "backup",
@@ -68,7 +68,7 @@ def _config_api(tmp_path: Path, flask_app: Flask) -> tuple[Config, Path, _Record
     )
     Api(
         app=flask_app,
-        cfg=cast(ConfigLike, cfg),
+        cfg=cfg,
         audit_cfg=cast(LinesConfigLike, audit),
         sub=subscription,
         bw=make_watch(subscription.res.db, subscription),

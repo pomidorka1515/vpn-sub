@@ -5,7 +5,6 @@ import uuid
 import time
 from collections.abc import Mapping
 from dataclasses import asdict
-from typing import cast
 from urllib.parse import quote
 
 from ...common import BaseService, SharedCoreResources
@@ -151,19 +150,19 @@ class BusinessUserService(BaseService):
     def get_info(self, username: str, pretty: bool = False) -> UserInfo:
         """Get all info about a user. Raises NotFoundError if it does not exist."""
         
-        conf = self.cfg.copy()
+        conf = self.cfg.view()
         user = self.user_svc.user(username)
         bandwidths = self.bandwidth_svc.bandwidth(username=username)
         wl_bandwidths = self.bandwidth_svc.bandwidth(username=username, whitelist=True)
         monthly = int(user['bw_used'])
         wl_monthly = int(user['wl_used'])
-        domain = self.cfg['domain']
-        uri = str(self.cfg['uri']).strip('/')
+        domain = conf['domain']
+        uri = conf['uri'].strip('/')
         if pretty:
             bandwidths = bandwidths.format_all_mb()
             wl_bandwidths = wl_bandwidths.format_all_mb()
         info = UserInfo(
-            _=random.choice(cast(list[str], conf.get('funny_strings', []))),
+            _=random.choice(conf.get('funny_strings', [])),
             token=str(user['token']),
             link=f"{domain}/{uri}?token={user['token']}",
             displayname=str(user['displayname']),
@@ -509,10 +508,11 @@ class BusinessUserService(BaseService):
         else:
             if not isuuid(userid):
                 raise ValidationError("Invalid UUID")
+        conf = self.cfg.view()
         if fingerprint is None:
-            fingerprint = random.choice(self.cfg['fingerprints'])
+            fingerprint = random.choice(conf['fingerprints'])
         else:
-            if fingerprint not in self.cfg['fingerprints']:
+            if fingerprint not in conf['fingerprints']:
                 raise ValidationError("Invalid fingerprint")
         if timee > 2**31:
             raise ValidationError("Invalid timestamp")
@@ -605,7 +605,8 @@ class BusinessUserService(BaseService):
             fingerprint = str(current["fingerprint"])
         else:
             audit_info['fingerprint'] = fingerprint
-        if fingerprint not in self.cfg['fingerprints']:
+        conf = self.cfg.view()
+        if fingerprint not in conf['fingerprints']:
             raise ValidationError("Invalid fingerprint")
         limit = int(current["bw_limit_gb"]) if limit is None else limit
         wl_limit = int(current["wl_limit_gb"]) if wl_limit is None else wl_limit

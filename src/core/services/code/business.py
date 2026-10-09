@@ -169,7 +169,8 @@ class BusinessCodeService(BaseService):
         displayname = sanitize(displayname, "display")
         token = generate_token("sub")
         userid = str(uuid.uuid4())
-        fingerprint = random.choice(self.cfg['fingerprints'])
+        conf = self.cfg.view()
+        fingerprint = random.choice(conf['fingerprints'])
         hashed_password = self.password_svc.hash(ext_password)
 
         try:

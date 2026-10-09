@@ -8,7 +8,7 @@ from custom_types import BandwidthInfo
 from db import Database
 from loggers import Logger
 from bots import AdminBot, PublicBot
-from config import ConfigLike, JsonValue
+from config import AppConfig, Config, JsonValue
 from tracer import trace, TraceOp
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ class BWatchHost:
     """Attributes supplied by ``BWatch``. Mixins do not construct them."""
 
     log: Logger
-    cfg: ConfigLike
+    cfg: Config[AppConfig]
     db: Database
     sub: Subscription
     bot: PublicBot | None

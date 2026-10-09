@@ -4,7 +4,7 @@ from argon2 import PasswordHasher
 
 from .common import SharedCoreResources
 from errors import UnsupportedPlatformError
-from config import ConfigLike, LinesConfigLike
+from config import AppConfig, Config, LangConfig, LinesConfigLike
 from db import Database
 from flask import Flask, Response, request
 from builders import get_subscription
@@ -31,8 +31,8 @@ if platform.system().lower() != "linux":
 class Subscription:
     def __init__(
         self,
-        cfg: ConfigLike,
-        lang_cfg: ConfigLike, # ro
+        cfg: Config[AppConfig],
+        lang_cfg: Config[LangConfig], # ro
         db: Database,
         app: Flask,
         panels: list[XUiSession],
@@ -53,7 +53,7 @@ class Subscription:
                 whitelist_panel=whitelist_panel,
                 audit_cfg=audit_cfg,
                 password_hasher=PasswordHasher(),
-                legacy_salt=cfg['salt'],
+                legacy_salt=cfg.view()['salt'],
                 verbose=verbose
             )
 
@@ -87,7 +87,8 @@ class Subscription:
             self.register_routes()
 
     def register_routes(self) -> None:
-        uri = str(self.res.cfg["uri"]).strip("/")
+        conf = self.res.cfg.view()
+        uri = conf["uri"].strip("/")
 
         @self.res.app.route(f"/{uri}", strict_slashes=False)
         def _sub() -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction]

@@ -10,7 +10,7 @@ import pytest
 from telebot import types
 
 from bots import PublicBot
-from config import ConfigLike
+from helpers import config_mock, language_config, subscription_config
 
 
 def _public_message(text: str) -> types.Message:
@@ -129,8 +129,8 @@ def test_public_bot_uses_three_worker_threads() -> None:
     ):
         PublicBot(
             sub=MagicMock(),
-            cfg=cast(ConfigLike, {"publicbot": {"token": "1:token"}}),
-            lang_cfg=cast(ConfigLike, {"publicbot": {}}),
+            cfg=config_mock(subscription_config(publicbot={"token": "1:token"})),
+            lang_cfg=config_mock(language_config()),
         )
     _args, kwargs = telebot_cls.call_args
     assert kwargs["threaded"] is True

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from config import ConfigLike
+from config import Config, DiscordConfig, DiscordLangConfig
 from loggers import Logger
 
 __all__ = ["AdminFeatureMixin", "PublicFeatureMixin"]
@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     class PublicFeatureMixin:
         bot: discord.Client
         log: Logger
-        cfg: ConfigLike
-        lang_cfg: ConfigLike
+        cfg: Config[DiscordConfig]
+        lang_cfg: Config[DiscordLangConfig]
         http: WebApiClient
         sessions: SessionStore
         TEXTS: dict[str, dict[str, str]]
@@ -102,8 +102,8 @@ if TYPE_CHECKING:
         bot: discord.Client
         tree: app_commands.CommandTree
         log: Logger
-        cfg: ConfigLike
-        lang_cfg: ConfigLike
+        cfg: Config[DiscordConfig]
+        lang_cfg: Config[DiscordLangConfig]
         http: AdminApiClient
         admin_uids: list[int]
         USERS_PER_PAGE: int

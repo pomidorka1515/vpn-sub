@@ -4,7 +4,7 @@ from flask import Flask
 
 from api.common import BaseApi, Route
 from bwatch import BWatch
-from config import ConfigLike
+from config import AppConfig, Config
 from core import Subscription
 from loggers import Logger
 
@@ -31,10 +31,11 @@ class WebApi(
 
     def __init__(self,
                  app: Flask,
-                 cfg: ConfigLike,
+                 cfg: Config[AppConfig],
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)
-        uri = '/' + '/'.join(p for p in cfg['uri'].split('/') if p)
+        conf = cfg.view()
+        uri = '/' + '/'.join(p for p in conf['uri'].split('/') if p)
         super().__init__(app, cfg, sub, bw, uri)
         self.prefix = self.uri.rstrip('/')

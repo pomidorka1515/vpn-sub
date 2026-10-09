@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast, Callable, Coroutine
+from typing import Any, Callable, Coroutine
 
 import discord
 
 from admin.bot import AdminBot
 from adminapi import AdminApiClient
-from config import ConfigLike
+from config import Config, DiscordConfig, DiscordLangConfig
+from unittest.mock import MagicMock
+from copy import deepcopy
 from host import SharedDiscordClient
 from public.bot import PublicBot
 from sessions import SessionStore
@@ -20,7 +21,13 @@ DISCORD_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = DISCORD_ROOT / "config.schema.json"
 EXAMPLE_PATH = DISCORD_ROOT / "docs" / "EXAMPLE.config.json"
 LANG_PATH = DISCORD_ROOT / "lang.jsonc"
-LANG = cast(ConfigLike, json.loads(LANG_PATH.read_text(encoding="utf-8")))
+LANG = Config[DiscordLangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
+
+
+def config_mock(document: DiscordConfig) -> Config[DiscordConfig]:
+    mock = MagicMock(spec=Config)
+    mock.view.side_effect = lambda: deepcopy(document)
+    return mock
 
 
 type Handler = Callable[..., FakeResponse]
@@ -227,7 +234,7 @@ def make_public_bot(
     session = FakeSession(handler)
     host = SharedDiscordClient(intents=discord.Intents.none())
     bot = PublicBot(
-        cast(ConfigLike, {"public": {"token": "discord-token"}}),
+        config_mock({"public": {"token": "discord-token"}, "private": {"whitelist": [7], "api_token": "api-token"}}),
         LANG,
         WebApiClient("http://127.0.0.1:5550", "sub", session=session),  # type: ignore[arg-type]
         store,
@@ -245,8 +252,7 @@ def make_admin_bot(
     session = FakeSession(handler)
     host = SharedDiscordClient(intents=discord.Intents.none())
     bot = AdminBot(
-        cast(
-            ConfigLike,
+        config_mock(
             {
                 "public": {"token": "discord-token"},
                 "private": {

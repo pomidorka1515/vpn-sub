@@ -14,10 +14,10 @@ from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
     close_rate_limit,
 )
 from api.common import RES_DIR
-from config import Config, ConfigLike, LinesConfigLike
+from config import Config, LangConfig, LinesConfigLike
 from db import Database
 from errors import AppError, DatabaseError
-from helpers import make_subscription, make_watch, subscription_config
+from helpers import config_mock, make_subscription, make_watch, subscription_config
 from jinja2 import FileSystemLoader
 
 _LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
@@ -27,8 +27,8 @@ class _OrderedJSONProvider(DefaultJSONProvider):
     sort_keys = False
 
 
-def _web_lang_cfg() -> ConfigLike:
-    return cast(ConfigLike, Config(path=_LANG_PATH, read_only=True, read_only_jsonc=True))
+def _web_lang_cfg() -> Config[LangConfig]:
+    return Config[LangConfig](path=_LANG_PATH, read_only=True, read_only_jsonc=True)
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ def test_user_refresh_aborts_on_non_panel_error(database: Database, flask_app: F
     subscription.business_svc.add_users = add_users  # type: ignore[method-assign]
     Api(
         app=flask_app,
-        cfg=cast(ConfigLike, subscription_config(api_uri="api", api_token="secret")),
+        cfg=config_mock(subscription_config(api_uri="api", api_token="secret")),
         audit_cfg=cast(LinesConfigLike, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
@@ -145,7 +145,7 @@ def _admin_api(
     subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
     Api(
         app=flask_app,
-        cfg=cast(ConfigLike, subscription_config(
+        cfg=config_mock(subscription_config(
             api_uri=api_uri,
             api_token="secret",
             api_admin_ui_auth=list(api_admin_ui_auth),
@@ -273,7 +273,7 @@ def test_admin_logout_cookie_path_matches_login_when_uri_empty(
     subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
     Api(
         app=flask_app,
-        cfg=cast(ConfigLike, subscription_config(
+        cfg=config_mock(subscription_config(
             uri="",
             api_uri="api",
             api_token="secret",
@@ -379,7 +379,7 @@ def _polling_api(
     )
     Api(
         app=flask_app,
-        cfg=cast(ConfigLike, subscription_config(api_uri="api", api_token="secret")),
+        cfg=config_mock(subscription_config(api_uri="api", api_token="secret")),
         audit_cfg=cast(LinesConfigLike, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),

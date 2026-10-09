@@ -45,14 +45,15 @@ def get_subscription(
 
     if builders.isbrowser(ua=ua):
         html = builders.render_template("browser.html", **builders._browser_strings(obj, lang))
-        prefix = '/' + '/'.join(p for p in str(obj.res.cfg['uri']).split('/') if p)
+        cfg = obj.res.cfg.view()
+        prefix = '/' + '/'.join(p for p in cfg['uri'].split('/') if p)
         html = builders.embed_font_faces(html, prefix)
         return Response(html, mimetype="text/html"), 403
 
     bandwidths = obj.bandwidth_svc.bandwidth(username)
 
-    cfg = obj.res.cfg.copy()
-    lang_cfg = obj.res.lang_cfg.copy()
+    cfg = obj.res.cfg.view()
+    lang_cfg = obj.res.lang_cfg.view()
     user = obj.user_svc.user(username)
 
     displayname = str(user['displayname'])

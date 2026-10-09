@@ -16,13 +16,15 @@ __all__ = ["PublicTrafficMixin"]
 
 class PublicTrafficMixin(PublicFeatureMixin):
     def _chart_lang(self, lang: str) -> Mapping[str, str]:
-        raw = self.lang_cfg.get("chart")
+        language = self.lang_cfg.view()
+        raw = cast(object, language.get("chart"))
         if isinstance(raw, dict):
-            table = raw.get(lang)
+            tables = cast(dict[object, object], raw)
+            table = tables.get(lang)
             if not isinstance(table, dict):
-                table = raw.get("en")
+                table = tables.get("en")
             if isinstance(table, dict):
-                return {str(k): str(v) for k, v in table.items()}
+                return {str(k): str(v) for k, v in cast(dict[object, object], table).items()}
         return {}
 
     def chart_view(self, lang: str) -> discord.ui.View:

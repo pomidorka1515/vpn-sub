@@ -4,7 +4,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
-from config import ConfigLike
+from config import Config, DiscordConfig, DiscordLangConfig
 from loggers import Logger
 
 from adminapi import AdminApiClient
@@ -31,8 +31,8 @@ class AdminBot(
 ):
     def __init__(
         self,
-        cfg: ConfigLike,
-        lang_cfg: ConfigLike,
+        cfg: Config[DiscordConfig],
+        lang_cfg: Config[DiscordLangConfig],
         http: AdminApiClient,
         *,
         client: discord.Client,
@@ -45,7 +45,8 @@ class AdminBot(
             self.http = http
             self.bot = client
             self.tree = tree
-            whitelist: list[int] = cfg["private"]["whitelist"]
+            conf = cfg.view()
+            whitelist = conf["private"]["whitelist"]
             self.admin_uids = [int(item) for item in whitelist]
             self._pending_codes: dict[int, dict[str, str | int | bool]] = {}
             self._pending_edits: dict[int, dict[str, str]] = {}

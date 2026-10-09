@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from typing import Any, Callable, cast
+from unittest.mock import MagicMock
+from copy import deepcopy
 from urllib.parse import unquote
 
 import json
@@ -10,7 +12,7 @@ from flask import Flask
 from requests import Response
 
 from bwatch import BWatch
-from config import ConfigLike
+from config import AppConfig, Config, LangConfig, ProfileConfig
 from core import Subscription
 from custom_types import ClientTraffic, Inbound, PanelClient
 from db import Database
@@ -22,16 +24,48 @@ TOKEN_A = "a" * 40
 type _PostHandler = Callable[[FakePanel, str, dict[str, Any]], Response]
 
 
-def subscription_config(**overrides: Any) -> dict[str, Any]:
-    config: dict[str, Any] = {
+def subscription_config(**overrides: Any) -> AppConfig:
+    config: AppConfig = {
         "uri": "sub",
         "fingerprints": ["chrome"],
         "salt": "test-salt",
         "domain": "https://example.test",
         "funny_strings": ["test"],
+        "api_token": "secret",
+        "provider_id": "",
+        "ping_check_url": "https://example.test/204",
+        "sub_name": "VPN",
+        "api_admin_ui_auth": ["admin", "password"],
+        "bypass_packages": [],
+        "panel_alert_cooldown": 3600,
+        "nodes": {},
+        "json_template": {},
+        "3xui": {},
+        "profiles": {},
+        "redis": {"url": ""},
     }
-    config.update(overrides)
+    cast(dict[str, Any], config).update(overrides)
     return config
+
+
+def config_mock[Doc](document: Doc) -> Config[Doc]:
+    mock = MagicMock(spec=Config)
+    mock.view.side_effect = lambda: deepcopy(document)
+    return mock
+
+
+def language_config() -> LangConfig:
+    return {"description": {}, "chart": {}, "publicbot": {}, "web": {}}
+
+
+def profile_config(**overrides: Any) -> ProfileConfig:
+    document: ProfileConfig = {
+        "flag": "", "name": ["", ""], "json": {}, "description": ["", ""],
+        "whitelist": False, "xhttpExtra": {}, "masterLink": "", "node": "edge",
+        "shortProfileDescription": ["", ""],
+    }
+    cast(dict[str, Any], document).update(overrides)
+    return document
 
 
 def make_subscription(
@@ -41,12 +75,12 @@ def make_subscription(
     whitelist_panel: object | None = None,
     app: Flask | None = None,
     audit_cfg: object | None = None,
-    lang_cfg: object | None = None,
+    lang_cfg: Config[LangConfig] | None = None,
     **config_overrides: Any,
 ) -> Subscription:
     return Subscription(
-        cfg=cast(ConfigLike, subscription_config(**config_overrides)),
-        lang_cfg=cast(ConfigLike, {} if lang_cfg is None else lang_cfg),
+        cfg=config_mock(subscription_config(**config_overrides)),
+        lang_cfg=config_mock(language_config()) if lang_cfg is None else lang_cfg,
         db=database,
         app=app or Flask(__name__),
         panels=cast(list[XUiSession], panels or []),
@@ -67,13 +101,6 @@ def create_alice(database: Database, **kwargs: Any) -> None:
     database.create_user(**payload)
 
 
-class BWatchConfig:
-    def get(self, key: str, *args: object, **kwargs: object) -> object:
-        if key == "panel_alert_cooldown":
-            return 3600
-        raise KeyError(key)
-
-
 def make_watch(
     database: Database,
     subscription: Subscription,
@@ -82,7 +109,7 @@ def make_watch(
     admin_bot: object | None = None,
 ) -> BWatch:
     return BWatch(
-        cfg=cast(ConfigLike, BWatchConfig()),
+        cfg=config_mock(subscription_config()),
         db=database,
         sub=subscription,
         bot=cast(Any, bot),

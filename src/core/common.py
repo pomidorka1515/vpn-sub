@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from flask import Flask
 from argon2 import PasswordHasher
 
-from config import ConfigLike, JsonValue, LinesConfigLike
+from config import AppConfig, Config, LangConfig, JsonValue, LinesConfigLike
 from db import Database
 from session import XUiSession
 from loggers import Logger
@@ -13,8 +13,8 @@ __all__ = ["SharedCoreResources", "BaseService"]
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SharedCoreResources:
     log: Logger
-    cfg: ConfigLike
-    lang_cfg: ConfigLike
+    cfg: Config[AppConfig]
+    lang_cfg: Config[LangConfig]
     audit_cfg: LinesConfigLike | None
     db: Database
     app: Flask
@@ -41,11 +41,11 @@ class BaseService:
         return self.res.log
 
     @property
-    def cfg(self) -> ConfigLike:
+    def cfg(self) -> Config[AppConfig]:
         return self.res.cfg
 
     @property
-    def lang_cfg(self) -> ConfigLike:
+    def lang_cfg(self) -> Config[LangConfig]:
         return self.res.lang_cfg
 
     @property

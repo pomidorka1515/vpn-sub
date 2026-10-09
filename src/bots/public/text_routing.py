@@ -155,7 +155,8 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     def _handle_help(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
         descriptions = ""
-        for profile in self.cfg["profiles"].values():
+        conf = self.cfg.view()
+        for profile in conf["profiles"].values():
             index = 0 if lang == "en" else 1
             profile_name = profile["name"][index]
             profile_desc = profile["description"][index]

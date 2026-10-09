@@ -5,10 +5,13 @@ from pathlib import Path
 import hashlib
 import json
 import os
+from typing import Literal
 
 import pytest
 
-from config import Config, LinesConfig
+from config import AppConfig, Config, ConfigLike, JsonDict, JsonValue, LinesConfig
+from config.protocols import _ConfigTransactionLike
+from config.transaction import _ConfigTransaction
 from errors import (
     ConfigError,
     FileCorruptionError,
@@ -113,6 +116,142 @@ def test_reads_pick_up_external_file_changes(cfg: Config) -> None:
     Path(cfg.path).write_text(json.dumps({"x": 2, "extra": True}), encoding="utf-8")
     assert cfg["x"] == 2
     assert cfg["extra"] is True
+
+
+@pytest.fixture
+def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
+    document: AppConfig = {
+        "uri": "sub", "api_token": "test", "provider_id": "test", "salt": "test",
+        "domain": "example.test", "ping_check_url": "https://example.test/ping",
+        "sub_name": "test", "api_admin_ui_auth": ["admin", "password"],
+        "fingerprints": ["chrome"], "bypass_packages": [], "panel_alert_cooldown": 3600,
+        "nodes": {}, "profiles": {}, "redis": {"url": "redis://localhost/0"},
+        "json_template": {
+            "dns": {}, "routing": {"rules": [], "domainStrategy": "AsIs"},
+            "inbounds": [], "outbounds": [], "remarks": "test",
+        },
+        "3xui": {"local": {
+            "name": "local", "address": "localhost", "port": 2053, "uri": "panel",
+            "token": "test-token-at-least-20-characters", "https": False,
+            "whitelist": False, "inbounds_list": [1], "mode": "whitelist",
+        }},
+        "bot": {"token": "test", "whitelist": [1]},
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    config = Config[AppConfig](
+        path=path, schema_path=Path(__file__).resolve().parents[2] / "config.schema.json",
+        backup_dir=None, sync_mode="none",
+    )
+    try:
+        yield config
+    finally:
+        config.close()
+
+
+def test_view_is_detached_typed_document(app_cfg: Config[AppConfig]) -> None:
+    contract: ConfigLike[AppConfig] = app_cfg
+    assert isinstance(app_cfg, ConfigLike)
+    snapshot: AppConfig = contract.view()
+    assert type(snapshot) is dict
+    if "bot" not in snapshot:
+        raise AssertionError("fixture must include bot")
+    token: str = snapshot["bot"]["token"]
+    mode: Literal["whitelist", "blacklist"] = snapshot["3xui"]["local"]["mode"]
+    optional: str | None = snapshot.get("api_uri")
+    assert (token, mode, optional) == ("test", "whitelist", None)
+    before = Path(app_cfg.path).read_bytes()
+    snapshot["bot"]["whitelist"].append(2)
+    snapshot["3xui"]["local"]["name"] = "changed"
+    fresh = app_cfg.view()
+    assert "bot" in fresh
+    assert fresh["bot"]["whitelist"] == [1]
+    assert fresh["3xui"]["local"]["name"] == "local"
+    assert Path(app_cfg.path).read_bytes() == before
+    copied: JsonDict = app_cfg.copy()
+    assert copied == fresh
+
+
+def test_view_reloads_external_changes(app_cfg: Config[AppConfig]) -> None:
+    snapshot = app_cfg.view()
+    snapshot["domain"] = "changed.example.test"
+    Path(app_cfg.path).write_text(json.dumps(snapshot), encoding="utf-8")
+    assert app_cfg.view()["domain"] == "changed.example.test"
+
+
+def test_transaction_view_is_active_and_commits_nested_edits(app_cfg: Config[AppConfig]) -> None:
+    real_transaction = _ConfigTransaction(app_cfg)
+    transaction: _ConfigTransactionLike[AppConfig] = real_transaction
+    with pytest.raises(RuntimeError, match="not active"):
+        transaction.view()
+    with transaction as tx:
+        snapshot: AppConfig = tx.view()
+        assert type(snapshot) is dict
+        snapshot["3xui"]["local"]["inbounds_list"].append(2)
+        assert tx.view() is snapshot
+        copied: JsonDict = tx.copy()
+        assert copied == snapshot
+        assert copied is not snapshot
+        with pytest.raises(RuntimeError, match="transaction"):
+            app_cfg.view()
+    with pytest.raises(RuntimeError, match="not active"):
+        transaction.view()
+    assert app_cfg.view()["3xui"]["local"]["inbounds_list"] == [1, 2]
+    with app_cfg as context_tx:
+        context_document: AppConfig = context_tx.view()
+        assert context_document["domain"] == "example.test"
+    with app_cfg.edit() as edit_tx:
+        edit_document: AppConfig = edit_tx.view()
+        assert edit_document["domain"] == "example.test"
+
+
+def test_transaction_view_rolls_back_nested_edits(app_cfg: Config[AppConfig]) -> None:
+    transaction = app_cfg.edit()
+    with pytest.raises(ValueError, match="abort"):
+        with transaction as tx:
+            tx.view()["3xui"]["local"]["inbounds_list"].append(2)
+            raise ValueError("abort")
+    assert app_cfg.view()["3xui"]["local"]["inbounds_list"] == [1]
+    with pytest.raises(RuntimeError, match="not active"):
+        transaction.view()
+
+
+@pytest.mark.parametrize("isolate", [True, False])
+def test_leaked_transaction_view_obeys_commit_isolation(tmp_path: Path, isolate: bool) -> None:
+    config = Config(path=tmp_path / "config.json", sync_mode="none", isolate_commits=isolate)
+    try:
+        with config.edit() as tx:
+            leaked: JsonDict = tx.view()
+            nested: dict[str, JsonValue] = {"value": 1}
+            leaked["nested"] = nested
+        nested["value"] = 2
+        leaked["extra"] = True
+        assert config.view() == ({"nested": {"value": 1}} if isolate else {
+            "nested": {"value": 2}, "extra": True,
+        })
+        assert json.loads(Path(config.path).read_text(encoding="utf-8")) == {
+            "nested": {"value": 1},
+        }
+    finally:
+        config.close()
+
+
+def test_get_keeps_mapping_semantics(cfg: Config) -> None:
+    cfg["value"] = {"items": [1]}
+    default = object()
+    assert cfg.get("missing") is None
+    assert cfg.get("missing", default) is default
+    snapshot = cfg.get("value", default)
+    assert isinstance(snapshot, dict)
+    snapshot["items"] = [1, 2]
+    assert cfg["value"] == {"items": [1]}
+    with cfg.edit() as tx:
+        assert tx.get("missing") is None
+        assert tx.get("missing", default) is default
+        live = tx.get("value", default)
+        assert isinstance(live, dict)
+        live["items"] = [1, 2]
+    assert cfg["value"] == {"items": [1, 2]}
 
 
 def test_read_only_rejects_mutation(tmp_path: Path) -> None:
