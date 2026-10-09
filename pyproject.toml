@@ -241,6 +241,15 @@ reportPrivateUsage = false
 reportUnusedFunction = false
 
 [[tool.pyright.executionEnvironments]]
+extraPaths = ["src"]
+root = "src/bots"
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportUnknownLambdaType = false
+
+[[tool.pyright.executionEnvironments]]
 extraPaths = ["src", "src/tests"]
 root = "src/tests"
 reportPrivateUsage = false

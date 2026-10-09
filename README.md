@@ -228,6 +228,7 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | `GUNICORN_BIND` | `127.0.0.1:5550`         | Address gunicorn listens on (`src/gunicorn.conf.py`). Loopback only.    |
 | `LOGLEVEL`      | `DEBUG`                  | Threshold for every `Logger()`. Does not affect gunicorn.               |
 | `LOGLEVEL_GUNICORN` | `DEBUG`              | HTTP access-log threshold.                                              |
+| `VERBOSE_LOGGING_OVERRIDES` | *(unset)*   | Comma-separated components to start with verbose traces.                |
 
 `LOGLEVEL` and `LOGLEVEL_GUNICORN` accept a level name or an integer. Names
 are case-insensitive: `TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`, `ERROR`,
@@ -235,6 +236,12 @@ are case-insensitive: `TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`, `ERROR`,
 is `DEBUG`, `0` is `TRACE`, `99` is `CRITICAL`). Unset, blank, or unrecognized
 values use the default. `LOGLEVEL` does not change gunicorn's own error log.
 `LOGLEVEL_GUNICORN` only decides whether an access line is emitted.
+
+`VERBOSE_LOGGING_OVERRIDES` turns on the existing `verbose` flag for named
+components: `bwatch`, `core` (`Subscription`), and `panels` (`XUiSession`,
+including the whitelist panel). Names are case-insensitive and split on
+commas; empty tokens are ignored, so `bwatch,`, `bwatch`, and `,` all parse.
+Unknown names are ignored. Unset or empty leaves every component quiet.
 
 Shipped files (`res/`, `lang.jsonc`) are found by walking up from the module
 until one of those markers exists. In a checkout that is the repository root. In
@@ -269,6 +276,7 @@ WorkingDirectory=/opt/vpn-sub
 # Environment="GUNICORN_BIND=127.0.0.1:5550"
 # Environment="LOGLEVEL=INFO"  # recommended for prod
 # Environment="LOGLEVEL_GUNICORN=INFO"
+# Environment="VERBOSE_LOGGING_OVERRIDES=bwatch,core,panels"
 
 ExecStart=/opt/vpn-sub/vpn-sub
 

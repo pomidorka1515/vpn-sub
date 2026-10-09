@@ -38,11 +38,21 @@ def _environ(path: str) -> dict[str, str]:
     }
 
 
+class _AccessLog:
+    def __init__(self, logged: list[tuple[int, str]]) -> None:
+        self._logged = logged
+
+    def log(self, level: object, message: object, *_args: object, **_kwargs: object) -> None:
+        if isinstance(level, bool) or not isinstance(level, int):
+            raise AssertionError(f"unexpected log level {level!r}")
+        self._logged.append((level, str(message)))
+
+
 def test_access_log_levels_by_status_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
     logged: list[tuple[int, str]] = []
     logger = GunicornLogger.__new__(GunicornLogger)
     logger.cfg = cast(Any, _Cfg())
-    logger.access_log = cast(Any, SimpleNamespace(log=lambda level, message: logged.append((level, message))))
+    logger.access_log = cast(Any, _AccessLog(logged))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 12}
 
     def atoms_for(*args: object) -> dict[str, object]:
@@ -111,7 +121,7 @@ def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> N
     logged: list[tuple[int, str]] = []
     logger = GunicornLogger.__new__(GunicornLogger)
     logger.cfg = cast(Any, _Cfg())
-    logger.access_log = cast(Any, SimpleNamespace(log=lambda level, message: logged.append((level, message))))
+    logger.access_log = cast(Any, _AccessLog(logged))
     atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 4}
 
     def atoms_for(*args: object) -> dict[str, object]:

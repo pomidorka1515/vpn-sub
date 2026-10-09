@@ -10,6 +10,7 @@ import pytest
 from requests import Response
 
 from app import AppOptions, AppPaths, Application, create_application
+from app import verbose_overrides
 from paths import runtime_dir
 from api.decorators.rate_limit import close_rate_limit
 
@@ -92,6 +93,41 @@ def test_from_env_defaults_to_project_root() -> None:
         audit=data / "audit.jsonl",
         primary_lock=runtime_dir(data) / ".primary.lock",
     )
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, frozenset[str]()),
+        ("", frozenset[str]()),
+        (",", frozenset[str]()),
+        ("  ,  ", frozenset[str]()),
+        ("bwatch", frozenset({"bwatch"})),
+        ("bwatch,", frozenset({"bwatch"})),
+        (",bwatch,", frozenset({"bwatch"})),
+        ("BWATCH", frozenset({"bwatch"})),
+        ("bwatch, core, panels", frozenset({"bwatch", "core", "panels"})),
+        ("bwatch,nope", frozenset({"bwatch", "nope"})),
+    ],
+)
+def test_verbose_overrides_parses_loose_lists(raw: str | None, expected: frozenset[str]) -> None:
+    assert verbose_overrides(raw) == expected
+
+
+def test_verbose_overrides_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch,")
+    assert verbose_overrides() == frozenset({"bwatch"})
+    monkeypatch.delenv("VERBOSE_LOGGING_OVERRIDES")
+    assert verbose_overrides() == frozenset()
+
+
+def test_factory_applies_verbose_overrides(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch, core, panels")
+    with factory(paths) as runtime:
+        assert runtime.subscription.res.verbose is True
+        assert runtime.bandwidth_watcher.verbose is True
+        assert runtime.panels
+        assert all(panel.verbose for panel in runtime.panels)
 
 
 def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:

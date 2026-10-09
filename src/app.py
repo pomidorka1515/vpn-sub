@@ -42,7 +42,22 @@ __all__ = [
     "Application",
     "PanelTransportFactory",
     "create_application",
+    "verbose_overrides",
 ]
+
+
+def verbose_overrides(raw: str | None = None) -> frozenset[str]:
+    """Names in ``VERBOSE_LOGGING_OVERRIDES`` that should start verbose.
+
+    Comma-separated, case-insensitive. Empty tokens are dropped, so
+    ``bwatch,``, ``bwatch``, and ``,`` all parse. Unknown names are ignored.
+    Unset is quiet.
+    """
+    if raw is None:
+        raw = os.getenv("VERBOSE_LOGGING_OVERRIDES")
+    if raw is None:
+        return frozenset()
+    return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
 
 
 class _OrderedJSONProvider(DefaultJSONProvider):
@@ -325,6 +340,7 @@ def _build_panels(
     *,
     stamp_dir: Path,
     transport_factory: PanelTransportFactory | None,
+    verbose: bool = False,
 ) -> tuple[list[XUiSession], XUiSession | None]:
     panels: list[XUiSession] = []
     whitelist: XUiSession | None = None
@@ -344,6 +360,7 @@ def _build_panels(
             inject_headers=panel_cfg.get("inject_headers"),
             transport=transport,
             stamp_dir=str(stamp_dir),
+            verbose=verbose,
         )
         if panel_cfg["whitelist"]:
             if whitelist is not None:
@@ -452,10 +469,12 @@ def create_application(
             backup_dir=paths.backups,
             start_backup=primary,
         )
+        overrides = verbose_overrides()
         panels, whitelist = _build_panels(
             cfg,
             stamp_dir=paths.primary_lock.parent,
             transport_factory=options.panel_transport_factory,
+            verbose="panels" in overrides,
         )
         if not panels and whitelist is None:
             raise RuntimeError("No panels initialized")
@@ -468,6 +487,7 @@ def create_application(
             app=flask_app,
             panels=panels,
             whitelist_panel=whitelist,
+            verbose="core" in overrides,
         )
         admin_bot = (
             AdminBot(sub=subscription, cfg=runtime_cfg, lang_cfg=runtime_lang_cfg)
@@ -485,6 +505,7 @@ def create_application(
             sub=subscription,
             bot=public_bot,
             admin_bot=admin_bot,
+            verbose="bwatch" in overrides,
         )
         api = Api(
             app=flask_app,
