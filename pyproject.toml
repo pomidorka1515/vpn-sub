@@ -143,10 +143,6 @@ no_implicit_reexport           = false
 module = ["config.core", "config.transaction"]
 disable_error_code             = ["override"]
 
-[[tool.mypy.overrides]]
-module = ["helpers"]
-disallow_untyped_calls         = false
-
 # -- pylance compatibility ----------------------------------------------
 [tool.pyright]
 pythonVersion = "3.14"

@@ -60,7 +60,9 @@ def test_unauthenticated_users_cannot_hit_protected_handlers() -> None:
 
 
 def test_slash_wrapper_uses_command_requires_auth(tmp_path: Path) -> None:
-    bot, store, _session = make_public_bot(tmp_path, lambda *args: json_ok()) # pyright: ignore
+    bot, store, _session = make_public_bot(
+        tmp_path, lambda method, path, params, payload, headers: json_ok(),
+    )
     store.clear_token(7)
     try:
         info_cmd = bot.tree.get_command("info")

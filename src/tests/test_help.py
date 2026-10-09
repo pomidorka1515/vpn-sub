@@ -47,7 +47,7 @@ def test_main_short_help_exits(monkeypatch: pytest.MonkeyPatch, capsys: pytest.C
 
 
 def test_discord_help_exits_before_boot(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.syspath_prepend(str(DISCORD)) # pyright: ignore
+    monkeypatch.syspath_prepend(str(DISCORD))  # pyright: ignore[reportUnknownMemberType]  # Upstream parameter is untyped.
     monkeypatch.setattr(sys, "argv", ["vpn-sub-discord", "--help"])
     with pytest.raises(SystemExit) as caught:
         runpy.run_path(str(DISCORD / "runtime.py"), run_name="__main__")
