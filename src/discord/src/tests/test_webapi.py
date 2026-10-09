@@ -162,3 +162,26 @@ def test_validate_username_sends_params_and_passthrough() -> None:
     assert result.obj == obj
     assert session.calls[0]["params"] == {"username": "alice"}
     assert str(session.calls[0]["url"]).endswith("/validate")
+
+
+def test_typed_endpoints_reject_malformed_payloads() -> None:
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, json, params, headers
+        if url.endswith("/stats"):
+            return json_ok({"bandwidth": {"total": {"upload": "invalid"}}})
+        if url.endswith("/history"):
+            return json_ok([{"ts": 1}])
+        if url.endswith("/fingerprints"):
+            return json_ok([42])
+        if url.endswith("/profiles"):
+            return json_ok({"name": 42})
+        return json_ok({"valid": "yes", "taken": False, "sanitized": "alice"})
+
+    client, session = make_web_client(handler)
+    results = [
+        run(client.stats("tok")), run(client.stats("tok")),
+        run(client.history("tok", 14)), run(client.fingerprints("tok")),
+        run(client.profiles("tok", "en")), run(client.validate_username("alice")),
+    ]
+    assert len(session.calls) == 6
+    assert all(not result.ok and result.msg == "bad_response" and result.obj is None for result in results)

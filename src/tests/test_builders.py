@@ -13,6 +13,7 @@ from flask import Flask
 from builders import build_description, build_json, build_link_array, get_subscription
 from custom_types import BandwidthInfo
 from config import AppConfig, LangConfig, ProfileConfig
+from config.documents import ProfileOutbound, ProfileStream, ProfileTemplate
 from helpers import config_mock, language_config, subscription_config
 
 
@@ -94,7 +95,7 @@ def _link_config() -> AppConfig:
                 "flag": "⚡",
                 "node": "edge",
                 "xhttpExtra": {"path": "/x"},
-                "json": {}, "description": ["", ""], "shortProfileDescription": ["", ""],
+                "json": {"settings": {"vnext": []}, "streamSettings": {}}, "description": ["", ""], "shortProfileDescription": ["", ""],
             },
             "wl": {
                 "name": ["WL", "ВЛ"],
@@ -103,7 +104,7 @@ def _link_config() -> AppConfig:
                 "flag": "🛡",
                 "node": "wl-node",
                 "xhttpExtra": {},
-                "json": {}, "description": ["", ""], "shortProfileDescription": ["", ""],
+                "json": {"settings": {"vnext": []}, "streamSettings": {}}, "description": ["", ""], "shortProfileDescription": ["", ""],
             },
         },
         "nodes": {"edge": "edge.example", "wl-node": "wl.example"},
@@ -145,7 +146,7 @@ def test_link_array_filters_profiles_and_encodes_extra() -> None:
     assert "🛡" not in text
 
 
-def _json_template() -> dict[str, Any]:
+def _json_template() -> ProfileTemplate:
     return {
         "remarks": "",
         "meta": {},
@@ -156,11 +157,10 @@ def _json_template() -> dict[str, Any]:
     }
 
 
-def _profile(stream: dict[str, Any]) -> dict[str, Any]:
+def _profile(stream: ProfileStream) -> ProfileOutbound:
     profile = _json_template()["outbounds"][0]
-    profile = json.loads(json.dumps(profile))
     profile["streamSettings"] = stream
-    return cast(dict[str, Any], profile)
+    return profile
 
 
 def test_json_profiles_fill_transport_hosts() -> None:

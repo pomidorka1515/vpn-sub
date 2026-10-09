@@ -4,6 +4,8 @@ from dataclasses import asdict
 import time
 
 from custom_types import BandwidthInfo, UserRecord
+from config.constants import JsonDict
+from db.state import StateSnapshot
 from errors import PanelUnavailableError
 from sysutil import SysUtil
 
@@ -25,7 +27,7 @@ class SnapshotsMixin(BWatchHost):
 
     def record_snap_snapshot(self) -> None:
         """Record one state snapshot (`SysUtil` + panels) for today."""
-        panels_data: dict[str, object] = {}
+        panels_data: dict[str, JsonDict] = {}
         panel_errors: list[str] = []
         for panel, status in zip(
             self.sub.panels, self.sub.panel_svc.statuses(pool=self._panel_pool()), strict=True
@@ -40,7 +42,7 @@ class SnapshotsMixin(BWatchHost):
             )
 
         midnight = int(time.time()) - (int(time.time()) % 86400)
-        data: dict[str, object] = {
+        data: StateSnapshot = {
             "ts": midnight,
             "host": asdict(SysUtil.full_info()),
             "panels": panels_data

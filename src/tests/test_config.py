@@ -5,7 +5,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
-from typing import Literal
+from typing import Literal, cast
 
 import pytest
 
@@ -256,6 +256,27 @@ def test_get_keeps_mapping_semantics(cfg: Config) -> None:
         assert isinstance(live, dict)
         live["items"] = [1, 2]
     assert cfg["value"] == {"items": [1, 2]}
+
+
+def test_mapping_defaults_preserve_existing_value_types(cfg: Config) -> None:
+    cfg["value"] = {"items": [1]}
+    assert cfg.setdefault("value", "fallback") == {"items": [1]}
+    assert cfg.pop("value", 0) == {"items": [1]}
+    assert cfg.pop("missing", 0) == 0
+    with cfg.edit() as tx:
+        tx["value"] = [1, 2]
+        assert tx.setdefault("value", "fallback") == [1, 2]
+        assert tx.pop("value", False) == [1, 2]
+        assert tx.setdefault("missing", "fallback") == "fallback"
+
+
+def test_panel_headers_reject_non_string_values(app_cfg: Config[AppConfig]) -> None:
+    document = app_cfg.copy()
+    panels = cast(JsonDict, document["3xui"])
+    panel = cast(JsonDict, panels["local"])
+    panel["inject_headers"] = {"X-Test": 42}
+    with pytest.raises(SchemaValidationError):
+        app_cfg.validate_document(document)
 
 
 def test_read_only_rejects_mutation(tmp_path: Path) -> None:

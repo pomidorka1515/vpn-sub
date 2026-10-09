@@ -37,7 +37,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol, cast
@@ -161,7 +161,7 @@ def _build_panel(name: str, panel_cfg: PanelConfig, *, stamp_dir: str) -> XUiSes
     )
 
 
-def _headers(value: dict[str, JsonValue] | None) -> dict[str, str]:
+def _headers(value: Mapping[str, JsonValue] | None) -> dict[str, str]:
     if value is None:
         return {}
     if any(not isinstance(item, str) for item in value.values()):

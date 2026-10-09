@@ -8,6 +8,63 @@ from .constants import JsonDict
 # lang.jsonc and src/discord/lang.jsonc have no schemas.
 
 
+class ProfileUser(TypedDict):
+    id: str
+
+
+class ProfileVNext(TypedDict):
+    users: list[ProfileUser]
+    address: str
+
+
+class ProfileSettings(TypedDict):
+    vnext: list[ProfileVNext]
+
+
+class ProfileTLS(TypedDict):
+    serverName: str
+    fingerprint: str
+
+
+class ProfileReality(TypedDict):
+    fingerprint: str
+
+
+class ProfileHost(TypedDict):
+    host: NotRequired[str]
+
+
+class ProfileGRPC(TypedDict):
+    authority: str
+
+
+class ProfileWS(ProfileHost):
+    headers: NotRequired[dict[str, str]]
+
+
+class ProfileStream(TypedDict, total=False):
+    tlsSettings: ProfileTLS
+    realitySettings: ProfileReality
+    xhttpSettings: ProfileHost
+    grpcSettings: ProfileGRPC
+    wsSettings: ProfileWS
+    httpupgradeSettings: ProfileHost
+
+
+class ProfileOutbound(TypedDict):
+    settings: ProfileSettings
+    streamSettings: ProfileStream
+
+
+class ProfileTemplate(TypedDict):
+    remarks: str
+    outbounds: list[ProfileOutbound]
+    meta: NotRequired[dict[str, str]]
+    dns: NotRequired[JsonDict]
+    routing: NotRequired[JsonDict]
+    inbounds: NotRequired[list[JsonDict]]
+
+
 class BotConfig(TypedDict):
     token: str
     whitelist: list[int]
@@ -33,13 +90,13 @@ class PanelConfig(TypedDict):
     inbounds_list: list[int]
     mode: Literal["whitelist", "blacklist"]
     nginx_auth: NotRequired[list[str]]
-    inject_headers: NotRequired[JsonDict]
+    inject_headers: NotRequired[dict[str, str]]
 
 
 class ProfileConfig(TypedDict):
     flag: str
     name: list[str]
-    json: JsonDict
+    json: ProfileOutbound
     description: list[str]
     whitelist: bool
     xhttpExtra: JsonDict
@@ -61,7 +118,7 @@ AppConfig = TypedDict("AppConfig", {
     "bypass_packages": list[str],
     "panel_alert_cooldown": int,
     "nodes": dict[str, str],
-    "json_template": JsonDict,
+    "json_template": ProfileTemplate,
     "3xui": dict[str, PanelConfig],
     "profiles": dict[str, ProfileConfig],
     "redis": RedisConfig,

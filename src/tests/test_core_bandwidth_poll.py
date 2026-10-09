@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from bwatch import BWatch
 from core import Subscription
-from custom_types import BandwidthInfo
+from custom_types import BandwidthInfo, UserFields
 from db import Database
 from errors import PanelRejectedError
 from helpers import create_alice, make_watch
@@ -267,7 +267,7 @@ def test_bonus_on_zero_quota_reenables_on_next_poll(
         wl_enable: bool | None = None,
     ) -> bool:
         enabled.append((username, enable, wl_enable))
-        fields: dict[str, bool] = {}
+        fields: UserFields = {}
         if enable is not None:
             fields["status"] = enable
         if timee is not None:
@@ -301,7 +301,7 @@ def test_lapsed_bonus_renewal_reenables_time(
         timee: bool | None = None,
         wl_enable: bool | None = None,
     ) -> bool:
-        fields: dict[str, bool] = {}
+        fields: UserFields = {}
         if enable is not None:
             fields["status"] = enable
         if timee is not None:

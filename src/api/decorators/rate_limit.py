@@ -126,11 +126,12 @@ def _get_client() -> _RateLimitClient:
     return client
 
 
-def _redis_config(cfg: object) -> tuple[str, float]:
-    getter = getattr(cfg, "get", None)
-    if getter is None:
-        raise RuntimeError("redis config is required")
-    raw = cast(object, getter("redis", None))
+class _RateLimitConfig(Protocol):
+    def get(self, key: str) -> object: ...
+
+
+def _redis_config(cfg: _RateLimitConfig) -> tuple[str, float]:
+    raw = cfg.get("redis")
     if not isinstance(raw, Mapping):
         raise RuntimeError("redis config is required")
     section = cast(Mapping[str, object], raw)
@@ -143,7 +144,7 @@ def _redis_config(cfg: object) -> tuple[str, float]:
     return url, float(timeout)
 
 
-def configure_rate_limit_from_config(cfg: object) -> _RateLimitClient:
+def configure_rate_limit_from_config(cfg: _RateLimitConfig) -> _RateLimitClient:
     return configure_rate_limit(*_redis_config(cfg))
 
 

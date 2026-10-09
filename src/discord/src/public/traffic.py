@@ -10,7 +10,7 @@ from chart import bandwidth_chart
 from composition import PublicFeatureMixin
 from custom_types import BandwidthSnapshot
 from util import fmt_bytes, format_usage, truncate_utf8
-from payloads import number, obj_map, object_rows
+from payloads import number
 
 __all__ = ["PublicTrafficMixin"]
 
@@ -76,25 +76,13 @@ class PublicTrafficMixin(PublicFeatureMixin):
                 lang = self.get_lang(uid)
                 t = self.TEXTS[lang]
                 raw_obj = stats.obj
-                if not isinstance(raw_obj, dict):
+                if raw_obj is None:
                     await self._reply_key(interaction, "bad_response")
                     return
-                obj = cast(dict[str, object], raw_obj)
-                bandwidth_obj = obj.get("bandwidth")
-                if isinstance(bandwidth_obj, dict):
-                    bandwidth = obj_map(cast(object, bandwidth_obj))
-                else:
-                    bandwidth = {}
-                total_obj = bandwidth.get("total")
-                if isinstance(total_obj, dict):
-                    total = obj_map(cast(object, total_obj))
-                else:
-                    total = {}
-                wl_total_obj = bandwidth.get("wl_total")
-                if isinstance(wl_total_obj, dict):
-                    wl_total = obj_map(cast(object, wl_total_obj))
-                else:
-                    wl_total = {}
+                obj = raw_obj
+                bandwidth = obj.get("bandwidth", {})
+                total = bandwidth.get("total", {})
+                wl_total = bandwidth.get("wl_total", {})
                 used_str, limit_str, percent_str = format_usage(
                     number(bandwidth.get("monthly")),
                     number(bandwidth.get("limit")),
@@ -120,11 +108,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
                 )
                 text = truncate_utf8(text, 1024)
                 snapshots: list[BandwidthSnapshot] = []
-                history_raw = history.obj
-                if isinstance(history_raw, list):
-                    raw_history = object_rows(cast(object, history_raw))
-                else:
-                    raw_history = []
+                raw_history = history.obj or []
                 for item in raw_history:
                     snapshots.append(
                         BandwidthSnapshot(

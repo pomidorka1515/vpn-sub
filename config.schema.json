@@ -138,7 +138,7 @@
                         "type": "string",
                         "enum": ["whitelist", "blacklist"]
                     },
-                    "inject_headers": { "type": "object" }
+                    "inject_headers": { "type": "object", "additionalProperties": { "type": "string" } }
                 }
             }
         },

@@ -155,6 +155,33 @@ class UserRecord(TypedDict):
     created_at: int
 
 
+class UserFields(TypedDict, total=False):
+    userid: str
+    uuid: str
+    token: str
+    fingerprint: str
+    displayname: str
+    status: bool | int
+    status_time: bool | int
+    status_wl: bool | int
+    bw_limit: int
+    bw_used: int
+    wl_bw_limit: int
+    wl_bw_used: int
+    expiry_time: int
+    ext_username: str | None
+    ext_password: str | None
+    tgid: str | int | None
+
+
+class BandwidthSnapshotPayload(TypedDict):
+    ts: int
+    up: int
+    down: int
+    wl_up: int
+    wl_down: int
+
+
 class CodeRecord(TypedDict):
     code: str
     action: str

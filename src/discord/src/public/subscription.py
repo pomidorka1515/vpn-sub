@@ -3,13 +3,13 @@ from __future__ import annotations
 import io
 import time
 from datetime import datetime, timezone
-from typing import Mapping, cast
 
 import discord
 
 from composition import PublicFeatureMixin
 from util import fmt_bytes
-from payloads import number, obj_map
+from payloads import number
+from webapi import StatsPayload
 
 __all__ = ["PublicSubscriptionMixin"]
 
@@ -21,7 +21,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             return f"*{unlimited}*"
         return f"{fmt_bytes(used)} / {limit} GB"
 
-    def _info_text(self, lang: str, obj: Mapping[str, object]) -> str | None:
+    def _info_text(self, lang: str, obj: StatsPayload) -> str | None:
         t = self.TEXTS[lang]
         template = t.get("info_text")
         if not template:
@@ -38,21 +38,9 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t.get("lifetime", "Lifetime")
-        bandwidth_obj = obj.get("bandwidth")
-        if isinstance(bandwidth_obj, dict):
-            bandwidth = obj_map(cast(object, bandwidth_obj))
-        else:
-            bandwidth = {}
-        total_obj = bandwidth.get("total")
-        if isinstance(total_obj, dict):
-            total = obj_map(cast(object, total_obj))
-        else:
-            total = {}
-        wl_total_obj = bandwidth.get("wl_total")
-        if isinstance(wl_total_obj, dict):
-            wl_total = obj_map(cast(object, wl_total_obj))
-        else:
-            wl_total = {}
+        bandwidth = obj.get("bandwidth", {})
+        total = bandwidth.get("total", {})
+        wl_total = bandwidth.get("wl_total", {})
         monthly = number(bandwidth.get("monthly"))
         wl_monthly = number(bandwidth.get("wl_monthly"))
         limit = number(bandwidth.get("limit"))
@@ -88,10 +76,10 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not await self.consume_result(interaction, result):
             return
         raw_obj = result.obj
-        if not isinstance(raw_obj, dict):
+        if raw_obj is None:
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, object], raw_obj)
+        obj = raw_obj
         lang = self.get_lang(uid)
         text = self._info_text(lang, obj)
         if text:
@@ -112,10 +100,10 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not await self.consume_result(interaction, stats):
             return
         raw_obj = stats.obj
-        if not isinstance(raw_obj, dict):
+        if raw_obj is None:
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, object], raw_obj)
+        obj = raw_obj
         link = str(obj.get("link") or "")
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]

@@ -16,7 +16,7 @@ from ..password import PasswordService
 from ..audit import AuditService
 from custom_types import (
     ClientPayload, NewUserInfo, PanelClient,
-    ResetUserObject, UserInfo,
+    ResetUserObject, UserFields, UserInfo,
     UserInfoBandwidth, UserInfoBandwidthTotal
 )
 from errors import AppError, PanelRejectedError, ValidationError, ConflictError, DuplicateError
@@ -441,7 +441,7 @@ class BusinessUserService(BaseService):
                 ),
             )
             
-            fields: dict[str, object] = {"status": enable}
+            fields: UserFields = {"status": enable}
             if timee is not None:
                 fields["status_time"] = timee
             self.db.update_user(username, **fields)

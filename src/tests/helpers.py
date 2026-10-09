@@ -39,7 +39,7 @@ def subscription_config(**overrides: Any) -> AppConfig:
         "bypass_packages": [],
         "panel_alert_cooldown": 3600,
         "nodes": {},
-        "json_template": {},
+        "json_template": {"remarks": "", "outbounds": []},
         "3xui": {},
         "profiles": {},
         "redis": {"url": ""},
@@ -60,7 +60,7 @@ def language_config() -> LangConfig:
 
 def profile_config(**overrides: Any) -> ProfileConfig:
     document: ProfileConfig = {
-        "flag": "", "name": ["", ""], "json": {}, "description": ["", ""],
+        "flag": "", "name": ["", ""], "json": {"settings": {"vnext": []}, "streamSettings": {}}, "description": ["", ""],
         "whitelist": False, "xhttpExtra": {}, "masterLink": "", "node": "edge",
         "shortProfileDescription": ["", ""],
     }

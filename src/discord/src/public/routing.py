@@ -109,7 +109,7 @@ class PublicRoutingMixin(PublicFeatureMixin):
         if not isinstance(raw_obj, dict):
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, str], raw_obj)
+        obj = raw_obj
         lines: list[str] = []
         for name, desc in obj.items():
             lines.append(f"`{name}` — {desc}")

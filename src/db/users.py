@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import time
-from typing import cast
+from typing import Unpack, cast
 
-from custom_types import UserRecord
+from custom_types import UserFields, UserRecord
 from errors import DatabaseError, DuplicateError
 
 from .common import ConnectionMixin
@@ -80,7 +80,7 @@ class UsersMixin(ConnectionMixin):
                 raise DuplicateError("username, UUID, token or external username already exists") from exc
             raise
 
-    def set_user(self, username: str, **fields: object) -> None:
+    def set_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         mapping = {
             "userid": "uuid", "uuid": "uuid", "token": "token",
             "fingerprint": "fingerprint", "displayname": "displayname",
@@ -108,7 +108,7 @@ class UsersMixin(ConnectionMixin):
                 raise DuplicateError("unique user field already exists") from exc
             raise
 
-    def update_user(self, username: str, **fields: object) -> None:
+    def update_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         self.set_user(username, **fields)
 
     def delete_user(self, username: str) -> None:

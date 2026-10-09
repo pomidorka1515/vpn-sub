@@ -3,10 +3,11 @@ from __future__ import annotations
 import time
 
 from db import Database
+from db.state import StateSnapshot
 from helpers import create_alice, make_subscription
 
 
-def _state_payload(ts: int) -> dict[str, object]:
+def _state_payload(ts: int) -> StateSnapshot:
     return {
         "ts": ts,
         "host": {

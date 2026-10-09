@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import TypedDict, cast
 from config.constants import JsonDict
+from custom_types import BandwidthSnapshotPayload
 
 from .common import ConnectionMixin
 
@@ -159,9 +160,12 @@ class StateMixin(ConnectionMixin):
                 rows,
             )
 
-    def get_bandwidth_snapshots(self, username: str, cutoff: int) -> list[dict[str, int]]:
+    def get_bandwidth_snapshots(self, username: str, cutoff: int) -> list[BandwidthSnapshotPayload]:
         with self.connection() as conn:
-            return [dict(row) for row in conn.execute(
+            return [BandwidthSnapshotPayload(
+                ts=int(row["ts"]), up=int(row["up"]), down=int(row["down"]),
+                wl_up=int(row["wl_up"]), wl_down=int(row["wl_down"]),
+            ) for row in conn.execute(
                 "SELECT ts, up, down, wl_up, wl_down FROM bandwidth_snapshots WHERE username = ? AND ts >= ? ORDER BY ts DESC",
                 (username, cutoff),
             )]
@@ -171,7 +175,7 @@ class StateMixin(ConnectionMixin):
             cur = conn.execute("DELETE FROM bandwidth_snapshots WHERE ts < ?", (cutoff,))
             return cur.rowcount
 
-    def upsert_state_snapshot(self, ts: int, payload: Mapping[str, object]) -> None:
+    def upsert_state_snapshot(self, ts: int, payload: StateSnapshot) -> None:
         with self.transaction(immediate=True) as conn:
             conn.execute("INSERT INTO state_snapshots(ts, payload) VALUES (?, ?) ON CONFLICT(ts) DO UPDATE SET payload=excluded.payload",
                          (ts, json.dumps(payload, separators=(",", ":"))))

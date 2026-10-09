@@ -3,10 +3,11 @@ from __future__ import annotations
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import cast
+from typing import Callable, TypedDict, cast
 from urllib.parse import urljoin
 
 import aiohttp
+from custom_types import BandwidthSnapshotPayload
 
 __all__ = ["ApiResult", "WebApiClient", "extract_auth_token"]
 
@@ -15,14 +16,121 @@ _AUTH_COOKIE = "auth_token="
 
 
 @dataclass(frozen=True, slots=True)
-class ApiResult:
+class ApiResult[T = object]:
     ok: bool
     status: int
     msg: str | None
-    obj: object
+    obj: T
     raw_headers: Mapping[str, str]
     body: bytes | None = None
     auth_token: str | None = None
+
+
+class BandwidthTotal(TypedDict, total=False):
+    upload: int | float
+    download: int | float
+    total: int | float
+
+
+class StatsBandwidth(TypedDict, total=False):
+    total: BandwidthTotal
+    wl_total: BandwidthTotal
+    monthly: int | float
+    wl_monthly: int | float
+    limit: int
+    wl_limit: int
+
+
+class StatsPayload(TypedDict, total=False):
+    _: str
+    token: str
+    link: str
+    displayname: str
+    uuid: str
+    fingerprint: str
+    enabled: bool
+    wl_enabled: bool
+    time: int
+    online: bool
+    bandwidth: StatsBandwidth
+
+
+class UsernamePayload(TypedDict):
+    valid: bool
+    taken: bool
+    sanitized: str
+
+
+def _mapping(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError("expected an object")
+    return cast(dict[str, object], value)
+
+
+def _stats(value: object) -> StatsPayload:
+    obj = _mapping(value)
+    for key, item in obj.items():
+        if key in ("_", "token", "link", "displayname", "uuid", "fingerprint"):
+            if not isinstance(item, str):
+                raise ValueError(key)
+        elif key in ("enabled", "wl_enabled", "online"):
+            if not isinstance(item, bool):
+                raise ValueError(key)
+        elif key == "time":
+            if not isinstance(item, int):
+                raise ValueError(key)
+        elif key == "bandwidth":
+            for field, amount in _mapping(item).items():
+                if field in ("total", "wl_total"):
+                    for number in _mapping(amount).values():
+                        if not isinstance(number, (int, float)):
+                            raise ValueError(field)
+                elif field in ("monthly", "wl_monthly", "limit", "wl_limit"):
+                    if not isinstance(amount, (int, float)) or (field in ("limit", "wl_limit") and not isinstance(amount, int)):
+                        raise ValueError(field)
+    return cast(StatsPayload, obj)
+
+
+def _strings(value: object) -> dict[str, str]:
+    obj = _mapping(value)
+    if not all(isinstance(item, str) for item in obj.values()):
+        raise ValueError("expected string values")
+    return cast(dict[str, str], obj)
+
+
+def _fingerprints(value: object) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in cast(list[object], value)):
+        raise ValueError("expected strings")
+    return cast(list[str], value)
+
+
+def _history(value: object) -> list[BandwidthSnapshotPayload]:
+    if not isinstance(value, list):
+        raise ValueError("expected history rows")
+    rows = cast(list[object], value)
+    for row in rows:
+        obj = _mapping(row)
+        if not all(isinstance(obj.get(key), int) for key in ("ts", "up", "down", "wl_up", "wl_down")):
+            raise ValueError("invalid history row")
+    return cast(list[BandwidthSnapshotPayload], rows)
+
+
+def _username(value: object) -> UsernamePayload:
+    obj = _mapping(value)
+    if not isinstance(obj.get("valid"), bool) or not isinstance(obj.get("taken"), bool) or not isinstance(obj.get("sanitized"), str):
+        raise ValueError("invalid username result")
+    return cast(UsernamePayload, obj)
+
+
+def _parsed[T](result: ApiResult, parser: Callable[[object], T]) -> ApiResult[T | None]:
+    obj: T | None = None
+    ok, msg = result.ok, result.msg
+    if ok:
+        try:
+            obj = parser(result.obj)
+        except ValueError:
+            ok, msg = False, "bad_response"
+    return ApiResult(ok, result.status, msg, obj, result.raw_headers, result.body, result.auth_token)
 
 
 def _token_from_set_cookie(header: str) -> str | None:
@@ -69,7 +177,7 @@ class WebApiClient:
         self._root = f"{root}/{prefix}/webapi" if prefix else f"{root}/webapi"
         self._session = session
         self._owns_session = session is None
-        self._stats_cache: dict[str, tuple[float, ApiResult]] = {}
+        self._stats_cache: dict[str, tuple[float, ApiResult[StatsPayload | None]]] = {}
 
     async def start(self) -> None:
         if self._session is None or self._session.closed:
@@ -192,12 +300,12 @@ class WebApiClient:
             json={"username": username, "password": password},
         )
 
-    async def stats(self, token: str) -> ApiResult:
+    async def stats(self, token: str) -> ApiResult[StatsPayload | None]:
         cached = self._stats_cache.get(token)
         now = time.monotonic()
         if cached is not None and now - cached[0] < _STATS_TTL_S:
             return cached[1]
-        result = await self._request("GET", "/stats", token=token)
+        result = _parsed(await self._request("GET", "/stats", token=token), _stats)
         if result.ok:
             self._stats_cache[token] = (now, result)
         return result
@@ -219,8 +327,8 @@ class WebApiClient:
         self.invalidate_stats(token)
         return await self._request("POST", "/logout", token=token)
 
-    async def fingerprints(self, token: str) -> ApiResult:
-        return await self._request("GET", "/fingerprints", token=token)
+    async def fingerprints(self, token: str) -> ApiResult[list[str] | None]:
+        return _parsed(await self._request("GET", "/fingerprints", token=token), _fingerprints)
 
     async def delete(self, token: str, current_password: str) -> ApiResult:
         self.invalidate_stats(token)
@@ -231,14 +339,14 @@ class WebApiClient:
             json={"current_password": current_password},
         )
 
-    async def validate_username(self, username: str) -> ApiResult:
-        return await self._request("GET", "/validate", params={"username": username})
+    async def validate_username(self, username: str) -> ApiResult[UsernamePayload | None]:
+        return _parsed(await self._request("GET", "/validate", params={"username": username}), _username)
 
-    async def profiles(self, token: str, lang: str) -> ApiResult:
-        return await self._request("GET", "/profiles", token=token, params={"lang": lang})
+    async def profiles(self, token: str, lang: str) -> ApiResult[dict[str, str] | None]:
+        return _parsed(await self._request("GET", "/profiles", token=token, params={"lang": lang}), _strings)
 
-    async def history(self, token: str, days: int) -> ApiResult:
-        return await self._request("GET", "/history", token=token, params={"days": days})
+    async def history(self, token: str, days: int) -> ApiResult[list[BandwidthSnapshotPayload] | None]:
+        return _parsed(await self._request("GET", "/history", token=token, params={"days": days}), _history)
 
     async def qr(self, token: str, *, happ: bool, lang: str) -> ApiResult:
         params: dict[str, str | int] = {"lang": lang}

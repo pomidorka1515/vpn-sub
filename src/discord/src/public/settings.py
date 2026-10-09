@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Self, cast
+from typing import Self
 
 import discord
 
@@ -104,7 +104,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             return
         raw_fps = result.obj
         if isinstance(raw_fps, list):
-            fps = cast(list[str], raw_fps)
+            fps = raw_fps
         else:
             fps = []
         options: list[discord.SelectOption] = []
@@ -168,7 +168,6 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not isinstance(obj, dict):
             await self._reply_key(interaction, "bad_response")
             return
-        obj = cast(dict[str, object], obj)
         if not obj.get("valid"):
             await self._reply_key(interaction, "length_username", ln=32)
             return

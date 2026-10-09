@@ -100,7 +100,7 @@ class DiscordIOMixin(PublicFeatureMixin):
                     out[cid] = value if isinstance(value, str) else str(value or "")
         return out
 
-    def apply_api_status(self, user_id: int, result: ApiResult) -> str | None:
+    def apply_api_status[T](self, user_id: int, result: ApiResult[T]) -> str | None:
         if result.status == 401:
             self.sessions.clear_token(user_id)
             return "session_expired"
@@ -110,10 +110,10 @@ class DiscordIOMixin(PublicFeatureMixin):
             return "http_unavailable"
         return None
 
-    async def consume_result(
+    async def consume_result[T](
         self,
         interaction: discord.Interaction,
-        result: ApiResult,
+        result: ApiResult[T],
     ) -> bool:
         key = self.apply_api_status(interaction.user.id, result)
         if key is not None:

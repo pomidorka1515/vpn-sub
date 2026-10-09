@@ -294,6 +294,18 @@ def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
     assert database.prune_state_snapshots(20) == 1
 
 
+def test_bandwidth_snapshot_preserves_named_integer_fields(database: Database) -> None:
+    database.create_user(
+        username="snapshot", uuid="uuid-snapshot", token="token-snapshot",
+        fingerprint="chrome", displayname="Snapshot",
+    )
+    database.add_bandwidth_snapshot("snapshot", 100, 1, 2, 3, 4)
+    assert database.get_bandwidth_snapshots("snapshot", 100) == [
+        {"ts": 100, "up": 1, "down": 2, "wl_up": 3, "wl_down": 4},
+    ]
+    assert database.get_bandwidth_snapshots("snapshot", 101) == []
+
+
 def test_bulk_usage_and_snapshots_commit_once(database: Database) -> None:
     create_user(database, "alice")
     create_user(database, "bob")

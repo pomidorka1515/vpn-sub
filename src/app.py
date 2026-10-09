@@ -4,10 +4,10 @@ import fcntl
 import os
 import sys
 import threading
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, Self, cast
+from typing import BinaryIO, Protocol, Self, cast
 
 from api import Api, WebApi
 from api.common import RES_DIR
@@ -34,6 +34,10 @@ threading.main_thread().name = "main"
 log = Logger("app")
 
 type PanelTransportFactory = Callable[[], XUiPanelTransport]
+
+
+class Closeable(Protocol):
+    def close(self) -> None: ...
 
 __all__ = [
     "AppOptions",
@@ -204,7 +208,7 @@ class Application:
         close_rate_limit()
 
     def _close_all(self) -> None:
-        resources: tuple[object, ...] = (
+        resources: tuple[Closeable | None, ...] = (
             *self.panels,
             self.whitelist_panel,
             self.db,
@@ -216,9 +220,8 @@ class Application:
         for resource in resources:
             if resource is None:
                 continue
-            close = cast(Callable[[], None], getattr(resource, "close", None))
             try:
-                close()
+                resource.close()
             except Exception:
                 log.error("resource cleanup failed", exc_info=True)
         if self._primary_lock_file is not None:
@@ -358,8 +361,7 @@ def _build_panels(
             nginx_auth=cast(tuple[str, str] | None, tuple(panel_cfg.get("nginx_auth", [])) or None),
             inbounds_list=tuple(panel_cfg["inbounds_list"]),
             mode=panel_cfg["mode"],
-            # The schema guarantees only an object; preserve the session boundary.
-            inject_headers=cast(Mapping[str, str | bytes] | None, panel_cfg.get("inject_headers")),
+            inject_headers=panel_cfg.get("inject_headers"),
             transport=transport,
             stamp_dir=str(stamp_dir),
             verbose=verbose,
@@ -438,7 +440,7 @@ def create_application(
                     component.stop()
                 except Exception:
                     log.error("startup component cleanup failed", exc_info=True)
-        resources: tuple[object, ...] = ( # arbitrary length due to panels
+        resources: tuple[Closeable | None, ...] = (
             *panels,
             whitelist,
             db,
@@ -450,12 +452,10 @@ def create_application(
         for resource in resources:
             if resource is None:
                 continue
-            close = cast(Callable[[], None], getattr(resource, "close", None))
-            if close is not None:
-                try:
-                    close()
-                except Exception:
-                    log.error("startup cleanup failed", exc_info=True)
+            try:
+                resource.close()
+            except Exception:
+                log.error("startup cleanup failed", exc_info=True)
         if lock_file is not None:
             lock_file.close()
         close_rate_limit()
