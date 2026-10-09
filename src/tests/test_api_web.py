@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from typing import Any, cast
 import uuid
 
@@ -13,6 +13,7 @@ from flask.json.provider import DefaultJSONProvider
 
 from api import WebApi
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
+    _RateLimitScript,
     _replace_client,
     close_rate_limit,
 )
@@ -44,7 +45,7 @@ def flask_app() -> Flask:
 
 
 class _OpenRedis:
-    def register_script(self, script: str) -> Callable[..., int]:
+    def register_script(self, script: str) -> _RateLimitScript:
         del script
 
         def run(keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int:

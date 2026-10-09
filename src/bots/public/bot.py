@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable
-
+from typing import Callable
+from telebot import types
 import telebot
 
 from config import AppConfig, Config, LangConfig
@@ -58,7 +58,7 @@ class PublicBot(
             language = lang_cfg.view()
             self.TEXTS: dict[str, dict[str, str]] = language["publicbot"]
             self.bot.message_handler(commands=["start", "menu"])(self.cmd_start)  # pyright: ignore[reportUnknownMemberType]
-            callbacks: tuple[tuple[str, Callable[..., Any]], ...] = (
+            callbacks: tuple[tuple[str, Callable[[types.CallbackQuery], None]], ...] = (
                 ("lang_", self.set_lang_callback),
                 ("set_", self.settings_callback),
                 ("fp_", self.fp_callback),

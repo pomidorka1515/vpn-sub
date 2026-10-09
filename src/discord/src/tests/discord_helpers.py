@@ -30,7 +30,16 @@ def config_mock(document: DiscordConfig) -> Config[DiscordConfig]:
     return mock
 
 
-type Handler = Callable[..., FakeResponse]
+type Handler = Callable[
+    [
+        str,
+        str,
+        Mapping[str, object] | None,
+        Mapping[str, str | int] | None,
+        Mapping[str, str] | None,
+    ],
+    FakeResponse,
+]
 
 class FakeHeaders(dict[str, str]):
     def getall(self, key: str, default: list[str] | None = None) -> list[str]:

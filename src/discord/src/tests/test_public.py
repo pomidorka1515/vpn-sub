@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +11,7 @@ from discord_helpers import (
     FakeInteraction,
     FakeResponse,
     FakeSession,
+    Handler,
     json_ok,
     make_public_bot,
     modal_data,
@@ -21,7 +21,6 @@ from discord_helpers import (
 from public.bot import PublicBot
 from sessions import SessionStore
 
-Handler = Callable[..., Any]
 PublicBotFactory = Callable[[Handler], tuple[PublicBot, SessionStore, FakeSession]]
 
 
@@ -166,7 +165,7 @@ def test_chart_uses_history_and_stats(public_bot_factory: PublicBotFactory) -> N
     bot, _store, session = public_bot_factory(handler)
     interaction = FakeInteraction()
 
-    async def fake_to_thread(func: Callable[..., object], *args: object, **kwargs: object) -> None:
+    async def fake_to_thread[**P](func: Callable[P, object], /, *args: P.args, **kwargs: P.kwargs) -> None:
         del func, args, kwargs
         return None
 
@@ -224,7 +223,11 @@ def test_delete_posts_password_and_clears_session(public_bot_factory: PublicBotF
 
 
 def test_slash_commands_sync_in_setup_hook_not_on_ready(public_bot_factory: PublicBotFactory) -> None:
-    bot, _store, _session = public_bot_factory(lambda *args: json_ok())
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        del method, url, json, params, headers
+        return json_ok()
+
+    bot, _store, _session = public_bot_factory(handler)
     calls = {"n": 0}
 
     async def fake_sync() -> list[object]:
@@ -401,7 +404,7 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
     first = FakeInteraction()
     second = FakeInteraction()
 
-    async def fake_to_thread(func: Callable[..., object], *args: object, **kwargs: object) -> None:
+    async def fake_to_thread[**P](func: Callable[P, object], /, *args: P.args, **kwargs: P.kwargs) -> None:
         del func, args, kwargs
         entered.set()
         await release.wait()
@@ -421,4 +424,3 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
     second_text = str(second.response.messages[-1]["content"]).lower()
     assert "generating" in second_text
     assert "14" in str(first.response.messages[-1]["content"])
-

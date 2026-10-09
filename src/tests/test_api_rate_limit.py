@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from typing import Any
 from unittest import mock
 
@@ -9,6 +9,7 @@ from flask import Flask
 
 from api import BaseApi, rate_limit
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
+    _RateLimitScript,
     _replace_client,
     close_rate_limit,
 )
@@ -34,7 +35,7 @@ class _SharedRedis:
         self.sets: dict[str, dict[str, float]] = {}
         self.closed = False
 
-    def register_script(self, script: str) -> Callable[..., int]:
+    def register_script(self, script: str) -> _RateLimitScript:
         assert "ZADD" in script
 
         def run(keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int:

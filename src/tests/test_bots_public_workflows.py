@@ -165,7 +165,7 @@ def test_settings_callback_requires_registration_and_dispatches(
         ("set_pass", mixin.step_settings_pass),
     ):
         mixin.settings_callback(_call(action))
-        registered = cast(Callable[..., object], telegram.register_next_step_handler.call_args.args[1])
+        registered = cast(Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1])
         assert getattr(registered, "__func__", registered) is getattr(step, "__func__", step)
 
 
@@ -315,7 +315,7 @@ def test_login_flow(
     mixin.login_callback(_call("login_other"))
     cast(MagicMock, mixin._answer_callback).assert_called_once()
     mixin.login_callback(_call("login_credentials"))
-    registered = cast(Callable[..., object], telegram.register_next_step_handler.call_args.args[1])
+    registered = cast(Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1])
     assert getattr(registered, "__func__", registered) is getattr(
         mixin.step_login_email, "__func__", mixin.step_login_email
     )
