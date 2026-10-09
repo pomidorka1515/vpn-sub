@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, cast
+from typing import Mapping, cast
 
 import discord
 
 from composition import PublicFeatureMixin
 from webapi import ApiResult
+from payloads import ResponseOptions
 
 __all__ = ["DiscordIOMixin"]
 
@@ -30,7 +31,7 @@ class DiscordIOMixin(PublicFeatureMixin):
         if not content and view is None and file is None:
             return
         ephemeral = self._ephemeral(interaction, ephemeral)
-        kwargs: dict[str, Any] = {"ephemeral": ephemeral}
+        kwargs: ResponseOptions = {"ephemeral": ephemeral}
         if content is not None:
             kwargs["content"] = content
         if view is not None:

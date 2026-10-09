@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 import time
 
 from custom_types import BandwidthInfo, BandwidthUpdate, UserRecord
@@ -19,14 +18,19 @@ from .host import BWatchHost
 class QuotaMixin(BWatchHost):
     """Quota polling and expiry / near-limit notifications."""
 
-    def _update_user(self, *args: Any, **kwargs: Any) -> bool:
+    def _update_user(
+        self, *, username: str, enable: bool | None = None,
+        wl_enable: bool | None = None, timee: bool | None = None,
+    ) -> bool:
         """Run a background user update. Returns False when it failed.
 
         Callers must not notify the user of a state change that never
         happened — the next cycle retries it.
         """
         try:
-            self.sub.business_svc.update_user(*args, **kwargs)
+            self.sub.business_svc.update_user(
+                username=username, enable=enable, wl_enable=wl_enable, timee=timee,
+            )
             return True
         except AppError:
             self.log.error("background user update failed", exc_info=True)

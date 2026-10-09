@@ -6,7 +6,7 @@ import os
 import threading
 import time
 from collections.abc import Callable, Mapping
-from typing import Any, Literal, Unpack, cast
+from typing import Literal, Unpack
 
 from requests import ConnectionError, RequestException, Response, Session, Timeout
 
@@ -302,7 +302,7 @@ class XUiSession:
 
         request_url = self._format_url(url)
         kwargs["headers"] = {
-            **cast(Any, kwargs.get("headers", {})),
+            **(kwargs.get("headers") or {}),
             **self._inject_headers,
             # set last: the panel Authorization must not be overridable by accident
             **self._auth_header(),
@@ -310,7 +310,7 @@ class XUiSession:
         kwargs.setdefault("timeout", _DEFAULT_REQUEST_TIMEOUT)
 
         try:
-            response = self._transport.request(method, request_url, **cast(Any, kwargs))
+            response = self._transport.request(method, request_url, **kwargs)
         except Timeout:
             reason = f"timeout of {_DEFAULT_REQUEST_TIMEOUT:.0f} seconds exceeded"
             self._mark_dead(reason)

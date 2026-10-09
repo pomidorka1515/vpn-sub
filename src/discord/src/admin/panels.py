@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, cast
+from typing import Mapping, cast
 
 import discord
 
 from composition import AdminFeatureMixin
 from util import fmt_time
 from .common import obj_map, result_obj
+from payloads import number
 
 __all__ = ["AdminPanelsMixin"]
 
@@ -16,7 +17,7 @@ def _as_loads(value: object) -> list[object]:
 
 
 class AdminPanelsMixin(AdminFeatureMixin):
-    def _metrics(self, payload: Mapping[str, object]) -> dict[str, Any] | None:
+    def _metrics(self, payload: Mapping[str, object]) -> dict[str, object] | None:
         if payload.get("status") == "unknown":
             return None
         # GET /api/panel/status stores the 3x-ui envelope in obj:
@@ -54,36 +55,36 @@ class AdminPanelsMixin(AdminFeatureMixin):
         MB = 1024 ** 2
         xr_state = xray.get("state")
         xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xray.get('errorMsg')}"
-        sys_up = fmt_time(int(obj.get("uptime") or 0))
-        app_up = fmt_time(int(app_stats.get("uptime") or 0))
+        sys_up = fmt_time(int(number(obj.get("uptime"))))
+        app_up = fmt_time(int(number(app_stats.get("uptime"))))
         load0 = loads[0] if len(loads) > 0 else 0
         load1 = loads[1] if len(loads) > 1 else 0
         load2 = loads[2] if len(loads) > 2 else 0
         return f"""📊 **Статус сервера {name}**
 
 🖥 **Система**
-├ **CPU:** `{int(round(float(obj.get('cpu') or 0)))}%` (`{obj.get('cpuCores')}`/`{obj.get('logicalPro')}` ядер, `{int(round(float(obj.get('cpuSpeedMhz') or 0)))} MHz`)
+├ **CPU:** `{int(round(number(obj.get('cpu'))))}%` (`{obj.get('cpuCores')}`/`{obj.get('logicalPro')}` ядер, `{int(round(number(obj.get('cpuSpeedMhz'))))} MHz`)
 ├ **Load:** `{load0}` | `{load1}` | `{load2}`
-├ **RAM:** `{float(mem.get('current') or 0) / GB:.2f} GB` / `{float(mem.get('total') or 0) / GB:.2f} GB`
+├ **RAM:** `{number(mem.get('current')) / GB:.2f} GB` / `{number(mem.get('total')) / GB:.2f} GB`
 └ **Uptime:** `{sys_up}`
 
 💾 **Накопители**
-├ **Диск:** `{float(disk.get('current') or 0) / GB:.2f} GB` / `{float(disk.get('total') or 0) / GB:.2f} GB`
-└ **Swap:** `{float(swap.get('current') or 0) / GB:.2f} GB` / `{float(swap.get('total') or 0) / GB:.2f} GB`
+├ **Диск:** `{number(disk.get('current')) / GB:.2f} GB` / `{number(disk.get('total')) / GB:.2f} GB`
+└ **Swap:** `{number(swap.get('current')) / GB:.2f} GB` / `{number(swap.get('total')) / GB:.2f} GB`
 
 🌐 **Сеть & IP**
 ├ **IPv4:** `{public_ip.get('ipv4')}`
 ├ **IPv6:** `{public_ip.get('ipv6') or 'Отключен'}`
 ├ **Соединения:** `{obj.get('tcpCount')}` TCP / `{obj.get('udpCount')}` UDP
-├ **Скорость:** ⬇️ `{float(net_io.get('down') or 0) / MB:.2f} MB/s` | ⬆️ `{float(net_io.get('up') or 0) / MB:.2f} MB/s`
-└ **Трафик:** ⬇️ `{float(net_traffic.get('recv') or 0) / GB:.2f} GB` | ⬆️ `{float(net_traffic.get('sent') or 0) / GB:.2f} GB`
+├ **Скорость:** ⬇️ `{number(net_io.get('down')) / MB:.2f} MB/s` | ⬆️ `{number(net_io.get('up')) / MB:.2f} MB/s`
+└ **Трафик:** ⬇️ `{number(net_traffic.get('recv')) / GB:.2f} GB` | ⬆️ `{number(net_traffic.get('sent')) / GB:.2f} GB`
 
 ⚡️ **Xray Core v{xray.get('version')}**
 └ **Статус:** {xr_status}
 
 🤖 **Other**
 ├ **Потоков:** `{app_stats.get('threads')}`
-├ **RAM:** `{float(app_stats.get('mem') or 0) / MB:.2f} MB`
+├ **RAM:** `{number(app_stats.get('mem')) / MB:.2f} MB`
 └ **Uptime:** `{app_up}`"""
 
     async def _cb_all_panels_status(self, interaction: discord.Interaction) -> None:

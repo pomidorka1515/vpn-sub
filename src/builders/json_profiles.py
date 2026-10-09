@@ -3,8 +3,62 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, cast
+from typing import NotRequired, TypedDict, cast
 from config import AppConfig
+
+
+class _User(TypedDict):
+    id: str
+
+
+class _VNext(TypedDict):
+    users: list[_User]
+    address: str
+
+
+class _Settings(TypedDict):
+    vnext: list[_VNext]
+
+
+class _TLS(TypedDict):
+    serverName: str
+    fingerprint: str
+
+
+class _Reality(TypedDict):
+    fingerprint: str
+
+
+class _Host(TypedDict):
+    host: str
+
+
+class _GRPC(TypedDict):
+    authority: str
+
+
+class _WS(_Host):
+    headers: NotRequired[dict[str, str]]
+
+
+class _Stream(TypedDict, total=False):
+    tlsSettings: _TLS
+    realitySettings: _Reality
+    xhttpSettings: _Host
+    grpcSettings: _GRPC
+    wsSettings: _WS
+    httpupgradeSettings: _Host
+
+
+class _Outbound(TypedDict):
+    settings: _Settings
+    streamSettings: _Stream
+
+
+class _Template(TypedDict):
+    remarks: str
+    outbounds: list[_Outbound]
+    meta: NotRequired[dict[str, str]]
 
 
 def build_json(
@@ -24,12 +78,12 @@ def build_json(
     for profile in cfg["profiles"].values():
         node = profile["node"]
         domain = cfg["nodes"][node]
-        outbound = cast(dict[str, Any], profile["json"])
-        vnext: dict[str, Any] = outbound["settings"]["vnext"][0]
+        outbound = cast(_Outbound, profile["json"])
+        vnext = outbound["settings"]["vnext"][0]
         vnext["users"][0]["id"] = user_uuid
         vnext["address"] = domain
 
-        stream: dict[str, Any] = outbound["streamSettings"]
+        stream = outbound["streamSettings"]
         if (tls := stream.get("tlsSettings")) is not None:
             tls["serverName"] = domain
             tls["fingerprint"] = fingerprint
@@ -49,12 +103,12 @@ def build_json(
         if (upgrade := stream.get("httpupgradeSettings")) is not None:
             upgrade["host"] = domain
 
-        result = cast(dict[str, Any], copy.deepcopy(cfg["json_template"]))
+        result = cast(_Template, copy.deepcopy(cfg["json_template"]))
         result["remarks"] = profile["flag"] + profile["name"][index]
         result["outbounds"][0] = outbound
         # only shown when a provider id is set, but written regardless
         meta = result.setdefault("meta", {})
         meta["serverDescription"] = profile["shortProfileDescription"][index]
-        profiles.append(result)
+        profiles.append(dict(result))
 
     return profiles

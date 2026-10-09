@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import (
     Protocol, runtime_checkable, Self,
-    Literal, Callable, Any, overload, Final
+    Literal, Callable, overload, Final
 )
 from types import TracebackType
 from collections.abc import Mapping, MutableMapping, Iterator, Iterable, Sequence
@@ -48,7 +48,7 @@ class ConfigLike[Doc = JsonDict](Protocol):
         exc_tb: TracebackType | None
     ) -> Literal[False] | None: ...
 
-    def __getitem__(self, key: str) -> Any: ...
+    def __getitem__(self, key: str) -> JsonValue: ...
 
     def __setitem__(self, key: str, value: JsonValue) -> None: ...
 
@@ -130,7 +130,7 @@ class _ConfigTransactionLike[Doc = JsonDict](Protocol):
         exc_tb: TracebackType | None
     ) -> Literal[False] | None: ...
 
-    def __getitem__(self, key: str) -> Any: ...
+    def __getitem__(self, key: str) -> JsonValue: ...
 
     def __setitem__(self, key: str, value: JsonValue) -> None: ...
 

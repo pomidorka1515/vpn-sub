@@ -3,12 +3,13 @@ from __future__ import annotations
 import io
 import time
 from datetime import datetime, timezone
-from typing import Any, Mapping, cast
+from typing import Mapping, cast
 
 import discord
 
 from composition import PublicFeatureMixin
 from util import fmt_bytes
+from payloads import number, obj_map
 
 __all__ = ["PublicSubscriptionMixin"]
 
@@ -20,13 +21,13 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             return f"*{unlimited}*"
         return f"{fmt_bytes(used)} / {limit} GB"
 
-    def _info_text(self, lang: str, obj: Mapping[str, Any]) -> str | None:
+    def _info_text(self, lang: str, obj: Mapping[str, object]) -> str | None:
         t = self.TEXTS[lang]
         template = t.get("info_text")
         if not template:
             return None
         daystext = t["days_word"]
-        expiry = obj.get("time") or 0
+        expiry = number(obj.get("time"))
         try:
             expiry_i = int(expiry)
         except (TypeError, ValueError):
@@ -39,27 +40,27 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             time_str = t.get("lifetime", "Lifetime")
         bandwidth_obj = obj.get("bandwidth")
         if isinstance(bandwidth_obj, dict):
-            bandwidth = cast(dict[str, Any], bandwidth_obj)
+            bandwidth = obj_map(cast(object, bandwidth_obj))
         else:
             bandwidth = {}
         total_obj = bandwidth.get("total")
         if isinstance(total_obj, dict):
-            total = cast(dict[str, Any], total_obj)
+            total = obj_map(cast(object, total_obj))
         else:
             total = {}
         wl_total_obj = bandwidth.get("wl_total")
         if isinstance(wl_total_obj, dict):
-            wl_total = cast(dict[str, Any], wl_total_obj)
+            wl_total = obj_map(cast(object, wl_total_obj))
         else:
             wl_total = {}
-        monthly = bandwidth.get("monthly") or 0
-        wl_monthly = bandwidth.get("wl_monthly") or 0
-        limit = bandwidth.get("limit") or 0
-        wl_limit = bandwidth.get("wl_limit") or 0
-        upload = total.get("upload") or 0
-        download = total.get("download") or 0
-        wl_up = wl_total.get("upload") or 0
-        wl_down = wl_total.get("download") or 0
+        monthly = number(bandwidth.get("monthly"))
+        wl_monthly = number(bandwidth.get("wl_monthly"))
+        limit = number(bandwidth.get("limit"))
+        wl_limit = number(bandwidth.get("wl_limit"))
+        upload = number(total.get("upload"))
+        download = number(total.get("download"))
+        wl_up = number(wl_total.get("upload"))
+        wl_down = number(wl_total.get("download"))
         return template.format(
             username=obj.get("displayname") or "",
             status="🟢" if obj.get("enabled") else "🔴",

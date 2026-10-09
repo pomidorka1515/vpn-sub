@@ -6,7 +6,7 @@ import glob
 import threading
 
 from datetime import datetime, timezone
-from typing import cast, Any
+from typing import cast
 
 from .jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
 from .constants import CONFIG_TYPES, JsonValue
@@ -82,7 +82,7 @@ def _do_backup(
             if not isinstance(loaded, dict):
                 log.warning(f"skipping backup: {path} is not a JSON object")
                 return
-            data = cast(dict[str, Any], loaded)
+            data = cast(dict[str, JsonValue], loaded)
         fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
         os.close(fd)
         try:

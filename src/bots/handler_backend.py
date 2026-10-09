@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+from telebot import Handler
 
 from telebot.handler_backends import HandlerBackend
 
@@ -22,7 +22,7 @@ class LockedHandlerBackend(HandlerBackend):
         super().__init__({})
         self._lock = threading.Lock()
 
-    def register_handler(self, handler_group_id: int | str, handler: Any) -> None:
+    def register_handler(self, handler_group_id: int | str, handler: Handler) -> None:
         with self._lock:
             bucket = self.handlers.get(handler_group_id)
             if bucket is None:
@@ -34,6 +34,6 @@ class LockedHandlerBackend(HandlerBackend):
         with self._lock:
             self.handlers.pop(handler_group_id, None)
 
-    def get_handlers(self, handler_group_id: int | str) -> list[Any] | None:
+    def get_handlers(self, handler_group_id: int | str) -> list[Handler] | None:
         with self._lock:
             return self.handlers.pop(handler_group_id, None)

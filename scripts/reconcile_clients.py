@@ -40,10 +40,11 @@ import sys
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast
+from typing import Protocol, cast
 from urllib.parse import quote
 
 from dacite import from_dict
+from requests import Response
 
 _ROOT = Path(__file__).resolve().parent.parent
 _SRC = _ROOT / "src"
@@ -59,6 +60,7 @@ from custom_types import (  # noqa: E402
 from db import Database  # noqa: E402
 from paths import runtime_dir  # noqa: E402
 from session import XUiSession  # noqa: E402
+from config import AppConfig, JsonValue, PanelConfig  # noqa: E402
 
 
 class ReconcileError(RuntimeError):
@@ -137,7 +139,7 @@ def _load_uuid_map(database: Database) -> dict[str, str]:
     return mapping
 
 
-def _build_panel(name: str, panel_cfg: dict[str, Any], *, stamp_dir: str) -> XUiSession:
+def _build_panel(name: str, panel_cfg: PanelConfig, *, stamp_dir: str) -> XUiSession:
     nginx_auth: tuple[str, str] | None = None
     nginx_raw: object = panel_cfg.get("nginx_auth")
     if isinstance(nginx_raw, (list, tuple)):
@@ -153,15 +155,23 @@ def _build_panel(name: str, panel_cfg: dict[str, Any], *, stamp_dir: str) -> XUi
         https=bool(panel_cfg["https"]),
         nginx_auth=nginx_auth,
         inbounds_list=tuple(int(i) for i in panel_cfg["inbounds_list"]),
-        mode=cast(Literal["whitelist", "blacklist"], panel_cfg["mode"]),
-        inject_headers=panel_cfg.get("inject_headers"),
+        mode=panel_cfg["mode"],
+        inject_headers=_headers(panel_cfg.get("inject_headers")),
         stamp_dir=stamp_dir,
     )
 
 
-def _envelope(panel: XUiSession, response: Any, what: str) -> dict[str, Any]:
+def _headers(value: dict[str, JsonValue] | None) -> dict[str, str]:
+    if value is None:
+        return {}
+    if any(not isinstance(item, str) for item in value.values()):
+        raise ValueError("inject_headers values must be strings")
+    return {key: str(item) for key, item in value.items()}
+
+
+def _envelope(panel: XUiSession, response: Response, what: str) -> dict[str, JsonValue]:
     try:
-        data: dict[str, Any] = dict(response.json())
+        data = cast(dict[str, JsonValue], dict(response.json()))
     except Exception as exc:
         raise ReconcileError(f"panel {panel.name}: {what} returned invalid JSON") from exc
     if response.status_code != 200 or not data.get("success"):
@@ -192,10 +202,10 @@ def _list_clients(panel: XUiSession) -> list[PanelClient]:
     return from_dict(ClientListResponse, data).obj
 
 
-def _post(panel: XUiSession, url: str, body: dict[str, Any], what: str) -> None:
+def _post(panel: XUiSession, url: str, body: dict[str, JsonValue], what: str) -> None:
     response = panel.post(url, json=body, headers={"Accept": "application/json"})
     try:
-        content: dict[str, Any] = dict(response.json())
+        content = cast(dict[str, JsonValue], dict(response.json()))
     except Exception:
         content = {}
     if response.status_code not in (200, 201) or not content.get("success"):
@@ -390,8 +400,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     with open(args.config, encoding="utf-8") as handle:
-        config: dict[str, Any] = json.load(handle)
-    panels_cfg: dict[str, dict[str, Any]] = config["3xui"]
+        config = cast(AppConfig, json.load(handle))
+    panels_cfg = config["3xui"]
     selected_keys = list(panels_cfg) if not args.panel else list(args.panel)
     unknown_keys = sorted(set(args.panel or ()) - set(panels_cfg))
     if unknown_keys:

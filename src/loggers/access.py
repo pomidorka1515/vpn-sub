@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from collections.abc import MutableMapping
 from datetime import timedelta
-from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from gunicorn.config import Config
@@ -107,7 +106,7 @@ class GunicornLogger(GunicornBaseLogger):
         for handler in self.access_log.handlers:
             handler.setFormatter(formatter)
 
-    def access(self, resp: Response, req: Request, environ: MutableMapping[str, Any], request_time: timedelta) -> None:
+    def access(self, resp: Response, req: Request, environ: MutableMapping[str, object], request_time: timedelta) -> None:
         if not self.access_log_enabled:
             return
 

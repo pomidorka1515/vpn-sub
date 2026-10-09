@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, BinaryIO, Self, cast
+from typing import BinaryIO, Self, cast
 
 from api import Api, WebApi
 from api.common import RES_DIR
@@ -239,7 +239,7 @@ def _build_flask_app(options: AppOptions) -> Flask:
     flask_app.json = _OrderedJSONProvider(flask_app)
     # pages live in res/, not a flask-style templates/ directory
     # jinja_loader is a cached_property; assigning replaces the template lookup.
-    cast(Any, flask_app).jinja_loader = FileSystemLoader(str(RES_DIR))
+    flask_app.__dict__["jinja_loader"] = FileSystemLoader(str(RES_DIR))
     # 1 MiB: the config editor posts whole xray profile objects. Werkzeug
     # applies this before the view, so it cannot be per-route.
     flask_app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024

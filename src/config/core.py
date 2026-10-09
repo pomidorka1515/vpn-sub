@@ -7,7 +7,7 @@ import copy
 from collections.abc import Mapping, MutableMapping, Iterator, Iterable
 from pathlib import Path
 from types import TracebackType
-from typing import Any, overload, cast, Callable, Literal
+from typing import overload, cast, Callable, Literal
 
 from .constants import JsonValue, JsonDict, SYNC_MODES
 from .protocols import MISSING, MISSING_TYPE
@@ -313,7 +313,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
             raise RuntimeError("Config.__exit__ called without a matching __enter__().")
         return tx.__exit__(exc_type, exc_val, exc_tb)
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> JsonValue:
         with self._lock:
             self._raise_if_used_inside_transaction()
             self._ensure_recent_locked()

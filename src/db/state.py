@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import TypedDict, cast
+from config.constants import JsonDict
 
 from .common import ConnectionMixin
+
+class StateSnapshot(TypedDict):
+    ts: int
+    host: JsonDict
+    panels: dict[str, JsonDict]
 
 class StateMixin(ConnectionMixin):
     def increment_usage(self, username: str, *, regular: int = 0, whitelist: int = 0) -> None:
@@ -170,10 +176,10 @@ class StateMixin(ConnectionMixin):
             conn.execute("INSERT INTO state_snapshots(ts, payload) VALUES (?, ?) ON CONFLICT(ts) DO UPDATE SET payload=excluded.payload",
                          (ts, json.dumps(payload, separators=(",", ":"))))
 
-    def get_state_snapshots(self, cutoff: int) -> list[dict[str, Any]]:
+    def get_state_snapshots(self, cutoff: int) -> list[StateSnapshot]:
         with self.connection() as conn:
             rows = conn.execute("SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC", (cutoff,)).fetchall()
-        return [json.loads(str(row[0])) for row in rows]
+        return [cast(StateSnapshot, json.loads(str(row[0]))) for row in rows]
 
     def prune_state_snapshots(self, cutoff: int) -> int:
         with self.transaction(immediate=True) as conn:

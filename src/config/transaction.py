@@ -7,7 +7,7 @@ import threading
 
 from collections.abc import Mapping, MutableMapping, Iterator, Iterable
 from types import TracebackType
-from typing import overload, Self, TYPE_CHECKING, Any, Literal, cast
+from typing import overload, Self, TYPE_CHECKING, Literal, cast
 
 from .constants import JsonValue, JsonDict
 from .protocols import MISSING, MISSING_TYPE
@@ -148,7 +148,7 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
             raise RuntimeError("Transaction is not active.")
         return self.data
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> JsonValue:
         return self._require_active()[key]
 
     def __setitem__(self, key: str, value: JsonValue) -> None:

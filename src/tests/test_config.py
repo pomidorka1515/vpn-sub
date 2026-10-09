@@ -49,7 +49,9 @@ def test_assignment_persists_to_disk(cfg: Config) -> None:
 def test_transaction_commit_writes_nested_changes(cfg: Config) -> None:
     with cfg as tx:
         tx["panel"] = {"name": "local"}
-        tx["panel"]["port"] = 2053
+        panel = tx["panel"]
+        assert isinstance(panel, dict)
+        panel["port"] = 2053
     assert cfg["panel"] == {"name": "local", "port": 2053}
 
 
@@ -73,8 +75,9 @@ def test_isolate_commits_detaches_leaked_transaction_refs(tmp_path: Path) -> Non
         with cfg as tx:
             tx["nested"] = {"a": 1}
             leaked = tx["nested"]
+            assert isinstance(leaked, dict)
         leaked["a"] = 2
-        assert cfg["nested"]["a"] == 1
+        assert cfg["nested"] == {"a": 1}
     finally:
         cfg.close()
 
@@ -90,8 +93,9 @@ def test_disabled_isolate_commits_keeps_leaked_transaction_refs(tmp_path: Path) 
         with cfg as tx:
             tx["nested"] = {"a": 1}
             leaked = tx["nested"]
+            assert isinstance(leaked, dict)
         leaked["a"] = 2
-        assert cfg["nested"]["a"] == 2
+        assert cfg["nested"] == {"a": 2}
     finally:
         cfg.close()
 

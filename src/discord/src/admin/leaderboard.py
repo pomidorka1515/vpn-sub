@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 import discord
 
@@ -10,6 +10,7 @@ from chart import leaderboard_chart
 from composition import AdminFeatureMixin
 from .common import result_obj
 from util import fmt_bytes, truncate_utf8
+from payloads import number, object_rows
 
 __all__ = ["AdminLeaderboardMixin"]
 
@@ -66,11 +67,11 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         if not await self.consume_result(interaction, result):
             return
         raw = result_obj(result)
-        rows = cast(list[dict[str, Any]], raw) if isinstance(raw, list) else []
+        rows = object_rows(raw)
         lb_data: dict[str, int] = {}
         for item in rows:
             user = str(item.get("username") or "")
-            amount = int(item.get("amount") or 0)
+            amount = int(number(item.get("amount")))
             if user:
                 lb_data[user] = amount
         if not lb_data:

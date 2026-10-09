@@ -25,9 +25,12 @@ import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import jsonschema
+
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonDict = dict[str, JsonValue]
 
 _ROOT = Path(__file__).resolve().parent.parent
 _SCHEMA_PATH = _ROOT / "config.schema.json"
@@ -79,7 +82,7 @@ def _is_bilingual(value: object) -> bool:
     return len(pair) == 2 and all(isinstance(item, str) for item in pair)
 
 
-def _load(path: Path) -> dict[str, Any]:
+def _load(path: Path) -> JsonDict:
     if not path.is_file():
         raise MigrateError(f"config not found: {path}")
     try:
@@ -89,35 +92,35 @@ def _load(path: Path) -> dict[str, Any]:
         raise MigrateError(f"config is not valid JSON: {exc}") from exc
     if not _is_object(data):
         raise MigrateError("config must be a JSON object")
-    return cast(dict[str, Any], data)
+    return cast(JsonDict, data)
 
 
-def _already_migrated(data: Mapping[str, Any]) -> bool:
+def _already_migrated(data: Mapping[str, JsonValue]) -> bool:
     if any(key in data for key in LEGACY_KEYS):
         return False
     profiles = data.get("profiles")
     if not _is_object(profiles):
         return False
-    profile_map = cast(dict[str, Any], profiles)
+    profile_map = cast(JsonDict, profiles)
     if not profile_map:
         return False
     return all(
         _is_object(profile)
-        and all(field in cast(dict[str, Any], profile) for field in PROFILE_FIELDS)
+        and all(field in cast(JsonDict, profile) for field in PROFILE_FIELDS)
         for profile in profile_map.values()
     )
 
 
-def _require_object(data: Mapping[str, Any], key: str) -> dict[str, Any]:
+def _require_object(data: Mapping[str, JsonValue], key: str) -> JsonDict:
     value = data.get(key)
     if not _is_object(value):
         raise MigrateError(f"{key} must be an object")
-    return cast(dict[str, Any], value)
+    return cast(JsonDict, value)
 
 
 def _key_set(value: object, label: str) -> set[str]:
     if isinstance(value, dict):
-        return set(cast(dict[str, Any], value))
+        return set(cast(JsonDict, value))
     if isinstance(value, list):
         items = cast(list[object], value)
         if not all(isinstance(item, str) for item in items):
@@ -126,12 +129,12 @@ def _key_set(value: object, label: str) -> set[str]:
     raise MigrateError(f"{label} must be an object or array of ids")
 
 
-def build_profiles(data: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def build_profiles(data: Mapping[str, JsonValue]) -> tuple[dict[str, JsonDict], list[str]]:
     """Join the legacy maps. Refuse rather than drop or invent ids."""
     profiles = data.get("profiles")
     if not _is_object(profiles):
         raise MigrateError("profiles must be an object")
-    names = cast(dict[str, Any], profiles)
+    names = cast(JsonDict, profiles)
     if any(_is_object(value) for value in names.values()):
         raise MigrateError("mixed config: profiles values are already objects and legacy keys are still present")
 
@@ -141,7 +144,7 @@ def build_profiles(data: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
     nodes = data.get("nodes")
     if not _is_object(nodes):
         raise MigrateError("nodes must be an object")
-    node_ids = set(cast(dict[str, Any], nodes))
+    node_ids = set(cast(JsonDict, nodes))
 
     for key, mapping in maps.items():
         present = set(mapping)
@@ -160,14 +163,14 @@ def build_profiles(data: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
         raise MigrateError("whitelistProfiles must be an array")
     if not _is_object(extra):
         raise MigrateError("xhttpExtra must be an object")
-    extra_map = cast(dict[str, Any], extra)
+    extra_map = cast(JsonDict, extra)
     for label, present in (("whitelistProfiles", whitelist_ids), ("xhttpExtra", extra_ids)):
         orphans = sorted(present - id_set)
         if orphans:
             raise MigrateError(f"{label} has id(s) not in profiles: {', '.join(orphans)}")
 
     filled: list[str] = []
-    built: dict[str, Any] = {}
+    built: dict[str, JsonDict] = {}
     for profile_id in ids:
         name = names[profile_id]
         if not _is_bilingual(name):
@@ -210,17 +213,17 @@ def build_profiles(data: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
     return built, filled
 
 
-def rewrite(data: Mapping[str, Any], profiles: Mapping[str, Any]) -> dict[str, Any]:
+def rewrite(data: Mapping[str, JsonValue], profiles: Mapping[str, JsonDict]) -> JsonDict:
     """Keep top-level order. Emit the new map where ``profiles`` was; skip legacy keys."""
-    rewritten: dict[str, Any] = {}
+    rewritten: JsonDict = {}
     for key, value in data.items():
         if key in LEGACY_KEYS:
             continue
-        rewritten[key] = profiles if key == "profiles" else value
+        rewritten[key] = dict(profiles) if key == "profiles" else value
     return rewritten
 
 
-def _validate(data: Mapping[str, Any]) -> None:
+def _validate(data: Mapping[str, JsonValue]) -> None:
     try:
         with _SCHEMA_PATH.open(encoding="utf-8") as handle:
             loaded: object = json.load(handle)
@@ -228,14 +231,14 @@ def _validate(data: Mapping[str, Any]) -> None:
         raise MigrateError(f"cannot load schema {_SCHEMA_PATH}: {exc}") from exc
     if not _is_object(loaded):
         raise MigrateError(f"schema {_SCHEMA_PATH} must be a JSON object")
-    schema = cast(dict[str, Any], loaded)
+    schema = cast(JsonDict, loaded)
     try:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as exc:
         raise MigrateError(f"migrated config failed schema validation: {exc.message}") from exc
 
 
-def _write(path: Path, data: Mapping[str, Any]) -> None:
+def _write(path: Path, data: Mapping[str, JsonValue]) -> None:
     directory = path.parent
     backup = path.with_name(path.name + ".pre-v6")
     # A second --apply on a still-legacy file may proceed. The first backup
@@ -260,7 +263,7 @@ def _write(path: Path, data: Mapping[str, Any]) -> None:
 
 
 def _report(
-    profiles: Mapping[str, dict[str, Any]],
+    profiles: Mapping[str, JsonDict],
     filled: list[str],
     *,
     apply: bool,

@@ -113,7 +113,8 @@ class AdminUsersMixin(AdminFeatureMixin):
         bandwidth = obj_map(typed.get("bandwidth"))
         total = obj_map(bandwidth.get("total"))
         wl_total = obj_map(bandwidth.get("wl_total"))
-        times = int(typed.get("time") or 0)
+        time_value = typed.get("time")
+        times = int(time_value) if isinstance(time_value, (str, int, float)) else 0
         if times:
             days_left = str((times - int(time.time())) // 86400)
             date = datetime.fromtimestamp(times, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")

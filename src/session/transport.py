@@ -7,7 +7,7 @@ that share a session remain responsible for its lifecycle and pool limits.
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping, Protocol, Unpack, cast
+from typing import Mapping, Protocol, Unpack
 
 from requests import Response, Session
 from requests.adapters import HTTPAdapter
@@ -68,7 +68,7 @@ class RequestsPanelTransport:
     ) -> Response:
         if self._auth is not None:
             kwargs.setdefault("auth", self._auth)
-        headers = cast(Mapping[str, str | bytes | None] | None, kwargs.get("headers"))
+        headers = kwargs.get("headers")
         if (
             kwargs.get("auth") is not None
             and headers is not None
@@ -78,7 +78,7 @@ class RequestsPanelTransport:
                 "refusing to send basic auth alongside an Authorization header: "
                 "requests would silently overwrite the header"
             )
-        return self._session.request(method, url, **cast(Any, kwargs))
+        return self._session.request(method, url, **kwargs)
 
 
 def new_session() -> Session:

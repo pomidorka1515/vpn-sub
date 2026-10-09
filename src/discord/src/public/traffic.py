@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import cast
 
 import discord
 
@@ -10,6 +10,7 @@ from chart import bandwidth_chart
 from composition import PublicFeatureMixin
 from custom_types import BandwidthSnapshot
 from util import fmt_bytes, format_usage, truncate_utf8
+from payloads import number, obj_map, object_rows
 
 __all__ = ["PublicTrafficMixin"]
 
@@ -81,38 +82,38 @@ class PublicTrafficMixin(PublicFeatureMixin):
                 obj = cast(dict[str, object], raw_obj)
                 bandwidth_obj = obj.get("bandwidth")
                 if isinstance(bandwidth_obj, dict):
-                    bandwidth = cast(dict[str, Any], bandwidth_obj)
+                    bandwidth = obj_map(cast(object, bandwidth_obj))
                 else:
                     bandwidth = {}
                 total_obj = bandwidth.get("total")
                 if isinstance(total_obj, dict):
-                    total = cast(dict[str, Any], total_obj)
+                    total = obj_map(cast(object, total_obj))
                 else:
                     total = {}
                 wl_total_obj = bandwidth.get("wl_total")
                 if isinstance(wl_total_obj, dict):
-                    wl_total = cast(dict[str, Any], wl_total_obj)
+                    wl_total = obj_map(cast(object, wl_total_obj))
                 else:
                     wl_total = {}
                 used_str, limit_str, percent_str = format_usage(
-                    bandwidth.get("monthly") or 0,
-                    bandwidth.get("limit") or 0,
+                    number(bandwidth.get("monthly")),
+                    number(bandwidth.get("limit")),
                     t.get("unlimited", "Unlimited"),
                 )
                 wl_used_str, wl_limit_str, wl_percent_str = format_usage(
-                    bandwidth.get("wl_monthly") or 0,
-                    bandwidth.get("wl_limit") or 0,
+                    number(bandwidth.get("wl_monthly")),
+                    number(bandwidth.get("wl_limit")),
                     t.get("unlimited", "Unlimited"),
                 )
                 text = t.get("chart_text", "").format(
                     days=days,
-                    upload=fmt_bytes(total.get("upload") or 0),
-                    download=fmt_bytes(total.get("download") or 0),
+                    upload=fmt_bytes(number(total.get("upload"))),
+                    download=fmt_bytes(number(total.get("download"))),
                     used=used_str,
                     limit=limit_str,
                     percent=percent_str,
-                    wl_upload=fmt_bytes(wl_total.get("upload") or 0),
-                    wl_download=fmt_bytes(wl_total.get("download") or 0),
+                    wl_upload=fmt_bytes(number(wl_total.get("upload"))),
+                    wl_download=fmt_bytes(number(wl_total.get("download"))),
                     wl_used=wl_used_str,
                     wl_limit=wl_limit_str,
                     wl_percent=wl_percent_str,
@@ -121,17 +122,17 @@ class PublicTrafficMixin(PublicFeatureMixin):
                 snapshots: list[BandwidthSnapshot] = []
                 history_raw = history.obj
                 if isinstance(history_raw, list):
-                    raw_history = cast(list[dict[str, Any]], history_raw)
+                    raw_history = object_rows(cast(object, history_raw))
                 else:
                     raw_history = []
                 for item in raw_history:
                     snapshots.append(
                         BandwidthSnapshot(
-                            ts=int(item.get("ts") or 0),
-                            up=int(item.get("up") or 0),
-                            down=int(item.get("down") or 0),
-                            wl_up=int(item.get("wl_up") or 0),
-                            wl_down=int(item.get("wl_down") or 0),
+                            ts=int(number(item.get("ts"))),
+                            up=int(number(item.get("up"))),
+                            down=int(number(item.get("down"))),
+                            wl_up=int(number(item.get("wl_up"))),
+                            wl_down=int(number(item.get("wl_down"))),
                         )
                     )
                 chart_lang = self._chart_lang(lang)

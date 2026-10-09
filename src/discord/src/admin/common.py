@@ -1,24 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, cast
+from typing import Mapping, cast
 
 import discord
 
 from composition import AdminFeatureMixin
 from webapi import ApiResult
+from payloads import ResponseOptions, obj_map as obj_map
 
 __all__ = ["AdminCommonMixin", "obj_map", "result_obj", "str_list"]
-
-
-def obj_map(value: object) -> dict[str, Any]:
-    raw: object = value
-    if not isinstance(raw, Mapping):
-        return {}
-    mapping = cast(Mapping[object, object], raw)
-    out: dict[str, Any] = {}
-    for key, item in mapping.items():
-        out[str(key)] = item
-    return out
 
 
 def str_list(value: object) -> list[str]:
@@ -61,7 +51,7 @@ class AdminCommonMixin(AdminFeatureMixin):
         if not content and view is None and file is None:
             return
         ephemeral = self._ephemeral(interaction, ephemeral)
-        kwargs: dict[str, Any] = {"ephemeral": ephemeral}
+        kwargs: ResponseOptions = {"ephemeral": ephemeral}
         if content is not None:
             kwargs["content"] = content
         if view is not None:

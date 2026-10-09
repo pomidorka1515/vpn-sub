@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 from typing import (
-    Protocol,
-    Any, Literal, Sequence,
+    Protocol, TYPE_CHECKING,
+    Literal, Sequence,
     Callable, TypedDict, NamedTuple
 )
-from collections.abc import MutableMapping, Mapping, Iterator, Iterable
+from collections.abc import MutableMapping, Mapping, Iterable
 
 from dataclasses import dataclass, field
 from requests import Response
 from requests.cookies import RequestsCookieJar
 from requests.auth import AuthBase
 from requests.models import PreparedRequest
+from config.constants import JsonValue
+
+# Dacite does not resolve PEP 695 recursive aliases when checking fields.
+# Keep JSON checking for callers while its runtime check accepts raw objects.
+if TYPE_CHECKING:
+    _InboundValue = JsonValue
+else:
+    _InboundValue = object
 
 __all__ = [
 
@@ -91,7 +99,7 @@ class SupportsKeysAndGetItem[KT, VT](Protocol):
 class SupportsRead[T_C](Protocol):
     def read(self, __length: int = ...) -> T_C: ...
 class SupportsItems[K, V](Protocol):
-    def items(self) -> Iterator[tuple[K, V]]: ...
+    def items(self) -> Iterable[tuple[K, V]]: ...
 
 ### requests-stubs/session.pyi ###
 _FileSpec = (
@@ -105,27 +113,25 @@ class RequestKwargs(TypedDict, total=False):
     # method: str | bytes
     # url: str | bytes
     params: (
-        SupportsItems[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
+        Mapping[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
         | tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
         | Iterable[tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]]
         | str
         | bytes
     ) | None
-    data: Iterable[bytes] | str | bytes | SupportsRead[str |  bytes] \
-          | list[tuple[Any, Any]] | tuple[tuple[Any, Any], ...] \
-          | Mapping[Any, Any] | None
-    headers: Mapping[str, str | bytes | None] | SupportsKeysAndGetItem[str, str | bytes | None] | None
+    data: Iterable[bytes] | str | bytes | SupportsRead[str | bytes] | list[tuple[str, str | bytes | int | float | bool | None]] | tuple[tuple[str, str | bytes | int | float | bool | None], ...] | Mapping[str, str | bytes | int | float | bool | None] | None
+    headers: Mapping[str, str | bytes | None] | None
     cookies: None | RequestsCookieJar | MutableMapping[str, str]
     files: Mapping[str, _FileSpec] | Iterable[tuple[str, _FileSpec]] | None
     auth: tuple[str, str] | AuthBase | Callable[[PreparedRequest], PreparedRequest] | None 
     timeout: float | tuple[float | None, float | None] | None 
     allow_redirects: bool
     proxies: MutableMapping[str, str] | None 
-    hooks: Mapping[str, Iterable[Callable[[Response], Any]] | Callable[[Response], Any]] | None
+    hooks: Mapping[str, Iterable[Callable[[Response], object]] | Callable[[Response], object]] | None
     stream: bool | None
     verify: bool | str | None
     cert: str | tuple[str, str] | None
-    json: Any | None 
+    json: JsonValue
 
 ### db.py ###
 
@@ -296,10 +302,10 @@ class Inbound:
     listen: str
     port: int
     protocol: str
-    settings: dict[str, Any]
-    streamSettings: dict[str, Any]
+    settings: dict[str, _InboundValue]
+    streamSettings: dict[str, _InboundValue]
     tag: str
-    sniffing: dict[str, Any]
+    sniffing: dict[str, _InboundValue]
     subSortIndex: int = 0
     trafficResetDay: int = 0
     nodeId: int | None = None

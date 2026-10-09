@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Awaitable
-from typing import Any, Mapping, cast
+from typing import Mapping, cast
 
 import discord
 
@@ -62,7 +62,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
     }
 
     def _custom_id(self, interaction: discord.Interaction) -> str:
-        data = cast(Mapping[str, Any] | None, interaction.data)
+        data = cast(Mapping[str, object] | None, interaction.data)
         if not data:
             return ""
         custom_id = data.get("custom_id")

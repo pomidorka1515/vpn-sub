@@ -27,7 +27,7 @@ class _Cfg:
     disable_redirect_access_to_syslog = False
 
 
-def _environ(path: str) -> dict[str, str]:
+def _environ(path: str) -> dict[str, object]:
     return {
         "REQUEST_METHOD": "GET",
         "RAW_URI": path,

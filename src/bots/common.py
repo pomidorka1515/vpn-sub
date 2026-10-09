@@ -5,15 +5,20 @@ from __future__ import annotations
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, cast
+from typing import Any, TypedDict, Unpack, cast
 
 import telebot
+from telebot import types
 
 from loggers import Logger
 from config import AppConfig, Config, LangConfig
 from core import Subscription
 __all__ = ["AdminStateMixin", "BotStateMixin", "PublicStateMixin", "TelegramIOMixin"]
 
+
+class MessageOptions(TypedDict, total=False):
+    parse_mode: str
+    reply_markup: types.InlineKeyboardMarkup | types.ReplyKeyboardMarkup
 
 
 class TelegramIOMixin:
@@ -28,9 +33,9 @@ class TelegramIOMixin:
         else:
             self.bot.answer_callback_query(cast(Any, call_id), text)
 
-    def _send_message(self, chat_id: int, text: str, **kwargs: object) -> None:
+    def _send_message(self, chat_id: int, text: str, **kwargs: Unpack[MessageOptions]) -> None:
         try:
-            self.bot.send_message(chat_id, text, **cast(Any, kwargs))
+            self.bot.send_message(chat_id, text, **kwargs)
         except Exception as error:
             self.log.error(f"failed to send message to chat {chat_id}: {error}", exc_info=True)
 
@@ -69,4 +74,3 @@ class AdminStateMixin(BotStateMixin):
 class PublicStateMixin(BotStateMixin):
     TEXTS: dict[str, dict[str, str]]
     _executor: ThreadPoolExecutor
-

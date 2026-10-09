@@ -4,7 +4,8 @@ import logging
 import time
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+from types import TracebackType
 
 from .colors import Colors
 from .common import _ANSI_ESCAPE
@@ -51,7 +52,7 @@ class Logger(logging.Logger):
         self,
         msg: object,
         *args: object,
-        exc_info: Any = None,
+        exc_info: bool | BaseException | tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None] | None = None,
         stack_info: bool = False,
         stacklevel: int = 1,
         extra: Mapping[str, object] | None = None,

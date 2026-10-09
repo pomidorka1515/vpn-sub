@@ -21,6 +21,7 @@ from custom_types import (
 )
 from errors import AppError, PanelRejectedError, ValidationError, ConflictError, DuplicateError
 from session import XUiSession
+from config.constants import JsonValue
 from util import *
 
 __all__ = ["BusinessUserService"]
@@ -51,7 +52,7 @@ def _client_payload_from(client: PanelClient) -> ClientPayload:
 def _panel_post_json(
     panel: XUiSession,
     url: str,
-    body: dict[str, object],
+    body: dict[str, JsonValue],
     what: str,
 ) -> dict[str, object]:
     """POST a JSON mutation and require the panel's success envelope."""
