@@ -85,9 +85,6 @@ class OnlineStatus(NamedTuple):
 
 # pyright: reportPrivateUsage=false
 # pyright: reportUnnecessaryIsInstance=false
-# pyright: reportIncompatibleMethodOverride=false
-# mypy: disable-error-code="attr-defined"
-# mypy: disable-error-code="override"
 # pylint: disable=protected-access
 
 ### Stub Protocols ###

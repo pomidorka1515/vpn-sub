@@ -143,18 +143,6 @@ no_implicit_reexport           = false
 module = ["config.core", "config.transaction"]
 disable_error_code             = ["override"]
 
-# pyTelegramBotAPI is only partially typed.
-[[tool.mypy.overrides]]
-module = ["bots.*"]
-disallow_untyped_calls         = false
-disallow_any_expr              = false
-disable_error_code             = ["no-any-return"]
-
-[[tool.mypy.overrides]]
-module = ["public.*", "admin.*"]
-disallow_untyped_calls         = false
-disable_error_code             = ["no-any-return"]
-
 [[tool.mypy.overrides]]
 module = ["helpers"]
 disallow_untyped_calls         = false
@@ -236,11 +224,6 @@ reportUnusedFunction = false
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]
 root = "src/bots"
-reportUnknownMemberType = false
-reportUnknownVariableType = false
-reportUnknownArgumentType = false
-reportUnknownParameterType = false
-reportUnknownLambdaType = false
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src", "src/tests"]

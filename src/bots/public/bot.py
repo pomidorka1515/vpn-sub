@@ -66,7 +66,7 @@ class PublicBot(
                 ("chart_", self.chart_callback),
             )
             for prefix, handler in callbacks:
-                self.bot.callback_query_handler(  # pyright: ignore[reportUnknownMemberType]
+                self.bot.callback_query_handler(  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownMemberType]
                     func=lambda call, p=prefix: call.data.startswith(p)  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
                 )(handler)  # pyright: ignore[reportUnknownLambdaType]
             self.bot.message_handler(func=lambda g: True)(self.handle_text)  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]

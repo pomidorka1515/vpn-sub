@@ -9,8 +9,6 @@ from PIL import Image, ImageDraw, ImageFont
 from util import fmt_bytes
 from paths import bundled_root
 
-# pyright: reportUnknownMemberType=false
-
 BG       = '#1a1a1d'
 PANEL    = '#232327'
 GRID     = '#2c2c31'
@@ -40,8 +38,21 @@ def load_font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def text_size(face: ImageFont.FreeTypeFont, text: str) -> tuple[int, int]:
-    left, top, right, bottom = face.getbbox(text)
+    # Pillow leaves the unused direction/features options untyped.
+    left, top, right, bottom = face.getbbox(text)  # pyright: ignore[reportUnknownMemberType]
     return int(right - left), int(bottom - top)
+
+
+def draw_text(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[float, float],
+    text: str,
+    *,
+    font: ImageFont.FreeTypeFont,
+    fill: str,
+) -> None:
+    """Keep Pillow's untyped extra text options at the library boundary."""
+    draw.text(xy, text, font=font, fill=fill)  # pyright: ignore[reportUnknownMemberType]
 
 
 def ellipsis(face: ImageFont.FreeTypeFont, text: str, max_width: int) -> str:
@@ -102,7 +113,7 @@ def draw_stacked(
 ) -> None:
     left, top, right, bottom = plot
     draw.rectangle((left, top, right, bottom), fill=PANEL)
-    draw.text((left, top - 28), title, font=fonts['title'], fill=TEXT)
+    draw_text(draw, (left, top - 28), title, font=fonts['title'], fill=TEXT)
 
     peak = max((b + t for b, t in zip(bottoms, tops)), default=0)
     ticks = nice_ticks(float(peak))
@@ -114,7 +125,7 @@ def draw_stacked(
         draw.line((left, y, right, y), fill=GRID, width=1)
         label = fmt_bytes(tick)
         tw, _ = text_size(fonts['tick'], label)
-        draw.text((left - tw - 8, y - 7), label, font=fonts['tick'], fill=TEXT_DIM)
+        draw_text(draw, (left - tw - 8, y - 7), label, font=fonts['tick'], fill=TEXT_DIM)
 
     draw.line((left, bottom, right, bottom), fill=BORDER, width=1)
     draw.line((left, top, left, bottom), fill=BORDER, width=1)
@@ -136,11 +147,12 @@ def draw_stacked(
             draw.rectangle((x0, bottom - down_h - up_h, x1, bottom - down_h), fill=top_color)
         if i % step == 0:
             tw, _ = text_size(fonts['tick'], label)
-            draw.text((int(cx - tw / 2), bottom + 8), label, font=fonts['tick'], fill=TEXT_DIM)
+            draw_text(draw, (int(cx - tw / 2), bottom + 8), label, font=fonts['tick'], fill=TEXT_DIM)
 
     if empty_label is not None:
         tw, th = text_size(fonts['body'], empty_label)
-        draw.text(
+        draw_text(
+            draw,
             ((left + right - tw) // 2, (top + bottom - th) // 2),
             empty_label,
             font=fonts['body'],
@@ -156,7 +168,7 @@ def draw_stacked(
     lx = right - legend_w
     ly = top + 8
     draw.rectangle((lx, ly, lx + sw, ly + sw), fill=bottom_color)
-    draw.text((lx + sw + 6, ly - 1), down_name, font=fonts['tick'], fill=TEXT_DIM)
+    draw_text(draw, (lx + sw + 6, ly - 1), down_name, font=fonts['tick'], fill=TEXT_DIM)
     ux = lx + sw + 6 + down_w + 16
     draw.rectangle((ux, ly, ux + sw, ly + sw), fill=top_color)
-    draw.text((ux + sw + gap, ly - 1), up_name, font=fonts['tick'], fill=TEXT_DIM)
+    draw_text(draw, (ux + sw + gap, ly - 1), up_name, font=fonts['tick'], fill=TEXT_DIM)

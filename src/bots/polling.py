@@ -97,14 +97,14 @@ class TelegramPollingMixin:
     def stop_polling(self) -> None:
         thread = self.polling_thread
         self._ensure_polling_stop().set()
-        self.bot.stop_polling()
+        self.bot.stop_polling()  # type: ignore[no-untyped-call]  # Upstream method has no annotations.
         if thread is None:
             return
 
         deadline = time.monotonic() + _POLLING_STOP_TIMEOUT
         while thread.is_alive() and time.monotonic() < deadline:
             thread.join(timeout=0.1)
-            self.bot.stop_polling()
+            self.bot.stop_polling()  # type: ignore[no-untyped-call]
 
         self.polling_thread = None
         if thread.is_alive():

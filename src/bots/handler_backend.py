@@ -18,8 +18,11 @@ class LockedHandlerBackend(HandlerBackend):
     clear or pop that same chat from another.
     """
 
+    handlers: dict[int | str, list[Handler]]
+
     def __init__(self) -> None:
-        super().__init__({})
+        # The upstream initializer only assigns this dictionary and is untyped.
+        super().__init__({})  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownMemberType]
         self._lock = threading.Lock()
 
     def register_handler(self, handler_group_id: int | str, handler: Handler) -> None:

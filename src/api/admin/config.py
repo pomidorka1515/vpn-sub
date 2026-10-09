@@ -34,7 +34,7 @@ class ConfigRoutes(AdminApiMixin):
     @requires_admin_auth
     @requires_fields_strict()
     def config_set(self) -> ResponseType:
-        body = g.json_obj
+        body = cast(dict[str, JsonValue], g.json_obj)
         base = body.get("base")
         values = body.get("values")
         if not isinstance(base, str) or not isinstance(values, dict):
@@ -58,7 +58,7 @@ class ConfigRoutes(AdminApiMixin):
                 if conflict is None:
                     status, changed, restart = apply_config_patch(
                         cast(MutableMapping[str, JsonValue], tx),
-                        values,  # pyright: ignore
+                        values,
                     )
                     if status == "updated":
                         # Fail before commit. __exit__ validates again, then replaces.

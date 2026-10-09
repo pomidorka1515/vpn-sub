@@ -8,8 +8,6 @@ from PIL import Image, ImageDraw
 
 from util import fmt_bytes
 
-# pyright: reportUnknownMemberType=false
-
 from .draw import (
     BG,
     BORDER,
@@ -20,6 +18,7 @@ from .draw import (
     TEXT,
     TEXT_DIM,
     ellipsis,
+    draw_text,
     load_font,
     nice_ticks,
     save,
@@ -55,7 +54,7 @@ def leaderboard_chart(
     tick_font = load_font(14)
 
     header = f'{lang["leaderboard"]} — {bw_label}'
-    draw.text((40, 18), header, font=header_font, fill=TEXT)
+    draw_text(draw, (40, 18), header, font=header_font, fill=TEXT)
 
     label_col = 220
     value_col = 130
@@ -75,7 +74,7 @@ def leaderboard_chart(
         draw.line((x, top, x, bottom), fill=GRID, width=1)
         label = fmt_bytes(tick)
         tw, _ = text_size(tick_font, label)
-        draw.text((x - tw // 2, bottom + 10), label, font=tick_font, fill=TEXT_DIM)
+        draw_text(draw, (x - tw // 2, bottom + 10), label, font=tick_font, fill=TEXT_DIM)
 
     draw.line((left, bottom, right, bottom), fill=BORDER, width=1)
     draw.line((left, top, left, bottom), fill=BORDER, width=1)
@@ -92,8 +91,8 @@ def leaderboard_chart(
             draw.rectangle((left, y0, left + bar_w, y1), fill=REG_DOWN)
         shown = ellipsis(tick_font, name, label_col - 16)
         tw, th = text_size(tick_font, shown)
-        draw.text((left - 12 - tw, int(cy - th / 2)), shown, font=tick_font, fill=TEXT_DIM)
+        draw_text(draw, (left - 12 - tw, int(cy - th / 2)), shown, font=tick_font, fill=TEXT_DIM)
         value_label = fmt_bytes(value)
-        draw.text((left + bar_w + 8, int(cy - th / 2)), value_label, font=tick_font, fill=TEXT_DIM)
+        draw_text(draw, (left + bar_w + 8, int(cy - th / 2)), value_label, font=tick_font, fill=TEXT_DIM)
 
     return save(image)

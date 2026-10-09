@@ -9,8 +9,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 from custom_types import BandwidthSnapshot
 
-# pyright: reportUnknownMemberType=false
-
 from .draw import (
     BG,
     BW_SIZE,
@@ -22,6 +20,7 @@ from .draw import (
     WL_UP,
     calc_bar_width,
     draw_stacked,
+    draw_text,
     load_font,
     save,
 )
@@ -72,8 +71,8 @@ def bandwidth_chart(
 
     header = f'{lang["bandwidth"]} — {label}' if label else lang['bandwidth']
     period = f'{len(snaps)} {lang["day"]}' if len(snaps) == 1 else f'{len(snaps)} {lang["days"]}'
-    draw.text((40, 18), header, font=fonts['header'], fill=TEXT)
-    draw.text((40, 48), period, font=fonts['sub'], fill=TEXT_DIM)
+    draw_text(draw, (40, 18), header, font=fonts['header'], fill=TEXT)
+    draw_text(draw, (40, 48), period, font=fonts['sub'], fill=TEXT_DIM)
 
     n = len(labels)
     bar_frac = calc_bar_width(n) if bar_width is None else bar_width

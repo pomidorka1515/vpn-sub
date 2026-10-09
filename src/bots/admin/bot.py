@@ -50,5 +50,4 @@ class AdminBot(
             self.polling_thread: threading.Thread | None = None
 
             self.bot.message_handler(commands=["start", "menu"])(self.cmd_start)  # pyright: ignore[reportUnknownMemberType]
-            self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks)  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-
+            self.bot.callback_query_handler(func=lambda call: True)(self.handle_callbacks)  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
