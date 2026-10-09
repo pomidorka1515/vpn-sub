@@ -4,6 +4,7 @@ from ..common import BaseService, SharedCoreResources
 from .user.common import CommonUserService
 from .bandwidth import BandwidthService
 from .panel import BG_POOL
+from tracer import Op
 
 class LeaderboardService(BaseService):
     def __init__(
@@ -41,6 +42,11 @@ class LeaderboardService(BaseService):
             where key is the username and value is bandwidth in bytes.
         """
         raw: dict[str, int] = {}
+        self.trace(
+            Op.leaderboard.leaderboard, "start",
+            category=category, top_n=top_n,
+            use_displaynames=use_displaynames, flip=flip,
+        )
         records = self.user_svc.list_user_states()
         users = [record["username"] for record in records]
         if use_displaynames:
@@ -74,4 +80,11 @@ class LeaderboardService(BaseService):
         sorted_items: list[tuple[str, int]] = sorted(raw.items(), key=lambda x: x[1], reverse=not flip)
         if top_n > 0:
             sorted_items = sorted_items[:top_n]
-        return {k: v for k, v in sorted_items}
+        result = {k: v for k, v in sorted_items}
+        self.trace(
+            Op.leaderboard.leaderboard, "ok",
+            category=category, top_n=top_n,
+            use_displaynames=use_displaynames, flip=flip,
+            users=len(users), returned=len(result),
+        )
+        return result

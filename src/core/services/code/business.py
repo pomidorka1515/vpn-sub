@@ -9,6 +9,7 @@ from ...common import BaseService, SharedCoreResources
 from ..password import PasswordService
 from ..audit import AuditService
 from ..user.business import BusinessUserService
+from tracer import Op
 from errors import DuplicateError, NotFoundError, CodeError, ConflictError, ValidationError
 from custom_types import RegisterWithCodeInfo
 from util import generate_token, isusername, sanitize
@@ -36,12 +37,15 @@ class BusinessCodeService(BaseService):
         username: str,
     ) -> None:
         """Best-effort rollback for register_with_code()."""
+        self.trace(Op.register.rollback_registered_user, "start", username=username)
         # Registration is committed before the panel request so panel I/O is
         # never inside a SQLite transaction. The pending record makes removal
         # plus a finite-code refund one short local transaction.
         try:
             self.db.rollback_registration_sync(username)
+            self.trace(Op.register.rollback_registered_user, "rolled_back", username=username)
         except Exception:
+            self.trace(Op.register.rollback_registered_user, "failed", username=username)
             self.log.critical(
                 "register rollback failed for user %s; pending registration may remain",
                 username,
@@ -49,7 +53,15 @@ class BusinessCodeService(BaseService):
             )
             try:
                 self.db.set_metadata(f"registration_rollback_failed:{username}", str(int(time.time())))
+                self.trace(
+                    Op.register.rollback_registered_user, "marker_persisted",
+                    username=username,
+                )
             except Exception:
+                self.trace(
+                    Op.register.rollback_registered_user, "marker_failed",
+                    username=username,
+                )
                 self.log.critical(
                     "failed to persist registration rollback failure marker for user %s",
                     username,
@@ -59,18 +71,28 @@ class BusinessCodeService(BaseService):
     def recover_rollback_failures(self) -> None:
         """Retry persisted registration rollbacks at startup."""
         prefix = "registration_rollback_failed:"
-        for key in tuple(self.db.list_metadata(prefix)):
+        keys = tuple(self.db.list_metadata(prefix))
+        self.trace(Op.register.recover_rollback_failures, "start", markers=len(keys))
+        recovered = 0
+        retained = 0
+        for key in keys:
             username = key.removeprefix(prefix)
             try:
                 self.db.rollback_registration_sync(username)
                 self.db.delete_metadata(key)
+                recovered += 1
                 self.log.warning("recovered registration rollback marker for user %s", username)
             except Exception:
+                retained += 1
                 self.log.critical(
                     "registration rollback recovery failed for user %s; marker retained",
                     username,
                     exc_info=True,
                 )
+        self.trace(
+            Op.register.recover_rollback_failures, "done",
+            markers=len(keys), recovered=recovered, retained=retained,
+        )
 
     def get_rollback_failures(self) -> dict[str, dict[str, dict[str, str]]]:
         """Return persisted rollback markers for admin reconciliation."""
@@ -92,7 +114,15 @@ class BusinessCodeService(BaseService):
         """Clear a rollback marker after an administrator repairs the user."""
         if kind not in ("uuid", "registration"):
             raise ValidationError("Invalid rollback marker kind")
+        self.trace(
+            Op.register.clear_rollback_failure, "start",
+            kind=kind, username=username,
+        )
         self.db.delete_metadata(f"{kind}_rollback_failed:{username}")
+        self.trace(
+            Op.register.clear_rollback_failure, "cleared",
+            kind=kind, username=username,
+        )
 
     def register_with_code(
         self,
@@ -121,6 +151,11 @@ class BusinessCodeService(BaseService):
         if not ext_password or not isinstance(ext_password, str):
             raise ValidationError("Invalid password")
 
+        self.trace(
+            Op.register.register_with_code, "start",
+            code=code, username=username, displayname=displayname,
+            ext_username=ext_username,
+        )
 
         ext_username = sanitize(ext_username, "external")
         if not ext_username:
@@ -164,5 +199,11 @@ class BusinessCodeService(BaseService):
             self._rollback_registered_user(username=username)
             raise
         self.db.confirm_registration_sync(username)
+        self.trace(
+            Op.register.register_with_code, "registered",
+            code=code, username=username, uuid=userid, fingerprint=fingerprint,
+            displayname=displayname, ext_username=ext_username,
+            limit=result.limit, wl_limit=result.wl_limit, time=result.time,
+        )
         self.audit_svc.audit(name="user_add", info=audit_result)
         return result

@@ -11,6 +11,7 @@ from typing import Literal, cast, overload
 from requests import Response
 
 from ..common import BaseService, SharedCoreResources
+from tracer import Op
 from session import XUiSession
 from custom_types import (
     ClientListResponse,
@@ -80,15 +81,65 @@ class PanelService(BaseService):
         (BWatch, admin leaderboard) pass ``BG_POOL``. Request handlers
         pass nothing.
         """
-        if len(panels) <= 1:
-            return [fn(panel) for panel in panels]
+        started = monotonic()
+        names = [panel.name for panel in panels]
         executor = _PANEL_POOL if pool is None else pool
+        executor_name = getattr(executor, "_thread_name_prefix", type(executor).__name__)
+        self.trace(
+            Op.panel.map_panels, "start",
+            panels=names, count=len(panels), executor=executor_name,
+            inline=len(panels) <= 1,
+        )
+        if len(panels) <= 1:
+            try:
+                results = [fn(panel) for panel in panels]
+            except Exception as exc:
+                self.trace(
+                    Op.panel.map_panels, "failed",
+                    panels=names, executor=executor_name, inline=True,
+                    duration=round(monotonic() - started, 6),
+                    error=type(exc).__name__,
+                )
+                raise
+            self.trace(
+                Op.panel.map_panels, "done",
+                panels=names, executor=executor_name, inline=True,
+                duration=round(monotonic() - started, 6),
+                outcomes=len(results),
+            )
+            return results
         futures: list[Future[T]] = [
             executor.submit(fn, panel) for panel in panels
         ]
         # result() in input order: Executor.map would cancel not-yet-started
         # siblings on the first exception and drop a later panel's work.
-        return [future.result() for future in futures]
+        # The first failure in list order still raises immediately. Later
+        # futures keep running; only the outcomes already observed are traced.
+        outcomes: list[str] = []
+        gathered: list[T] = []
+        try:
+            for panel, future in zip(panels, futures, strict=True):
+                try:
+                    gathered.append(future.result())
+                except BaseException as exc:
+                    outcomes.append(f"{panel.name}:{type(exc).__name__}")
+                    raise
+                outcomes.append(f"{panel.name}:ok")
+        except BaseException as exc:
+            self.trace(
+                Op.panel.map_panels, "failed",
+                panels=names, executor=executor_name, inline=False,
+                duration=round(monotonic() - started, 6),
+                outcomes=outcomes, error=type(exc).__name__,
+            )
+            raise
+        self.trace(
+            Op.panel.map_panels, "done",
+            panels=names, executor=executor_name, inline=False,
+            duration=round(monotonic() - started, 6),
+            outcomes=outcomes,
+        )
+        return gathered
 
     def statuses(
         self,
@@ -107,9 +158,31 @@ class PanelService(BaseService):
             if response.status_code != 200:
                 message = data.get("msg") or response.status_code
                 raise PanelUnavailableError(f"Panel {panel.name} status query failed: {message}")
-            return from_dict(ServerMetricsResponse, data)
-        except Exception:
+            result = from_dict(ServerMetricsResponse, data)
+            obj = result.obj
+            self.trace(
+                Op.panel.getstatus, "ok",
+                panel=panel.name, success=result.success, msg=result.msg,
+                cpu=obj.cpu, cpu_cores=obj.cpuCores, logical_pro=obj.logicalPro,
+                cpu_speed_mhz=obj.cpuSpeedMhz, mem_current=obj.mem.current,
+                mem_total=obj.mem.total, swap_current=obj.swap.current,
+                swap_total=obj.swap.total, disk_current=obj.disk.current,
+                disk_total=obj.disk.total, xray_state=obj.xray.state,
+                xray_error=obj.xray.errorMsg, xray_version=obj.xray.version,
+                uptime=obj.uptime, loads=obj.loads, tcp=obj.tcpCount,
+                udp=obj.udpCount, net_up=obj.netIO.up, net_down=obj.netIO.down,
+                sent=obj.netTraffic.sent, recv=obj.netTraffic.recv,
+                ipv4=obj.publicIP.ipv4, ipv6=obj.publicIP.ipv6,
+                threads=obj.appStats.threads, app_mem=obj.appStats.mem,
+                app_uptime=obj.appStats.uptime,
+            )
+            return result
+        except Exception as exc:
             self.log.error("panel status is unknown for %s", panel.name, exc_info=True)
+            self.trace(
+                Op.panel.getstatus, "unknown",
+                panel=panel.name, error=type(exc).__name__,
+            )
             return None
 
     def getinbounds(self, panel: XUiSession) -> list[Inbound]:
@@ -122,7 +195,11 @@ class PanelService(BaseService):
 
         cached = panel.fresh_cache(ttl)
         if cached is not None:
-            return cached # NOTE: cache stores dataclasses!
+            self.trace(
+                Op.panel.getinbounds, "hit",
+                panel=panel.name, mode=panel.mode, ttl=ttl, count=len(cached),
+            )
+            return cached  # NOTE: cache stores dataclasses!
         
         try:
             response = panel.get(f"panel/api/inbounds/list")
@@ -133,6 +210,7 @@ class PanelService(BaseService):
                     f"{data.get('msg') or response.status_code}"
                 )
             raw_inbounds: list[dict[str, object]] = data['obj']
+            raw_count = len(raw_inbounds)
             inbounds = [from_dict(Inbound, i) for i in raw_inbounds]
             listed = set(panel.inbounds_list)
             if panel.mode == "whitelist":
@@ -140,6 +218,12 @@ class PanelService(BaseService):
             else:
                 inbounds = [i for i in inbounds if i.id not in listed]
             panel.cache = inbounds
+            self.trace(
+                Op.panel.getinbounds, "miss",
+                panel=panel.name, mode=panel.mode, ttl=ttl,
+                raw=raw_count, listed=len(listed), kept=len(inbounds),
+                dropped=raw_count - len(inbounds),
+            )
             return inbounds
         except AppError:
             raise
@@ -162,6 +246,10 @@ class PanelService(BaseService):
         """
         cached = panel.fresh_clients(_CLIENTS_TTL)
         if cached is not None:
+            self.trace(
+                Op.panel.clients_snapshot, "hit",
+                panel=panel.name, ttl=_CLIENTS_TTL, count=len(cached),
+            )
             return cached
         clients = self.list_clients(panel)
         snapshot = {client.email: client for client in clients}
@@ -169,11 +257,18 @@ class PanelService(BaseService):
         stored = panel.fresh_clients(_CLIENTS_TTL)
         # a clear that landed during the list wins: do not hand back the map
         # this fill just refused to store
-        return stored if stored is not None else snapshot
+        returned = stored if stored is not None else snapshot
+        self.trace(
+            Op.panel.clients_snapshot, "miss",
+            panel=panel.name, ttl=_CLIENTS_TTL, count=len(returned),
+            stored=stored is not None,
+        )
+        return returned
 
     def invalidate_clients(self, panel: XUiSession) -> None:
         """Drop this panel's client map. Call after every successful client POST."""
         panel.clear_clients()
+        self.trace(Op.panel.invalidate_clients, "invalidated", panel=panel.name)
 
     def client_maps(
         self, panels: Sequence[XUiSession],
@@ -235,12 +330,20 @@ class PanelService(BaseService):
             if not data.get("success"):
                 message = str(data.get("msg") or response.status_code)
                 if "record not found" in message.lower():
+                    self.trace(
+                        Op.panel.get_client, "absent",
+                        panel=panel.name, email=email, msg=message,
+                    )
                     return None
                 raise PanelRejectedError(
                     f"Panel {panel.name} client query failed: {message}"
                 )
             raw: object = data.get("obj")
             if raw is None:
+                self.trace(
+                    Op.panel.get_client, "absent",
+                    panel=panel.name, email=email,
+                )
                 return None
             if not isinstance(raw, dict):
                 raise PanelUnavailableError(
@@ -256,8 +359,23 @@ class PanelService(BaseService):
             inbound_ids_raw: object = obj.get("inboundIds")
             if isinstance(inbound_ids_raw, list) and "inboundIds" not in merged:
                 merged["inboundIds"] = list(cast(list[object], inbound_ids_raw))
-            return from_dict(PanelClient, merged)
-        except AppError:
+            client = from_dict(PanelClient, merged)
+            self.trace(
+                Op.panel.get_client, "found",
+                panel=panel.name, email=email, uuid=client.uuid,
+                enable=client.enable, flow=client.flow,
+                limit_ip=client.limitIp, total_gb=client.totalGB,
+                expiry_time=client.expiryTime, tg_id=str(client.tgId),
+                comment=client.comment, reset=client.reset,
+                inbound_ids=client.inboundIds,
+            )
+            return client
+        except AppError as exc:
+            if isinstance(exc, PanelRejectedError):
+                self.trace(
+                    Op.panel.get_client, "rejected",
+                    panel=panel.name, email=email, error=exc.message,
+                )
             raise
         except Exception as exc:
             raise PanelUnavailableError(
@@ -288,7 +406,12 @@ class PanelService(BaseService):
                     client = cast(dict[object, object], item)
                     if client.get("inboundIds") is None:
                         cast(dict[str, object], item)["inboundIds"] = []
-            return from_dict(ClientListResponse, data).obj
+            clients = from_dict(ClientListResponse, data).obj
+            self.trace(
+                Op.panel.list_clients, "ok",
+                panel=panel.name, count=len(clients),
+            )
+            return clients
         except AppError:
             raise
         except Exception as exc:
@@ -317,8 +440,20 @@ class PanelService(BaseService):
                 )
             raw: object = data.get("obj")
             if raw is None:
+                self.trace(
+                    Op.panel.client_traffic, "absent",
+                    panel=panel.name, email=email,
+                )
                 return None
-            return from_dict(ClientTraffic, cast(dict[str, object], raw))
+            traffic = from_dict(ClientTraffic, cast(dict[str, object], raw))
+            self.trace(
+                Op.panel.client_traffic, "found",
+                panel=panel.name, email=email, uuid=traffic.uuid,
+                enable=traffic.enable, up=traffic.up, down=traffic.down,
+                total=traffic.total, expiry_time=traffic.expiryTime,
+                reset=traffic.reset, last_online=traffic.lastOnline,
+            )
+            return traffic
         except AppError:
             raise
         except Exception as exc:
@@ -435,11 +570,24 @@ class PanelService(BaseService):
             if not fresh:
                 cached = self._fresh_onlines()
                 if cached is not None:
+                    self.trace(
+                        Op.panel.online_snapshot, "reuse",
+                        users=len(cached.users),
+                        panel_health=dict(cached.panel_health),
+                        fresh=fresh,
+                    )
                     return cached
             while self._onlines_loading:
+                self.trace(Op.panel.online_snapshot, "waiting", fresh=fresh)
                 self._onlines_lock.wait()
                 cached = self._fresh_onlines()
                 if cached is not None and not fresh:
+                    self.trace(
+                        Op.panel.online_snapshot, "reuse",
+                        users=len(cached.users),
+                        panel_health=dict(cached.panel_health),
+                        fresh=fresh, waited=True,
+                    )
                     return cached
                 # A fresh caller does not take the copy a non-fresh leader
                 # just stored. It loads after that leader finishes.
@@ -455,6 +603,13 @@ class PanelService(BaseService):
             self._onlines = snapshot
             self._onlines_loading = False
             self._onlines_lock.notify_all()
+        self.trace(
+            Op.panel.online_snapshot, "refreshed",
+            users=len(snapshot.users),
+            panel_health=dict(snapshot.panel_health),
+            fresh=fresh,
+            pool=type(pool).__name__ if pool is not None else None,
+        )
         return snapshot
 
     def _fresh_onlines(self) -> _OnlineSnapshot | None:
@@ -505,7 +660,24 @@ class PanelService(BaseService):
         if panel_health and all(
             health == "unavailable" for health in panel_health.values()
         ):
+            self.trace(
+                Op.panel.load_online_snapshot, "unavailable",
+                panels=list(panel_health),
+                panel_health=panel_health,
+                users=len(online_users),
+                known=len(known),
+                live=[panel.name for panel in live],
+            )
             raise PanelUnavailableError("No panel could be queried for online users")
+        self.trace(
+            Op.panel.load_online_snapshot, "loaded",
+            panels=list(panel_health),
+            panel_health=panel_health,
+            users=len(online_users),
+            known=len(known),
+            live=[panel.name for panel in live],
+            pool=type(pool).__name__ if pool is not None else None,
+        )
         return _OnlineSnapshot(online_users, panel_health, monotonic())
 
     def _status_from_snapshot(self, snapshot: _OnlineSnapshot, new: bool) -> OnlineStatus:

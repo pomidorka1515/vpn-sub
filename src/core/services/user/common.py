@@ -1,4 +1,5 @@
 from ...common import BaseService
+from tracer import Op
 from custom_types import UserRecord
 from errors import NotFoundError
 
@@ -47,7 +48,15 @@ class CommonUserService(BaseService):
 
     def set_auth_token(self, username: str, auth_token: str | None) -> None:
         self.user(username)
+        self.trace(
+            Op.auth.set_auth_token, "start",
+            username=username, cleared=auth_token is None,
+        )
         self.db.set_auth_token(username, auth_token)
+        self.trace(
+            Op.auth.set_auth_token, "set" if auth_token is not None else "cleared",
+            username=username, cleared=auth_token is None,
+        )
 
     def get_fingerprint(self, username: str) -> str:
         return str(self.user(username)["fingerprint"])

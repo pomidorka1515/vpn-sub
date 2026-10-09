@@ -37,7 +37,8 @@ class Subscription:
         app: Flask,
         panels: list[XUiSession],
         whitelist_panel: XUiSession | None,
-        audit_cfg: LinesConfigLike | None = None
+        audit_cfg: LinesConfigLike | None = None,
+        verbose: bool = False
     ):
         log = Logger(type(self).__name__)
         with log.loading():
@@ -52,7 +53,8 @@ class Subscription:
                 whitelist_panel=whitelist_panel,
                 audit_cfg=audit_cfg,
                 password_hasher=PasswordHasher(),
-                legacy_salt=cfg['salt']
+                legacy_salt=cfg['salt'],
+                verbose=verbose
             )
 
             # Service creation

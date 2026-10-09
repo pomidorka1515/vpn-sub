@@ -33,8 +33,9 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
         db: Database,
         sub: Subscription,
         bot: PublicBot | None = None,
-        admin_bot: AdminBot | None = None
-    ):
+        admin_bot: AdminBot | None = None,
+        verbose: bool = False
+    ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg: ConfigLike = cfg
@@ -44,6 +45,7 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             self.sub: Subscription = sub
             self.bot: PublicBot | None = bot
             self.admin_bot: AdminBot | None = admin_bot
+            self.verbose: bool = verbose
             self.mem: dict[str, BandwidthInfo] = {}
             self.wl_mem: dict[str, BandwidthInfo] = {}
             self.snap_mem: dict[str, BandwidthInfo] = {}

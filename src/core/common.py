@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from flask import Flask
 from argon2 import PasswordHasher
 
-from config import ConfigLike, LinesConfigLike
+from config import ConfigLike, JsonValue, LinesConfigLike
 from db import Database
 from session import XUiSession
 from loggers import Logger
+from tracer import trace, TraceOp
 
 __all__ = ["SharedCoreResources", "BaseService"]
 
@@ -21,11 +22,20 @@ class SharedCoreResources:
     panels: list[XUiSession]
     whitelist_panel: XUiSession | None
     password_hasher: PasswordHasher
+    verbose: bool = False
 
 class BaseService:
     def __init__(self, res: SharedCoreResources) -> None:
         self.res = res
 
+    def trace(self, operation: TraceOp, event: str, **fields: JsonValue) -> None:
+        """
+        Trace a detailed operation if ``self.res.verbose`` is True.
+        """
+        if not self.res.verbose:
+            return
+        trace(self.log, operation, event, **fields)
+    
     @property
     def log(self) -> Logger:
         return self.res.log

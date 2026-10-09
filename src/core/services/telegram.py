@@ -3,6 +3,7 @@ from typing import overload, Literal
 from ..common import BaseService, SharedCoreResources
 from .user.business import BusinessUserService
 from .code import CodeService
+from tracer import Op
 from custom_types import UserInfo, ApplyBonusCodeObject
 from errors import NotFoundError
 
@@ -27,7 +28,15 @@ class TelegramService(BaseService):
         return self.db.has_telegram_language(tgid)
 
     def set_telegram_language(self, tgid: int | str, language: str) -> None:
+        self.trace(
+            Op.telegram.set_telegram_language, "start",
+            tgid=str(tgid), language=language,
+        )
         self.db.set_telegram_language(tgid, language)
+        self.trace(
+            Op.telegram.set_telegram_language, "set",
+            tgid=str(tgid), language=language,
+        )
     
     def get_info_telegram(self, tgid: int) -> UserInfo:
         """Returns all user info by telegram ID. Raises NotFoundError if absent."""
@@ -41,12 +50,24 @@ class TelegramService(BaseService):
         return self.db.tgid_to_user(tgid) is not None
 
     def set_telegram_user(self, tgid: int | str, username: str | None) -> None:
+        self.trace(
+            Op.telegram.set_telegram_user, "start",
+            tgid=str(tgid), username=username, cleared=username is None,
+        )
         if username is None:
             existing = self.db.tgid_to_user(tgid)
             if existing is not None:
                 self.db.set_telegram(existing, None)
+            self.trace(
+                Op.telegram.set_telegram_user, "cleared",
+                tgid=str(tgid), username=existing,
+            )
             return
         self.db.set_telegram(username, str(tgid))
+        self.trace(
+            Op.telegram.set_telegram_user, "set",
+            tgid=str(tgid), username=username,
+        )
     
     def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
         """Apply a bonus code for a Telegram user."""

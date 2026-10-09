@@ -5,6 +5,7 @@ from dacite import from_dict, Config as DConfig
 from ..common import BaseService, SharedCoreResources
 from .panel import PanelService
 from .user.common import CommonUserService
+from tracer import Op
 from session import XUiSession
 from custom_types import BandwidthInfo, BandwidthSnapshot
 from custom_types import PanelClient
@@ -51,6 +52,11 @@ class BandwidthService(BaseService):
         (a user is one client per panel).
         """
         self.user_svc.user(username)  # keeps the NotFoundError contract
+        self.trace(
+            Op.bandwidth.bandwidth, "start",
+            username=username, whitelist=whitelist,
+            pool=type(pool).__name__ if pool is not None else None,
+        )
 
         up_total = 0
         down_total = 0
@@ -62,11 +68,20 @@ class BandwidthService(BaseService):
             lambda panel: self.panel_svc.client_traffic(panel, username),
             pool,
         )
+        found = 0
         for traffic in rows:
             if traffic is not None:
+                found += 1
                 up_total += traffic.up
                 down_total += traffic.down
 
+        self.trace(
+            Op.bandwidth.bandwidth, "ok",
+            username=username, whitelist=whitelist,
+            panels=[panel.name for panel in panels],
+            found=found, absent=len(rows) - found,
+            upload=up_total, download=down_total, total=up_total + down_total,
+        )
         return BandwidthInfo(up_total, down_total, up_total + down_total)
 
     def all_traffic(
@@ -84,7 +99,14 @@ class BandwidthService(BaseService):
         ``get_online_status`` uses.
         """
         panels = self._target_panels(whitelist)
+        self.trace(
+            Op.bandwidth.all_traffic, "start",
+            whitelist=whitelist,
+            panels=[panel.name for panel in panels],
+            pool=type(pool).__name__ if pool is not None else None,
+        )
         if not panels:
+            self.trace(Op.bandwidth.all_traffic, "empty", whitelist=whitelist, users=0)
             return {}
         totals: dict[str, list[int]] = {}
         queried = 0
@@ -116,11 +138,21 @@ class BandwidthService(BaseService):
                 acc[0] += traffic.up
                 acc[1] += traffic.down
         if queried == 0:
+            self.trace(
+                Op.bandwidth.all_traffic, "unavailable",
+                whitelist=whitelist, panels=len(panels),
+            )
             raise PanelUnavailableError("No panel could be queried for client traffic")
-        return {
+        result = {
             email: BandwidthInfo(up, down, up + down)
             for email, (up, down) in totals.items()
         }
+        self.trace(
+            Op.bandwidth.all_traffic, "ok",
+            whitelist=whitelist, queried=queried, panels=len(panels),
+            users=len(result),
+        )
+        return result
 
     def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
         """Return snapshots for a user, clamped to retention window."""

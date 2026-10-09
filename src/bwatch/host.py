@@ -8,7 +8,8 @@ from custom_types import BandwidthInfo
 from db import Database
 from loggers import Logger
 from bots import AdminBot, PublicBot
-from config import ConfigLike
+from config import ConfigLike, JsonValue
+from tracer import trace, TraceOp
 
 if TYPE_CHECKING:
     from core import Subscription
@@ -22,6 +23,7 @@ class BWatchHost:
     db: Database
     sub: Subscription
     bot: PublicBot | None
+    verbose: bool
     admin_bot: AdminBot | None
     _stop_event: threading.Event
     _mem_lock: threading.Lock
@@ -36,6 +38,14 @@ class BWatchHost:
     _snapshot_due_at: dict[Literal["bandwidth", "state"], float]
     _threads: tuple[threading.Thread, ...]
 
+    def trace(self, operation: TraceOp, event: str, **fields: JsonValue) -> None:
+        """
+        Log a detailed operation, only when ``self.verbose`` is True.
+        """
+        if not self.verbose:
+            return
+        trace(self.log, operation, event, **fields)
+    
     # Implemented by SchedulerMixin / SnapshotsMixin. Declared here so sibling
     # mixins can call them; pyright does not see methods across mixin classes.
     @staticmethod

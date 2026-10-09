@@ -2,6 +2,7 @@ from dataclasses import asdict
 
 from ...common import BaseService, SharedCoreResources
 from ..audit import AuditService
+from tracer import Op
 from custom_types import CodeObject, ApplyBonusCodeObject
 from errors import CodeError, ConflictError, ValidationError, DuplicateError, NotFoundError
 
@@ -44,6 +45,7 @@ class CodeService(BaseService):
             """
         if not isinstance(code, str) or not code:
             raise ValidationError("Unknown code")
+        self.trace(Op.code.apply_bonus_code, "start", username=username, code=code)
         try:
             result_data = self.db.adjust_bonus(username, code)
         except CodeError as exc:
@@ -55,6 +57,13 @@ class CodeService(BaseService):
             wl_gb=int(result_data["wl_gb"]), uses=int(result_data["uses"]),
             perma=bool(result_data["perma"]), time=int(result_data["time"]),
             limit=int(result_data["limit"]), wl_limit=int(result_data["wl_limit"]),
+        )
+        self.trace(
+            Op.code.apply_bonus_code, "applied",
+            username=username, code=code,
+            days=result.days, gb=result.gb, wl_gb=result.wl_gb,
+            uses=result.uses, perma=result.perma, time=result.time,
+            limit=result.limit, wl_limit=result.wl_limit,
         )
         self.audit_svc.audit(name="user_consume_code", info=asdict(result))
         return result
@@ -85,6 +94,11 @@ class CodeService(BaseService):
             if uses < 1:
                 raise ValidationError("uses must be >= 1")
 
+        self.trace(
+            Op.code.add_code, "start",
+            code=code, action=action, perma=permanent,
+            days=days, gb=gb, wl_gb=wl_gb, uses=uses,
+        )
         res: dict[str, str | bool | int] = {
             "code": code, "action": action, "perma": permanent,
             "days": days, "gb": gb, "wl_gb": wl_gb, "uses": uses if not permanent else -1
@@ -93,12 +107,19 @@ class CodeService(BaseService):
             self.db.add_code(code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses)
         except DuplicateError:
             raise ConflictError(f"code '{code}' already exists")
+        self.trace(
+            Op.code.add_code, "created",
+            code=code, action=action, perma=permanent,
+            days=days, gb=gb, wl_gb=wl_gb, uses=res["uses"],
+        )
         self.audit_svc.audit(name="code_add", info=res)
     def delete_code(self, code: str) -> None:
         """Delete a code. Raises NotFoundError if it does not exist."""
+        self.trace(Op.code.delete_code, "start", code=code)
         deleted = self.db.delete_code(code)
         if not deleted:
             raise NotFoundError("Unknown code")
+        self.trace(Op.code.delete_code, "deleted", code=code)
         self.audit_svc.audit(name="code_delete", info={"code": code})
     def list_code(self) -> list[str]:
         return [str(c['code']) for c in self.db.all_codes() if 'code' in c]
