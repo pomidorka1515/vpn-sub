@@ -506,15 +506,13 @@ class BusinessUserService(BaseService):
             token = generate_token("sub")
         if userid is None:
             userid = str(uuid.uuid4())
-        else:
-            if not isuuid(userid):
-                raise ValidationError("Invalid UUID")
+        elif not isuuid(userid):
+            raise ValidationError("Invalid UUID")
         conf = self.cfg.view()
         if fingerprint is None:
             fingerprint = random.choice(conf['fingerprints'])
-        else:
-            if fingerprint not in conf['fingerprints']:
-                raise ValidationError("Invalid fingerprint")
+        elif fingerprint not in conf['fingerprints']:
+            raise ValidationError("Invalid fingerprint")
         if timee > 2**31:
             raise ValidationError("Invalid timestamp")
         if ext_password is not None:
