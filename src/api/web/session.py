@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import ClassVar
 from uuid import uuid4
 
 from flask import Response, g, request
@@ -14,13 +15,13 @@ from util import err, generate_token, ok, sanitize
 class SessionRoutes(WebApiMixin):
     """Registration, login, logout, and account deletion."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('POST', '/webapi/register', 'register', 5),
         Route('POST', '/webapi/login', 'login', 10),
         Route('POST', '/webapi/logout', 'logout', 20),
         Route('POST', '/webapi/delete', 'delete', 3),
         Route('GET', '/webapi/validate', 'validate_username', 80),
-    ]
+    )
 
     def validate_auth_token(self, auth_token: str | None = None) -> str | None:
         def _v(token: str | None) -> str | None:

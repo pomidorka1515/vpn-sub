@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import cast
+from typing import ClassVar, cast
 
 from flask import g, make_response, request, send_file
 
@@ -14,7 +14,7 @@ from util import err, make_qr, ok, parse_bool
 class AccountRoutes(WebApiMixin):
     """Authenticated account, stats, and subscription helpers."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('POST', '/webapi/bonus', 'bonus', 15),
         Route('GET', '/webapi/stats', 'stats', 20),
         Route('POST', '/webapi/reset', 'reset', 3),
@@ -23,7 +23,7 @@ class AccountRoutes(WebApiMixin):
         Route('GET', '/webapi/profiles', 'profiles', 60),
         Route('GET', '/webapi/history', 'bandwidth_history', 30),
         Route('GET', '/webapi/qr', 'qr', 80),
-    ]
+    )
 
     @requires_webapi_auth
     def qr(self, username: str) -> ResponseType:

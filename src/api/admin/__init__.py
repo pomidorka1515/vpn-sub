@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from flask import Flask
 
 from api.common import BaseApi, Route
@@ -33,7 +35,7 @@ class Api(
 ):
     """Private admin API."""
 
-    ROUTES: list[Route] = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         *UserRoutes.ROUTES,
         *PanelRoutes.ROUTES,
         *CodeRoutes.ROUTES,
@@ -41,7 +43,7 @@ class Api(
         *LogsRoutes.ROUTES,
         *OperationsRoutes.ROUTES,
         *ConfigRoutes.ROUTES,
-    ]
+    )
 
     def __init__(self,
                  app: Flask,

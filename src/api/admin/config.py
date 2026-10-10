@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-from typing import Literal, cast
+from typing import ClassVar, Literal, cast
 
 from flask import g
 
@@ -18,10 +18,10 @@ from util import err, ok
 class ConfigRoutes(AdminApiMixin):
     """Admin config read and patch routes."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('GET', '/api/config/get', 'config_get'),
         Route('POST', '/api/config/set', 'config_set'),
-    ]
+    )
 
     @requires_admin_auth
     def config_get(self) -> ResponseType:

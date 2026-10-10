@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Literal, cast
+from typing import ClassVar, Literal, cast
 
 from flask import g, request
 
@@ -15,12 +15,12 @@ from util import err, ok, parse_bool
 class CodeRoutes(AdminApiMixin):
     """Admin invite-code routes."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('GET', '/api/code/list', 'code_list'),
         Route('GET', '/api/code/info', 'code_info'),
         Route('POST', '/api/code/add', 'code_add'),
         Route('POST', '/api/code/delete', 'code_delete'),
-    ]
+    )
 
     @requires_admin_auth
     def code_list(self) -> ResponseType:

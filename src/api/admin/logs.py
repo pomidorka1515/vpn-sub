@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from flask import request
 
 from api.admin._base import AdminApiMixin
@@ -11,9 +13,9 @@ from util import err, ok
 class LogsRoutes(AdminApiMixin):
     """Admin audit-log routes."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('GET', '/api/logs/audit', 'audit'),
-    ]
+    )
 
     @requires_admin_auth
     def audit(self) -> ResponseType:

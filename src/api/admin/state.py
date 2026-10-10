@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Literal
+from typing import ClassVar, Literal
 
 from flask import g
 
@@ -16,13 +16,13 @@ from util import err, ok
 class StateRoutes(AdminApiMixin):
     """Admin host, panel, snapshot, and leaderboard routes."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('POST', '/api/leaderboard', 'leaderboard'),
         Route('POST', '/api/state/snapshots', 'snapshots'),
         Route('GET', '/api/state/all', 'full_info'),
         Route('GET', '/api/state/system', 'system_status'),
         Route('GET', '/api/state/polling', 'polling_status'),
-    ]
+    )
 
     @requires_admin_auth
     def system_status(self) -> ResponseType:

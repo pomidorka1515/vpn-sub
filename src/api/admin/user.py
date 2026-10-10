@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import cast
+from typing import ClassVar, cast
 
 from flask import g, request
 
@@ -15,7 +15,7 @@ from util import err, ok, parse_bool
 class UserRoutes(AdminApiMixin):
     """Admin user and fingerprint routes."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('GET', '/api/user/list', 'user_list'),
         Route('GET', '/api/user/info', 'user_info'),
         Route('POST', '/api/user/add', 'user_add'),
@@ -26,7 +26,7 @@ class UserRoutes(AdminApiMixin):
         Route('POST', '/api/user/update', 'user_update'),
         Route('GET', '/api/user/history', 'user_history'),
         Route('GET', '/api/fingerprints', 'fingerprints'),
-    ]
+    )
 
     @requires_admin_auth
     def user_list(self) -> ResponseType:

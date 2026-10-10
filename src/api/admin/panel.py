@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import ClassVar
 
 from flask import request
 
@@ -14,9 +15,9 @@ from util import err, ok
 class PanelRoutes(AdminApiMixin):
     """Admin panel status routes."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('GET', '/api/panel/status', 'panel_status'),
-    ]
+    )
 
     @requires_admin_auth
     def panel_status(self) -> ResponseType:

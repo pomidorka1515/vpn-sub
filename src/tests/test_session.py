@@ -8,7 +8,7 @@ from typing_contracts import SessionOptions, SessionExtras
 from pathlib import Path
 
 import pytest
-from requests import ConnectionError, Response, Timeout
+from requests import ConnectionError, Response, Timeout # noqa: A004
 
 from helpers import json_http, make_inbound, make_panel_client
 from loggers import Colors, color_status

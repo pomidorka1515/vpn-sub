@@ -85,7 +85,7 @@ def test_limits_each_ip_independently(
     configured_rate_limit: _SharedRedis,
 ) -> None:
     class Handler(BaseApi):
-        ROUTES = []
+        ROUTES = ()
 
         @rate_limit(2)
         def endpoint(self: BaseApi) -> tuple[str, int]:
@@ -112,7 +112,7 @@ def test_reused_decorator_gives_each_endpoint_its_own_window(
     limiter_decorator = rate_limit(1)
 
     class Handler(BaseApi):
-        ROUTES = []
+        ROUTES = ()
 
         @limiter_decorator
         def first(self: BaseApi) -> tuple[str, int]:
@@ -135,7 +135,7 @@ def test_missing_remote_address_uses_shared_unknown_bucket(
     configured_rate_limit: _SharedRedis,
 ) -> None:
     class Handler(BaseApi):
-        ROUTES = []
+        ROUTES = ()
 
         @rate_limit(1)
         def endpoint(self: BaseApi) -> tuple[str, int]:
@@ -154,7 +154,7 @@ def test_redis_window_is_shared_across_limiter_instances(
     configured_rate_limit: _SharedRedis,
 ) -> None:
     class Handler(BaseApi):
-        ROUTES = []
+        ROUTES = ()
 
         @rate_limit(1)
         def endpoint(self: BaseApi) -> tuple[str, int]:
@@ -174,7 +174,7 @@ def test_redis_window_expires_at_sixty_seconds(
     configured_rate_limit: _SharedRedis,
 ) -> None:
     class Handler(BaseApi):
-        ROUTES = []
+        ROUTES = ()
 
         @rate_limit(1)
         def endpoint(self: BaseApi) -> tuple[str, int]:
@@ -194,7 +194,7 @@ def test_redis_failure_fails_closed(flask_app: Flask) -> None:
     _replace_client(client)
     try:
         class Handler(BaseApi):
-            ROUTES = []
+            ROUTES = ()
 
             @rate_limit(5)
             def endpoint(self: BaseApi) -> tuple[str, int]:

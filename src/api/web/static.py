@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from typing import ClassVar
 
 from flask import Response, make_response, redirect, render_template, request, send_file
 
@@ -38,7 +39,7 @@ class StaticRoutes(WebApiMixin):
         locals()['admin_' + _admin_module.replace('/', '_') + '_js'] = _admin_module_method(_admin_module)
     del _admin_module
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('GET', '/redirect', 'redirect_page'),
         Route('GET', '/common.js', 'common_js'),
         Route('GET', '/common.css', 'common_css'),
@@ -55,7 +56,7 @@ class StaticRoutes(WebApiMixin):
         Route('GET', '/panel', 'gui_panel'),
         Route('GET', '/auth', 'gui_auth'),
         Route('GET', '/history', 'gui_history'),
-    ]
+    )
 
     def redirect_page(self) -> ResponseType:
         prefix = request.args.get('prefix', '')

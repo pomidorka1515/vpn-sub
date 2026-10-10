@@ -100,7 +100,7 @@ class _PartialFormatter(dict[str, object]):
         return "{" + key + "}"
 
 # intentionally shadows `builtins.format`
-def format(template: str, **values: object) -> str:
+def format(template: str, **values: object) -> str: # noqa: A001
     return template.format_map(
         _PartialFormatter(values)
     )

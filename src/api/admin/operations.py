@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from random import random
+from typing import ClassVar
 
 from flask import g
 
@@ -15,12 +16,12 @@ from util import err, ok
 class OperationsRoutes(AdminApiMixin):
     """Admin health, rollback, and novelty routes."""
 
-    ROUTES = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         Route('GET', '/api/health', 'health'),
         Route('GET', '/api/operations/status', 'operation_status'),
         Route('POST', '/api/operations/rollback/resolve', 'operation_rollback_resolve'),
         Route('GET', '/api/teapot', 'teapot'),
-    ]
+    )
 
     @requires_admin_auth
     def health(self) -> ResponseType:

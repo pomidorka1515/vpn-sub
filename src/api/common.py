@@ -1,5 +1,5 @@
 from custom_types import HTTPMethod
-from typing import NamedTuple, cast
+from typing import NamedTuple, cast, ClassVar
 import re
 from abc import ABC
 from collections.abc import Mapping
@@ -155,7 +155,7 @@ class Route(NamedTuple):
 class BaseApi(ABC):
     """Base class for API handlers. Enforces required attributes and route registration."""
 
-    ROUTES: list[Route]  # subclasses must define this
+    ROUTES: ClassVar[tuple[Route, ...]]
 
     def __init__(self,
                  app: Flask,
@@ -194,4 +194,3 @@ class BaseApi(ABC):
 
     def reg_handles(self) -> None: # noqa: B027
         """Optional: subclass setup beyond route registration (error handlers, etc)."""
-        pass

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from flask import Flask
 
 from api.common import BaseApi, Route
@@ -23,11 +25,11 @@ class WebApi(
 ):
     """Public, user-facing API."""
 
-    ROUTES: list[Route] = [
+    ROUTES: ClassVar[tuple[Route, ...]] = (
         *StaticRoutes.ROUTES,
         *SessionRoutes.ROUTES,
         *AccountRoutes.ROUTES,
-    ]
+    )
 
     def __init__(self,
                  app: Flask,
