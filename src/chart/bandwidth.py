@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Mapping
 
 from PIL import Image, ImageDraw, ImageFont
@@ -50,7 +50,7 @@ def bandwidth_chart(
 
     snaps = sorted(snapshots, key=lambda s: s.ts)
     labels = [
-        datetime.fromtimestamp(s.ts, tz=timezone.utc).strftime('%m/%d')
+        datetime.fromtimestamp(s.ts, tz=UTC).strftime('%m/%d')
         for s in snaps
     ]
     reg_up = [s.up for s in snaps]

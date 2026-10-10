@@ -5,7 +5,7 @@ from ..composition import PublicFeatureMixin
 
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from util import fmt_bytes, make_qr
 from telebot import types
 __all__ = ["PublicSubscriptionMixin"]
@@ -29,7 +29,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
 
         if info.time:
             days_left = str((info.time - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(info.time, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
+            date_end = datetime.fromtimestamp(info.time, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t['lifetime']

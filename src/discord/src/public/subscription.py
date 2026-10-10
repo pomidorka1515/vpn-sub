@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import discord
 
@@ -34,7 +34,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             expiry_i = 0
         if expiry_i:
             days_left = str((expiry_i - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(expiry_i, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
+            date_end = datetime.fromtimestamp(expiry_i, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t.get("lifetime", "Lifetime")

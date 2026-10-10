@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 import glob
 import os
 import sqlite3
@@ -18,7 +18,7 @@ def instance_backup_dir(path: str, backup_dir: str) -> str:
 def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None:
     """Take an atomic SQLite snapshot in a per-instance backup directory."""
     os.makedirs(instance_dir, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(instance_dir, f"{timestamp}.sqlite3")
     fd, temporary = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".sqlite3")
     os.close(fd)

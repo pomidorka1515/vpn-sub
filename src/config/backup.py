@@ -5,7 +5,7 @@ import tempfile
 import glob
 import threading
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import cast
 
 from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
@@ -42,7 +42,7 @@ def do_backup(
     """
     os.makedirs(instance_dir, exist_ok=True)
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
     if raw:
         backup_path = os.path.join(instance_dir, f"{timestamp}.jsonl")

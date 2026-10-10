@@ -4,7 +4,7 @@ from __future__ import annotations
 from ..composition import AdminFeatureMixin
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import cast
 
 from telebot import types
@@ -103,7 +103,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             fingerprint = info.fingerprint
             if times:
                 days_left = str((times - int(time.time())) // 86400)
-                date = datetime.fromtimestamp(times, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
+                date = datetime.fromtimestamp(times, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             else:
                 days_left = "N/A"
                 date = "N/A"
@@ -234,7 +234,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         current_time = info.time
         if current_time:
-                date = datetime.fromtimestamp(current_time, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
+                date = datetime.fromtimestamp(current_time, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
         else:
             date = "N/A"
         msg = self.bot.send_message(chat_id, f"⏰ Введите новое кол-во дней для <b>{username}</b> (текущая дата: <code>{date}</code>, 0 = безлимит):", parse_mode="HTML")
@@ -256,7 +256,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         self._pending_edits.pop(message.chat.id, None)
         if days:
-            new_date = datetime.fromtimestamp(timee, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
+            new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             self.bot.send_message(message.chat.id, f"✅ Срок продлён на <code>{days}</code> дней, новая дата: <code>{new_date}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
         else:
             self.bot.send_message(message.chat.id, "✅ Срок установлен в безлимит.", parse_mode="HTML", reply_markup=self.get_main_menu())

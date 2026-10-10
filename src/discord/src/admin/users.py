@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import cast
 
 import discord
@@ -117,7 +117,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         times = int(time_value) if isinstance(time_value, (str, int, float)) else 0
         if times:
             days_left = str((times - int(time.time())) // 86400)
-            date = datetime.fromtimestamp(times, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
+            date = datetime.fromtimestamp(times, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
         else:
             days_left = "N/A"
             date = "N/A"
@@ -317,7 +317,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         self._pending_edits.pop(interaction.user.id, None)
         if days:
-            new_date = datetime.fromtimestamp(timee, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)")
+            new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             await self._respond(
                 interaction,
                 f"✅ Срок продлён на `{days}` дней, новая дата: `{new_date}`",

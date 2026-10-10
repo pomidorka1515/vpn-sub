@@ -1,6 +1,6 @@
 from typing import Literal
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from config import JsonValue
 from ..common import BaseService
@@ -28,7 +28,7 @@ class AuditService(BaseService):
         Ignores everything if the audit config is not set."""
         if not self.audit_cfg:
             return
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
         cur_date = ts.strftime("%d.%m.%Y %H:%M:%S")
         to_log: Mapping[str, str | int | float | Mapping[str, JsonValue] | None] = {
             "ts": ts.timestamp(),

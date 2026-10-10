@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from config import LangConfig
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from util import fmt_bytes, format
 from custom_types import BandwidthInfo
@@ -38,7 +38,7 @@ def build_description(
             ts_str = descTable["date"]
             ts_str = format(
                 ts_str,
-                date=datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)"),
+                date=datetime.fromtimestamp(ts, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)"),
                 days=str((ts - int(time.time())) // 86400)
             )
 
@@ -117,7 +117,7 @@ def build_description(
             time_str = descTable["date_expired"]
             time_str = format(
                 time_str,
-                date=datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d.%m.%y %H:%M (UTC)"),
+                date=datetime.fromtimestamp(ts, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)"),
                 days=str(-(ts - int(time.time())) // 86400)
             )
 

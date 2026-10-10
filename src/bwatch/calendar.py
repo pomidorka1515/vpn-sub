@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from .host import BWatchHost
 
@@ -16,7 +16,7 @@ class CalendarMixin(BWatchHost):
     def is_first(self) -> None:
         # NOTE: This function is NOT meant to be called like `bwatch_instance.is_first()`.
         # NOTE: Exclusive to one thread only.
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if now.day != 1:
             return
         today = now.strftime("%Y-%m-%d")
