@@ -169,15 +169,15 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get[_T](self, key: str, default: _T) -> JsonValue | _T: ...
+    def get[T](self, key: str, default: T) -> JsonValue | T: ...
 
-    def get[_T](
+    def get[T](
         self,
         key: str,
-        default: _T | MISSING_TYPE = MISSING,
-    ) -> JsonValue | _T:
+        default: T | MISSING_TYPE = MISSING,
+    ) -> JsonValue | T:
         data = self.require_active()
-        value = data.get(key) if default is MISSING else data.get(key, cast(_T, default))
+        value = data.get(key) if default is MISSING else data.get(key, cast(T, default))
         return value
 
     def view(self) -> Doc:
@@ -194,9 +194,9 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def pop(self, key: str) -> JsonValue: ...
 
     @overload
-    def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
+    def pop[TJ: JsonValue](self, key: str, default: TJ) -> JsonValue | TJ: ...
 
-    def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
+    def pop[TJ: JsonValue](self, key: str, default: TJ | MISSING_TYPE = MISSING) -> JsonValue | TJ:
         data = self.require_active()
         if default is MISSING:
             return data.pop(key)
@@ -207,7 +207,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
         return self.require_active().popitem()
 
     @overload
-    def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
+    def setdefault[TJ: JsonValue](self, key: str, default: TJ) -> JsonValue | TJ: ...
 
     @overload
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...

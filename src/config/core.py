@@ -273,7 +273,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         self.raise_if_read_only()
         return ConfigTransaction(self)
 
-    def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
+    def mutate[T](self, callback: Callable[[MutableMapping[str, JsonValue]], T]) -> T:
         """Run a callback inside a transaction and return its result.
 
         Keep callbacks short and non-blocking: they run while holding the
@@ -342,17 +342,17 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def get(self, key: str) -> JsonValue: ...
 
     @overload
-    def get[_T](self, key: str, default: _T) -> JsonValue | _T: ...
+    def get[T](self, key: str, default: T) -> JsonValue | T: ...
 
-    def get[_T](
+    def get[T](
         self,
         key: str,
-        default: _T | MISSING_TYPE = MISSING,
-    ) -> JsonValue | _T:
+        default: T | MISSING_TYPE = MISSING,
+    ) -> JsonValue | T:
         with self.lock:
             self.raise_if_used_inside_transaction()
             self.ensure_recent_locked()
-            value = self.data.get(key) if default is MISSING else self.data.get(key, cast(_T, default))
+            value = self.data.get(key) if default is MISSING else self.data.get(key, cast(T, default))
             return self.detach(value)
 
     def __iter__(self) -> Iterator[str]:
@@ -401,9 +401,9 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def pop(self, key: str) -> JsonValue: ...
 
     @overload
-    def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
+    def pop[TJ: JsonValue](self, key: str, default: TJ) -> JsonValue | TJ: ...
 
-    def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
+    def pop[TJ: JsonValue](self, key: str, default: TJ | MISSING_TYPE = MISSING) -> JsonValue | TJ:
         self.raise_if_read_only()
         def action(tx: ConfigTransaction[Doc]) -> JsonValue:
             if default is MISSING:
@@ -417,7 +417,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         return self.run_edit(lambda tx: tx.popitem())
 
     @overload
-    def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
+    def setdefault[TJ: JsonValue](self, key: str, default: TJ) -> JsonValue | TJ: ...
 
     @overload
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...
@@ -451,7 +451,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
         self.run_edit(lambda tx: tx.update(updates))
 
-    def run_edit[_TJ: JsonValue](self, action: Callable[[ConfigTransaction[Doc]], _TJ]) -> _TJ:
+    def run_edit[TJ: JsonValue](self, action: Callable[[ConfigTransaction[Doc]], TJ]) -> TJ:
         with self.edit() as tx:
             result = action(tx)
         return self.detach(result)
@@ -539,7 +539,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         )
 
     @staticmethod
-    def detach[_T: object](value: _T) -> _T:
+    def detach[T: object](value: T) -> T:
         if isinstance(value, (dict, list)):
-            return copy.deepcopy(cast(_T, value))
+            return copy.deepcopy(cast(T, value))
         return value
