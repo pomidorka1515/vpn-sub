@@ -99,7 +99,7 @@ class Logger(logging.Logger):
         self.addHandler(jsonl_handler)
 
     @contextmanager
-    def loading(self) -> Generator[None, None, None]:
+    def loading(self) -> Generator[None]:
         self.debug(f"Loading {self.name}...")
         t0 = time.monotonic()
         try:
@@ -111,7 +111,7 @@ class Logger(logging.Logger):
             raise
 
     @contextmanager
-    def span(self, name: str, verbose: bool = False) -> Generator[None, None, None]:
+    def span(self, name: str, verbose: bool = False) -> Generator[None]:
         if verbose: self.debug(f"Executing: {name}")
         t0 = time.monotonic()
         try:

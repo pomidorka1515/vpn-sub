@@ -7,7 +7,7 @@ import discord
 
 from composition import AdminFeatureMixin
 from webapi import ApiResult
-from payloads import ResponseOptions, obj_map as obj_map
+from payloads import ResponseOptions, obj_map
 
 __all__ = ["AdminCommonMixin", "obj_map", "result_obj", "str_list"]
 

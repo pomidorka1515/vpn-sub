@@ -229,7 +229,7 @@ def test_leaderboard_result_renders_or_reports_empty(
         mixin._handle_leaderboard_result(7, "monthly", "asc", 2)
     caption = telegram.send_photo.call_args.args[2]
     assert "..." in caption
-    assert len(caption.encode("utf-8")) <= 1024 + len("...".encode("utf-8"))
+    assert len(caption.encode("utf-8")) <= 1024 + len(b"...")
 
 
 @pytest.fixture

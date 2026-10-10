@@ -103,10 +103,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if not await self.consume_result(interaction, result):
             return
         raw_fps = result.obj
-        if isinstance(raw_fps, list):
-            fps = raw_fps
-        else:
-            fps = []
+        fps = raw_fps if isinstance(raw_fps, list) else []
         options: list[discord.SelectOption] = []
         for item in fps:
             options.append(discord.SelectOption(label=item, value=item))

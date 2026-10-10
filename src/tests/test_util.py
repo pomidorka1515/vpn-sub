@@ -79,7 +79,7 @@ def test_app_memory_returns_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
         def children(self, recursive: bool = False) -> list[_Proc]:
             return []
 
-    monkeypatch.setattr(psutil, "Process", lambda: _Proc())
+    monkeypatch.setattr(psutil, "Process", _Proc)
     memory = SysUtil.app_memory()
     assert memory.ram == 20 * 1024 * 1024
     assert memory.swap == 4096
@@ -101,7 +101,7 @@ def test_app_memory_skips_dead_children(monkeypatch: pytest.MonkeyPatch) -> None
         def children(self, recursive: bool = False) -> list[_Dead]:
             return [_Dead()]
 
-    monkeypatch.setattr(psutil, "Process", lambda: _Proc())
+    monkeypatch.setattr(psutil, "Process", _Proc)
     assert SysUtil.app_memory().ram == 1024
 
 

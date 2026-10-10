@@ -141,7 +141,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
         return conn
 
     @contextmanager
-    def connection(self) -> Generator[sqlite3.Connection, None, None]:
+    def connection(self) -> Generator[sqlite3.Connection]:
         conn = self._connection()
         try:
             yield conn
@@ -151,7 +151,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
             raise DatabaseError(str(exc)) from exc
 
     @contextmanager
-    def transaction(self, *, immediate: bool = False) -> Generator[sqlite3.Connection, None, None]:
+    def transaction(self, *, immediate: bool = False) -> Generator[sqlite3.Connection]:
         with self.connection() as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")

@@ -443,11 +443,8 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         """Atomic mapping-style update."""
         self.raise_if_read_only()
 
-        if __m is not None:
-            # dict() handles both mappings and iterables safely
-            updates = dict(__m, **kwargs)
-        else:
-            updates = kwargs
+        # dict() handles both mappings and iterables safely
+        updates = dict(__m, **kwargs) if __m is not None else kwargs
 
         self.run_edit(lambda tx: tx.update(updates))
 

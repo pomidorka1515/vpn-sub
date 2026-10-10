@@ -51,7 +51,7 @@ def locked_file(
     *,
     exclusive: bool,
     lockfile_path: str | None = None,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     ensure_parent_dir(path)
     resolved = lockfile_path if lockfile_path is not None else resolve_lockfile_path(path)
     ensure_parent_dir(resolved)

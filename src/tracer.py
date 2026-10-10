@@ -100,7 +100,7 @@ def trace(
     """
     if not logger.isEnabledFor(logging.DEBUG):
         return
-    logger.debug((
+    logger.debug(
         f"{operation.color}{operation}{Colors.RESET}: {event}" \
         + (" " if fields else "") + " ".join(
             f"{k}=" + (
@@ -109,4 +109,4 @@ def trace(
             )
             for k, v in fields.items()
         )
-    ))
+    )
