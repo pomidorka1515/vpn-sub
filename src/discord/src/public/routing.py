@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import cast
-from collections.abc import Mapping
-
-import discord
 
 from composition import PublicFeatureMixin
+
+import discord
 
 __all__ = ["PublicRoutingMixin"]
 

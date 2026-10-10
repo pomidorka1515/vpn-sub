@@ -5,7 +5,6 @@ from typing import cast
 
 import jsonschema
 import pytest
-
 from discord_helpers import DISCORD_ROOT, EXAMPLE_PATH, SCHEMA_PATH
 
 

@@ -1,8 +1,9 @@
-from typing import Literal
 from collections.abc import Mapping
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+from typing import Literal
 
 from config import JsonValue
+
 from ..common import BaseService
 
 __all__ = ["AuditService", "AUDIT_VALUES"]

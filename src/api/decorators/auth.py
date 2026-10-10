@@ -1,10 +1,12 @@
-from ._common import Decorated, DecoratedInject, WrappedReturn
-from typing import cast, TYPE_CHECKING
-from flask import request
-from functools import wraps
-from util import err, compare
-
 import secrets
+from functools import wraps
+from typing import TYPE_CHECKING, cast
+
+from flask import request
+
+from util import compare, err
+
+from ._common import Decorated, DecoratedInject, WrappedReturn
 
 if TYPE_CHECKING:
     from ..admin._base import AdminApiMixin

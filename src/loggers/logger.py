@@ -4,8 +4,8 @@ import logging
 import time
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, ClassVar
 from types import TracebackType
+from typing import TYPE_CHECKING, ClassVar
 
 from .colors import Colors
 from .common import _ANSI_ESCAPE

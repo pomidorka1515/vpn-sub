@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import cast
 from collections.abc import Callable
-from telebot import TeleBot
-from loggers import Logger
-from requests import Response
+from typing import cast
 
 import pytest
-
 import telebot.apihelper as apihelper
+from requests import Response
+from telebot import TeleBot
 
 from bots import polling as polling_module
 from bots.polling import (
@@ -18,7 +16,7 @@ from bots.polling import (
     _PollingExceptionHandler,  # pyright: ignore[reportPrivateUsage]
     configure_telegram_api,
 )
-
+from loggers import Logger
 
 _STOP_WAIT_SECONDS = 30
 

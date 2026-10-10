@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import io
-import fcntl
 import copy
+import fcntl
+import io
 import threading
-
-from collections.abc import Mapping, MutableMapping, Iterator, Iterable
+from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from types import TracebackType
-from typing import overload, Self, TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
-from .constants import JsonValue, JsonDict, MISSING, MISSING_TYPE
-from .atomic import file_signature, atomic_write_json, ensure_parent_dir
+from .atomic import atomic_write_json, ensure_parent_dir, file_signature
+from .constants import MISSING, MISSING_TYPE, JsonDict, JsonValue
+
 if TYPE_CHECKING:
     from .core import Config
 

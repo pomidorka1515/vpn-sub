@@ -1,11 +1,12 @@
-from typing import overload, Literal
+from typing import Literal, overload
+
+from custom_types import ApplyBonusCodeObject, UserInfo
+from errors import NotFoundError
+from tracer import Op
 
 from ..common import BaseService, SharedCoreResources
-from .user.business import BusinessUserService
 from .code import CodeService
-from tracer import Op
-from custom_types import UserInfo, ApplyBonusCodeObject
-from errors import NotFoundError
+from .user.business import BusinessUserService
 
 __all__ = ["TelegramService"]
 

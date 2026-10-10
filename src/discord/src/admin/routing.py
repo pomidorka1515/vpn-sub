@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Awaitable
-from typing import cast, ClassVar
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
+from typing import ClassVar, cast
+
+from composition import AdminFeatureMixin
 
 import discord
 
-from composition import AdminFeatureMixin
 from .common import result_obj, str_list
 
 __all__ = ["AdminRoutingMixin"]

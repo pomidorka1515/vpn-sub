@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import time
 import sqlite3
+import time
 from collections.abc import Callable
+
+from helpers import create_alice, make_watch
 
 from bwatch import BWatch
 from core import Subscription
 from custom_types import BandwidthInfo, UserFields
 from db import Database
 from errors import PanelRejectedError
-from helpers import create_alice, make_watch
 
 
 def _count_queries(

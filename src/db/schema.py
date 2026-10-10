@@ -6,7 +6,6 @@ from errors import MigrationError
 
 from .common import ConnectionMixin
 
-
 SCHEMA_STATEMENTS = (
     """CREATE TABLE users (
         username TEXT PRIMARY KEY,

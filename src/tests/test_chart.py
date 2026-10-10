@@ -7,7 +7,6 @@ from PIL import Image
 from chart import bandwidth_chart, leaderboard_chart
 from custom_types import BandwidthSnapshot
 
-
 _LANG = {
     "bandwidth": "Использование трафика",
     "day": "день",

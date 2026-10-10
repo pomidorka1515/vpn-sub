@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-
 from discord_helpers import LANG_PATH
 
 

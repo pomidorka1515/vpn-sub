@@ -8,6 +8,7 @@ from errors import CodeError, DatabaseError, DuplicateError
 
 from .common import ConnectionMixin, row_dict
 
+
 class CodesMixin(ConnectionMixin):
     def add_code(self, code: str, action: str, *, permanent: bool = False, uses: int = 1,
                  days: int = 0, gb: int = 0, wl_gb: int = 0) -> None:

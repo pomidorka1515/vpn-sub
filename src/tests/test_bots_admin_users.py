@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Unpack, cast
-from typing_contracts import UserInfoOverrides
 from unittest.mock import MagicMock
 
 import pytest
+from helpers import config_mock, subscription_config
 from telebot import types
+from typing_contracts import UserInfoOverrides
 
 from bots.admin.users import AdminUsersMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
 from errors import AppError, NotFoundError, PanelUnavailableError
-from helpers import config_mock, subscription_config
 
 
 def _message(text: str, chat_id: int = 7) -> types.Message:

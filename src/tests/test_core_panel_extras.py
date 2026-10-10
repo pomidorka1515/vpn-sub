@@ -2,13 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import cast
-from config import JsonValue
 
 import pytest
-
-from core import Subscription
-from db import Database
-from errors import PanelRejectedError, PanelUnavailableError
 from helpers import (
     USER_UUID,
     FakePanel,
@@ -16,6 +11,11 @@ from helpers import (
     make_panel_client,
     make_subscription,
 )
+
+from config import JsonValue
+from core import Subscription
+from db import Database
+from errors import PanelRejectedError, PanelUnavailableError
 from session import XUiSession
 
 

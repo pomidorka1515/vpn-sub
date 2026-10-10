@@ -1,5 +1,6 @@
 import json
 
+
 def strip_jsonc_comments(content: str) -> str:
     """Remove JSONC comments while preserving strings and line structure."""
     result: list[str] = []

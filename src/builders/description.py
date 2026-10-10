@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import time
-from config import LangConfig
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
-from util import fmt_bytes, format # noqa: A004
+from config import LangConfig
 from custom_types import BandwidthInfo
+from util import fmt_bytes, format  # noqa: A004
 
 
 def build_description(

@@ -1,28 +1,40 @@
 from __future__ import annotations
 
 import random
-import uuid
 import time
+import uuid
 from collections.abc import Mapping
 from dataclasses import asdict
 from urllib.parse import quote
 
-from ...common import BaseService, SharedCoreResources
-from tracer import Op
-from .common import CommonUserService
-from ..panel import PanelService
-from ..bandwidth import BandwidthService
-from ..password import PasswordService
-from ..audit import AuditService
-from custom_types import (
-    ClientPayload, NewUserInfo, PanelClient,
-    ResetUserObject, UserFields, UserInfo,
-    UserInfoBandwidth, UserInfoBandwidthTotal
-)
-from errors import AppError, PanelRejectedError, ValidationError, ConflictError, DuplicateError
-from session import XUiSession
 from config.constants import JsonValue
+from custom_types import (
+    ClientPayload,
+    NewUserInfo,
+    PanelClient,
+    ResetUserObject,
+    UserFields,
+    UserInfo,
+    UserInfoBandwidth,
+    UserInfoBandwidthTotal,
+)
+from errors import (
+    AppError,
+    ConflictError,
+    DuplicateError,
+    PanelRejectedError,
+    ValidationError,
+)
+from session import XUiSession
+from tracer import Op
 from util import *
+
+from ...common import BaseService, SharedCoreResources
+from ..audit import AuditService
+from ..bandwidth import BandwidthService
+from ..panel import PanelService
+from ..password import PasswordService
+from .common import CommonUserService
 
 __all__ = ["BusinessUserService"]
 

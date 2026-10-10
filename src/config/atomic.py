@@ -1,14 +1,14 @@
-import hashlib
-import os
 import fcntl
+import hashlib
 import json
+import os
 import tempfile
-
-from typing import NamedTuple
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager, suppress
-from collections.abc import Mapping, Generator
+from typing import NamedTuple
 
 from .constants import SYNC_MODES, JsonValue
+
 
 class FileSignature(NamedTuple):
     """Unique file identifier after atomic write."""

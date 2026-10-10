@@ -4,11 +4,11 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from helpers import make_subscription, make_watch
 
 from bwatch import BWatch
 from core import Subscription
 from db import Database
-from helpers import make_subscription, make_watch
 
 __all__ = ["db_path", "database", "subscription", "watch"]
 

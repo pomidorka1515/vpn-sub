@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import threading
 from concurrent.futures import Executor
 from typing import TYPE_CHECKING, Literal
-import threading
 
+from bots import AdminBot, PublicBot
+from config import AppConfig, Config, JsonValue
 from custom_types import BandwidthInfo
 from db import Database
 from loggers import Logger
-from bots import AdminBot, PublicBot
-from config import AppConfig, Config, JsonValue
-from tracer import trace, TraceOp
+from tracer import TraceOp, trace
 
 if TYPE_CHECKING:
     from core import Subscription

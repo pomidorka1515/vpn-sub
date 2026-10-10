@@ -11,8 +11,7 @@ not change which status class maps to TRACE, DEBUG, or INFO.
 
 from __future__ import annotations
 
-from .colors import Colors
-from .colors import color_status
+from .colors import Colors, color_status
 from .common import _ANSI_ESCAPE, _safe_handle_error
 from .handlers import _JSONLinesLogger, _TelegramLogger
 from .level import LEVELS, TRACE, env_level, parse_level

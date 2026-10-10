@@ -51,6 +51,7 @@ _SRC = _ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from config import AppConfig, JsonValue, PanelConfig  # noqa: E402
 from custom_types import (  # noqa: E402
     ClientListResponse,
     ClientPayload,
@@ -60,7 +61,6 @@ from custom_types import (  # noqa: E402
 from db import Database  # noqa: E402
 from paths import runtime_dir  # noqa: E402
 from session import XUiSession  # noqa: E402
-from config import AppConfig, JsonValue, PanelConfig  # noqa: E402
 
 
 class ReconcileError(RuntimeError):

@@ -5,12 +5,12 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from helpers import config_mock, profile_config, subscription_config
 from telebot import types
 
 from bots.public.common import PublicCommonMixin
 from bots.public.subscription import PublicSubscriptionMixin
 from bots.public.text_routing import PublicTextRoutingMixin
-from helpers import config_mock, profile_config, subscription_config
 
 
 def _button_text(button: types.KeyboardButton | dict[str, str]) -> str:

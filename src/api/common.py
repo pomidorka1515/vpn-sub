@@ -1,16 +1,18 @@
-from custom_types import HTTPMethod
-from typing import NamedTuple, cast, ClassVar
 import re
 from abc import ABC
 from collections.abc import Mapping
 from functools import lru_cache
 from hashlib import sha1
+from typing import ClassVar, NamedTuple, cast
+
+from flask import Flask, Response, request
+
+from bwatch import BWatch
 from config import AppConfig, Config, LangConfig
 from core import Subscription
-from bwatch import BWatch
-from flask import Flask, Response, request
-from loggers import Logger
+from custom_types import HTTPMethod
 from fonts import FONT_FILES
+from loggers import Logger
 from paths import bundled_root
 
 type ResponseType = tuple[Response, int] | Response
@@ -136,7 +138,7 @@ class Route(NamedTuple):
             raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
 
     def register(self, api: BaseApi) -> None:
-        from .decorators.rate_limit import rate_limit # intentional lazy loading
+        from .decorators.rate_limit import rate_limit  # intentional lazy loading
         try:
             func = getattr(type(api), self.handler)
         except AttributeError:

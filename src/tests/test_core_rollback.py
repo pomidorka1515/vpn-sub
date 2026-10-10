@@ -3,10 +3,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from helpers import make_subscription
 
 from core import Subscription
 from db import Database
-from helpers import make_subscription
 
 
 def test_startup_recovers_registration_rollback_marker(

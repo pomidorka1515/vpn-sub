@@ -1,13 +1,14 @@
 """Public account lifecycle workflows."""
 from __future__ import annotations
 
-from ..composition import PublicFeatureMixin
-
 from typing import cast
 
 from telebot import types
 
 from errors import AppError
+
+from ..composition import PublicFeatureMixin
+
 __all__ = ["PublicAccountMixin"]
 
 

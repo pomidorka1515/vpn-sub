@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Final, Literal
 from collections.abc import Mapping, Sequence
+from typing import Final, Literal
 
 SYNC_MODES = Literal['full', 'data', 'none']
 CONFIG_TYPES = Literal['json', 'jsonl']

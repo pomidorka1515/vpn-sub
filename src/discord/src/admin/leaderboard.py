@@ -4,13 +4,14 @@ import asyncio
 from collections.abc import Mapping
 from typing import Literal, cast
 
-import discord
-
-from chart import leaderboard_chart
 from composition import AdminFeatureMixin
-from .common import result_obj
-from util import fmt_bytes, truncate_utf8
 from payloads import number, object_rows
+
+import discord
+from chart import leaderboard_chart
+from util import fmt_bytes, truncate_utf8
+
+from .common import result_obj
 
 __all__ = ["AdminLeaderboardMixin"]
 

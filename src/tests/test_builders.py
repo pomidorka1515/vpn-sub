@@ -4,20 +4,18 @@ import base64
 import json
 from types import SimpleNamespace
 from typing import cast
-from core import Subscription
-from typing_contracts import AppOverrides, UserRecordOverrides
 from unittest.mock import MagicMock
 
 import pytest
-
 from flask import Flask
+from helpers import config_mock, language_config, subscription_config
+from typing_contracts import AppOverrides, UserRecordOverrides
 
 from builders import build_description, build_json, build_link_array, get_subscription
-from custom_types import BandwidthInfo
 from config import AppConfig, LangConfig, ProfileConfig
 from config.documents import ProfileOutbound, ProfileStream, ProfileTemplate
-from helpers import config_mock, language_config, subscription_config
-
+from core import Subscription
+from custom_types import BandwidthInfo
 
 DESC = {
         "en": {

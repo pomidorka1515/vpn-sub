@@ -8,9 +8,10 @@ no interpreter and no config file to hand it.
 
 from __future__ import annotations
 
+from wsgiref.types import WSGIApplication
+
 from gunicorn.app.base import BaseApplication
 from gunicorn.util import import_app
-from wsgiref.types import WSGIApplication
 
 from paths import compiled
 from serve import options

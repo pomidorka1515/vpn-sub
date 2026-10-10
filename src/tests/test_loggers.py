@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import timedelta
 from types import SimpleNamespace
-from collections.abc import Mapping
 from typing import cast
-from gunicorn.config import Config as GunicornConfig
-from config import LinesConfig
 
 import pytest
-
+from gunicorn.config import Config as GunicornConfig
 from gunicorn.http.message import Request
 from gunicorn.http.wsgi import Response
 
+from config import LinesConfig
+from loggers import TRACE, Colors, Logger
 from loggers.access import GunicornLogger, _color_status
-from loggers import Colors
-from loggers import TRACE, Logger
-from loggers.level import env_level, parse_level
 from loggers.handlers import _JSONLinesLogger
+from loggers.level import env_level, parse_level
 
 
 class _Cfg:

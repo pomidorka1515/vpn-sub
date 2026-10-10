@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import sys
-from types import ModuleType, SimpleNamespace
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 

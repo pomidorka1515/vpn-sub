@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Unpack, cast
-from typing_contracts import CodeOverrides
 from unittest.mock import MagicMock
 
 import pytest
 from telebot import types
+from typing_contracts import CodeOverrides
 
 from bots.admin.codes import AdminCodesMixin
 from custom_types import CodeObject

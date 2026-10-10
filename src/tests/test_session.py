@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Unpack, cast, Literal
-from config import JsonValue
-from custom_types import RequestKwargs
-from typing_contracts import SessionOptions, SessionExtras
 from pathlib import Path
+from typing import Literal, Unpack, cast
 
 import pytest
-from requests import ConnectionError, Response, Timeout # noqa: A004
-
 from helpers import json_http, make_inbound, make_panel_client
+from requests import ConnectionError, Response, Timeout  # noqa: A004
+from typing_contracts import SessionExtras, SessionOptions
+
+from config import JsonValue
+from custom_types import RequestKwargs
 from loggers import Colors, color_status
 from session import XUiSession, _client_stamp_path, inbound_stamp_path
+
 
 class FakeClock:
     def __init__(self, now: float = 1000.0) -> None:

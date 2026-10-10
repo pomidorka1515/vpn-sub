@@ -1,14 +1,15 @@
 """Administrator leaderboard workflows."""
 from __future__ import annotations
 
-from ..composition import AdminFeatureMixin
-
 from typing import Literal, cast
 
 from telebot import types
 
 from chart import leaderboard_chart
 from util import fmt_bytes
+
+from ..composition import AdminFeatureMixin
+
 __all__ = ["AdminLeaderboardMixin"]
 
 

@@ -1,12 +1,13 @@
 """Administrator panel status workflows."""
 from __future__ import annotations
 
-from ..composition import AdminFeatureMixin
-
 from typing import TYPE_CHECKING, Final, cast
 
-from util import fmt_time
 from custom_types import ServerMetricsResponse
+from util import fmt_time
+
+from ..composition import AdminFeatureMixin
+
 __all__ = ["AdminPanelsMixin"]
 
 

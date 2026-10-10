@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import cast
-from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -1,18 +1,24 @@
+import random
+import time
+import uuid
 from collections.abc import Mapping
 from typing import Literal
 
-import random
-import uuid
-import time
+from custom_types import RegisterWithCodeInfo
+from errors import (
+    CodeError,
+    ConflictError,
+    DuplicateError,
+    NotFoundError,
+    ValidationError,
+)
+from tracer import Op
+from util import generate_token, isusername, sanitize
 
 from ...common import BaseService, SharedCoreResources
-from ..password import PasswordService
 from ..audit import AuditService
+from ..password import PasswordService
 from ..user.business import BusinessUserService
-from tracer import Op
-from errors import DuplicateError, NotFoundError, CodeError, ConflictError, ValidationError
-from custom_types import RegisterWithCodeInfo
-from util import generate_token, isusername, sanitize
 
 # pyright: reportUnnecessaryIsInstance=false
 

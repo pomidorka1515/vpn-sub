@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 import time
+from dataclasses import asdict
 
-from custom_types import BandwidthInfo, UserRecord
 from config.constants import JsonDict
+from custom_types import BandwidthInfo, UserRecord
 from db.state import StateSnapshot
 from errors import PanelUnavailableError
 from sysutil import SysUtil

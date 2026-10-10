@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
-
-from errors import ConflictError, DuplicateError, NotFoundError, ValidationError
 from helpers import make_subscription
+
 from db import Database
+from errors import ConflictError, DuplicateError, NotFoundError, ValidationError
 
 
 def test_get_info_link_uses_configured_uri(database: Database) -> None:

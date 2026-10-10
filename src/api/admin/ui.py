@@ -6,7 +6,11 @@ from flask import Response, make_response, redirect, render_template, request
 
 from api.admin._base import AdminApiMixin
 from api.common import ResponseType, asset_version, web_lang_tables
-from api.decorators.auth import ADMIN_UI_COOKIE, ADMIN_UI_SESSION_LEN, new_admin_ui_session
+from api.decorators.auth import (
+    ADMIN_UI_COOKIE,
+    ADMIN_UI_SESSION_LEN,
+    new_admin_ui_session,
+)
 from api.decorators.rate_limit import rate_limit
 from util import compare, err, ok
 

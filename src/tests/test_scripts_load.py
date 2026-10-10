@@ -11,8 +11,8 @@ from typing import Protocol
 import pytest
 
 import cli.scripts as scripts_load
-from loggers import Logger
 from cli.scripts import load_scripts
+from loggers import Logger
 
 
 class StubResponse(Protocol):

@@ -1,18 +1,18 @@
+import contextlib
+import glob
+import json
 import os
 import shutil
-import json
 import tempfile
-import glob
 import threading
-
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import cast
 
-from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
-from .constants import CONFIG_TYPES, JsonValue
-
 from loggers import Logger
-import contextlib
+
+from .constants import CONFIG_TYPES, JsonValue
+from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
+
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0]

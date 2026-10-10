@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from contextlib import contextmanager, suppress
 import os
 import sqlite3
 import threading
 from collections.abc import Generator
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from errors import DatabaseError
 from loggers import Logger
 
 from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
-from .common import row_dict
 from .codes import CodesMixin
+from .common import row_dict
 from .schema import SchemaMixin
 from .state import StateMixin
 from .telegram import TelegramMixin

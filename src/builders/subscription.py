@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import base64
+import json
 from typing import TYPE_CHECKING
 
 from flask import Response

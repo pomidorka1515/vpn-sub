@@ -5,7 +5,6 @@ from typing import cast
 from urllib.parse import urljoin
 
 import aiohttp
-
 from webapi import ApiResult
 
 __all__ = ["AdminApiClient"]

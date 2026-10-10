@@ -1,20 +1,19 @@
 from __future__ import annotations
-from config import JsonValue
 
-from typing import cast
 import sqlite3
 import threading
+from typing import cast
 
 import pytest
+from helpers import FakePanel, create_alice
 from requests import Response
 
+from config import JsonValue
 from core import Subscription
 from core.services.panel import _ONLINES_TTL
+from db import Database
 from errors import PanelUnavailableError
 from session import XUiSession
-from helpers import FakePanel
-from db import Database
-from helpers import create_alice
 
 
 def test_online_status_reports_empty_when_all_panels_succeed(

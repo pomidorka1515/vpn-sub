@@ -7,8 +7,8 @@ that share a session remain responsible for its lifecycle and pool limits.
 from __future__ import annotations
 
 import json
-from typing import Protocol, Unpack
 from collections.abc import Mapping
+from typing import Protocol, Unpack
 
 from requests import Response, Session
 from requests.adapters import HTTPAdapter

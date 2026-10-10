@@ -5,11 +5,12 @@ import json
 import sys
 from pathlib import Path
 from typing import cast
-import pytest
-from config import PanelConfig
 
-from db import Database
+import pytest
 from helpers import USER_UUID, FakePanel, create_alice, make_inbound, make_panel_client
+
+from config import PanelConfig
+from db import Database
 from session import XUiSession
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "reconcile_clients.py"

@@ -1,9 +1,9 @@
 """Administrator authentication, menus, and lifecycle glue."""
 from __future__ import annotations
 
-from telebot import types
-
 from typing import cast
+
+from telebot import types
 
 from ..common import AdminStateMixin, TelegramIOMixin
 from ..composition import AdminFeatureMixin

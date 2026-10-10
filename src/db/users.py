@@ -9,6 +9,7 @@ from errors import DatabaseError, DuplicateError
 from .common import ConnectionMixin
 from .telegram import set_telegram_mapping
 
+
 class UsersMixin(ConnectionMixin):
     def get_user(self, username: str) -> UserRecord | None:
         with self.connection() as conn:

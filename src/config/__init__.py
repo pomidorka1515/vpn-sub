@@ -1,11 +1,20 @@
+from .atomic import CompactReturn, FileSignature
+from .constants import JsonDict, JsonValue
 from .core import Config
-from .lines import LinesConfig
-from .atomic import FileSignature, CompactReturn
-from .constants import JsonValue, JsonDict
 from .documents import (
-    AppConfig, BotConfig, PublicBotConfig, RedisConfig, PanelConfig, ProfileConfig,
-    DiscordConfig, DiscordBotConfig, DiscordPrivateConfig, LangConfig, DiscordLangConfig,
+    AppConfig,
+    BotConfig,
+    DiscordBotConfig,
+    DiscordConfig,
+    DiscordLangConfig,
+    DiscordPrivateConfig,
+    LangConfig,
+    PanelConfig,
+    ProfileConfig,
+    PublicBotConfig,
+    RedisConfig,
 )
+from .lines import LinesConfig
 
 __all__ = [
     "Config", "LinesConfig",

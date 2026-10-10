@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
 import sqlite3
+from contextlib import AbstractContextManager
 
 
 def row_dict(row: sqlite3.Row | None) -> dict[str, object] | None:

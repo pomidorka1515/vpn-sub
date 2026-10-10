@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import re
-import telebot
-from telebot import apihelper
-import time
 import threading
+import time
 from typing import cast
 
+import telebot
 from requests.exceptions import RequestException
+from telebot import apihelper
 
 from loggers import Logger
+
 __all__ = ['TelegramPollingMixin', 'configure_telegram_api']
 
 

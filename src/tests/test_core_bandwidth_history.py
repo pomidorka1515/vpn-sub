@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import time
 
+from helpers import create_alice, make_subscription
+
 from db import Database
 from db.state import StateSnapshot
-from helpers import create_alice, make_subscription
 
 
 def _state_payload(ts: int) -> StateSnapshot:

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 
+from helpers import create_alice, make_subscription
+
 from custom_types import BandwidthInfo
 from db import Database
-from helpers import create_alice, make_subscription
 
 
 def test_leaderboard_total_and_monthly_ranking(database: Database) -> None:

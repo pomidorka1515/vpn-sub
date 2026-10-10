@@ -8,6 +8,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO, Protocol, Self, cast
+from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
+
+from flask import Flask, Response, request
+from flask.json.provider import DefaultJSONProvider
+from jinja2 import FileSystemLoader
+from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from api import Api, WebApi
 from api.common import RES_DIR
@@ -18,16 +25,10 @@ from config import AppConfig, Config, LangConfig, LinesConfig
 from core import Subscription
 from db import Database
 from errors import AppError
-from flask import Flask, Response, request
-from jinja2 import FileSystemLoader
-from loggers import Logger, Colors
+from loggers import Colors, Logger
 from paths import bundled_root, compiled, program_dir, runtime_dir
-from session import XUiSession, XUiPanelTransport
+from session import XUiPanelTransport, XUiSession
 from util import err
-from werkzeug.exceptions import HTTPException
-from werkzeug.middleware.proxy_fix import ProxyFix
-from wsgiref.types import WSGIApplication, StartResponse, WSGIEnvironment
-from flask.json.provider import DefaultJSONProvider
 
 threading.main_thread().name = "main"
 

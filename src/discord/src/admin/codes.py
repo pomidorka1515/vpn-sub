@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import cast
 
+from composition import AdminFeatureMixin
+
 import discord
 
-from composition import AdminFeatureMixin
 from .common import obj_map, result_obj
 
 __all__ = ["AdminCodesMixin"]

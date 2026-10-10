@@ -7,7 +7,11 @@ from uuid import uuid4
 from flask import Response, g, request
 
 from api.common import ResponseType, Route
-from api.decorators import requires_fields_strict, requires_no_auth, requires_webapi_auth
+from api.decorators import (
+    requires_fields_strict,
+    requires_no_auth,
+    requires_webapi_auth,
+)
 from api.web._base import WebApiMixin
 from util import err, generate_token, ok, sanitize
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import cast
 from collections.abc import Mapping
-
-import discord
+from typing import cast
 
 from composition import PublicFeatureMixin
-from webapi import ApiResult
 from payloads import ResponseOptions
+from webapi import ApiResult
+
+import discord
 
 __all__ = ["DiscordIOMixin"]
 

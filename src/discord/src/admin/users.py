@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import cast
+
+from composition import AdminFeatureMixin
 
 import discord
 
-from composition import AdminFeatureMixin
 from .common import obj_map, result_obj, str_list
 
 __all__ = ["AdminUsersMixin"]

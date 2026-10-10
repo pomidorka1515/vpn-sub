@@ -1,13 +1,14 @@
 """Administrator invitation-code workflows."""
 from __future__ import annotations
 
-from ..composition import AdminFeatureMixin
-
 from typing import Literal, cast
 
 from telebot import types
 
 from errors import AppError
+
+from ..composition import AdminFeatureMixin
+
 __all__ = ["AdminCodesMixin"]
 
 

@@ -1,26 +1,26 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 import uuid
+from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from argon2 import PasswordHasher
 from flask import Flask
-from flask.testing import FlaskClient
-from pathlib import Path
 from flask.json.provider import DefaultJSONProvider
+from flask.testing import FlaskClient
+from helpers import config_mock, make_subscription, make_watch, subscription_config
+from jinja2 import FileSystemLoader
 
 from api import WebApi
+from api.common import RES_DIR
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
     _RateLimitScript,
     _replace_client,
     close_rate_limit,
 )
-from api.common import RES_DIR
 from config import Config, LangConfig
 from db import Database
-from helpers import config_mock, make_subscription, make_watch, subscription_config
-from jinja2 import FileSystemLoader
 
 _LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
 

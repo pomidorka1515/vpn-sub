@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import threading
-from telebot import Handler
 
+from telebot import Handler
 from telebot.handler_backends import HandlerBackend
 
 __all__ = ["LockedHandlerBackend"]

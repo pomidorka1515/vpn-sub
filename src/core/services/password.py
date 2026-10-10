@@ -1,9 +1,11 @@
 import hashlib
-from argon2.exceptions import VerificationError, InvalidHashError, VerifyMismatchError
 
-from util import compare
-from ..common import BaseService
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+
 from tracer import Op
+from util import compare
+
+from ..common import BaseService
 
 __all__ = ["PasswordService"]
 

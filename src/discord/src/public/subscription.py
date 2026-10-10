@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import io
 import time
-from datetime import datetime, UTC
-
-import discord
+from datetime import UTC, datetime
 
 from composition import PublicFeatureMixin
-from util import fmt_bytes
 from payloads import number
 from webapi import StatsPayload
+
+import discord
+from util import fmt_bytes
 
 __all__ = ["PublicSubscriptionMixin"]
 

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import urllib.parse
-import json
 import base64
-from config import AppConfig, LangConfig
+import json
+import urllib.parse
 from collections import deque
 
-from util import fmt_bytes
+from config import AppConfig, LangConfig
 from custom_types import BandwidthInfo
+from util import fmt_bytes
 
 
 def build_link_array(

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from helpers import TOKEN_A, create_alice
-from db import Database
+
 from core import Subscription
+from db import Database
 
 
 def test_reset_user_invalidates_auth_session(

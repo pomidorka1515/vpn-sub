@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
 import os
-from typing import TextIO, Literal
 import sqlite3
 import threading
+from pathlib import Path
+from typing import Literal, TextIO
 from unittest.mock import patch
 
 import pytest
 
 from config.backup import (
     do_backup as config_do_backup,
+)
+from config.backup import (
     make_backup_thread as config_make_backup_thread,
+)
+from config.backup import (
     prune_backups as config_prune_backups,
 )
 from db.backup import do_backup, make_backup_thread, prune_backups

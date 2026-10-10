@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-from typing import (
-    Protocol, TYPE_CHECKING,
-    Literal, TypedDict, NamedTuple
-)
-from collections.abc import Sequence, Callable
-from collections.abc import MutableMapping, Mapping, Iterable
-
+from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypedDict
+
 from requests import Response
-from requests.cookies import RequestsCookieJar
 from requests.auth import AuthBase
+from requests.cookies import RequestsCookieJar
 from requests.models import PreparedRequest
+
 from config.constants import JsonValue
 
 # Dacite does not resolve PEP 695 recursive aliases when checking fields.

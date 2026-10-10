@@ -6,8 +6,8 @@ from collections.abc import Mapping
 
 from PIL import Image, ImageDraw, ImageFont
 
-from util import fmt_bytes
 from paths import bundled_root
+from util import fmt_bytes
 
 BG       = '#1a1a1d'
 PANEL    = '#232327'

@@ -1,22 +1,27 @@
-import os
-import threading
-import json
-import tempfile
+import contextlib
 import io
-
+import json
+import os
+import tempfile
+import threading
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
-from collections.abc import Mapping, Iterator, Sequence
 from types import TracebackType
 from typing import Literal, Self
-from collections.abc import Callable
-
-from .constants import SYNC_MODES, JsonValue, JsonDict
-from .atomic import CompactReturn, ensure_parent_dir, locked_file, fsync_parent_dir, resolve_lockfile_path
-from .backup import make_backup_thread, instance_backup_dir, do_backup, prune_backups
 
 from errors import ConfigError
 from loggers import Logger
-import contextlib
+
+from .atomic import (
+    CompactReturn,
+    ensure_parent_dir,
+    fsync_parent_dir,
+    locked_file,
+    resolve_lockfile_path,
+)
+from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
+from .constants import SYNC_MODES, JsonDict, JsonValue
+
 
 class LinesConfig:
     """

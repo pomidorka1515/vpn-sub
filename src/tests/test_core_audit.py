@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+from helpers import create_alice, make_subscription
+
 from config import LinesConfig
 from db import Database
-from helpers import create_alice, make_subscription
 
 
 class RecordingAudit:

@@ -12,8 +12,8 @@ from .types import (
     LoadAverage,
     PollingSystemInfo,
     RamInfo,
-    SwapInfo,
     StateSnapshot,
+    SwapInfo,
     SystemMemory,
     ThreadInfo,
 )

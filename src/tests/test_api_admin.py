@@ -1,26 +1,26 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import cast
-from flask.testing import FlaskClient
 
 import pytest
 from flask import Flask
-from pathlib import Path
 from flask.json.provider import DefaultJSONProvider
+from flask.testing import FlaskClient
+from helpers import config_mock, make_subscription, make_watch, subscription_config
+from jinja2 import FileSystemLoader
 
 from api import Api
+from api.common import RES_DIR
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
     _RateLimitScript,
     _replace_client,
     close_rate_limit,
 )
-from api.common import RES_DIR
 from config import Config, LangConfig, LinesConfig
 from db import Database
 from errors import AppError, DatabaseError
-from helpers import config_mock, make_subscription, make_watch, subscription_config
-from jinja2 import FileSystemLoader
 
 _LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
 
@@ -325,12 +325,18 @@ def test_admin_token_api_root_omits_empty_api_uri(
 def _polling_api(
     database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
 ) -> FlaskClient:
+    from helpers import FakePanel
+
     from custom_types import NetTrafficStats
     from sysutil import (
-        AppMemory, ConnCount, LoadAverage,
-        PollingSystemInfo, RamInfo, SwapInfo, SystemMemory,
+        AppMemory,
+        ConnCount,
+        LoadAverage,
+        PollingSystemInfo,
+        RamInfo,
+        SwapInfo,
+        SystemMemory,
     )
-    from helpers import FakePanel
 
     host = PollingSystemInfo(
         cpu=1.5,

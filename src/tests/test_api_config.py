@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from typing import cast
-from werkzeug.test import TestResponse
 import json
+from pathlib import Path
+from typing import cast
 
 import pytest
 from flask import Flask
-from pathlib import Path
+from helpers import make_subscription, make_watch
+from werkzeug.test import TestResponse
 
 from api import Api
 from api.config_patch import REQUIRED_KEYS, config_etag
 from config import AppConfig, Config, JsonValue, LinesConfig
 from db import Database
-from helpers import make_subscription, make_watch
 
 _SCHEMA_PATH = Path(__file__).resolve().parents[2] / "config.schema.json"
 _EXAMPLE_PATH = Path(__file__).resolve().parents[2] / "docs" / "EXAMPLE.config.json"

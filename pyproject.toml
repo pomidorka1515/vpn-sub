@@ -88,20 +88,39 @@ select = [
 
 extend-select = [
     "A",      # Shadowing built-ins
+    "ANN",    # Missing function annotations
+    "ASYNC",  # Async correctness and blocking calls
     "C4",     # Unnecessary comprehensions
     "DTZ",    # Timezone mistakes
+    "EXE",    # Executable permissions and shebangs
+    "FA",     # Future-annotations consistency
+    "FLY",    # Prefer f-strings over static joins
+    "G",      # Logging format and exception handling
+    "I",      # Import sorting and grouping
+    "ICN",    # Import alias conventions
+    "INT",    # Incorrect gettext usage
     "ISC",    # Implicit string concatenation
     "LOG",    # Incorrect logging usage
     "PIE",    # Redundant/unnecessary code
     "RSE",    # Unnecessary parentheses in raise statements
     "PGH",    # Blanket noqa/type-ignore directives
     "PERF",   # Performance patterns
+    "RET",    # Consistent returns and redundant control flow
+    "SLOT",   # Missing slots on immutable built-in subclasses
     "T10",    # Forgotten debugger calls
     "YTT",    # Fragile Python-version checks
     "RUF006", # Unretained asyncio tasks
     "RUF008", # Mutable dataclass defaults
     "RUF012", # Mutable class attributes without ClassVar
+    "RUF013", # Implicit Optional annotations
+    "RUF016", # Invalid index types
+    "RUF017", # Inefficient list summation
+    "RUF018", # Assignment expressions in assertions
     "RUF019", # Unnecessary dictionary key checks
+    "RUF020", # Never-matching union members in isinstance
+    "RUF024", # Mutable values passed to dict.fromkeys
+    "RUF026", # Incorrect default_factory arguments
+    "RUF030", # Assert messages containing print calls
     "RUF100", # Unused noqa directives
 ]
 

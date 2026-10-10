@@ -4,13 +4,13 @@ import asyncio
 from collections.abc import Mapping
 from typing import cast
 
-import discord
-
-from chart import bandwidth_chart
 from composition import PublicFeatureMixin
+from payloads import number
+
+import discord
+from chart import bandwidth_chart
 from custom_types import BandwidthSnapshot
 from util import fmt_bytes, format_usage, truncate_utf8
-from payloads import number
 
 __all__ = ["PublicTrafficMixin"]
 

@@ -1,5 +1,6 @@
-from typing import Concatenate
 from collections.abc import Callable
+from typing import Concatenate
+
 from flask import Response
 
 type Decorated[

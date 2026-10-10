@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from .common import _ANSI_ESCAPE, _safe_handle_error

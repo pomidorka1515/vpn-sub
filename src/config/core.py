@@ -1,23 +1,28 @@
 from __future__ import annotations
 
-import threading
-import os
 import copy
-
-from collections.abc import Mapping, MutableMapping, Iterator, Iterable
+import os
+import threading
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
 from pathlib import Path
 from types import TracebackType
-from typing import overload, cast, Literal
-from collections.abc import Callable
-
-from .constants import JsonValue, JsonDict, SYNC_MODES, MISSING, MISSING_TYPE
-from .atomic import FileSignature, file_signature, locked_file, atomic_write_json, resolve_lockfile_path
-from .backup import prune_backups, do_backup, make_backup_thread, instance_backup_dir
-from .schema import load_schema, validate_schema, read_json_object
-from .transaction import ConfigTransaction
+from typing import Literal, cast, overload
 
 from errors import ConfigError, ReadOnlyConfigError
 from loggers import Logger
+
+from .atomic import (
+    FileSignature,
+    atomic_write_json,
+    file_signature,
+    locked_file,
+    resolve_lockfile_path,
+)
+from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
+from .constants import MISSING, MISSING_TYPE, SYNC_MODES, JsonDict, JsonValue
+from .schema import load_schema, read_json_object, validate_schema
+from .transaction import ConfigTransaction
+
 
 class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     """

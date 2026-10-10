@@ -3,7 +3,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from unittest.mock import patch
 
-from discord_helpers import FakeInteraction, FakeResponse, json_ok, make_admin_bot, modal_data, run, stats_obj
+from discord_helpers import (
+    FakeInteraction,
+    FakeResponse,
+    json_ok,
+    make_admin_bot,
+    modal_data,
+    run,
+    stats_obj,
+)
 
 
 def _ok(*args: object) -> FakeResponse:

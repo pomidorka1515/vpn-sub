@@ -3,18 +3,17 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Unpack, TypedDict
-from config import JsonValue
-from custom_types import RequestKwargs
+from typing import TypedDict, Unpack
 from unittest import mock
 
 import pytest
 from requests import Response
 
-from app import AppOptions, AppPaths, Application, create_application
-from app import verbose_overrides
-from paths import runtime_dir
 from api.decorators.rate_limit import close_rate_limit
+from app import Application, AppOptions, AppPaths, create_application, verbose_overrides
+from config import JsonValue
+from custom_types import RequestKwargs
+from paths import runtime_dir
 
 
 def json_response(data: dict[str, JsonValue], status_code: int = 200) -> Response:

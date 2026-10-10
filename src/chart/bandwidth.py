@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime, UTC
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
 from PIL import Image, ImageDraw, ImageFont
 

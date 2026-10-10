@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from flask.ctx import RequestContext
 from unittest import mock
 
 import pytest
 from flask import Flask
+from flask.ctx import RequestContext
 
 from api import BaseApi, rate_limit
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]

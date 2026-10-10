@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import cast
-from session import XUiSession
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,6 +26,7 @@ from custom_types import (
     XrayStats,
 )
 from errors import AppError, NotFoundError
+from session import XUiSession
 
 
 def _message(text: str | None, chat_id: int = 7) -> types.Message:

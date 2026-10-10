@@ -1,19 +1,21 @@
 from __future__ import annotations
 
-import jsonschema
 import json
 import os
-
 from collections.abc import Mapping
-from typing import cast, TYPE_CHECKING
-from .constants import JsonValue
+from typing import TYPE_CHECKING, cast
+
+import jsonschema
+
 from .atomic import stat_signature
+from .constants import JsonValue
 from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 
 if TYPE_CHECKING:
     from .core import Config
 
-from errors import SchemaValidationError, ConfigError, FileCorruptionError
+from errors import ConfigError, FileCorruptionError, SchemaValidationError
+
 
 def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
     try:

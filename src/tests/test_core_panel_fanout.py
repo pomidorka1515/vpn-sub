@@ -1,17 +1,12 @@
 # Panel poll fan-out: overlap, order, and first-failure contracts.
 from __future__ import annotations
 
-from typing import Unpack, cast
-from config import JsonValue
-from typing_contracts import FakePanelOptions
 import threading
 import time
 import uuid
+from typing import Unpack, cast
 
 import pytest
-
-from db import Database
-from errors import PanelRejectedError, PanelUnavailableError
 from helpers import (
     FakePanel,
     create_alice,
@@ -20,6 +15,11 @@ from helpers import (
     make_subscription,
 )
 from requests import Response
+from typing_contracts import FakePanelOptions
+
+from config import JsonValue
+from db import Database
+from errors import PanelRejectedError, PanelUnavailableError
 from session import XUiSession
 
 

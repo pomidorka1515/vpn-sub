@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sqlite3
 import threading
 import uuid
+from pathlib import Path
 
 import pytest
 
-from errors import CodeError, DuplicateError, MigrationError
 from db import Database
+from errors import CodeError, DuplicateError, MigrationError
 
 
 def create_user(db: Database, username: str = "alice", *, token: str | None = None) -> None:

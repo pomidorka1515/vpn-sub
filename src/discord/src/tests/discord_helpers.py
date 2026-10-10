@@ -1,22 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Callable, Coroutine, Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable, Coroutine
-
-import discord
+from unittest.mock import MagicMock
 
 from admin.bot import AdminBot
 from adminapi import AdminApiClient
-from config import Config, DiscordConfig, DiscordLangConfig
-from unittest.mock import MagicMock
-from copy import deepcopy
 from host import SharedDiscordClient
 from public.bot import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
+
+import discord
+from config import Config, DiscordConfig, DiscordLangConfig
 
 DISCORD_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = DISCORD_ROOT / "config.schema.json"

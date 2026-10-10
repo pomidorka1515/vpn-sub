@@ -1,13 +1,16 @@
 """Public subscription information workflows."""
 from __future__ import annotations
 
-from ..composition import PublicFeatureMixin
-
 import time
 import urllib.parse
-from datetime import datetime, UTC
-from util import fmt_bytes, make_qr
+from datetime import UTC, datetime
+
 from telebot import types
+
+from util import fmt_bytes, make_qr
+
+from ..composition import PublicFeatureMixin
+
 __all__ = ["PublicSubscriptionMixin"]
 
 

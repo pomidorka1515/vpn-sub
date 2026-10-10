@@ -1,7 +1,8 @@
-from ...common import BaseService
-from tracer import Op
 from custom_types import UserRecord
 from errors import NotFoundError
+from tracer import Op
+
+from ...common import BaseService
 
 __all__ = ["CommonUserService"]
 

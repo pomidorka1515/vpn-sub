@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from typing import TypedDict, cast
+
 from config.constants import JsonDict
 from custom_types import BandwidthSnapshotPayload
 
 from .common import ConnectionMixin
+
 
 class StateSnapshot(TypedDict):
     ts: int

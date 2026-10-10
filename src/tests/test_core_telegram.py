@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from helpers import create_alice
 
 from core import Subscription
 from db import Database
 from errors import NotFoundError
-from helpers import create_alice
 
 
 def test_telegram_language_round_trip(subscription: Subscription) -> None:

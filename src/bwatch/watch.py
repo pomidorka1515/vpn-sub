@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
-from collections.abc import Callable
 import threading
 import time
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Literal
 
+from bots import AdminBot, PublicBot
+from config import AppConfig, Config
 from custom_types import BandwidthInfo
 from db import Database
 from loggers import Logger
-from bots import AdminBot, PublicBot
-from config import AppConfig, Config
 
 from .calendar import CalendarMixin
 from .panels import PanelsMixin

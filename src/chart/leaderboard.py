@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import io
-from typing import Literal
 from collections.abc import Mapping
+from typing import Literal
 
 from PIL import Image, ImageDraw
 
@@ -18,8 +18,8 @@ from .draw import (
     REG_DOWN,
     TEXT,
     TEXT_DIM,
-    ellipsis,
     draw_text,
+    ellipsis,
     load_font,
     nice_ticks,
     save,

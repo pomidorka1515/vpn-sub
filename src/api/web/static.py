@@ -6,7 +6,14 @@ from typing import ClassVar
 
 from flask import Response, make_response, redirect, render_template, request, send_file
 
-from api.common import RES_DIR, ResponseType, Route, admin_module_names, asset_version, web_lang_tables
+from api.common import (
+    RES_DIR,
+    ResponseType,
+    Route,
+    admin_module_names,
+    asset_version,
+    web_lang_tables,
+)
 from api.web._base import WebApiMixin
 from fonts import FONT_FILES, embed_font_faces
 from util import err

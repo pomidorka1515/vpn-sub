@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import cast
 
-from db import Database
-from errors import PanelRejectedError
 from helpers import (
     FakePanel,
     create_alice,
@@ -12,6 +10,9 @@ from helpers import (
     make_subscription,
     make_watch,
 )
+
+from db import Database
+from errors import PanelRejectedError
 from session import XUiSession
 
 

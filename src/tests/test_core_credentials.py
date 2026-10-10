@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace as dreplace
 
-from argon2 import PasswordHasher
 import pytest
+from argon2 import PasswordHasher
+from helpers import create_alice
 
 from core import Subscription
 from db import Database
-from helpers import create_alice
 
 
 def _create_login(database: Database, password_hash: str) -> None:

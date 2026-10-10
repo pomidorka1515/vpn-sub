@@ -1,10 +1,12 @@
 from typing import Literal
 
+from tracer import Op
+
 from ..common import BaseService, SharedCoreResources
-from .user.common import CommonUserService
 from .bandwidth import BandwidthService
 from .panel import BG_POOL
-from tracer import Op
+from .user.common import CommonUserService
+
 
 class LeaderboardService(BaseService):
     def __init__(

@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from typing import cast
 
-from custom_types import BandwidthInfo
-from db import Database
 from helpers import (
     FakePanel,
     create_alice,
     make_panel_client,
     make_subscription,
 )
+
+from custom_types import BandwidthInfo
+from db import Database
 from session import XUiSession
 
 
@@ -73,8 +74,9 @@ def test_all_traffic_raises_when_no_panel_queryable(database: Database) -> None:
     subscription = make_subscription(database, panels=[one, two])
     create_alice(database)
 
-    from errors import PanelUnavailableError
     import pytest
+
+    from errors import PanelUnavailableError
     with pytest.raises(PanelUnavailableError):
         subscription.bandwidth_svc.all_traffic()
 

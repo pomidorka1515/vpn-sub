@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, UTC
+import contextlib
 import glob
 import os
 import sqlite3
 import tempfile
 import threading
+from datetime import UTC, datetime
 
 from loggers import Logger
-import contextlib
 
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:

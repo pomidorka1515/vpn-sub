@@ -4,17 +4,16 @@ import hashlib
 import logging
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Protocol, TypedDict
-from collections.abc import Callable
 
 import pytest
 
 import cli.updater as updater
-from loggers import Logger
 from cli.updater import notice, update
+from loggers import Logger
 
 
 class ReleaseAsset(TypedDict):

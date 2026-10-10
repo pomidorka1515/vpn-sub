@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import cast
-from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
+from helpers import config_mock, language_config, profile_config, subscription_config
 from telebot import types
 
 from bots.public.account import PublicAccountMixin
@@ -13,8 +14,6 @@ from bots.public.login import PublicLoginMixin
 from bots.public.settings import PublicSettingsMixin
 from bots.public.traffic import PublicTrafficMixin
 from errors import AppError, NotFoundError
-from helpers import config_mock, language_config, profile_config, subscription_config
-
 
 TEXTS = {
     "en": {

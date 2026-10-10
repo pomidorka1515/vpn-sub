@@ -5,12 +5,11 @@ from __future__ import annotations
 
 import json
 import logging
-
-from typing import Self
 from enum import StrEnum
+from typing import Self
 
 from config import JsonValue
-from loggers import Logger, Colors
+from loggers import Colors, Logger
 
 __all__ = ["Op", "trace"]
 

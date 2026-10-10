@@ -1,10 +1,14 @@
+from collections.abc import Callable
 from functools import wraps
 from typing import cast
-from collections.abc import Callable
-from util import err
+
+from flask import g, request
+
 from custom_types import JsonifyValue
+from util import err
+
 from ._common import WrappedReturn
-from flask import request, g
+
 
 def requires_fields[**P, R](*fields: str) -> Callable[[Callable[P, R]], Callable[P, WrappedReturn[R]]]:
     """Validate request JSON object, store it on flask.g.json_obj, and require named fields."""

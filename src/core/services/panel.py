@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from threading import Condition
 from time import monotonic
-from urllib.parse import quote
-from dacite import from_dict
 from typing import Literal, cast, overload
+from urllib.parse import quote
 
+from dacite import from_dict
 from requests import Response
 
-from ..common import BaseService, SharedCoreResources
-from tracer import Op
-from session import XUiSession
 from custom_types import (
     ClientListResponse,
     ClientTraffic,
@@ -22,6 +19,10 @@ from custom_types import (
     ServerMetricsResponse,
 )
 from errors import AppError, PanelRejectedError, PanelUnavailableError
+from session import XUiSession
+from tracer import Op
+
+from ..common import BaseService, SharedCoreResources
 
 __all__ = ["BG_POOL", "PanelService"]
 

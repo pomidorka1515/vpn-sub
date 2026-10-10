@@ -1,8 +1,6 @@
 """Public traffic chart workflows."""
 from __future__ import annotations
 
-from ..composition import PublicFeatureMixin
-
 from typing import cast
 
 from telebot import types
@@ -10,6 +8,9 @@ from telebot import types
 from chart import bandwidth_chart
 from errors import AppError
 from util import fmt_bytes, format_usage, truncate_utf8
+
+from ..composition import PublicFeatureMixin
+
 __all__ = ["PublicTrafficMixin"]
 
 

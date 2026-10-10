@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from ._common import Decorated, DecoratedReturn, WrappedReturn
-from collections.abc import Mapping
-from util import err
-from flask import request
-from functools import wraps
-from typing import Protocol, cast
-from collections.abc import Callable
-from loggers import Logger
 import threading
 import time
+from collections.abc import Callable, Mapping
+from functools import wraps
+from typing import Protocol, cast
+
+from flask import request
+
+from loggers import Logger
+from util import err
 
 from ..common import BaseApi
+from ._common import Decorated, DecoratedReturn, WrappedReturn
 
 _RATE_LIMIT_WINDOW = 60.0
 _REDIS_SOCKET_TIMEOUT = 0.2

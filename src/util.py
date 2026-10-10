@@ -1,10 +1,11 @@
 import hmac
-import uuid
-import re
 import io
-import qrcode
+import re
 import secrets
-from typing import TYPE_CHECKING, cast, Literal
+import uuid
+from typing import TYPE_CHECKING, Literal, cast
+
+import qrcode
 
 from custom_types import JsonifyValue
 

@@ -3,11 +3,11 @@ from __future__ import annotations
 import time
 
 import pytest
+from helpers import create_alice
 
 from core import Subscription
 from db import Database
 from errors import NotFoundError, ValidationError
-from helpers import create_alice
 
 
 def test_add_code_rejects_unknown_action(subscription: Subscription) -> None:

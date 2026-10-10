@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
-
 from loggers import Logger
 
 if TYPE_CHECKING:
