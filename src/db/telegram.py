@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import sqlite3
+from typing import TYPE_CHECKING
 
 from .common import ConnectionMixin
+
+if TYPE_CHECKING:
+    import sqlite3
 
 
 def set_telegram_mapping(

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-import sqlite3
-from contextlib import AbstractContextManager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import sqlite3
+    from contextlib import AbstractContextManager
 
 
 def row_dict(row: sqlite3.Row | None) -> dict[str, object] | None:

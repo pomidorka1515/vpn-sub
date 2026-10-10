@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-import sqlite3
 import time
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from helpers import create_alice, make_watch
 
-from bwatch import BWatch
-from core import Subscription
 from custom_types import BandwidthInfo, UserFields
-from db import Database
 from errors import PanelRejectedError
+
+if TYPE_CHECKING:
+    import sqlite3
+    from collections.abc import Callable
+
+    from bwatch import BWatch
+    from core import Subscription
+    from db import Database
 
 
 def _count_queries(

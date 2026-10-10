@@ -1,13 +1,10 @@
 """Stacked regular + whitelist bandwidth chart."""
 from __future__ import annotations
 
-import io
-from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from PIL import Image, ImageDraw, ImageFont
-
-from custom_types import BandwidthSnapshot
 
 from .draw import (
     BG,
@@ -24,6 +21,12 @@ from .draw import (
     load_font,
     save,
 )
+
+if TYPE_CHECKING:
+    import io
+    from collections.abc import Mapping
+
+    from custom_types import BandwidthSnapshot
 
 
 def bandwidth_chart(

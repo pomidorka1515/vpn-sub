@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from threading import Condition
 from time import monotonic
-from typing import Literal, cast, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 from urllib.parse import quote
 
 from dacite import from_dict
-from requests import Response
 
 from custom_types import (
     ClientListResponse,
@@ -19,10 +17,16 @@ from custom_types import (
     ServerMetricsResponse,
 )
 from errors import AppError, PanelRejectedError, PanelUnavailableError
-from session import XUiSession
 from tracer import Op
 
 from ..common import BaseService, SharedCoreResources
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping, Sequence
+
+    from requests import Response
+
+    from session import XUiSession
 
 __all__ = ["BG_POOL", "PanelService"]
 

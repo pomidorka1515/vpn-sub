@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from config import LangConfig
-from custom_types import BandwidthInfo
 from util import fmt_bytes, format  # noqa: A004
+
+if TYPE_CHECKING:
+    from config import LangConfig
+    from custom_types import BandwidthInfo
 
 
 def build_description(

@@ -1,14 +1,12 @@
 import platform
+from typing import TYPE_CHECKING
 
 from argon2 import PasswordHasher
 from flask import Flask, Response, request
 
 from builders import get_subscription
-from config import AppConfig, Config, LangConfig, LinesConfig
-from db import Database
 from errors import UnsupportedPlatformError
 from loggers import Logger
-from session import XUiSession
 
 from .common import SharedCoreResources
 from .services.audit import AuditService
@@ -20,6 +18,11 @@ from .services.password import PasswordService
 from .services.telegram import TelegramService
 from .services.user.business import BusinessUserService
 from .services.user.common import CommonUserService
+
+if TYPE_CHECKING:
+    from config import AppConfig, Config, LangConfig, LinesConfig
+    from db import Database
+    from session import XUiSession
 
 __all__ = ["Subscription"]
 

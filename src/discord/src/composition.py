@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from config import Config, DiscordConfig, DiscordLangConfig
-from loggers import Logger
-
 __all__ = ["AdminFeatureMixin", "PublicFeatureMixin"]
 
 
@@ -13,7 +10,9 @@ if TYPE_CHECKING:
 
     import discord
     from adminapi import AdminApiClient
+    from config import Config, DiscordConfig, DiscordLangConfig
     from discord import app_commands
+    from loggers import Logger
     from sessions import SessionStore
     from webapi import ApiResult, WebApiClient
 

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from flask import Flask
+from typing import TYPE_CHECKING
 
-from bwatch import BWatch
-from config import AppConfig, Config, LinesConfig
-from core import Subscription
-from loggers import Logger
+if TYPE_CHECKING:
+    from flask import Flask
+
+    from bwatch import BWatch
+    from config import AppConfig, Config, LinesConfig
+    from core import Subscription
+    from loggers import Logger
 
 
 class AdminApiMixin:

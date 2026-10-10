@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
 import jsonschema
@@ -12,6 +11,8 @@ from .constants import JsonValue
 from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from .core import Config
 
 from errors import ConfigError, FileCorruptionError, SchemaValidationError

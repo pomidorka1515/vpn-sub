@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import discord
 from chart import bandwidth_chart
@@ -10,6 +9,9 @@ from composition import PublicFeatureMixin
 from custom_types import BandwidthSnapshot
 from payloads import number
 from util import fmt_bytes, format_usage, truncate_utf8
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 __all__ = ["PublicTrafficMixin"]
 

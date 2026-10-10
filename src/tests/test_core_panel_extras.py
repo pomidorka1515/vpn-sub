@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from helpers import (
@@ -12,11 +12,13 @@ from helpers import (
     make_subscription,
 )
 
-from config import JsonValue
-from core import Subscription
-from db import Database
 from errors import PanelRejectedError, PanelUnavailableError
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from config import JsonValue
+    from core import Subscription
+    from db import Database
 
 
 def _status_obj() -> dict[str, JsonValue]:

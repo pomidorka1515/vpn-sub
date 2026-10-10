@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from types import TracebackType
 from typing import TYPE_CHECKING, ClassVar
 
 from .colors import Colors
@@ -13,6 +11,9 @@ from .handlers import _JSONLinesLogger, _TelegramLogger
 from .level import TRACE, env_level
 
 if TYPE_CHECKING:
+    from collections.abc import Generator, Mapping
+    from types import TracebackType
+
     from bots import AdminBot
     from config import LinesConfig
 

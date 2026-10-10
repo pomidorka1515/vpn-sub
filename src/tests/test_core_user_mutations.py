@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from helpers import (
@@ -13,10 +13,12 @@ from helpers import (
     make_subscription,
 )
 
-from core import Subscription
-from db import Database
 from errors import PanelRejectedError, ValidationError
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from core import Subscription
+    from db import Database
 
 NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 

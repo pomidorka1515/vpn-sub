@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from helpers import (
     FakePanel,
@@ -11,9 +11,11 @@ from helpers import (
     make_watch,
 )
 
-from db import Database
 from errors import PanelRejectedError
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from db import Database
 
 
 class _RecordingAdminBot:

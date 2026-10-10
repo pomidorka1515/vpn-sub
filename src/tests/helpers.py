@@ -5,21 +5,24 @@ import time
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, replace
-from typing import Unpack, cast
+from typing import TYPE_CHECKING, Unpack, cast
 from unittest.mock import MagicMock
 from urllib.parse import unquote
 
 from flask import Flask
 from requests import Response
-from typing_contracts import AppOverrides, CreateUserOverrides, ProfileOverrides
 
 from bots import AdminBot, PublicBot
 from bwatch import BWatch
 from config import AppConfig, Config, JsonValue, LangConfig, LinesConfig, ProfileConfig
 from core import Subscription
 from custom_types import ClientTraffic, Inbound, PanelClient
-from db import Database
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from typing_contracts import AppOverrides, CreateUserOverrides, ProfileOverrides
+
+    from db import Database
 
 USER_UUID = "01234567-89ab-cdef-0123-456789abcdef"
 TOKEN_A = "a" * 40

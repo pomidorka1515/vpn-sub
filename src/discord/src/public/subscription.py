@@ -3,12 +3,15 @@ from __future__ import annotations
 import io
 import time
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import discord
 from composition import PublicFeatureMixin
 from payloads import number
 from util import fmt_bytes
-from webapi import StatsPayload
+
+if TYPE_CHECKING:
+    from webapi import StatsPayload
 
 __all__ = ["PublicSubscriptionMixin"]
 

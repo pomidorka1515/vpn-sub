@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from flask import Response, make_response, redirect, render_template, request, send_file
 
@@ -17,6 +16,9 @@ from api.common import (
 from api.web._base import WebApiMixin
 from fonts import FONT_FILES, embed_font_faces
 from util import err
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _admin_module_method(name: str) -> Callable[[WebApiMixin], ResponseType]:

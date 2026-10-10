@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import copy
+from typing import TYPE_CHECKING
 
-from config import AppConfig
+if TYPE_CHECKING:
+    from config import AppConfig
 
 
 def build_json(

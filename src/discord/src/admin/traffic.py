@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import discord
 from chart import bandwidth_chart
@@ -12,6 +11,9 @@ from payloads import number, object_rows
 from util import fmt_bytes, format_usage, truncate_utf8
 
 from .common import obj_map, result_obj
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 __all__ = ["AdminTrafficMixin"]
 

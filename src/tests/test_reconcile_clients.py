@@ -4,14 +4,17 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import pytest
 from helpers import USER_UUID, FakePanel, create_alice, make_inbound, make_panel_client
 
-from config import PanelConfig
-from db import Database
 from session import XUiSession
+
+if TYPE_CHECKING:
+    import pytest
+
+    from config import PanelConfig
+    from db import Database
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "reconcile_clients.py"
 _SPEC = importlib.util.spec_from_file_location("reconcile_clients", _SCRIPT_PATH)

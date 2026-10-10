@@ -1,19 +1,23 @@
 from __future__ import annotations
 
-import sqlite3
 import threading
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from helpers import FakePanel, create_alice
-from requests import Response
 
-from config import JsonValue
-from core import Subscription
 from core.services.panel import _ONLINES_TTL
-from db import Database
 from errors import PanelUnavailableError
 from session import XUiSession
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from requests import Response
+
+    from config import JsonValue
+    from core import Subscription
+    from db import Database
 
 
 def test_online_status_reports_empty_when_all_panels_succeed(

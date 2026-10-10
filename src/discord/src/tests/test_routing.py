@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from pathlib import Path
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from discord_helpers import FakeInteraction, FakeUser, json_ok, make_public_bot, run
 
 from public.routing import PublicRoutingMixin
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class SlashCommand(Protocol):

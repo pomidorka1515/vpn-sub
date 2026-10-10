@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import time
 from dataclasses import asdict
+from typing import TYPE_CHECKING
 
-from config.constants import JsonDict
 from custom_types import BandwidthInfo, UserRecord
-from db.state import StateSnapshot
 from errors import PanelUnavailableError
 from sysutil import SysUtil
 
 from .host import BWatchHost
+
+if TYPE_CHECKING:
+    from config.constants import JsonDict
+    from db.state import StateSnapshot
 
 
 class SnapshotsMixin(BWatchHost):

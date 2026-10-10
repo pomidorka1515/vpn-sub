@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from typing import ClassVar
-
-from flask import Flask
+from typing import TYPE_CHECKING, ClassVar
 
 from api.common import BaseApi, Route
-from bwatch import BWatch
-from config import AppConfig, Config, LinesConfig
-from core import Subscription
 from loggers import Logger
 
 from .code import CodeRoutes
@@ -18,6 +13,13 @@ from .panel import PanelRoutes
 from .state import StateRoutes
 from .ui import UiRoutes
 from .user import UserRoutes
+
+if TYPE_CHECKING:
+    from flask import Flask
+
+    from bwatch import BWatch
+    from config import AppConfig, Config, LinesConfig
+    from core import Subscription
 
 __all__ = ["Api"]
 

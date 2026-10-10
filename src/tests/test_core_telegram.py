@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 from helpers import create_alice
 
-from core import Subscription
-from db import Database
 from errors import NotFoundError
+
+if TYPE_CHECKING:
+    from core import Subscription
+    from db import Database
 
 
 def test_telegram_language_round_trip(subscription: Subscription) -> None:

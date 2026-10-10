@@ -1,8 +1,12 @@
-from custom_types import UserRecord
+from typing import TYPE_CHECKING
+
 from errors import NotFoundError
 from tracer import Op
 
 from ...common import BaseService
+
+if TYPE_CHECKING:
+    from custom_types import UserRecord
 
 __all__ = ["CommonUserService"]
 

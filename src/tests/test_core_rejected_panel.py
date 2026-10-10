@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from helpers import FakePanel, create_alice, make_inbound, make_panel_client
 
-from core import Subscription
-from db import Database
 from errors import PanelRejectedError
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from core import Subscription
+    from db import Database
 
 
 def test_add_users_raises_panel_rejected_error(

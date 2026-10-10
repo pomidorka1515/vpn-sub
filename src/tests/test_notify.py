@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import time
-from typing import Unpack
+from typing import TYPE_CHECKING, Unpack
 
-from typing_contracts import UserRecordOverrides
-
-from custom_types import UserRecord
-from db import Database
 from notify import Kind, Notifier, account_key, classify, restored, split_key
 from notify.events import Notice
+
+if TYPE_CHECKING:
+    from typing_contracts import UserRecordOverrides
+
+    from custom_types import UserRecord
+    from db import Database
 
 TEXTS = {
     "en": {

@@ -8,9 +8,12 @@ stamp does not revive a value a clear already dropped.
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from .stamp import bump_stamp, read_stamp
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 __all__ = ["GenerationCache"]
 

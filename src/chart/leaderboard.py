@@ -1,9 +1,7 @@
 """Horizontal user leaderboard chart."""
 from __future__ import annotations
 
-import io
-from collections.abc import Mapping
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from PIL import Image, ImageDraw
 
@@ -25,6 +23,10 @@ from .draw import (
     save,
     text_size,
 )
+
+if TYPE_CHECKING:
+    import io
+    from collections.abc import Mapping
 
 
 def leaderboard_chart(

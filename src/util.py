@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import qrcode
 
-from custom_types import JsonifyValue
-
 if TYPE_CHECKING:
     from flask import Response
+
+    from custom_types import JsonifyValue
 
 __all__ = [
     "compare",

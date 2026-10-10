@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import discord
-from adminapi import AdminApiClient
-from config import Config, DiscordConfig, DiscordLangConfig
-from discord import app_commands
+from typing import TYPE_CHECKING
+
 from loggers import Logger
 
 from .codes import AdminCodesMixin
@@ -13,6 +11,12 @@ from .panels import AdminPanelsMixin
 from .routing import AdminRoutingMixin
 from .traffic import AdminTrafficMixin
 from .users import AdminUsersMixin
+
+if TYPE_CHECKING:
+    import discord
+    from adminapi import AdminApiClient
+    from config import Config, DiscordConfig, DiscordLangConfig
+    from discord import app_commands
 
 __all__ = ["AdminBot"]
 

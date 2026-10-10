@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from flask import request
 
 from api.admin._base import AdminApiMixin
 from api.common import ResponseType, Route
 from api.decorators import requires_admin_auth
-from custom_types import JsonifyValue
 from util import err, ok
+
+if TYPE_CHECKING:
+    from custom_types import JsonifyValue
 
 
 class PanelRoutes(AdminApiMixin):

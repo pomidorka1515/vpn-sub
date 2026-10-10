@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from typing import ClassVar
-
-from flask import Flask
+from typing import TYPE_CHECKING, ClassVar
 
 from api.common import BaseApi, Route
-from bwatch import BWatch
-from config import AppConfig, Config
-from core import Subscription
 from loggers import Logger
 
 from .account import AccountRoutes
 from .session import SessionRoutes
 from .static import StaticRoutes
+
+if TYPE_CHECKING:
+    from flask import Flask
+
+    from bwatch import BWatch
+    from config import AppConfig, Config
+    from core import Subscription
 
 __all__ = ["WebApi"]
 

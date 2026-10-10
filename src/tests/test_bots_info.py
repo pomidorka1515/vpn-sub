@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import Unpack
+from typing import TYPE_CHECKING, Unpack
 from unittest.mock import MagicMock
 
 import pytest
-from typing_contracts import UserInfoOverrides
 
 from bots.public.subscription import PublicSubscriptionMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
+
+if TYPE_CHECKING:
+    from typing_contracts import UserInfoOverrides
 
 INFO_TEXTS = {
     "en": {

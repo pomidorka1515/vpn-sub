@@ -1,10 +1,12 @@
-from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Literal
-
-from config import JsonValue
+from typing import TYPE_CHECKING, Literal
 
 from ..common import BaseService
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from config import JsonValue
 
 __all__ = ["AUDIT_VALUES", "AuditService"]
 

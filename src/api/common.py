@@ -3,17 +3,19 @@ from abc import ABC
 from collections.abc import Mapping
 from functools import lru_cache
 from hashlib import sha1
-from typing import ClassVar, NamedTuple, cast
+from typing import TYPE_CHECKING, ClassVar, NamedTuple, cast
 
 from flask import Flask, Response, request
 
-from bwatch import BWatch
-from config import AppConfig, Config, LangConfig
-from core import Subscription
-from custom_types import HTTPMethod
 from fonts import FONT_FILES
 from loggers import Logger
 from paths import bundled_root
+
+if TYPE_CHECKING:
+    from bwatch import BWatch
+    from config import AppConfig, Config, LangConfig
+    from core import Subscription
+    from custom_types import HTTPMethod
 
 type ResponseType = tuple[Response, int] | Response
 

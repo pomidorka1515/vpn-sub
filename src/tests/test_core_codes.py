@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 import pytest
 from helpers import create_alice
 
-from core import Subscription
-from db import Database
 from errors import NotFoundError, ValidationError
+
+if TYPE_CHECKING:
+    from core import Subscription
+    from db import Database
 
 
 def test_add_code_rejects_unknown_action(subscription: Subscription) -> None:

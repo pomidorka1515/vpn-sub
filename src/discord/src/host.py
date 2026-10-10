@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import discord
@@ -8,6 +7,8 @@ from discord import app_commands
 from loggers import Logger
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from admin.bot import AdminBot
     from public.bot import PublicBot
 

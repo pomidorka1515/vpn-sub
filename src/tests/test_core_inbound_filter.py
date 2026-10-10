@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from helpers import FakePanel, make_inbound
 
-from core import Subscription
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from core import Subscription
 
 
 def _filter(subscription: Subscription, mode: str, listed: tuple[int, ...]) -> list[int]:

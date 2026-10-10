@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from datetime import timedelta
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from gunicorn.config import Config as GunicornConfig
@@ -16,6 +15,9 @@ from loggers import TRACE, Colors, Logger
 from loggers.access import GunicornLogger, _color_status
 from loggers.handlers import _JSONLinesLogger
 from loggers.level import env_level, parse_level
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class _Cfg:

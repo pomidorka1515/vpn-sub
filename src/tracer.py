@@ -6,10 +6,12 @@ from __future__ import annotations
 import json
 import logging
 from enum import StrEnum
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
-from config import JsonValue
 from loggers import Colors, Logger
+
+if TYPE_CHECKING:
+    from config import JsonValue
 
 __all__ = ["Op", "trace"]
 

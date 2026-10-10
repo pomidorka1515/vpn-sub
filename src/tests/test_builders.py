@@ -3,19 +3,22 @@ from __future__ import annotations
 import base64
 import json
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import pytest
 from flask import Flask
 from helpers import config_mock, language_config, subscription_config
-from typing_contracts import AppOverrides, UserRecordOverrides
 
 from builders import build_description, build_json, build_link_array, get_subscription
-from config import AppConfig, LangConfig, ProfileConfig
 from config.documents import ProfileOutbound, ProfileStream, ProfileTemplate
 from core import Subscription
 from custom_types import BandwidthInfo
+
+if TYPE_CHECKING:
+    from typing_contracts import AppOverrides, UserRecordOverrides
+
+    from config import AppConfig, LangConfig, ProfileConfig
 
 DESC = {
         "en": {

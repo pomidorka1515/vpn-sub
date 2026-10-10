@@ -14,13 +14,15 @@ import binascii
 import hashlib
 import hmac
 import os
-from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from requests import Response
 
-from loggers import Logger
+    from loggers import Logger
+
 from paths import bundled_root, compiled, program_dir
 from version import VERSION
 

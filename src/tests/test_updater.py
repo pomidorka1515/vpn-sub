@@ -4,16 +4,18 @@ import hashlib
 import logging
 import os
 import sys
-from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Protocol, TypedDict
+from typing import TYPE_CHECKING, Protocol, TypedDict
 
 import pytest
 
 import cli.updater as updater
 from cli.updater import notice, update
 from loggers import Logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
 
 class ReleaseAsset(TypedDict):

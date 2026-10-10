@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import discord
 from composition import AdminFeatureMixin
 from payloads import number
 from util import fmt_time
 
 from .common import obj_map, result_obj
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    import discord
 
 __all__ = ["AdminPanelsMixin"]
 

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from typing import Literal, TypedDict
-
-from requests import Session
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from config import JsonValue, ProfileConfig
 from config.documents import (
@@ -14,8 +11,14 @@ from config.documents import (
     PublicBotConfig,
     RedisConfig,
 )
-from custom_types import Inbound, PanelClient, UserInfoBandwidth
-from session.transport import XUiPanelTransport
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from requests import Session
+
+    from custom_types import Inbound, PanelClient, UserInfoBandwidth
+    from session.transport import XUiPanelTransport
 
 
 class UserInfoOverrides(TypedDict, total=False):

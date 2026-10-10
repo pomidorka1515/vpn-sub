@@ -1,8 +1,7 @@
 import random
 import time
 import uuid
-from collections.abc import Mapping
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from custom_types import RegisterWithCodeInfo
 from errors import (
@@ -16,9 +15,13 @@ from tracer import Op
 from util import generate_token, isusername, sanitize
 
 from ...common import BaseService, SharedCoreResources
-from ..audit import AuditService
-from ..password import PasswordService
-from ..user.business import BusinessUserService
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from ..audit import AuditService
+    from ..password import PasswordService
+    from ..user.business import BusinessUserService
 
 # pyright: reportUnnecessaryIsInstance=false
 

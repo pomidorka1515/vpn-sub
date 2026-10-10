@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from helpers import (
     FakePanel,
@@ -10,8 +10,10 @@ from helpers import (
 )
 
 from custom_types import BandwidthInfo
-from db import Database
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from db import Database
 
 
 def test_whitelist_total_uses_only_whitelist_panel(database: Database) -> None:

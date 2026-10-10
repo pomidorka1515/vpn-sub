@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from helpers import TOKEN_A, create_alice
 
-from core import Subscription
-from db import Database
+if TYPE_CHECKING:
+    from core import Subscription
+    from db import Database
 
 
 def test_reset_user_invalidates_auth_session(

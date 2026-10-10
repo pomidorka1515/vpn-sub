@@ -7,8 +7,7 @@ import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, Protocol, Self, cast
-from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
+from typing import TYPE_CHECKING, BinaryIO, Protocol, Self, cast
 
 from flask import Flask, Response, request
 from flask.json.provider import DefaultJSONProvider
@@ -29,6 +28,9 @@ from loggers import Colors, Logger
 from paths import bundled_root, compiled, program_dir, runtime_dir
 from session import XUiPanelTransport, XUiSession
 from util import err
+
+if TYPE_CHECKING:
+    from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 threading.main_thread().name = "main"
 

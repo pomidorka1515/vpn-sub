@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING
 
 from loggers import Logger
 
-from .events import Notice
 from .kinds import Scope
+
+if TYPE_CHECKING:
+    from .events import Notice
 
 Send = Callable[[int, str], None]
 Language = Callable[[int], str]

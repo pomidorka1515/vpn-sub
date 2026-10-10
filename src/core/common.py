@@ -1,13 +1,16 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from argon2 import PasswordHasher
-from flask import Flask
-
-from config import AppConfig, Config, JsonValue, LangConfig, LinesConfig
-from db import Database
-from loggers import Logger
-from session import XUiSession
 from tracer import TraceOp, trace
+
+if TYPE_CHECKING:
+    from argon2 import PasswordHasher
+    from flask import Flask
+
+    from config import AppConfig, Config, JsonValue, LangConfig, LinesConfig
+    from db import Database
+    from loggers import Logger
+    from session import XUiSession
 
 __all__ = ["BaseService", "SharedCoreResources"]
 

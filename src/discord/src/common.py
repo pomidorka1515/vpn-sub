@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import discord
 from composition import PublicFeatureMixin
-from payloads import ResponseOptions
-from webapi import ApiResult
+
+if TYPE_CHECKING:
+    import discord
+    from payloads import ResponseOptions
+    from webapi import ApiResult
 
 __all__ = ["DiscordIOMixin"]
 

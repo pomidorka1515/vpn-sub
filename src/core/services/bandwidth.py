@@ -1,18 +1,23 @@
 import time
-from concurrent.futures import Executor
+from typing import TYPE_CHECKING
 
 from dacite import Config as DConfig
 from dacite import from_dict
 
 from custom_types import BandwidthInfo, BandwidthSnapshot, PanelClient
 from errors import AppError, PanelUnavailableError
-from session import XUiSession
 from sysutil import StateSnapshot
 from tracer import Op
 
 from ..common import BaseService, SharedCoreResources
-from .panel import PanelService
-from .user.common import CommonUserService
+
+if TYPE_CHECKING:
+    from concurrent.futures import Executor
+
+    from session import XUiSession
+
+    from .panel import PanelService
+    from .user.common import CommonUserService
 
 __all__ = ["BandwidthService"]
 

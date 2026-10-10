@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from typing import Unpack, cast
+from typing import TYPE_CHECKING, Unpack, cast
 
 import pytest
 from helpers import (
@@ -14,13 +14,16 @@ from helpers import (
     make_panel_client,
     make_subscription,
 )
-from requests import Response
-from typing_contracts import FakePanelOptions
 
-from config import JsonValue
-from db import Database
 from errors import PanelRejectedError, PanelUnavailableError
 from session import XUiSession
+
+if TYPE_CHECKING:
+    from requests import Response
+    from typing_contracts import FakePanelOptions
+
+    from config import JsonValue
+    from db import Database
 
 
 def _status_obj() -> dict[str, JsonValue]:

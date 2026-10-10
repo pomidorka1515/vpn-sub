@@ -2,15 +2,16 @@
 from __future__ import annotations
 
 import threading
-from typing import cast
-
-from telebot import types
+from typing import TYPE_CHECKING, cast
 
 from chart import bandwidth_chart
 from errors import AppError
 from util import fmt_bytes, format_usage, truncate_utf8
 
 from ..composition import AdminFeatureMixin
+
+if TYPE_CHECKING:
+    from telebot import types
 
 __all__ = ["AdminTrafficMixin"]
 

@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Unpack, cast
+from typing import TYPE_CHECKING, Unpack, cast
 from unittest.mock import MagicMock
 
 import pytest
 from telebot import types
-from typing_contracts import CodeOverrides
 
 from bots.admin.codes import AdminCodesMixin
 from custom_types import CodeObject
 from errors import AppError, NotFoundError
+
+if TYPE_CHECKING:
+    from typing_contracts import CodeOverrides
 
 
 def _message(text: str, chat_id: int = 7) -> types.Message:

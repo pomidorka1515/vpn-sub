@@ -4,16 +4,15 @@ from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequenc
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypedDict
 
-from requests import Response
-from requests.auth import AuthBase
-from requests.cookies import RequestsCookieJar
-from requests.models import PreparedRequest
-
-from config.constants import JsonValue
-
 # Dacite does not resolve PEP 695 recursive aliases when checking fields.
 # Keep JSON checking for callers while its runtime check accepts raw objects.
 if TYPE_CHECKING:
+    from requests import Response
+    from requests.auth import AuthBase
+    from requests.cookies import RequestsCookieJar
+    from requests.models import PreparedRequest
+
+    from config.constants import JsonValue
     _InboundValue = JsonValue
 else:
     _InboundValue = object

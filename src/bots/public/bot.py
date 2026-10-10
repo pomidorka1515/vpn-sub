@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import threading
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 
 import telebot
 from telebot import types
 
 from bots.handler_backend import LockedHandlerBackend
 from bots.polling import configure_telegram_api
-from config import AppConfig, Config, LangConfig
-from core import Subscription
 from loggers import Logger
 
 from .account import PublicAccountMixin
@@ -21,6 +18,13 @@ from .login import PublicLoginMixin
 from .settings import PublicSettingsMixin
 from .subscription import PublicSubscriptionMixin
 from .traffic import PublicTrafficMixin
+
+if TYPE_CHECKING:
+    import threading
+    from collections.abc import Callable
+
+    from config import AppConfig, Config, LangConfig
+    from core import Subscription
 
 __all__ = ["PublicBot"]
 

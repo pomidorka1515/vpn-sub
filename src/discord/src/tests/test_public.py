@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Iterator
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -20,6 +20,9 @@ from discord_helpers import (
 
 from public.bot import PublicBot
 from sessions import SessionStore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 PublicBotFactory = Callable[[Handler], tuple[PublicBot, SessionStore, FakeSession]]
 

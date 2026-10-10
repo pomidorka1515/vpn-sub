@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
 
-from telebot import Handler
 from telebot.handler_backends import HandlerBackend
+
+if TYPE_CHECKING:
+    from telebot import Handler
 
 __all__ = ["LockedHandlerBackend"]
 

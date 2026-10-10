@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from helpers import create_alice, make_subscription
 
 from config import LinesConfig
-from db import Database
+
+if TYPE_CHECKING:
+    from db import Database
 
 
 class RecordingAudit:

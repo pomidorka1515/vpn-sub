@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from typing import TYPE_CHECKING
 
 from custom_types import ApplyBonusCodeObject, CodeObject
 from errors import (
@@ -11,7 +12,9 @@ from errors import (
 from tracer import Op
 
 from ...common import BaseService, SharedCoreResources
-from ..audit import AuditService
+
+if TYPE_CHECKING:
+    from ..audit import AuditService
 
 # pyright: reportUnnecessaryIsInstance=false
 

@@ -37,14 +37,12 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 from urllib.parse import quote
 
 from dacite import from_dict
-from requests import Response
 
 _ROOT = Path(__file__).resolve().parent.parent
 _SRC = _ROOT / "src"
@@ -61,6 +59,11 @@ from custom_types import (  # noqa: E402
 from db import Database  # noqa: E402
 from paths import runtime_dir  # noqa: E402
 from session import XUiSession  # noqa: E402
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
+    from requests import Response
 
 
 class ReconcileError(RuntimeError):

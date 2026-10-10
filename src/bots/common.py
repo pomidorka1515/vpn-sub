@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import logging
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, TypedDict, Unpack, cast
+from typing import TYPE_CHECKING, Any, TypedDict, Unpack, cast
 
-import telebot
-from telebot import types
+if TYPE_CHECKING:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
 
-from config import AppConfig, Config, LangConfig
-from core import Subscription
-from loggers import Logger
+    import telebot
+    from telebot import types
+
+    from config import AppConfig, Config, LangConfig
+    from core import Subscription
+    from loggers import Logger
 
 __all__ = ["AdminStateMixin", "BotStateMixin", "PublicStateMixin", "TelegramIOMixin"]
 

@@ -5,12 +5,10 @@ from __future__ import annotations
 import os
 import threading
 import time
-from collections.abc import Callable, Mapping
-from typing import Literal, Unpack
+from typing import TYPE_CHECKING, Literal, Unpack
 
 from requests import ConnectionError, RequestException, Response, Session, Timeout  # noqa: A004
 
-from custom_types import Inbound, PanelClient, RequestKwargs
 from loggers import Logger, color_status
 
 from .cache import GenerationCache
@@ -22,6 +20,11 @@ from .transport import (
     XUiPanelTransport,
     new_session,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from custom_types import Inbound, PanelClient, RequestKwargs
 
 __all__ = ["XUiSession"]
 

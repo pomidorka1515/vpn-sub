@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from custom_types import UserRecord
+from typing import TYPE_CHECKING
 
 from .kinds import Kind
+
+if TYPE_CHECKING:
+    from custom_types import UserRecord
 
 _GB = 10**9
 _DAY = 86400

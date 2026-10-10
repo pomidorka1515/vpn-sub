@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
-import discord
+if TYPE_CHECKING:
+    import discord
 
 
 class ResponseOptions(TypedDict, total=False):

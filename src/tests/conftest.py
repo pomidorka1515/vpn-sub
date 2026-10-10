@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from helpers import make_subscription, make_watch
 
-from bwatch import BWatch
-from core import Subscription
 from db import Database
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
+
+    from bwatch import BWatch
+    from core import Subscription
 
 __all__ = ["database", "db_path", "subscription", "watch"]
 

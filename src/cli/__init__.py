@@ -10,9 +10,12 @@ starts the process.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from loggers import Logger
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from loggers import Logger
 
 __all__ = ["dispatch"]
 

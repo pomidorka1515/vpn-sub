@@ -38,4 +38,4 @@ def print_help(prog: str) -> None:
     Does not exit. The caller raises ``SystemExit`` so the process code is
     explicit at the flag dispatch.
     """
-    print(usage(prog), end="")
+    print(usage(prog), end="") # noqa: T201

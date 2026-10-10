@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from types import ModuleType, SimpleNamespace
-
-import pytest
+from typing import TYPE_CHECKING
 
 from paths import program_dir
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 
 def _compiled_main(monkeypatch: pytest.MonkeyPatch, compiled: object) -> None:

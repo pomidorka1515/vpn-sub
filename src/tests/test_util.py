@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import socket
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import psutil
-import pytest
 
 from sysutil import SysUtil
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 
 def test_ipaddr_uses_interface_addresses_not_hosts_file(

@@ -4,9 +4,7 @@ import copy
 import os
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
-from pathlib import Path
-from types import TracebackType
-from typing import Literal, cast, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 
 from errors import ConfigError, ReadOnlyConfigError
 from loggers import Logger
@@ -22,6 +20,10 @@ from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_ba
 from .constants import MISSING, MISSING_TYPE, SYNC_MODES, JsonDict, JsonValue
 from .schema import load_schema, read_json_object, validate_schema
 from .transaction import ConfigTransaction
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from types import TracebackType
 
 
 class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):

@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import MutableMapping
-from datetime import timedelta
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlsplit
 
-from gunicorn.config import Config
 from gunicorn.glogging import Logger as GunicornBaseLogger
-from gunicorn.http.message import Request
-from gunicorn.http.wsgi import Response
 
 from .colors import Colors
 from .colors import color_status as _color_status
 from .level import TRACE, env_level
 from .logger import Logger
+
+if TYPE_CHECKING:
+    from collections.abc import MutableMapping
+    from datetime import timedelta
+
+    from gunicorn.config import Config
+    from gunicorn.http.message import Request
+    from gunicorn.http.wsgi import Response
 
 __all__ = [
     "GunicornLogger",

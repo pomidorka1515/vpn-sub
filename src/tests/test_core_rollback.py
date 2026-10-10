@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
 from helpers import make_subscription
 
-from core import Subscription
-from db import Database
+if TYPE_CHECKING:
+    from core import Subscription
+    from db import Database
 
 
 def test_startup_recovers_registration_rollback_marker(

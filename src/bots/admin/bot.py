@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import threading
+from typing import TYPE_CHECKING
 
 import telebot
 
 from bots.polling import configure_telegram_api
-from config import AppConfig, Config, LangConfig
-from core import Subscription
 from loggers import Logger
 
 from .codes import AdminCodesMixin
@@ -17,6 +15,12 @@ from .leaderboard import AdminLeaderboardMixin
 from .panels import AdminPanelsMixin
 from .traffic import AdminTrafficMixin
 from .users import AdminUsersMixin
+
+if TYPE_CHECKING:
+    import threading
+
+    from config import AppConfig, Config, LangConfig
+    from core import Subscription
 
 __all__ = ["AdminBot"]
 

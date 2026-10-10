@@ -4,10 +4,7 @@ import json
 import os
 import tempfile
 import threading
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from pathlib import Path
-from types import TracebackType
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 from errors import ConfigError
 from loggers import Logger
@@ -20,7 +17,13 @@ from .atomic import (
     resolve_lockfile_path,
 )
 from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
-from .constants import SYNC_MODES, JsonDict, JsonValue
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Mapping, Sequence
+    from pathlib import Path
+    from types import TracebackType
+
+    from .constants import SYNC_MODES, JsonDict, JsonValue
 
 
 class LinesConfig:

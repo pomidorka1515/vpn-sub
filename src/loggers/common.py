@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import logging
 import re
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import logging
 
 __all__ = ["_ANSI_ESCAPE", "_safe_handle_error"]
 
@@ -13,4 +16,4 @@ def _safe_handle_error(handler: logging.Handler, record: logging.LogRecord) -> N
     try:
         handler.handleError(record)
     except Exception:
-        print(f"logging handler {handler!r} failed while handling {record!r}", file=sys.stderr)
+        print(f"logging handler {handler!r} failed while handling {record!r}", file=sys.stderr) # noqa: T201

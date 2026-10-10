@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from concurrent.futures import Executor
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .host import BWatchHost
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from concurrent.futures import Executor
 
 
 class SchedulerMixin(BWatchHost):

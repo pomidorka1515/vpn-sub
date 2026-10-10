@@ -3,9 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Iterator
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import pytest
 
@@ -17,6 +16,9 @@ from errors import (
     ReadOnlyConfigError,
     SchemaValidationError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @pytest.fixture

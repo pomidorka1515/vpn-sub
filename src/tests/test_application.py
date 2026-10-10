@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import TypedDict, Unpack
+from typing import TYPE_CHECKING, TypedDict, Unpack
 from unittest import mock
 
 import pytest
@@ -11,9 +11,11 @@ from requests import Response
 
 from api.decorators.rate_limit import close_rate_limit
 from app import Application, AppOptions, AppPaths, create_application, verbose_overrides
-from config import JsonValue
-from custom_types import RequestKwargs
 from paths import runtime_dir
+
+if TYPE_CHECKING:
+    from config import JsonValue
+    from custom_types import RequestKwargs
 
 
 def json_response(data: dict[str, JsonValue], status_code: int = 200) -> Response:

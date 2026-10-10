@@ -7,16 +7,19 @@ that share a session remain responsible for its lifecycle and pool limits.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
-from typing import Protocol, Unpack
+from typing import TYPE_CHECKING, Protocol, Unpack
 
 from requests import Response, Session
 from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
 
-from config import JsonValue
-from custom_types import RequestKwargs
 from errors import XUiSessionError
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from config import JsonValue
+    from custom_types import RequestKwargs
 
 __all__ = ["SESSION_POOL_MAXSIZE", "FakeResponse", "RequestsPanelTransport", "XUiPanelTransport"]
 

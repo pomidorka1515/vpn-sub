@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Unpack
-
-import telebot
-from telebot import types
-
-from config import AppConfig, Config, LangConfig
-from core import Subscription
-from loggers import Logger
 
 __all__ = ["AdminFeatureMixin", "PublicFeatureMixin"]
 
 
 if TYPE_CHECKING:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    import telebot
+    from telebot import types
+
+    from config import AppConfig, Config, LangConfig
+    from core import Subscription
+    from loggers import Logger
+
     from .common import MessageOptions
 
     class AdminFeatureMixin:

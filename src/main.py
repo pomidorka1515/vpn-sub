@@ -8,13 +8,16 @@ no interpreter and no config file to hand it.
 
 from __future__ import annotations
 
-from wsgiref.types import WSGIApplication
+from typing import TYPE_CHECKING
 
 from gunicorn.app.base import BaseApplication
 from gunicorn.util import import_app
 
 from paths import compiled
 from serve import options
+
+if TYPE_CHECKING:
+    from wsgiref.types import WSGIApplication
 
 
 class Application(BaseApplication):

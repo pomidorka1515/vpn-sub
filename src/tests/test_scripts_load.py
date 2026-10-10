@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import logging
 import sys
-from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Protocol
-
-import pytest
+from typing import TYPE_CHECKING, Protocol
 
 import cli.scripts as scripts_load
 from cli.scripts import load_scripts
 from loggers import Logger
+
+if TYPE_CHECKING:
+    import logging
+    from pathlib import Path
+
+    import pytest
 
 
 class StubResponse(Protocol):

@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import discord
-from config import Config, DiscordConfig, DiscordLangConfig
-from discord import Client, Interaction, app_commands
 from loggers import Logger
-from sessions import SessionStore
-from webapi import WebApiClient
 
 from .account import PublicAccountMixin
 from .common import PublicCommonMixin
@@ -18,6 +12,15 @@ from .routing import PublicRoutingMixin
 from .settings import PublicSettingsMixin
 from .subscription import PublicSubscriptionMixin
 from .traffic import PublicTrafficMixin
+
+if TYPE_CHECKING:
+    import asyncio
+
+    import discord
+    from config import Config, DiscordConfig, DiscordLangConfig
+    from discord import Client, Interaction, app_commands
+    from sessions import SessionStore
+    from webapi import WebApiClient
 
 __all__ = ["PublicBot"]
 

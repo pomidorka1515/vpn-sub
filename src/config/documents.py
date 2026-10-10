@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
-from .constants import JsonDict
+if TYPE_CHECKING:
+    from .constants import JsonDict
 
 # Contracts from config.schema.json and src/discord/config.schema.json;
 # lang.jsonc and src/discord/lang.jsonc have no schemas.

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import discord
 from chart import leaderboard_chart
@@ -11,6 +10,9 @@ from payloads import number, object_rows
 from util import fmt_bytes, truncate_utf8
 
 from .common import result_obj
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 __all__ = ["AdminLeaderboardMixin"]
 

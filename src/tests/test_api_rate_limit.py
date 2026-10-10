@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import pytest
 from flask import Flask
-from flask.ctx import RequestContext
 
 from api import BaseApi, rate_limit
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
@@ -13,6 +12,11 @@ from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
     _replace_client,
     close_rate_limit,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from flask.ctx import RequestContext
 
 
 @pytest.fixture

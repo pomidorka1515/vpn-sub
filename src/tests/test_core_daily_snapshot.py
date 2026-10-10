@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
 from helpers import create_alice
 
-from bwatch import BWatch
-from core import Subscription
 from custom_types import BandwidthInfo
-from db import Database
 from errors import PanelUnavailableError
+
+if TYPE_CHECKING:
+    from bwatch import BWatch
+    from core import Subscription
+    from db import Database
 
 
 def test_daily_snapshot_retries_only_failed_kind(watch: BWatch) -> None:

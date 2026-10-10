@@ -4,8 +4,7 @@ import json
 import os
 import sqlite3
 import threading
-from pathlib import Path
-from typing import Literal, TextIO
+from typing import TYPE_CHECKING, Literal, TextIO
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +20,9 @@ from config.backup import (
 )
 from db.backup import do_backup, make_backup_thread, prune_backups
 from loggers import Logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _log() -> Logger:

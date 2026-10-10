@@ -3,11 +3,10 @@ from __future__ import annotations
 import random
 import time
 import uuid
-from collections.abc import Mapping
 from dataclasses import asdict
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from config.constants import JsonValue
 from custom_types import (
     ClientPayload,
     NewUserInfo,
@@ -25,16 +24,22 @@ from errors import (
     PanelRejectedError,
     ValidationError,
 )
-from session import XUiSession
 from tracer import Op
 from util import *
 
 from ...common import BaseService, SharedCoreResources
-from ..audit import AuditService
-from ..bandwidth import BandwidthService
-from ..panel import PanelService
-from ..password import PasswordService
-from .common import CommonUserService
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from config.constants import JsonValue
+    from session import XUiSession
+
+    from ..audit import AuditService
+    from ..bandwidth import BandwidthService
+    from ..panel import PanelService
+    from ..password import PasswordService
+    from .common import CommonUserService
 
 __all__ = ["BusinessUserService"]
 

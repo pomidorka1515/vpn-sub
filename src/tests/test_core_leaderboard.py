@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-import sqlite3
+from typing import TYPE_CHECKING
 
 from helpers import create_alice, make_subscription
 
 from custom_types import BandwidthInfo
-from db import Database
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from db import Database
 
 
 def test_leaderboard_total_and_monthly_ranking(database: Database) -> None:

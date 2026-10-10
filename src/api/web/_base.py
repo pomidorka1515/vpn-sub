@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from flask import Flask, Response
+from typing import TYPE_CHECKING
 
-from api.common import ResponseType
-from bwatch import BWatch
-from config import AppConfig, Config
-from core import Subscription
-from loggers import Logger
+if TYPE_CHECKING:
+    from flask import Flask, Response
+
+    from api.common import ResponseType
+    from bwatch import BWatch
+    from config import AppConfig, Config
+    from core import Subscription
+    from loggers import Logger
 
 
 class WebApiMixin:

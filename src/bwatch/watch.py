@@ -4,13 +4,9 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
-from bots import AdminBot, PublicBot
-from config import AppConfig, Config
 from custom_types import BandwidthInfo
-from db import Database
 from loggers import Logger
 
 from .calendar import CalendarMixin
@@ -20,7 +16,12 @@ from .scheduler import SchedulerMixin
 from .snapshots import SnapshotsMixin
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from bots import AdminBot, PublicBot
+    from config import AppConfig, Config
     from core import Subscription
+    from db import Database
 
 __all__ = ["BWatch"]
 

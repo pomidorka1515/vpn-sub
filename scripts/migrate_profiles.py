@@ -23,11 +23,13 @@ import json
 import os
 import sys
 import tempfile
-from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import jsonschema
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 type JsonDict = dict[str, JsonValue]

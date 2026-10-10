@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import io
-from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from PIL import Image, ImageDraw, ImageFont
 
 from paths import bundled_root
 from util import fmt_bytes
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 BG       = '#1a1a1d'
 PANEL    = '#232327'

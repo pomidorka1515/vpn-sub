@@ -3,12 +3,15 @@ from __future__ import annotations
 import sqlite3
 import threading
 import uuid
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from db import Database
 from errors import CodeError, DuplicateError, MigrationError
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def create_user(db: Database, username: str = "alice", *, token: str | None = None) -> None:

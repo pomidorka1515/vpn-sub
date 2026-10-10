@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from flask import Flask
 from flask.json.provider import DefaultJSONProvider
-from flask.testing import FlaskClient
 from helpers import config_mock, make_subscription, make_watch, subscription_config
 from jinja2 import FileSystemLoader
 
@@ -19,8 +17,14 @@ from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
     close_rate_limit,
 )
 from config import Config, LangConfig, LinesConfig
-from db import Database
 from errors import AppError, DatabaseError
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from flask.testing import FlaskClient
+
+    from db import Database
 
 _LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
 

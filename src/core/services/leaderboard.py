@@ -1,11 +1,13 @@
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from tracer import Op
 
 from ..common import BaseService, SharedCoreResources
-from .bandwidth import BandwidthService
 from .panel import BG_POOL
-from .user.common import CommonUserService
+
+if TYPE_CHECKING:
+    from .bandwidth import BandwidthService
+    from .user.common import CommonUserService
 
 
 class LeaderboardService(BaseService):

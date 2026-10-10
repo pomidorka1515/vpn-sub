@@ -3,11 +3,13 @@ import hashlib
 import json
 import os
 import tempfile
-from collections.abc import Generator, Mapping
 from contextlib import contextmanager, suppress
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
-from .constants import SYNC_MODES, JsonValue
+if TYPE_CHECKING:
+    from collections.abc import Generator, Mapping
+
+    from .constants import SYNC_MODES, JsonValue
 
 
 class FileSignature(NamedTuple):

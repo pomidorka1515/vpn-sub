@@ -3,13 +3,15 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from config import JsonValue
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "migrate_profiles.py"
 _SPEC = importlib.util.spec_from_file_location("migrate_profiles", _SCRIPT_PATH)

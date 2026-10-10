@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from helpers import create_alice, make_subscription
 
-from db import Database
-from db.state import StateSnapshot
+if TYPE_CHECKING:
+    from db import Database
+    from db.state import StateSnapshot
 
 
 def _state_payload(ts: int) -> StateSnapshot:

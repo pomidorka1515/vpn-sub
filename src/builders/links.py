@@ -6,10 +6,13 @@ import base64
 import json
 import urllib.parse
 from collections import deque
+from typing import TYPE_CHECKING
 
-from config import AppConfig, LangConfig
-from custom_types import BandwidthInfo
 from util import fmt_bytes
+
+if TYPE_CHECKING:
+    from config import AppConfig, LangConfig
+    from custom_types import BandwidthInfo
 
 
 def build_link_array(

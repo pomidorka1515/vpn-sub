@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
-from typing import TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
-from config.constants import JsonDict
 from custom_types import BandwidthSnapshotPayload
 
 from .common import ConnectionMixin
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from config.constants import JsonDict
 
 
 class StateSnapshot(TypedDict):

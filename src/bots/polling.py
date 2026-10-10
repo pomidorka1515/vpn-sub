@@ -3,13 +3,14 @@ from __future__ import annotations
 import re
 import threading
 import time
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import telebot
 from requests.exceptions import RequestException
 from telebot import apihelper
 
-from loggers import Logger
+if TYPE_CHECKING:
+    from loggers import Logger
 
 __all__ = ['TelegramPollingMixin', 'configure_telegram_api']
 

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import replace as dreplace
+from typing import TYPE_CHECKING
 
-import pytest
 from argon2 import PasswordHasher
 from helpers import create_alice
 
-from core import Subscription
-from db import Database
+if TYPE_CHECKING:
+    import pytest
+
+    from core import Subscription
+    from db import Database
 
 
 def _create_login(database: Database, password_hash: str) -> None:

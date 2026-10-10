@@ -14,18 +14,20 @@ import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from types import TracebackType
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from types import TracebackType
+
     from requests import Response
+
+    from loggers import Logger
 
 import contextlib
 
-from loggers import Logger
 from paths import compiled, program_dir
 from version import VERSION
 

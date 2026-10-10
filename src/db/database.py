@@ -3,9 +3,8 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
-from collections.abc import Generator
 from contextlib import contextmanager, suppress
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from errors import DatabaseError
 from loggers import Logger
@@ -17,6 +16,10 @@ from .schema import SchemaMixin
 from .state import StateMixin
 from .telegram import TelegramMixin
 from .users import UsersMixin
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+    from pathlib import Path
 
 
 class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):

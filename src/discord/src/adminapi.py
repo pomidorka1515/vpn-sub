@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urljoin
 
 import aiohttp
 
 from webapi import ApiResult
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 __all__ = ["AdminApiClient"]
 

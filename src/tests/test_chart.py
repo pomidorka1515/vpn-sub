@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import io
+from typing import TYPE_CHECKING
 
 from PIL import Image
 
 from chart import bandwidth_chart, leaderboard_chart
 from custom_types import BandwidthSnapshot
+
+if TYPE_CHECKING:
+    import io
 
 _LANG = {
     "bandwidth": "Использование трафика",
