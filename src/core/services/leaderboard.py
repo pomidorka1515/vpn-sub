@@ -62,11 +62,11 @@ class LeaderboardService(BaseService):
                 # pool with BWatch. A whitelist-only read is one panel and
                 # stays inline; this path is the multi-panel total.
                 totals = self.bandwidth_svc.all_traffic(pool=BG_POOL)
-                for user, display in zip(users, display_users):
+                for user, display in zip(users, display_users, strict=True):
                     info = totals.get(user)
                     raw[display] = int(info.total) if info is not None else 0
             case 'monthly' | 'wl_monthly':
-                for record, display in zip(records, display_users):
+                for record, display in zip(records, display_users, strict=True):
                     if category == "monthly":
                         limit = record["bw_limit_gb"]
                         used = record["bw_used"]

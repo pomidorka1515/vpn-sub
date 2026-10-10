@@ -115,7 +115,7 @@ def draw_stacked(
     draw.rectangle((left, top, right, bottom), fill=PANEL)
     draw_text(draw, (left, top - 28), title, font=fonts['title'], fill=TEXT)
 
-    peak = max((b + t for b, t in zip(bottoms, tops)), default=0)
+    peak = max((b + t for b, t in zip(bottoms, tops, strict=True)), default=0)
     ticks = nice_ticks(float(peak))
     scale_max = ticks[-1] if ticks[-1] > 0 else 1.0
     plot_h = bottom - top
@@ -135,7 +135,7 @@ def draw_stacked(
     bar_w = max(1, int(slot * bar_frac))
     step = max(1, n // 10) if n > 15 else 1
 
-    for i, (label, down, up) in enumerate(zip(labels, bottoms, tops)):
+    for i, (label, down, up) in enumerate(zip(labels, bottoms, tops, strict=True)):
         cx = left + slot * (i + 0.5)
         x0 = int(cx - bar_w / 2)
         x1 = x0 + bar_w
