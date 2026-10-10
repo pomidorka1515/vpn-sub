@@ -17,7 +17,7 @@ from errors import SchemaValidationError, ConfigError, FileCorruptionError
 
 def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
     try:
-        with open(cfg.path, "r", encoding="utf-8") as handle:
+        with open(cfg.path, encoding="utf-8") as handle:
             content = handle.read()
         if cfg.read_only_jsonc:
             content = strip_jsonc_comments(content)
@@ -73,7 +73,7 @@ def load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping
         return cfg.schema_cache
 
     try:
-        with open(schema_path, "r", encoding="utf-8") as handle:
+        with open(schema_path, encoding="utf-8") as handle:
             schema: dict[str, JsonValue] = json.load(handle)
     except FileNotFoundError as exc:
         if cfg.strict_schema:

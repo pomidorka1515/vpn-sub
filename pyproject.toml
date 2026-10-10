@@ -91,9 +91,13 @@ ignore = [
 	"PLR2004", # "magic values", useless
 	"PLC0415", # "import should be at the top-level", lazy imports are intentional
 	"E701",    # "too many statements on 1 line"
-	"PLR0913", # "too many arguments in ..."
-	"PLR0917", # "too many positional arguments"
+	"PLR0912", # "too many X" in something (branches, args, etc)
+	"PLR0913", 
+	"PLR0915", 
+	"PLR0917",
 	"TID252",  # relative imports
+	"F403",    # star imports trigger these;
+	"F405",    # mypy/pyright will catch any invalid method/variable either way
 ]
 
 extend-safe-fixes = ["W293", "W291"]

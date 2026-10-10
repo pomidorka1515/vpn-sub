@@ -147,7 +147,7 @@ class SysUtil:
     def memory() -> SystemMemory:
         mem_data: dict[str, int] = {}
 
-        with open("/proc/meminfo", "r") as f:
+        with open("/proc/meminfo") as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 2:

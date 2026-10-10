@@ -67,7 +67,7 @@ def do_backup(
         backup_path = os.path.join(instance_dir, f"{timestamp}.json")
         if data is None:
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     content = f.read()
                 if jsonc:
                     content = strip_jsonc_comments(content)

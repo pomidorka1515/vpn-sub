@@ -141,7 +141,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
-                    with open(self._path, "r", encoding="utf-8") as f:
+                    with open(self._path, encoding="utf-8") as f:
                         for line in f:
                             line = line.strip()
                             if line:
@@ -194,7 +194,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
-                    with open(self._path, "r", encoding="utf-8") as f:
+                    with open(self._path, encoding="utf-8") as f:
                         for line in f:
                             line = line.strip()
                             if line:
@@ -210,7 +210,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
-                    with open(self._path, "r", encoding="utf-8") as f:
+                    with open(self._path, encoding="utf-8") as f:
                         return sum(1 for line in f if line.strip())
                 except OSError:
                     return 0
@@ -255,7 +255,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 try:
-                    with open(self._path, "r", encoding="utf-8") as f:
+                    with open(self._path, encoding="utf-8") as f:
                         records = [json.loads(line) for line in f if line.strip()]
                 except OSError:
                     return CompactReturn(0, 0)
