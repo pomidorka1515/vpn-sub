@@ -50,6 +50,7 @@ class AccountRoutes(WebApiMixin):
 
     @requires_webapi_auth
     def profiles(self, username: str) -> ResponseType:
+        del username
         lang = request.args.get('lang')
         if lang not in ('ru', 'en'):
             return err("Unknown language", 400)
@@ -65,6 +66,7 @@ class AccountRoutes(WebApiMixin):
 
     @requires_webapi_auth
     def fps(self, username: str) -> ResponseType:
+        del username
         conf = self.cfg.view()
         return ok(obj=conf['fingerprints'])
 

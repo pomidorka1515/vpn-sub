@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Protocol, Self, TypedDict
 
 import pytest
 
-import cli.updater as updater
+from cli import updater
 from cli.updater import notice, update
 from loggers import Logger
 

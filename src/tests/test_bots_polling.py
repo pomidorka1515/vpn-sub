@@ -6,9 +6,8 @@ from collections.abc import Callable
 from typing import cast
 
 import pytest
-import telebot.apihelper as apihelper
 from requests import Response
-from telebot import TeleBot
+from telebot import TeleBot, apihelper
 
 from bots import polling as polling_module
 from bots.polling import (

@@ -22,14 +22,10 @@ if TYPE_CHECKING:
 
 class Application(BaseApplication):
     def load_config(self) -> None:
-        if self.cfg is None:
-            raise RuntimeError("config not loaded")
         for key, value in options().items():
             self.cfg.set(key, value)
 
     def load(self) -> WSGIApplication:  # type: ignore[override]
-        if self.cfg is None:
-            raise RuntimeError("config not loaded")
         return import_app(self.cfg.wsgi_app)  # type: ignore[return-value]
 
 

@@ -217,7 +217,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
         return self.require_active().setdefault(key, default)
 
     @overload
-    def update(self, **kwargs: JsonValue) -> None: ...
+    def update(self, /, **kwargs: JsonValue) -> None: ...
 
     @overload
     def update(self, m: Mapping[str, JsonValue], /, **kwargs: JsonValue) -> None: ...
@@ -225,12 +225,11 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
     @overload
     def update(self, m: Iterable[tuple[str, JsonValue]], /, **kwargs: JsonValue) -> None: ...
 
-    # whatever lol
-    def update( # pyright: ignore[reportInconsistentOverload]
+    def update(
         self,
         m: Mapping[str, JsonValue] | Iterable[tuple[str, JsonValue]] | None = None,
         /,
-        **kwargs: JsonValue
+        **kwargs: JsonValue,
     ) -> None:
         data = self.require_active()
 

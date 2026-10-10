@@ -57,6 +57,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         self.send_info(message.chat.id, uid, lang)
 
     def _handle_bonus(self, message: types.Message, uid: int, lang: str) -> None:
+        del uid
         t = self.TEXTS[lang]
         msg = self.bot.send_message(
             message.chat.id,
@@ -91,6 +92,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     def _handle_subscription_menu(
         self, message: types.Message, uid: int, lang: str
     ) -> None:
+        del uid
         t = self.TEXTS[lang]
         reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         reply_markup.add(  # pyright: ignore[reportUnknownMemberType]
@@ -110,6 +112,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     def _handle_account_menu(
         self, message: types.Message, uid: int, lang: str
     ) -> None:
+        del uid
         t = self.TEXTS[lang]
         reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         reply_markup.add(  # pyright: ignore[reportUnknownMemberType]
@@ -132,6 +135,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         )
 
     def _handle_reset(self, message: types.Message, uid: int, lang: str) -> None:
+        del uid
         t = self.TEXTS[lang]
         msg = self.bot.send_message(
             message.chat.id,
@@ -153,6 +157,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         )
 
     def _handle_help(self, message: types.Message, uid: int, lang: str) -> None:
+        del uid
         t = self.TEXTS[lang]
         descriptions = ""
         conf = self.cfg.view()
@@ -168,6 +173,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         )
 
     def _handle_settings(self, message: types.Message, uid: int, lang: str) -> None:
+        del uid
         t = self.TEXTS[lang]
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
@@ -184,6 +190,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         )
 
     def _handle_delete(self, message: types.Message, uid: int, lang: str) -> None:
+        del uid
         t = self.TEXTS[lang]
         msg = self.bot.send_message(
             message.chat.id,
@@ -199,6 +206,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         self.send_link(message.chat.id, uid, lang)
 
     def _handle_chart(self, message: types.Message, uid: int, lang: str) -> None:
+        del uid
         t = self.TEXTS[lang]
         markup = types.InlineKeyboardMarkup(row_width=2)
         buttons: list[types.InlineKeyboardButton] = [

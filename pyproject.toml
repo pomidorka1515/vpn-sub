@@ -41,56 +41,34 @@ requires = ["setuptools>=70"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
+# Discover packages and top-level modules automatically from src/.
 package-dir = {"" = "src"}
-py-modules = [
-    "app",
-    "custom_types",
-    "util", "errors", "tracer",
-    "paths", "serve", "main", "wsgi"
-]
-packages = [
-    "api",
-    "api.decorators",
-    "builders",
-    "config",
-    "chart",
-    "core",
-    "loggers",
-    "bots",
-    "bots.admin",
-    "bots.public",
-    "notify",
-    "db",
-    "bwatch",
-    "session",
-    "sysutil",
-    "cli",
-]
 
 # ---------------------------------------------------------------------------
 # ruff
 # ---------------------------------------------------------------------------
 
 [tool.ruff]
-target-version = "py314"
-src = ["src", "src/discord/src"]
+target-version = "py314" # Match the development Python version
+src = ["src", "src/discord/src"] # First-party import roots
 
 [tool.ruff.lint]
+# Rule families belong here; exceptions below use individual rule codes.
 select = [
     "F",      # Pyflakes
     "E", "W", # pycodestyle
     "UP",     # pyupgrade
     "TID",    # flake8-tidy-imports
     "B",      # flake8-bugbear
+    "S",      # Security checks (flake8-bandit)
     "SIM",    # flake8-simplify
     "FURB",   # refurb
     "PL",     # Pylint
-]
-
-extend-select = [
     "A",      # Shadowing built-ins
     "ANN",    # Missing function annotations
+    "ARG",    # Unused function, method, and lambda arguments
     "ASYNC",  # Async correctness and blocking calls
+    "BLE",    # Bare Exception/BaseException catches that hide failures
     "C4",     # Unnecessary comprehensions
     "DTZ",    # Timezone mistakes
     "EXE",    # Executable permissions and shebangs
@@ -108,7 +86,6 @@ extend-select = [
     "PERF",   # Performance patterns
     "PT",     # Pytest assertions, fixtures, parametrization, and exception checks
     "RET",    # Consistent returns and redundant control flow
-    "S",
     "SLOT",   # Missing slots on immutable built-in subclasses
     "T10",    # Forgotten debugger calls
     "TRY",    # Exception handling
@@ -121,55 +98,68 @@ extend-select = [
 ]
 
 ignore = [
-	"RUF001",  # Unicode characters in strings are intentional
-	"RUF002",  # Unicode characters in docstrings are intentional
-	"RUF003",  # Unicode characters in comments are intentional
-	"E501",    # i dont need this
-	"PLR2004", # "magic values", useless
-	"PLC0415", # "import should be at the top-level", lazy imports are intentional
-	"E701",    # "too many statements on 1 line"
-	"PLR09",   # "too many X"
-	"TID252",  # relative imports
-	"F403",    # star imports trigger these;
-	"F405",    # mypy/pyright will catch any invalid method/variable either way
-	"SIM117",  # nested with(), chaining can lead to unexpected behaviour in tests
-	"SIM102",  # nested ifs
-	"PLW2901", # redefined loop name
-	"G003",    # logging stuff
-	"G004",
-	"TRY003",  # avoid specifying long messages outside the exception class
-	"TRY301",  # abstract raise to an inner function
-	"TRY300",  # demand else blocks after try except
-	"TRY004",  # prefer `TypeError`...
-	"S110",    # try/except/pass
-	"S311",    # random.choice()
-	"S603",    # subprocess
-	"TC006",   # wrap values in quotes in cast()
+    "RUF001",  # Unicode characters in strings are intentional
+    "RUF002",  # Unicode characters in docstrings are intentional
+    "RUF003",  # Unicode characters in comments are intentional
+    "E501",    # Line length is not enforced
+    "PLR2004", # Literal comparisons do not need named constants
+    "PLC0415", # Lazy imports are intentional
+    "E701",    # Compact single-line compound statements are allowed
+    "PLR0904", # Public method counts are not limited
+    "PLR0911", # Return counts are not limited
+    "PLR0912", # Branch counts are not limited
+    "PLR0913", # Argument counts are not limited
+    "PLR0914", # Local variable counts are not limited
+    "PLR0915", # Statement counts are not limited
+    "PLR0916", # Boolean expression counts are not limited
+    "PLR0917", # Positional argument counts are not limited
+    "TID252",  # Relative imports are allowed
+    "F403",    # Star imports are intentional
+    "F405",    # Mypy/pyright check names introduced by star imports
+    "SIM117",  # Nested context managers preserve intentional test structure
+    "SIM102",  # Nested conditionals are allowed
+    "PLW2901", # Loop variables may be reassigned
+    "G003",    # Concatenated logging messages are allowed
+    "G004",    # F-string logging messages are allowed
+    "TRY003",  # Exception messages may be supplied at the raise site
+    "TRY301",  # Explicit raises may remain inside try blocks
+    "TRY300",  # Successful try paths do not require else blocks
+    "TRY004",  # Invalid argument types do not require TypeError
+    "S110",    # Deliberately suppressed exceptions may use pass
+    "S311",    # Non-cryptographic random choices are intentional
+    "S603",    # Subprocess calls are intentional
+    "TC006",   # Runtime types are allowed in cast() calls
+    "BLE",     # Exceptions are audited independently from ruff
+    "ARG005",  # Libraries require arguments when passing callables
 ]
 
+# Whitespace-only fixes are safe even inside multiline strings.
 extend-safe-fixes = ["W293", "W291"]
 
 [tool.ruff.lint.pyupgrade]
-keep-runtime-typing = false
+keep-runtime-typing = false # Modernize annotations even when evaluated at runtime
 
 [tool.ruff.lint.per-file-ignores]
 # Expected CLI failures use concise messages rather than tracebacks.
 "src/cli/{scripts,updater}.py" = ["TRY400"]
-"scripts/*" = ["T201"]
+
+# Standalone scripts may print user-facing output and intentionally have unused arguments.
+"scripts/*" = ["T201", "ARG"]
+# Test helpers intentionally exercise dynamic attributes and insecure fixtures.
 "**/tests/*" = [
-    "PLR",
-    "B009",
-    "B010",
-    "RUF012",
-    "TRY004",
-    "S101",
-    "S108",
-    "S106",
-    "S105",
-    "S324"
+    "B009",   # getattr() with a constant name is useful in attribute tests
+    "B010",   # setattr() with a constant name is useful in attribute tests
+    "RUF012", # Mutable class attributes are intentional in test doubles
+    "S101",   # Pytest uses assert statements
+    "S108",   # Temporary path literals are test fixtures
+    "S106",   # Hardcoded password arguments are test fixtures
+    "S105",   # Hardcoded password strings are test fixtures
+    "S324",   # Weak hashes may be exercised by compatibility tests
+    "ARG",    # Unused arguments/etc are useful in tests
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Require PEP 695 generics/type aliases and stdlib typing.
 "typing.TypeVar".msg = "Use 3.12 syntax: `class MyClass[T]:` or `def func[T]():`"
 "typing.ParamSpec".msg = "Use 3.12 syntax."
 "typing.Generic".msg = "Use 3.12 syntax."
@@ -243,32 +233,7 @@ cache_dir = "$MYPY_CONFIG_FILE_DIR/.mypy_cache"
 # this file doesn't need type checking.
 exclude = ['src/discord/src/app.py']
 
-files = [
-    "src/config/",
-    "src/bots/",
-    "src/db/",
-    "src/custom_types.py",
-    "src/loggers/",
-    "src/session/",
-    "src/chart/",
-    "src/bwatch/",
-    "src/notify/",
-    "src/api/",
-    "src/app.py",
-    "src/util.py",
-    "src/sysutil/",
-    "src/paths.py",
-    "src/cli/",
-    "src/version.py",
-    "src/errors.py",
-    "src/builders/",
-    "src/fonts.py",
-    "src/tracer.py",
-    "src/tests/",
-    "src/core/",
-    "src/discord/src/",
-    "scripts/"
-]
+files = ["src/", "scripts/"]
 
 # -- strict mode --------------------------------------------------------
 # Listed individually (instead of strict = true) so per-module relaxations
@@ -307,31 +272,7 @@ disable_error_code             = ["override"]
 # -- pylance compatibility ----------------------------------------------
 [tool.pyright]
 pythonVersion = "3.14"
-include = [
-    "src/config/",
-    "src/bots/",
-    "src/db/",
-    "src/custom_types.py",
-    "src/loggers/",
-    "src/session/",
-    "src/chart/",
-    "src/paths.py",
-    "src/cli/",
-    "src/version.py",
-    "src/bwatch/",
-    "src/notify/",
-    "src/api/",
-    "src/app.py",
-    "src/util.py",
-    "src/errors.py",
-    "src/builders/",
-    "src/fonts.py",
-    "src/tracer.py",
-    "src/tests/",
-    "src/core/",
-    "src/discord/src/",
-    "scripts/"
-]
+include = ["src/", "scripts/"]
 exclude = [
     "**/venv/**",
     "**/.venv/**",
@@ -386,14 +327,16 @@ root = "src/tests"
 reportPrivateUsage = false
 
 [[tool.pyright.executionEnvironments]]
-extraPaths = ["src/discord/src", "src"]
-root = "src/discord/src"
+extraPaths = ["src", "src/discord/src", "src/discord/src/tests"]
+root = "src/discord/src/tests"
 reportPrivateUsage = false
 reportUnusedFunction = false
 
 [[tool.pyright.executionEnvironments]]
-extraPaths = ["src", "src/discord/src", "src/discord/src/tests"]
-root = "src/discord/src/tests"
+extraPaths = ["src/discord/src", "src"]
+root = "src/discord/src"
+reportPrivateUsage = false
+reportUnusedFunction = false
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]

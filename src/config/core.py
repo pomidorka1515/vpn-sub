@@ -434,7 +434,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         return self.run_edit(lambda tx: tx.setdefault(key, default))
 
     @overload
-    def update(self, **kwargs: JsonValue) -> None: ...
+    def update(self, /, **kwargs: JsonValue) -> None: ...
 
     @overload
     def update(self, m: Mapping[str, JsonValue], /, **kwargs: JsonValue) -> None: ...
@@ -442,11 +442,11 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     @overload
     def update(self, m: Iterable[tuple[str, JsonValue]], /, **kwargs: JsonValue) -> None: ...
 
-    def update( # pyright: ignore[reportInconsistentOverload]
+    def update(
         self,
         m: Mapping[str, JsonValue] | Iterable[tuple[str, JsonValue]] | None = None,
         /,
-        **kwargs: JsonValue
+        **kwargs: JsonValue,
     ) -> None:
         """Atomic mapping-style update."""
         self.raise_if_read_only()
