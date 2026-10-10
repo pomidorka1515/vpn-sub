@@ -8,6 +8,12 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Protocol
 
+import pytest
+
+import cli.scripts as scripts_load
+from loggers import Logger
+from cli.scripts import load_scripts
+
 
 class StubResponse(Protocol):
     def raise_for_status(self) -> None: ...
@@ -16,12 +22,6 @@ class StubResponse(Protocol):
 
 class GetStub(Protocol):
     def __call__(self, url: str, *_args: object, **_kwargs: object) -> StubResponse: ...
-
-import pytest
-
-import cli.scripts as scripts_load
-from loggers import Logger
-from cli.scripts import load_scripts
 
 
 class _Log(Logger):

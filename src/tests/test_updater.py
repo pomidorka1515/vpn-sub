@@ -9,6 +9,12 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Protocol, TypedDict, Callable
 
+import pytest
+
+import cli.updater as updater
+from loggers import Logger
+from cli.updater import notice, update
+
 
 class ReleaseAsset(TypedDict):
     name: str
@@ -36,12 +42,6 @@ class StubResponse(Protocol):
 
 class GetStub(Protocol):
     def __call__(self, *_args: object, **_kwargs: object) -> StubResponse: ...
-
-import pytest
-
-import cli.updater as updater
-from loggers import Logger
-from cli.updater import notice, update
 
 
 class _Log(Logger):

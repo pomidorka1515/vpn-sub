@@ -4,13 +4,13 @@ from pathlib import Path
 from typing import Protocol, cast
 from collections.abc import Callable, Coroutine
 
+from discord_helpers import FakeInteraction, FakeUser, json_ok, make_public_bot, run
+from public.routing import PublicRoutingMixin
+
 
 class SlashCommand(Protocol):
     _callback: Callable[[object, FakeInteraction], Coroutine[object, object, object]]
     binding: object
-
-from discord_helpers import FakeInteraction, FakeUser, json_ok, make_public_bot, run
-from public.routing import PublicRoutingMixin
 
 
 def _invoke_slash(command: object, interaction: FakeInteraction) -> None:
