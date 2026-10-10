@@ -10,7 +10,8 @@ if TYPE_CHECKING:
 
 
 def test_reset_user_invalidates_auth_session(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     database.set_auth_token("alice", "b" * 100)

@@ -20,13 +20,9 @@ if TYPE_CHECKING:
 
 __all__ = ["CodeService"]
 
+
 class CodeService(BaseService):
-    def __init__(
-        self,
-        res: SharedCoreResources,
-        *,
-        audit_svc: AuditService
-    ) -> None:
+    def __init__(self, res: SharedCoreResources, *, audit_svc: AuditService) -> None:
         super().__init__(res)
         self.audit_svc: AuditService = audit_svc
 
@@ -39,12 +35,12 @@ class CodeService(BaseService):
             raise NotFoundError("Unknown code")
         return CodeObject(
             code=code,
-            action=result['action'],
-            perma=result['perma'],
-            uses=result['uses'],
-            days=result['days'],
-            gb=result['gb'],
-            wl_gb=result['wl_gb']
+            action=result["action"],
+            perma=result["perma"],
+            uses=result["uses"],
+            days=result["days"],
+            gb=result["gb"],
+            wl_gb=result["wl_gb"],
         )
 
     def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject:
@@ -52,7 +48,7 @@ class CodeService(BaseService):
 
         Returns:
             ApplyBonusCodeObject: Applied bonus info on success.
-            """
+        """
         if not isinstance(code, str) or not code:
             raise ValidationError("Unknown code")
         self.trace(Op.code.apply_bonus_code, "start", username=username, code=code)
@@ -63,29 +59,41 @@ class CodeService(BaseService):
                 raise NotFoundError("Unknown user") from exc
             raise NotFoundError("Unknown code") from exc
         result = ApplyBonusCodeObject(
-            days=int(result_data["days"]), gb=int(result_data["gb"]),
-            wl_gb=int(result_data["wl_gb"]), uses=int(result_data["uses"]),
-            perma=bool(result_data["perma"]), time=int(result_data["time"]),
-            limit=int(result_data["limit"]), wl_limit=int(result_data["wl_limit"]),
+            days=int(result_data["days"]),
+            gb=int(result_data["gb"]),
+            wl_gb=int(result_data["wl_gb"]),
+            uses=int(result_data["uses"]),
+            perma=bool(result_data["perma"]),
+            time=int(result_data["time"]),
+            limit=int(result_data["limit"]),
+            wl_limit=int(result_data["wl_limit"]),
         )
         self.trace(
-            Op.code.apply_bonus_code, "applied",
-            username=username, code=code,
-            days=result.days, gb=result.gb, wl_gb=result.wl_gb,
-            uses=result.uses, perma=result.perma, time=result.time,
-            limit=result.limit, wl_limit=result.wl_limit,
+            Op.code.apply_bonus_code,
+            "applied",
+            username=username,
+            code=code,
+            days=result.days,
+            gb=result.gb,
+            wl_gb=result.wl_gb,
+            uses=result.uses,
+            perma=result.perma,
+            time=result.time,
+            limit=result.limit,
+            wl_limit=result.wl_limit,
         )
         self.audit_svc.audit(name="user_consume_code", info=asdict(result))
         return result
 
-    def add_code(self,
+    def add_code(
+        self,
         code: str,
         action: str,
         permanent: bool = False,
         days: int = 0,
         gb: int = 0,
         wl_gb: int = 0,
-        uses: int = 1
+        uses: int = 1,
     ) -> None:
         """
         Creates a code.
@@ -104,24 +112,44 @@ class CodeService(BaseService):
             raise ValidationError("uses must be >= 1")
 
         self.trace(
-            Op.code.add_code, "start",
-            code=code, action=action, perma=permanent,
-            days=days, gb=gb, wl_gb=wl_gb, uses=uses,
+            Op.code.add_code,
+            "start",
+            code=code,
+            action=action,
+            perma=permanent,
+            days=days,
+            gb=gb,
+            wl_gb=wl_gb,
+            uses=uses,
         )
         res: dict[str, str | bool | int] = {
-            "code": code, "action": action, "perma": permanent,
-            "days": days, "gb": gb, "wl_gb": wl_gb, "uses": uses if not permanent else -1
+            "code": code,
+            "action": action,
+            "perma": permanent,
+            "days": days,
+            "gb": gb,
+            "wl_gb": wl_gb,
+            "uses": uses if not permanent else -1,
         }
         try:
-            self.db.add_code(code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses)
+            self.db.add_code(
+                code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses
+            )
         except DuplicateError as exc:
             raise ConflictError(f"code '{code}' already exists") from exc
         self.trace(
-            Op.code.add_code, "created",
-            code=code, action=action, perma=permanent,
-            days=days, gb=gb, wl_gb=wl_gb, uses=res["uses"],
+            Op.code.add_code,
+            "created",
+            code=code,
+            action=action,
+            perma=permanent,
+            days=days,
+            gb=gb,
+            wl_gb=wl_gb,
+            uses=res["uses"],
         )
         self.audit_svc.audit(name="code_add", info=res)
+
     def delete_code(self, code: str) -> None:
         """Delete a code. Raises NotFoundError if it does not exist."""
         self.trace(Op.code.delete_code, "start", code=code)
@@ -130,5 +158,6 @@ class CodeService(BaseService):
             raise NotFoundError("Unknown code")
         self.trace(Op.code.delete_code, "deleted", code=code)
         self.audit_svc.audit(name="code_delete", info={"code": code})
+
     def list_code(self) -> list[str]:
-        return [str(c['code']) for c in self.db.all_codes() if 'code' in c]
+        return [str(c["code"]) for c in self.db.all_codes() if "code" in c]

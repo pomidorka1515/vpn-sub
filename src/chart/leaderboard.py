@@ -1,4 +1,5 @@
 """Horizontal user leaderboard chart."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
@@ -46,17 +47,17 @@ def leaderboard_chart(
     if not data:
         return None
 
-    bw_key = f'bw_type_{bandwidth_type}'
-    bw_label = lang.get(bw_key, lang['bw_type_total'])
+    bw_key = f"bw_type_{bandwidth_type}"
+    bw_label = lang.get(bw_key, lang["bw_type_total"])
     sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)[:15]
 
     width, height = LB_SIZE
-    image = Image.new('RGB', (width, height), BG)
+    image = Image.new("RGB", (width, height), BG)
     draw = ImageDraw.Draw(image)
     header_font = load_font(22)
     tick_font = load_font(14)
 
-    header = f'{lang["leaderboard"]} — {bw_label}'
+    header = f"{lang['leaderboard']} — {bw_label}"
     draw_text(draw, (40, 18), header, font=header_font, fill=TEXT)
 
     label_col = 220
@@ -96,6 +97,8 @@ def leaderboard_chart(
         tw, th = text_size(tick_font, shown)
         draw_text(draw, (left - 12 - tw, int(cy - th / 2)), shown, font=tick_font, fill=TEXT_DIM)
         value_label = fmt_bytes(value)
-        draw_text(draw, (left + bar_w + 8, int(cy - th / 2)), value_label, font=tick_font, fill=TEXT_DIM)
+        draw_text(
+            draw, (left + bar_w + 8, int(cy - th / 2)), value_label, font=tick_font, fill=TEXT_DIM
+        )
 
     return save(image)

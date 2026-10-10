@@ -34,28 +34,64 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
 
     async def _cb_leaderboard_type(self, interaction: discord.Interaction) -> None:
         view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label="📊 Общий (total)", custom_id="admin:lbt:total", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label="📅 Месячный (monthly)", custom_id="admin:lbt:monthly", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label="🛡 Белый список (wl_monthly)", custom_id="admin:lbt:wl_monthly", style=discord.ButtonStyle.secondary))
-        await self._respond(interaction, "🏆 **Таблица лидеров**\n\nВыберите тип трафика:", view=view)
+        view.add_item(
+            discord.ui.Button(
+                label="📊 Общий (total)",
+                custom_id="admin:lbt:total",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="📅 Месячный (monthly)",
+                custom_id="admin:lbt:monthly",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="🛡 Белый список (wl_monthly)",
+                custom_id="admin:lbt:wl_monthly",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        await self._respond(
+            interaction, "🏆 **Таблица лидеров**\n\nВыберите тип трафика:", view=view
+        )
 
     async def _cb_leaderboard_order(self, interaction: discord.Interaction) -> None:
         view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label="🔽 По убыванию (1st = most)", custom_id="admin:lbo:desc", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label="🔼 По возрастанию (1st = least)", custom_id="admin:lbo:asc", style=discord.ButtonStyle.secondary))
+        view.add_item(
+            discord.ui.Button(
+                label="🔽 По убыванию (1st = most)",
+                custom_id="admin:lbo:desc",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="🔼 По возрастанию (1st = least)",
+                custom_id="admin:lbo:asc",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
         await self._respond(interaction, "📋 **Сортировка**\n\nВыберите порядок:", view=view)
 
     async def handle_leaderboard_window_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_leaderboard.pop(interaction.user.id, None)
         if not pending:
-            await self._respond(interaction, "❌ Сессия истекла, начните заново.", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните заново.", view=self.main_menu_view()
+            )
             return
         try:
             window = int(self.modal_values(interaction).get("window", "").strip())
             if window < 0:
                 raise ValueError
         except ValueError:
-            await self._respond(interaction, "❌ Введите неотрицательное целое число.", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Введите неотрицательное целое число.", view=self.main_menu_view()
+            )
             return
         bw_type = cast(Literal["total", "monthly", "wl_monthly"], pending.get("type", "total"))
         order = cast(Literal["asc", "desc"], pending.get("order", "desc"))

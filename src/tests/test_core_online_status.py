@@ -53,12 +53,16 @@ def test_online_status_marks_malformed_payload_invalid(subscription: Subscriptio
 
 
 def test_online_status_loads_users_once(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database, ext_username="ext-alice")
     database.create_user(
-        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        token="b" * 40, fingerprint="chrome", displayname="Bob",
+        username="bob",
+        uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
     )
     payload: dict[str, JsonValue] = {"success": True, "obj": ["alice", "stranger", "bob", "alice"]}
     subscription.panels.append(cast(XUiSession, FakePanel(name="a", post_payload=payload)))
@@ -83,7 +87,8 @@ def test_online_status_loads_users_once(
 
 
 def test_online_status_reuses_a_fresh_classification(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     panel = FakePanel(name="panel", post_payload={"success": True, "obj": ["alice"]})
@@ -117,7 +122,8 @@ def test_online_status_does_not_cache_a_total_outage(
 
 
 def test_online_status_shares_one_inflight_fetch(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     started = threading.Event()

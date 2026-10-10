@@ -58,7 +58,11 @@ class PublicRoutingMixin(PublicFeatureMixin):
         )
 
     async def _show_account_menu(self, interaction: discord.Interaction) -> None:
-        await self._reply_key(interaction, "welcome_reg", view=self.account_menu_view(self.get_lang(interaction.user.id)))
+        await self._reply_key(
+            interaction,
+            "welcome_reg",
+            view=self.account_menu_view(self.get_lang(interaction.user.id)),
+        )
 
     async def _show_sub_menu(self, interaction: discord.Interaction) -> None:
         await self._reply_key(
@@ -131,7 +135,9 @@ class PublicRoutingMixin(PublicFeatureMixin):
         handler_name = _EXACT_HANDLERS.get(custom_id)
         if handler_name is None:
             return
-        handler = cast(Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name))
+        handler = cast(
+            Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name)
+        )
         await handler(interaction)
 
     async def _dispatch_fp_select(self, interaction: discord.Interaction) -> None:

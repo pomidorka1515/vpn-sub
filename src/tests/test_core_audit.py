@@ -31,7 +31,8 @@ def test_audit_is_silent_without_config(
 def test_audit_appends_when_configured(database: Database) -> None:
     audit = RecordingAudit()
     subscription = make_subscription(
-        database, audit_cfg=cast(LinesConfig, audit),
+        database,
+        audit_cfg=cast(LinesConfig, audit),
     )
     create_alice(database)
     subscription.business_svc.update_params("alice", displayname="Alice 2")

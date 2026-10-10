@@ -130,27 +130,49 @@ def test_reads_pick_up_external_file_changes(cfg: Config) -> None:
 @pytest.fixture
 def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
     document: AppConfig = {
-        "uri": "sub", "api_token": "test", "provider_id": "test", "salt": "test",
-        "domain": "example.test", "ping_check_url": "https://example.test/ping",
-        "sub_name": "test", "api_admin_ui_auth": ["admin", "password"],
-        "fingerprints": ["chrome"], "bypass_packages": [], "panel_alert_cooldown": 3600,
-        "nodes": {}, "profiles": {}, "redis": {"url": "redis://localhost/0"},
+        "uri": "sub",
+        "api_token": "test",
+        "provider_id": "test",
+        "salt": "test",
+        "domain": "example.test",
+        "ping_check_url": "https://example.test/ping",
+        "sub_name": "test",
+        "api_admin_ui_auth": ["admin", "password"],
+        "fingerprints": ["chrome"],
+        "bypass_packages": [],
+        "panel_alert_cooldown": 3600,
+        "nodes": {},
+        "profiles": {},
+        "redis": {"url": "redis://localhost/0"},
         "json_template": {
-            "dns": {}, "routing": {"rules": [], "domainStrategy": "AsIs"},
-            "inbounds": [], "outbounds": [], "remarks": "test",
+            "dns": {},
+            "routing": {"rules": [], "domainStrategy": "AsIs"},
+            "inbounds": [],
+            "outbounds": [],
+            "remarks": "test",
         },
-        "3xui": {"local": {
-            "name": "local", "address": "localhost", "port": 2053, "uri": "panel",
-            "token": "test-token-at-least-20-characters", "https": False,
-            "whitelist": False, "inbounds_list": [1], "mode": "whitelist",
-        }},
+        "3xui": {
+            "local": {
+                "name": "local",
+                "address": "localhost",
+                "port": 2053,
+                "uri": "panel",
+                "token": "test-token-at-least-20-characters",
+                "https": False,
+                "whitelist": False,
+                "inbounds_list": [1],
+                "mode": "whitelist",
+            }
+        },
         "bot": {"token": "test", "whitelist": [1]},
     }
     path = tmp_path / "config.json"
     path.write_text(json.dumps(document), encoding="utf-8")
     config = Config[AppConfig](
-        path=path, schema_path=Path(__file__).resolve().parents[2] / "config.schema.json",
-        backup_dir=None, sync_mode="none",
+        path=path,
+        schema_path=Path(__file__).resolve().parents[2] / "config.schema.json",
+        backup_dir=None,
+        sync_mode="none",
     )
     try:
         yield config
@@ -236,9 +258,14 @@ def test_leaked_transaction_view_obeys_commit_isolation(tmp_path: Path, isolate:
             leaked["nested"] = nested
         nested["value"] = 2
         leaked["extra"] = True
-        assert config.view() == ({"nested": {"value": 1}} if isolate else {
-            "nested": {"value": 2}, "extra": True,
-        })
+        assert config.view() == (
+            {"nested": {"value": 1}}
+            if isolate
+            else {
+                "nested": {"value": 2},
+                "extra": True,
+            }
+        )
         assert json.loads(Path(config.path).read_text(encoding="utf-8")) == {
             "nested": {"value": 1},
         }
@@ -365,12 +392,14 @@ def test_remote_schema_is_rejected(tmp_path: Path) -> None:
 
 def test_local_schema_validation_error(tmp_path: Path) -> None:
     (tmp_path / "schema.json").write_text(
-        json.dumps({
-            "type": "object",
-            "required": ["name"],
-            "properties": {"name": {"type": "string"}},
-            "additionalProperties": True,
-        }),
+        json.dumps(
+            {
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}},
+                "additionalProperties": True,
+            }
+        ),
         encoding="utf-8",
     )
     path = tmp_path / "config.json"
@@ -381,12 +410,14 @@ def test_local_schema_validation_error(tmp_path: Path) -> None:
 
 def test_local_schema_accepts_valid_document(tmp_path: Path) -> None:
     (tmp_path / "schema.json").write_text(
-        json.dumps({
-            "type": "object",
-            "required": ["name"],
-            "properties": {"name": {"type": "string"}},
-            "additionalProperties": True,
-        }),
+        json.dumps(
+            {
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}},
+                "additionalProperties": True,
+            }
+        ),
         encoding="utf-8",
     )
     path = tmp_path / "config.json"
@@ -471,10 +502,12 @@ def test_lines_append_tail_and_compact(tmp_path: Path) -> None:
     lines = LinesConfig(path, backup_dir=None, sync_mode="none")
     try:
         lines.append({"id": 1, "keep": True})
-        lines.append_many((
-            {"id": 2, "keep": False},
-            {"id": 3, "keep": True, "text": "привет"},
-        ))
+        lines.append_many(
+            (
+                {"id": 2, "keep": False},
+                {"id": 3, "keep": True, "text": "привет"},
+            )
+        )
         assert lines.count() == 3
         assert lines.first(1) == [{"id": 1, "keep": True}]
         assert list(lines.tail(2)) == [

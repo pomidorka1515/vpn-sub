@@ -30,24 +30,21 @@ def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
     except FileNotFoundError:
         raise
     except json.JSONDecodeError as exc:
-        raise FileCorruptionError(
-            f"Config file '{cfg.path}' is not valid JSON: {exc}"
-        ) from exc
+        raise FileCorruptionError(f"Config file '{cfg.path}' is not valid JSON: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise ConfigError(
-            f"Config file '{cfg.path}' must contain a JSON object at the top level."
-        )
+        raise ConfigError(f"Config file '{cfg.path}' must contain a JSON object at the top level.")
     return cast(dict[str, JsonValue], data)
 
-def load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
+
+def load_schema[Doc](
+    cfg: Config[Doc], data: Mapping[str, JsonValue]
+) -> Mapping[str, JsonValue] | None:
     schema_ref = data.get("$schema")
     forced = cfg.schema_path
     if forced is not None:
         if schema_ref:
-            cfg.log.warning(
-                f"$schema {schema_ref!r} ignored; using schema_path {forced!r}"
-            )
+            cfg.log.warning(f"$schema {schema_ref!r} ignored; using schema_path {forced!r}")
         schema_path = forced
     elif not schema_ref:
         return None
@@ -56,24 +53,17 @@ def load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping
             raise SchemaValidationError("'$schema' must be a string.")
 
         if schema_ref.startswith(("http://", "https://")):
-            message = (
-                "Remote JSON schemas are not supported for security/reliability reasons."
-            )
+            message = "Remote JSON schemas are not supported for security/reliability reasons."
             if cfg.strict_schema:
                 raise SchemaValidationError(message)
             cfg.log.warning(message)
 
             return None
 
-        schema_path = os.path.normpath(
-            Path(cfg.path).parent / schema_ref
-        )
+        schema_path = os.path.normpath(Path(cfg.path).parent / schema_ref)
     schema_sig = stat_signature(schema_path)
 
-    if (
-        schema_path == cfg.schema_cache_path
-        and schema_sig == cfg.schema_cache_signature
-    ):
+    if schema_path == cfg.schema_cache_path and schema_sig == cfg.schema_cache_signature:
         return cfg.schema_cache
 
     try:
@@ -81,9 +71,7 @@ def load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping
             schema: dict[str, JsonValue] = json.load(handle)
     except FileNotFoundError as exc:
         if cfg.strict_schema:
-            raise SchemaValidationError(
-                f"Schema file not found: {schema_path}"
-            ) from exc
+            raise SchemaValidationError(f"Schema file not found: {schema_path}") from exc
         cfg.log.warning(f"Schema file not found: {schema_path}")
         return None
     except json.JSONDecodeError as exc:
@@ -91,15 +79,14 @@ def load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping
             f"Schema file '{schema_path}' is not valid JSON: {exc}"
         ) from exc
 
-    if not isinstance(schema, dict): # pyright: ignore[reportUnnecessaryIsInstance]
-        raise SchemaValidationError(
-            f"Schema file '{schema_path}' must contain a JSON object."
-        )
+    if not isinstance(schema, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise SchemaValidationError(f"Schema file '{schema_path}' must contain a JSON object.")
 
     cfg.schema_cache_path = schema_path
     cfg.schema_cache_signature = schema_sig
     cfg.schema_cache = schema
     return schema
+
 
 def validate_schema[Doc](cfg: Config[Doc], data: dict[str, JsonValue]) -> None:
     schema = load_schema(cfg, data)
@@ -109,10 +96,7 @@ def validate_schema[Doc](cfg: Config[Doc], data: dict[str, JsonValue]) -> None:
     try:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as exc:
-        message = (
-            f"Schema validation error: {exc.message} "
-            f"at path {list(exc.absolute_path)}"
-        )
+        message = f"Schema validation error: {exc.message} at path {list(exc.absolute_path)}"
         if cfg.strict_schema:
             raise SchemaValidationError(message) from exc
         cfg.log.warning(message)

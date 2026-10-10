@@ -21,7 +21,8 @@ def test_telegram_language_round_trip(subscription: Subscription) -> None:
 
 
 def test_telegram_bind_unbind_and_reverse_lookup(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     subscription.telegram_svc.set_telegram_user(123, "alice")
@@ -36,7 +37,8 @@ def test_telegram_bind_unbind_and_reverse_lookup(
 
 
 def test_telegram_bonus_requires_bound_user(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1, expires_at=1000)
     subscription.code_svc.add_code("bonus1", "bonus", gb=2, wl_gb=3, uses=1)

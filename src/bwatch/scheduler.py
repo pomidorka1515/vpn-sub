@@ -19,14 +19,22 @@ class SchedulerMixin(BWatchHost):
         ("Bandwidth", 15, (("bandwidth poll", "bandwidth_check"),)),
         ("Quota & Notifs", 120, (("periodic user check", "check"),)),
         ("Panels check", 300, (("panel health check", "panel_health_check"),)),
-        ("Date check & reconcile", 7200, (
-            ("monthly reset check", "is_first"),
-            ("inbound reconcile", "reconcile_inbounds"),
-        )),
-        ("Snapshots", 86400, (
-            ("bandwidth snapshot pruning", "prune_old_bw_snapshots"),
-            ("state snapshot pruning", "prune_old_snap_snapshots"),
-        )),
+        (
+            "Date check & reconcile",
+            7200,
+            (
+                ("monthly reset check", "is_first"),
+                ("inbound reconcile", "reconcile_inbounds"),
+            ),
+        ),
+        (
+            "Snapshots",
+            86400,
+            (
+                ("bandwidth snapshot pruning", "prune_old_bw_snapshots"),
+                ("state snapshot pruning", "prune_old_snap_snapshots"),
+            ),
+        ),
     )
 
     @staticmethod
@@ -35,6 +43,7 @@ class SchedulerMixin(BWatchHost):
         before ``core`` has finished loading ``panel``.
         """
         from core.services.panel import BG_POOL
+
         return BG_POOL
 
     def _alert_admin(self, message: str) -> None:
@@ -66,7 +75,9 @@ class SchedulerMixin(BWatchHost):
             operation()
             failures = self._snapshot_failures.pop(kind, 0)
             if failures:
-                self.log.info("Daily %s snapshot recovered after %d failed attempts", kind, failures)
+                self.log.info(
+                    "Daily %s snapshot recovered after %d failed attempts", kind, failures
+                )
             return 86400.0
         except Exception as exc:
             failures = self._snapshot_failures.get(kind, 0) + 1
@@ -84,9 +95,7 @@ class SchedulerMixin(BWatchHost):
         )
         for kind in due_snapshots:
             operation = (
-                self.record_daily_snapshot
-                if kind == "bandwidth"
-                else self.record_snap_snapshot
+                self.record_daily_snapshot if kind == "bandwidth" else self.record_snap_snapshot
             )
             delay = self._run_daily_snapshot(kind, operation)
             self._snapshot_due_at[kind] = now + delay

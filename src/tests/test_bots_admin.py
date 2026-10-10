@@ -34,7 +34,10 @@ def admin_bot() -> tuple[AdminBot, MagicMock]:
 
 @pytest.mark.parametrize(("route", "handler_name", "is_prefix"), AdminBot.ROUTES)
 def test_routes_exact_and_prefix_callbacks_to_first_matching_handler(
-    admin_bot: tuple[AdminBot, MagicMock], route: str, handler_name: str, is_prefix: bool,
+    admin_bot: tuple[AdminBot, MagicMock],
+    route: str,
+    handler_name: str,
+    is_prefix: bool,
 ) -> None:
     bot, _telegram = admin_bot
     data = f"{route}value" if is_prefix else route

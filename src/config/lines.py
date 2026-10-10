@@ -42,7 +42,7 @@ class LinesConfig:
     def __init__(
         self,
         path: str | Path,
-        sync_mode: SYNC_MODES = 'data',
+        sync_mode: SYNC_MODES = "data",
         backup_dir: str | Path | None = None,
         backup_interval: float = 7200,
         backup_retention: int = 3,
@@ -69,7 +69,7 @@ class LinesConfig:
         self.log = Logger(type(self).__name__)
         path_str = str(path)
         with self.log.loading():
-            if not path_str.endswith('.jsonl'):
+            if not path_str.endswith(".jsonl"):
                 self.log.warning("path doesnt end with .jsonl, did you specify the correct path?")
             self._path: str = path_str
             self._lockfile_path: str = resolve_lockfile_path(
@@ -89,14 +89,14 @@ class LinesConfig:
                 with Path(self._path).open("a", encoding="utf-8"):
                     pass
             if self._backup_dir and start_backup:
-                self._backup_t: threading.Thread | None  = make_backup_thread(
+                self._backup_t: threading.Thread | None = make_backup_thread(
                     path=self._path,
                     indent=4,
                     backup_dir=self._backup_dir,
                     backup_interval=backup_interval,
                     backup_retention=backup_retention,
                     stop_event=self._backup_stop,
-                    config_type='jsonl',
+                    config_type="jsonl",
                     raw=True,
                 )
                 self._backup_t.start()
@@ -246,7 +246,9 @@ class LinesConfig:
                 if self._sync_mode == "full":
                     fsync_parent_dir(self._path)
 
-    def compact(self, keep: Callable[[Mapping[str, JsonValue]], bool] | None = None) -> CompactReturn:
+    def compact(
+        self, keep: Callable[[Mapping[str, JsonValue]], bool] | None = None
+    ) -> CompactReturn:
         """Rewrite the file keeping only records that satisfy `keep`. Thread-safe.
 
         This is the primary way to delete or deduplicate records, since JSONL
@@ -302,7 +304,7 @@ class LinesConfig:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
         instance_dir = instance_backup_dir(self._path, self._backup_dir)
         do_backup(self._path, 4, instance_dir, self.log, raw=True)
-        prune_backups(instance_dir, self._backup_retention, self.log, config_type='jsonl')
+        prune_backups(instance_dir, self._backup_retention, self.log, config_type="jsonl")
 
     def close(self) -> None:
         """Stop backup thread. Does not affect the data file."""

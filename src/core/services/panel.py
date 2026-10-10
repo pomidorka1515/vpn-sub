@@ -34,13 +34,10 @@ _PANEL_POOL_WORKERS = 4
 _BG_POOL_WORKERS = 4
 _CLIENTS_TTL = 4.0
 _ONLINES_TTL = 4.0
-_PANEL_POOL = ThreadPoolExecutor(
-    max_workers=_PANEL_POOL_WORKERS, thread_name_prefix="panel-req"
-)
-_BG_POOL = ThreadPoolExecutor(
-    max_workers=_BG_POOL_WORKERS, thread_name_prefix="panel-bg"
-)
+_PANEL_POOL = ThreadPoolExecutor(max_workers=_PANEL_POOL_WORKERS, thread_name_prefix="panel-req")
+_BG_POOL = ThreadPoolExecutor(max_workers=_BG_POOL_WORKERS, thread_name_prefix="panel-bg")
 BG_POOL: Executor = _BG_POOL
+
 
 class _OnlineSnapshot:
     """Classified online set. Ext names are applied later, so a rename is live."""
@@ -91,8 +88,11 @@ class PanelService(BaseService):
         executor = _PANEL_POOL if pool is None else pool
         executor_name = getattr(executor, "_thread_name_prefix", type(executor).__name__)
         self.trace(
-            Op.panel.map_panels, "start",
-            panels=names, count=len(panels), executor=executor_name,
+            Op.panel.map_panels,
+            "start",
+            panels=names,
+            count=len(panels),
+            executor=executor_name,
             inline=len(panels) <= 1,
         )
         if len(panels) <= 1:
@@ -100,22 +100,26 @@ class PanelService(BaseService):
                 results = [fn(panel) for panel in panels]
             except Exception as exc:
                 self.trace(
-                    Op.panel.map_panels, "failed",
-                    panels=names, executor=executor_name, inline=True,
+                    Op.panel.map_panels,
+                    "failed",
+                    panels=names,
+                    executor=executor_name,
+                    inline=True,
                     duration=round(monotonic() - started, 6),
                     error=type(exc).__name__,
                 )
                 raise
             self.trace(
-                Op.panel.map_panels, "done",
-                panels=names, executor=executor_name, inline=True,
+                Op.panel.map_panels,
+                "done",
+                panels=names,
+                executor=executor_name,
+                inline=True,
                 duration=round(monotonic() - started, 6),
                 outcomes=len(results),
             )
             return results
-        futures: list[Future[T]] = [
-            executor.submit(fn, panel) for panel in panels
-        ]
+        futures: list[Future[T]] = [executor.submit(fn, panel) for panel in panels]
         # result() in input order: Executor.map would cancel not-yet-started
         # siblings on the first exception and drop a later panel's work.
         # The first failure in list order still raises immediately. Later
@@ -132,15 +136,22 @@ class PanelService(BaseService):
                 outcomes.append(f"{panel.name}:ok")
         except BaseException as exc:
             self.trace(
-                Op.panel.map_panels, "failed",
-                panels=names, executor=executor_name, inline=False,
+                Op.panel.map_panels,
+                "failed",
+                panels=names,
+                executor=executor_name,
+                inline=False,
                 duration=round(monotonic() - started, 6),
-                outcomes=outcomes, error=type(exc).__name__,
+                outcomes=outcomes,
+                error=type(exc).__name__,
             )
             raise
         self.trace(
-            Op.panel.map_panels, "done",
-            panels=names, executor=executor_name, inline=False,
+            Op.panel.map_panels,
+            "done",
+            panels=names,
+            executor=executor_name,
+            inline=False,
             duration=round(monotonic() - started, 6),
             outcomes=outcomes,
         )
@@ -166,27 +177,46 @@ class PanelService(BaseService):
             result = from_dict(ServerMetricsResponse, data)
             obj = result.obj
             self.trace(
-                Op.panel.getstatus, "ok",
-                panel=panel.name, success=result.success, msg=result.msg,
-                cpu=obj.cpu, cpu_cores=obj.cpuCores, logical_pro=obj.logicalPro,
-                cpu_speed_mhz=obj.cpuSpeedMhz, mem_current=obj.mem.current,
-                mem_total=obj.mem.total, swap_current=obj.swap.current,
-                swap_total=obj.swap.total, disk_current=obj.disk.current,
-                disk_total=obj.disk.total, xray_state=obj.xray.state,
-                xray_error=obj.xray.errorMsg, xray_version=obj.xray.version,
-                uptime=obj.uptime, loads=obj.loads, tcp=obj.tcpCount,
-                udp=obj.udpCount, net_up=obj.netIO.up, net_down=obj.netIO.down,
-                sent=obj.netTraffic.sent, recv=obj.netTraffic.recv,
-                ipv4=obj.publicIP.ipv4, ipv6=obj.publicIP.ipv6,
-                threads=obj.appStats.threads, app_mem=obj.appStats.mem,
+                Op.panel.getstatus,
+                "ok",
+                panel=panel.name,
+                success=result.success,
+                msg=result.msg,
+                cpu=obj.cpu,
+                cpu_cores=obj.cpuCores,
+                logical_pro=obj.logicalPro,
+                cpu_speed_mhz=obj.cpuSpeedMhz,
+                mem_current=obj.mem.current,
+                mem_total=obj.mem.total,
+                swap_current=obj.swap.current,
+                swap_total=obj.swap.total,
+                disk_current=obj.disk.current,
+                disk_total=obj.disk.total,
+                xray_state=obj.xray.state,
+                xray_error=obj.xray.errorMsg,
+                xray_version=obj.xray.version,
+                uptime=obj.uptime,
+                loads=obj.loads,
+                tcp=obj.tcpCount,
+                udp=obj.udpCount,
+                net_up=obj.netIO.up,
+                net_down=obj.netIO.down,
+                sent=obj.netTraffic.sent,
+                recv=obj.netTraffic.recv,
+                ipv4=obj.publicIP.ipv4,
+                ipv6=obj.publicIP.ipv6,
+                threads=obj.appStats.threads,
+                app_mem=obj.appStats.mem,
                 app_uptime=obj.appStats.uptime,
             )
             return result
         except Exception as exc:
             self.log.exception("panel status is unknown for %s", panel.name)
             self.trace(
-                Op.panel.getstatus, "unknown",
-                panel=panel.name, error=type(exc).__name__,
+                Op.panel.getstatus,
+                "unknown",
+                panel=panel.name,
+                error=type(exc).__name__,
             )
             return None
 
@@ -201,8 +231,12 @@ class PanelService(BaseService):
         cached = panel.fresh_cache(ttl)
         if cached is not None:
             self.trace(
-                Op.panel.getinbounds, "hit",
-                panel=panel.name, mode=panel.mode, ttl=ttl, count=len(cached),
+                Op.panel.getinbounds,
+                "hit",
+                panel=panel.name,
+                mode=panel.mode,
+                ttl=ttl,
+                count=len(cached),
             )
             return cached  # NOTE: cache stores dataclasses!
 
@@ -214,7 +248,7 @@ class PanelService(BaseService):
                     f"Panel {panel.name} inbound query failed: "
                     f"{data.get('msg') or response.status_code}"
                 )
-            raw_inbounds: list[dict[str, object]] = data['obj']
+            raw_inbounds: list[dict[str, object]] = data["obj"]
             raw_count = len(raw_inbounds)
             inbounds = [from_dict(Inbound, i) for i in raw_inbounds]
             listed = set(panel.inbounds_list)
@@ -224,18 +258,21 @@ class PanelService(BaseService):
                 inbounds = [i for i in inbounds if i.id not in listed]
             panel.cache = inbounds
             self.trace(
-                Op.panel.getinbounds, "miss",
-                panel=panel.name, mode=panel.mode, ttl=ttl,
-                raw=raw_count, listed=len(listed), kept=len(inbounds),
+                Op.panel.getinbounds,
+                "miss",
+                panel=panel.name,
+                mode=panel.mode,
+                ttl=ttl,
+                raw=raw_count,
+                listed=len(listed),
+                kept=len(inbounds),
                 dropped=raw_count - len(inbounds),
             )
             return inbounds
         except AppError:
             raise
         except Exception as exc:
-            raise PanelUnavailableError(
-                f"Panel {panel.name} inbound query failed: {exc}"
-            ) from exc
+            raise PanelUnavailableError(f"Panel {panel.name} inbound query failed: {exc}") from exc
 
     def clients_snapshot(self, panel: XUiSession) -> Mapping[str, PanelClient]:
         """Cached email-to-client map for "does this client exist, which inbounds".
@@ -252,8 +289,11 @@ class PanelService(BaseService):
         cached = panel.fresh_clients(_CLIENTS_TTL)
         if cached is not None:
             self.trace(
-                Op.panel.clients_snapshot, "hit",
-                panel=panel.name, ttl=_CLIENTS_TTL, count=len(cached),
+                Op.panel.clients_snapshot,
+                "hit",
+                panel=panel.name,
+                ttl=_CLIENTS_TTL,
+                count=len(cached),
             )
             return cached
         clients = self.list_clients(panel)
@@ -264,8 +304,11 @@ class PanelService(BaseService):
         # this fill just refused to store
         returned = stored if stored is not None else snapshot
         self.trace(
-            Op.panel.clients_snapshot, "miss",
-            panel=panel.name, ttl=_CLIENTS_TTL, count=len(returned),
+            Op.panel.clients_snapshot,
+            "miss",
+            panel=panel.name,
+            ttl=_CLIENTS_TTL,
+            count=len(returned),
             stored=stored is not None,
         )
         return returned
@@ -276,7 +319,8 @@ class PanelService(BaseService):
         self.trace(Op.panel.invalidate_clients, "invalidated", panel=panel.name)
 
     def client_maps(
-        self, panels: Sequence[XUiSession],
+        self,
+        panels: Sequence[XUiSession],
     ) -> dict[str, Mapping[str, PanelClient]]:
         """One client list per panel, filled on this thread before any writes.
 
@@ -288,12 +332,11 @@ class PanelService(BaseService):
         if not panels:
             return {}
         snapshots = self.map_panels(panels, self.clients_snapshot)
-        return {
-            panel.name: snapshot
-            for panel, snapshot in zip(panels, snapshots, strict=True)
-        }
+        return {panel.name: snapshot for panel, snapshot in zip(panels, snapshots, strict=True)}
 
-    def _status_error(self, panel: XUiSession, what: str, response: Response) -> PanelUnavailableError:
+    def _status_error(
+        self, panel: XUiSession, what: str, response: Response
+    ) -> PanelUnavailableError:
         """Classify a non-200 response as unavailability.
 
         The synthetic 503 from a dead ``XUiSession`` carries the down reason
@@ -308,9 +351,7 @@ class PanelService(BaseService):
                 message = cast(dict[str, object], data).get("msg") or response.status_code
         except Exception:
             pass
-        return PanelUnavailableError(
-            f"Panel {panel.name} {what} failed: {message}"
-        )
+        return PanelUnavailableError(f"Panel {panel.name} {what} failed: {message}")
 
     def get_client(self, panel: XUiSession, email: str) -> PanelClient | None:
         """Get a panel client by email, or ``None`` when the panel reports one.
@@ -336,18 +377,21 @@ class PanelService(BaseService):
                 message = str(data.get("msg") or response.status_code)
                 if "record not found" in message.lower():
                     self.trace(
-                        Op.panel.get_client, "absent",
-                        panel=panel.name, email=email, msg=message,
+                        Op.panel.get_client,
+                        "absent",
+                        panel=panel.name,
+                        email=email,
+                        msg=message,
                     )
                     return None
-                raise PanelRejectedError(
-                    f"Panel {panel.name} client query failed: {message}"
-                )
+                raise PanelRejectedError(f"Panel {panel.name} client query failed: {message}")
             raw: object = data.get("obj")
             if raw is None:
                 self.trace(
-                    Op.panel.get_client, "absent",
-                    panel=panel.name, email=email,
+                    Op.panel.get_client,
+                    "absent",
+                    panel=panel.name,
+                    email=email,
                 )
                 return None
             if not isinstance(raw, dict):
@@ -366,26 +410,34 @@ class PanelService(BaseService):
                 merged["inboundIds"] = list(cast(list[object], inbound_ids_raw))
             client = from_dict(PanelClient, merged)
             self.trace(
-                Op.panel.get_client, "found",
-                panel=panel.name, email=email, uuid=client.uuid,
-                enable=client.enable, flow=client.flow,
-                limit_ip=client.limitIp, total_gb=client.totalGB,
-                expiry_time=client.expiryTime, tg_id=str(client.tgId),
-                comment=client.comment, reset=client.reset,
+                Op.panel.get_client,
+                "found",
+                panel=panel.name,
+                email=email,
+                uuid=client.uuid,
+                enable=client.enable,
+                flow=client.flow,
+                limit_ip=client.limitIp,
+                total_gb=client.totalGB,
+                expiry_time=client.expiryTime,
+                tg_id=str(client.tgId),
+                comment=client.comment,
+                reset=client.reset,
                 inbound_ids=client.inboundIds,
             )
             return client
         except AppError as exc:
             if isinstance(exc, PanelRejectedError):
                 self.trace(
-                    Op.panel.get_client, "rejected",
-                    panel=panel.name, email=email, error=exc.message,
+                    Op.panel.get_client,
+                    "rejected",
+                    panel=panel.name,
+                    email=email,
+                    error=exc.message,
                 )
             raise
         except Exception as exc:
-            raise PanelUnavailableError(
-                f"Panel {panel.name} client query failed: {exc}"
-            ) from exc
+            raise PanelUnavailableError(f"Panel {panel.name} client query failed: {exc}") from exc
 
     def list_clients(self, panel: XUiSession) -> list[PanelClient]:
         """List every panel client with its inbound attachments and traffic."""
@@ -413,8 +465,10 @@ class PanelService(BaseService):
                         cast(dict[str, object], item)["inboundIds"] = []
             clients = from_dict(ClientListResponse, data).obj
             self.trace(
-                Op.panel.list_clients, "ok",
-                panel=panel.name, count=len(clients),
+                Op.panel.list_clients,
+                "ok",
+                panel=panel.name,
+                count=len(clients),
             )
             return clients
         except AppError:
@@ -446,25 +500,32 @@ class PanelService(BaseService):
             raw: object = data.get("obj")
             if raw is None:
                 self.trace(
-                    Op.panel.client_traffic, "absent",
-                    panel=panel.name, email=email,
+                    Op.panel.client_traffic,
+                    "absent",
+                    panel=panel.name,
+                    email=email,
                 )
                 return None
             traffic = from_dict(ClientTraffic, cast(dict[str, object], raw))
             self.trace(
-                Op.panel.client_traffic, "found",
-                panel=panel.name, email=email, uuid=traffic.uuid,
-                enable=traffic.enable, up=traffic.up, down=traffic.down,
-                total=traffic.total, expiry_time=traffic.expiryTime,
-                reset=traffic.reset, last_online=traffic.lastOnline,
+                Op.panel.client_traffic,
+                "found",
+                panel=panel.name,
+                email=email,
+                uuid=traffic.uuid,
+                enable=traffic.enable,
+                up=traffic.up,
+                down=traffic.down,
+                total=traffic.total,
+                expiry_time=traffic.expiryTime,
+                reset=traffic.reset,
+                last_online=traffic.lastOnline,
             )
             return traffic
         except AppError:
             raise
         except Exception as exc:
-            raise PanelUnavailableError(
-                f"Panel {panel.name} traffic query failed: {exc}"
-            ) from exc
+            raise PanelUnavailableError(f"Panel {panel.name} traffic query failed: {exc}") from exc
 
     def _fetch_onlines(self, panel: XUiSession) -> Response | BaseException:
         """POST the onlines route. Exceptions travel back as values."""
@@ -562,7 +623,9 @@ class PanelService(BaseService):
         return self._status_from_snapshot(snapshot, new)
 
     def _online_snapshot(
-        self, pool: Executor | None, fresh: bool,
+        self,
+        pool: Executor | None,
+        fresh: bool,
     ) -> _OnlineSnapshot:
         """One in-flight classification. Waiters share the leader's result.
 
@@ -576,7 +639,8 @@ class PanelService(BaseService):
                 cached = self._fresh_onlines()
                 if cached is not None:
                     self.trace(
-                        Op.panel.online_snapshot, "reuse",
+                        Op.panel.online_snapshot,
+                        "reuse",
                         users=len(cached.users),
                         panel_health=dict(cached.panel_health),
                         fresh=fresh,
@@ -588,10 +652,12 @@ class PanelService(BaseService):
                 cached = self._fresh_onlines()
                 if cached is not None and not fresh:
                     self.trace(
-                        Op.panel.online_snapshot, "reuse",
+                        Op.panel.online_snapshot,
+                        "reuse",
                         users=len(cached.users),
                         panel_health=dict(cached.panel_health),
-                        fresh=fresh, waited=True,
+                        fresh=fresh,
+                        waited=True,
                     )
                     return cached
                 # A fresh caller does not take the copy a non-fresh leader
@@ -609,7 +675,8 @@ class PanelService(BaseService):
             self._onlines_loading = False
             self._onlines_lock.notify_all()
         self.trace(
-            Op.panel.online_snapshot, "refreshed",
+            Op.panel.online_snapshot,
+            "refreshed",
             users=len(snapshot.users),
             panel_health=dict(snapshot.panel_health),
             fresh=fresh,
@@ -635,11 +702,13 @@ class PanelService(BaseService):
         live = [panel for panel in self.panels if not panel.dead]
         fetched: dict[str, Response | BaseException] = {}
         if live:
-            fetched = dict(zip(
-                (panel.name for panel in live),
-                self.map_panels(live, self._fetch_onlines, pool),
-                strict=True,
-            ))
+            fetched = dict(
+                zip(
+                    (panel.name for panel in live),
+                    self.map_panels(live, self._fetch_onlines, pool),
+                    strict=True,
+                )
+            )
 
         for panel in self.panels:
             if panel.dead:
@@ -648,9 +717,7 @@ class PanelService(BaseService):
             outcome = fetched[panel.name]
             if isinstance(outcome, BaseException):
                 panel_health[panel.name] = "unavailable"
-                self.log.error(
-                    "Online check failed for panel %s", panel.name, exc_info=outcome
-                )
+                self.log.error("Online check failed for panel %s", panel.name, exc_info=outcome)
                 continue
             try:
                 panel_health[panel.name] = self._classify_onlines(
@@ -660,11 +727,10 @@ class PanelService(BaseService):
                 panel_health[panel.name] = "unavailable"
                 self.log.exception("Online check failed for panel %s", panel.name)
 
-        if panel_health and all(
-            health == "unavailable" for health in panel_health.values()
-        ):
+        if panel_health and all(health == "unavailable" for health in panel_health.values()):
             self.trace(
-                Op.panel.load_online_snapshot, "unavailable",
+                Op.panel.load_online_snapshot,
+                "unavailable",
                 panels=list(panel_health),
                 panel_health=panel_health,
                 users=len(online_users),
@@ -673,7 +739,8 @@ class PanelService(BaseService):
             )
             raise PanelUnavailableError("No panel could be queried for online users")
         self.trace(
-            Op.panel.load_online_snapshot, "loaded",
+            Op.panel.load_online_snapshot,
+            "loaded",
             panels=list(panel_health),
             panel_health=panel_health,
             users=len(online_users),
@@ -689,7 +756,8 @@ class PanelService(BaseService):
             return OnlineStatus(list(snapshot.users), health)
         exts = self.db.username_exts()
         return OnlineStatus(
-            {name: exts.get(name) for name in snapshot.users}, health,
+            {name: exts.get(name) for name in snapshot.users},
+            health,
         )
 
     @overload

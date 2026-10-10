@@ -29,14 +29,16 @@ def _state_payload(ts: int) -> StateSnapshot:
             "app_memory": {"ram": 1.0, "swap": 0.0},
             "app_uptime": 1.0,
             "app_thread_amount": 1,
-            "app_threads": [{
-                "tid": 1024,
-                "name": "MainThread",
-                "state": "sleeping",
-                "cpu": 12.4,
-                "ctx_switches": 4021,
-                "stack": 65536,
-            }],
+            "app_threads": [
+                {
+                    "tid": 1024,
+                    "name": "MainThread",
+                    "state": "sleeping",
+                    "cpu": 12.4,
+                    "ctx_switches": 4021,
+                    "stack": 65536,
+                }
+            ],
             "app_gc_stats": {
                 "gc_counts": [1, 0, 0],
                 "gc_thresholds": [1, 1, 1],
@@ -58,7 +60,10 @@ def test_get_bw_history_clamps_to_window(database: Database) -> None:
     history = subscription.bandwidth_svc.get_bw_history("alice", days=30)
     assert len(history) == 1
     assert (history[0].up, history[0].down, history[0].wl_up, history[0].wl_down) == (
-        5, 6, 7, 8,
+        5,
+        6,
+        7,
+        8,
     )
 
 
@@ -72,6 +77,18 @@ def test_get_snapshots_hydrates_state_rows(database: Database) -> None:
     assert snapshots[0].host.process_count == 2
     assert snapshots[0].panels == {}
     thread = snapshots[0].host.app_threads[0]
-    assert (thread.tid, thread.name, thread.state, thread.cpu, thread.ctx_switches, thread.stack) == (
-        1024, "MainThread", "sleeping", 12.4, 4021, 65536,
+    assert (
+        thread.tid,
+        thread.name,
+        thread.state,
+        thread.cpu,
+        thread.ctx_switches,
+        thread.stack,
+    ) == (
+        1024,
+        "MainThread",
+        "sleeping",
+        12.4,
+        4021,
+        65536,
     )

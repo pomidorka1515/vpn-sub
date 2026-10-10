@@ -17,18 +17,14 @@ if TYPE_CHECKING:
 class PanelRoutes(AdminApiMixin):
     """Admin panel status routes."""
 
-    ROUTES: ClassVar[tuple[Route, ...]] = (
-        Route('GET', '/api/panel/status', 'panel_status'),
-    )
+    ROUTES: ClassVar[tuple[Route, ...]] = (Route("GET", "/api/panel/status", "panel_status"),)
 
     @requires_admin_auth
     def panel_status(self) -> ResponseType:
-        query = request.args.get('name', None)
+        query = request.args.get("name", None)
         if query is None:
             result: dict[str, dict[str, JsonifyValue] | None] = {}
-            for panel, status in zip(
-                self.sub.panels, self.sub.panel_svc.statuses(), strict=True
-            ):
+            for panel, status in zip(self.sub.panels, self.sub.panel_svc.statuses(), strict=True):
                 _ = status
                 if _ is None:
                     self.log.error(f"getstatus: {panel.name} returned None")

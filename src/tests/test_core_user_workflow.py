@@ -14,8 +14,12 @@ if TYPE_CHECKING:
 def test_get_info_link_uses_configured_uri(database: Database) -> None:
     subscription = make_subscription(database, uri="custom")
     created = subscription.business_svc.add_new_user(
-        "alice", "Alice", ext_username="alice-login",
-        ext_password="secret", limit=10, wl_limit=5,
+        "alice",
+        "Alice",
+        ext_username="alice-login",
+        ext_password="secret",
+        limit=10,
+        wl_limit=5,
     )
     info = subscription.business_svc.get_info("alice")
     assert info.link == f"https://example.test/custom?token={created.token}"
@@ -23,20 +27,29 @@ def test_get_info_link_uses_configured_uri(database: Database) -> None:
 
 def test_user_workflow_without_live_panels(database: Database) -> None:
     subscription = make_subscription(
-        database, fingerprints=["chrome", "firefox"],
+        database,
+        fingerprints=["chrome", "firefox"],
     )
     with pytest.raises(NotFoundError):
         subscription.business_svc.get_info("missing")
     created = subscription.business_svc.add_new_user(
-        "alice", "Alice", ext_username="alice-login",
-        ext_password="secret", limit=10, wl_limit=5,
+        "alice",
+        "Alice",
+        ext_username="alice-login",
+        ext_password="secret",
+        limit=10,
+        wl_limit=5,
     )
     with pytest.raises(ValidationError):
         subscription.business_svc.update_params("alice", fingerprint="invalid")
     with pytest.raises(ConflictError) as user_conflict:
         subscription.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice-login",
-            ext_password="secret", limit=10, wl_limit=5,
+            "alice",
+            "Alice",
+            ext_username="alice-login",
+            ext_password="secret",
+            limit=10,
+            wl_limit=5,
         )
     assert isinstance(user_conflict.value.__cause__, DuplicateError)
     with pytest.raises(ValidationError):
@@ -64,7 +77,10 @@ def test_user_workflow_without_live_panels(database: Database) -> None:
 def test_external_username_conflict_preserves_cause(database: Database) -> None:
     subscription = make_subscription(database)
     subscription.business_svc.add_new_user(
-        "alice", "Alice", ext_username="alice-login", ext_password="secret",
+        "alice",
+        "Alice",
+        ext_username="alice-login",
+        ext_password="secret",
     )
     subscription.business_svc.add_new_user("bob", "Bob")
 

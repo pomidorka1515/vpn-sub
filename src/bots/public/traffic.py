@@ -1,4 +1,5 @@
 """Public traffic chart workflows."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -29,37 +30,33 @@ class PublicTrafficMixin(PublicFeatureMixin):
         t = self.TEXTS[lang]
 
         try:
-            days = int(data.split('_', 1)[1])
+            days = int(data.split("_", 1)[1])
             if not 1 <= days <= 90:
                 raise ValueError
-        except (ValueError, IndexError):
-            self._answer_callback(call.id, t['chart_invalid_period'])
+        except ValueError, IndexError:
+            self._answer_callback(call.id, t["chart_invalid_period"])
             return
 
         username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str):
             return
 
-        self._answer_callback(call.id, t['chart_generating'])
+        self._answer_callback(call.id, t["chart_generating"])
 
         try:
             self._executor.submit(
                 self._render_chart,
-                uid=uid, username=username, days=days, lang=lang, chat_id=message.chat.id
+                uid=uid,
+                username=username,
+                days=days,
+                lang=lang,
+                chat_id=message.chat.id,
             )
         except Exception:
             self.log.exception("chart submission failed")
-            self._send_message(message.chat.id, t['error_generic'])
+            self._send_message(message.chat.id, t["error_generic"])
 
-    def _render_chart(
-        self,
-        *,
-        uid: int,
-        username: str,
-        days: int,
-        lang: str,
-        chat_id: int
-    ) -> None:
+    def _render_chart(self, *, uid: int, username: str, days: int, lang: str, chat_id: int) -> None:
         t = self.TEXTS[lang]
         try:
             snapshots = self.sub.bandwidth_svc.get_bw_history(username, days=days)
@@ -75,14 +72,16 @@ class PublicTrafficMixin(PublicFeatureMixin):
             limit = bandwidths.limit
             monthly = bandwidths.monthly
 
-            used_str, limit_str, percent_str = format_usage(monthly, limit, t['unlimited'])
+            used_str, limit_str, percent_str = format_usage(monthly, limit, t["unlimited"])
 
             wl_limit = bandwidths.wl_limit
             wl_monthly = bandwidths.wl_monthly
 
-            wl_used_str, wl_limit_str, wl_percent_str = format_usage(wl_monthly, wl_limit, t['unlimited'])
+            wl_used_str, wl_limit_str, wl_percent_str = format_usage(
+                wl_monthly, wl_limit, t["unlimited"]
+            )
 
-            text = t['chart_text'].format(
+            text = t["chart_text"].format(
                 days=days,
                 upload=upload_fmt,
                 download=download_fmt,
@@ -93,23 +92,32 @@ class PublicTrafficMixin(PublicFeatureMixin):
                 wl_download=wl_download_fmt,
                 wl_used=wl_used_str,
                 wl_limit=wl_limit_str,
-                wl_percent=wl_percent_str
+                wl_percent=wl_percent_str,
             )
 
             text = truncate_utf8(text, 1024)
 
             language = self.lang_cfg.view()
             chart_img = bandwidth_chart(
-                snapshots,
-                label=info.displayname,
-                lang=language['chart'][lang]
+                snapshots, label=info.displayname, lang=language["chart"][lang]
             )
             if chart_img is not None:
-                self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_menu(uid))
+                self.bot.send_photo(
+                    chat_id,
+                    chart_img,
+                    caption=text,
+                    parse_mode="HTML",
+                    reply_markup=self.get_menu(uid),
+                )
             else:
-                self.bot.send_message(chat_id, text + "\n\n" + t['no_data'], parse_mode="HTML", reply_markup=self.get_menu(uid))
+                self.bot.send_message(
+                    chat_id,
+                    text + "\n\n" + t["no_data"],
+                    parse_mode="HTML",
+                    reply_markup=self.get_menu(uid),
+                )
         except AppError as error:
             self._send_message(chat_id, error.message, reply_markup=self.get_menu(uid))
         except Exception:
             self.log.exception(f"Chart error for uid {uid}")
-            self._send_message(chat_id, t['error_generic'], reply_markup=self.get_menu(uid))
+            self._send_message(chat_id, t["error_generic"], reply_markup=self.get_menu(uid))

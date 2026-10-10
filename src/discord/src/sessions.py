@@ -75,6 +75,7 @@ class SessionStore:
         if lang not in ("en", "ru"):
             return
         key = self._key(user_id)
+
         def _edit(data: MutableMapping[str, JsonValue]) -> None:
             current = data.get(key)
             token = ""
@@ -82,11 +83,13 @@ class SessionStore:
                 raw_token = current.get("token")
                 token = raw_token if isinstance(raw_token, str) else ""
             data[key] = {"token": token, "lang": lang}
+
         self._cfg.mutate(_edit)
         Path(self._cfg.path).chmod(0o600)
 
     def set_token(self, user_id: int | str, token: str) -> None:
         key = self._key(user_id)
+
         def _edit(data: MutableMapping[str, JsonValue]) -> None:
             current = data.get(key)
             lang = ""
@@ -97,6 +100,7 @@ class SessionStore:
             if lang in ("en", "ru"):
                 payload["lang"] = lang
             data[key] = payload
+
         self._cfg.mutate(_edit)
         Path(self._cfg.path).chmod(0o600)
 

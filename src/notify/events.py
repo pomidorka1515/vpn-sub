@@ -1,4 +1,5 @@
 """Pure quota classification. No Telegram, no database."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -78,35 +79,51 @@ def classify(state: UserRecord, now: int) -> tuple[Notice, ...]:
     wl_used = int(state["wl_used"])
     if wl_limit != 0 and wl_used > wl_limit * _GB:
         if bool(state["enabled_wl"]):
-            notices.append(Notice(
-                Kind.WHITELIST_EXHAUSTED, "1",
-                {"limit_gb": wl_limit},
-                clears=("whitelist_soon",),
-            ))
+            notices.append(
+                Notice(
+                    Kind.WHITELIST_EXHAUSTED,
+                    "1",
+                    {"limit_gb": wl_limit},
+                    clears=("whitelist_soon",),
+                )
+            )
     else:
         wl_bucket = _traffic_bucket(wl_used, wl_limit)
         if wl_bucket is not None:
-            notices.append(_soon(
-                Kind.WHITELIST_SOON, wl_bucket,
-                used_gb=_gb(wl_used), limit_gb=wl_limit, percent=wl_bucket,
-            ))
+            notices.append(
+                _soon(
+                    Kind.WHITELIST_SOON,
+                    wl_bucket,
+                    used_gb=_gb(wl_used),
+                    limit_gb=wl_limit,
+                    percent=wl_bucket,
+                )
+            )
 
     bw_limit = int(state["bw_limit_gb"])
     bw_used = int(state["bw_used"])
     over_main = bw_limit != 0 and bw_used > bw_limit * _GB
     if bool(state["enabled"]) and over_main:
-        notices.append(Notice(
-            Kind.TRAFFIC_EXHAUSTED, "1",
-            {"limit_gb": bw_limit},
-            clears=("traffic_soon",),
-        ))
+        notices.append(
+            Notice(
+                Kind.TRAFFIC_EXHAUSTED,
+                "1",
+                {"limit_gb": bw_limit},
+                clears=("traffic_soon",),
+            )
+        )
     elif bool(state["enabled"]):
         bucket = _traffic_bucket(bw_used, bw_limit)
         if bucket is not None:
-            notices.append(_soon(
-                Kind.TRAFFIC_SOON, bucket,
-                used_gb=_gb(bw_used), limit_gb=bw_limit, percent=bucket,
-            ))
+            notices.append(
+                _soon(
+                    Kind.TRAFFIC_SOON,
+                    bucket,
+                    used_gb=_gb(bw_used),
+                    limit_gb=bw_limit,
+                    percent=bucket,
+                )
+            )
     return tuple(notices)
 
 
@@ -128,13 +145,21 @@ def restored(
             clears.extend(("traffic_exhausted", "traffic_soon"))
         if time:
             clears.extend(("expired", "expiry_soon"))
-        notices.append(Notice(
-            Kind.RESTORED, "", {},
-            clears=tuple(clears),
-        ))
+        notices.append(
+            Notice(
+                Kind.RESTORED,
+                "",
+                {},
+                clears=tuple(clears),
+            )
+        )
     if whitelist:
-        notices.append(Notice(
-            Kind.WHITELIST_RESTORED, "", {},
-            clears=("whitelist_exhausted", "whitelist_soon"),
-        ))
+        notices.append(
+            Notice(
+                Kind.WHITELIST_RESTORED,
+                "",
+                {},
+                clears=("whitelist_exhausted", "whitelist_soon"),
+            )
+        )
     return tuple(notices)

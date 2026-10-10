@@ -53,7 +53,6 @@ def test_extra_top_level_keys_fail(schema: dict[str, object]) -> None:
         )
 
 
-
 def test_example_schema_path_resolves_from_data_dir() -> None:
     example = json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))
     schema_ref = example["$schema"]

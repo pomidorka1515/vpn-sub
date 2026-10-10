@@ -13,54 +13,64 @@ if TYPE_CHECKING:
     from requests.models import PreparedRequest
 
     from config.constants import JsonValue
+
     _InboundValue = JsonValue
 else:
     _InboundValue = object
 
 __all__ = [
-
-    'AppStats',
-    'ApplyBonusCodeObject',
-    'BandwidthInfo',
-    'BandwidthSnapshot',
-    'BandwidthUpdate',
-    'BonusResult',
-    'ClientListResponse',
-    'ClientPayload',
-    'ClientTraffic',
-    'ClientTrafficResponse',
-    'CodeObject',
-    'CodeRecord',
-    'DiskStats',
-    'HTTPMethod',
-    'Inbound',
-    'InboundListResponse',
-    'JsonifyValue',
-    'MemoryStats',
-    'MigrationReport',
-    'NetIOStats',
-    'NetTrafficStats',
-    'NewUserInfo',
-    'PanelClient',
-    'PollingPanelInfo',
-    'PublicIPStats',
-    'RegisterCodeResult',
-    'RegisterWithCodeInfo',
-    'RequestKwargs',
-    'ResetUserObject',
-    'ServerMetricsObj',
-    'ServerMetricsResponse',
-    'SwapStats',
-    'UserInfo',
-    'UserInfoBandwidth',
-    'UserInfoBandwidthTotal',
-    'UserRecord',
-    'XrayStats'
+    "AppStats",
+    "ApplyBonusCodeObject",
+    "BandwidthInfo",
+    "BandwidthSnapshot",
+    "BandwidthUpdate",
+    "BonusResult",
+    "ClientListResponse",
+    "ClientPayload",
+    "ClientTraffic",
+    "ClientTrafficResponse",
+    "CodeObject",
+    "CodeRecord",
+    "DiskStats",
+    "HTTPMethod",
+    "Inbound",
+    "InboundListResponse",
+    "JsonifyValue",
+    "MemoryStats",
+    "MigrationReport",
+    "NetIOStats",
+    "NetTrafficStats",
+    "NewUserInfo",
+    "PanelClient",
+    "PollingPanelInfo",
+    "PublicIPStats",
+    "RegisterCodeResult",
+    "RegisterWithCodeInfo",
+    "RequestKwargs",
+    "ResetUserObject",
+    "ServerMetricsObj",
+    "ServerMetricsResponse",
+    "SwapStats",
+    "UserInfo",
+    "UserInfoBandwidth",
+    "UserInfoBandwidthTotal",
+    "UserRecord",
+    "XrayStats",
 ]
 
 
-type JsonifyValue = str | int | float | bool | Mapping[str, 'JsonifyValue'] | Sequence['JsonifyValue'] | tuple['JsonifyValue', ...] | None
-type HTTPMethod   = Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+type JsonifyValue = (
+    str
+    | int
+    | float
+    | bool
+    | Mapping[str, "JsonifyValue"]
+    | Sequence["JsonifyValue"]
+    | tuple["JsonifyValue", ...]
+    | None
+)
+type HTTPMethod = Literal["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+
 
 class BandwidthInfo(NamedTuple):
     """
@@ -68,6 +78,7 @@ class BandwidthInfo(NamedTuple):
     ' | float' is present because get_info formats these values into floats.
     bandwidth() itself returns int, always.
     """
+
     upload: int | float
     download: int | float
     total: int | float
@@ -89,9 +100,11 @@ class BandwidthUpdate(NamedTuple):
     delta: int
     current: BandwidthInfo
 
+
 class OnlineStatus(NamedTuple):
     users: list[str] | dict[str, str | None]
     panel_health: dict[str, Literal["ok", "unavailable", "invalid"]]
+
 
 # pyright: reportPrivateUsage=false
 # pyright: reportUnnecessaryIsInstance=false
@@ -103,30 +116,58 @@ class OnlineStatus(NamedTuple):
 class SupportsKeysAndGetItem[KT, VT](Protocol):
     def keys(self) -> Iterable[KT]: ...
     def __getitem__(self, k: KT, /) -> VT: ...
+
+
 class SupportsRead[T_C](Protocol):
     def read(self, length: int = ..., /) -> T_C: ...
+
+
 class SupportsItems[K, V](Protocol):
     def items(self) -> Iterable[tuple[K, V]]: ...
 
+
 ### requests-stubs/session.pyi ###
 _FileSpec = (
-    SupportsRead[str | bytes] | str | bytes
+    SupportsRead[str | bytes]
+    | str
+    | bytes
     | tuple[str | None, SupportsRead[str | bytes] | str | bytes]
     | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str]
     | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str, Mapping[str, str]]
 )
 
+
 class RequestKwargs(TypedDict, total=False):
     # method: str | bytes
     # url: str | bytes
     params: (
-        Mapping[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
-        | tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]
-        | Iterable[tuple[str | bytes | int | float, str | bytes | int | float | Iterable[str | bytes | int | float] | None]]
+        Mapping[
+            str | bytes | int | float,
+            str | bytes | int | float | Iterable[str | bytes | int | float] | None,
+        ]
+        | tuple[
+            str | bytes | int | float,
+            str | bytes | int | float | Iterable[str | bytes | int | float] | None,
+        ]
+        | Iterable[
+            tuple[
+                str | bytes | int | float,
+                str | bytes | int | float | Iterable[str | bytes | int | float] | None,
+            ]
+        ]
         | str
         | bytes
     ) | None
-    data: Iterable[bytes] | str | bytes | SupportsRead[str | bytes] | list[tuple[str, str | bytes | int | float | bool | None]] | tuple[tuple[str, str | bytes | int | float | bool | None], ...] | Mapping[str, str | bytes | int | float | bool | None] | None
+    data: (
+        Iterable[bytes]
+        | str
+        | bytes
+        | SupportsRead[str | bytes]
+        | list[tuple[str, str | bytes | int | float | bool | None]]
+        | tuple[tuple[str, str | bytes | int | float | bool | None], ...]
+        | Mapping[str, str | bytes | int | float | bool | None]
+        | None
+    )
     headers: Mapping[str, str | bytes | None] | None
     cookies: RequestsCookieJar | MutableMapping[str, str] | None
     files: Mapping[str, _FileSpec] | Iterable[tuple[str, _FileSpec]] | None
@@ -134,13 +175,17 @@ class RequestKwargs(TypedDict, total=False):
     timeout: float | tuple[float | None, float | None] | None
     allow_redirects: bool
     proxies: MutableMapping[str, str] | None
-    hooks: Mapping[str, Iterable[Callable[[Response], object]] | Callable[[Response], object]] | None
+    hooks: (
+        Mapping[str, Iterable[Callable[[Response], object]] | Callable[[Response], object]] | None
+    )
     stream: bool | None
     verify: bool | str | None
     cert: str | tuple[str, str] | None
     json: JsonValue
 
+
 ### db.py ###
+
 
 class UserRecord(TypedDict):
     username: str
@@ -214,7 +259,6 @@ class BonusResult(RegisterCodeResult):
     wl_limit: int
 
 
-
 @dataclass(frozen=True, slots=True)
 class MigrationReport:
     users: int
@@ -226,21 +270,25 @@ class MigrationReport:
     skipped_orphans: int = 0
     already_migrated: bool = False
 
+
 ### 3x-ui status object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class MemoryStats:
     current: int
     total: int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class SwapStats:
     current: int
     total: int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class DiskStats:
     current: int
     total: int
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class XrayStats:
@@ -248,26 +296,31 @@ class XrayStats:
     errorMsg: str
     version: str
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class NetIOStats:
     up: int
     down: int
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class NetTrafficStats:
     sent: int
     recv: int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class PublicIPStats:
     ipv4: str
     ipv6: str
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class AppStats:
     threads: int
     mem: int
     uptime: int
+
 
 @dataclass(slots=True, kw_only=True)
 class ServerMetricsObj:
@@ -292,6 +345,7 @@ class ServerMetricsObj:
         """Format ugly values from 3x-ui's API. (e.g. 2999.98MHz, etc)"""
         self.cpu = round(self.cpu, 2)
         self.cpuSpeedMhz = int(self.cpuSpeedMhz)
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ServerMetricsResponse:
@@ -351,9 +405,10 @@ class InboundListResponse:
     msg: str
     obj: list[Inbound]
 
+
 ### 3x-ui clients-first API objects ###
 @dataclass(slots=True, kw_only=True)
-class ClientPayload: # NOTE: this must NOT be frozen
+class ClientPayload:  # NOTE: this must NOT be frozen
     email: str
     id: str
     flow: str
@@ -400,7 +455,9 @@ class ClientTrafficResponse:
     msg: str
     obj: ClientTraffic
 
+
 ### add_new_user() ###
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class NewUserInfo:
@@ -410,7 +467,9 @@ class NewUserInfo:
     fingerprint: str
     displayname: str
 
+
 ### register_with_code() ###
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class RegisterWithCodeInfo:
@@ -421,6 +480,7 @@ class RegisterWithCodeInfo:
     limit: int
     wl_limit: int
     time: int
+
 
 ### Code Object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -433,11 +493,13 @@ class CodeObject:
     gb: int
     wl_gb: int
 
+
 ### reset_user() ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ResetUserObject:
     uuid: str
     token: str
+
 
 ### get_info() ###
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -445,6 +507,7 @@ class UserInfoBandwidthTotal:
     upload: int | float
     download: int | float
     total: int | float
+
 
 ### apply_bonus_code() ###
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -458,6 +521,7 @@ class ApplyBonusCodeObject:
     limit: int
     wl_limit: int
 
+
 ### User Info ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class UserInfoBandwidth:
@@ -467,6 +531,7 @@ class UserInfoBandwidth:
     wl_monthly: int | float
     limit: int
     wl_limit: int
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class UserInfo:
@@ -482,6 +547,7 @@ class UserInfo:
     online: bool
     bandwidth: UserInfoBandwidth
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class PollingPanelInfo:
     """Dynamic panel fields for frequent polling.
@@ -491,6 +557,7 @@ class PollingPanelInfo:
     panel host seconds; `app_stats.uptime` is the panel app seconds.
     `netIO` is the instantaneous up/down rate; `netTraffic` is totals.
     """
+
     app_stats: AppStats
     cpu: int | float
     disk: DiskStats
@@ -502,6 +569,7 @@ class PollingPanelInfo:
     tcpCount: int
     udpCount: int
     uptime: int
+
 
 ### Snapshots ###
 @dataclass(slots=True, frozen=True)

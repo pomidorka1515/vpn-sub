@@ -32,7 +32,10 @@ class UsersMixin(ConnectionMixin):
 
     def user_exists(self, username: str) -> bool:
         with self.connection() as conn:
-            return conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone() is not None
+            return (
+                conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+                is not None
+            )
 
     def usernames(self) -> set[str]:
         """Known usernames, loaded once for batch membership checks."""
@@ -72,37 +75,68 @@ class UsersMixin(ConnectionMixin):
                      enabled_time, enabled_wl, expires_at, bw_limit_gb, wl_limit_gb,
                      ext_username, ext_password_hash, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (username, uuid, token, fingerprint, displayname, int(enabled),
-                     int(enabled_time), int(enabled_wl), expires_at, bw_limit_gb,
-                     wl_limit_gb, ext_username, ext_password_hash, int(time.time())),
+                    (
+                        username,
+                        uuid,
+                        token,
+                        fingerprint,
+                        displayname,
+                        int(enabled),
+                        int(enabled_time),
+                        int(enabled_wl),
+                        expires_at,
+                        bw_limit_gb,
+                        wl_limit_gb,
+                        ext_username,
+                        ext_password_hash,
+                        int(time.time()),
+                    ),
                 )
         except DatabaseError as exc:
             if "UNIQUE" in str(exc) or "PRIMARY KEY" in str(exc):
-                raise DuplicateError("username, UUID, token or external username already exists") from exc
+                raise DuplicateError(
+                    "username, UUID, token or external username already exists"
+                ) from exc
             raise
 
     def set_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         mapping = {
-            "userid": "uuid", "uuid": "uuid", "token": "token",
-            "fingerprint": "fingerprint", "displayname": "displayname",
-            "status": "enabled", "status_time": "enabled_time", "status_wl": "enabled_wl",
-            "bw_limit": "bw_limit_gb", "bw_used": "bw_used",
-            "wl_bw_limit": "wl_limit_gb", "wl_bw_used": "wl_used",
-            "expiry_time": "expires_at", "ext_username": "ext_username",
-            "ext_password": "ext_password_hash", "tgid": None,
+            "userid": "uuid",
+            "uuid": "uuid",
+            "token": "token",
+            "fingerprint": "fingerprint",
+            "displayname": "displayname",
+            "status": "enabled",
+            "status_time": "enabled_time",
+            "status_wl": "enabled_wl",
+            "bw_limit": "bw_limit_gb",
+            "bw_used": "bw_used",
+            "wl_bw_limit": "wl_limit_gb",
+            "wl_bw_used": "wl_used",
+            "expiry_time": "expires_at",
+            "ext_username": "ext_username",
+            "ext_password": "ext_password_hash",
+            "tgid": None,
         }
         updates = {mapping[k]: v for k, v in fields.items() if mapping.get(k)}
-        updates = {k: int(bool(v)) if k in ("enabled", "enabled_time", "enabled_wl") else v for k, v in updates.items()}
+        updates = {
+            k: int(bool(v)) if k in ("enabled", "enabled_time", "enabled_wl") else v
+            for k, v in updates.items()
+        }
         try:
             with self.transaction(immediate=True) as conn:
                 if updates:
                     assignments = ", ".join(f"{key} = ?" for key in updates)
                     # Column names come from the fixed mapping above; values are bound.
-                    conn.execute(f"UPDATE users SET {assignments} WHERE username = ?", (*updates.values(), username))  # noqa: S608
+                    conn.execute(
+                        f"UPDATE users SET {assignments} WHERE username = ?",  # noqa: S608
+                        (*updates.values(), username),
+                    )
                 if "tgid" in fields:
                     telegram_id = fields["tgid"]
                     set_telegram_mapping(
-                        conn, username,
+                        conn,
+                        username,
                         None if telegram_id is None else str(telegram_id),
                     )
         except DatabaseError as exc:
@@ -139,15 +173,21 @@ class UsersMixin(ConnectionMixin):
 
     def ext_to_user(self, ext_username: str) -> str | None:
         with self.connection() as conn:
-            row = conn.execute("SELECT username FROM users WHERE ext_username = ?", (ext_username,)).fetchone()
+            row = conn.execute(
+                "SELECT username FROM users WHERE ext_username = ?", (ext_username,)
+            ).fetchone()
             return str(row[0]) if row else None
 
     def user_to_ext(self, username: str) -> str | None:
         with self.connection() as conn:
-            row = conn.execute("SELECT ext_username FROM users WHERE username = ?", (username,)).fetchone()
+            row = conn.execute(
+                "SELECT ext_username FROM users WHERE username = ?", (username,)
+            ).fetchone()
             return str(row[0]) if row and row[0] is not None else None
 
     def ext_password(self, ext_username: str) -> str | None:
         with self.connection() as conn:
-            row = conn.execute("SELECT ext_password_hash FROM users WHERE ext_username = ?", (ext_username,)).fetchone()
+            row = conn.execute(
+                "SELECT ext_password_hash FROM users WHERE ext_username = ?", (ext_username,)
+            ).fetchone()
             return str(row[0]) if row and row[0] is not None else None

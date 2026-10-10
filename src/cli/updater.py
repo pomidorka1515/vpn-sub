@@ -76,7 +76,7 @@ def notice(log: Logger) -> None:
         return
     try:
         release = _latest(NOTICE_TIMEOUT)
-    except (OSError, RequestError, ValueError):
+    except OSError, RequestError, ValueError:
         return
     current = _parse(VERSION)
     if current is None or not _newer(release.version, current):
@@ -328,7 +328,7 @@ def _unit_binary(props: dict[str, str], wanted: dict[Path, str]) -> str | None:
         return None
     try:
         resolved = Path(executable).resolve()
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     return wanted.get(resolved)
 
@@ -376,7 +376,7 @@ def _process_name(entry: Path, wanted: dict[Path, str]) -> str | None:
             continue
         try:
             resolved = Path(candidate).resolve()
-        except (OSError, ValueError):
+        except OSError, ValueError:
             continue
         name = wanted.get(resolved)
         if name is not None:

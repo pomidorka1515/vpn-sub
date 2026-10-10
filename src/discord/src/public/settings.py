@@ -11,14 +11,18 @@ __all__ = ["PublicSettingsMixin"]
 class NameModal(discord.ui.Modal):
     def __init__(self, title: str, label: str) -> None:
         super().__init__(title=title, custom_id="settings_name_modal")
-        self.name: discord.ui.TextInput[Self] = discord.ui.TextInput(label=label, custom_id="name", min_length=1, max_length=16)
+        self.name: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=label, custom_id="name", min_length=1, max_length=16
+        )
         self.add_item(self.name)
 
 
 class LoginChangeModal(discord.ui.Modal):
     def __init__(self, title: str, login_label: str, password_label: str) -> None:
         super().__init__(title=title, custom_id="settings_login_modal")
-        self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(label=login_label, custom_id="username", min_length=1, max_length=32)
+        self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=login_label, custom_id="username", min_length=1, max_length=32
+        )
         self.current_password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=password_label,
             custom_id="current_password",
@@ -32,7 +36,9 @@ class LoginChangeModal(discord.ui.Modal):
 class PasswordChangeModal(discord.ui.Modal):
     def __init__(self, title: str, new_label: str, current_label: str) -> None:
         super().__init__(title=title, custom_id="settings_pass_modal")
-        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(label=new_label, custom_id="password", min_length=1, max_length=128)
+        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=new_label, custom_id="password", min_length=1, max_length=128
+        )
         self.current_password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=current_label,
             custom_id="current_password",
@@ -47,10 +53,26 @@ class PublicSettingsMixin(PublicFeatureMixin):
     def settings_menu_view(self, lang: str) -> discord.ui.View:
         t = self.TEXTS[lang]
         view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label=t["name_label"], custom_id="set_name", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label=t["fp_label"], custom_id="set_fp", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label=t["login_label"], custom_id="set_login", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label=t["pass_label"], custom_id="set_pass", style=discord.ButtonStyle.secondary))
+        view.add_item(
+            discord.ui.Button(
+                label=t["name_label"], custom_id="set_name", style=discord.ButtonStyle.secondary
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label=t["fp_label"], custom_id="set_fp", style=discord.ButtonStyle.secondary
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label=t["login_label"], custom_id="set_login", style=discord.ButtonStyle.secondary
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label=t["pass_label"], custom_id="set_pass", style=discord.ButtonStyle.secondary
+            )
+        )
         return view
 
     async def cmd_settings(self, interaction: discord.Interaction) -> None:
@@ -60,7 +82,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
     async def open_name_modal(self, interaction: discord.Interaction) -> None:
         lang = self.get_lang(interaction.user.id)
         t = self.TEXTS[lang]
-        modal = NameModal(title=t.get("name_label", "Name"), label=t.get("settings_name_prompt", "Name"))
+        modal = NameModal(
+            title=t.get("name_label", "Name"), label=t.get("settings_name_prompt", "Name")
+        )
         try:
             await interaction.response.send_modal(modal)
         except Exception:
@@ -112,7 +136,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
         view = discord.ui.View(timeout=None)
         select: discord.ui.Select[discord.ui.View] = discord.ui.Select(
             custom_id="fp_select",
-            placeholder=self.TEXTS[self.get_lang(interaction.user.id)].get("settings_fp_prompt", "Fingerprint"),
+            placeholder=self.TEXTS[self.get_lang(interaction.user.id)].get(
+                "settings_fp_prompt", "Fingerprint"
+            ),
             options=options[:25],
         )
         view.add_item(select)
@@ -170,7 +196,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if obj.get("taken"):
             await self._reply_key(interaction, "username_taken")
             return
-        result = await self.http.settings(token, username=username, current_password=current_password)
+        result = await self.http.settings(
+            token, username=username, current_password=current_password
+        )
         if not await self.consume_result(interaction, result):
             return
         await self._reply_key(interaction, "settings_login_success")
@@ -184,7 +212,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.settings(token, password=password, current_password=current_password)
+        result = await self.http.settings(
+            token, password=password, current_password=current_password
+        )
         if not await self.consume_result(interaction, result):
             return
         await self._reply_key(interaction, "settings_pass_success")

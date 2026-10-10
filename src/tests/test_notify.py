@@ -97,8 +97,10 @@ def test_traffic_80_then_95_then_exhausted() -> None:
 
 def test_whitelist_is_independent_of_main() -> None:
     state = _state(
-        bw_limit_gb=10, bw_used=1,
-        wl_limit_gb=2, wl_used=2 * 10**9 + 1,
+        bw_limit_gb=10,
+        bw_used=1,
+        wl_limit_gb=2,
+        wl_used=2 * 10**9 + 1,
     )
     assert _kinds(state) == (Kind.WHITELIST_EXHAUSTED,)
 

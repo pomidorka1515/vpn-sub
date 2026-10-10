@@ -29,7 +29,6 @@ if TYPE_CHECKING:
 __all__ = ["PublicBot"]
 
 
-
 class PublicBot(
     PublicCommonMixin,
     PublicLoginMixin,
@@ -40,7 +39,9 @@ class PublicBot(
 ):
     """Public bot assembled from the public feature workflows."""
 
-    def __init__(self, sub: Subscription, cfg: Config[AppConfig], lang_cfg: Config[LangConfig]) -> None:
+    def __init__(
+        self, sub: Subscription, cfg: Config[AppConfig], lang_cfg: Config[LangConfig]
+    ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             configure_telegram_api()

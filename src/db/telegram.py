@@ -35,12 +35,16 @@ class TelegramMixin(ConnectionMixin):
 
     def tgid_to_user(self, tgid: str | int) -> str | None:
         with self.connection() as conn:
-            row = conn.execute("SELECT username FROM telegram_mappings WHERE telegram_id = ?", (str(tgid),)).fetchone()
+            row = conn.execute(
+                "SELECT username FROM telegram_mappings WHERE telegram_id = ?", (str(tgid),)
+            ).fetchone()
             return str(row[0]) if row else None
 
     def user_to_tgid(self, username: str) -> str | None:
         with self.connection() as conn:
-            row = conn.execute("SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,)).fetchone()
+            row = conn.execute(
+                "SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,)
+            ).fetchone()
             return str(row[0]) if row else None
 
     def user_tgids(self) -> dict[str, str]:
@@ -53,13 +57,24 @@ class TelegramMixin(ConnectionMixin):
 
     def get_telegram_language(self, telegram_id: str | int, default: str = "ru") -> str:
         with self.connection() as conn:
-            row = conn.execute("SELECT language FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),)).fetchone()
+            row = conn.execute(
+                "SELECT language FROM telegram_preferences WHERE telegram_id = ?",
+                (str(telegram_id),),
+            ).fetchone()
             return str(row[0]) if row else default
 
     def has_telegram_language(self, telegram_id: str | int) -> bool:
         with self.connection() as conn:
-            return conn.execute("SELECT 1 FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),)).fetchone() is not None
+            return (
+                conn.execute(
+                    "SELECT 1 FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),)
+                ).fetchone()
+                is not None
+            )
 
     def set_telegram_language(self, telegram_id: str | int, language: str) -> None:
         with self.transaction(immediate=True) as conn:
-            conn.execute("INSERT INTO telegram_preferences(telegram_id, language) VALUES (?, ?) ON CONFLICT(telegram_id) DO UPDATE SET language=excluded.language", (str(telegram_id), language))
+            conn.execute(
+                "INSERT INTO telegram_preferences(telegram_id, language) VALUES (?, ?) ON CONFLICT(telegram_id) DO UPDATE SET language=excluded.language",
+                (str(telegram_id), language),
+            )

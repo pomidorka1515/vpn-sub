@@ -31,7 +31,7 @@ class _TelegramLogger(logging.Handler):
         """
         try:
             msg_text = self.format(record)
-            clean_text = self.ansi_escape.sub('', msg_text)
+            clean_text = self.ansi_escape.sub("", msg_text)
             safe_text = html.escape(clean_text)
             self.bot.msg(f"<code>{safe_text}</code>", **kwargs)
         except Exception:
@@ -67,7 +67,7 @@ class _JSONLinesLogger(logging.Handler):
                 "level": level,
                 "name": log_name,
                 "threadname": thread_name,
-                "text": text
+                "text": text,
             }
 
             self.cfg.append(record=to_log)

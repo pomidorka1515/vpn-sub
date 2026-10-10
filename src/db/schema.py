@@ -96,8 +96,12 @@ class SchemaMixin(ConnectionMixin):
                         version INTEGER NOT NULL
                     )"""
                 )
-                conn.execute("INSERT INTO schema_version(id, version) VALUES (1, 0) ON CONFLICT(id) DO NOTHING")
-                version_row = conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+                conn.execute(
+                    "INSERT INTO schema_version(id, version) VALUES (1, 0) ON CONFLICT(id) DO NOTHING"
+                )
+                version_row = conn.execute(
+                    "SELECT version FROM schema_version WHERE id = 1"
+                ).fetchone()
                 if version_row is None:
                     raise MigrationError("schema_version row is missing")
                 try:
@@ -107,16 +111,21 @@ class SchemaMixin(ConnectionMixin):
                 if version < 0:
                     raise MigrationError(f"invalid database schema version {version}")
                 if version > self.SCHEMA_VERSION:
-                    raise MigrationError(f"database schema {version} is newer than supported {self.SCHEMA_VERSION}")
+                    raise MigrationError(
+                        f"database schema {version} is newer than supported {self.SCHEMA_VERSION}"
+                    )
                 if version == 0:
                     existing_tables = {
-                        str(row[0]) for row in conn.execute(
+                        str(row[0])
+                        for row in conn.execute(
                             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_version'"
                         )
                     }
                     if existing_tables:
                         names = ", ".join(sorted(existing_tables))
-                        raise MigrationError(f"unversioned database contains existing tables: {names}")
+                        raise MigrationError(
+                            f"unversioned database contains existing tables: {names}"
+                        )
                     for statement in SCHEMA_STATEMENTS:
                         conn.execute(statement)
                     version = self.SCHEMA_VERSION
@@ -137,7 +146,9 @@ class SchemaMixin(ConnectionMixin):
                         "ON CONFLICT(key) DO NOTHING"
                     )
                     version = 4
-                conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,))
+                conn.execute(
+                    "UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,)
+                )
                 conn.execute("COMMIT")
             except sqlite3.Error:
                 if conn.in_transaction:

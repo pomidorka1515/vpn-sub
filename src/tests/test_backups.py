@@ -73,7 +73,9 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
     instance = tmp_path / "json"
     real_open = Path.open
 
-    def fail_temp(path: Path, mode: Literal["r", "w"] = "r", *, encoding: str | None = None) -> TextIO:
+    def fail_temp(
+        path: Path, mode: Literal["r", "w"] = "r", *, encoding: str | None = None
+    ) -> TextIO:
         if path.suffix == ".tmp":
             raise OSError("unwritable")
         return real_open(path, mode, encoding=encoding)
@@ -130,8 +132,12 @@ def test_config_backup_thread_retries_then_succeeds(tmp_path: Path) -> None:
         patch.object(threading.Event, "wait", staticmethod(wait)),
     ):
         thread = config_make_backup_thread(
-            path=str(source), indent=2, backup_dir=str(tmp_path / "out"),
-            backup_interval=0, backup_retention=1, stop_event=stop,
+            path=str(source),
+            indent=2,
+            backup_dir=str(tmp_path / "out"),
+            backup_interval=0,
+            backup_retention=1,
+            stop_event=stop,
             config_type="json",
         )
         thread.run()
@@ -155,9 +161,14 @@ def test_config_backup_thread_logs_repeated_failures(tmp_path: Path) -> None:
         patch.object(Logger, "critical") as critical,
     ):
         config_make_backup_thread(
-            path=str(source), indent=2, backup_dir=str(tmp_path),
-            backup_interval=5, backup_retention=1, stop_event=stop,
-            config_type="jsonl", raw=True,
+            path=str(source),
+            indent=2,
+            backup_dir=str(tmp_path),
+            backup_interval=5,
+            backup_retention=1,
+            stop_event=stop,
+            config_type="jsonl",
+            raw=True,
         ).run()
     error.assert_called()
     critical.assert_called()
@@ -222,8 +233,11 @@ def test_database_backup_thread_retries(tmp_path: Path) -> None:
         patch.object(Logger, "critical") as critical,
     ):
         make_backup_thread(
-            path=str(tmp_path / "state.sqlite3"), timeout=1,
-            backup_dir=str(tmp_path), backup_interval=1, backup_retention=1,
+            path=str(tmp_path / "state.sqlite3"),
+            timeout=1,
+            backup_dir=str(tmp_path),
+            backup_interval=1,
+            backup_retention=1,
             stop_event=threading.Event(),
         ).run()
     assert calls["count"] == 3

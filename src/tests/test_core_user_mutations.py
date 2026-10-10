@@ -96,8 +96,11 @@ def test_add_users_uses_one_client_list_not_per_user_gets(database: Database) ->
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
     create_alice(database)
     database.create_user(
-        username="bob", uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        token="b" * 40, fingerprint="chrome", displayname="Bob",
+        username="bob",
+        uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
     )
 
     known = subscription.panel_svc.client_maps([cast(XUiSession, panel)])
@@ -183,7 +186,9 @@ def test_update_user_disables_regular_panel_only(
         local=False,
     )
     subscription = make_subscription(
-        database, panels=[regular], whitelist_panel=whitelist,
+        database,
+        panels=[regular],
+        whitelist_panel=whitelist,
     )
     create_alice(database)
 
@@ -238,7 +243,8 @@ def test_update_user_skips_panels_without_the_client(database: Database) -> None
         clients=[make_panel_client("alice", [1])],
     )
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, absent), cast(XUiSession, present)],
+        database,
+        panels=[cast(XUiSession, absent), cast(XUiSession, present)],
     )
     create_alice(database)
 
@@ -249,7 +255,8 @@ def test_update_user_skips_panels_without_the_client(database: Database) -> None
 
 
 def test_whitelist_status_persists_without_whitelist_panel(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     subscription.business_svc.update_user("alice", wl_enable=False)
@@ -259,7 +266,8 @@ def test_whitelist_status_persists_without_whitelist_panel(
 
 
 def test_update_uuid_rejects_invalid_value(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     with pytest.raises(ValidationError):
@@ -272,7 +280,9 @@ def test_update_uuid_rejects_invalid_value(
 def test_update_uuid_sends_full_row_with_new_id(database: Database) -> None:
     existing = replace(
         make_panel_client("alice", [1, 2]),
-        subId="sub-123", comment="keep me", tgId="777",
+        subId="sub-123",
+        comment="keep me",
+        tgId="777",
     )
     panel = FakePanel(name="panel", inbounds=[make_inbound(1)], clients=[existing])
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
@@ -301,7 +311,8 @@ def test_update_uuid_skips_panels_without_client(database: Database) -> None:
     )
     unsynced = FakePanel(name="unsynced", inbounds=[make_inbound(2)])
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, synced), cast(XUiSession, unsynced)],
+        database,
+        panels=[cast(XUiSession, synced), cast(XUiSession, unsynced)],
     )
     create_alice(database)
 
@@ -346,11 +357,15 @@ def test_uuid_db_conflict_marks_failure(database: Database) -> None:
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
     create_alice(database)
     database.create_user(
-        username="bob", uuid=NEW_UUID, token="b" * 40,
-        fingerprint="chrome", displayname="Bob",
+        username="bob",
+        uuid=NEW_UUID,
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
     )
 
     from errors import ConflictError, DuplicateError
+
     with pytest.raises(ConflictError) as conflict:
         subscription.business_svc.update_uuid("alice", NEW_UUID)
 
@@ -370,8 +385,12 @@ def test_add_new_user_rolls_back_db_row_when_panel_rejects(
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
     with pytest.raises(PanelRejectedError):
         subscription.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice-login",
-            ext_password="secret", limit=10, wl_limit=5,
+            "alice",
+            "Alice",
+            ext_username="alice-login",
+            ext_password="secret",
+            limit=10,
+            wl_limit=5,
         )
     assert not database.user_exists("alice")
 
@@ -384,8 +403,11 @@ def test_add_users_quotes_username_in_attach_path(database: Database) -> None:
     )
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
     database.create_user(
-        username="quoted_user", uuid=USER_UUID, token="q" * 40,
-        fingerprint="chrome", displayname="Quoted",
+        username="quoted_user",
+        uuid=USER_UUID,
+        token="q" * 40,
+        fingerprint="chrome",
+        displayname="Quoted",
     )
 
     subscription.business_svc.add_users("quoted_user")
@@ -401,8 +423,11 @@ def test_delete_user_quotes_username_in_path(database: Database) -> None:
     )
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
     database.create_user(
-        username="quoted_user", uuid=USER_UUID, token="q" * 40,
-        fingerprint="chrome", displayname="Quoted",
+        username="quoted_user",
+        uuid=USER_UUID,
+        token="q" * 40,
+        fingerprint="chrome",
+        displayname="Quoted",
     )
 
     subscription.business_svc.delete_user("quoted_user")
@@ -420,7 +445,8 @@ def test_delete_user_skips_panels_without_the_client(database: Database) -> None
         clients=[make_panel_client("alice", [1])],
     )
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, absent), cast(XUiSession, present)],
+        database,
+        panels=[cast(XUiSession, absent), cast(XUiSession, present)],
     )
     create_alice(database)
 

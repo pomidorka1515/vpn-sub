@@ -90,6 +90,7 @@ class GunicornLogger(GunicornBaseLogger):
         # ``_access_log_level`` is unchanged: a 2xx is still DEBUG, a
         # successful poll is still TRACE, and anything else is still INFO.
         self.access_log.setLevel(env_level("LOGLEVEL_GUNICORN", logging.DEBUG))
+
         class AccessFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
                 original_level = record.levelname
@@ -104,13 +105,19 @@ class GunicornLogger(GunicornBaseLogger):
                     record.levelname = original_level
 
         formatter = AccessFormatter(
-            "%(asctime)s %(levelname)s [HTTP] [main] %(message)s", # [main] = "thread name", not relevant in this context
+            "%(asctime)s %(levelname)s [HTTP] [main] %(message)s",  # [main] = "thread name", not relevant in this context
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         for handler in self.access_log.handlers:
             handler.setFormatter(formatter)
 
-    def access(self, resp: Response, req: Request, environ: MutableMapping[str, object], request_time: timedelta) -> None:
+    def access(
+        self,
+        resp: Response,
+        req: Request,
+        environ: MutableMapping[str, object],
+        request_time: timedelta,
+    ) -> None:
         if not self.access_log_enabled:
             return
 
@@ -122,6 +129,6 @@ class GunicornLogger(GunicornBaseLogger):
         target = _safe_request_target(raw_uri)
         sent = atoms.get("B")
         size = f"{sent}b" if sent is not None else "-"
-        user_agent = str(environ.get("HTTP_USER_AGENT") or "-").replace('"', "\\\"")
+        user_agent = str(environ.get("HTTP_USER_AGENT") or "-").replace('"', '\\"')
         message = f'{_client_address(environ)} > "{method} {target} {protocol}" {_color_status(status)} {size} "{user_agent}"'
         self.access_log.log(_access_log_level(environ, status), message)

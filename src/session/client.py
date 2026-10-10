@@ -129,20 +129,28 @@ class XUiSession:
             self.inbounds_list = inbounds_list or ()
             self.mode: Literal["whitelist", "blacklist"] = mode
             protocol = "https" if https else "http"
-            clean_uri = f"/{uri.strip('/')}/" if uri.strip('/') else "/"
+            clean_uri = f"/{uri.strip('/')}/" if uri.strip("/") else "/"
             self.port = str(port)
             self.address = address
             self.name = name
-            self.local = self.address in ("localhost", "::1", "127.0.0.1", "0.0.0.0") # noqa: S104
+            self.local = self.address in ("localhost", "::1", "127.0.0.1", "0.0.0.0")  # noqa: S104
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
 
-            resolved_stamp = stamp_path if stamp_path is not None else default_inbound_stamp_path(
-                name, self.base_url, directory=stamp_dir,
+            resolved_stamp = (
+                stamp_path
+                if stamp_path is not None
+                else default_inbound_stamp_path(
+                    name,
+                    self.base_url,
+                    directory=stamp_dir,
+                )
             )
             resolved_client_stamp = client_stamp_path
             if resolved_client_stamp is None:
                 resolved_client_stamp = default_client_stamp_path(
-                    name, self.base_url, directory=stamp_dir,
+                    name,
+                    self.base_url,
+                    directory=stamp_dir,
                 )
             inbound_path = os.path.normpath(Path(resolved_stamp).absolute())
             client_path = os.path.normpath(Path(resolved_client_stamp).absolute())
@@ -150,7 +158,8 @@ class XUiSession:
                 raise ValueError("client stamp must not be the inbound stamp")
             self._inbounds: GenerationCache[list[Inbound]] = GenerationCache(resolved_stamp, clock)
             self._clients: GenerationCache[dict[str, PanelClient]] = GenerationCache(
-                resolved_client_stamp, clock,
+                resolved_client_stamp,
+                clock,
             )
             self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
             self.verbose = verbose
@@ -227,9 +236,7 @@ class XUiSession:
         if version == 10:
             protocol = "HTTP/1.0"
         target = self._request_target(url)
-        self.log.debug(
-            f'"{method} {target} {protocol}" {color_status(status)} {size}b'
-        )
+        self.log.debug(f'"{method} {target} {protocol}" {color_status(status)} {size}b')
 
     def _mark_dead(self, reason: str) -> None:
         with self._health_check_lock:

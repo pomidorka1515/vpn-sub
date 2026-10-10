@@ -95,7 +95,9 @@ class AdminRoutingMixin(AdminFeatureMixin):
         if handler_name is None:
             return
         try:
-            handler = cast(Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name))
+            handler = cast(
+                Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name)
+            )
             await handler(interaction)
         except Exception:
             self.log.exception("admin modal dispatch failed")
@@ -131,16 +133,36 @@ class AdminRoutingMixin(AdminFeatureMixin):
     async def _handle_reset_user(self, data: str, interaction: discord.Interaction) -> None:
         del data
         modal = discord.ui.Modal(title="Сброс пользователя", custom_id="admin:modal:reset_user")
-        modal.add_item(discord.ui.TextInput(label="Username", custom_id="username", min_length=1, max_length=64))
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Username", custom_id="username", min_length=1, max_length=64
+            )
+        )
         await self._send_modal(interaction, modal)
 
     async def _handle_add_user(self, data: str, interaction: discord.Interaction) -> None:
         del data
         modal = discord.ui.Modal(title="Добавить пользователя", custom_id="admin:modal:add_user")
-        modal.add_item(discord.ui.TextInput(label="Username", custom_id="username", min_length=1, max_length=64))
-        modal.add_item(discord.ui.TextInput(label="Отображаемое имя", custom_id="displayname", min_length=1, max_length=16))
-        modal.add_item(discord.ui.TextInput(label="Лимит GB (0 = безлимит)", custom_id="limit", min_length=1, max_length=8))
-        modal.add_item(discord.ui.TextInput(label="Дней (0 = безлимит)", custom_id="days", min_length=1, max_length=8))
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Username", custom_id="username", min_length=1, max_length=64
+            )
+        )
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Отображаемое имя", custom_id="displayname", min_length=1, max_length=16
+            )
+        )
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Лимит GB (0 = безлимит)", custom_id="limit", min_length=1, max_length=8
+            )
+        )
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Дней (0 = безлимит)", custom_id="days", min_length=1, max_length=8
+            )
+        )
         await self._send_modal(interaction, modal)
 
     async def _load_users(self, interaction: discord.Interaction) -> list[str] | None:
@@ -149,7 +171,9 @@ class AdminRoutingMixin(AdminFeatureMixin):
             return None
         raw: object = result_obj(result)
         if not isinstance(raw, list):
-            await self._respond(interaction, "❌ Некорректный ответ сервиса.", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Некорректный ответ сервиса.", view=self.main_menu_view()
+            )
             return None
         return str_list(cast(object, raw))
 
@@ -159,7 +183,9 @@ class AdminRoutingMixin(AdminFeatureMixin):
         if users is None:
             return
         if not users:
-            await self._respond(interaction, "Список пользователей пуст.", view=self.main_menu_view())
+            await self._respond(
+                interaction, "Список пользователей пуст.", view=self.main_menu_view()
+            )
             return
         uid = interaction.user.id
         page = self._pagination_state.get(uid, {}).get("info_page", 0)
@@ -229,19 +255,27 @@ class AdminRoutingMixin(AdminFeatureMixin):
     async def _handle_info_code(self, data: str, interaction: discord.Interaction) -> None:
         del data
         modal = discord.ui.Modal(title="Инфо о коде", custom_id="admin:modal:info_code")
-        modal.add_item(discord.ui.TextInput(label="Код", custom_id="code", min_length=1, max_length=64))
+        modal.add_item(
+            discord.ui.TextInput(label="Код", custom_id="code", min_length=1, max_length=64)
+        )
         await self._send_modal(interaction, modal)
 
     async def _handle_delete_code(self, data: str, interaction: discord.Interaction) -> None:
         del data
         modal = discord.ui.Modal(title="Удалить код", custom_id="admin:modal:del_code")
-        modal.add_item(discord.ui.TextInput(label="Код", custom_id="code", min_length=1, max_length=64))
+        modal.add_item(
+            discord.ui.TextInput(label="Код", custom_id="code", min_length=1, max_length=64)
+        )
         await self._send_modal(interaction, modal)
 
     async def _handle_add_code(self, data: str, interaction: discord.Interaction) -> None:
         del data
         modal = discord.ui.Modal(title="Добавить код", custom_id="admin:modal:add_code")
-        modal.add_item(discord.ui.TextInput(label="Название кода", custom_id="code", min_length=1, max_length=64))
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Название кода", custom_id="code", min_length=1, max_length=64
+            )
+        )
         await self._send_modal(interaction, modal)
 
     async def _handle_panel_status(self, data: str, interaction: discord.Interaction) -> None:
@@ -251,21 +285,33 @@ class AdminRoutingMixin(AdminFeatureMixin):
     async def _handle_code_type(self, data: str, interaction: discord.Interaction) -> None:
         pending = self._pending_codes.get(interaction.user.id)
         if not pending:
-            await self._respond(interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view())
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view()
+            )
             return
         code_type = data.split("admin:codetype:", 1)[1]
         pending["type"] = code_type
         self._pending_codes[interaction.user.id] = pending
         modal = discord.ui.Modal(title="Параметры кода", custom_id="admin:modal:code_days")
-        modal.add_item(discord.ui.TextInput(label="Дней", custom_id="days", min_length=1, max_length=8))
-        modal.add_item(discord.ui.TextInput(label="Гигабайты", custom_id="gb", min_length=1, max_length=8))
-        modal.add_item(discord.ui.TextInput(label="ВЛ гигабайты", custom_id="wl_gb", min_length=1, max_length=8))
+        modal.add_item(
+            discord.ui.TextInput(label="Дней", custom_id="days", min_length=1, max_length=8)
+        )
+        modal.add_item(
+            discord.ui.TextInput(label="Гигабайты", custom_id="gb", min_length=1, max_length=8)
+        )
+        modal.add_item(
+            discord.ui.TextInput(
+                label="ВЛ гигабайты", custom_id="wl_gb", min_length=1, max_length=8
+            )
+        )
         await self._send_modal(interaction, modal)
 
     async def _handle_code_perma(self, data: str, interaction: discord.Interaction) -> None:
         pending = self._pending_codes.get(interaction.user.id)
         if not pending:
-            await self._respond(interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view())
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view()
+            )
             return
         perma = data.endswith(":yes")
         pending["perma"] = perma
@@ -274,14 +320,24 @@ class AdminRoutingMixin(AdminFeatureMixin):
             await self._finish_add_code(interaction)
             return
         modal = discord.ui.Modal(title="Использования кода", custom_id="admin:modal:code_uses")
-        modal.add_item(discord.ui.TextInput(label="Кол-во использований (>= 1)", custom_id="uses", min_length=1, max_length=8))
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Кол-во использований (>= 1)", custom_id="uses", min_length=1, max_length=8
+            )
+        )
         await self._send_modal(interaction, modal)
 
     async def _handle_chart(self, data: str, interaction: discord.Interaction) -> None:
         del data
         modal = discord.ui.Modal(title="История трафика", custom_id="admin:modal:chart")
-        modal.add_item(discord.ui.TextInput(label="Username", custom_id="username", min_length=1, max_length=64))
-        modal.add_item(discord.ui.TextInput(label="Дней (1-90)", custom_id="days", min_length=1, max_length=3))
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Username", custom_id="username", min_length=1, max_length=64
+            )
+        )
+        modal.add_item(
+            discord.ui.TextInput(label="Дней (1-90)", custom_id="days", min_length=1, max_length=3)
+        )
         await self._send_modal(interaction, modal)
 
     async def _handle_leaderboard(self, data: str, interaction: discord.Interaction) -> None:
@@ -294,7 +350,9 @@ class AdminRoutingMixin(AdminFeatureMixin):
     async def _handle_edit(self, data: str, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
         if not pending:
-            await self._respond(interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+            )
             return
         handlers = {
             "fp": self._cb_edit_fingerprint,
@@ -310,7 +368,9 @@ class AdminRoutingMixin(AdminFeatureMixin):
     async def _handle_fingerprint_save(self, data: str, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
         if not pending:
-            await self._respond(interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+            )
             return
         fp = data.split("admin:fp_save:", 1)[1]
         result = await self.http.update_user(pending["username"], fingerprint=fp)
@@ -330,9 +390,15 @@ class AdminRoutingMixin(AdminFeatureMixin):
     async def _handle_leaderboard_order(self, data: str, interaction: discord.Interaction) -> None:
         pending = self._pending_leaderboard.get(interaction.user.id)
         if pending is None:
-            await self._respond(interaction, "❌ Сессия истекла, начните заново.", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните заново.", view=self.main_menu_view()
+            )
             return
         pending["order"] = data.split("admin:lbo:", 1)[1]
         modal = discord.ui.Modal(title="Таблица лидеров", custom_id="admin:modal:lb_window")
-        modal.add_item(discord.ui.TextInput(label="Количество записей (0 = все)", custom_id="window", min_length=1, max_length=8))
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Количество записей (0 = все)", custom_id="window", min_length=1, max_length=8
+            )
+        )
         await self._send_modal(interaction, modal)

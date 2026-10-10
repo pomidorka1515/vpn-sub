@@ -47,11 +47,17 @@ def _info(**overrides: Unpack[UserInfoOverrides]) -> UserInfo:
     }
     payload.update(overrides)
     return UserInfo(
-        _=payload["_"], token=payload["token"], link=payload["link"],
-        displayname=payload["displayname"], uuid=payload["uuid"],
-        fingerprint=payload["fingerprint"], enabled=payload["enabled"],
-        wl_enabled=payload["wl_enabled"], time=payload["time"],
-        online=payload["online"], bandwidth=payload["bandwidth"],
+        _=payload["_"],
+        token=payload["token"],
+        link=payload["link"],
+        displayname=payload["displayname"],
+        uuid=payload["uuid"],
+        fingerprint=payload["fingerprint"],
+        enabled=payload["enabled"],
+        wl_enabled=payload["wl_enabled"],
+        time=payload["time"],
+        online=payload["online"],
+        bandwidth=payload["bandwidth"],
     )
 
 
@@ -74,7 +80,12 @@ def users() -> tuple[AdminUsersMixin, MagicMock, MagicMock]:
 
 def _buttons(markup: object) -> list[str]:
     keyboard = cast(types.InlineKeyboardMarkup, markup).inline_keyboard
-    return [button.callback_data for row in keyboard for button in row if button.callback_data is not None]
+    return [
+        button.callback_data
+        for row in keyboard
+        for button in row
+        if button.callback_data is not None
+    ]
 
 
 def test_list_users_empty_and_paginated(
@@ -91,7 +102,9 @@ def test_list_users_empty_and_paginated(
     text = cast(MagicMock, mixin._send_message).call_args.args[1]
     assert "<code>c</code>" in text
     assert "<code>a</code>" not in text
-    assert "page_list_users_0" in _buttons(cast(MagicMock, mixin._send_message).call_args.kwargs["reply_markup"])
+    assert "page_list_users_0" in _buttons(
+        cast(MagicMock, mixin._send_message).call_args.kwargs["reply_markup"]
+    )
 
 
 def test_online_users_and_refresh_failures(
@@ -187,7 +200,11 @@ def test_edit_prompts_and_lookup_errors(
     mixin, telegram, subscription = users
     subscription.business_svc.get_info.return_value = _info()
     mixin._cb_edit_fingerprint(7, "alice")
-    labels = [button.text for row in telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard for button in row]
+    labels = [
+        button.text
+        for row in telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard
+        for button in row
+    ]
     assert "✅ chrome" in labels
 
     mixin._cb_edit_limit(7, "alice")
@@ -284,7 +301,10 @@ def test_reset_and_add_user_flow(
     mixin._step_add_user_time(_message("bad"), "bob", "Bob", 5)
     mixin._step_add_user_time(_message("0"), "bob", "Bob", 5)
     subscription.business_svc.add_new_user.assert_called_with(
-        username="bob", displayname="Bob", limit=5, timee=0,
+        username="bob",
+        displayname="Bob",
+        limit=5,
+        timee=0,
     )
 
     subscription.business_svc.add_new_user.side_effect = AppError("denied")

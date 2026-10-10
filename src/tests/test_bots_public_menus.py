@@ -143,7 +143,9 @@ def test_language_menu_and_notifications(
     mixin.start()
     mixin.stop()
     cast(MagicMock, mixin.start_polling).assert_called_once()
-    cast(MagicMock, mixin._executor.shutdown).assert_called_once_with(wait=False, cancel_futures=True)
+    cast(MagicMock, mixin._executor.shutdown).assert_called_once_with(
+        wait=False, cancel_futures=True
+    )
 
 
 @pytest.fixture
@@ -154,10 +156,18 @@ def routing() -> tuple[PublicTextRoutingMixin, MagicMock, MagicMock]:
     mixin.bot = telegram
     mixin.sub = subscription
     mixin.TEXTS = TEXTS
-    mixin.cfg = config_mock(subscription_config(profiles={
-        "fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"]),
-        "broken": profile_config(name=["Broken", "Сломан"], description=["broken en", "broken ru"]),
-    }))
+    mixin.cfg = config_mock(
+        subscription_config(
+            profiles={
+                "fast": profile_config(
+                    name=["Fast", "Быстрый"], description=["fast en", "fast ru"]
+                ),
+                "broken": profile_config(
+                    name=["Broken", "Сломан"], description=["broken en", "broken ru"]
+                ),
+            }
+        )
+    )
     mixin.get_lang = MagicMock(return_value="en")  # type: ignore[method-assign]
     mixin.get_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     mixin.send_info = MagicMock()  # type: ignore[method-assign]

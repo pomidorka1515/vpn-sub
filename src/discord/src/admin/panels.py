@@ -55,8 +55,8 @@ class AdminPanelsMixin(AdminFeatureMixin):
         app_stats = obj_map(obj.get("appStats"))
         xray = obj_map(obj.get("xray"))
         loads = _as_loads(obj.get("loads"))
-        GB = 1024 ** 3
-        MB = 1024 ** 2
+        GB = 1024**3
+        MB = 1024**2
         xr_state = xray.get("state")
         xr_status = "🟢 Работает" if xr_state == "running" else f"🔴 {xray.get('errorMsg')}"
         sys_up = fmt_time(int(number(obj.get("uptime"))))
@@ -67,28 +67,28 @@ class AdminPanelsMixin(AdminFeatureMixin):
         return f"""📊 **Статус сервера {name}**
 
 🖥 **Система**
-├ **CPU:** `{round(number(obj.get('cpu')))}%` (`{obj.get('cpuCores')}`/`{obj.get('logicalPro')}` ядер, `{round(number(obj.get('cpuSpeedMhz')))} MHz`)
+├ **CPU:** `{round(number(obj.get("cpu")))}%` (`{obj.get("cpuCores")}`/`{obj.get("logicalPro")}` ядер, `{round(number(obj.get("cpuSpeedMhz")))} MHz`)
 ├ **Load:** `{load0}` | `{load1}` | `{load2}`
-├ **RAM:** `{number(mem.get('current')) / GB:.2f} GB` / `{number(mem.get('total')) / GB:.2f} GB`
+├ **RAM:** `{number(mem.get("current")) / GB:.2f} GB` / `{number(mem.get("total")) / GB:.2f} GB`
 └ **Uptime:** `{sys_up}`
 
 💾 **Накопители**
-├ **Диск:** `{number(disk.get('current')) / GB:.2f} GB` / `{number(disk.get('total')) / GB:.2f} GB`
-└ **Swap:** `{number(swap.get('current')) / GB:.2f} GB` / `{number(swap.get('total')) / GB:.2f} GB`
+├ **Диск:** `{number(disk.get("current")) / GB:.2f} GB` / `{number(disk.get("total")) / GB:.2f} GB`
+└ **Swap:** `{number(swap.get("current")) / GB:.2f} GB` / `{number(swap.get("total")) / GB:.2f} GB`
 
 🌐 **Сеть & IP**
-├ **IPv4:** `{public_ip.get('ipv4')}`
-├ **IPv6:** `{public_ip.get('ipv6') or 'Отключен'}`
-├ **Соединения:** `{obj.get('tcpCount')}` TCP / `{obj.get('udpCount')}` UDP
-├ **Скорость:** ⬇️ `{number(net_io.get('down')) / MB:.2f} MB/s` | ⬆️ `{number(net_io.get('up')) / MB:.2f} MB/s`
-└ **Трафик:** ⬇️ `{number(net_traffic.get('recv')) / GB:.2f} GB` | ⬆️ `{number(net_traffic.get('sent')) / GB:.2f} GB`
+├ **IPv4:** `{public_ip.get("ipv4")}`
+├ **IPv6:** `{public_ip.get("ipv6") or "Отключен"}`
+├ **Соединения:** `{obj.get("tcpCount")}` TCP / `{obj.get("udpCount")}` UDP
+├ **Скорость:** ⬇️ `{number(net_io.get("down")) / MB:.2f} MB/s` | ⬆️ `{number(net_io.get("up")) / MB:.2f} MB/s`
+└ **Трафик:** ⬇️ `{number(net_traffic.get("recv")) / GB:.2f} GB` | ⬆️ `{number(net_traffic.get("sent")) / GB:.2f} GB`
 
-⚡️ **Xray Core v{xray.get('version')}**
+⚡️ **Xray Core v{xray.get("version")}**
 └ **Статус:** {xr_status}
 
 🤖 **Other**
-├ **Потоков:** `{app_stats.get('threads')}`
-├ **RAM:** `{number(app_stats.get('mem')) / MB:.2f} MB`
+├ **Потоков:** `{app_stats.get("threads")}`
+├ **RAM:** `{number(app_stats.get("mem")) / MB:.2f} MB`
 └ **Uptime:** `{app_up}`"""
 
     async def _cb_all_panels_status(self, interaction: discord.Interaction) -> None:
@@ -99,13 +99,19 @@ class AdminPanelsMixin(AdminFeatureMixin):
             return
         raw: object = result_obj(result)
         if not isinstance(raw, dict) or not raw:
-            await self._respond(interaction, "❌ Статус панелей неизвестен", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Статус панелей неизвестен", view=self.main_menu_view()
+            )
             return
         panels = obj_map(cast(object, raw))
         names = list(panels.keys())
         for index, name in enumerate(names):
             payload = panels.get(name)
-            mapping = obj_map(cast(object, payload)) if isinstance(payload, dict) else {"status": "unknown"}
+            mapping = (
+                obj_map(cast(object, payload))
+                if isinstance(payload, dict)
+                else {"status": "unknown"}
+            )
             last = index == len(names) - 1
             await self._respond(
                 interaction,

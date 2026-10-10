@@ -1,4 +1,5 @@
 """Administrator authentication, menus, and lifecycle glue."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -46,7 +47,7 @@ class AdminCommonMixin(
             types.InlineKeyboardButton("⚠ Сбросить пользователя", callback_data="reset_user"),
             types.InlineKeyboardButton("📈 История трафика", callback_data="chart"),
             types.InlineKeyboardButton("🏆 Таблица лидеров", callback_data="leaderboard"),
-            types.InlineKeyboardButton("ℹ️ Статус панелей", callback_data="status_panels")
+            types.InlineKeyboardButton("ℹ️ Статус панелей", callback_data="status_panels"),
         )
 
     def get_codes_menu(self) -> types.InlineKeyboardMarkup:
@@ -55,7 +56,7 @@ class AdminCommonMixin(
             types.InlineKeyboardButton("❌ Удалить код", callback_data="del_code"),
             types.InlineKeyboardButton("📋 Список кодов", callback_data="list_codes"),
             types.InlineKeyboardButton("ℹ️ Инфо о коде", callback_data="info_code"),
-            types.InlineKeyboardButton("🔙 В меню", callback_data="cancel")
+            types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"),
         )
 
     def get_users_menu(self, prefix: str, page: int = 0) -> types.InlineKeyboardMarkup:
@@ -78,13 +79,19 @@ class AdminCommonMixin(
 
         nav_buttons: list[types.InlineKeyboardButton] = []
         if page > 0:
-            nav_buttons.append(types.InlineKeyboardButton("◀️", callback_data=f"page_{prefix}_{page - 1}"))
+            nav_buttons.append(
+                types.InlineKeyboardButton("◀️", callback_data=f"page_{prefix}_{page - 1}")
+            )
         if page < total_pages - 1:
-            nav_buttons.append(types.InlineKeyboardButton("▶️", callback_data=f"page_{prefix}_{page + 1}"))
+            nav_buttons.append(
+                types.InlineKeyboardButton("▶️", callback_data=f"page_{prefix}_{page + 1}")
+            )
 
         if nav_buttons:
             markup.add(*nav_buttons)  # pyright: ignore[reportUnknownMemberType]
-            markup.add(types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"))  # pyright: ignore[reportUnknownMemberType]
+            markup.add(
+                types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop")
+            )  # pyright: ignore[reportUnknownMemberType]
 
         markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         return markup
@@ -95,7 +102,7 @@ class AdminCommonMixin(
         self.bot.send_message(
             message.chat.id,
             "👋 Привет! Панель управления VPN запущена.",
-            reply_markup=self.get_main_menu()
+            reply_markup=self.get_main_menu(),
         )
 
     def start(self) -> None:

@@ -45,15 +45,17 @@ REQUIRED_KEYS: tuple[str, ...] = (
     "redis",
 )
 
-SCHEMA_PROPERTIES: frozenset[str] = frozenset((
-    "$schema",
-    *REQUIRED_KEYS,
-    "bot",
-    "publicbot",
-    "api_uri",
-    "fallback_domain",
-    "funny_strings",
-))
+SCHEMA_PROPERTIES: frozenset[str] = frozenset(
+    (
+        "$schema",
+        *REQUIRED_KEYS,
+        "bot",
+        "publicbot",
+        "api_uri",
+        "fallback_domain",
+        "funny_strings",
+    )
+)
 
 type PatchStatus = Literal["updated", "unchanged"]
 
@@ -90,9 +92,7 @@ def check_config_document(data: Mapping[str, object]) -> None:
             profile = cast(Mapping[str, object], profile)
             node = profile.get("node")
             if isinstance(node, str) and node not in nodes:
-                raise ValidationError(
-                    f"profiles.{profile_id}.node {node!r} is not a key of nodes"
-                )
+                raise ValidationError(f"profiles.{profile_id}.node {node!r} is not a key of nodes")
 
     panels = data.get("3xui")
     if isinstance(panels, Mapping) and len(cast(Mapping[str, object], panels)) == 0:
@@ -118,8 +118,8 @@ def check_config_document(data: Mapping[str, object]) -> None:
         isinstance(auth, list)
         and len(cast(list[object], auth)) == 2
         and (
-            not _nonempty_str(cast(list[object], auth)[0]) or
-            not _nonempty_str(cast(list[object], auth)[1])
+            not _nonempty_str(cast(list[object], auth)[0])
+            or not _nonempty_str(cast(list[object], auth)[1])
         )
     ):
         raise ValidationError("api_admin_ui_auth entries must not be empty")
@@ -161,13 +161,11 @@ def apply_config_patch(
         return "unchanged", [], []
 
     changed = [
-        key for key in values
+        key
+        for key in values
         if key not in preimage or not _json_equal(working.get(key), preimage[key])
     ]
-    restart = [
-        key for key in RESTART_KEYS
-        if not _json_equal(working.get(key), before[key])
-    ]
+    restart = [key for key in RESTART_KEYS if not _json_equal(working.get(key), before[key])]
     return "updated", changed, restart
 
 
@@ -177,7 +175,10 @@ def _is_json_value(value: object) -> bool:
     if isinstance(value, float):
         return math.isfinite(value)
     if isinstance(value, Mapping):
-        return all(isinstance(key, str) and _is_json_value(item) for key, item in cast(Mapping[str, object], value).items())
+        return all(
+            isinstance(key, str) and _is_json_value(item)
+            for key, item in cast(Mapping[str, object], value).items()
+        )
     if isinstance(value, list):
         return all(_is_json_value(item) for item in cast(list[object], value))
     return False

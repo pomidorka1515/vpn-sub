@@ -30,11 +30,13 @@ class CPUInfo:
     name: str
     mhz_max: float | int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class LoadAverage:
     load_1m: float
     load_5m: float
     load_15m: float
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class RamInfo:
@@ -42,31 +44,37 @@ class RamInfo:
     available: int
     used: int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class SwapInfo:
     total: int
     free: int
     used: int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class SystemMemory:
     ram: RamInfo
     swap: SwapInfo
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class IPList:
     ipv4: tuple[str, ...] | None
     ipv6: tuple[str, ...] | None
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ConnCount:
     tcp: int
     udp: int
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class AppMemory:
     ram: float
     swap: float
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GCGenStats:
@@ -74,11 +82,13 @@ class GCGenStats:
     collected: int
     uncollectable: int
 
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GCStats:
     gc_counts: tuple[int, int, int]
     gc_thresholds: tuple[int, int, int]
     gc_stats: tuple[GCGenStats, ...]
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ThreadInfo:
@@ -88,6 +98,7 @@ class ThreadInfo:
     involuntary. `stack` is the thread stack reservation in bytes.
     Missing OS fields stay None so older snapshots still hydrate.
     """
+
     tid: int
     name: str
     state: str | None = None
@@ -95,11 +106,13 @@ class ThreadInfo:
     ctx_switches: int | None = None
     stack: int | None = None
 
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class HealthStatus:
     uptime: float
     memory: AppMemory
     threads: int
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class FullSystemInfo:
@@ -127,9 +140,11 @@ class StateSnapshot:
     Lives here because `host` is a `FullSystemInfo`. Importing that type
     from `custom_types` would cycle through `NetTrafficStats`.
     """
+
     ts: int
     host: FullSystemInfo
     panels: dict[str, ServerMetricsObj]
+
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class PollingSystemInfo:
@@ -138,6 +153,7 @@ class PollingSystemInfo:
     Static identity (`cpu_info`, `ip`, GC) stays on `full_info`.
     `uptime` and `app_uptime` are seconds and change every poll.
     """
+
     cpu: float
     process_count: int
     uptime: float

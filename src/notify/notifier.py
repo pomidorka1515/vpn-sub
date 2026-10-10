@@ -1,4 +1,5 @@
 """Deliver one localized warning and remember it only after the send works."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -86,7 +87,10 @@ class Notifier:
         except Exception as error:
             self._log.error(
                 "failed to send %s to %s (%s): %s",
-                notice.kind.kind_id, username, telegram_id, error,
+                notice.kind.kind_id,
+                username,
+                telegram_id,
+                error,
                 exc_info=True,
             )
             return False
@@ -108,7 +112,8 @@ class Notifier:
         if not template:
             self._log.error(
                 "missing notification text %s for %s",
-                notice.kind.text_key, lang,
+                notice.kind.text_key,
+                lang,
             )
             return None
         try:
@@ -116,7 +121,8 @@ class Notifier:
         except (KeyError, IndexError, ValueError) as error:
             self._log.error(
                 "failed to format %s: %s",
-                notice.kind.text_key, error,
+                notice.kind.text_key,
+                error,
             )
             return None
 

@@ -57,8 +57,11 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 current: dict[str, JsonValue] = {}
                 cfg.validate_schema(current)
                 signature = atomic_write_json(
-                    cfg.path, current,
-                    indent=cfg.indent, minify=cfg.minify, sync_mode=cfg.sync_mode,
+                    cfg.path,
+                    current,
+                    indent=cfg.indent,
+                    minify=cfg.minify,
+                    sync_mode=cfg.sync_mode,
                 )
                 if signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
@@ -114,9 +117,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
                     signature = file_signature(cfg.path)
                     if signature is None:
-                        raise ConfigError(
-                            "Config file disappeared immediately after commit."
-                        )
+                        raise ConfigError("Config file disappeared immediately after commit.")
 
                     if cfg.isolate_commits:
                         cfg.data = copy.deepcopy(self.data)

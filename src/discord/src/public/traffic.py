@@ -36,7 +36,9 @@ class PublicTrafficMixin(PublicFeatureMixin):
             discord.SelectOption(label=t["btn_chart_days"].format(days=days), value=str(days))
             for days in (3, 14, 30, 90)
         ]
-        view.add_item(discord.ui.Select(custom_id="chart_select", options=options, min_values=1, max_values=1))
+        view.add_item(
+            discord.ui.Select(custom_id="chart_select", options=options, min_values=1, max_values=1)
+        )
         return view
 
     def _chart_lock(self, user_id: int) -> asyncio.Lock:

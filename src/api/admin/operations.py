@@ -17,10 +17,10 @@ class OperationsRoutes(AdminApiMixin):
     """Admin health, rollback, and novelty routes."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
-        Route('GET', '/api/health', 'health'),
-        Route('GET', '/api/operations/status', 'operation_status'),
-        Route('POST', '/api/operations/rollback/resolve', 'operation_rollback_resolve'),
-        Route('GET', '/api/teapot', 'teapot'),
+        Route("GET", "/api/health", "health"),
+        Route("GET", "/api/operations/status", "operation_status"),
+        Route("POST", "/api/operations/rollback/resolve", "operation_rollback_resolve"),
+        Route("GET", "/api/teapot", "teapot"),
     )
 
     @requires_admin_auth
@@ -34,41 +34,49 @@ class OperationsRoutes(AdminApiMixin):
             with self.sub.res.db.connection() as conn:
                 conn.execute("SELECT 1")
         except DatabaseError:
-            return err("Database unavailable", 503, obj={
-                "db": False,
+            return err(
+                "Database unavailable",
+                503,
+                obj={
+                    "db": False,
+                    "uptime": status.uptime,
+                    "memory": memory,
+                    "threads": status.threads,
+                },
+            )
+        snapshot_failure = self.bw.get_daily_snapshot_failure()
+        rollback_failures = self.sub.business_code_svc.get_rollback_failures()
+        return ok(
+            obj={
+                "db": True,
                 "uptime": status.uptime,
                 "memory": memory,
                 "threads": status.threads,
-            })
-        snapshot_failure = self.bw.get_daily_snapshot_failure()
-        rollback_failures = self.sub.business_code_svc.get_rollback_failures()
-        return ok(obj={
-            "db": True,
-            "uptime": status.uptime,
-            "memory": memory,
-            "threads": status.threads,
-            "degraded": snapshot_failure is not None or any(rollback_failures.values()),
-            "daily_snapshot_failure": snapshot_failure,
-            "rollback_failures": rollback_failures,
-        })
+                "degraded": snapshot_failure is not None or any(rollback_failures.values()),
+                "daily_snapshot_failure": snapshot_failure,
+                "rollback_failures": rollback_failures,
+            }
+        )
 
     @requires_admin_auth
     def operation_status(self) -> ResponseType:
-        return ok(obj={
-            "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
-            "rollback_failures": self.sub.business_code_svc.get_rollback_failures(),
-        })
+        return ok(
+            obj={
+                "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
+                "rollback_failures": self.sub.business_code_svc.get_rollback_failures(),
+            }
+        )
 
     @requires_admin_auth
-    @requires_fields_strict(('kind', str), ('user', str))
+    @requires_fields_strict(("kind", str), ("user", str))
     def operation_rollback_resolve(self) -> ResponseType:
         content = g.json_obj
-        kind_value: str = content.get('kind')
-        username: str = content.get('user')
-        if kind_value == 'uuid':
-            self.sub.business_code_svc.clear_rollback_failure('uuid', username)
-        elif kind_value == 'registration':
-            self.sub.business_code_svc.clear_rollback_failure('registration', username)
+        kind_value: str = content.get("kind")
+        username: str = content.get("user")
+        if kind_value == "uuid":
+            self.sub.business_code_svc.clear_rollback_failure("uuid", username)
+        elif kind_value == "registration":
+            self.sub.business_code_svc.clear_rollback_failure("registration", username)
         else:
             return err("kind must be 'uuid' or 'registration'")
         return ok("Resolved")

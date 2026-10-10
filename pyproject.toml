@@ -49,6 +49,7 @@ package-dir = {"" = "src"}
 # ---------------------------------------------------------------------------
 
 [tool.ruff]
+line-length = 100
 target-version = "py314" # Match the development Python version
 src = ["src", "src/discord/src"] # First-party import roots
 

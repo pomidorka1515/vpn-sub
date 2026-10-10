@@ -34,7 +34,9 @@ def stamp_path(
     if directory is None:
         directory = str(runtime_dir())
     digest = hashlib.sha1(base_url.encode(), usedforsecurity=False).hexdigest()[:8]
-    safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
+    safe = (
+        "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
+    )
     return str(Path(directory) / f"{kind}.{safe}.{digest}.stamp")
 
 

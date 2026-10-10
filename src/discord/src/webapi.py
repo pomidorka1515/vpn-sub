@@ -87,7 +87,9 @@ def _stats(value: object) -> StatsPayload:
                         if not isinstance(number, (int, float)):
                             raise ValueError(field)
                 elif field in ("monthly", "wl_monthly", "limit", "wl_limit"):
-                    if not isinstance(amount, (int, float)) or (field in ("limit", "wl_limit") and not isinstance(amount, int)):
+                    if not isinstance(amount, (int, float)) or (
+                        field in ("limit", "wl_limit") and not isinstance(amount, int)
+                    ):
                         raise ValueError(field)
     return cast(StatsPayload, obj)
 
@@ -100,7 +102,9 @@ def _strings(value: object) -> dict[str, str]:
 
 
 def _fingerprints(value: object) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in cast(list[object], value)):
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) for item in cast(list[object], value)
+    ):
         raise ValueError("expected strings")
     return cast(list[str], value)
 
@@ -111,14 +115,20 @@ def _history(value: object) -> list[BandwidthSnapshotPayload]:
     rows = cast(list[object], value)
     for row in rows:
         obj = _mapping(row)
-        if not all(isinstance(obj.get(key), int) for key in ("ts", "up", "down", "wl_up", "wl_down")):
+        if not all(
+            isinstance(obj.get(key), int) for key in ("ts", "up", "down", "wl_up", "wl_down")
+        ):
             raise ValueError("invalid history row")
     return cast(list[BandwidthSnapshotPayload], rows)
 
 
 def _username(value: object) -> UsernamePayload:
     obj = _mapping(value)
-    if not isinstance(obj.get("valid"), bool) or not isinstance(obj.get("taken"), bool) or not isinstance(obj.get("sanitized"), str):
+    if (
+        not isinstance(obj.get("valid"), bool)
+        or not isinstance(obj.get("taken"), bool)
+        or not isinstance(obj.get("sanitized"), str)
+    ):
         raise ValueError("invalid username result")
     return cast(UsernamePayload, obj)
 
@@ -131,7 +141,9 @@ def _parsed[T](result: ApiResult, parser: Callable[[object], T]) -> ApiResult[T 
             obj = parser(result.obj)
         except ValueError:
             ok, msg = False, "bad_response"
-    return ApiResult(ok, result.status, msg, obj, result.raw_headers, result.body, result.auth_token)
+    return ApiResult(
+        ok, result.status, msg, obj, result.raw_headers, result.body, result.auth_token
+    )
 
 
 def _token_from_set_cookie(header: str) -> str | None:
@@ -341,13 +353,21 @@ class WebApiClient:
         )
 
     async def validate_username(self, username: str) -> ApiResult[UsernamePayload | None]:
-        return _parsed(await self._request("GET", "/validate", params={"username": username}), _username)
+        return _parsed(
+            await self._request("GET", "/validate", params={"username": username}), _username
+        )
 
     async def profiles(self, token: str, lang: str) -> ApiResult[dict[str, str] | None]:
-        return _parsed(await self._request("GET", "/profiles", token=token, params={"lang": lang}), _strings)
+        return _parsed(
+            await self._request("GET", "/profiles", token=token, params={"lang": lang}), _strings
+        )
 
-    async def history(self, token: str, days: int) -> ApiResult[list[BandwidthSnapshotPayload] | None]:
-        return _parsed(await self._request("GET", "/history", token=token, params={"days": days}), _history)
+    async def history(
+        self, token: str, days: int
+    ) -> ApiResult[list[BandwidthSnapshotPayload] | None]:
+        return _parsed(
+            await self._request("GET", "/history", token=token, params={"days": days}), _history
+        )
 
     async def qr(self, token: str, *, happ: bool, lang: str) -> ApiResult:
         params: dict[str, str | int] = {"lang": lang}

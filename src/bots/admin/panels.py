@@ -1,4 +1,5 @@
 """Administrator panel status workflows."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, cast
@@ -14,24 +15,34 @@ __all__ = ["AdminPanelsMixin"]
 if TYPE_CHECKING:
     from session import XUiSession
 
+
 class _UNFETCHED_SENTINEL:
     def __repr__(self) -> str:
         return "<unfetched panel>"
+
+
 _UNFETCHED: Final[_UNFETCHED_SENTINEL] = _UNFETCHED_SENTINEL()
+
 
 class AdminPanelsMixin(AdminFeatureMixin):
     """Panel status and aggregation workflows."""
 
-    def _cb_panel_info(self,
-                       chat_id: int,
-                       panel: XUiSession,
-                       last: bool,
-                       info: ServerMetricsResponse | _UNFETCHED_SENTINEL | None = _UNFETCHED) -> None:
+    def _cb_panel_info(
+        self,
+        chat_id: int,
+        panel: XUiSession,
+        last: bool,
+        info: ServerMetricsResponse | _UNFETCHED_SENTINEL | None = _UNFETCHED,
+    ) -> None:
         if info is _UNFETCHED:
             info = self.sub.panel_svc.getstatus(panel)
         fetched = cast(ServerMetricsResponse | None, info)
         if fetched is None:
-            self._send_message(chat_id, f"❌ Статус панели {panel.name} неизвестен", reply_markup=self.get_main_menu())
+            self._send_message(
+                chat_id,
+                f"❌ Статус панели {panel.name} неизвестен",
+                reply_markup=self.get_main_menu(),
+            )
             return
         obj = fetched.obj
         obj.format()
@@ -39,8 +50,8 @@ class AdminPanelsMixin(AdminFeatureMixin):
         app_up = fmt_time(obj.appStats.uptime)
         xr = obj.xray
         xr_status = "🟢 Работает" if xr.state == "running" else f"🔴 {xr.errorMsg}"
-        GB = 1024 ** 3
-        MB = 1024 ** 2
+        GB = 1024**3
+        MB = 1024**2
         text = f"""📊 <b>Статус сервера {panel.name}</b>
 
 🖥 <b>Система</b>
@@ -55,7 +66,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
 
 🌐 <b>Сеть & IP</b>
 ├ <b>IPv4:</b> <code>{obj.publicIP.ipv4}</code>
-├ <b>IPv6:</b> <code>{obj.publicIP.ipv6 or 'Отключен'}</code>
+├ <b>IPv6:</b> <code>{obj.publicIP.ipv6 or "Отключен"}</code>
 ├ <b>Соединения:</b> <code>{obj.tcpCount}</code> TCP / <code>{obj.udpCount}</code> UDP
 ├ <b>Скорость:</b> ⬇️ <code>{obj.netIO.down / MB:.2f} MB/s</code> | ⬆️ <code>{obj.netIO.up / MB:.2f} MB/s</code>
 └ <b>Трафик:</b> ⬇️ <code>{obj.netTraffic.recv / GB:.2f} GB</code> | ⬆️ <code>{obj.netTraffic.sent / GB:.2f} GB</code>
@@ -67,7 +78,9 @@ class AdminPanelsMixin(AdminFeatureMixin):
 ├ <b>Потоков:</b> <code>{obj.appStats.threads}</code>
 ├ <b>RAM:</b> <code>{obj.appStats.mem / MB:.2f} MB</code>
 └ <b>Uptime:</b> <code>{app_up}</code>"""
-        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None)
+        self.bot.send_message(
+            chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None
+        )
 
     def _cb_all_panels_status(self, chat_id: int) -> None:
         msg = self.bot.send_message(chat_id, "⏳ Получение статуса панелей...")

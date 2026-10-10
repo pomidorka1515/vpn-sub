@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 __all__ = ["CommonUserService"]
 
+
 class CommonUserService(BaseService):
     def isuser(self, username: str) -> bool:
         """Know if a username exists."""
@@ -43,24 +44,26 @@ class CommonUserService(BaseService):
     def get_token(self, username: str) -> str:
         return str(self.user(username)["token"])
 
-
     def auth_token_to_user(self, auth_token: str) -> str | None:
         """Get a username from a web auth token, None if it does not exist."""
         if len(auth_token) != 100:
             return None
         return self.db.auth_token_to_user(auth_token)
 
-
     def set_auth_token(self, username: str, auth_token: str | None) -> None:
         self.user(username)
         self.trace(
-            Op.auth.set_auth_token, "start",
-            username=username, cleared=auth_token is None,
+            Op.auth.set_auth_token,
+            "start",
+            username=username,
+            cleared=auth_token is None,
         )
         self.db.set_auth_token(username, auth_token)
         self.trace(
-            Op.auth.set_auth_token, "set" if auth_token is not None else "cleared",
-            username=username, cleared=auth_token is None,
+            Op.auth.set_auth_token,
+            "set" if auth_token is not None else "cleared",
+            username=username,
+            cleared=auth_token is None,
         )
 
     def get_fingerprint(self, username: str) -> str:

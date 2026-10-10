@@ -73,15 +73,14 @@ def _panel_post_json(
     what: str,
 ) -> dict[str, object]:
     """POST a JSON mutation and require the panel's success envelope."""
-    response = panel.post(url, json=body, headers={'Accept': 'application/json'})
+    response = panel.post(url, json=body, headers={"Accept": "application/json"})
     try:
         content: dict[str, object] = response.json()
     except Exception:
         content = {}
-    if response.status_code not in (200, 201) or not content.get('success'):
+    if response.status_code not in (200, 201) or not content.get("success"):
         raise PanelRejectedError(
-            f"Panel {panel.name} {what} rejected: "
-            f"{content.get('msg') or response.status_code}"
+            f"Panel {panel.name} {what} rejected: {content.get('msg') or response.status_code}"
         )
     return content
 
@@ -114,7 +113,7 @@ class BusinessUserService(BaseService):
         panel_svc: PanelService,
         password_svc: PasswordService,
         audit_svc: AuditService,
-        bandwidth_svc: BandwidthService
+        bandwidth_svc: BandwidthService,
     ) -> None:
         super().__init__(res)
         self.panel_svc: PanelService = panel_svc
@@ -139,12 +138,13 @@ class BusinessUserService(BaseService):
                 item.clear_cache()
         except Exception as exc:
             self.trace(
-                Op.user.drop_cache, "failed",
-                targets=names, error=type(exc).__name__,
+                Op.user.drop_cache,
+                "failed",
+                targets=names,
+                error=type(exc).__name__,
             )
             raise
         self.trace(Op.user.drop_cache, "cleared", targets=names)
-
 
     def _invalidate_clients(self, panel: XUiSession) -> None:
         """Drop one panel's client map after a successful client POST.
@@ -155,7 +155,8 @@ class BusinessUserService(BaseService):
         self.panel_svc.invalidate_clients(panel)
 
     def _client_maps(
-        self, panels: list[XUiSession] | tuple[XUiSession, ...],
+        self,
+        panels: list[XUiSession] | tuple[XUiSession, ...],
     ) -> dict[str, Mapping[str, PanelClient]]:
         """One client list per panel, filled before the writes.
 
@@ -172,54 +173,63 @@ class BusinessUserService(BaseService):
         user = self.user_svc.user(username)
         bandwidths = self.bandwidth_svc.bandwidth(username=username)
         wl_bandwidths = self.bandwidth_svc.bandwidth(username=username, whitelist=True)
-        monthly = int(user['bw_used'])
-        wl_monthly = int(user['wl_used'])
-        domain = conf['domain']
-        uri = conf['uri'].strip('/')
+        monthly = int(user["bw_used"])
+        wl_monthly = int(user["wl_used"])
+        domain = conf["domain"]
+        uri = conf["uri"].strip("/")
         if pretty:
             bandwidths = bandwidths.format_all_mb()
             wl_bandwidths = wl_bandwidths.format_all_mb()
         info = UserInfo(
-            _=random.choice(conf.get('funny_strings', [])),
-            token=str(user['token']),
+            _=random.choice(conf.get("funny_strings", [])),
+            token=str(user["token"]),
             link=f"{domain}/{uri}?token={user['token']}",
-            displayname=str(user['displayname']),
-            uuid=str(user['uuid']),
-            fingerprint=str(user['fingerprint']),
-            enabled=bool(user['enabled']),
-            wl_enabled=bool(user['enabled_wl']),
-            time=int(user['expires_at']),
+            displayname=str(user["displayname"]),
+            uuid=str(user["uuid"]),
+            fingerprint=str(user["fingerprint"]),
+            enabled=bool(user["enabled"]),
+            wl_enabled=bool(user["enabled_wl"]),
+            time=int(user["expires_at"]),
             online=self.panel_svc.is_online(username),
             bandwidth=UserInfoBandwidth(
                 total=UserInfoBandwidthTotal(
-                    upload=bandwidths.upload,
-                    download=bandwidths.download,
-                    total=bandwidths.total
+                    upload=bandwidths.upload, download=bandwidths.download, total=bandwidths.total
                 ),
                 wl_total=UserInfoBandwidthTotal(
                     upload=wl_bandwidths.upload,
                     download=wl_bandwidths.download,
-                    total=wl_bandwidths.total
+                    total=wl_bandwidths.total,
                 ),
                 monthly=monthly,
                 wl_monthly=wl_monthly,
-                limit=int(user['bw_limit_gb']),
-                wl_limit=int(user['wl_limit_gb'])
-            )
+                limit=int(user["bw_limit_gb"]),
+                wl_limit=int(user["wl_limit_gb"]),
+            ),
         )
         self.trace(
-            Op.user.get_info, "ok",
-            username=username, pretty=pretty, uuid=info.uuid,
-            displayname=info.displayname, fingerprint=info.fingerprint,
-            enabled=info.enabled, wl_enabled=info.wl_enabled, time=info.time,
-            online=info.online, monthly=monthly, wl_monthly=wl_monthly,
-            limit=int(user['bw_limit_gb']), wl_limit=int(user['wl_limit_gb']),
-            upload=bandwidths.upload, download=bandwidths.download,
-            total=bandwidths.total, wl_upload=wl_bandwidths.upload,
-            wl_download=wl_bandwidths.download, wl_total=wl_bandwidths.total,
+            Op.user.get_info,
+            "ok",
+            username=username,
+            pretty=pretty,
+            uuid=info.uuid,
+            displayname=info.displayname,
+            fingerprint=info.fingerprint,
+            enabled=info.enabled,
+            wl_enabled=info.wl_enabled,
+            time=info.time,
+            online=info.online,
+            monthly=monthly,
+            wl_monthly=wl_monthly,
+            limit=int(user["bw_limit_gb"]),
+            wl_limit=int(user["wl_limit_gb"]),
+            upload=bandwidths.upload,
+            download=bandwidths.download,
+            total=bandwidths.total,
+            wl_upload=wl_bandwidths.upload,
+            wl_download=wl_bandwidths.download,
+            wl_total=wl_bandwidths.total,
         )
         return info
-
 
     def add_users(
         self,
@@ -244,8 +254,10 @@ class BusinessUserService(BaseService):
         """
         userid = str(self.user_svc.user(username)["uuid"])
         self.trace(
-            Op.user.add_users, "start",
-            username=username, uuid=userid,
+            Op.user.add_users,
+            "start",
+            username=username,
+            uuid=userid,
             called_internally=_called_internally,
             known_clients=known_clients is not None,
             panels=[panel.name for panel in self.panels],
@@ -282,7 +294,7 @@ class BusinessUserService(BaseService):
                     tgId=0,
                     subId="",
                     comment="",
-                    reset=0
+                    reset=0,
                 )
                 _panel_post_json(
                     panel,
@@ -326,8 +338,7 @@ class BusinessUserService(BaseService):
                     raise
                 inbounds = self.panel_svc.getinbounds(panel)
                 missing = [
-                    i.id for i in inbounds
-                    if i.protocol == "vless" and i.id not in live.inboundIds
+                    i.id for i in inbounds if i.protocol == "vless" and i.id not in live.inboundIds
                 ]
                 if missing:
                     _panel_post_json(
@@ -337,9 +348,7 @@ class BusinessUserService(BaseService):
                         "user attach",
                     )
                     self._invalidate_clients(panel)
-                return [
-                    f"Panel {panel.name} client already existed; attached missing inbounds."
-                ]
+                return [f"Panel {panel.name} client already existed; attached missing inbounds."]
 
         # First failing panel in list order still raises. Sibling writes
         # may already have landed; they are not cancelled.
@@ -347,23 +356,25 @@ class BusinessUserService(BaseService):
             for note in notes:
                 self.log.debug(note)
         self.trace(
-            Op.user.add_users, "synced",
-            username=username, uuid=userid,
+            Op.user.add_users,
+            "synced",
+            username=username,
+            uuid=userid,
             called_internally=_called_internally,
             audited=not _called_internally,
         )
-        if not _called_internally: self.audit_svc.audit(name="user_refresh", info={"username":username})
+        if not _called_internally:
+            self.audit_svc.audit(name="user_refresh", info={"username": username})
         self._drop_cache()
 
-    def delete_user(self,
-                    username: str,
-                    perma: bool = False
-    ) -> None:
+    def delete_user(self, username: str, perma: bool = False) -> None:
         """Delete a user, either from panels or from storage too."""
         self.user_svc.user(username)
         self.trace(
-            Op.user.delete_user, "start",
-            username=username, perma=perma,
+            Op.user.delete_user,
+            "start",
+            username=username,
+            perma=perma,
             panels=[panel.name for panel in self.panels],
         )
         known = self._client_maps(tuple(self.panels))
@@ -386,8 +397,10 @@ class BusinessUserService(BaseService):
             self.db.delete_user(username)
 
         self.trace(
-            Op.user.delete_user, "deleted",
-            username=username, perma=perma,
+            Op.user.delete_user,
+            "deleted",
+            username=username,
+            perma=perma,
         )
         self.audit_svc.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
@@ -416,8 +429,11 @@ class BusinessUserService(BaseService):
         """
         if clients.get(username) is None:
             self.trace(
-                Op.user.set_enabled, "skipped",
-                panel=panel.name, username=username, enabled=enabled,
+                Op.user.set_enabled,
+                "skipped",
+                panel=panel.name,
+                username=username,
+                enabled=enabled,
                 reason="absent",
             )
             return
@@ -429,22 +445,32 @@ class BusinessUserService(BaseService):
             "user update",
         )
         self.trace(
-            Op.user.set_enabled, "applied",
-            panel=panel.name, username=username, enabled=enabled, action=action,
+            Op.user.set_enabled,
+            "applied",
+            panel=panel.name,
+            username=username,
+            enabled=enabled,
+            action=action,
         )
         self._invalidate_clients(panel)
 
-    def update_user(self,
-                    username: str,
-                    enable: bool | None = None,
-                    timee: bool | None = None,
-                    wl_enable: bool | None = None) -> None:
+    def update_user(
+        self,
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+    ) -> None:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
         Raises a domain error if the user is absent or a panel update fails."""
         self.user_svc.user(username)
         self.trace(
-            Op.user.update_user, "start",
-            username=username, enable=enable, timee=timee, wl_enable=wl_enable,
+            Op.user.update_user,
+            "start",
+            username=username,
+            enable=enable,
+            timee=timee,
+            wl_enable=wl_enable,
             whitelist_panel=self.whitelist_panel.name if self.whitelist_panel else None,
         )
         audit_info: dict[str, str | bool] = {"username": username}
@@ -454,7 +480,10 @@ class BusinessUserService(BaseService):
             self.panel_svc.map_panels(
                 panels,
                 lambda panel: self._set_enabled(
-                    panel, username, enable, known[panel.name],
+                    panel,
+                    username,
+                    enable,
+                    known[panel.name],
                 ),
             )
 
@@ -463,7 +492,7 @@ class BusinessUserService(BaseService):
                 fields["status_time"] = timee
             self.db.update_user(username, **fields)
 
-            audit_info['enable'] = enable
+            audit_info["enable"] = enable
         if wl_enable is not None:
             # Only push the change to the whitelist panel if one is actually
             # configured. Regardless of that, the local `statusWl` bookkeeping
@@ -475,16 +504,23 @@ class BusinessUserService(BaseService):
             if self.whitelist_panel:
                 wl_known = self.panel_svc.clients_snapshot(self.whitelist_panel)
                 self._set_enabled(
-                    self.whitelist_panel, username, wl_enable, wl_known,
+                    self.whitelist_panel,
+                    username,
+                    wl_enable,
+                    wl_known,
                 )
 
             self.db.update_user(username, status_wl=wl_enable)
 
-            audit_info['wl_enable'] = wl_enable
+            audit_info["wl_enable"] = wl_enable
 
         self.trace(
-            Op.user.update_user, "updated",
-            username=username, enable=enable, timee=timee, wl_enable=wl_enable,
+            Op.user.update_user,
+            "updated",
+            username=username,
+            enable=enable,
+            timee=timee,
+            wl_enable=wl_enable,
         )
         self.audit_svc.audit(name="user_update", info=audit_info)
         self._drop_cache()
@@ -500,16 +536,23 @@ class BusinessUserService(BaseService):
         fingerprint: str | None = None,
         limit: int = 0,
         wl_limit: int = 5,
-        timee: int = 0
+        timee: int = 0,
     ) -> NewUserInfo:
         """Adds a new user. Raises a domain error if any argument is incorrect.
         Now also suppports ext username and password (optional)"""
         self.trace(
-            Op.user.add_new_user, "start",
-            username=username, displayname=displayname,
-            ext_username=ext_username, userid=userid, fingerprint=fingerprint,
-            limit=limit, wl_limit=wl_limit, timee=timee,
-            has_token=token is not None, has_password=ext_password is not None,
+            Op.user.add_new_user,
+            "start",
+            username=username,
+            displayname=displayname,
+            ext_username=ext_username,
+            userid=userid,
+            fingerprint=fingerprint,
+            limit=limit,
+            wl_limit=wl_limit,
+            timee=timee,
+            has_token=token is not None,
+            has_password=ext_password is not None,
         )
         if not isusername(username):
             # the username becomes the panel client email (clients-first API
@@ -527,8 +570,8 @@ class BusinessUserService(BaseService):
             raise ValidationError("Invalid UUID")
         conf = self.cfg.view()
         if fingerprint is None:
-            fingerprint = random.choice(conf['fingerprints'])
-        elif fingerprint not in conf['fingerprints']:
+            fingerprint = random.choice(conf["fingerprints"])
+        elif fingerprint not in conf["fingerprints"]:
             raise ValidationError("Invalid fingerprint")
         if timee > 2**31:
             raise ValidationError("Invalid timestamp")
@@ -537,15 +580,20 @@ class BusinessUserService(BaseService):
         else:
             ext_username = None
 
-
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
         displayname = sanitize(displayname, "display")
         try:
             self.db.create_user(
-                username=username, uuid=userid, token=token, fingerprint=fingerprint,
-                displayname=displayname, expires_at=timee, bw_limit_gb=limit,
-                wl_limit_gb=wl_limit, ext_username=ext_username,
+                username=username,
+                uuid=userid,
+                token=token,
+                fingerprint=fingerprint,
+                displayname=displayname,
+                expires_at=timee,
+                bw_limit_gb=limit,
+                wl_limit_gb=wl_limit,
+                ext_username=ext_username,
                 ext_password_hash=ext_password,
             )
         except DuplicateError as exc:
@@ -558,7 +606,7 @@ class BusinessUserService(BaseService):
                 token=token,
                 uuid=userid,
                 fingerprint=fingerprint,
-                displayname=displayname
+                displayname=displayname,
             )
         except Exception:
             try:
@@ -577,14 +625,20 @@ class BusinessUserService(BaseService):
         finally:
             to_log: dict[str, str] = {"username": username}
             if ext_username:
-                to_log['ext_username'] = ext_username
+                to_log["ext_username"] = ext_username
             self.audit_svc.audit(name="user_add", info=to_log)
             self._drop_cache()
         self.trace(
-            Op.user.add_new_user, "created",
-            username=username, uuid=userid, fingerprint=fingerprint,
-            displayname=displayname, ext_username=ext_username,
-            limit=limit, wl_limit=wl_limit, timee=timee,
+            Op.user.add_new_user,
+            "created",
+            username=username,
+            uuid=userid,
+            fingerprint=fingerprint,
+            displayname=displayname,
+            ext_username=ext_username,
+            limit=limit,
+            wl_limit=wl_limit,
+            timee=timee,
         )
         return created
 
@@ -598,15 +652,22 @@ class BusinessUserService(BaseService):
         fingerprint: str | None = None,
         limit: int | None = None,
         wl_limit: int | None = None,
-        timee: int | None = None
+        timee: int | None = None,
     ) -> None:
         """Updates certain fields for any user. Changing UUIDs isnt supported."""
         current = self.user_svc.user(username)
         self.trace(
-            Op.user.update_params, "start",
-            username=username, displayname=displayname, ext_username=ext_username,
-            fingerprint=fingerprint, limit=limit, wl_limit=wl_limit, timee=timee,
-            has_token=token is not None, has_password=ext_password is not None,
+            Op.user.update_params,
+            "start",
+            username=username,
+            displayname=displayname,
+            ext_username=ext_username,
+            fingerprint=fingerprint,
+            limit=limit,
+            wl_limit=wl_limit,
+            timee=timee,
+            has_token=token is not None,
+            has_password=ext_password is not None,
         )
         audit_info: dict[str, str | int] = {"username": username}
         if displayname is None:
@@ -615,14 +676,14 @@ class BusinessUserService(BaseService):
             if len(displayname) > 16:
                 raise ValidationError("Displayname too long")
             displayname = sanitize(displayname, "display")
-            audit_info['displayname'] = displayname
+            audit_info["displayname"] = displayname
         token = token if token is not None else str(current["token"])
         if fingerprint is None:
             fingerprint = str(current["fingerprint"])
         else:
-            audit_info['fingerprint'] = fingerprint
+            audit_info["fingerprint"] = fingerprint
         conf = self.cfg.view()
-        if fingerprint not in conf['fingerprints']:
+        if fingerprint not in conf["fingerprints"]:
             raise ValidationError("Invalid fingerprint")
         limit = int(current["bw_limit_gb"]) if limit is None else limit
         wl_limit = int(current["wl_limit_gb"]) if wl_limit is None else wl_limit
@@ -636,24 +697,36 @@ class BusinessUserService(BaseService):
             if len(ext_username) > 32:
                 raise ValidationError("Username too long")
             ext_username = sanitize(ext_username, "external")
-            audit_info['ext_username'] = ext_username
+            audit_info["ext_username"] = ext_username
         if ext_password is None:
             password_hash = current["ext_password_hash"]
         else:
             password_hash = self.password_svc.hash(ext_password)
         try:
             self.db.update_user(
-                username, displayname=displayname, token=token, fingerprint=fingerprint,
-                bw_limit=limit, wl_bw_limit=wl_limit, expiry_time=timestamp,
-                ext_username=ext_username, ext_password=password_hash,
+                username,
+                displayname=displayname,
+                token=token,
+                fingerprint=fingerprint,
+                bw_limit=limit,
+                wl_bw_limit=wl_limit,
+                expiry_time=timestamp,
+                ext_username=ext_username,
+                ext_password=password_hash,
             )
         except DuplicateError as exc:
             raise ConflictError("Ext username exists") from exc
 
         self.trace(
-            Op.user.update_params, "updated",
-            username=username, displayname=displayname, ext_username=ext_username,
-            fingerprint=fingerprint, limit=limit, wl_limit=wl_limit, timee=timestamp,
+            Op.user.update_params,
+            "updated",
+            username=username,
+            displayname=displayname,
+            ext_username=ext_username,
+            fingerprint=fingerprint,
+            limit=limit,
+            wl_limit=wl_limit,
+            timee=timestamp,
         )
         self.audit_svc.audit(name="user_update_params", info=audit_info)
         self._drop_cache()
@@ -665,13 +738,17 @@ class BusinessUserService(BaseService):
                 f"{int(time.time())}:{reason}",
             )
             self.trace(
-                Op.user.mark_rollback_failure, "persisted",
-                username=username, reason=reason,
+                Op.user.mark_rollback_failure,
+                "persisted",
+                username=username,
+                reason=reason,
             )
         except Exception:
             self.trace(
-                Op.user.mark_rollback_failure, "failed",
-                username=username, reason=reason,
+                Op.user.mark_rollback_failure,
+                "failed",
+                username=username,
+                reason=reason,
             )
             self.log.critical(
                 "failed to persist UUID rollback failure marker for user %s",
@@ -693,8 +770,10 @@ class BusinessUserService(BaseService):
             raise ValidationError("Invalid UUID")
         self.user_svc.user(username)
         self.trace(
-            Op.user.update_uuid, "start",
-            username=username, uuid=uid,
+            Op.user.update_uuid,
+            "start",
+            username=username,
+            uuid=uid,
             panels=[panel.name for panel in self.panels],
         )
 
@@ -727,7 +806,9 @@ class BusinessUserService(BaseService):
             if exc is None:
                 continue
             self.log.critical(
-                "update_uuid failed on panel %s", panel.name, exc_info=exc,
+                "update_uuid failed on panel %s",
+                panel.name,
+                exc_info=exc,
             )
             self._mark_rollback_failure(username, f"{panel.name}: {exc.message}")
             raise exc
@@ -738,8 +819,10 @@ class BusinessUserService(BaseService):
             self._mark_rollback_failure(username, "db duplicate uuid")
             raise ConflictError("UUID exists") from exc
         self.trace(
-            Op.user.update_uuid, "updated",
-            username=username, uuid=uid,
+            Op.user.update_uuid,
+            "updated",
+            username=username,
+            uuid=uid,
         )
         self.audit_svc.audit(name="user_update_uuid", info={"username": username, "uuid": uid})
         self._drop_cache()
@@ -750,12 +833,11 @@ class BusinessUserService(BaseService):
         newid = str(uuid.uuid4())
         newt = generate_token("sub")
         self.update_uuid(username, newid)
-        self.update_params(
-            username=username,
-            token=newt
-        )
+        self.update_params(username=username, token=newt)
         self.user_svc.set_auth_token(username, None)
         self.trace(Op.user.reset_user, "reset", username=username, uuid=newid)
-        self.audit_svc.audit(name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"})
+        self.audit_svc.audit(
+            name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"}
+        )
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)

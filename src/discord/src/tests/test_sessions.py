@@ -50,6 +50,7 @@ def test_401_clears_session(session_store: SessionStore) -> None:
     assert not record.logged_in
     assert record.lang == "en"
 
+
 def test_chmod_600(session_path: Path, session_store: SessionStore) -> None:
     mode = session_path.stat().st_mode & 0o777
     assert mode == 0o600

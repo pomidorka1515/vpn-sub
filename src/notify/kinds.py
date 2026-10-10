@@ -3,6 +3,7 @@
 Copy lives in ``lang.jsonc``. A kind only names the text key, the dedupe
 scope, and which condition clears the marker.
 """
+
 from __future__ import annotations
 
 from enum import Enum

@@ -17,6 +17,7 @@ from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 def instance_backup_dir(path: str, backup_dir: str) -> str:
     return str(Path(backup_dir) / Path(path).stem)
 
+
 def do_backup(
     path: str,
     indent: int,
@@ -84,7 +85,7 @@ def do_backup(
         try:
             with Path(tmp).open("w", encoding="utf-8") as f:
                 if minify:
-                    json.dump(data, f, indent=None, separators=(',', ':'), ensure_ascii=False)
+                    json.dump(data, f, indent=None, separators=(",", ":"), ensure_ascii=False)
                 else:
                     json.dump(data, f, indent=indent, ensure_ascii=False)
             Path(tmp).replace(backup_path)
@@ -95,11 +96,9 @@ def do_backup(
 
     log.debug(f"backup saved: {backup_path}")
 
+
 def prune_backups(
-    instance_dir: str,
-    retention: int,
-    log: Logger,
-    config_type: CONFIG_TYPES
+    instance_dir: str, retention: int, log: Logger, config_type: CONFIG_TYPES
 ) -> None:
     """Keep only the N most recent backups."""
     # Match both .json (Config) and .jsonl (LinesConfig) backup files.
@@ -112,8 +111,9 @@ def prune_backups(
         except OSError:
             log.exception("prune failed for %s", f)
 
+
 def make_backup_thread(
-    *, # NOTE: kwargs only for safety
+    *,  # NOTE: kwargs only for safety
     path: str,
     indent: int,
     backup_dir: str,
@@ -134,6 +134,7 @@ def make_backup_thread(
         raw: see do_backup raw kwarg.
         jsonc: see do_backup jsonc kwarg.
     """
+
     def log_failure(log: Logger, failures: int, exc: Exception) -> None:
         if failures == 1:
             log.error(f"backup failed for {path}", exc_info=exc)
@@ -170,4 +171,5 @@ def make_backup_thread(
             except Exception as retry_exc:
                 failures += 1
                 log_failure(log, failures, retry_exc)
+
     return threading.Thread(target=loop, daemon=True, name="Backup")

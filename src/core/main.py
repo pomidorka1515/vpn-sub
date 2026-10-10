@@ -30,18 +30,17 @@ if platform.system().lower() != "linux":
     raise UnsupportedPlatformError
 
 
-
 class Subscription:
     def __init__(
         self,
         cfg: Config[AppConfig],
-        lang_cfg: Config[LangConfig], # ro
+        lang_cfg: Config[LangConfig],  # ro
         db: Database,
         app: Flask,
         panels: list[XUiSession],
         whitelist_panel: XUiSession | None,
         audit_cfg: LinesConfig | None = None,
-        verbose: bool = False
+        verbose: bool = False,
     ) -> None:
         log = Logger(type(self).__name__)
         with log.loading():
@@ -50,14 +49,17 @@ class Subscription:
                 self.panels.append(whitelist_panel)
 
             self.res = SharedCoreResources(
-                cfg=cfg, lang_cfg=lang_cfg, db=db,
-                app=app, log=log,
+                cfg=cfg,
+                lang_cfg=lang_cfg,
+                db=db,
+                app=app,
+                log=log,
                 panels=panels,
                 whitelist_panel=whitelist_panel,
                 audit_cfg=audit_cfg,
                 password_hasher=PasswordHasher(),
-                legacy_salt=cfg.view()['salt'],
-                verbose=verbose
+                legacy_salt=cfg.view()["salt"],
+                verbose=verbose,
             )
 
             # Service creation
@@ -70,19 +72,22 @@ class Subscription:
                 self.res, panel_svc=self.panel_svc, user_svc=self.user_svc
             )
             self.business_svc: BusinessUserService = BusinessUserService(
-                self.res, user_svc=self.user_svc, panel_svc=self.panel_svc,
-                password_svc=self.password_svc, audit_svc=self.audit_svc,
-                bandwidth_svc=self.bandwidth_svc
+                self.res,
+                user_svc=self.user_svc,
+                panel_svc=self.panel_svc,
+                password_svc=self.password_svc,
+                audit_svc=self.audit_svc,
+                bandwidth_svc=self.bandwidth_svc,
             )
-            self.code_svc: CodeService = CodeService(
-                self.res, audit_svc=self.audit_svc
-            )
+            self.code_svc: CodeService = CodeService(self.res, audit_svc=self.audit_svc)
             self.telegram_svc: TelegramService = TelegramService(
                 self.res, code_svc=self.code_svc, user_svc=self.business_svc
             )
             self.business_code_svc: BusinessCodeService = BusinessCodeService(
-                self.res, audit_svc=self.audit_svc, password_svc=self.password_svc,
-                user_svc=self.business_svc
+                self.res,
+                audit_svc=self.audit_svc,
+                password_svc=self.password_svc,
+                user_svc=self.business_svc,
             )
             self.leaderboard_svc: LeaderboardService = LeaderboardService(
                 self.res, user_svc=self.user_svc, bandwidth_svc=self.bandwidth_svc

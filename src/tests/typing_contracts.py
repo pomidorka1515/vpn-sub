@@ -81,17 +81,34 @@ class CreateUserOverrides(TypedDict, total=False):
     enabled_wl: bool
 
 
-AppOverrides = TypedDict("AppOverrides", {
-    "uri": str, "api_token": str, "provider_id": str, "salt": str,
-    "domain": str, "ping_check_url": str, "sub_name": str,
-    "api_admin_ui_auth": list[str], "fingerprints": list[str],
-    "bypass_packages": list[str], "panel_alert_cooldown": int,
-    "nodes": dict[str, str], "json_template": ProfileTemplate,
-    "3xui": dict[str, PanelConfig], "profiles": dict[str, ProfileConfig],
-    "redis": RedisConfig, "bot": BotConfig, "publicbot": PublicBotConfig,
-    "api_uri": str, "fallback_domain": str, "$schema": str,
-    "funny_strings": list[str],
-}, total=False)
+AppOverrides = TypedDict(
+    "AppOverrides",
+    {
+        "uri": str,
+        "api_token": str,
+        "provider_id": str,
+        "salt": str,
+        "domain": str,
+        "ping_check_url": str,
+        "sub_name": str,
+        "api_admin_ui_auth": list[str],
+        "fingerprints": list[str],
+        "bypass_packages": list[str],
+        "panel_alert_cooldown": int,
+        "nodes": dict[str, str],
+        "json_template": ProfileTemplate,
+        "3xui": dict[str, PanelConfig],
+        "profiles": dict[str, ProfileConfig],
+        "redis": RedisConfig,
+        "bot": BotConfig,
+        "publicbot": PublicBotConfig,
+        "api_uri": str,
+        "fallback_domain": str,
+        "$schema": str,
+        "funny_strings": list[str],
+    },
+    total=False,
+)
 
 
 class ProfileOverrides(TypedDict, total=False):

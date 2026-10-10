@@ -38,6 +38,7 @@ class SysUtil:
     Fetch info about current state of the app and system. Linux-only.
     Not meant to be instantiated.
     """
+
     _cpu_lock = threading.Lock()
     _cpu_prev: tuple[int, int] | None = None
 
@@ -47,7 +48,7 @@ class SysUtil:
     @staticmethod
     def _cpu_sample() -> tuple[int, int]:
         """Total and idle jiffies from the aggregate `/proc/stat` line."""
-        with Path('/proc/stat').open() as f:
+        with Path("/proc/stat").open() as f:
             cpu_line = f.readline()
         # user, nice, system, idle, iowait, irq, softirq, steal
         parts = cpu_line.split()
@@ -91,55 +92,47 @@ class SysUtil:
     def cpu_info() -> CPUInfo:
         cores = os.cpu_count()
 
-        with Path('/proc/cpuinfo').open() as f:
+        with Path("/proc/cpuinfo").open() as f:
             cpu_name = ""
             max_mhz: float | int = 0
             for line in f:
-                if line.startswith('model name'):
-                    cpu_name = line.split(':', 1)[1].strip()
-                elif line.startswith('cpu MHz'):
-                    mhz = float(line.split(':', 1)[1].strip())
+                if line.startswith("model name"):
+                    cpu_name = line.split(":", 1)[1].strip()
+                elif line.startswith("cpu MHz"):
+                    mhz = float(line.split(":", 1)[1].strip())
                     max_mhz = max(max_mhz, mhz)
 
-        return CPUInfo(
-            cores=cores,
-            name=cpu_name,
-            mhz_max=max_mhz
-        )
+        return CPUInfo(cores=cores, name=cpu_name, mhz_max=max_mhz)
 
     @staticmethod
     def loadavg() -> LoadAverage:
-        with Path('/proc/loadavg').open() as f:
+        with Path("/proc/loadavg").open() as f:
             one, five, fifteen = f.read().split()[:3]
 
-        return LoadAverage(
-            load_1m=float(one),
-            load_5m=float(five),
-            load_15m=float(fifteen)
-        )
+        return LoadAverage(load_1m=float(one), load_5m=float(five), load_15m=float(fifteen))
 
     @staticmethod
     def process_count() -> int:
-        return len(list(Path('/proc').glob('[0-9]*')))
+        return len(list(Path("/proc").glob("[0-9]*")))
 
     @staticmethod
     def network() -> NetTrafficStats:
         tx, rx = 0, 0
-        with Path('/proc/net/dev').open() as f:
+        with Path("/proc/net/dev").open() as f:
             f.readline()  # skip headers
             f.readline()
             for line in f:
                 parts = line.split()
                 if len(parts) >= 10:
-                    iface = parts[0].rstrip(':')
-                    if iface != 'lo':
+                    iface = parts[0].rstrip(":")
+                    if iface != "lo":
                         rx += int(parts[1])
                         tx += int(parts[9])
         return NetTrafficStats(sent=tx, recv=rx)
 
     @staticmethod
     def uptime() -> float:
-        with Path('/proc/uptime').open() as f:
+        with Path("/proc/uptime").open() as f:
             return float(f.read().split()[0])
 
     @staticmethod
@@ -165,16 +158,8 @@ class SysUtil:
         swap_used = swap_total - swap_free
 
         return SystemMemory(
-            ram=RamInfo(
-                total=ram_total,
-                available=ram_available,
-                used=ram_used
-            ),
-            swap=SwapInfo(
-                total=swap_total,
-                free=swap_free,
-                used=swap_used
-            )
+            ram=RamInfo(total=ram_total, available=ram_available, used=ram_used),
+            swap=SwapInfo(total=swap_total, free=swap_free, used=swap_used),
         )
 
     @staticmethod
@@ -193,10 +178,7 @@ class SysUtil:
         if family == socket.AF_INET6 and not isinstance(addr, ipaddress.IPv6Address):
             return False
         return not (
-            addr.is_loopback
-            or addr.is_link_local
-            or addr.is_unspecified
-            or addr.is_multicast
+            addr.is_loopback or addr.is_link_local or addr.is_unspecified or addr.is_multicast
         )
 
     @classmethod
@@ -230,21 +212,17 @@ class SysUtil:
         tcp_count = 0
         udp_count = 0
 
-        for state_file in Path('/proc/net').glob('tcp*'):
+        for state_file in Path("/proc/net").glob("tcp*"):
             with state_file.open() as f:
                 f.readline()  # skip header
                 tcp_count += sum(1 for _ in f)
 
-        for udp_file in Path('/proc/net').glob('udp*'):
+        for udp_file in Path("/proc/net").glob("udp*"):
             with udp_file.open() as f:
                 f.readline()
                 udp_count += sum(1 for _ in f)
 
-        return ConnCount(
-            tcp=tcp_count - 2,
-            udp=udp_count - 2
-        )
-
+        return ConnCount(tcp=tcp_count - 2, udp=udp_count - 2)
 
     @staticmethod
     def app_memory() -> AppMemory:
@@ -264,7 +242,7 @@ class SysUtil:
                 mem = proc.memory_full_info()
                 total_rss += mem.rss
                 total_swap += mem.swap
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except psutil.NoSuchProcess, psutil.AccessDenied:
                 pass
 
         return AppMemory(
@@ -274,13 +252,13 @@ class SysUtil:
 
     @staticmethod
     def app_uptime() -> float:
-        with Path('/proc/uptime').open() as f:
+        with Path("/proc/uptime").open() as f:
             system_uptime = float(f.read().split()[0])
 
-        with Path(f'/proc/{os.getpid()}/stat').open() as f:
+        with Path(f"/proc/{os.getpid()}/stat").open() as f:
             starttime_ticks = int(f.read().split()[21])
 
-        clk_tck = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+        clk_tck = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
         return system_uptime - (starttime_ticks / clk_tck)
 
     @staticmethod
@@ -301,7 +279,7 @@ class SysUtil:
                     if not line.startswith("VmStk:"):
                         continue
                     return int(line.split()[1]) * 1024
-        except (OSError, ValueError, IndexError):
+        except OSError, ValueError, IndexError:
             return None
         return None
 
@@ -319,15 +297,17 @@ class SysUtil:
             try:
                 native = psutil.Process(thread.id)
                 switches = native.num_ctx_switches()
-                found.append(ThreadInfo(
-                    tid=thread.id,
-                    name=native.name(),
-                    state=native.status(),
-                    cpu=round(thread.user_time + thread.system_time, 1),
-                    ctx_switches=switches.voluntary + switches.involuntary,
-                    stack=SysUtil._thread_stack(current.pid, thread.id),
-                ))
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                found.append(
+                    ThreadInfo(
+                        tid=thread.id,
+                        name=native.name(),
+                        state=native.status(),
+                        cpu=round(thread.user_time + thread.system_time, 1),
+                        ctx_switches=switches.voluntary + switches.involuntary,
+                        stack=SysUtil._thread_stack(current.pid, thread.id),
+                    )
+                )
+            except psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess:
                 continue
         return tuple(found)
 
@@ -343,9 +323,11 @@ class SysUtil:
     @staticmethod
     def app_gc_stats() -> GCStats:
         return GCStats(
-            gc_counts=gc.get_count(), # objects in each generation (0, 1, 2)
-            gc_thresholds=gc.get_threshold(), # collection thresholds
-            gc_stats=tuple(from_dict(GCGenStats, stats) for stats in gc.get_stats()) # detailed per-generation stats
+            gc_counts=gc.get_count(),  # objects in each generation (0, 1, 2)
+            gc_thresholds=gc.get_threshold(),  # collection thresholds
+            gc_stats=tuple(
+                from_dict(GCGenStats, stats) for stats in gc.get_stats()
+            ),  # detailed per-generation stats
         )
 
     @classmethod
@@ -360,12 +342,11 @@ class SysUtil:
             memory=cls.memory(),
             ip=cls.ipaddr(),
             connections=cls.connections(),
-
             app_memory=cls.app_memory(),
             app_uptime=cls.app_uptime(),
             app_thread_amount=cls.app_thread_amount(),
             app_threads=cls.app_threads(),
-            app_gc_stats=cls.app_gc_stats()
+            app_gc_stats=cls.app_gc_stats(),
         )
 
     @classmethod

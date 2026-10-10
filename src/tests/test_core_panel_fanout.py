@@ -85,17 +85,22 @@ class TimedPanel(FakePanel):
 def test_polls_overlap(database: Database) -> None:
     span = _Span()
     one = TimedPanel(
-        span, 0.05, name="one",
+        span,
+        0.05,
+        name="one",
         post_payload={"success": True, "obj": []},
         status_payload={"success": True, "msg": "", "obj": _status_obj()},
     )
     two = TimedPanel(
-        span, 0.05, name="two",
+        span,
+        0.05,
+        name="two",
         post_payload={"success": True, "obj": []},
         status_payload={"success": True, "msg": "", "obj": _status_obj()},
     )
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, one), cast(XUiSession, two)],
+        database,
+        panels=[cast(XUiSession, one), cast(XUiSession, two)],
     )
     create_alice(database)
 
@@ -119,19 +124,27 @@ def test_polls_overlap(database: Database) -> None:
 def test_online_users_follow_panel_list_order(database: Database) -> None:
     span = _Span()
     slow = TimedPanel(
-        span, 0.05, name="slow",
+        span,
+        0.05,
+        name="slow",
         post_payload={"success": True, "obj": ["bob"]},
     )
     fast = TimedPanel(
-        span, 0.0, name="fast",
+        span,
+        0.0,
+        name="fast",
         post_payload={"success": True, "obj": ["alice"]},
     )
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
+        database,
+        panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
     )
     database.create_user(
-        username="bob", uuid=str(uuid.uuid4()), token="b" * 40,
-        fingerprint="chrome", displayname="Bob",
+        username="bob",
+        uuid=str(uuid.uuid4()),
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
     )
     create_alice(database)
 
@@ -145,7 +158,8 @@ def test_bandwidth_raises_from_first_panel(database: Database) -> None:
     slow = TimedPanel(span, 0.05, name="one", get_error=RuntimeError("one"))
     fast = TimedPanel(span, 0.0, name="two", get_error=RuntimeError("two"))
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
+        database,
+        panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
     )
     create_alice(database)
 
@@ -157,15 +171,19 @@ def test_all_traffic_keeps_fast_panel_when_slow_raises(database: Database) -> No
     span = _Span()
     slow = TimedPanel(span, 0.05, name="slow", get_error=RuntimeError("down"))
     fast = TimedPanel(
-        span, 0.0, name="fast",
+        span,
+        0.0,
+        name="fast",
         clients=[make_panel_client("alice", [1], up=7, down=8)],
     )
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
+        database,
+        panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
     )
     create_alice(database)
 
     from custom_types import BandwidthInfo
+
     assert subscription.bandwidth_svc.all_traffic() == {
         "alice": BandwidthInfo(7, 8, 15),
     }
@@ -202,12 +220,14 @@ def test_user_mutations_overlap(database: Database) -> None:
         gate = threading.Barrier(2)
         return [
             HoldPanel(
-                gate, name="one",
+                gate,
+                name="one",
                 inbounds=[make_inbound(1), make_inbound(2)],
                 clients=[make_panel_client("alice", [1])],
             ),
             HoldPanel(
-                gate, name="two",
+                gate,
+                name="two",
                 inbounds=[make_inbound(3), make_inbound(4)],
                 clients=[make_panel_client("alice", [3])],
             ),
@@ -216,10 +236,12 @@ def test_user_mutations_overlap(database: Database) -> None:
     create_alice(database)
     make_subscription(database, panels=panels()).business_svc.add_users("alice")
     make_subscription(database, panels=panels()).business_svc.update_user(
-        "alice", enable=False,
+        "alice",
+        enable=False,
     )
     make_subscription(database, panels=panels()).business_svc.update_uuid(
-        "alice", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "alice",
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     )
     make_subscription(database, panels=panels()).business_svc.delete_user("alice")
 
@@ -227,25 +249,31 @@ def test_user_mutations_overlap(database: Database) -> None:
 def test_update_uuid_marks_first_panel_when_later_fails_first(database: Database) -> None:
     span = _Span()
     slow = TimedPanel(
-        span, 0.05, name="slow",
+        span,
+        0.05,
+        name="slow",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
         post_payload={"success": False, "msg": "slow rejected", "obj": None},
     )
     fast = TimedPanel(
-        span, 0.0, name="fast",
+        span,
+        0.0,
+        name="fast",
         inbounds=[make_inbound(2)],
         clients=[make_panel_client("alice", [2])],
         post_payload={"success": False, "msg": "fast rejected", "obj": None},
     )
     subscription = make_subscription(
-        database, panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
+        database,
+        panels=[cast(XUiSession, slow), cast(XUiSession, fast)],
     )
     create_alice(database)
 
     with pytest.raises(PanelRejectedError, match="slow rejected"):
         subscription.business_svc.update_uuid(
-            "alice", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "alice",
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         )
 
     failures = subscription.business_code_svc.get_rollback_failures()

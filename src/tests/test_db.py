@@ -35,10 +35,15 @@ def test_schema_initialization_is_idempotent(db_path: Path) -> None:
         assert db.get_metadata("missing") is None
         assert db.admin_ui_session() is None
         with sqlite3.connect(db_path) as conn:
-            assert conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
-            assert conn.execute(
-                "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
-            ).fetchone()[0] == ""
+            assert (
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
+            )
+            assert (
+                conn.execute(
+                    "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
+                ).fetchone()[0]
+                == ""
+            )
         db.set_admin_ui_session("a" * 100)
         assert db.admin_ui_session() == "a" * 100
         db.set_admin_ui_session(None)
@@ -57,7 +62,8 @@ def test_unversioned_existing_database_is_refused(tmp_path: Path) -> None:
 
 
 def test_migration_repairs_negative_bandwidth_snapshot_values(
-    database: Database, db_path: Path,
+    database: Database,
+    db_path: Path,
 ) -> None:
     database.close()
     connection = sqlite3.connect(db_path)
@@ -170,10 +176,15 @@ def test_admin_ui_session_migration_from_version_3(database: Database, db_path: 
     try:
         assert db.admin_ui_session() is None
         with sqlite3.connect(db_path) as conn:
-            assert conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
-            assert conn.execute(
-                "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
-            ).fetchone()[0] == ""
+            assert (
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
+            )
+            assert (
+                conn.execute(
+                    "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
+                ).fetchone()[0]
+                == ""
+            )
         db.set_admin_ui_session("c" * 100)
         assert db.admin_ui_session() == "c" * 100
     finally:
@@ -203,9 +214,13 @@ def test_registration_and_bonus_consumption_are_atomic(database: Database) -> No
     def register(index: int) -> None:
         try:
             database.register_with_code(
-                code="invite", username=f"u{index}", uuid=str(uuid.uuid4()),
-                token=f"{index}{'x' * 39}", fingerprint="chrome",
-                displayname=f"U {index}", ext_username=f"u{index}@example.test",
+                code="invite",
+                username=f"u{index}",
+                uuid=str(uuid.uuid4()),
+                token=f"{index}{'x' * 39}",
+                fingerprint="chrome",
+                displayname=f"U {index}",
+                ext_username=f"u{index}@example.test",
                 ext_password_hash="hash",
             )
             with lock:
@@ -239,7 +254,9 @@ def test_metadata_prefix_listing_and_deletion(database: Database) -> None:
     database.set_metadata("prefix_100%", "3")
     database.set_metadata("other", "4")
     assert database.list_metadata("prefix_") == {
-        "prefix_one": "1", "prefix_two": "2", "prefix_100%": "3",
+        "prefix_one": "1",
+        "prefix_two": "2",
+        "prefix_100%": "3",
     }
     database.delete_metadata("prefix_one")
     assert database.get_metadata("prefix_one") is None
@@ -249,9 +266,14 @@ def test_metadata_prefix_listing_and_deletion(database: Database) -> None:
 def test_registration_sync_rollback_refunds_finite_code(database: Database) -> None:
     database.add_code("invite", "register", uses=1)
     database.register_with_code(
-        code="invite", username="alice", uuid=str(uuid.uuid4()),
-        token="a" * 40, fingerprint="chrome", displayname="Alice",
-        ext_username="alice@example.test", ext_password_hash="hash",
+        code="invite",
+        username="alice",
+        uuid=str(uuid.uuid4()),
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        ext_username="alice@example.test",
+        ext_password_hash="hash",
     )
     assert database.get_code("invite") is None
     database.rollback_registration_sync("alice")
@@ -299,8 +321,11 @@ def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
 
 def test_bandwidth_snapshot_preserves_named_integer_fields(database: Database) -> None:
     database.create_user(
-        username="snapshot", uuid="uuid-snapshot", token="token-snapshot",
-        fingerprint="chrome", displayname="Snapshot",
+        username="snapshot",
+        uuid="uuid-snapshot",
+        token="token-snapshot",
+        fingerprint="chrome",
+        displayname="Snapshot",
     )
     database.add_bandwidth_snapshot("snapshot", 100, 1, 2, 3, 4)
     assert database.get_bandwidth_snapshots("snapshot", 100) == [
@@ -330,10 +355,12 @@ def test_bulk_usage_and_snapshots_commit_once(database: Database) -> None:
     database._connect = traced_connect  # type: ignore[method-assign]
     try:
         database.increment_usages({"alice": (3, 0), "bob": (0, 4), "cara": (0, 0)})
-        database.add_bandwidth_snapshots([
-            ("alice", 10, 1, 2, 0, 0),
-            ("bob", 10, 0, 0, 5, 6),
-        ])
+        database.add_bandwidth_snapshots(
+            [
+                ("alice", 10, 1, 2, 0, 0),
+                ("bob", 10, 0, 0, 5, 6),
+            ]
+        )
         database.increment_usages({})
         database.add_bandwidth_snapshots([])
     finally:

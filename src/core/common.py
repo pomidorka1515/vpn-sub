@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 __all__ = ["BaseService", "SharedCoreResources"]
 
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SharedCoreResources:
     log: Logger
@@ -27,6 +28,7 @@ class SharedCoreResources:
     whitelist_panel: XUiSession | None
     password_hasher: PasswordHasher
     verbose: bool = False
+
 
 class BaseService:
     def __init__(self, res: SharedCoreResources) -> None:

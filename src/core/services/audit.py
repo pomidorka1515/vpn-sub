@@ -11,22 +11,23 @@ if TYPE_CHECKING:
 __all__ = ["AUDIT_VALUES", "AuditService"]
 
 AUDIT_VALUES = Literal[
-    'sub_hit',
-    'user_refresh', 'user_delete', 'user_reset',
-    'user_update', 'user_update_params', 'user_add',
-    'user_update_uuid', 'user_consume_code',
-    'code_add', 'code_delete',
-    'config_update',
-
+    "sub_hit",
+    "user_refresh",
+    "user_delete",
+    "user_reset",
+    "user_update",
+    "user_update_params",
+    "user_add",
+    "user_update_uuid",
+    "user_consume_code",
+    "code_add",
+    "code_delete",
+    "config_update",
 ]
 
+
 class AuditService(BaseService):
-    def audit(
-        self,
-        *,
-        name: AUDIT_VALUES,
-        info: Mapping[str, JsonValue] | None = None
-    ) -> None:
+    def audit(self, *, name: AUDIT_VALUES, info: Mapping[str, JsonValue] | None = None) -> None:
         """Call a JSONL config manager to append an action.
         Ignores everything if the audit config is not set."""
         if not self.audit_cfg:
@@ -37,6 +38,6 @@ class AuditService(BaseService):
             "ts": ts.timestamp(),
             "date": cur_date,
             "action": name,
-            "info": info
+            "info": info,
         }
         self.audit_cfg.append(record=to_log)

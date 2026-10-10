@@ -12,13 +12,19 @@ if TYPE_CHECKING:
 
 
 def test_startup_recovers_registration_rollback_marker(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     database.add_code("invite", "register", uses=1)
     database.register_with_code(
-        code="invite", username="alice", uuid=str(uuid.uuid4()),
-        token="a" * 40, fingerprint="chrome", displayname="Alice",
-        ext_username="alice-login", ext_password_hash="hash",
+        code="invite",
+        username="alice",
+        uuid=str(uuid.uuid4()),
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        ext_username="alice-login",
+        ext_password_hash="hash",
     )
     database.set_metadata("registration_rollback_failed:alice", "123")
     subscription.business_code_svc.recover_rollback_failures()
@@ -27,7 +33,8 @@ def test_startup_recovers_registration_rollback_marker(
 
 
 def test_rollback_marker_reporting_and_resolution(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     database.set_metadata("uuid_rollback_failed:alice", "123:panel rejected")
     database.set_metadata("registration_rollback_failed:bob", "124")
@@ -58,8 +65,11 @@ def test_registration_rollback_failure_preserves_sync_error(database: Database) 
     database.rollback_registration_sync = fail_rollback  # type: ignore[method-assign]
     with pytest.raises(RuntimeError) as raised:
         subscription.business_code_svc.register_with_code(
-            code="invite", username="alice", displayname="Alice",
-            ext_username="alice-login", ext_password="secret",
+            code="invite",
+            username="alice",
+            displayname="Alice",
+            ext_username="alice-login",
+            ext_password="secret",
         )
     assert raised.value is sync_error
     assert database.get_metadata("registration_rollback_failed:alice") is not None

@@ -107,8 +107,7 @@ def _already_migrated(data: Mapping[str, JsonValue]) -> bool:
     if not profile_map:
         return False
     return all(
-        _is_object(profile)
-        and all(field in cast(JsonDict, profile) for field in PROFILE_FIELDS)
+        _is_object(profile) and all(field in cast(JsonDict, profile) for field in PROFILE_FIELDS)
         for profile in profile_map.values()
     )
 
@@ -138,7 +137,9 @@ def build_profiles(data: Mapping[str, JsonValue]) -> tuple[dict[str, JsonDict], 
         raise MigrateError("profiles must be an object")
     names = cast(JsonDict, profiles)
     if any(_is_object(value) for value in names.values()):
-        raise MigrateError("mixed config: profiles values are already objects and legacy keys are still present")
+        raise MigrateError(
+            "mixed config: profiles values are already objects and legacy keys are still present"
+        )
 
     ids = list(names)
     id_set = set(ids)

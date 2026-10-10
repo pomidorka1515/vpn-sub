@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 __all__ = ["GenerationCache"]
 
 
-
 class GenerationCache[T]:
     """In-memory value whose generation is a stamp file's mtime."""
 

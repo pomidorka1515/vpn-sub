@@ -32,8 +32,7 @@ def public_bot() -> tuple[PublicBot, MagicMock, MagicMock]:
     bot.sub = subscription
     subscription.telegram_svc.get_telegram_language.return_value = "en"
     bot.TEXTS = {
-        lang: {button: f"{lang}:{button}" for button, _, _ in bot.ROUTES}
-        for lang in ("ru", "en")
+        lang: {button: f"{lang}:{button}" for button, _, _ in bot.ROUTES} for lang in ("ru", "en")
     }
     return bot, telegram, subscription
 
@@ -48,7 +47,9 @@ def public_bot() -> tuple[PublicBot, MagicMock, MagicMock]:
 )
 def test_routes_both_languages_to_first_matching_handler(
     public_bot: tuple[PublicBot, MagicMock, MagicMock],
-    button: str, handler_name: str, lang: str,
+    button: str,
+    handler_name: str,
+    lang: str,
 ) -> None:
     bot, _telegram, _subscription = public_bot
     message = _public_message(bot.TEXTS[lang][button])
@@ -70,9 +71,7 @@ def test_chart_buttons_keep_original_order_and_registration_guard(
     public_bot: tuple[PublicBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, subscription = public_bot
-    bot.TEXTS["en"].update(
-        btn_chart_days="Last {days} days", choose_chart_days="Choose a period"
-    )
+    bot.TEXTS["en"].update(btn_chart_days="Last {days} days", choose_chart_days="Choose a period")
     message = _public_message(bot.TEXTS["ru"]["btn_chart"])
     subscription.telegram_svc.is_registered.return_value = False
     bot.handle_text(message)
@@ -84,7 +83,10 @@ def test_chart_buttons_keep_original_order_and_registration_guard(
     assert args == (7, "Choose a period")
     markup = kwargs["reply_markup"]
     assert [button.callback_data for row in markup.keyboard for button in row] == [
-        "chart_3", "chart_14", "chart_30", "chart_90",
+        "chart_3",
+        "chart_14",
+        "chart_30",
+        "chart_90",
     ]
 
 
@@ -127,8 +129,9 @@ def test_public_bot_stop_does_not_wait_for_running_chart() -> None:
 
 
 def test_public_bot_uses_three_worker_threads() -> None:
-    with patch("bots.public.bot.telebot.TeleBot") as telebot_cls, patch(
-        "bots.public.bot.configure_telegram_api"
+    with (
+        patch("bots.public.bot.telebot.TeleBot") as telebot_cls,
+        patch("bots.public.bot.configure_telegram_api"),
     ):
         PublicBot(
             sub=MagicMock(),

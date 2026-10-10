@@ -49,7 +49,9 @@ class SharedDiscordClient(discord.Client):
             if public is None or admin is None:
                 return
             if interaction.type is discord.InteractionType.component:
-                await _dispatch(custom_id, admin.dispatch_component, public.dispatch_component, interaction)
+                await _dispatch(
+                    custom_id, admin.dispatch_component, public.dispatch_component, interaction
+                )
             elif interaction.type is discord.InteractionType.modal_submit:
                 await _dispatch(custom_id, admin.dispatch_modal, public.dispatch_modal, interaction)
 

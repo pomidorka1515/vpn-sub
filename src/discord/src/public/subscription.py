@@ -32,7 +32,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         expiry = number(obj.get("time"))
         try:
             expiry_i = int(expiry)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             expiry_i = 0
         if expiry_i:
             days_left = str((expiry_i - int(time.time())) // 86400)

@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 __all__ = ["AdminBot"]
 
 
-
 class AdminBot(
     AdminCommonMixin,
     AdminUsersMixin,
@@ -36,7 +35,9 @@ class AdminBot(
 ):
     """Administrator bot assembled from the admin feature workflows."""
 
-    def __init__(self, sub: Subscription, lang_cfg: Config[LangConfig], cfg: Config[AppConfig]) -> None:
+    def __init__(
+        self, sub: Subscription, lang_cfg: Config[LangConfig], cfg: Config[AppConfig]
+    ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             configure_telegram_api()

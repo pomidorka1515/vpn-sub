@@ -15,12 +15,15 @@ if TYPE_CHECKING:
 
 def _create_login(database: Database, password_hash: str) -> None:
     create_alice(
-        database, ext_username="alice-login", ext_password_hash=password_hash,
+        database,
+        ext_username="alice-login",
+        ext_password_hash=password_hash,
     )
 
 
 def test_validate_credentials_rejects_wrong_argon2_password(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     _create_login(database, PasswordHasher().hash("secret"))
     assert subscription.password_svc.validate_credentials("alice-login", "wrong") is None
@@ -28,7 +31,8 @@ def test_validate_credentials_rejects_wrong_argon2_password(
 
 
 def test_valid_legacy_hash_is_migrated_to_argon2(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     _create_login(database, subscription.password_svc.legacy_hash("secret"))
     assert subscription.password_svc.validate_credentials("alice-login", "secret") == "alice"
@@ -41,7 +45,9 @@ def test_valid_legacy_hash_is_migrated_to_argon2(
 
 
 def test_validate_credentials_logs_corrupt_argon2_hash(
-    database: Database, subscription: Subscription, caplog: pytest.LogCaptureFixture,
+    database: Database,
+    subscription: Subscription,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     _create_login(database, "$argon2id$corrupt")
     subscription.res.log.addHandler(caplog.handler)

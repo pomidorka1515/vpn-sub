@@ -36,4 +36,8 @@ def number(value: object) -> int | float:
 def object_rows(value: object) -> list[dict[str, object]]:
     if not isinstance(value, list):
         return []
-    return [obj_map(cast(object, item)) for item in cast(list[object], value) if isinstance(item, Mapping)]
+    return [
+        obj_map(cast(object, item))
+        for item in cast(list[object], value)
+        if isinstance(item, Mapping)
+    ]

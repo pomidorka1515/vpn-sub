@@ -13,13 +13,10 @@ if TYPE_CHECKING:
 
 __all__ = ["TelegramService"]
 
+
 class TelegramService(BaseService):
     def __init__(
-        self,
-        res: SharedCoreResources,
-        *,
-        user_svc: BusinessUserService,
-        code_svc: CodeService
+        self, res: SharedCoreResources, *, user_svc: BusinessUserService, code_svc: CodeService
     ) -> None:
         super().__init__(res)
         self.user_svc: BusinessUserService = user_svc
@@ -33,13 +30,17 @@ class TelegramService(BaseService):
 
     def set_telegram_language(self, tgid: int | str, language: str) -> None:
         self.trace(
-            Op.telegram.set_telegram_language, "start",
-            tgid=str(tgid), language=language,
+            Op.telegram.set_telegram_language,
+            "start",
+            tgid=str(tgid),
+            language=language,
         )
         self.db.set_telegram_language(tgid, language)
         self.trace(
-            Op.telegram.set_telegram_language, "set",
-            tgid=str(tgid), language=language,
+            Op.telegram.set_telegram_language,
+            "set",
+            tgid=str(tgid),
+            language=language,
         )
 
     def get_info_telegram(self, tgid: int) -> UserInfo:
@@ -55,22 +56,29 @@ class TelegramService(BaseService):
 
     def set_telegram_user(self, tgid: int | str, username: str | None) -> None:
         self.trace(
-            Op.telegram.set_telegram_user, "start",
-            tgid=str(tgid), username=username, cleared=username is None,
+            Op.telegram.set_telegram_user,
+            "start",
+            tgid=str(tgid),
+            username=username,
+            cleared=username is None,
         )
         if username is None:
             existing = self.db.tgid_to_user(tgid)
             if existing is not None:
                 self.db.set_telegram(existing, None)
             self.trace(
-                Op.telegram.set_telegram_user, "cleared",
-                tgid=str(tgid), username=existing,
+                Op.telegram.set_telegram_user,
+                "cleared",
+                tgid=str(tgid),
+                username=existing,
             )
             return
         self.db.set_telegram(username, str(tgid))
         self.trace(
-            Op.telegram.set_telegram_user, "set",
-            tgid=str(tgid), username=username,
+            Op.telegram.set_telegram_user,
+            "set",
+            tgid=str(tgid),
+            username=username,
         )
 
     def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
@@ -81,7 +89,9 @@ class TelegramService(BaseService):
         return self.code_svc.apply_bonus_code(username=username, code=code)
 
     @overload
-    def get_username_telegram(self, tgid: int | str, reverse: Literal[False] = False) -> str | None: ...
+    def get_username_telegram(
+        self, tgid: int | str, reverse: Literal[False] = False
+    ) -> str | None: ...
 
     @overload
     def get_username_telegram(self, tgid: int | str, reverse: Literal[True]) -> int | None: ...

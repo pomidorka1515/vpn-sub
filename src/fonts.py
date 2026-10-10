@@ -1,15 +1,18 @@
 """Self-hosted webfonts. Kept out of api/ so builders can use it without a cycle."""
+
 from paths import bundled_root
 
 RES_DIR = bundled_root() / "res"
 
-FONT_FILES: frozenset[str] = frozenset({
-    'outfit-latin.woff2',
-    'jetbrains-mono-latin.woff2',
-    'jetbrains-mono-cyrillic.woff2',
-})
-_FONT_PLACEHOLDER = '__FONT_BASE__'
-FONTS_MARKER = '/* __FONTS__ */'
+FONT_FILES: frozenset[str] = frozenset(
+    {
+        "outfit-latin.woff2",
+        "jetbrains-mono-latin.woff2",
+        "jetbrains-mono-cyrillic.woff2",
+    }
+)
+_FONT_PLACEHOLDER = "__FONT_BASE__"
+FONTS_MARKER = "/* __FONTS__ */"
 
 
 def embed_font_faces(source: str, prefix: str) -> str:
@@ -19,9 +22,9 @@ def embed_font_faces(source: str, prefix: str) -> str:
     path (/panel) instead of the asset root. The placeholder is substituted here.
     """
     if FONTS_MARKER not in source:
-        raise ValueError('fonts marker is missing')
-    css = (RES_DIR / 'fonts.css').read_text(encoding='utf-8')
+        raise ValueError("fonts marker is missing")
+    css = (RES_DIR / "fonts.css").read_text(encoding="utf-8")
     if _FONT_PLACEHOLDER not in css:
-        raise ValueError('fonts.css is missing the font base placeholder')
-    faces = css.replace(_FONT_PLACEHOLDER, prefix.rstrip('/'))
+        raise ValueError("fonts.css is missing the font base placeholder")
+    faces = css.replace(_FONT_PLACEHOLDER, prefix.rstrip("/"))
     return source.replace(FONTS_MARKER, faces, 1)

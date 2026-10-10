@@ -50,7 +50,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         read_only_jsonc: bool = False,
         strict_schema: bool = True,
         schema_path: str | Path | None = None,
-        sync_mode: SYNC_MODES = 'data',
+        sync_mode: SYNC_MODES = "data",
         isolate_commits: bool = True,
         backup_dir: str | Path | None = None,
         backup_interval: float = 7200,
@@ -91,11 +91,13 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         self.log = Logger(type(self).__name__)
         path_str = str(path)
 
-        valid_exts: tuple[str] | tuple[str, str] = ('.jsonc', '.json') if read_only else ('.json',)
+        valid_exts: tuple[str] | tuple[str, str] = (".jsonc", ".json") if read_only else (".json",)
         if read_only_jsonc and not read_only:
             raise ConfigError("read_only_jsonc requires read_only=True")
         if not path_str.endswith(valid_exts):
-            self.log.warning(f"path doesnt end with .json{"c" if read_only else ""}, did you specify the correct path?")
+            self.log.warning(
+                f"path doesnt end with .json{'c' if read_only else ''}, did you specify the correct path?"
+            )
         self._path: str = path_str
         self._lockfile_path: str = resolve_lockfile_path(
             path_str,
@@ -128,7 +130,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         self._warned_update_callable: bool = False
 
         self._read_only: bool = read_only
-        self._read_only_jsonc: bool = read_only_jsonc or (path_str.endswith('.jsonc') and read_only)
+        self._read_only_jsonc: bool = read_only_jsonc or (path_str.endswith(".jsonc") and read_only)
 
         self._backup_dir: str | None = str(backup_dir) if backup_dir else None
         self._backup_interval: int | float = backup_interval
@@ -146,7 +148,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 backup_interval=backup_interval,
                 backup_retention=backup_retention,
                 stop_event=self._backup_stop,
-                config_type='json',
+                config_type="json",
                 jsonc=self._read_only_jsonc,
             )
             self._backup_t.start()
@@ -246,7 +248,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
             jsonc=self._read_only_jsonc,
             data=data,
         )
-        prune_backups(instance_dir, self._backup_retention, self.log, config_type='json')
+        prune_backups(instance_dir, self._backup_retention, self.log, config_type="json")
 
     def validate_document(self, data: Mapping[str, JsonValue]) -> None:
         """Schema-check a document without writing. Raises SchemaValidationError."""
@@ -359,7 +361,9 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         with self.lock:
             self.raise_if_used_inside_transaction()
             self.ensure_recent_locked()
-            value = self.data.get(key) if default is MISSING else self.data.get(key, cast(T, default))
+            value = (
+                self.data.get(key) if default is MISSING else self.data.get(key, cast(T, default))
+            )
             return self.detach(value)
 
     def __iter__(self) -> Iterator[str]:
@@ -412,11 +416,13 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
     def pop[TJ: JsonValue](self, key: str, default: TJ | MISSING_TYPE = MISSING) -> JsonValue | TJ:
         self.raise_if_read_only()
+
         def action(tx: ConfigTransaction[Doc]) -> JsonValue:
             if default is MISSING:
                 return tx.pop(key)
             d: JsonValue = default  # type: ignore[assignment]
             return tx.pop(key, d)
+
         return self.run_edit(action)
 
     def popitem(self) -> tuple[str, JsonValue]:
@@ -496,8 +502,11 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 empty: dict[str, JsonValue] = {}
                 self.validate_schema(empty)
                 new_signature = atomic_write_json(
-                    self._path, empty,
-                    indent=self._indent, minify=self._minify, sync_mode=self._sync_mode,
+                    self._path,
+                    empty,
+                    indent=self._indent,
+                    minify=self._minify,
+                    sync_mode=self._sync_mode,
                 )
                 if new_signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
@@ -524,9 +533,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         with locked_file(self._path, exclusive=False, lockfile_path=self._lockfile_path):
             signature = file_signature(self._path)
             if signature is None:
-                raise ConfigError(
-                    f"Config file '{self._path}' disappeared while in use."
-                )
+                raise ConfigError(f"Config file '{self._path}' disappeared while in use.")
 
             if signature == self.last_signature:
                 return
@@ -539,8 +546,11 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def atomic_write(self, data: dict[str, JsonValue]) -> None:
         self.raise_if_read_only()
         atomic_write_json(
-            self._path, data,
-            indent=self._indent, minify=self._minify, sync_mode=self._sync_mode,
+            self._path,
+            data,
+            indent=self._indent,
+            minify=self._minify,
+            sync_mode=self._sync_mode,
         )
 
     @staticmethod

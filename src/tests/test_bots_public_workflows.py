@@ -112,17 +112,25 @@ def _message(text: str, user_id: int = 42) -> types.Message:
     )
 
 
-def _wire[M: (PublicSettingsMixin, PublicAccountMixin, PublicLoginMixin, PublicTrafficMixin)](mixin: M) -> tuple[M, MagicMock, MagicMock]:
+def _wire[M: (PublicSettingsMixin, PublicAccountMixin, PublicLoginMixin, PublicTrafficMixin)](
+    mixin: M,
+) -> tuple[M, MagicMock, MagicMock]:
     telegram = MagicMock()
     subscription = MagicMock()
     mixin.bot = telegram
     mixin.sub = subscription
     mixin.log = MagicMock()
     mixin.TEXTS = TEXTS
-    mixin.cfg = config_mock(subscription_config(
-        fingerprints=["chrome", "firefox"], uri="/sub/", domain="https://example.test/",
-        profiles={"fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"])},
-    ))
+    mixin.cfg = config_mock(
+        subscription_config(
+            fingerprints=["chrome", "firefox"],
+            uri="/sub/",
+            domain="https://example.test/",
+            profiles={
+                "fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"])
+            },
+        )
+    )
     setattr(mixin, "get_lang", MagicMock(return_value="en"))
     setattr(mixin, "get_menu", MagicMock(return_value="menu"))
     setattr(mixin, "cmd_start", MagicMock())
@@ -165,7 +173,9 @@ def test_settings_callback_requires_registration_and_dispatches(
         ("set_pass", mixin.step_settings_pass),
     ):
         mixin.settings_callback(_call(action))
-        registered = cast(Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1])
+        registered = cast(
+            Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1]
+        )
         assert getattr(registered, "__func__", registered) is getattr(step, "__func__", step)
 
 
@@ -188,14 +198,18 @@ def test_fingerprint_and_settings_steps(
     assert "bad" in telegram.send_message.call_args.args[1]
     subscription.business_svc.update_params.side_effect = None
     mixin.fp_callback(_call("fp_firefox"))
-    subscription.business_svc.update_params.assert_called_with(username="alice", fingerprint="firefox")
+    subscription.business_svc.update_params.assert_called_with(
+        username="alice", fingerprint="firefox"
+    )
     assert "fp ok" in telegram.send_message.call_args.args[1]
 
     mixin.step_settings_name(_message("/start"))
     cast(MagicMock, mixin.cmd_start).assert_called()
     subscription.telegram_svc.get_username_telegram.return_value = 1
     mixin.step_settings_name(_message("Bob"))
-    subscription.business_svc.update_params.assert_called_with(username="alice", fingerprint="firefox")
+    subscription.business_svc.update_params.assert_called_with(
+        username="alice", fingerprint="firefox"
+    )
 
     subscription.telegram_svc.get_username_telegram.return_value = "alice"
     mixin.step_settings_name(_message("x" * 17))
@@ -231,7 +245,9 @@ def test_fingerprint_and_settings_steps(
     subscription.business_svc.update_params.side_effect = None
     mixin.step_settings_pass(_message(" secret "))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", ext_username="bob", ext_password="secret",
+        username="alice",
+        ext_username="bob",
+        ext_password="secret",
     )
     assert "pass ok" in telegram.send_message.call_args.args[1]
 
@@ -315,7 +331,9 @@ def test_login_flow(
     mixin.login_callback(_call("login_other"))
     cast(MagicMock, mixin._answer_callback).assert_called_once()
     mixin.login_callback(_call("login_credentials"))
-    registered = cast(Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1])
+    registered = cast(
+        Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1]
+    )
     assert getattr(registered, "__func__", registered) is getattr(
         mixin.step_login_email, "__func__", mixin.step_login_email
     )

@@ -44,7 +44,9 @@ def test_daily_snapshot_retries_only_failed_kind(watch: BWatch) -> None:
 
 
 def test_all_daily_snapshot_failures_raise_and_persist_counts(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
 
@@ -62,7 +64,9 @@ def test_all_daily_snapshot_failures_raise_and_persist_counts(
 
 
 def test_successful_daily_snapshot_clears_previous_failure(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, uuid=str(uuid.uuid4()), bw_limit_gb=1, wl_limit_gb=1)
     database.set_metadata("daily_bw_snapshot_failures", "123:1:1")
@@ -76,13 +80,19 @@ def test_successful_daily_snapshot_clears_previous_failure(
 
 
 def test_partial_daily_snapshot_failure_is_visible(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     for username in ("alice", "bob"):
         database.create_user(
-            username=username, uuid=str(uuid.uuid4()),
-            token=username.ljust(40, "x"), fingerprint="chrome",
-            displayname=username.title(), bw_limit_gb=1, wl_limit_gb=1,
+            username=username,
+            uuid=str(uuid.uuid4()),
+            token=username.ljust(40, "x"),
+            fingerprint="chrome",
+            displayname=username.title(),
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
 
     def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
@@ -99,13 +109,19 @@ def test_partial_daily_snapshot_failure_is_visible(
 
 
 def test_partial_daily_snapshot_failure_does_not_advance_failed_baseline(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     for username in ("alice", "bob"):
         database.create_user(
-            username=username, uuid=str(uuid.uuid4()),
-            token=username.ljust(40, "x"), fingerprint="chrome",
-            displayname=username.title(), bw_limit_gb=1, wl_limit_gb=1,
+            username=username,
+            uuid=str(uuid.uuid4()),
+            token=username.ljust(40, "x"),
+            fingerprint="chrome",
+            displayname=username.title(),
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
 
     zero = BandwidthInfo(upload=0, download=0, total=0)

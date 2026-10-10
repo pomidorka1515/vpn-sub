@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 __all__ = ["BusinessCodeService"]
 
+
 class BusinessCodeService(BaseService):
     def __init__(
         self,
@@ -34,12 +35,13 @@ class BusinessCodeService(BaseService):
         *,
         audit_svc: AuditService,
         password_svc: PasswordService,
-        user_svc: BusinessUserService
+        user_svc: BusinessUserService,
     ) -> None:
         super().__init__(res)
         self.audit_svc: AuditService = audit_svc
         self.password_svc: PasswordService = password_svc
         self.user_svc: BusinessUserService = user_svc
+
     def _rollback_registered_user(
         self,
         *,
@@ -61,14 +63,18 @@ class BusinessCodeService(BaseService):
                 exc_info=True,
             )
             try:
-                self.db.set_metadata(f"registration_rollback_failed:{username}", str(int(time.time())))
+                self.db.set_metadata(
+                    f"registration_rollback_failed:{username}", str(int(time.time()))
+                )
                 self.trace(
-                    Op.register.rollback_registered_user, "marker_persisted",
+                    Op.register.rollback_registered_user,
+                    "marker_persisted",
                     username=username,
                 )
             except Exception:
                 self.trace(
-                    Op.register.rollback_registered_user, "marker_failed",
+                    Op.register.rollback_registered_user,
+                    "marker_failed",
                     username=username,
                 )
                 self.log.critical(
@@ -99,8 +105,11 @@ class BusinessCodeService(BaseService):
                     exc_info=True,
                 )
         self.trace(
-            Op.register.recover_rollback_failures, "done",
-            markers=len(keys), recovered=recovered, retained=retained,
+            Op.register.recover_rollback_failures,
+            "done",
+            markers=len(keys),
+            recovered=recovered,
+            retained=retained,
         )
 
     def get_rollback_failures(self) -> dict[str, dict[str, dict[str, str]]]:
@@ -124,13 +133,17 @@ class BusinessCodeService(BaseService):
         if kind not in ("uuid", "registration"):
             raise ValidationError("Invalid rollback marker kind")
         self.trace(
-            Op.register.clear_rollback_failure, "start",
-            kind=kind, username=username,
+            Op.register.clear_rollback_failure,
+            "start",
+            kind=kind,
+            username=username,
         )
         self.db.delete_metadata(f"{kind}_rollback_failed:{username}")
         self.trace(
-            Op.register.clear_rollback_failure, "cleared",
-            kind=kind, username=username,
+            Op.register.clear_rollback_failure,
+            "cleared",
+            kind=kind,
+            username=username,
         )
 
     def register_with_code(
@@ -161,8 +174,11 @@ class BusinessCodeService(BaseService):
             raise ValidationError("Invalid password")
 
         self.trace(
-            Op.register.register_with_code, "start",
-            code=code, username=username, displayname=displayname,
+            Op.register.register_with_code,
+            "start",
+            code=code,
+            username=username,
+            displayname=displayname,
             ext_username=ext_username,
         )
 
@@ -172,48 +188,69 @@ class BusinessCodeService(BaseService):
         if len(ext_username) > 32:
             raise ValidationError("Ext Username too long")
 
-
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
         displayname = sanitize(displayname, "display")
         token = generate_token("sub")
         userid = str(uuid.uuid4())
         conf = self.cfg.view()
-        fingerprint = random.choice(conf['fingerprints'])
+        fingerprint = random.choice(conf["fingerprints"])
         hashed_password = self.password_svc.hash(ext_password)
 
         try:
             result_data = self.db.register_with_code(
-                code=code, username=username, uuid=userid, token=token,
-                fingerprint=fingerprint, displayname=displayname,
-                ext_username=ext_username, ext_password_hash=hashed_password,
+                code=code,
+                username=username,
+                uuid=userid,
+                token=token,
+                fingerprint=fingerprint,
+                displayname=displayname,
+                ext_username=ext_username,
+                ext_password_hash=hashed_password,
             )
         except CodeError as exc:
             raise NotFoundError("Invalid code") from exc
         except DuplicateError as exc:
             raise ConflictError("Username exists") from exc
         result = RegisterWithCodeInfo(
-            username=username, token=token, uuid=userid, fingerprint=fingerprint,
-            limit=int(result_data["gb"]), wl_limit=int(result_data["wl_gb"]),
+            username=username,
+            token=token,
+            uuid=userid,
+            fingerprint=fingerprint,
+            limit=int(result_data["gb"]),
+            wl_limit=int(result_data["wl_gb"]),
             time=int(result_data["time"]),
         )
         audit_result: Mapping[str, str | int] = {
-            "username": username, "ext_username": ext_username, "uuid": userid,
-            "fingerprint": fingerprint, "limit": int(result_data["gb"]),
-            "wl_limit": int(result_data["wl_gb"]), "time": int(result_data["time"]),
+            "username": username,
+            "ext_username": ext_username,
+            "uuid": userid,
+            "fingerprint": fingerprint,
+            "limit": int(result_data["gb"]),
+            "wl_limit": int(result_data["wl_gb"]),
+            "time": int(result_data["time"]),
         }
         try:
             self.user_svc.add_users(username=username, _called_internally=True)
         except Exception:
-            self.log.critical(f"register_with_code backend sync failed for {username}", exc_info=True)
+            self.log.critical(
+                f"register_with_code backend sync failed for {username}", exc_info=True
+            )
             self._rollback_registered_user(username=username)
             raise
         self.db.confirm_registration_sync(username)
         self.trace(
-            Op.register.register_with_code, "registered",
-            code=code, username=username, uuid=userid, fingerprint=fingerprint,
-            displayname=displayname, ext_username=ext_username,
-            limit=result.limit, wl_limit=result.wl_limit, time=result.time,
+            Op.register.register_with_code,
+            "registered",
+            code=code,
+            username=username,
+            uuid=userid,
+            fingerprint=fingerprint,
+            displayname=displayname,
+            ext_username=ext_username,
+            limit=result.limit,
+            wl_limit=result.wl_limit,
+            time=result.time,
         )
         self.audit_svc.audit(name="user_add", info=audit_result)
         return result

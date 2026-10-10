@@ -22,7 +22,9 @@ def _ok(*args: object) -> FakeResponse:
 def test_non_whitelist_admin_does_not_call_api() -> None:
     calls: list[str] = []
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         calls.append(url)
         return json_ok()
@@ -55,7 +57,9 @@ def test_whitelist_admin_renders_main_menu() -> None:
 
 
 def test_list_users_button_uses_admin_api() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params
         assert headers == {"Authorization": "api-token"}
         assert url.endswith("/api/user/list")
@@ -106,7 +110,9 @@ def test_panel_status_uses_admin_api() -> None:
         }
     }
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/api/panel/status")
         return json_ok(payload)
@@ -120,7 +126,9 @@ def test_panel_status_uses_admin_api() -> None:
 
 
 def test_add_user_modal_posts_admin_api() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del params, headers
         assert method == "POST"
         assert url.endswith("/api/user/add")
@@ -145,30 +153,42 @@ def test_add_user_modal_posts_admin_api() -> None:
 def test_permanent_code_posts_unlimited_uses() -> None:
     posted: list[object] = []
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, params, headers
         assert url.endswith("/api/code/add")
         posted.append(json)
         return json_ok(msg="Created")
 
     bot, session = make_admin_bot(handler)
-    bot._pending_codes[7] = {"name": "WELCOME", "type": "register", "days": 30, "gb": 10, "wl_gb": 5}
-    interaction = FakeInteraction(user_id=7, data={"custom_id": "admin:code_perma:yes"})
-    run(bot.dispatch_component(interaction))  # type: ignore[arg-type]
-    assert len(session.calls) == 1
-    assert posted == [{
-        "code": "WELCOME",
-        "action": "register",
-        "perma": True,
+    bot._pending_codes[7] = {
+        "name": "WELCOME",
+        "type": "register",
         "days": 30,
         "gb": 10,
         "wl_gb": 5,
-        "uses": -1,
-    }]
+    }
+    interaction = FakeInteraction(user_id=7, data={"custom_id": "admin:code_perma:yes"})
+    run(bot.dispatch_component(interaction))  # type: ignore[arg-type]
+    assert len(session.calls) == 1
+    assert posted == [
+        {
+            "code": "WELCOME",
+            "action": "register",
+            "perma": True,
+            "days": 30,
+            "gb": 10,
+            "wl_gb": 5,
+            "uses": -1,
+        }
+    ]
 
 
 def test_refresh_abort_reports_counts() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/api/user/refresh")
         return FakeResponse(
@@ -197,7 +217,10 @@ def test_edit_user_menu_remembers_username() -> None:
     run(bot.dispatch_component(interaction))  # type: ignore[arg-type]
     assert session.calls == []
     assert bot._pending_edits[7] == {"username": "alice"}
-    ids = [getattr(item, "custom_id", None) for item in getattr(interaction.response.messages[-1]["view"], "children", [])]
+    ids = [
+        getattr(item, "custom_id", None)
+        for item in getattr(interaction.response.messages[-1]["view"], "children", [])
+    ]
     assert "admin:edit:fp" in ids
     assert "admin:edit:name" in ids
 
@@ -237,14 +260,21 @@ def test_code_type_keeps_name_and_type() -> None:
 def test_edit_modals_open_before_user_info() -> None:
     calls: list[str] = []
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         calls.append(url)
         return json_ok(stats_obj())
 
     bot, _session = make_admin_bot(handler)
     bot._pending_edits[7] = {"username": "alice"}
-    for custom_id in ("admin:edit:limit", "admin:edit:wl_limit", "admin:edit:time", "admin:edit:name"):
+    for custom_id in (
+        "admin:edit:limit",
+        "admin:edit:wl_limit",
+        "admin:edit:time",
+        "admin:edit:name",
+    ):
         interaction = FakeInteraction(user_id=7, data={"custom_id": custom_id})
         run(bot.dispatch_component(interaction))  # type: ignore[arg-type]
         assert interaction.response.modals
@@ -255,7 +285,9 @@ def test_edit_modals_open_before_user_info() -> None:
 def test_leaderboard_text_uses_discord_limit() -> None:
     rows = [{"username": f"user-{index:03d}", "amount": 2_000_000_000} for index in range(40)]
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/api/leaderboard")
         return json_ok(rows)

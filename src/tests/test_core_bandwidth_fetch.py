@@ -17,19 +17,25 @@ if TYPE_CHECKING:
 
 
 def test_whitelist_total_uses_only_whitelist_panel(database: Database) -> None:
-    regular = FakePanel(clients=[
-        make_panel_client("alice", [1], up=100, down=200),
-        make_panel_client("stranger", [1], up=9_000, down=9_000),
-    ])
-    whitelist = FakePanel(clients=[
-        make_panel_client("alice", [2], up=10, down=20),
-        make_panel_client("stranger", [2], up=8_000, down=8_000),
-    ])
+    regular = FakePanel(
+        clients=[
+            make_panel_client("alice", [1], up=100, down=200),
+            make_panel_client("stranger", [1], up=9_000, down=9_000),
+        ]
+    )
+    whitelist = FakePanel(
+        clients=[
+            make_panel_client("alice", [2], up=10, down=20),
+            make_panel_client("stranger", [2], up=8_000, down=8_000),
+        ]
+    )
     subscription = make_subscription(database, panels=[regular], whitelist_panel=whitelist)
     create_alice(database)
 
     assert subscription.bandwidth_svc.bandwidth("alice") == BandwidthInfo(100, 200, 300)
-    assert subscription.bandwidth_svc.bandwidth("alice", whitelist=True) == BandwidthInfo(10, 20, 30)
+    assert subscription.bandwidth_svc.bandwidth("alice", whitelist=True) == BandwidthInfo(
+        10, 20, 30
+    )
     assert subscription.bandwidth_svc.bandwidth("alice").total == 300
 
 
@@ -55,13 +61,19 @@ def test_traffic_is_one_shared_row_not_summed_over_inbounds(database: Database) 
 def test_all_traffic_sums_across_panels_and_skips_unknown_emails(
     database: Database,
 ) -> None:
-    one = FakePanel(name="one", clients=[
-        make_panel_client("alice", [1], up=100, down=200),
-        make_panel_client("stranger", [1], up=9_000, down=9_000),
-    ])
-    two = FakePanel(name="two", clients=[
-        make_panel_client("alice", [2], up=1, down=2),
-    ])
+    one = FakePanel(
+        name="one",
+        clients=[
+            make_panel_client("alice", [1], up=100, down=200),
+            make_panel_client("stranger", [1], up=9_000, down=9_000),
+        ],
+    )
+    two = FakePanel(
+        name="two",
+        clients=[
+            make_panel_client("alice", [2], up=1, down=2),
+        ],
+    )
     subscription = make_subscription(database, panels=[one, two])
     create_alice(database)
 
@@ -79,6 +91,7 @@ def test_all_traffic_raises_when_no_panel_queryable(database: Database) -> None:
     import pytest
 
     from errors import PanelUnavailableError
+
     with pytest.raises(PanelUnavailableError):
         subscription.bandwidth_svc.all_traffic()
 
@@ -94,14 +107,22 @@ def test_all_traffic_returns_partial_when_one_panel_fails(database: Database) ->
 
 
 def test_all_traffic_uses_whitelist_slot(database: Database) -> None:
-    regular = FakePanel(name="regular", clients=[
-        make_panel_client("alice", [1], up=100, down=200),
-    ])
-    whitelist = FakePanel(name="whitelist", clients=[
-        make_panel_client("alice", [2], up=10, down=20),
-    ])
+    regular = FakePanel(
+        name="regular",
+        clients=[
+            make_panel_client("alice", [1], up=100, down=200),
+        ],
+    )
+    whitelist = FakePanel(
+        name="whitelist",
+        clients=[
+            make_panel_client("alice", [2], up=10, down=20),
+        ],
+    )
     subscription = make_subscription(
-        database, panels=[regular], whitelist_panel=whitelist,
+        database,
+        panels=[regular],
+        whitelist_panel=whitelist,
     )
     create_alice(database)
 

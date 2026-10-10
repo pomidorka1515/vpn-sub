@@ -33,7 +33,9 @@ def _count_queries(
 
 
 def test_periodic_loop_guard_swallows_crashes(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     def boom() -> None:
         raise RuntimeError("poll exploded")
@@ -68,7 +70,8 @@ class _RecordingBot:
 
 
 def test_no_traffic_disabled_notification_when_panel_update_fails(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     bot = _RecordingBot()
     failing_watch = make_watch(database, subscription, bot=bot)
@@ -87,7 +90,8 @@ def test_no_traffic_disabled_notification_when_panel_update_fails(
 
 
 def test_exhausted_warning_is_not_repeated(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     """Two checks while the user is still over quota send one warning.
 
@@ -118,7 +122,8 @@ def test_exhausted_warning_is_not_repeated(
 
 
 def test_near_limit_warning_is_not_repeated(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     bot = _RecordingBot()
     watch = make_watch(database, subscription, bot=bot)
@@ -134,7 +139,8 @@ def test_near_limit_warning_is_not_repeated(
 
 
 def test_failed_send_retries_and_then_sticks(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     bot = _RecordingBot()
     watch = make_watch(database, subscription, bot=bot)
@@ -157,7 +163,8 @@ def test_failed_send_retries_and_then_sticks(
 
 
 def test_recovery_is_sent_only_through_deliver(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     """A re-enable announces recovery only when the outage marker is stored."""
     bot = _RecordingBot()
@@ -175,6 +182,7 @@ def test_recovery_is_sent_only_through_deliver(
         database.update_user(username, status=True)
 
     subscription.business_svc.update_user = reenable  # type: ignore[method-assign]
+
     def no_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         return {}
 
@@ -193,7 +201,8 @@ def test_recovery_is_sent_only_through_deliver(
 
 
 def test_second_recovery_is_not_swallowed_by_the_first(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     bot = _RecordingBot()
     watch = make_watch(database, subscription, bot=bot)
@@ -222,6 +231,7 @@ def test_second_recovery_is_not_swallowed_by_the_first(
         database.update_user(username, status=True)
 
     subscription.business_svc.update_user = reenable  # type: ignore[method-assign]
+
     def no_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:
         return {}
 
@@ -242,7 +252,9 @@ def test_second_recovery_is_not_swallowed_by_the_first(
 
 
 def test_daily_snapshot_job_does_not_clear_episode_markers(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     database.mark_notification("alice:traffic_exhausted:1", "")
     database.mark_notification("regular", 123)
@@ -256,10 +268,14 @@ def test_daily_snapshot_job_does_not_clear_episode_markers(
 
 
 def test_bonus_on_zero_quota_reenables_on_next_poll(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=0, wl_limit_gb=0, expires_at=0)
-    database.update_user("alice", status=False, status_time=False, status_wl=False, bw_used=5 * 10**9)
+    database.update_user(
+        "alice", status=False, status_time=False, status_wl=False, bw_used=5 * 10**9
+    )
     subscription.code_svc.add_code("bonus1", "bonus", gb=3, wl_gb=1, uses=1)
     subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
 
@@ -293,7 +309,9 @@ def test_bonus_on_zero_quota_reenables_on_next_poll(
 
 
 def test_lapsed_bonus_renewal_reenables_time(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=0, expires_at=1)
     database.update_user("alice", status=False, status_time=False)
@@ -326,7 +344,8 @@ def test_lapsed_bonus_renewal_reenables_time(
 
 
 def test_no_expiry_disabled_notification_when_panel_update_fails(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     bot = _RecordingBot()
     failing_watch = make_watch(database, subscription, bot=bot)
@@ -342,7 +361,9 @@ def test_no_expiry_disabled_notification_when_panel_update_fails(
 
 
 def test_counter_failure_does_not_advance_either_baseline(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
     first = BandwidthInfo(upload=100, download=100, total=200)
@@ -369,7 +390,9 @@ def test_counter_failure_does_not_advance_either_baseline(
 
 
 def test_bandwidth_check_reads_one_map_per_side(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
     calls: list[bool] = []
@@ -390,7 +413,9 @@ def test_bandwidth_check_reads_one_map_per_side(
 
 
 def test_bandwidth_check_skips_unrequired_side(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
     calls: list[bool] = []
@@ -408,7 +433,9 @@ def test_bandwidth_check_skips_unrequired_side(
 
 
 def test_daily_snapshot_accumulates_repeated_days(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
     readings = [
@@ -435,7 +462,9 @@ def test_daily_snapshot_accumulates_repeated_days(
 
 
 def test_daily_snapshot_clamps_counter_reset_deltas(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
     baseline = BandwidthInfo(upload=1000, download=2000, total=3000)
@@ -457,7 +486,9 @@ def test_daily_snapshot_clamps_counter_reset_deltas(
 
 
 def test_daily_snapshot_ignores_poller_baseline(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
     current = BandwidthInfo(upload=400, download=600, total=1000)
@@ -475,14 +506,20 @@ def test_daily_snapshot_ignores_poller_baseline(
 
     row = database.get_bandwidth_snapshots("alice", 0)[0]
     assert (row["up"], row["down"], row["up"] + row["down"], row["wl_up"], row["wl_down"]) == (
-        400, 600, 1000, 400, 600,
+        400,
+        600,
+        1000,
+        400,
+        600,
     )
     assert watch.mem["alice"] == poller
     assert watch.wl_mem["alice"] == poller
 
 
 def test_daily_snapshot_skips_unused_counter(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
     calls: list[bool] = []
@@ -503,13 +540,19 @@ def test_daily_snapshot_skips_unused_counter(
 
 
 def test_bandwidth_check_reads_users_once_and_writes_once(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
     database.create_user(
-        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        token="b" * 40, fingerprint="chrome", displayname="Bob",
-        bw_limit_gb=1, wl_limit_gb=0,
+        username="bob",
+        uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
+        bw_limit_gb=1,
+        wl_limit_gb=0,
     )
     watch.mem["alice"] = BandwidthInfo(0, 0, 0)
     watch.wl_mem["alice"] = BandwidthInfo(0, 0, 0)
@@ -537,12 +580,17 @@ def test_bandwidth_check_reads_users_once_and_writes_once(
 
 
 def test_check_reads_users_and_telegram_once(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=0, wl_limit_gb=0)
     database.create_user(
-        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        token="b" * 40, fingerprint="chrome", displayname="Bob",
+        username="bob",
+        uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
     )
     seen, original = _count_queries(database)
     try:
@@ -558,13 +606,19 @@ def test_check_reads_users_and_telegram_once(
 
 
 def test_daily_snapshot_writes_rows_in_one_transaction(
-    database: Database, subscription: Subscription, watch: BWatch,
+    database: Database,
+    subscription: Subscription,
+    watch: BWatch,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=0)
     database.create_user(
-        username="bob", uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        token="b" * 40, fingerprint="chrome", displayname="Bob",
-        bw_limit_gb=1, wl_limit_gb=0,
+        username="bob",
+        uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
+        bw_limit_gb=1,
+        wl_limit_gb=0,
     )
 
     def all_traffic(whitelist: bool = False, *, pool: object = None) -> dict[str, BandwidthInfo]:

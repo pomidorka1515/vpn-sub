@@ -3,6 +3,7 @@
 Quota code classifies a user row into ``Notice`` values. ``Notifier`` renders
 and sends one, and only then is the marker recorded.
 """
+
 from __future__ import annotations
 
 from .events import Notice, classify, restored

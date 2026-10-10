@@ -29,7 +29,9 @@ def test_print_help_writes_stdout(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.err == ""
 
 
-def test_main_help_exits_before_boot(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_help_exits_before_boot(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setattr(sys, "argv", ["vpn-sub", "--help"])
     with pytest.raises(SystemExit) as caught:
         runpy.run_path(str(ROOT / "main.py"), run_name="__main__")
@@ -38,7 +40,9 @@ def test_main_help_exits_before_boot(monkeypatch: pytest.MonkeyPatch, capsys: py
     assert captured.out.startswith("usage: vpn-sub ")
 
 
-def test_main_short_help_exits(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_short_help_exits(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setattr(sys, "argv", ["vpn-sub", "-h"])
     with pytest.raises(SystemExit) as caught:
         runpy.run_path(str(ROOT / "main.py"), run_name="__main__")
@@ -46,7 +50,9 @@ def test_main_short_help_exits(monkeypatch: pytest.MonkeyPatch, capsys: pytest.C
     assert capsys.readouterr().out.startswith("usage: vpn-sub ")
 
 
-def test_discord_help_exits_before_boot(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_discord_help_exits_before_boot(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.syspath_prepend(str(DISCORD))  # pyright: ignore[reportUnknownMemberType]  # Upstream parameter is untyped.
     monkeypatch.setattr(sys, "argv", ["vpn-sub-discord", "--help"])
     with pytest.raises(SystemExit) as caught:

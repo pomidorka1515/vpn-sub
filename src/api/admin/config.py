@@ -19,8 +19,8 @@ class ConfigRoutes(AdminApiMixin):
     """Admin config read and patch routes."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
-        Route('GET', '/api/config/get', 'config_get'),
-        Route('POST', '/api/config/set', 'config_set'),
+        Route("GET", "/api/config/get", "config_get"),
+        Route("POST", "/api/config/set", "config_set"),
     )
 
     @requires_admin_auth

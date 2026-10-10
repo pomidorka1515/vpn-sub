@@ -1,4 +1,5 @@
 """Stacked regular + whitelist bandwidth chart."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -52,41 +53,38 @@ def bandwidth_chart(
         return None
 
     snaps = sorted(snapshots, key=lambda s: s.ts)
-    labels = [
-        datetime.fromtimestamp(s.ts, tz=UTC).strftime('%m/%d')
-        for s in snaps
-    ]
+    labels = [datetime.fromtimestamp(s.ts, tz=UTC).strftime("%m/%d") for s in snaps]
     reg_up = [s.up for s in snaps]
     reg_down = [s.down for s in snaps]
     wl_up = [s.wl_up for s in snaps]
     wl_down = [s.wl_down for s in snaps]
 
     width, height = BW_SIZE
-    image = Image.new('RGB', (width, height), BG)
+    image = Image.new("RGB", (width, height), BG)
     draw = ImageDraw.Draw(image)
     fonts: dict[str, ImageFont.FreeTypeFont] = {
-        'header': load_font(22),
-        'sub': load_font(16),
-        'title': load_font(18),
-        'body': load_font(16),
-        'tick': load_font(14),
+        "header": load_font(22),
+        "sub": load_font(16),
+        "title": load_font(18),
+        "body": load_font(16),
+        "tick": load_font(14),
     }
 
-    header = f'{lang["bandwidth"]} — {label}' if label else lang['bandwidth']
-    period = f'{len(snaps)} {lang["day"]}' if len(snaps) == 1 else f'{len(snaps)} {lang["days"]}'
-    draw_text(draw, (40, 18), header, font=fonts['header'], fill=TEXT)
-    draw_text(draw, (40, 48), period, font=fonts['sub'], fill=TEXT_DIM)
+    header = f"{lang['bandwidth']} — {label}" if label else lang["bandwidth"]
+    period = f"{len(snaps)} {lang['day']}" if len(snaps) == 1 else f"{len(snaps)} {lang['days']}"
+    draw_text(draw, (40, 18), header, font=fonts["header"], fill=TEXT)
+    draw_text(draw, (40, 48), period, font=fonts["sub"], fill=TEXT_DIM)
 
     n = len(labels)
     bar_frac = calc_bar_width(n) if bar_width is None else bar_width
-    legend = (lang['download'], lang['upload'])
+    legend = (lang["download"], lang["upload"])
     margin_l, margin_r = 110, 36
     panels = (
-        (lang['regular_traffic'], reg_down, reg_up, REG_DOWN, REG_UP, 130, 500),
-        (lang['whitelist_traffic'], wl_down, wl_up, WL_DOWN, WL_UP, 580, 930),
+        (lang["regular_traffic"], reg_down, reg_up, REG_DOWN, REG_UP, 130, 500),
+        (lang["whitelist_traffic"], wl_down, wl_up, WL_DOWN, WL_UP, 580, 930),
     )
     for title, bottoms, tops, bottom_color, top_color, top, bottom in panels:
-        empty = lang['no_data'] if not any(bottoms) and not any(tops) else None
+        empty = lang["no_data"] if not any(bottoms) and not any(tops) else None
         draw_stacked(
             draw,
             plot=(margin_l, top, width - margin_r, bottom),

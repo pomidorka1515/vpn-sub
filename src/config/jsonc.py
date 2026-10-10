@@ -64,6 +64,7 @@ def strip_jsonc_comments(content: str) -> str:
 
     return "".join(result)
 
+
 def strip_jsonc_trailing_commas(content: str) -> str:
     """Remove JSONC's optional trailing commas outside string values."""
     result: list[str] = []

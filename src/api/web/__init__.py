@@ -33,13 +33,9 @@ class WebApi(
         *AccountRoutes.ROUTES,
     )
 
-    def __init__(self,
-                 app: Flask,
-                 cfg: Config[AppConfig],
-                 sub: Subscription,
-                 bw: BWatch) -> None:
+    def __init__(self, app: Flask, cfg: Config[AppConfig], sub: Subscription, bw: BWatch) -> None:
         self.log = Logger(type(self).__name__)
         conf = cfg.view()
-        uri = '/' + '/'.join(p for p in conf['uri'].split('/') if p)
+        uri = "/" + "/".join(p for p in conf["uri"].split("/") if p)
         super().__init__(app, cfg, sub, bw, uri)
-        self.prefix = self.uri.rstrip('/')
+        self.prefix = self.uri.rstrip("/")

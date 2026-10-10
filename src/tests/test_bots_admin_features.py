@@ -68,9 +68,9 @@ def _metrics(*, running: bool = True, ipv6: str = "") -> ServerMetricsResponse:
             cpuCores=2,
             logicalPro=4,
             cpuSpeedMhz=2400.4,
-            mem=MemoryStats(current=2 * 1024 ** 3, total=4 * 1024 ** 3),
-            swap=SwapStats(current=0, total=1024 ** 3),
-            disk=DiskStats(current=10 * 1024 ** 3, total=20 * 1024 ** 3),
+            mem=MemoryStats(current=2 * 1024**3, total=4 * 1024**3),
+            swap=SwapStats(current=0, total=1024**3),
+            disk=DiskStats(current=10 * 1024**3, total=20 * 1024**3),
             xray=XrayStats(
                 state="running" if running else "stopped",
                 errorMsg="" if running else "crashed",
@@ -80,10 +80,10 @@ def _metrics(*, running: bool = True, ipv6: str = "") -> ServerMetricsResponse:
             loads=[0.1, 0.2, 0.3],
             tcpCount=3,
             udpCount=1,
-            netIO=NetIOStats(up=2 * 1024 ** 2, down=4 * 1024 ** 2),
-            netTraffic=NetTrafficStats(sent=1024 ** 3, recv=2 * 1024 ** 3),
+            netIO=NetIOStats(up=2 * 1024**2, down=4 * 1024**2),
+            netTraffic=NetTrafficStats(sent=1024**3, recv=2 * 1024**3),
             publicIP=PublicIPStats(ipv4="1.2.3.4", ipv6=ipv6),
-            appStats=AppStats(threads=5, mem=8 * 1024 ** 2, uptime=30),
+            appStats=AppStats(threads=5, mem=8 * 1024**2, uptime=30),
         ),
     )
 
@@ -97,7 +97,12 @@ def traffic() -> tuple[AdminTrafficMixin, MagicMock, MagicMock]:
     mixin.sub = subscription
     mixin.log = MagicMock()
     lang_cfg = MagicMock()
-    lang_cfg.view.return_value = {"description": {}, "publicbot": {}, "web": {}, "chart": {"ru": {"bandwidth": "bw"}}}
+    lang_cfg.view.return_value = {
+        "description": {},
+        "publicbot": {},
+        "web": {},
+        "chart": {"ru": {"bandwidth": "bw"}},
+    }
     mixin.lang_cfg = lang_cfg
     mixin.get_main_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     mixin._send_message = MagicMock()  # type: ignore[method-assign]
@@ -170,7 +175,12 @@ def leaderboard() -> tuple[AdminLeaderboardMixin, MagicMock, MagicMock]:
     mixin.bot = telegram
     mixin.sub = subscription
     lang_cfg = MagicMock()
-    lang_cfg.view.return_value = {"description": {}, "publicbot": {}, "web": {}, "chart": {"ru": {"leaderboard": "lb"}}}
+    lang_cfg.view.return_value = {
+        "description": {},
+        "publicbot": {},
+        "web": {},
+        "chart": {"ru": {"leaderboard": "lb"}},
+    }
     mixin.lang_cfg = lang_cfg
     mixin.get_main_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
     mixin._pending_leaderboard = {}
@@ -190,7 +200,10 @@ def test_leaderboard_prompts_and_window(
     mixin._cb_leaderboard_window = AdminLeaderboardMixin._cb_leaderboard_window.__get__(mixin)  # type: ignore[method-assign]
     mixin._cb_leaderboard_window(7)
     registered = telegram.register_next_step_handler.call_args.args[1]
-    assert getattr(registered, "__func__", registered) is AdminLeaderboardMixin._step_leaderboard_window
+    assert (
+        getattr(registered, "__func__", registered)
+        is AdminLeaderboardMixin._step_leaderboard_window
+    )
 
     mixin._step_leaderboard_window(_message(None))
     mixin._step_leaderboard_window(_message("-1"))

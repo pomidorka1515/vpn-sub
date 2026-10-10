@@ -41,7 +41,9 @@ class _Poller:
         self.token: str | None = None
         self._stop_event = stop_event
 
-    def infinity_polling(self, *, timeout: int, long_polling_timeout: int, logger_level: int | None) -> None:
+    def infinity_polling(
+        self, *, timeout: int, long_polling_timeout: int, logger_level: int | None
+    ) -> None:
         self.polling_started.set()
         self._stop_event.wait(_STOP_WAIT_SECONDS)
 
@@ -68,7 +70,8 @@ def polling_bot(stop_event: threading.Event) -> _TestBot:
 
 
 def test_start_polling_reuses_running_thread(
-    polling_bot: _TestBot, stop_event: threading.Event,
+    polling_bot: _TestBot,
+    stop_event: threading.Event,
 ) -> None:
     polling_bot.start_polling()
     assert polling_bot.polling_thread is not None
@@ -85,7 +88,8 @@ def test_start_polling_reuses_running_thread(
 
 
 def test_stop_polling_is_idempotent_and_does_not_join_without_thread(
-    polling_bot: _TestBot, stop_event: threading.Event,
+    polling_bot: _TestBot,
+    stop_event: threading.Event,
 ) -> None:
     started = time.monotonic()
     polling_bot.stop_polling()
@@ -101,7 +105,9 @@ def test_stop_polling_is_idempotent_and_does_not_join_without_thread(
 
 
 def test_stop_polling_logs_timeout(
-    polling_bot: _TestBot, stop_event: threading.Event, monkeypatch: pytest.MonkeyPatch,
+    polling_bot: _TestBot,
+    stop_event: threading.Event,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(polling_module, "_POLLING_STOP_TIMEOUT", 0.2)
     polling_bot.start_polling()
@@ -119,13 +125,16 @@ def test_stop_polling_logs_timeout(
 
 
 def test_polling_errors_are_logged_without_token_or_traceback(
-    polling_bot: _TestBot, stop_event: threading.Event,
+    polling_bot: _TestBot,
+    stop_event: threading.Event,
 ) -> None:
     token = "123456:secret-token-value"
     polling_bot.poller.token = token
     raised = threading.Event()
 
-    def infinity_polling(*, timeout: int, long_polling_timeout: int, logger_level: int | None) -> None:
+    def infinity_polling(
+        *, timeout: int, long_polling_timeout: int, logger_level: int | None
+    ) -> None:
         if not raised.is_set():
             raised.set()
             raise ConnectionError(
@@ -162,12 +171,19 @@ def test_transient_polling_errors_are_left_to_library_backoff() -> None:
     reset = ConnectionError(
         "('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
     )
-    exception = cast(Callable[[str, Response, dict[str, object]], apihelper.ApiTelegramException], apihelper.ApiTelegramException)
+    exception = cast(
+        Callable[[str, Response, dict[str, object]], apihelper.ApiTelegramException],
+        apihelper.ApiTelegramException,
+    )
     gateway = exception(
-        "getUpdates", Response(), {"error_code": 502, "description": "Bad Gateway"},
+        "getUpdates",
+        Response(),
+        {"error_code": 502, "description": "Bad Gateway"},
     )
     limited = exception(
-        "getUpdates", Response(), {"error_code": 429, "description": "Too Many Requests"},
+        "getUpdates",
+        Response(),
+        {"error_code": 429, "description": "Too Many Requests"},
     )
 
     assert handler.handle(reset) is False

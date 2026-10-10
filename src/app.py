@@ -42,6 +42,7 @@ type PanelTransportFactory = Callable[[], XUiPanelTransport]
 class Closeable(Protocol):
     def close(self) -> None: ...
 
+
 __all__ = [
     "AppOptions",
     "AppPaths",
@@ -89,7 +90,10 @@ class _ProxyGuard:
         if peer not in ("127.0.0.1", "::1"):
             log.error("direct access attempt from %s; refusing", peer)
             body = b'{"success": false, "msg": "direct access forbidden", "obj": null}'
-            start_response("400 Bad Request", [("Content-Type", "application/json"), ("Content-Length", str(len(body)))])
+            start_response(
+                "400 Bad Request",
+                [("Content-Type", "application/json"), ("Content-Length", str(len(body)))],
+            )
             return [body]
         return self.wsgi(environ, start_response)
 
@@ -170,12 +174,13 @@ class Application:
             if self.public_bot is not None:
                 self.public_bot.start()
 
-
         match sys.version_info[:2]:
             case (3, minor) if minor >= 13:
                 pass
             case (3, 12):
-                log.warning("This app was built for Python 3.13+, consider switching to avoid bugs (found: 3.12)")
+                log.warning(
+                    "This app was built for Python 3.13+, consider switching to avoid bugs (found: 3.12)"
+                )
             case (3, minor):
                 raise RuntimeError(f"Error: Python 3.12+ required (detected 3.{minor})")
             case _:
@@ -250,25 +255,19 @@ def _build_flask_app(options: AppOptions) -> Flask:
     # applies this before the view, so it cannot be per-route.
     flask_app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
     if options.proxy_hops > 0:
-        flask_app.wsgi_app = ProxyFix( # type: ignore[method-assign]
-            flask_app.wsgi_app,
-            x_for=options.proxy_hops,
-            x_proto=1,
-            x_host=1
+        flask_app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
+            flask_app.wsgi_app, x_for=options.proxy_hops, x_proto=1, x_host=1
         )
     if options.require_proxy:
-        flask_app.wsgi_app = _ProxyGuard(flask_app.wsgi_app) # type: ignore[method-assign]
-
+        flask_app.wsgi_app = _ProxyGuard(flask_app.wsgi_app)  # type: ignore[method-assign]
 
     @flask_app.errorhandler(AppError)
     def handle_app_error(error: AppError) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
         return err(msg=error.message, code=error.status)
 
-
     @flask_app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
         return err(msg=error.description, code=error.code or 500)
-
 
     @flask_app.errorhandler(Exception)
     def handle_unexpected_error(error: Exception) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction] -> tuple[Response, int]:
@@ -295,11 +294,13 @@ def _acquire_primary_lock(path: Path) -> tuple[bool, BinaryIO | None]:
     return True, handle
 
 
-def _build_configs(paths: AppPaths, *, start_backup: bool) -> tuple[
-    Config[AppConfig], # main
-    Config[LangConfig], # lang
-    LinesConfig, # log
-    LinesConfig # audit
+def _build_configs(
+    paths: AppPaths, *, start_backup: bool
+) -> tuple[
+    Config[AppConfig],  # main
+    Config[LangConfig],  # lang
+    LinesConfig,  # log
+    LinesConfig,  # audit
 ]:
     paths.data.mkdir(parents=True, exist_ok=True)
     lock_dir = paths.primary_lock.parent
@@ -513,7 +514,7 @@ def create_application(
         )
         api = Api(
             app=flask_app,
-                cfg=cfg,
+            cfg=cfg,
             audit_cfg=audit_cfg,
             sub=subscription,
             bw=bandwidth_watcher,

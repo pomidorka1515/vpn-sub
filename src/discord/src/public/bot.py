@@ -26,6 +26,7 @@ __all__ = ["PublicBot"]
 
 type Coro[T = None] = Coroutine[Any, Any, T]
 
+
 class PublicBot(
     PublicCommonMixin,
     PublicLoginMixin,
@@ -76,15 +77,18 @@ class PublicBot(
             ("reset", self.cmd_reset, "Reset your subscription link"),
             ("delete", self.cmd_delete, "Delete your account"),
         )
+
         def bind(
-            command_name: str,
-            command_handler: Callable[[discord.Interaction[Client]], Coro]
+            command_name: str, command_handler: Callable[[discord.Interaction[Client]], Coro]
         ) -> Callable[[discord.Interaction[Client]], Coro]:
             async def wrapped(interaction: discord.Interaction) -> None:
-                if self.command_requires_auth(command_name) and not self.is_logged_in(interaction.user.id):
+                if self.command_requires_auth(command_name) and not self.is_logged_in(
+                    interaction.user.id
+                ):
                     await self._reply_key(interaction, "not_logged_in")
                     return
                 await command_handler(interaction)
+
             wrapped.__name__ = command_name
             wrapped.__qualname__ = command_name
             return wrapped

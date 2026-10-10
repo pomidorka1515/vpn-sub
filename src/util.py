@@ -31,7 +31,10 @@ __all__ = [
     "tuple_hook",
 ]
 
-_BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')
+_BROWSER_UA = re.compile(
+    r"(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)"
+)
+
 
 def sanitize(s: str, kind: Literal["external", "display"], /) -> str:
     """
@@ -42,9 +45,10 @@ def sanitize(s: str, kind: Literal["external", "display"], /) -> str:
     """
     match kind:
         case "external":
-            return re.sub(r'[^A-Za-z0-9_\-]', '', s[:32])
+            return re.sub(r"[^A-Za-z0-9_\-]", "", s[:32])
         case "display":
-            return s[:16].translate(str.maketrans('', '', r''':;"'?/<>{}[]*&^%$#@\|`'''))
+            return s[:16].translate(str.maketrans("", "", r""":;"'?/<>{}[]*&^%$#@\|`"""))
+
 
 def generate_token(kind: Literal["sub", "auth"], /) -> str:
     """
@@ -60,11 +64,14 @@ def generate_token(kind: Literal["sub", "auth"], /) -> str:
         case "auth":
             return secrets.token_hex(50)
 
+
 def isbrowser(ua: str) -> bool:
     return bool(_BROWSER_UA.search(ua))
 
+
 def compare(a: str, b: str) -> bool:
     return hmac.compare_digest(a, b)
+
 
 def isuuid(s: str) -> bool:
     """Validate a UUID."""
@@ -74,7 +81,9 @@ def isuuid(s: str) -> bool:
     except ValueError:
         return False
 
-_USERNAME_RE = re.compile(r'[A-Za-z0-9_-]+')
+
+_USERNAME_RE = re.compile(r"[A-Za-z0-9_-]+")
+
 
 def isusername(s: str) -> bool:
     """Validate a username for panel use.
@@ -85,37 +94,29 @@ def isusername(s: str) -> bool:
     """
     return bool(_USERNAME_RE.fullmatch(s))
 
-def ok(
-    msg: str | None = None,
-    code: int = 200,
-    obj: JsonifyValue = None
-) -> tuple[Response, int]:
+
+def ok(msg: str | None = None, code: int = 200, obj: JsonifyValue = None) -> tuple[Response, int]:
     """Internal helper function to return a successful Response."""
     from flask import jsonify
 
     return jsonify({"success": True, "msg": msg, "obj": obj}), code
 
-def err(
-    msg: str | None = None,
-    code: int = 400,
-    obj: JsonifyValue = None
-) -> tuple[Response, int]:
+
+def err(msg: str | None = None, code: int = 400, obj: JsonifyValue = None) -> tuple[Response, int]:
     """Internal helper function to return an error Response."""
     from flask import jsonify
 
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
 
-
 class _PartialFormatter(dict[str, object]):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
 
+
 # intentionally shadows `builtins.format`
-def format(template: str, **values: object) -> str: # noqa: A001
-    return template.format_map(
-        _PartialFormatter(values)
-    )
+def format(template: str, **values: object) -> str:  # noqa: A001
+    return template.format_map(_PartialFormatter(values))
 
 
 def tuple_hook(value: object) -> object:
@@ -123,19 +124,21 @@ def tuple_hook(value: object) -> object:
         return tuple(cast(list[object], value))
     return value
 
+
 def parse_bool(value: object) -> bool | None:
     """Convert boolean-like values to actual bool."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
         value = value.lower().strip()
-        if value in ('true', 'yes', '1', 'on', 'y'):
+        if value in ("true", "yes", "1", "on", "y"):
             return True
-        if value in ('false', 'no', '0', 'off', 'n'):
+        if value in ("false", "no", "0", "off", "n"):
             return False
     if isinstance(value, int):
         return bool(value)
     return None
+
 
 def fmt_bytes_tuple(value: float) -> tuple[str, str]:
     """
@@ -144,10 +147,7 @@ def fmt_bytes_tuple(value: float) -> tuple[str, str]:
         tuple[amount, label]
         Example: ("193", "MB")
     """
-    for unit, div in (
-        ("TB", 10**12), ("GB", 10**9),
-        ("MB", 10**6), ("KB", 10**3)
-    ):
+    for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6), ("KB", 10**3)):
         if value >= div:
             return str(round(value / div, 2)), unit
     return str(round(value / 10**6, 2)), "MB"
@@ -155,13 +155,10 @@ def fmt_bytes_tuple(value: float) -> tuple[str, str]:
 
 def fmt_bytes(value: float) -> str:
     """Format bytes as short human-readable string."""
-    for unit, div in (
-        ('TB', 10**12), ('GB', 10**9),
-        ('MB', 10**6), ('KB', 10**3)
-    ):
+    for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6), ("KB", 10**3)):
         if value >= div:
-            return f'{value / div:.2f} {unit}'
-    return f'{int(value)} B'
+            return f"{value / div:.2f} {unit}"
+    return f"{int(value)} B"
 
 
 def fmt_time(seconds: int, lang: str = "ru") -> str:
@@ -185,8 +182,7 @@ def fmt_time(seconds: int, lang: str = "ru") -> str:
     return f"{m}{t_m}"
 
 
-def format_usage(used: float, limit: float,
-                 unlimited: str = "Безлимит") -> tuple[str, str, str]:
+def format_usage(used: float, limit: float, unlimited: str = "Безлимит") -> tuple[str, str, str]:
     """Format used bytes, a GB limit, and the corresponding percentage."""
     if limit == 0:
         return unlimited, unlimited, "N/A"
@@ -208,14 +204,14 @@ def truncate_utf8(text: str, max_bytes: int, suffix: str = "...") -> str:
     suffix_bytes = len(suffix.encode("utf-8"))
     if suffix_bytes >= max_bytes:
         return suffix.encode("utf-8")[:max_bytes].decode("utf-8", errors="ignore")
-    raw = text.encode("utf-8")[:max_bytes - suffix_bytes]
+    raw = text.encode("utf-8")[: max_bytes - suffix_bytes]
     return raw.decode("utf-8", errors="ignore") + suffix
 
 
 def make_qr(text: str) -> io.BytesIO:
     img = qrcode.make(text)
     bio = io.BytesIO()
-    img.save(bio, 'PNG')
+    img.save(bio, "PNG")
     bio.seek(0)
     bio.name = "qr.png"
     return bio

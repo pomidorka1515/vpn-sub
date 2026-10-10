@@ -130,7 +130,9 @@ def test_verbose_overrides_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert verbose_overrides() == frozenset()
 
 
-def test_factory_applies_verbose_overrides(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_applies_verbose_overrides(
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch, core, panels")
     with factory(paths) as runtime:
         assert runtime.subscription.res.verbose is True
@@ -143,9 +145,13 @@ def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:
     with factory(paths) as runtime:
         client = runtime.app.test_client()
         assert client.get("/sub/api/api/health").status_code == 401
-        assert client.get(
-            "/sub/api/api/health", headers={"Authorization": "secret"},
-        ).status_code == 200
+        assert (
+            client.get(
+                "/sub/api/api/health",
+                headers={"Authorization": "secret"},
+            ).status_code
+            == 200
+        )
         assert any(rule.rule == "/sub" for rule in runtime.app.url_map.iter_rules())
         sub_response = client.get("/sub")
         assert sub_response.status_code == 401
@@ -157,7 +163,9 @@ def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:
         assert len(runtime.panels) == 2
 
 
-def test_compiled_binary_forces_bundled_schema(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compiled_binary_forces_bundled_schema(
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from paths import bundled_root
 
     monkeypatch.setattr("app.compiled", lambda: True)
@@ -214,9 +222,13 @@ def test_omitted_or_empty_bot_is_not_started(paths: AppPaths) -> None:
         assert runtime.bandwidth_watcher.admin_bot is None
         assert runtime.bandwidth_watcher.bot is None
         client = runtime.app.test_client()
-        assert client.get(
-            "/sub/api/api/health", headers={"Authorization": "secret"},
-        ).status_code == 200
+        assert (
+            client.get(
+                "/sub/api/api/health",
+                headers={"Authorization": "secret"},
+            ).status_code
+            == 200
+        )
 
 
 def test_stop_is_idempotent(paths: AppPaths) -> None:
@@ -285,7 +297,9 @@ def test_secondary_process_does_not_recover_or_start_bots(paths: AppPaths) -> No
             assert runtime.cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
             assert runtime.log_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
             assert runtime.audit_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
-            with mock.patch.object(runtime.subscription.business_code_svc, "recover_rollback_failures") as recover:
+            with mock.patch.object(
+                runtime.subscription.business_code_svc, "recover_rollback_failures"
+            ) as recover:
                 with mock.patch.object(runtime.bandwidth_watcher, "start") as watcher_start:
                     assert runtime.admin_bot is not None
                     assert runtime.public_bot is not None

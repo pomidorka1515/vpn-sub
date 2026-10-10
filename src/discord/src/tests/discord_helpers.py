@@ -40,6 +40,7 @@ type Handler = Callable[
     FakeResponse,
 ]
 
+
 class FakeHeaders(dict[str, str]):
     def getall(self, key: str, default: list[str] | None = None) -> list[str]:
         if key in self:
@@ -85,10 +86,7 @@ class FakeResponse:
 class FakeSession:
     closed = False
 
-    def __init__(
-        self,
-        handler: Handler
-    ) -> None:
+    def __init__(self, handler: Handler) -> None:
         self.handler = handler
         self.calls: list[dict[str, object]] = []
 
@@ -199,11 +197,7 @@ def modal_data(custom_id: str, fields: Mapping[str, str]) -> dict[str, object]:
     return {
         "custom_id": custom_id,
         "components": [
-            {
-                "components": [
-                    {"custom_id": key, "value": value} for key, value in fields.items()
-                ]
-            }
+            {"components": [{"custom_id": key, "value": value} for key, value in fields.items()]}
         ],
     }
 
@@ -242,7 +236,12 @@ def make_public_bot(
     session = FakeSession(handler)
     host = SharedDiscordClient(intents=discord.Intents.none())
     bot = PublicBot(
-        config_mock({"public": {"token": "discord-token"}, "private": {"whitelist": [7], "api_token": "api-token"}}),
+        config_mock(
+            {
+                "public": {"token": "discord-token"},
+                "private": {"whitelist": [7], "api_token": "api-token"},
+            }
+        ),
         LANG,
         WebApiClient("http://127.0.0.1:5550", "sub", session=session),  # type: ignore[arg-type]
         store,

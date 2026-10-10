@@ -99,11 +99,17 @@ def _info(**overrides: Unpack[UserInfoOverrides]) -> UserInfo:
     }
     payload.update(overrides)
     return UserInfo(
-        _=payload["_"], token=payload["token"], link=payload["link"],
-        displayname=payload["displayname"], uuid=payload["uuid"],
-        fingerprint=payload["fingerprint"], enabled=payload["enabled"],
-        wl_enabled=payload["wl_enabled"], time=payload["time"],
-        online=payload["online"], bandwidth=payload["bandwidth"],
+        _=payload["_"],
+        token=payload["token"],
+        link=payload["link"],
+        displayname=payload["displayname"],
+        uuid=payload["uuid"],
+        fingerprint=payload["fingerprint"],
+        enabled=payload["enabled"],
+        wl_enabled=payload["wl_enabled"],
+        time=payload["time"],
+        online=payload["online"],
+        bandwidth=payload["bandwidth"],
     )
 
 

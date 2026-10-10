@@ -40,8 +40,7 @@ def test_reconcile_attaches_new_inbound_to_existing_client(database: Database) -
     watch.reconcile_inbounds()
 
     attach_bodies = [
-        post["json"] for url, post in panel.posts
-        if url == "panel/api/clients/alice/attach"
+        post["json"] for url, post in panel.posts if url == "panel/api/clients/alice/attach"
     ]
     assert attach_bodies == [{"inboundIds": [2]}]
     # no create, no delete: the client already exists with the right uuid
@@ -87,8 +86,11 @@ def test_reconcile_continues_after_user_failure_and_alerts(
     subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
     create_alice(database)
     database.create_user(
-        username="bob", uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        token="b" * 40, fingerprint="chrome", displayname="Bob",
+        username="bob",
+        uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
     )
     admin_bot = _RecordingAdminBot()
     watch = make_watch(database, subscription, admin_bot=admin_bot)

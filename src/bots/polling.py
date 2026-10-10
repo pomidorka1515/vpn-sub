@@ -12,7 +12,7 @@ from telebot import apihelper
 if TYPE_CHECKING:
     from loggers import Logger
 
-__all__ = ['TelegramPollingMixin', 'configure_telegram_api']
+__all__ = ["TelegramPollingMixin", "configure_telegram_api"]
 
 
 _POLLING_CONNECT_TIMEOUT = 20
@@ -66,7 +66,7 @@ class TelegramPollingMixin:
         self.polling_thread = threading.Thread(
             target=self._poll_forever,
             daemon=True,
-            name=f"{type(self).__name__}" # 15-char comm limit
+            name=f"{type(self).__name__}",  # 15-char comm limit
         )
         self.polling_thread.start()
 
@@ -110,9 +110,7 @@ class TelegramPollingMixin:
 
         self.polling_thread = None
         if thread.is_alive():
-            self.log.error(
-                f"polling thread did not stop within {_POLLING_STOP_TIMEOUT} seconds"
-            )
+            self.log.error(f"polling thread did not stop within {_POLLING_STOP_TIMEOUT} seconds")
 
 
 def _is_transient_polling_error(error: BaseException) -> bool:

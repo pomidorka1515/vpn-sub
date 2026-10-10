@@ -171,13 +171,17 @@ def test_reconcile_surfaces_panel_rejection(database: Database) -> None:
 def _write_config(tmp_path: Path) -> Path:
     config_path = tmp_path / "config.json"
     config_path.write_text(
-        json.dumps({"3xui": {"p1": {"name": "panel"}}}), encoding="utf-8",
+        json.dumps({"3xui": {"p1": {"name": "panel"}}}),
+        encoding="utf-8",
     )
     return config_path
 
 
 def test_main_is_dry_run_by_default(
-    tmp_path: Path, database: Database, db_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    database: Database,
+    db_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     panel = _legacy_panel()
 
@@ -187,25 +191,38 @@ def test_main_is_dry_run_by_default(
     monkeypatch.setattr(rc, "_build_panel", fake_build_panel)
     create_alice(database)
 
-    code = rc.main([
-        "--config", str(_write_config(tmp_path)),
-        "--database", str(db_path),
-        "--panel", "p1",
-    ])
+    code = rc.main(
+        [
+            "--config",
+            str(_write_config(tmp_path)),
+            "--database",
+            str(db_path),
+            "--panel",
+            "p1",
+        ]
+    )
 
     assert code == 0
     assert panel.posts == []
 
 
 def test_main_rejects_unknown_panel_key(
-    tmp_path: Path, database: Database, db_path: Path, monkeypatch: object,
+    tmp_path: Path,
+    database: Database,
+    db_path: Path,
+    monkeypatch: object,
 ) -> None:
     create_alice(database)
-    code = rc.main([
-        "--config", str(_write_config(tmp_path)),
-        "--database", str(db_path),
-        "--panel", "nope",
-    ])
+    code = rc.main(
+        [
+            "--config",
+            str(_write_config(tmp_path)),
+            "--database",
+            str(db_path),
+            "--panel",
+            "nope",
+        ]
+    )
     assert code == 2
 
 
@@ -252,7 +269,10 @@ def test_rerun_after_failed_delete_folds_only_new_traffic(database: Database) ->
     ledger.set("panel", "alice", 101, 202)  # first run's fold
 
     report = rc.reconcile_panel(
-        cast(XUiSession, panel), {USER_UUID: "alice"}, apply=True, ledger=ledger,
+        cast(XUiSession, panel),
+        {USER_UUID: "alice"},
+        apply=True,
+        ledger=ledger,
     )
 
     seed_urls = [u for u, _ in panel.posts if "updateTraffic/alice" in u]
@@ -278,7 +298,10 @@ def test_ledger_cleared_when_no_legacy_rows_remain(database: Database) -> None:
     ledger.set("panel", "alice", 101, 202)
 
     report = rc.reconcile_panel(
-        cast(XUiSession, panel), {USER_UUID: "alice"}, apply=True, ledger=ledger,
+        cast(XUiSession, panel),
+        {USER_UUID: "alice"},
+        apply=True,
+        ledger=ledger,
     )
 
     assert ("panel", "alice") in ledger.cleared

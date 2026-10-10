@@ -1,4 +1,5 @@
 """Administrator traffic chart workflows."""
+
 from __future__ import annotations
 
 import threading
@@ -21,13 +22,16 @@ class AdminTrafficMixin(AdminFeatureMixin):
 
     def _step_chart_username(self, message: types.Message) -> None:
         text = cast(str, message.text)
-        if text.startswith('/'): return
+        if text.startswith("/"):
+            return
         username = text.strip()
 
         try:
             self.sub.user_svc.get_user_state(username)
         except AppError as error:
-            self.bot.send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            self.bot.send_message(
+                message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
             return
 
         msg = self.bot.send_message(message.chat.id, "Введите количество дней (1-90):")
@@ -35,14 +39,17 @@ class AdminTrafficMixin(AdminFeatureMixin):
 
     def _step_chart_days(self, message: types.Message, username: str) -> None:
         text = cast(str, message.text)
-        if text.startswith('/'): return
+        if text.startswith("/"):
+            return
 
         try:
             days = int(text.strip())
             if not 1 <= days <= 90:
                 raise ValueError
         except ValueError:
-            self.bot.send_message(message.chat.id, "❌ Введите число от 1 до 90.", reply_markup=self.get_main_menu())
+            self.bot.send_message(
+                message.chat.id, "❌ Введите число от 1 до 90.", reply_markup=self.get_main_menu()
+            )
             return
 
         self.bot.send_message(message.chat.id, "⏳ Генерация графика...")
@@ -51,7 +58,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
             target=self._render_chart,
             kwargs={"username": username, "days": days, "chat_id": message.chat.id},
             daemon=True,
-            name=f"admin-chart-{username}"
+            name=f"admin-chart-{username}",
         )
         thread.start()
 
@@ -93,18 +100,26 @@ class AdminTrafficMixin(AdminFeatureMixin):
 ├ Использовано: {wl_used_str} / {wl_limit_str}
 └ Процент: {wl_percent_str}"""
 
-
             text = truncate_utf8(text, 1024)
             language = self.lang_cfg.view()
             chart_img = bandwidth_chart(
-                snapshots,
-                label=info.displayname,
-                lang=language['chart']['ru']
+                snapshots, label=info.displayname, lang=language["chart"]["ru"]
             )
             if chart_img is not None:
-                self.bot.send_photo(chat_id, chart_img, caption=text, parse_mode="HTML", reply_markup=self.get_main_menu())
+                self.bot.send_photo(
+                    chat_id,
+                    chart_img,
+                    caption=text,
+                    parse_mode="HTML",
+                    reply_markup=self.get_main_menu(),
+                )
             else:
-                self.bot.send_message(chat_id, text + "\n\n❌ Нет данных для графика", parse_mode="HTML", reply_markup=self.get_main_menu())
+                self.bot.send_message(
+                    chat_id,
+                    text + "\n\n❌ Нет данных для графика",
+                    parse_mode="HTML",
+                    reply_markup=self.get_main_menu(),
+                )
         except AppError as error:
             self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
         except Exception:

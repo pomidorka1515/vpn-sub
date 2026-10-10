@@ -106,30 +106,33 @@ class ProfileConfig(TypedDict):
     shortProfileDescription: list[str]
 
 
-AppConfig = TypedDict("AppConfig", {
-    "uri": str,
-    "api_token": str,
-    "provider_id": str,
-    "salt": str,
-    "domain": str,
-    "ping_check_url": str,
-    "sub_name": str,
-    "api_admin_ui_auth": list[str],
-    "fingerprints": list[str],
-    "bypass_packages": list[str],
-    "panel_alert_cooldown": int,
-    "nodes": dict[str, str],
-    "json_template": ProfileTemplate,
-    "3xui": dict[str, PanelConfig],
-    "profiles": dict[str, ProfileConfig],
-    "redis": RedisConfig,
-    "bot": NotRequired[BotConfig],
-    "publicbot": NotRequired[PublicBotConfig],
-    "api_uri": NotRequired[str],
-    "fallback_domain": NotRequired[str],
-    "$schema": NotRequired[str],
-    "funny_strings": NotRequired[list[str]],
-})
+AppConfig = TypedDict(
+    "AppConfig",
+    {
+        "uri": str,
+        "api_token": str,
+        "provider_id": str,
+        "salt": str,
+        "domain": str,
+        "ping_check_url": str,
+        "sub_name": str,
+        "api_admin_ui_auth": list[str],
+        "fingerprints": list[str],
+        "bypass_packages": list[str],
+        "panel_alert_cooldown": int,
+        "nodes": dict[str, str],
+        "json_template": ProfileTemplate,
+        "3xui": dict[str, PanelConfig],
+        "profiles": dict[str, ProfileConfig],
+        "redis": RedisConfig,
+        "bot": NotRequired[BotConfig],
+        "publicbot": NotRequired[PublicBotConfig],
+        "api_uri": NotRequired[str],
+        "fallback_domain": NotRequired[str],
+        "$schema": NotRequired[str],
+        "funny_strings": NotRequired[list[str]],
+    },
+)
 
 
 class DiscordBotConfig(TypedDict):
@@ -141,11 +144,14 @@ class DiscordPrivateConfig(TypedDict):
     api_token: str
 
 
-DiscordConfig = TypedDict("DiscordConfig", {
-    "public": DiscordBotConfig,
-    "private": DiscordPrivateConfig,
-    "$schema": NotRequired[str],
-})
+DiscordConfig = TypedDict(
+    "DiscordConfig",
+    {
+        "public": DiscordBotConfig,
+        "private": DiscordPrivateConfig,
+        "$schema": NotRequired[str],
+    },
+)
 
 
 class LangConfig(TypedDict):

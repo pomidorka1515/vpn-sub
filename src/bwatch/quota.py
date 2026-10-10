@@ -19,8 +19,12 @@ class QuotaMixin(BWatchHost):
     """Quota polling and expiry / near-limit notifications."""
 
     def _update_user(
-        self, *, username: str, enable: bool | None = None,
-        wl_enable: bool | None = None, timee: bool | None = None,
+        self,
+        *,
+        username: str,
+        enable: bool | None = None,
+        wl_enable: bool | None = None,
+        timee: bool | None = None,
     ) -> bool:
         """Run a background user update. Returns False when it failed.
 
@@ -29,7 +33,10 @@ class QuotaMixin(BWatchHost):
         """
         try:
             self.sub.business_svc.update_user(
-                username=username, enable=enable, wl_enable=wl_enable, timee=timee,
+                username=username,
+                enable=enable,
+                wl_enable=wl_enable,
+                timee=timee,
             )
             return True
         except AppError:
@@ -40,8 +47,10 @@ class QuotaMixin(BWatchHost):
         bot = self.bot
         if bot is None:
             return None
+
         def send(tgid: int, text: str) -> None:
             bot.bot.send_message(tgid, text, parse_mode="HTML")
+
         return Notifier(
             texts=bot.TEXTS,
             send=send,
@@ -115,18 +124,26 @@ class QuotaMixin(BWatchHost):
             reenabled_time = False
             reenabled_main = False
             reenabled_wl = False
-            expires_at = int(state['expires_at'])
+            expires_at = int(state["expires_at"])
             time_ok = expires_at == 0 or (expires_at - int(time.time())) >= 0
-            if time_ok and not bool(state['enabled_time']):
+            if time_ok and not bool(state["enabled_time"]):
                 reenabled_time = self._update_user(username=i, enable=True, timee=True)
                 state = self.sub.user_svc.get_user_state(i)  # re-read after the mutation
                 states[i] = state
 
-            main_required = int(state['bw_limit_gb']) != 0
-            wl_required = int(state['wl_limit_gb']) != 0
-            if main_required and int(state['bw_used']) < int(int(state['bw_limit_gb']) * 10**9) and not bool(state['enabled']):
+            main_required = int(state["bw_limit_gb"]) != 0
+            wl_required = int(state["wl_limit_gb"]) != 0
+            if (
+                main_required
+                and int(state["bw_used"]) < int(int(state["bw_limit_gb"]) * 10**9)
+                and not bool(state["enabled"])
+            ):
                 reenabled_main = self._update_user(username=i, enable=True)
-            if wl_required and int(state['wl_used']) < int(int(state['wl_limit_gb']) * 10**9) and not bool(state['enabled_wl']):
+            if (
+                wl_required
+                and int(state["wl_used"]) < int(int(state["wl_limit_gb"]) * 10**9)
+                and not bool(state["enabled_wl"])
+            ):
                 reenabled_wl = self._update_user(username=i, wl_enable=True)
             if reenabled_time or reenabled_main or reenabled_wl:
                 recoveries[i] = restored(
@@ -141,15 +158,16 @@ class QuotaMixin(BWatchHost):
         return states
 
     def _read_traffic(
-        self, states: dict[str, UserRecord],
+        self,
+        states: dict[str, UserRecord],
     ) -> tuple[dict[str, BandwidthInfo], dict[str, BandwidthInfo]] | None:
         """Read one map per required side.
 
         None means a required read failed. Both maps are read before either
         is committed, so a partial delta is never recorded.
         """
-        need_main = any(int(state['bw_limit_gb']) != 0 for state in states.values())
-        need_wl = any(int(state['wl_limit_gb']) != 0 for state in states.values())
+        need_main = any(int(state["bw_limit_gb"]) != 0 for state in states.values())
+        need_wl = any(int(state["wl_limit_gb"]) != 0 for state in states.values())
         main_map: dict[str, BandwidthInfo] = {}
         wl_map: dict[str, BandwidthInfo] = {}
         try:
@@ -174,8 +192,8 @@ class QuotaMixin(BWatchHost):
         wl_updates: dict[str, BandwidthUpdate] = {}
         with self._mem_lock:
             for i, state in states.items():
-                main_required = int(state['bw_limit_gb']) != 0
-                wl_required = int(state['wl_limit_gb']) != 0
+                main_required = int(state["bw_limit_gb"]) != 0
+                wl_required = int(state["wl_limit_gb"]) != 0
                 if main_required:
                     current_bws = main_map.get(i, BandwidthInfo(0, 0, 0))
                     if i not in self.mem:

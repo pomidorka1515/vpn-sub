@@ -67,7 +67,9 @@ def _plain(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "__main__", ModuleType("__main__"))
 
 
-def _release(tag: str = "v9.0.0", assets: tuple[str, ...] = ("vpn-sub", "vpn-sub-discord")) -> ReleasePayload:
+def _release(
+    tag: str = "v9.0.0", assets: tuple[str, ...] = ("vpn-sub", "vpn-sub-discord")
+) -> ReleasePayload:
     return {
         "tag_name": tag,
         "draft": False,
@@ -125,7 +127,6 @@ def _empty_stub() -> Callable[[object, object], list[object]]:
         return []
 
     return _empty
-
 
 
 def _units_stub() -> Callable[[object], list[tuple[str, int, str]]]:
@@ -303,7 +304,9 @@ def test_running_lists_unit_and_stray_pid(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 def test_asset_requires_sha256() -> None:
     with pytest.raises(ValueError, match="has no sha256 digest"):
-        updater._asset({"name": "vpn-sub", "browser_download_url": "https://x", "size": 1, "digest": "md5:abc"})
+        updater._asset(
+            {"name": "vpn-sub", "browser_download_url": "https://x", "size": 1, "digest": "md5:abc"}
+        )
 
 
 def test_parse_strips_release_suffix() -> None:
@@ -347,5 +350,8 @@ def test_alive_pid_blocks_replace(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     log = _Log()
     assert update(log) == 1
     assert binary.read_bytes() == b"old\n"
-    assert any("make sure both services are stopped before continuing" in message for _level, message in log.records)
+    assert any(
+        "make sure both services are stopped before continuing" in message
+        for _level, message in log.records
+    )
     assert any("still running" in message for _level, message in log.records)

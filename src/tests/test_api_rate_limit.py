@@ -49,9 +49,7 @@ class _SharedRedis:
             now, window, member, limit, _ttl = args
             bucket = self.sets.get(key, {})
             cutoff = now - window
-            bucket = {
-                item: score for item, score in bucket.items() if score > cutoff
-            }
+            bucket = {item: score for item, score in bucket.items() if score > cutoff}
             if len(bucket) < limit:
                 bucket[member] = now
                 self.sets[key] = bucket
@@ -197,6 +195,7 @@ def test_redis_failure_fails_closed(flask_app: Flask) -> None:
     client = _SharedRedis(fail=True)
     _replace_client(client)
     try:
+
         class Handler(BaseApi):
             ROUTES = ()
 

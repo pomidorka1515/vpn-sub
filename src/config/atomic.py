@@ -15,19 +15,21 @@ if TYPE_CHECKING:
 
 class FileSignature(NamedTuple):
     """Unique file identifier after atomic write."""
+
     mtime_ns: int
     size: int
     inode: int
     device: int
+
 
 class CompactReturn(NamedTuple):
     kept: int
     removed: int
 
 
-
 def ensure_parent_dir(path: str) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
+
 
 def resolve_lockfile_path(data_path: str, lockfile_path: str | None = None) -> str:
     """Resolve an inter-process lock path.
@@ -45,6 +47,7 @@ def resolve_lockfile_path(data_path: str, lockfile_path: str | None = None) -> s
         name = f"{Path(data_path).name}.{digest}.lock"
         return str(Path(lockfile_path) / name)
     return lockfile_path
+
 
 @contextmanager
 def locked_file(
@@ -64,6 +67,7 @@ def locked_file(
         finally:
             fcntl.flock(lock_fp, fcntl.LOCK_UN)
 
+
 def stat_signature(path: str) -> FileSignature | None:
     try:
         stat_result = Path(path).stat()
@@ -76,6 +80,7 @@ def stat_signature(path: str) -> FileSignature | None:
         device=stat_result.st_dev,
     )
 
+
 def file_signature(path: str) -> FileSignature | None:
     return stat_signature(path)
 
@@ -87,7 +92,6 @@ def fsync_parent_dir(path: str) -> None:
         os.fsync(dir_fd)
     finally:
         os.close(dir_fd)
-
 
 
 def atomic_write_json(
@@ -114,7 +118,7 @@ def atomic_write_json(
 
         with Path(temp_path).open("w", encoding="utf-8") as handle:
             if minify:
-                json.dump(data, handle, indent=None, separators=(',', ':'), ensure_ascii=False)
+                json.dump(data, handle, indent=None, separators=(",", ":"), ensure_ascii=False)
             else:
                 json.dump(data, handle, indent=indent, ensure_ascii=False)
             handle.write("\n")

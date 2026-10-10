@@ -83,7 +83,9 @@ _client: _RateLimitClient | None = None
 _client_lock = threading.Lock()
 
 
-def configure_rate_limit(url: str, socket_timeout: float = _REDIS_SOCKET_TIMEOUT) -> _RateLimitClient:
+def configure_rate_limit(
+    url: str, socket_timeout: float = _REDIS_SOCKET_TIMEOUT
+) -> _RateLimitClient:
     """Open the process-wide client. Every worker must point at the same Redis."""
     from redis import Redis
 
@@ -91,12 +93,15 @@ def configure_rate_limit(url: str, socket_timeout: float = _REDIS_SOCKET_TIMEOUT
         raise ValueError("redis url must not be empty")
     if socket_timeout <= 0:
         raise ValueError(f"socket_timeout must be positive, got {socket_timeout}")
-    client = cast(_RateLimitClient, Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
-        url,
-        socket_connect_timeout=socket_timeout,
-        socket_timeout=socket_timeout,
-        decode_responses=True,
-    ))
+    client = cast(
+        _RateLimitClient,
+        Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
+            url,
+            socket_connect_timeout=socket_timeout,
+            socket_timeout=socket_timeout,
+            decode_responses=True,
+        ),
+    )
     client.ping()
     _replace_client(client)
     return client
@@ -113,7 +118,7 @@ def close_rate_limit() -> None:
 
 
 def _replace_client(client: _RateLimitClient | None) -> _RateLimitClient | None:
-    global _client # noqa: PLW0603
+    global _client  # noqa: PLW0603
     with _client_lock:
         previous = _client
         _client = client
@@ -150,7 +155,9 @@ def configure_rate_limit_from_config(cfg: _RateLimitConfig) -> _RateLimitClient:
     return configure_rate_limit(*_redis_config(cfg))
 
 
-def rate_limit[**P, R](max_requests: int) -> Callable[
+def rate_limit[**P, R](
+    max_requests: int,
+) -> Callable[
     [Decorated[BaseApi, P, R]],
     DecoratedReturn[BaseApi, P, R],
 ]:
@@ -158,9 +165,7 @@ def rate_limit[**P, R](max_requests: int) -> Callable[
     if max_requests <= 0:
         raise ValueError(f"max_requests must be positive, got {max_requests}")
 
-    def decorator(
-        f: Decorated[BaseApi, P, R]
-    ) -> DecoratedReturn[BaseApi, P, R]:
+    def decorator(f: Decorated[BaseApi, P, R]) -> DecoratedReturn[BaseApi, P, R]:
         scope = f"{f.__module__}.{f.__qualname__}:{max_requests}"
         shared: _RedisRateLimiter | None = None
         seen: _RateLimitClient | None = None
@@ -181,5 +186,7 @@ def rate_limit[**P, R](max_requests: int) -> Callable[
             if not allowed:
                 return err(msg="Too many requests.", code=429)
             return f(self, *args, **kwargs)
+
         return cast(DecoratedReturn[BaseApi, P, R], wrapper)
+
     return decorator

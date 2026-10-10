@@ -28,7 +28,7 @@ class PanelsMixin(BWatchHost):
                 obj.format()
 
                 xray = obj.xray
-                if xray.state != 'running':
+                if xray.state != "running":
                     problems.append(f"Xray: {xray.state} - {xray.errorMsg}")
 
                 cpu = obj.cpu
@@ -57,7 +57,9 @@ class PanelsMixin(BWatchHost):
                 else:
                     self._panel_alerts.pop(key, None)
             except Exception:
-                self.log.exception("health check failed for panel %s (%s)", panel.name, panel.address)
+                self.log.exception(
+                    "health check failed for panel %s (%s)", panel.name, panel.address
+                )
 
     def reconcile_inbounds(self) -> None:
         """Re-sync every user to every panel (idempotent).
@@ -77,13 +79,13 @@ class PanelsMixin(BWatchHost):
         for username in self.sub.user_svc.list_users():
             try:
                 self.sub.business_svc.add_users(
-                    username, _called_internally=True, known_clients=known,
+                    username,
+                    _called_internally=True,
+                    known_clients=known,
                 )
             except AppError:
                 self.log.exception("inbound reconcile failed for %s", username)
                 failures.append(username)
         if failures:
             shown = ", ".join(failures[:10])
-            self._alert_admin(
-                f"⚠️ Inbound reconcile failed for {len(failures)} user(s): {shown}"
-            )
+            self._alert_admin(f"⚠️ Inbound reconcile failed for {len(failures)} user(s): {shown}")

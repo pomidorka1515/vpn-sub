@@ -102,12 +102,18 @@ class _Audit:
 def test_user_refresh_aborts_on_non_panel_error(database: Database, flask_app: Flask) -> None:
     subscription = make_subscription(database, app=flask_app)
     database.create_user(
-        username="alice", uuid="01234567-89ab-cdef-0123-456789abcdef", token="a" * 40,
-        fingerprint="chrome", displayname="Alice",
+        username="alice",
+        uuid="01234567-89ab-cdef-0123-456789abcdef",
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
     )
     database.create_user(
-        username="bob", uuid="11234567-89ab-cdef-0123-456789abcdef", token="b" * 40,
-        fingerprint="chrome", displayname="Bob",
+        username="bob",
+        uuid="11234567-89ab-cdef-0123-456789abcdef",
+        token="b" * 40,
+        fingerprint="chrome",
+        displayname="Bob",
     )
 
     def add_users(
@@ -151,11 +157,13 @@ def _admin_api(
     subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
     Api(
         app=flask_app,
-        cfg=config_mock(subscription_config(
-            api_uri=api_uri,
-            api_token="secret",
-            api_admin_ui_auth=list(api_admin_ui_auth),
-        )),
+        cfg=config_mock(
+            subscription_config(
+                api_uri=api_uri,
+                api_token="secret",
+                api_admin_ui_auth=list(api_admin_ui_auth),
+            )
+        ),
         audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
@@ -163,7 +171,8 @@ def _admin_api(
 
 
 def test_admin_ui_requires_session(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     denied = flask_app.test_client().get("/sub/admin")
@@ -172,7 +181,8 @@ def test_admin_ui_requires_session(
 
 
 def test_admin_login_page_omits_register_and_api(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     login_page = flask_app.test_client().get("/sub/admin/login")
@@ -188,7 +198,8 @@ def test_admin_login_page_omits_register_and_api(
 
 
 def test_admin_session_rejects_invalid_login(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     client = flask_app.test_client()
@@ -205,11 +216,13 @@ def test_admin_session_rejects_invalid_login(
 
 
 def test_admin_session_sets_httponly_cookie(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     signed_in = flask_app.test_client().post(
-        "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
+        "/sub/admin/session",
+        json={"username": "admin", "password": "panel-secret"},
     )
     assert signed_in.status_code == 200
     assert "admin_ui=" in signed_in.headers["Set-Cookie"]
@@ -221,7 +234,8 @@ def test_admin_session_sets_httponly_cookie(
 
 
 def test_admin_page_uses_local_assets(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     client = flask_app.test_client()
@@ -242,14 +256,16 @@ def test_admin_page_uses_local_assets(
 
 
 def test_admin_relogin_invalidates_previous_cookie(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     client = flask_app.test_client()
     client.post("/sub/admin/session", json={"username": "admin", "password": "panel-secret"})
     first = database.admin_ui_session()
     again = client.post(
-        "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
+        "/sub/admin/session",
+        json={"username": "admin", "password": "panel-secret"},
     )
     assert again.status_code == 200
     second = database.admin_ui_session()
@@ -262,7 +278,8 @@ def test_admin_relogin_invalidates_previous_cookie(
 
 
 def test_admin_logout_clears_session(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     client = flask_app.test_client()
@@ -277,23 +294,28 @@ def test_admin_logout_clears_session(
 
 
 def test_admin_logout_cookie_path_matches_login_when_uri_empty(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     subscription = make_subscription(database, app=flask_app, lang_cfg=_web_lang_cfg())
     Api(
         app=flask_app,
-        cfg=config_mock(subscription_config(
-            uri="",
-            api_uri="api",
-            api_token="secret",
-            api_admin_ui_auth=["admin", "panel-secret"],
-        )),
+        cfg=config_mock(
+            subscription_config(
+                uri="",
+                api_uri="api",
+                api_token="secret",
+                api_admin_ui_auth=["admin", "panel-secret"],
+            )
+        ),
         audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
     )
     client = flask_app.test_client()
-    signed_in = client.post("/admin/session", json={"username": "admin", "password": "panel-secret"})
+    signed_in = client.post(
+        "/admin/session", json={"username": "admin", "password": "panel-secret"}
+    )
     assert signed_in.status_code == 200
     assert "Path=/admin" in signed_in.headers["Set-Cookie"]
     logged_out = client.post("/admin/logout")
@@ -303,7 +325,8 @@ def test_admin_logout_cookie_path_matches_login_when_uri_empty(
 
 
 def test_admin_token_returns_secret_and_api_root(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app)
     client = flask_app.test_client()
@@ -319,7 +342,8 @@ def test_admin_token_returns_secret_and_api_root(
 
 
 def test_admin_token_api_root_omits_empty_api_uri(
-    database: Database, flask_app: Flask,
+    database: Database,
+    flask_app: Flask,
 ) -> None:
     _admin_api(database, flask_app, api_uri="")
     client = flask_app.test_client()
@@ -330,7 +354,9 @@ def test_admin_token_api_root_omits_empty_api_uri(
 
 
 def _polling_api(
-    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    flask_app: Flask,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> FlaskClient:
     from helpers import FakePanel
 
@@ -390,7 +416,10 @@ def _polling_api(
     )
     down = FakePanel(name="down", status_error=RuntimeError("down"))
     subscription = make_subscription(
-        database, app=flask_app, lang_cfg=_web_lang_cfg(), panels=[panel, down],
+        database,
+        app=flask_app,
+        lang_cfg=_web_lang_cfg(),
+        panels=[panel, down],
     )
     Api(
         app=flask_app,
@@ -403,7 +432,9 @@ def _polling_api(
 
 
 def test_polling_status_requires_admin_auth(
-    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    flask_app: Flask,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _polling_api(database, flask_app, monkeypatch)
     denied = client.get("/sub/api/api/state/polling")
@@ -411,7 +442,9 @@ def test_polling_status_requires_admin_auth(
 
 
 def test_polling_status_returns_limited_host_state(
-    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    flask_app: Flask,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _polling_api(database, flask_app, monkeypatch)
     response = client.get("/sub/api/api/state/polling", headers={"Authorization": "secret"})
@@ -421,9 +454,17 @@ def test_polling_status_returns_limited_host_state(
     obj = payload["obj"]
     assert set(obj) == {"host", "panels"}
     assert set(obj["host"]) == {
-        "cpu", "connections", "network", "memory", "loadavg",
-        "app_memory", "app_threads", "app_thread_amount", "process_count",
-        "uptime", "app_uptime",
+        "cpu",
+        "connections",
+        "network",
+        "memory",
+        "loadavg",
+        "app_memory",
+        "app_threads",
+        "app_thread_amount",
+        "process_count",
+        "uptime",
+        "app_uptime",
     }
     assert obj["host"]["cpu"] == 1.5
     assert obj["host"]["network"] == {"sent": 1, "recv": 2}
@@ -435,14 +476,25 @@ def test_polling_status_returns_limited_host_state(
 
 
 def test_polling_status_returns_limited_panel_state(
-    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    flask_app: Flask,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _polling_api(database, flask_app, monkeypatch)
     response = client.get("/sub/api/api/state/polling", headers={"Authorization": "secret"})
     edge = response.get_json()["obj"]["panels"]["edge"]
     assert set(edge) == {
-        "app_stats", "cpu", "disk", "loads", "mem",
-        "netIO", "netTraffic", "swap", "tcpCount", "udpCount", "uptime",
+        "app_stats",
+        "cpu",
+        "disk",
+        "loads",
+        "mem",
+        "netIO",
+        "netTraffic",
+        "swap",
+        "tcpCount",
+        "udpCount",
+        "uptime",
     }
     assert edge["cpu"] == 12.5
     assert edge["netIO"] == {"up": 1, "down": 2}
@@ -456,12 +508,15 @@ def test_polling_status_returns_limited_panel_state(
 
 
 def test_polling_status_nulls_unknown_panel(
-    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    flask_app: Flask,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _polling_api(database, flask_app, monkeypatch)
 
     panels = client.get(
-        "/sub/api/api/state/polling", headers={"Authorization": "secret"},
+        "/sub/api/api/state/polling",
+        headers={"Authorization": "secret"},
     ).get_json()["obj"]["panels"]
     assert set(panels) == {"edge", "down"}
     assert panels["down"] is None
@@ -487,7 +542,9 @@ def test_health_reports_db_and_process_status(database: Database, flask_app: Fla
 
 
 def test_health_returns_503_when_database_ping_fails(
-    database: Database, flask_app: Flask, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    flask_app: Flask,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail() -> object:
         raise DatabaseError("down")
@@ -495,7 +552,8 @@ def test_health_returns_503_when_database_ping_fails(
     _admin_api(database, flask_app)
     monkeypatch.setattr(database, "connection", fail)
     response = flask_app.test_client().get(
-        "/sub/api/api/health", headers={"Authorization": "secret"},
+        "/sub/api/api/health",
+        headers={"Authorization": "secret"},
     )
     assert response.status_code == 503
     payload = response.get_json()

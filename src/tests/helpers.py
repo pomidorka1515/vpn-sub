@@ -66,8 +66,14 @@ def language_config() -> LangConfig:
 
 def profile_config(**overrides: Unpack[ProfileOverrides]) -> ProfileConfig:
     document: ProfileConfig = {
-        "flag": "", "name": ["", ""], "json": {"settings": {"vnext": []}, "streamSettings": {}}, "description": ["", ""],
-        "whitelist": False, "xhttpExtra": {}, "masterLink": "", "node": "edge",
+        "flag": "",
+        "name": ["", ""],
+        "json": {"settings": {"vnext": []}, "streamSettings": {}},
+        "description": ["", ""],
+        "whitelist": False,
+        "xhttpExtra": {},
+        "masterLink": "",
+        "node": "edge",
         "shortProfileDescription": ["", ""],
     }
     document.update(overrides)
@@ -105,12 +111,19 @@ def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]) -> N
     }
     payload.update(kwargs)
     database.create_user(
-        username=payload["username"], uuid=payload["uuid"], token=payload["token"],
-        fingerprint=payload["fingerprint"], displayname=payload["displayname"],
-        expires_at=payload.get("expires_at", 0), bw_limit_gb=payload.get("bw_limit_gb", 0),
-        wl_limit_gb=payload.get("wl_limit_gb", 0), ext_username=payload.get("ext_username"),
-        ext_password_hash=payload.get("ext_password_hash"), enabled=payload.get("enabled", True),
-        enabled_time=payload.get("enabled_time", True), enabled_wl=payload.get("enabled_wl", True),
+        username=payload["username"],
+        uuid=payload["uuid"],
+        token=payload["token"],
+        fingerprint=payload["fingerprint"],
+        displayname=payload["displayname"],
+        expires_at=payload.get("expires_at", 0),
+        bw_limit_gb=payload.get("bw_limit_gb", 0),
+        wl_limit_gb=payload.get("wl_limit_gb", 0),
+        ext_username=payload.get("ext_username"),
+        ext_password_hash=payload.get("ext_password_hash"),
+        enabled=payload.get("enabled", True),
+        enabled_time=payload.get("enabled_time", True),
+        enabled_wl=payload.get("enabled_wl", True),
     )
 
 
@@ -140,9 +153,18 @@ def json_http(data: JsonValue, status_code: int = 200) -> Response:
 
 def make_client(uuid: str, up: int, down: int, inbound_id: int = 1) -> ClientTraffic:
     return ClientTraffic(
-        id=inbound_id, inboundId=inbound_id, enable=True, email="alice",
-        uuid=uuid, subId="", up=up, down=down,
-        expiryTime=0, total=0, reset=0, lastOnline=0,
+        id=inbound_id,
+        inboundId=inbound_id,
+        enable=True,
+        email="alice",
+        uuid=uuid,
+        subId="",
+        up=up,
+        down=down,
+        expiryTime=0,
+        total=0,
+        reset=0,
+        lastOnline=0,
     )
 
 
@@ -154,12 +176,30 @@ def make_panel_client(
     uuid: str = USER_UUID,
 ) -> PanelClient:
     return PanelClient(
-        email=email, uuid=uuid, subId="", enable=True, flow="",
-        limitIp=0, totalGB=0, expiryTime=0, tgId="", comment="", reset=0,
+        email=email,
+        uuid=uuid,
+        subId="",
+        enable=True,
+        flow="",
+        limitIp=0,
+        totalGB=0,
+        expiryTime=0,
+        tgId="",
+        comment="",
+        reset=0,
         inboundIds=inbound_ids,
         traffic=ClientTraffic(
-            id=0, inboundId=0, enable=True, email=email, uuid=uuid,
-            subId="", up=up, down=down, expiryTime=0, total=0, reset=0,
+            id=0,
+            inboundId=0,
+            enable=True,
+            email=email,
+            uuid=uuid,
+            subId="",
+            up=up,
+            down=down,
+            expiryTime=0,
+            total=0,
+            reset=0,
         ),
     )
 
@@ -170,10 +210,23 @@ def make_inbound(
     protocol: str = "vless",
 ) -> Inbound:
     return Inbound(
-        id=inbound_id, up=0, down=0, total=0, remark="test", enable=True,
-        expiryTime=0, trafficReset="", lastTrafficResetTime=0, clientStats=clients or [],
-        listen="", port=443, protocol=protocol, settings={},
-        streamSettings={"network": "tcp"}, tag="", sniffing={},
+        id=inbound_id,
+        up=0,
+        down=0,
+        total=0,
+        remark="test",
+        enable=True,
+        expiryTime=0,
+        trafficReset="",
+        lastTrafficResetTime=0,
+        clientStats=clients or [],
+        listen="",
+        port=443,
+        protocol=protocol,
+        settings={},
+        streamSettings={"network": "tcp"},
+        tag="",
+        sniffing={},
     )
 
 
@@ -290,7 +343,8 @@ class FakePanel:
             if self._status_error is not None:
                 raise self._status_error
             payload: dict[str, JsonValue] = (
-                self._status_payload if self._status_payload is not None
+                self._status_payload
+                if self._status_payload is not None
                 else {"success": True, "msg": "", "obj": {}}
             )
             return json_http(payload, self._status_status)
@@ -299,11 +353,14 @@ class FakePanel:
         if self._get_payload is not None:
             return json_http(self._get_payload, self._get_status)
         if "clients/list" in url:
-            return json_http({
-                "success": True,
-                "msg": "",
-                "obj": [asdict(client) for client in self.clients],
-            }, self._get_status)
+            return json_http(
+                {
+                    "success": True,
+                    "msg": "",
+                    "obj": [asdict(client) for client in self.clients],
+                },
+                self._get_status,
+            )
         if "clients/get/" in url:
             email = unquote(url.rsplit("/", 1)[-1])
             found = next((c for c in self.clients if c.email == email), None)
@@ -315,7 +372,11 @@ class FakePanel:
             inbound_ids = client_row.pop("inboundIds")
             client_row.pop("traffic", None)
             return json_http(
-                {"success": True, "msg": "", "obj": {"client": client_row, "inboundIds": inbound_ids}},
+                {
+                    "success": True,
+                    "msg": "",
+                    "obj": {"client": client_row, "inboundIds": inbound_ids},
+                },
                 self._get_status,
             )
         if "clients/traffic/" in url:
@@ -327,11 +388,14 @@ class FakePanel:
                 {"success": True, "msg": "", "obj": asdict(found.traffic)},
                 self._get_status,
             )
-        return json_http({
-            "success": True,
-            "msg": "",
-            "obj": [asdict(inbound) for inbound in self._inbounds],
-        }, self._get_status)
+        return json_http(
+            {
+                "success": True,
+                "msg": "",
+                "obj": [asdict(inbound) for inbound in self._inbounds],
+            },
+            self._get_status,
+        )
 
     def post(self, url: str, **kwargs: object) -> Response:
         self.posts.append((url, dict(kwargs)))
@@ -367,22 +431,35 @@ class FakePanel:
         inbound_ids = _integer_list(body.get("inboundIds", []))
         uuid_value = str(client.get("id", ""))
         sub_id = str(client.get("subId", ""))
-        self.clients.append(PanelClient(
-            email=email, uuid=uuid_value, subId=sub_id,
-            enable=bool(client.get("enable", True)),
-            flow=str(client.get("flow", "")),
-            limitIp=_integer(client.get("limitIp", 0)),
-            totalGB=_integer(client.get("totalGB", 0)),
-            expiryTime=_integer(client.get("expiryTime", 0)),
-            tgId=_telegram_id(client.get("tgId", "")),
-            comment=str(client.get("comment", "")),
-            reset=_integer(client.get("reset", 0)),
-            inboundIds=inbound_ids,
-            traffic=ClientTraffic(
-                id=0, inboundId=0, enable=True, email=email, uuid=uuid_value,
-                subId=sub_id, up=0, down=0, expiryTime=0, total=0, reset=0,
-            ),
-        ))
+        self.clients.append(
+            PanelClient(
+                email=email,
+                uuid=uuid_value,
+                subId=sub_id,
+                enable=bool(client.get("enable", True)),
+                flow=str(client.get("flow", "")),
+                limitIp=_integer(client.get("limitIp", 0)),
+                totalGB=_integer(client.get("totalGB", 0)),
+                expiryTime=_integer(client.get("expiryTime", 0)),
+                tgId=_telegram_id(client.get("tgId", "")),
+                comment=str(client.get("comment", "")),
+                reset=_integer(client.get("reset", 0)),
+                inboundIds=inbound_ids,
+                traffic=ClientTraffic(
+                    id=0,
+                    inboundId=0,
+                    enable=True,
+                    email=email,
+                    uuid=uuid_value,
+                    subId=sub_id,
+                    up=0,
+                    down=0,
+                    expiryTime=0,
+                    total=0,
+                    reset=0,
+                ),
+            )
+        )
         return json_http({"success": True, "msg": "", "obj": None}, 200)
 
     def _post_bulk(self, url: str, body: dict[str, object]) -> Response:
@@ -396,10 +473,7 @@ class FakePanel:
                 {"success": False, "msg": f"client not found: {missing[0]}", "obj": None},
                 200,
             )
-        self.clients = [
-            replace(c, enable=enable) if c.email in emails else c
-            for c in self.clients
-        ]
+        self.clients = [replace(c, enable=enable) if c.email in emails else c for c in self.clients]
         return json_http({"success": True, "msg": "", "obj": {"changed": len(emails)}}, 200)
 
     def _post_del(self, url: str, body: dict[str, object]) -> Response:

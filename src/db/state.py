@@ -18,11 +18,14 @@ class StateSnapshot(TypedDict):
     host: JsonDict
     panels: dict[str, JsonDict]
 
+
 class StateMixin(ConnectionMixin):
     def increment_usage(self, username: str, *, regular: int = 0, whitelist: int = 0) -> None:
         with self.transaction(immediate=True) as conn:
-            conn.execute("UPDATE users SET bw_used = bw_used + ?, wl_used = wl_used + ? WHERE username = ?",
-                         (regular, whitelist, username))
+            conn.execute(
+                "UPDATE users SET bw_used = bw_used + ?, wl_used = wl_used + ? WHERE username = ?",
+                (regular, whitelist, username),
+            )
 
     def increment_usages(self, updates: Mapping[str, tuple[int, int]]) -> None:
         """Apply (regular, whitelist) deltas in one transaction.
@@ -44,12 +47,17 @@ class StateMixin(ConnectionMixin):
 
     def reset_monthly(self, month: str, today: str) -> bool:
         with self.transaction(immediate=True) as conn:
-            current = conn.execute("SELECT value FROM app_metadata WHERE key = 'last_reset_month'").fetchone()
+            current = conn.execute(
+                "SELECT value FROM app_metadata WHERE key = 'last_reset_month'"
+            ).fetchone()
             if current is not None and current[0] == month:
                 return False
             conn.execute("UPDATE users SET bw_used = 0, wl_used = 0")
             for key, value in (("last_reset", today), ("last_reset_month", month)):
-                conn.execute("INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+                conn.execute(
+                    "INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (key, value),
+                )
             conn.execute("DELETE FROM notification_state")
             return True
 
@@ -97,11 +105,20 @@ class StateMixin(ConnectionMixin):
 
     def notification_seen(self, kind: str, telegram_id: int | str) -> bool:
         with self.connection() as conn:
-            return conn.execute("SELECT 1 FROM notification_state WHERE kind = ? AND telegram_id = ?", (kind, str(telegram_id))).fetchone() is not None
+            return (
+                conn.execute(
+                    "SELECT 1 FROM notification_state WHERE kind = ? AND telegram_id = ?",
+                    (kind, str(telegram_id)),
+                ).fetchone()
+                is not None
+            )
 
     def mark_notification(self, kind: str, telegram_id: int | str) -> bool:
         with self.transaction(immediate=True) as conn:
-            cur = conn.execute("INSERT OR IGNORE INTO notification_state(kind, telegram_id) VALUES (?, ?)", (kind, str(telegram_id)))
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO notification_state(kind, telegram_id) VALUES (?, ?)",
+                (kind, str(telegram_id)),
+            )
             return cur.rowcount == 1
 
     def get_metadata(self, key: str, default: str | None = None) -> str | None:
@@ -137,13 +154,17 @@ class StateMixin(ConnectionMixin):
     def set_admin_ui_session(self, token: str | None) -> None:
         self.set_metadata("admin_ui_session", token or "")
 
-    def add_bandwidth_snapshot(self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int) -> None:
+    def add_bandwidth_snapshot(
+        self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int
+    ) -> None:
         with self.transaction(immediate=True) as conn:
-            conn.execute("""INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
+            conn.execute(
+                """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
                 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(username, ts) DO UPDATE SET
                 up=up + excluded.up, down=down + excluded.down,
                 wl_up=wl_up + excluded.wl_up, wl_down=wl_down + excluded.wl_down""",
-                         (username, ts, up, down, wl_up, wl_down))
+                (username, ts, up, down, wl_up, wl_down),
+            )
 
     def add_bandwidth_snapshots(
         self,
@@ -167,13 +188,19 @@ class StateMixin(ConnectionMixin):
 
     def get_bandwidth_snapshots(self, username: str, cutoff: int) -> list[BandwidthSnapshotPayload]:
         with self.connection() as conn:
-            return [BandwidthSnapshotPayload(
-                ts=int(row["ts"]), up=int(row["up"]), down=int(row["down"]),
-                wl_up=int(row["wl_up"]), wl_down=int(row["wl_down"]),
-            ) for row in conn.execute(
-                "SELECT ts, up, down, wl_up, wl_down FROM bandwidth_snapshots WHERE username = ? AND ts >= ? ORDER BY ts DESC",
-                (username, cutoff),
-            )]
+            return [
+                BandwidthSnapshotPayload(
+                    ts=int(row["ts"]),
+                    up=int(row["up"]),
+                    down=int(row["down"]),
+                    wl_up=int(row["wl_up"]),
+                    wl_down=int(row["wl_down"]),
+                )
+                for row in conn.execute(
+                    "SELECT ts, up, down, wl_up, wl_down FROM bandwidth_snapshots WHERE username = ? AND ts >= ? ORDER BY ts DESC",
+                    (username, cutoff),
+                )
+            ]
 
     def prune_bandwidth_snapshots(self, cutoff: int) -> int:
         with self.transaction(immediate=True) as conn:
@@ -182,12 +209,16 @@ class StateMixin(ConnectionMixin):
 
     def upsert_state_snapshot(self, ts: int, payload: StateSnapshot) -> None:
         with self.transaction(immediate=True) as conn:
-            conn.execute("INSERT INTO state_snapshots(ts, payload) VALUES (?, ?) ON CONFLICT(ts) DO UPDATE SET payload=excluded.payload",
-                         (ts, json.dumps(payload, separators=(",", ":"))))
+            conn.execute(
+                "INSERT INTO state_snapshots(ts, payload) VALUES (?, ?) ON CONFLICT(ts) DO UPDATE SET payload=excluded.payload",
+                (ts, json.dumps(payload, separators=(",", ":"))),
+            )
 
     def get_state_snapshots(self, cutoff: int) -> list[StateSnapshot]:
         with self.connection() as conn:
-            rows = conn.execute("SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC", (cutoff,)).fetchall()
+            rows = conn.execute(
+                "SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC", (cutoff,)
+            ).fetchall()
         return [cast(StateSnapshot, json.loads(str(row[0]))) for row in rows]
 
     def prune_state_snapshots(self, cutoff: int) -> int:

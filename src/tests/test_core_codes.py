@@ -20,21 +20,36 @@ def test_add_code_rejects_unknown_action(subscription: Subscription) -> None:
 
 def test_list_and_get_code_round_trip(subscription: Subscription) -> None:
     subscription.code_svc.add_code(
-        "bonus1", "bonus", days=2, gb=3, wl_gb=4, uses=2,
+        "bonus1",
+        "bonus",
+        days=2,
+        gb=3,
+        wl_gb=4,
+        uses=2,
     )
     assert subscription.code_svc.list_code() == ["bonus1"]
     code = subscription.code_svc.get_code("bonus1")
     assert (code.action, code.days, code.gb, code.wl_gb, code.uses) == (
-        "bonus", 2, 3, 4, 2,
+        "bonus",
+        2,
+        3,
+        4,
+        2,
     )
 
 
 def test_apply_bonus_code_updates_user_limits(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=2, expires_at=1000)
     subscription.code_svc.add_code(
-        "bonus1", "bonus", days=1, gb=3, wl_gb=4, uses=1,
+        "bonus1",
+        "bonus",
+        days=1,
+        gb=3,
+        wl_gb=4,
+        uses=1,
     )
     result = subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
     record = database.get_user("alice")
@@ -49,12 +64,18 @@ def test_apply_bonus_code_updates_user_limits(
 
 
 def test_apply_bonus_code_grants_quota_on_zero_limit(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database, bw_limit_gb=0, wl_limit_gb=0, expires_at=0)
     database.update_user("alice", status=False, status_time=False, status_wl=False)
     subscription.code_svc.add_code(
-        "bonus1", "bonus", days=0, gb=3, wl_gb=4, uses=1,
+        "bonus1",
+        "bonus",
+        days=0,
+        gb=3,
+        wl_gb=4,
+        uses=1,
     )
     result = subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
     record = database.get_user("alice")
@@ -67,12 +88,18 @@ def test_apply_bonus_code_grants_quota_on_zero_limit(
 
 
 def test_apply_bonus_code_restarts_lapsed_expiry(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database, bw_limit_gb=1, wl_limit_gb=1, expires_at=1)
     database.update_user("alice", status=False, status_time=False)
     subscription.code_svc.add_code(
-        "bonus1", "bonus", days=2, gb=0, wl_gb=0, uses=1,
+        "bonus1",
+        "bonus",
+        days=2,
+        gb=0,
+        wl_gb=0,
+        uses=1,
     )
     before = int(time.time())
     result = subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
@@ -93,22 +120,35 @@ def test_apply_bonus_code_rejects_unknown_user(
 
 
 def test_register_with_code_creates_user(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     subscription.code_svc.add_code(
-        "invite", "register", days=1, gb=2, wl_gb=3, uses=1,
+        "invite",
+        "register",
+        days=1,
+        gb=2,
+        wl_gb=3,
+        uses=1,
     )
     created = subscription.business_code_svc.register_with_code(
-        code="invite", username="alice", displayname="Alice",
-        ext_username="alice-login", ext_password="secret",
+        code="invite",
+        username="alice",
+        displayname="Alice",
+        ext_username="alice-login",
+        ext_password="secret",
     )
     assert created.username == "alice"
     assert created.limit == 2
     assert created.wl_limit == 3
     assert database.user_exists("alice")
-    assert subscription.password_svc.validate_credentials(
-        "alice-login", "secret",
-    ) == "alice"
+    assert (
+        subscription.password_svc.validate_credentials(
+            "alice-login",
+            "secret",
+        )
+        == "alice"
+    )
 
 
 def test_register_with_code_rejects_empty_code(
@@ -116,20 +156,27 @@ def test_register_with_code_rejects_empty_code(
 ) -> None:
     with pytest.raises(ValidationError):
         subscription.business_code_svc.register_with_code(
-            code="", username="alice", displayname="Alice",
-            ext_username="alice-login", ext_password="secret",
+            code="",
+            username="alice",
+            displayname="Alice",
+            ext_username="alice-login",
+            ext_password="secret",
         )
 
 
 def test_register_with_code_rejects_panel_unsafe_username(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     subscription.code_svc.add_code("invite", "register", uses=1)
     for bad in ("bad name", "sl/ash", "back\\slash", ""):
         with pytest.raises(ValidationError):
             subscription.business_code_svc.register_with_code(
-                code="invite", username=bad, displayname="Alice",
-                ext_username="alice-login", ext_password="secret",
+                code="invite",
+                username=bad,
+                displayname="Alice",
+                ext_username="alice-login",
+                ext_password="secret",
             )
     assert not database.user_exists("bad name")
     # the code was never consumed by a rejected attempt

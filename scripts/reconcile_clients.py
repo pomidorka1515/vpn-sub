@@ -245,8 +245,14 @@ def reconcile_panel(
             continue
         try:
             _reconcile_user(
-                panel, report, username, uuid_value, rows, vless_ids,
-                apply=apply, ledger=seed_ledger,
+                panel,
+                report,
+                username,
+                uuid_value,
+                rows,
+                vless_ids,
+                apply=apply,
+                ledger=seed_ledger,
             )
         except ReconcileError as exc:
             report.errors.append(str(exc))
@@ -273,9 +279,7 @@ def _reconcile_user(
     email_path = quote(username, safe="")
 
     if canonical is None and not target_ids:
-        report.skipped.append(
-            f"{username}: no managed VLESS inbounds on panel {panel.name}"
-        )
+        report.skipped.append(f"{username}: no managed VLESS inbounds on panel {panel.name}")
         return
 
     if canonical is None:
@@ -421,7 +425,10 @@ def main(argv: list[str] | None = None) -> int:
             panel = _build_panel(key, panels_cfg[key], stamp_dir=stamp_dir)
             try:
                 report = reconcile_panel(
-                    panel, uuid_map, apply=args.apply, ledger=ledger,
+                    panel,
+                    uuid_map,
+                    apply=args.apply,
+                    ledger=ledger,
                 )
             except ReconcileError as exc:
                 print(f"[{key}] FAILED: {exc}")

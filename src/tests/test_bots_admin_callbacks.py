@@ -95,7 +95,9 @@ def test_menus_prompt_next_step_or_report_empty(
         ("chart", bot._step_chart_username),
     ):
         bot.handle_callbacks(_callback(data))
-        registered = cast(Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1])
+        registered = cast(
+            Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1]
+        )
         assert getattr(registered, "__func__", registered) is getattr(handler, "__func__", handler)
 
 
@@ -141,7 +143,8 @@ def test_fingerprint_save_and_leaderboard_order(
     subscription.business_svc.update_params.side_effect = None
     bot.handle_callbacks(_callback("fp_save_firefox"))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", fingerprint="firefox",
+        username="alice",
+        fingerprint="firefox",
     )
     assert "firefox" in cast(MagicMock, bot._send_message).call_args.args[1]
 

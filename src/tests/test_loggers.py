@@ -267,7 +267,12 @@ def test_gunicorn_access_level_uses_env(monkeypatch: pytest.MonkeyPatch) -> None
 
     error_log = logging.getLogger("gunicorn.error")
     access_log = logging.getLogger("gunicorn.access")
-    previous = (error_log.level, access_log.level, list(error_log.handlers), list(access_log.handlers))
+    previous = (
+        error_log.level,
+        access_log.level,
+        list(error_log.handlers),
+        list(access_log.handlers),
+    )
 
     def restore() -> None:
         error_log.setLevel(previous[0])

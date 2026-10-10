@@ -97,7 +97,8 @@ def test_no_login_is_ever_attempted(panel: XUiSession, transport: RecordingTrans
 
 
 def test_bearer_header_is_present_on_every_request(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.calls.clear()
     panel.get("panel/api/server/status")
@@ -109,7 +110,8 @@ def test_bearer_header_is_present_on_every_request(
 
 
 def test_authorization_is_not_overridable_by_caller_headers(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.calls.clear()
     panel.get(
@@ -136,7 +138,8 @@ def test_request_returns_down_response_when_dead(panel: XUiSession) -> None:
 
 
 def test_request_timeout_marks_panel_dead(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.request_error = Timeout()
     response = panel.post("panel/api/clients/add")
@@ -146,7 +149,8 @@ def test_request_timeout_marks_panel_dead(
 
 
 def test_connection_error_marks_panel_dead(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.request_error = ConnectionError("refused")
     response = panel.get("panel/api/server/status")
@@ -156,7 +160,8 @@ def test_connection_error_marks_panel_dead(
 
 
 def test_inject_headers_are_merged_into_requests(
-    transport: RecordingTransport, clock: FakeClock,
+    transport: RecordingTransport,
+    clock: FakeClock,
 ) -> None:
     session = XUiSession(
         **session_kwargs(
@@ -198,8 +203,12 @@ def test_cache_age_uses_the_session_clock(panel: XUiSession, clock: FakeClock) -
 
 def test_clear_cache_invalidates_another_session(tmp_path: Path, clock: FakeClock) -> None:
     stamp = tmp_path / "inbounds.stamp"
-    first = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
-    second = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    first = XUiSession(
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+    )
+    second = XUiSession(
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+    )
     try:
         first.cache = [make_inbound(1)]
         second.cache = [make_inbound(1)]
@@ -224,8 +233,12 @@ def test_clear_cache_keeps_the_list_when_the_stamp_cannot_move(panel: XUiSession
 
 def test_fresh_cache_misses_when_the_stamp_moves(tmp_path: Path, clock: FakeClock) -> None:
     stamp = tmp_path / "inbounds.stamp"
-    first = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
-    second = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    first = XUiSession(
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+    )
+    second = XUiSession(
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+    )
     try:
         first.cache = [make_inbound(1)]
         assert first.fresh_cache(15) is not None
@@ -239,7 +252,9 @@ def test_fresh_cache_misses_when_the_stamp_moves(tmp_path: Path, clock: FakeCloc
 
 def test_cache_fill_does_not_revive_a_cleared_stamp(tmp_path: Path, clock: FakeClock) -> None:
     stamp = tmp_path / "inbounds.stamp"
-    session = XUiSession(**session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)))
+    session = XUiSession(
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+    )
     try:
         session.cache = [make_inbound(1)]
         seen = session._cache_stamp  # pyright: ignore[reportPrivateUsage]
@@ -265,12 +280,14 @@ def test_inbound_stamp_path_stays_inside_its_directory() -> None:
 def test_client_cache_uses_its_own_stamp(tmp_path: Path, clock: FakeClock) -> None:
     inbound_stamp = tmp_path / "inbounds.stamp"
     client_stamp = tmp_path / "clients.stamp"
-    session = XUiSession(**session_kwargs(
-        transport=RecordingTransport(),
-        clock=clock,
-        stamp_path=str(inbound_stamp),
-        client_stamp_path=str(client_stamp),
-    ))
+    session = XUiSession(
+        **session_kwargs(
+            transport=RecordingTransport(),
+            clock=clock,
+            stamp_path=str(inbound_stamp),
+            client_stamp_path=str(client_stamp),
+        )
+    )
     try:
         session.cache = [make_inbound(1)]
         session.clients_cache = {"alice": make_panel_client("alice", [1])}
@@ -289,11 +306,13 @@ def test_client_cache_uses_its_own_stamp(tmp_path: Path, clock: FakeClock) -> No
 def test_client_stamp_must_not_be_the_inbound_stamp(tmp_path: Path) -> None:
     stamp = tmp_path / "shared.stamp"
     with pytest.raises(ValueError, match="client stamp"):
-        XUiSession(**session_kwargs(
-            transport=RecordingTransport(),
-            stamp_path=str(stamp),
-            client_stamp_path=str(stamp),
-        ))
+        XUiSession(
+            **session_kwargs(
+                transport=RecordingTransport(),
+                stamp_path=str(stamp),
+                client_stamp_path=str(stamp),
+            )
+        )
 
 
 def test_rejects_transport_and_session_together(transport: RecordingTransport) -> None:
@@ -305,11 +324,16 @@ def test_rejects_transport_and_session_together(transport: RecordingTransport) -
 
 def test_invalid_mode_is_rejected(transport: RecordingTransport) -> None:
     with pytest.raises(ValueError, match="whitelist"):
-        XUiSession(**session_kwargs(transport=transport, mode=cast(Literal["whitelist", "blacklist"], "both")))
+        XUiSession(
+            **session_kwargs(
+                transport=transport, mode=cast(Literal["whitelist", "blacklist"], "both")
+            )
+        )
 
 
 def test_health_check_marks_dead_on_unsuccessful_payload(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.health_payload = {"success": False, "msg": "nope"}
     panel._perform_health_check()  # pyright: ignore[reportPrivateUsage]
@@ -323,7 +347,8 @@ def test_health_check_recovers_after_successful_payload(panel: XUiSession) -> No
 
 
 def test_health_check_marks_dead_with_token_rejected_on_401(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.health_status = 401
     transport.calls.clear()
@@ -334,7 +359,8 @@ def test_health_check_marks_dead_with_token_rejected_on_401(
 
 
 def test_health_check_marks_dead_with_token_rejected_on_403(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.health_status = 403
     panel._perform_health_check()  # pyright: ignore[reportPrivateUsage]
@@ -342,7 +368,8 @@ def test_health_check_marks_dead_with_token_rejected_on_403(
 
 
 def test_health_check_carries_bearer_header(
-    panel: XUiSession, transport: RecordingTransport,
+    panel: XUiSession,
+    transport: RecordingTransport,
 ) -> None:
     transport.calls.clear()
     panel._perform_health_check()  # pyright: ignore[reportPrivateUsage]
@@ -359,23 +386,34 @@ def test_close_stops_background_threads(panel: XUiSession) -> None:
 
 
 def test_url_strips_panel_suffix_before_joining(
-    transport: RecordingTransport, clock: FakeClock,
+    transport: RecordingTransport,
+    clock: FakeClock,
 ) -> None:
     session = XUiSession(
         **session_kwargs(transport=transport, clock=clock, uri="secret/panel"),
     )
     try:
-        assert session._format_url("panel/api/server/status") == "http://127.0.0.1:2053/secret/panel/api/server/status"  # pyright: ignore[reportPrivateUsage]
+        assert (
+            session._format_url("panel/api/server/status")
+            == "http://127.0.0.1:2053/secret/panel/api/server/status"
+        )  # pyright: ignore[reportPrivateUsage]
     finally:
         session.close()
 
 
 def test_verbose_logs_completed_requests(
-    transport: RecordingTransport, clock: FakeClock, caplog: pytest.LogCaptureFixture,
+    transport: RecordingTransport,
+    clock: FakeClock,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    session = XUiSession(**session_kwargs(
-        transport=transport, clock=clock, uri="secret/panel", verbose=True,
-    ))
+    session = XUiSession(
+        **session_kwargs(
+            transport=transport,
+            clock=clock,
+            uri="secret/panel",
+            verbose=True,
+        )
+    )
     session.log.addHandler(caplog.handler)
     try:
         with caplog.at_level("DEBUG", logger=session.log.name):
@@ -388,10 +426,7 @@ def test_verbose_logs_completed_requests(
         session.close()
 
     size = len(response.content)
-    expected = (
-        f'"GET /panel/api/inbounds/list HTTP/1.1" '
-        f"{color_status('200')} {size}b"
-    )
+    expected = f'"GET /panel/api/inbounds/list HTTP/1.1" {color_status("200")} {size}b'
     assert caplog.messages.count(expected) == 2
     assert color_status("200") == f"{Colors.GREEN}200{Colors.RESET}"
     assert "secret" not in "".join(caplog.messages)
@@ -400,7 +435,8 @@ def test_verbose_logs_completed_requests(
 
 
 def test_verbose_defaults_to_quiet(
-    panel: XUiSession, caplog: pytest.LogCaptureFixture,
+    panel: XUiSession,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     panel.log.addHandler(caplog.handler)
     try:

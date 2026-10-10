@@ -59,7 +59,8 @@ def test_getstatus_returns_none_on_failure(subscription: Subscription) -> None:
 
 
 def test_get_client_parses_panel_client(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     panel = FakePanel(clients=[make_panel_client("alice", [1, 2], up=3, down=4)])
@@ -73,7 +74,8 @@ def test_get_client_parses_panel_client(
 
 
 def test_get_client_returns_none_when_not_found(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     panel = FakePanel(clients=[])
@@ -154,7 +156,8 @@ def test_get_client_raises_with_panel_msg_on_rejection(
 
 
 def test_client_traffic_returns_single_shared_row(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     panel = FakePanel(clients=[make_panel_client("alice", [1, 2], up=5, down=6)])
@@ -165,7 +168,8 @@ def test_client_traffic_returns_single_shared_row(
 
 
 def test_client_traffic_returns_none_when_not_found(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
     panel = FakePanel(clients=[])
@@ -175,13 +179,16 @@ def test_client_traffic_returns_none_when_not_found(
 
 
 def test_list_clients_parses_attachments(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     create_alice(database)
-    panel = FakePanel(clients=[
-        make_panel_client("alice", [1, 2], up=1, down=2),
-        make_panel_client("bob", [2], up=3, down=4),
-    ])
+    panel = FakePanel(
+        clients=[
+            make_panel_client("alice", [1, 2], up=1, down=2),
+            make_panel_client("bob", [2], up=3, down=4),
+        ]
+    )
     clients = subscription.panel_svc.list_clients(cast(XUiSession, panel))
     assert [c.email for c in clients] == ["alice", "bob"]
     assert clients[0].inboundIds == [1, 2]
@@ -191,10 +198,12 @@ def test_list_clients_parses_attachments(
 
 
 def test_clients_snapshot_lists_once_within_ttl(subscription: Subscription) -> None:
-    panel = FakePanel(clients=[
-        make_panel_client("alice", [1]),
-        make_panel_client("bob", [2]),
-    ])
+    panel = FakePanel(
+        clients=[
+            make_panel_client("alice", [1]),
+            make_panel_client("bob", [2]),
+        ]
+    )
     first = subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
     second = subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
     assert first["alice"].inboundIds == [1]

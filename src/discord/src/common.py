@@ -73,7 +73,9 @@ class DiscordIOMixin(PublicFeatureMixin):
             file=file,
         )
 
-    async def _defer(self, interaction: discord.Interaction, *, ephemeral: bool | None = None) -> None:
+    async def _defer(
+        self, interaction: discord.Interaction, *, ephemeral: bool | None = None
+    ) -> None:
         if interaction.response.is_done():
             return
         try:

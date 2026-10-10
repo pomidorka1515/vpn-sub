@@ -36,7 +36,7 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
         sub: Subscription,
         bot: PublicBot | None = None,
         admin_bot: AdminBot | None = None,
-        verbose: bool = False
+        verbose: bool = False,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -53,9 +53,11 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             self.snap_mem: dict[str, BandwidthInfo] = {}
             self.snap_wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
-            self._panel_alerts: dict[str, int | float] = {}  # only used by 1 thread, no lock needed yet
+            self._panel_alerts: dict[
+                str, int | float
+            ] = {}  # only used by 1 thread, no lock needed yet
             conf = self.cfg.view()
-            self._panel_alert_cooldown: int = conf['panel_alert_cooldown'] or 3600
+            self._panel_alert_cooldown: int = conf["panel_alert_cooldown"] or 3600
             self._snapshot_failures: dict[Literal["bandwidth", "state"], int] = {}
             self._snapshot_due_at: dict[Literal["bandwidth", "state"], float] = {
                 "bandwidth": 0.0,
@@ -92,7 +94,7 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             wl_current = wl_map.get(i, BandwidthInfo(0, 0, 0))
             initial_wl_mem[i] = wl_current
             initial_snap_wl_mem[i] = wl_current
-            if self.sub.user_svc.get_user_state(i)['bw_limit_gb'] == 0:
+            if self.sub.user_svc.get_user_state(i)["bw_limit_gb"] == 0:
                 continue
             current = main_map.get(i, BandwidthInfo(0, 0, 0))
             initial_mem[i] = current
@@ -106,7 +108,9 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             self._snapshot_initialized = True
 
         # Run first snapshot immediately; the scheduler tracks retries per kind.
-        initial_snapshots: tuple[tuple[Literal["bandwidth", "state"], Callable[[], object]], ...] = (
+        initial_snapshots: tuple[
+            tuple[Literal["bandwidth", "state"], Callable[[], object]], ...
+        ] = (
             ("bandwidth", self.record_daily_snapshot),
             ("state", self.record_snap_snapshot),
         )
@@ -114,7 +118,7 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
         for kind, operation in initial_snapshots:
             delay = self._run_daily_snapshot(kind, operation)
             self._snapshot_due_at[kind] = now + delay
-        self.is_first()   # also run the monthly reset check immediately
+        self.is_first()  # also run the monthly reset check immediately
 
         ### Start Threads ###
 

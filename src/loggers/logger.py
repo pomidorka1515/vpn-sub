@@ -53,7 +53,11 @@ class Logger(logging.Logger):
         self,
         msg: object,
         *args: object,
-        exc_info: bool | BaseException | tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None] | None = None,
+        exc_info: bool
+        | BaseException
+        | tuple[type[BaseException], BaseException, TracebackType | None]
+        | tuple[None, None, None]
+        | None = None,
         stack_info: bool = False,
         stacklevel: int = 1,
         extra: Mapping[str, object] | None = None,
@@ -72,6 +76,7 @@ class Logger(logging.Logger):
 
     def _make_formatter(self) -> logging.Formatter:
         parent = self
+
         class Fmt(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
                 orig_level = record.levelname
@@ -80,23 +85,26 @@ class Logger(logging.Logger):
                 val = super().format(record)
                 record.levelname = orig_level
                 return val
+
         return Fmt(
-            fmt='%(asctime)s %(levelname)s [%(name)s] [%(threadName)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            fmt="%(asctime)s %(levelname)s [%(name)s] [%(threadName)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
         )
 
     def set_tg_bot(self, bot: AdminBot, level: int | None = None) -> None:
         self.handlers = [h for h in self.handlers if not isinstance(h, _TelegramLogger)]
         tg_handler = _TelegramLogger(bot)
-        if level is None: tg_handler.setLevel(logging.WARNING)
-        simple_fmt = logging.Formatter('%(levelname)s [%(name)s] %(message)s')
+        if level is None:
+            tg_handler.setLevel(logging.WARNING)
+        simple_fmt = logging.Formatter("%(levelname)s [%(name)s] %(message)s")
         tg_handler.setFormatter(simple_fmt)
         self.addHandler(tg_handler)
 
     def set_jsonl_handler(self, lines_config: LinesConfig, level: int | None = None) -> None:
         self.handlers = [h for h in self.handlers if not isinstance(h, _JSONLinesLogger)]
         jsonl_handler = _JSONLinesLogger(lines_config)
-        if level is None: jsonl_handler.setLevel(logging.INFO)
+        if level is None:
+            jsonl_handler.setLevel(logging.INFO)
         self.addHandler(jsonl_handler)
 
     @contextmanager
@@ -106,14 +114,17 @@ class Logger(logging.Logger):
         try:
             yield
             dt = (time.monotonic() - t0) * 1000
-            self.info(f"Loaded {Colors.BOLD}{self.name}{Colors.RESET}! {Colors.ITALIC}({dt:.1f}ms){Colors.RESET}")
+            self.info(
+                f"Loaded {Colors.BOLD}{self.name}{Colors.RESET}! {Colors.ITALIC}({dt:.1f}ms){Colors.RESET}"
+            )
         except Exception:
             self.error(f"Failed to load {self.name}.")
             raise
 
     @contextmanager
     def span(self, name: str, verbose: bool = False) -> Generator[None]:
-        if verbose: self.debug(f"Executing: {name}")
+        if verbose:
+            self.debug(f"Executing: {name}")
         t0 = time.monotonic()
         try:
             yield

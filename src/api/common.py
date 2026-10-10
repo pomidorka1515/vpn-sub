@@ -23,21 +23,21 @@ RES_DIR = bundled_root() / "res"
 
 
 _ASSET_FILES: tuple[str, ...] = (
-    'common.js',
-    'common.css',
-    'fonts.css',
-    'auth.css',
-    'dashboard.css',
-    'history.css',
-    'admin.css',
-    'charts.css',
-    'dashboard.js',
-    'history.js',
-    'vendor/chart.umd.min.js',
-    *(f'fonts/{name}' for name in sorted(FONT_FILES)),
+    "common.js",
+    "common.css",
+    "fonts.css",
+    "auth.css",
+    "dashboard.css",
+    "history.css",
+    "admin.css",
+    "charts.css",
+    "dashboard.js",
+    "history.js",
+    "vendor/chart.umd.min.js",
+    *(f"fonts/{name}" for name in sorted(FONT_FILES)),
 )
 
-_ADMIN_MODULE_RE = re.compile(r'^[a-z0-9_-]+$')
+_ADMIN_MODULE_RE = re.compile(r"^[a-z0-9_-]+$")
 
 
 def admin_module_names() -> tuple[str, ...]:
@@ -46,19 +46,19 @@ def admin_module_names() -> tuple[str, ...]:
     Basenames must be unique. A nested file is served at /admin/<relative>.js
     and imported by that same relative path, so charts/spec.js stays charts/spec.js.
     """
-    folder = RES_DIR / 'admin'
+    folder = RES_DIR / "admin"
     if not folder.is_dir():
         return ()
     names: list[str] = []
     stems: set[str] = set()
-    for path in sorted(folder.rglob('*.js')):
+    for path in sorted(folder.rglob("*.js")):
         if not path.is_file():
             continue
-        relative = path.relative_to(folder).with_suffix('')
+        relative = path.relative_to(folder).with_suffix("")
         if not all(_ADMIN_MODULE_RE.fullmatch(part) for part in relative.parts):
             continue
         if path.stem in stems:
-            raise ValueError(f'duplicate admin module basename: {path.stem}')
+            raise ValueError(f"duplicate admin module basename: {path.stem}")
         stems.add(path.stem)
         names.append(relative.as_posix())
     return tuple(names)
@@ -68,24 +68,24 @@ def admin_module_names() -> tuple[str, ...]:
 def asset_version() -> str:
     """Cache-busting version for static assets, derived from shared frontend files."""
     digest = sha1(usedforsecurity=False)
-    for name in (*_ASSET_FILES, 'browser.html'):
+    for name in (*_ASSET_FILES, "browser.html"):
         digest.update((RES_DIR / name).read_bytes())
     for name in admin_module_names():
-        digest.update((RES_DIR / 'admin' / f'{name}.js').read_bytes())
+        digest.update((RES_DIR / "admin" / f"{name}.js").read_bytes())
     return digest.hexdigest()[:12]
 
 
-WEB_LANGS: tuple[str, ...] = ('en', 'ru')
-_WEB_PAGES: tuple[str, ...] = ('auth', 'dashboard', 'history', 'admin', 'admin_auth')
+WEB_LANGS: tuple[str, ...] = ("en", "ru")
+_WEB_PAGES: tuple[str, ...] = ("auth", "dashboard", "history", "admin", "admin_auth")
 
 
 def resolve_web_lang() -> str:
     """?lang= wins, then the lang cookie, then English."""
-    for raw in (request.args.get('lang'), request.cookies.get('lang')):
-        code = (raw or '').lower()
+    for raw in (request.args.get("lang"), request.cookies.get("lang")):
+        code = (raw or "").lower()
         if code in WEB_LANGS:
             return code
-    return 'en'
+    return "en"
 
 
 def _string_map(value: object) -> dict[str, str]:
@@ -105,17 +105,17 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
     return {}
 
 
-def web_lang_tables(lang_cfg: Config[LangConfig], page: str) -> tuple[str, dict[str, str], dict[str, str]]:
+def web_lang_tables(
+    lang_cfg: Config[LangConfig], page: str
+) -> tuple[str, dict[str, str], dict[str, str]]:
     """Active page strings, plus the English table used when a key is missing."""
     if page not in _WEB_PAGES:
         raise ValueError(f"unknown web page '{page}'")
     lang = resolve_web_lang()
     language = lang_cfg.view()
-    raw = cast(object, language.get('web'))
-    web: Mapping[str, object] = (
-        cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
-    )
-    shared = _section(web, 'shared')
+    raw = cast(object, language.get("web"))
+    web: Mapping[str, object] = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
+    shared = _section(web, "shared")
     page_table = _section(web, page)
 
     def merged(code: str) -> dict[str, str]:
@@ -123,24 +123,26 @@ def web_lang_tables(lang_cfg: Config[LangConfig], page: str) -> tuple[str, dict[
         out.update(_string_map(page_table.get(code)))
         return out
 
-    return lang, merged(lang), merged('en')
+    return lang, merged(lang), merged("en")
 
 
 class Route(NamedTuple):
     """A Flask route, used in BaseApi."""
+
     method: HTTPMethod
     path: str
     handler: str
     rate_limit: int | None = None
 
     def validate(self) -> None:
-        if not self.path.startswith('/'):
+        if not self.path.startswith("/"):
             raise ValueError(f"Route path must start with '/', got '{self.path}'")
         if self.rate_limit is not None and self.rate_limit <= 0:
             raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
 
     def register(self, api: BaseApi) -> None:
         from .decorators.rate_limit import rate_limit  # intentional lazy loading
+
         try:
             func = getattr(type(api), self.handler)
         except AttributeError:
@@ -150,23 +152,19 @@ class Route(NamedTuple):
             func = rate_limit(self.rate_limit)(func)
         func = func.__get__(api, type(api))
 
-        url = '/' + '/'.join([
-            p.strip('/') for p in (api.uri, self.path) if p.strip('/')
-        ])
+        url = "/" + "/".join([p.strip("/") for p in (api.uri, self.path) if p.strip("/")])
 
         api.app.add_url_rule(url, self.handler, func, methods=[self.method])
+
 
 class BaseApi(ABC):
     """Base class for API handlers. Enforces required attributes and route registration."""
 
     ROUTES: ClassVar[tuple[Route, ...]]
 
-    def __init__(self,
-                 app: Flask,
-                 cfg: Config[AppConfig],
-                 sub: Subscription,
-                 bw: BWatch,
-                 uri: str) -> None:
+    def __init__(
+        self, app: Flask, cfg: Config[AppConfig], sub: Subscription, bw: BWatch, uri: str
+    ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.app = app
@@ -181,20 +179,19 @@ class BaseApi(ABC):
         """Called when a class inherits from BaseApi. Validates at import time."""
         super().__init_subclass__(**kwargs)
 
-        if not hasattr(cls, 'ROUTES'):
+        if not hasattr(cls, "ROUTES"):
             raise TypeError(f"{cls.__name__} must define ROUTES")
 
         for route in cls.ROUTES:
             route.validate()
             if not hasattr(cls, route.handler):
                 raise TypeError(
-                    f"{cls.__name__}.ROUTES references '{route.handler}' "
-                    f"but no such method exists"
+                    f"{cls.__name__}.ROUTES references '{route.handler}' but no such method exists"
                 )
 
     def _register_routes(self) -> None:
         for route in self.ROUTES:
             route.register(self)
 
-    def reg_handles(self) -> None: # noqa: B027
+    def reg_handles(self) -> None:  # noqa: B027
         """Optional: subclass setup beyond route registration (error handlers, etc)."""

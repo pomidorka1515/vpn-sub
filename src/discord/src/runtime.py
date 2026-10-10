@@ -211,7 +211,9 @@ async def _run() -> None:
     await runtime.start()
     try:
         runner = runtime._runner
-        waiters: list[asyncio.Task[bool] | asyncio.Task[None]] = [asyncio.ensure_future(stopping.wait())]
+        waiters: list[asyncio.Task[bool] | asyncio.Task[None]] = [
+            asyncio.ensure_future(stopping.wait())
+        ]
         if isinstance(runner, asyncio.Task):
             waiters.append(runner)
         done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)

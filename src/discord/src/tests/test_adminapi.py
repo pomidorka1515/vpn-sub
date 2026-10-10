@@ -4,7 +4,9 @@ from discord_helpers import FakeResponse, json_ok, make_admin_client, run
 
 
 def test_admin_client_sends_authorization_header() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params
         assert url.endswith("/api/user/list")
         assert headers == {"Authorization": "api-token"}
@@ -18,7 +20,9 @@ def test_admin_client_sends_authorization_header() -> None:
 
 
 def test_admin_client_user_update_and_history() -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del headers
         if url.endswith("/api/user/update"):
             assert method == "POST"

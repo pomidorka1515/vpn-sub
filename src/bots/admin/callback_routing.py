@@ -59,7 +59,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
         try:
             for route, handler_name, is_prefix in self.ROUTES:
-                if (data.startswith(route) if is_prefix else data == route):
+                if data.startswith(route) if is_prefix else data == route:
                     handler = cast(
                         Callable[[str, int, types.Message], None],
                         getattr(self, handler_name),
@@ -74,7 +74,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         del data
         self._pending_edits.pop(chat_id, None)
         self.bot.edit_message_text(
-            "Действие отменено. Главное меню:", chat_id, message.message_id,
+            "Действие отменено. Главное меню:",
+            chat_id,
+            message.message_id,
             reply_markup=self.get_main_menu(),
         )
         self.bot.clear_step_handler_by_chat_id(chat_id)
@@ -105,22 +107,36 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     def _handle_add_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
-        msg = self.bot.send_message(chat_id, "Введите username нового пользователя (или /start для отмены):")
+        msg = self.bot.send_message(
+            chat_id, "Введите username нового пользователя (или /start для отмены):"
+        )
         self.bot.register_next_step_handler(msg, self._step_add_user_name)  # pyright: ignore[reportUnknownMemberType]
 
     def _handle_info_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
         if not self.sub.user_svc.list_users():
-            self.bot.send_message(chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu())
+            self.bot.send_message(
+                chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu()
+            )
             return
         page = self._pagination_state.get(chat_id, {}).get("info_page", 0)
         self._pagination_state.setdefault(chat_id, {})["info_page"] = page
-        self.bot.edit_message_text("👤 Выберите пользователя для просмотра информации:", chat_id, message.message_id, reply_markup=self.get_users_menu("info", page))
+        self.bot.edit_message_text(
+            "👤 Выберите пользователя для просмотра информации:",
+            chat_id,
+            message.message_id,
+            reply_markup=self.get_users_menu("info", page),
+        )
 
     def _handle_info_page(self, data: str, chat_id: int, message: types.Message) -> None:
         page = int(data.rsplit("_", 1)[1])
         self._pagination_state.setdefault(chat_id, {})["info_page"] = page
-        self.bot.edit_message_text("👤 Выберите пользователя для просмотра информации:", chat_id, message.message_id, reply_markup=self.get_users_menu("info", page))
+        self.bot.edit_message_text(
+            "👤 Выберите пользователя для просмотра информации:",
+            chat_id,
+            message.message_id,
+            reply_markup=self.get_users_menu("info", page),
+        )
 
     def _handle_info_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del message
@@ -132,12 +148,22 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             self.bot.send_message(chat_id, "Список пуст.", reply_markup=self.get_main_menu())
             return
         page = self._pagination_state.get(chat_id, {}).get("del_page", 0)
-        self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, message.message_id, reply_markup=self.get_users_menu("dodel", page))
+        self.bot.edit_message_text(
+            "Выберите пользователя для УДАЛЕНИЯ ⚠️:",
+            chat_id,
+            message.message_id,
+            reply_markup=self.get_users_menu("dodel", page),
+        )
 
     def _handle_delete_page(self, data: str, chat_id: int, message: types.Message) -> None:
         page = int(data.rsplit("_", 1)[1])
         self._pagination_state.setdefault(chat_id, {})["del_page"] = page
-        self.bot.edit_message_text("Выберите пользователя для УДАЛЕНИЯ ⚠️:", chat_id, message.message_id, reply_markup=self.get_users_menu("dodel", page))
+        self.bot.edit_message_text(
+            "Выберите пользователя для УДАЛЕНИЯ ⚠️:",
+            chat_id,
+            message.message_id,
+            reply_markup=self.get_users_menu("dodel", page),
+        )
 
     def _handle_delete_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del message
@@ -145,7 +171,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     def _handle_codes_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
-        self.bot.edit_message_text("🎟 Управление кодами:", chat_id, message.message_id, reply_markup=self.get_codes_menu())
+        self.bot.edit_message_text(
+            "🎟 Управление кодами:", chat_id, message.message_id, reply_markup=self.get_codes_menu()
+        )
 
     def _handle_list_codes(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
@@ -177,12 +205,16 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
             return
         code_type = data.split("codetype_", 1)[1]
-        msg = self.bot.send_message(chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML")
+        msg = self.bot.send_message(
+            chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML"
+        )
         self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name)  # pyright: ignore[reportUnknownMemberType]
 
     def _handle_chart(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
-        msg = self.bot.send_message(chat_id, "Введите username пользователя (или /start для отмены):")
+        msg = self.bot.send_message(
+            chat_id, "Введите username пользователя (или /start для отмены):"
+        )
         self.bot.register_next_step_handler(msg, self._step_chart_username)  # pyright: ignore[reportUnknownMemberType]
 
     def _handle_leaderboard(self, data: str, chat_id: int, message: types.Message) -> None:
@@ -197,11 +229,15 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         del message
         pending = self._pending_edits.get(chat_id)
         if not pending:
-            self.bot.send_message(chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu())
+            self.bot.send_message(
+                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu()
+            )
             return
         handlers = {
-            "fp": self._cb_edit_fingerprint, "limit": self._cb_edit_limit,
-            "wl_limit": self._cb_edit_wl_limit, "time": self._cb_edit_time,
+            "fp": self._cb_edit_fingerprint,
+            "limit": self._cb_edit_limit,
+            "wl_limit": self._cb_edit_wl_limit,
+            "time": self._cb_edit_time,
             "name": self._cb_edit_name,
         }
         handler = handlers.get(data.split("_", 1)[1])
@@ -212,15 +248,24 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         del message
         pending = self._pending_edits.get(chat_id)
         if not pending:
-            self.bot.send_message(chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu())
+            self.bot.send_message(
+                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu()
+            )
             return
         fp = data.split("fp_save_", 1)[1]
         try:
             self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
         except AppError as error:
-            self._send_message(chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
+            self._send_message(
+                chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+            )
         else:
-            self._send_message(chat_id, f"✅ fingerprint обновлён: <code>{fp}</code>", parse_mode="HTML", reply_markup=self.get_main_menu())
+            self._send_message(
+                chat_id,
+                f"✅ fingerprint обновлён: <code>{fp}</code>",
+                parse_mode="HTML",
+                reply_markup=self.get_main_menu(),
+            )
         self._pending_edits.pop(chat_id, None)
 
     def _handle_leaderboard_type(self, data: str, chat_id: int, message: types.Message) -> None:

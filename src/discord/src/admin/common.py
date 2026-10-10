@@ -71,7 +71,9 @@ class AdminCommonMixin(AdminFeatureMixin):
         except Exception:
             self.log.exception("failed to respond to admin interaction")
 
-    async def _defer(self, interaction: discord.Interaction, *, ephemeral: bool | None = None) -> None:
+    async def _defer(
+        self, interaction: discord.Interaction, *, ephemeral: bool | None = None
+    ) -> None:
         if interaction.response.is_done():
             return
         try:
@@ -116,13 +118,21 @@ class AdminCommonMixin(AdminFeatureMixin):
         view: discord.ui.View | None = None,
     ) -> bool:
         if result.status == 401:
-            await self._respond(interaction, "❌ Нет доступа к API.", view=view or self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Нет доступа к API.", view=view or self.main_menu_view()
+            )
             return False
         if result.status == 429:
-            await self._respond(interaction, "⏳ Слишком много запросов. Подождите минуту.", view=view or self.main_menu_view())
+            await self._respond(
+                interaction,
+                "⏳ Слишком много запросов. Подождите минуту.",
+                view=view or self.main_menu_view(),
+            )
             return False
         if result.status == 0 or result.msg == "http_unavailable":
-            await self._respond(interaction, "⚠ Сервис временно недоступен.", view=view or self.main_menu_view())
+            await self._respond(
+                interaction, "⚠ Сервис временно недоступен.", view=view or self.main_menu_view()
+            )
             return False
         if not result.ok:
             await self._respond(
@@ -160,16 +170,48 @@ class AdminCommonMixin(AdminFeatureMixin):
 
     def codes_menu_view(self) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label="➕ Добавить код", custom_id="admin:add_code", style=discord.ButtonStyle.success))
-        view.add_item(discord.ui.Button(label="❌ Удалить код", custom_id="admin:del_code", style=discord.ButtonStyle.danger))
-        view.add_item(discord.ui.Button(label="📋 Список кодов", custom_id="admin:list_codes", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label="ℹ️ Инфо о коде", custom_id="admin:info_code", style=discord.ButtonStyle.secondary))
-        view.add_item(discord.ui.Button(label="🔙 В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary))
+        view.add_item(
+            discord.ui.Button(
+                label="➕ Добавить код",
+                custom_id="admin:add_code",
+                style=discord.ButtonStyle.success,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="❌ Удалить код", custom_id="admin:del_code", style=discord.ButtonStyle.danger
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="📋 Список кодов",
+                custom_id="admin:list_codes",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="ℹ️ Инфо о коде",
+                custom_id="admin:info_code",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="🔙 В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary
+            )
+        )
         return view
 
     def cancel_view(self) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label="🔙 Отмена / В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary))
+        view.add_item(
+            discord.ui.Button(
+                label="🔙 Отмена / В меню",
+                custom_id="admin:cancel",
+                style=discord.ButtonStyle.primary,
+            )
+        )
         return view
 
     def users_menu_view(self, prefix: str, users: list[str], page: int = 0) -> discord.ui.View:
@@ -177,7 +219,7 @@ class AdminCommonMixin(AdminFeatureMixin):
         total_pages = max(1, (total - 1) // self.USERS_PER_PAGE + 1)
         page = max(0, min(page, total_pages - 1))
         start = page * self.USERS_PER_PAGE
-        page_users = users[start:start + self.USERS_PER_PAGE]
+        page_users = users[start : start + self.USERS_PER_PAGE]
         view = discord.ui.View(timeout=None)
         for user in page_users:
             view.add_item(
@@ -188,15 +230,42 @@ class AdminCommonMixin(AdminFeatureMixin):
                 )
             )
         if page > 0:
-            view.add_item(discord.ui.Button(label="◀️", custom_id=f"admin:page:{prefix}:{page - 1}", style=discord.ButtonStyle.secondary))
+            view.add_item(
+                discord.ui.Button(
+                    label="◀️",
+                    custom_id=f"admin:page:{prefix}:{page - 1}",
+                    style=discord.ButtonStyle.secondary,
+                )
+            )
         if page < total_pages - 1:
-            view.add_item(discord.ui.Button(label="▶️", custom_id=f"admin:page:{prefix}:{page + 1}", style=discord.ButtonStyle.secondary))
+            view.add_item(
+                discord.ui.Button(
+                    label="▶️",
+                    custom_id=f"admin:page:{prefix}:{page + 1}",
+                    style=discord.ButtonStyle.secondary,
+                )
+            )
         if total_pages > 1:
-            view.add_item(discord.ui.Button(label=f"📄 {page + 1}/{total_pages}", custom_id="admin:noop", style=discord.ButtonStyle.secondary, disabled=True))
-        view.add_item(discord.ui.Button(label="🔙 Отмена / В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary))
+            view.add_item(
+                discord.ui.Button(
+                    label=f"📄 {page + 1}/{total_pages}",
+                    custom_id="admin:noop",
+                    style=discord.ButtonStyle.secondary,
+                    disabled=True,
+                )
+            )
+        view.add_item(
+            discord.ui.Button(
+                label="🔙 Отмена / В меню",
+                custom_id="admin:cancel",
+                style=discord.ButtonStyle.primary,
+            )
+        )
         return view
 
-    async def show_main_menu(self, interaction: discord.Interaction, text: str | None = None) -> None:
+    async def show_main_menu(
+        self, interaction: discord.Interaction, text: str | None = None
+    ) -> None:
         await self._respond(
             interaction,
             text or "👋 Привет! Панель управления VPN запущена.",

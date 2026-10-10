@@ -13,13 +13,11 @@ from util import err, ok
 class LogsRoutes(AdminApiMixin):
     """Admin audit-log routes."""
 
-    ROUTES: ClassVar[tuple[Route, ...]] = (
-        Route('GET', '/api/logs/audit', 'audit'),
-    )
+    ROUTES: ClassVar[tuple[Route, ...]] = (Route("GET", "/api/logs/audit", "audit"),)
 
     @requires_admin_auth
     def audit(self) -> ResponseType:
-        n = request.args.get('n', 50, type=int)
+        n = request.args.get("n", 50, type=int)
 
         if n < 0:
             return err("'n' arg must be a positive integer, or 0 for the whole file")

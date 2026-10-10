@@ -103,17 +103,40 @@ def test_apply_joins_maps_and_preserves_key_order(tmp_path: Path) -> None:
 
     written = _read(path)
     assert list(written) == [
-        "$schema", "uri", "api_token", "api_admin_ui_auth", "provider_id",
-        "panel_alert_cooldown", "salt", "fingerprints", "nodes", "bot",
-        "json_template", "bypass_packages", "domain", "ping_check_url",
-        "publicbot", "3xui", "sub_name", "profiles", "redis", "funny_strings",
+        "$schema",
+        "uri",
+        "api_token",
+        "api_admin_ui_auth",
+        "provider_id",
+        "panel_alert_cooldown",
+        "salt",
+        "fingerprints",
+        "nodes",
+        "bot",
+        "json_template",
+        "bypass_packages",
+        "domain",
+        "ping_check_url",
+        "publicbot",
+        "3xui",
+        "sub_name",
+        "profiles",
+        "redis",
+        "funny_strings",
     ]
     profiles = _object(written["profiles"])
     assert list(profiles) == ["profile1", "fast"]
     profile1 = _object(profiles["profile1"])
     assert list(profile1) == [
-        "flag", "name", "json", "description", "whitelist",
-        "xhttpExtra", "masterLink", "node", "shortProfileDescription",
+        "flag",
+        "name",
+        "json",
+        "description",
+        "whitelist",
+        "xhttpExtra",
+        "masterLink",
+        "node",
+        "shortProfileDescription",
     ]
     assert profile1["flag"] == "🇫🇮"
     assert profile1["name"] == ["English", "Russian"]

@@ -10,8 +10,11 @@ from util import err
 from ._common import WrappedReturn
 
 
-def requires_fields[**P, R](*fields: str) -> Callable[[Callable[P, R]], Callable[P, WrappedReturn[R]]]:
+def requires_fields[**P, R](
+    *fields: str,
+) -> Callable[[Callable[P, R]], Callable[P, WrappedReturn[R]]]:
     """Validate request JSON object, store it on flask.g.json_obj, and require named fields."""
+
     def decorator(f: Callable[P, R]) -> Callable[P, WrappedReturn[R]]:
         @wraps(f)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
@@ -25,17 +28,21 @@ def requires_fields[**P, R](*fields: str) -> Callable[[Callable[P, R]], Callable
             if missing:
                 return err(f"Missing fields: {', '.join(missing)}", 400)
 
-            content = cast(dict[str, JsonifyValue], content) # NOTE: g.json_obj will appear
-                                                             # NOTE: as dict[Unknown, Unknown] -> type errors without this
+            content = cast(dict[str, JsonifyValue], content)  # NOTE: g.json_obj will appear
+            # NOTE: as dict[Unknown, Unknown] -> type errors without this
             g.json_obj = content
             return f(*args, **kwargs)
+
         return cast(Callable[P, WrappedReturn[R]], wrapper)
+
     return decorator
-def requires_fields_strict[**P, R](*fields: tuple[str, type[JsonifyValue]]) -> Callable[
-    [Callable[P, R]],
-    Callable[P, WrappedReturn[R]]
-]:
+
+
+def requires_fields_strict[**P, R](
+    *fields: tuple[str, type[JsonifyValue]],
+) -> Callable[[Callable[P, R]], Callable[P, WrappedReturn[R]]]:
     """Validate request JSON object, store it on flask.g.json_obj, and require named fields with strict type checking."""
+
     def decorator(f: Callable[P, R]) -> Callable[P, WrappedReturn[R]]:
         @wraps(f)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
@@ -54,15 +61,20 @@ def requires_fields_strict[**P, R](*fields: tuple[str, type[JsonifyValue]]) -> C
                 if value is not None and not isinstance(value, expected_type):
                     return err(
                         f"Field '{field}' must be {expected_type.__name__}, got {type(value).__name__}",
-                        400
+                        400,
                     )
             content = cast(dict[str, JsonifyValue], content)
             g.json_obj = content
             return f(*args, **kwargs)
+
         return cast(Callable[P, WrappedReturn[R]], wrapper)
+
     return decorator
+
+
 def requires_args[**P, R](*arg: str) -> Callable[[Callable[P, R]], Callable[P, WrappedReturn[R]]]:
     """Validate request.args has all named fields. Returns 400 on failure."""
+
     def decorator(f: Callable[P, R]) -> Callable[P, WrappedReturn[R]]:
         @wraps(f)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
@@ -71,5 +83,7 @@ def requires_args[**P, R](*arg: str) -> Callable[[Callable[P, R]], Callable[P, W
             if missing:
                 return err(f"Missing args: {', '.join(missing)}", 400)
             return f(*args, **kwargs)
+
         return cast(Callable[P, WrappedReturn[R]], wrapper)
+
     return decorator

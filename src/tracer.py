@@ -1,6 +1,7 @@
 """
 Module for logging detailed actions across Subscription and BWatch.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,11 +16,13 @@ if TYPE_CHECKING:
 
 __all__ = ["Op", "trace"]
 
+
 class TraceOp(StrEnum):
     """
     Base class for trace operations.
     ``color`` is intended to be an ANSI color code from ``loggers``.
     """
+
     color: str
 
     def __new__(cls, value: str, color: str = "") -> Self:
@@ -35,6 +38,7 @@ class TraceOp(StrEnum):
     @property
     def action(self) -> str:
         return self.value.split(".", 1)[1]
+
 
 class Op:
     class user(TraceOp):
@@ -90,24 +94,19 @@ class Op:
     class leaderboard(TraceOp):
         leaderboard = "leaderboard.leaderboard", Colors.GREY
 
-def trace(
-    logger: Logger,
-    operation: TraceOp,
-    event: str,
-    **fields: JsonValue
-) -> None:
+
+def trace(logger: Logger, operation: TraceOp, event: str, **fields: JsonValue) -> None:
     """
     Logs a detailed action (DEBUG level)
     """
     if not logger.isEnabledFor(logging.DEBUG):
         return
     logger.debug(
-        f"{operation.color}{operation}{Colors.RESET}: {event}" \
-        + (" " if fields else "") + " ".join(
-            f"{k}=" + (
-                v if isinstance(v, str)
-                else json.dumps(v, ensure_ascii=True, separators=(",", ":"))
-            )
+        f"{operation.color}{operation}{Colors.RESET}: {event}"
+        + (" " if fields else "")
+        + " ".join(
+            f"{k}="
+            + (v if isinstance(v, str) else json.dumps(v, ensure_ascii=True, separators=(",", ":")))
             for k, v in fields.items()
         )
     )

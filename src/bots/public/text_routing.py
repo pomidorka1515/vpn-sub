@@ -89,9 +89,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         )
         self.bot.send_message(message.chat.id, t["choose_login"], reply_markup=markup)
 
-    def _handle_subscription_menu(
-        self, message: types.Message, uid: int, lang: str
-    ) -> None:
+    def _handle_subscription_menu(self, message: types.Message, uid: int, lang: str) -> None:
         del uid
         t = self.TEXTS[lang]
         reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -105,13 +103,9 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
             types.KeyboardButton(t["btn_lang"]),
             types.KeyboardButton(t["btn_support"]),
         )
-        self.bot.send_message(
-            message.chat.id, t["welcome_reg"], reply_markup=reply_markup
-        )
+        self.bot.send_message(message.chat.id, t["welcome_reg"], reply_markup=reply_markup)
 
-    def _handle_account_menu(
-        self, message: types.Message, uid: int, lang: str
-    ) -> None:
+    def _handle_account_menu(self, message: types.Message, uid: int, lang: str) -> None:
         del uid
         t = self.TEXTS[lang]
         reply_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -124,15 +118,11 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
             types.KeyboardButton(t["btn_lang"]),
             types.KeyboardButton(t["btn_support"]),
         )
-        self.bot.send_message(
-            message.chat.id, t["welcome_reg"], reply_markup=reply_markup
-        )
+        self.bot.send_message(message.chat.id, t["welcome_reg"], reply_markup=reply_markup)
 
     def _handle_main_menu(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
-        self.bot.send_message(
-            message.chat.id, t["welcome_reg"], reply_markup=self.get_menu(uid)
-        )
+        self.bot.send_message(message.chat.id, t["welcome_reg"], reply_markup=self.get_menu(uid))
 
     def _handle_reset(self, message: types.Message, uid: int, lang: str) -> None:
         del uid
@@ -152,9 +142,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     def _handle_logout(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
         self.sub.telegram_svc.set_telegram_user(uid, None)
-        self.bot.send_message(
-            message.chat.id, t["logout_success"], reply_markup=self.get_menu(uid)
-        )
+        self.bot.send_message(message.chat.id, t["logout_success"], reply_markup=self.get_menu(uid))
 
     def _handle_help(self, message: types.Message, uid: int, lang: str) -> None:
         del uid
@@ -200,9 +188,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         )
         self.bot.register_next_step_handler(msg, self.step_delete)  # pyright: ignore[reportUnknownMemberType]
 
-    def _handle_get_subscription(
-        self, message: types.Message, uid: int, lang: str
-    ) -> None:
+    def _handle_get_subscription(self, message: types.Message, uid: int, lang: str) -> None:
         self.send_link(message.chat.id, uid, lang)
 
     def _handle_chart(self, message: types.Message, uid: int, lang: str) -> None:
@@ -217,6 +203,4 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
             for days in (3, 14, 30, 90)
         ]
         markup.add(*buttons)  # pyright: ignore[reportUnknownMemberType]
-        self.bot.send_message(
-            message.chat.id, t["choose_chart_days"], reply_markup=markup
-        )
+        self.bot.send_message(message.chat.id, t["choose_chart_days"], reply_markup=markup)

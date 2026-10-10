@@ -47,15 +47,19 @@ class Api(
         *ConfigRoutes.ROUTES,
     )
 
-    def __init__(self,
-                 app: Flask,
-                 cfg: Config[AppConfig],
-                 audit_cfg: LinesConfig,
-                 sub: Subscription,
-                 bw: BWatch) -> None:
+    def __init__(
+        self,
+        app: Flask,
+        cfg: Config[AppConfig],
+        audit_cfg: LinesConfig,
+        sub: Subscription,
+        bw: BWatch,
+    ) -> None:
         self.log = Logger(type(self).__name__)
         conf = cfg.view()
-        uri = '/' + '/'.join(p.strip('/ ') for p in (conf['uri'], conf.get('api_uri', '')) if p and p.strip('/ '))
-        self.token = conf['api_token']
+        uri = "/" + "/".join(
+            p.strip("/ ") for p in (conf["uri"], conf.get("api_uri", "")) if p and p.strip("/ ")
+        )
+        self.token = conf["api_token"]
         self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri)

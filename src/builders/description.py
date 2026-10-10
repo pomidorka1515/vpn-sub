@@ -26,15 +26,13 @@ def build_description(
     wl_limit: int,
     wl_used: int,
 ) -> str:
-    descTable: dict[str, str] = lang_cfg['description'][lang]
+    descTable: dict[str, str] = lang_cfg["description"][lang]
 
     if status:
         desc = descTable["main"]
 
         desc = format(
-            desc,
-            up=fmt_bytes(int(bandwidths.upload)),
-            down=fmt_bytes(int(bandwidths.download))
+            desc, up=fmt_bytes(int(bandwidths.upload)), down=fmt_bytes(int(bandwidths.download))
         )
 
         if ts != 0:
@@ -42,35 +40,19 @@ def build_description(
             ts_str = format(
                 ts_str,
                 date=datetime.fromtimestamp(ts, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)"),
-                days=str((ts - int(time.time())) // 86400)
+                days=str((ts - int(time.time())) // 86400),
             )
 
-            desc = format(
-                desc,
-                slot_time=ts_str
-            )
+            desc = format(desc, slot_time=ts_str)
         else:
-            desc = format(
-                desc,
-                slot_time=""
-            )
+            desc = format(desc, slot_time="")
 
         if bw_limit != 0:
             bw_limit_str = descTable["bw"]
-            bw_limit_str = format(
-                bw_limit_str,
-                used=fmt_bytes(bw_used),
-                limit=f"{bw_limit!s}GB"
-            )
-            desc = format(
-                desc,
-                slot_bw=bw_limit_str
-            )
+            bw_limit_str = format(bw_limit_str, used=fmt_bytes(bw_used), limit=f"{bw_limit!s}GB")
+            desc = format(desc, slot_bw=bw_limit_str)
         else:
-            desc = format(
-                desc,
-                slot_bw=""
-            )
+            desc = format(desc, slot_bw="")
 
         if wl_limit != 0:
             if wl_used > wl_limit * 10**9:
@@ -78,20 +60,10 @@ def build_description(
             else:
                 wl_bw_str = descTable["wl_bw"]
 
-            wl_bw_str = format(
-                wl_bw_str,
-                used=fmt_bytes(wl_used),
-                limit=f"{wl_limit!s}GB"
-            )
-            desc = format(
-                desc,
-                slot_wl_bw=wl_bw_str
-            )
+            wl_bw_str = format(wl_bw_str, used=fmt_bytes(wl_used), limit=f"{wl_limit!s}GB")
+            desc = format(desc, slot_wl_bw=wl_bw_str)
         else:
-            desc = format(
-                desc,
-                slot_wl_bw=""
-            )
+            desc = format(desc, slot_wl_bw="")
 
     else:
         if bw_limit == 0:
@@ -101,10 +73,9 @@ def build_description(
                 desc,
                 up=fmt_bytes(int(bandwidths.upload)),
                 down=fmt_bytes(int(bandwidths.download)),
-
                 # aren't needed here
                 slot_bw="",
-                slot_wl_bw=""
+                slot_wl_bw="",
             )
         else:
             desc = descTable["main_exceeded"]
@@ -113,7 +84,7 @@ def build_description(
                 up=fmt_bytes(int(bandwidths.upload)),
                 down=fmt_bytes(int(bandwidths.download)),
                 used=fmt_bytes(bw_used),
-                limit=f"{bw_limit!s}GB"
+                limit=f"{bw_limit!s}GB",
             )
 
         if not statusTime:
@@ -121,18 +92,12 @@ def build_description(
             time_str = format(
                 time_str,
                 date=datetime.fromtimestamp(ts, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)"),
-                days=str(-(ts - int(time.time())) // 86400)
+                days=str(-(ts - int(time.time())) // 86400),
             )
 
-            desc = format(
-                desc,
-                slot_time=time_str
-            )
+            desc = format(desc, slot_time=time_str)
         else:
-            desc = format(
-                desc,
-                slot_time=""
-            )
+            desc = format(desc, slot_time="")
 
     final = format(desc, username=name)
     if "{" in final:

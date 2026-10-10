@@ -1,4 +1,5 @@
 """Public localization, menus, and lifecycle glue."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -36,16 +37,14 @@ class PublicCommonMixin(
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         if not is_reg:
             markup.add(  # pyright: ignore[reportUnknownMemberType]
-                types.KeyboardButton(t['btn_login'])
+                types.KeyboardButton(t["btn_login"])
             )
         else:
             markup.add(  # pyright: ignore[reportUnknownMemberType]
-                types.KeyboardButton(t['btn_main_account']),
-                types.KeyboardButton(t['btn_main_sub'])
+                types.KeyboardButton(t["btn_main_account"]), types.KeyboardButton(t["btn_main_sub"])
             )
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-                types.KeyboardButton(t['btn_lang']),
-                types.KeyboardButton(t['btn_support'])
+            types.KeyboardButton(t["btn_lang"]), types.KeyboardButton(t["btn_support"])
         )
         return markup
 
@@ -57,25 +56,31 @@ class PublicCommonMixin(
             markup = types.InlineKeyboardMarkup()
             markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
-                types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
+                types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
             )
-            self.bot.send_message(message.chat.id, "Welcome! Please choose your language:\nДобро пожаловать! Выберите язык:", reply_markup=markup)
+            self.bot.send_message(
+                message.chat.id,
+                "Welcome! Please choose your language:\nДобро пожаловать! Выберите язык:",
+                reply_markup=markup,
+            )
         else:
             lang = self.get_lang(uid)
             t = self.TEXTS[lang]
-            msg_text = t['welcome_reg'] if self.sub.telegram_svc.is_registered(uid) else t['welcome_new']
+            msg_text = (
+                t["welcome_reg"] if self.sub.telegram_svc.is_registered(uid) else t["welcome_new"]
+            )
             self.bot.send_message(message.chat.id, msg_text, reply_markup=self.get_menu(uid))
 
     def set_lang_callback(self, call: types.CallbackQuery) -> None:
         data = cast(str, call.data)
         message = cast(types.Message, call.message)
         uid = call.from_user.id
-        new_lang = data.split('_', 1)[1]
+        new_lang = data.split("_", 1)[1]
         self.set_lang(uid, new_lang)
 
         self._answer_callback(call.id)
         t = self.TEXTS[new_lang]
-        self.bot.send_message(message.chat.id, t['lang_set'], reply_markup=self.get_menu(uid))
+        self.bot.send_message(message.chat.id, t["lang_set"], reply_markup=self.get_menu(uid))
 
         self._delete_message(message.chat.id, message.message_id)
 
@@ -85,4 +90,3 @@ class PublicCommonMixin(
     def stop(self) -> None:
         self.stop_polling()
         self._executor.shutdown(wait=False, cancel_futures=True)
-

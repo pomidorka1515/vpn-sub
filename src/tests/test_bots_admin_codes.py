@@ -23,12 +23,17 @@ def _message(text: str, chat_id: int = 7) -> types.Message:
 
 
 def _real_message(text: str, chat_id: int = 7) -> types.Message:
-    return cast(types.Message, types.Message.de_json({  # type: ignore[no-untyped-call]
-        "message_id": 3,
-        "date": 0,
-        "chat": {"id": chat_id, "type": "private"},
-        "text": text,
-    }))
+    return cast(
+        types.Message,
+        types.Message.de_json(
+            {  # type: ignore[no-untyped-call]
+                "message_id": 3,
+                "date": 0,
+                "chat": {"id": chat_id, "type": "private"},
+                "text": text,
+            }
+        ),
+    )
 
 
 def _code(**overrides: Unpack[CodeOverrides]) -> CodeObject:
@@ -43,8 +48,13 @@ def _code(**overrides: Unpack[CodeOverrides]) -> CodeObject:
     }
     payload.update(overrides)
     return CodeObject(
-        code=payload["code"], action=payload["action"], perma=payload["perma"],
-        uses=payload["uses"], days=payload["days"], gb=payload["gb"], wl_gb=payload["wl_gb"],
+        code=payload["code"],
+        action=payload["action"],
+        perma=payload["perma"],
+        uses=payload["uses"],
+        days=payload["days"],
+        gb=payload["gb"],
+        wl_gb=payload["wl_gb"],
     )
 
 
@@ -159,8 +169,13 @@ def test_add_code_wizard_rejects_bad_numbers_and_creates_code(
 
     mixin._step_add_code_uses(_real_message("2"), "bonus", "WELCOME", 30, 10, 1, False)
     subscription.code_svc.add_code.assert_called_with(
-        code="WELCOME", action="bonus", permanent=False,
-        days=30, gb=10, wl_gb=1, uses=2,
+        code="WELCOME",
+        action="bonus",
+        permanent=False,
+        days=30,
+        gb=10,
+        wl_gb=1,
+        uses=2,
     )
     created = cast(MagicMock, mixin._send_message).call_args.args[1]
     assert "Код создан" in created
@@ -169,8 +184,13 @@ def test_add_code_wizard_rejects_bad_numbers_and_creates_code(
     subscription.code_svc.add_code.side_effect = AppError("duplicate")
     mixin._step_add_code_perma(_message("да"), "register", "FOREVER", 0, 0, 0)
     subscription.code_svc.add_code.assert_called_with(
-        code="FOREVER", action="register", permanent=True,
-        days=0, gb=0, wl_gb=0, uses=-1,
+        code="FOREVER",
+        action="register",
+        permanent=True,
+        days=0,
+        gb=0,
+        wl_gb=0,
+        uses=-1,
     )
     assert "duplicate" in cast(MagicMock, mixin._send_message).call_args.args[1]
 

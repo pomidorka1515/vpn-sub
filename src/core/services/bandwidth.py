@@ -21,13 +21,10 @@ if TYPE_CHECKING:
 
 __all__ = ["BandwidthService"]
 
+
 class BandwidthService(BaseService):
     def __init__(
-        self,
-        res: SharedCoreResources,
-        *,
-        panel_svc: PanelService,
-        user_svc: CommonUserService
+        self, res: SharedCoreResources, *, panel_svc: PanelService, user_svc: CommonUserService
     ) -> None:
         super().__init__(res)
         self.panel_svc: PanelService = panel_svc
@@ -60,8 +57,10 @@ class BandwidthService(BaseService):
         """
         self.user_svc.user(username)  # keeps the NotFoundError contract
         self.trace(
-            Op.bandwidth.bandwidth, "start",
-            username=username, whitelist=whitelist,
+            Op.bandwidth.bandwidth,
+            "start",
+            username=username,
+            whitelist=whitelist,
             pool=type(pool).__name__ if pool is not None else None,
         )
 
@@ -83,11 +82,16 @@ class BandwidthService(BaseService):
                 down_total += traffic.down
 
         self.trace(
-            Op.bandwidth.bandwidth, "ok",
-            username=username, whitelist=whitelist,
+            Op.bandwidth.bandwidth,
+            "ok",
+            username=username,
+            whitelist=whitelist,
             panels=[panel.name for panel in panels],
-            found=found, absent=len(rows) - found,
-            upload=up_total, download=down_total, total=up_total + down_total,
+            found=found,
+            absent=len(rows) - found,
+            upload=up_total,
+            download=down_total,
+            total=up_total + down_total,
         )
         return BandwidthInfo(up_total, down_total, up_total + down_total)
 
@@ -107,7 +111,8 @@ class BandwidthService(BaseService):
         """
         panels = self._target_panels(whitelist)
         self.trace(
-            Op.bandwidth.all_traffic, "start",
+            Op.bandwidth.all_traffic,
+            "start",
             whitelist=whitelist,
             panels=[panel.name for panel in panels],
             pool=type(pool).__name__ if pool is not None else None,
@@ -127,12 +132,15 @@ class BandwidthService(BaseService):
 
         # A raising map would skip a live later panel when the first fails.
         for panel, outcome in zip(
-            panels, self.panel_svc.map_panels(panels, fetch, pool), strict=True,
+            panels,
+            self.panel_svc.map_panels(panels, fetch, pool),
+            strict=True,
         ):
             if isinstance(outcome, AppError):
                 self.log.error(
                     "client traffic listing failed for panel %s",
-                    panel.name, exc_info=outcome,
+                    panel.name,
+                    exc_info=outcome,
                 )
                 continue
             clients = outcome
@@ -146,17 +154,19 @@ class BandwidthService(BaseService):
                 acc[1] += traffic.down
         if queried == 0:
             self.trace(
-                Op.bandwidth.all_traffic, "unavailable",
-                whitelist=whitelist, panels=len(panels),
+                Op.bandwidth.all_traffic,
+                "unavailable",
+                whitelist=whitelist,
+                panels=len(panels),
             )
             raise PanelUnavailableError("No panel could be queried for client traffic")
-        result = {
-            email: BandwidthInfo(up, down, up + down)
-            for email, (up, down) in totals.items()
-        }
+        result = {email: BandwidthInfo(up, down, up + down) for email, (up, down) in totals.items()}
         self.trace(
-            Op.bandwidth.all_traffic, "ok",
-            whitelist=whitelist, queried=queried, panels=len(panels),
+            Op.bandwidth.all_traffic,
+            "ok",
+            whitelist=whitelist,
+            queried=queried,
+            panels=len(panels),
             users=len(result),
         )
         return result
@@ -164,10 +174,14 @@ class BandwidthService(BaseService):
     def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
         """Return snapshots for a user, clamped to retention window."""
         cutoff = int(time.time()) - days * 86400
-        return [BandwidthSnapshot(**row) for row in self.db.get_bandwidth_snapshots(username, cutoff)]
+        return [
+            BandwidthSnapshot(**row) for row in self.db.get_bandwidth_snapshots(username, cutoff)
+        ]
 
     def get_snapshots(self, days: int = 30) -> list[StateSnapshot]:
         """Return state snapshots, clamped to a retention window."""
         cutoff = int(time.time()) - days * 86400
-        return [from_dict(StateSnapshot, row, config=DConfig(cast=[tuple]))
-                for row in self.db.get_state_snapshots(cutoff)]
+        return [
+            from_dict(StateSnapshot, row, config=DConfig(cast=[tuple]))
+            for row in self.db.get_state_snapshots(cutoff)
+        ]

@@ -42,7 +42,9 @@ def public_bot_factory(tmp_path: Path) -> Iterator[PublicBotFactory]:
 
 
 def test_info_uses_stats(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params
         assert url.endswith("/stats")
         assert headers == {"Cookie": "auth_token=tok"}
@@ -59,7 +61,9 @@ def test_info_uses_stats(public_bot_factory: PublicBotFactory) -> None:
 
 
 def test_sub_uses_stats_and_qr(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, headers
         if url.endswith("/stats"):
             return json_ok(stats_obj())
@@ -83,7 +87,9 @@ def test_sub_uses_stats_and_qr(public_bot_factory: PublicBotFactory) -> None:
 
 
 def test_sub_works_in_guild_and_stays_ephemeral(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, headers
         if url.endswith("/stats"):
             return json_ok(stats_obj())
@@ -101,8 +107,12 @@ def test_sub_works_in_guild_and_stays_ephemeral(public_bot_factory: PublicBotFac
     assert interaction.response.defers[-1].get("ephemeral") is True
 
 
-def test_info_is_persistent_in_dm_and_ephemeral_in_guild(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+def test_info_is_persistent_in_dm_and_ephemeral_in_guild(
+    public_bot_factory: PublicBotFactory,
+) -> None:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/stats")
         return json_ok(stats_obj())
@@ -120,7 +130,9 @@ def test_info_is_persistent_in_dm_and_ephemeral_in_guild(public_bot_factory: Pub
 
 
 def test_bonus_posts_code_then_refreshes_info(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, params, headers
         if url.endswith("/bonus"):
             assert json == {"code": "BONUS1"}
@@ -141,7 +153,9 @@ def test_bonus_posts_code_then_refreshes_info(public_bot_factory: PublicBotFacto
 
 
 def test_settings_posts_name(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, params, headers
         assert url.endswith("/settings")
         assert json == {"name": "Ada"}
@@ -156,7 +170,9 @@ def test_settings_posts_name(public_bot_factory: PublicBotFactory) -> None:
 
 
 def test_chart_uses_history_and_stats(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, headers
         if url.endswith("/history"):
             assert params == {"days": 14}
@@ -168,7 +184,9 @@ def test_chart_uses_history_and_stats(public_bot_factory: PublicBotFactory) -> N
     bot, _store, session = public_bot_factory(handler)
     interaction = FakeInteraction()
 
-    async def fake_to_thread[**P](func: Callable[P, object], /, *args: P.args, **kwargs: P.kwargs) -> None:
+    async def fake_to_thread[**P](
+        func: Callable[P, object], /, *args: P.args, **kwargs: P.kwargs
+    ) -> None:
         del func, args, kwargs
 
     with patch("public.traffic.asyncio.to_thread", fake_to_thread):
@@ -181,7 +199,9 @@ def test_chart_uses_history_and_stats(public_bot_factory: PublicBotFactory) -> N
 
 
 def test_logout_clears_session(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/logout")
         return json_ok()
@@ -195,7 +215,9 @@ def test_logout_clears_session(public_bot_factory: PublicBotFactory) -> None:
 
 
 def test_reset_clears_session(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/reset")
         return json_ok()
@@ -209,7 +231,9 @@ def test_reset_clears_session(public_bot_factory: PublicBotFactory) -> None:
 
 
 def test_delete_posts_password_and_clears_session(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, params, headers
         assert url.endswith("/delete")
         assert json == {"current_password": "secret"}
@@ -223,9 +247,12 @@ def test_delete_posts_password_and_clears_session(public_bot_factory: PublicBotF
     assert "deleted" in str(interaction.response.messages[-1]["content"]).lower()
 
 
-
-def test_slash_commands_sync_in_setup_hook_not_on_ready(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+def test_slash_commands_sync_in_setup_hook_not_on_ready(
+    public_bot_factory: PublicBotFactory,
+) -> None:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, url, json, params, headers
         return json_ok()
 
@@ -243,8 +270,11 @@ def test_slash_commands_sync_in_setup_hook_not_on_ready(public_bot_factory: Publ
     run(on_ready())
     assert calls["n"] == 1
 
+
 def test_register_modal_validates_then_registers(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del headers
         if url.endswith("/validate"):
             assert method == "GET"
@@ -252,8 +282,15 @@ def test_register_modal_validates_then_registers(public_bot_factory: PublicBotFa
             return json_ok({"valid": True, "taken": False, "sanitized": "alice"})
         if url.endswith("/register"):
             assert method == "POST"
-            assert json == {"username": "alice", "password": "secret", "code": "INVITE", "name": "Ada"}
-            return FakeResponse(201, {}, {"success": True, "msg": "Created", "obj": {"username": "alice"}})
+            assert json == {
+                "username": "alice",
+                "password": "secret",
+                "code": "INVITE",
+                "name": "Ada",
+            }
+            return FakeResponse(
+                201, {}, {"success": True, "msg": "Created", "obj": {"username": "alice"}}
+            )
         if url.endswith("/login"):
             return FakeResponse(
                 200,
@@ -292,7 +329,9 @@ def test_register_modal_taken_or_invalid_never_posts_register(
     obj: dict[str, object],
     needle: str,
 ) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, headers
         if url.endswith("/validate"):
             assert params == {"username": "alice"}
@@ -316,7 +355,9 @@ def test_register_modal_taken_or_invalid_never_posts_register(
 
 
 def test_login_change_modal_validates_username(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del headers
         if url.endswith("/validate"):
             assert method == "GET"
@@ -354,7 +395,9 @@ def test_login_change_modal_taken_or_invalid_never_posts_settings(
     obj: dict[str, object],
     needle: str,
 ) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, headers
         if url.endswith("/validate"):
             assert params == {"username": "newname"}
@@ -375,7 +418,9 @@ def test_login_change_modal_taken_or_invalid_never_posts_settings(
 
 
 def test_cmd_info_non_dict_obj_replies_bad_response(public_bot_factory: PublicBotFactory) -> None:
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, params, headers
         assert url.endswith("/stats")
         return json_ok(["not-a-dict"])
@@ -393,7 +438,9 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
     entered = asyncio.Event()
     release = asyncio.Event()
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+    def handler(
+        method: str, url: str, json: object, params: object, headers: object
+    ) -> FakeResponse:
         del method, json, headers
         if url.endswith("/history"):
             assert params == {"days": 14}
@@ -406,7 +453,9 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
     first = FakeInteraction()
     second = FakeInteraction()
 
-    async def fake_to_thread[**P](func: Callable[P, object], /, *args: P.args, **kwargs: P.kwargs) -> None:
+    async def fake_to_thread[**P](
+        func: Callable[P, object], /, *args: P.args, **kwargs: P.kwargs
+    ) -> None:
         del func, args, kwargs
         entered.set()
         await release.wait()

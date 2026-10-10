@@ -123,8 +123,12 @@ def test_writes_schema_and_scripts(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     log = _Log()
     assert load_scripts(log) == 0
     assert (install / "config.schema.json").read_bytes() == b'{"type":"object"}\n'
-    assert (install / "scripts" / "migrate_profiles.py").read_bytes() == files["migrate_profiles.py"]
-    assert (install / "scripts" / "reconcile_clients.py").read_bytes() == files["reconcile_clients.py"]
+    assert (install / "scripts" / "migrate_profiles.py").read_bytes() == files[
+        "migrate_profiles.py"
+    ]
+    assert (install / "scripts" / "reconcile_clients.py").read_bytes() == files[
+        "reconcile_clients.py"
+    ]
     assert not list(install.glob(".*.part"))
 
 

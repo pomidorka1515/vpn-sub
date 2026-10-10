@@ -16,11 +16,12 @@ class LeaderboardService(BaseService):
         res: SharedCoreResources,
         *,
         user_svc: CommonUserService,
-        bandwidth_svc: BandwidthService
+        bandwidth_svc: BandwidthService,
     ) -> None:
         super().__init__(res)
         self.user_svc: CommonUserService = user_svc
         self.bandwidth_svc: BandwidthService = bandwidth_svc
+
     def leaderboard(
         self,
         category: Literal["total", "monthly", "wl_monthly"],
@@ -47,9 +48,12 @@ class LeaderboardService(BaseService):
         """
         raw: dict[str, int] = {}
         self.trace(
-            Op.leaderboard.leaderboard, "start",
-            category=category, top_n=top_n,
-            use_displaynames=use_displaynames, flip=flip,
+            Op.leaderboard.leaderboard,
+            "start",
+            category=category,
+            top_n=top_n,
+            use_displaynames=use_displaynames,
+            flip=flip,
         )
         records = self.user_svc.list_user_states()
         users = [record["username"] for record in records]
@@ -60,7 +64,7 @@ class LeaderboardService(BaseService):
         # display_users is what we use in dict keys
         # populate the raw data
         match category:
-            case 'total':
+            case "total":
                 # One batched read instead of a per-user panel poll.
                 # Admin bot and the HTTP admin route share the background
                 # pool with BWatch. A whitelist-only read is one panel and
@@ -69,7 +73,7 @@ class LeaderboardService(BaseService):
                 for user, display in zip(users, display_users, strict=True):
                     info = totals.get(user)
                     raw[display] = int(info.total) if info is not None else 0
-            case 'monthly' | 'wl_monthly':
+            case "monthly" | "wl_monthly":
                 for record, display in zip(records, display_users, strict=True):
                     if category == "monthly":
                         limit = record["bw_limit_gb"]
@@ -78,17 +82,23 @@ class LeaderboardService(BaseService):
                         limit = record["wl_limit_gb"]
                         used = record["wl_used"]
                     if limit == 0:
-                        continue # skip users who dont have bandwidth
+                        continue  # skip users who dont have bandwidth
                     raw[display] = used
 
-        sorted_items: list[tuple[str, int]] = sorted(raw.items(), key=lambda x: x[1], reverse=not flip)
+        sorted_items: list[tuple[str, int]] = sorted(
+            raw.items(), key=lambda x: x[1], reverse=not flip
+        )
         if top_n > 0:
             sorted_items = sorted_items[:top_n]
         result = dict(sorted_items)
         self.trace(
-            Op.leaderboard.leaderboard, "ok",
-            category=category, top_n=top_n,
-            use_displaynames=use_displaynames, flip=flip,
-            users=len(users), returned=len(result),
+            Op.leaderboard.leaderboard,
+            "ok",
+            category=category,
+            top_n=top_n,
+            use_displaynames=use_displaynames,
+            flip=flip,
+            users=len(users),
+            returned=len(result),
         )
         return result

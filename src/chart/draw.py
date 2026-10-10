@@ -1,4 +1,5 @@
 """Shared palette, fonts, and drawing helpers for chart images."""
+
 from __future__ import annotations
 
 import io
@@ -12,17 +13,17 @@ from util import fmt_bytes
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-BG       = '#1a1a1d'
-PANEL    = '#232327'
-GRID     = '#2c2c31'
-TEXT     = '#d4d4d8'
-TEXT_DIM = '#8e8e96'
-BORDER   = '#3a3a42'
+BG = "#1a1a1d"
+PANEL = "#232327"
+GRID = "#2c2c31"
+TEXT = "#d4d4d8"
+TEXT_DIM = "#8e8e96"
+BORDER = "#3a3a42"
 
-REG_DOWN = '#9ca3af'
-REG_UP   = '#d1d5db'
-WL_DOWN  = '#6b7280'
-WL_UP    = '#a1a1aa'
+REG_DOWN = "#9ca3af"
+REG_UP = "#d1d5db"
+WL_DOWN = "#6b7280"
+WL_UP = "#a1a1aa"
 
 _FONT_PATH = bundled_root() / "res" / "fonts" / "DejaVuSans.ttf"
 
@@ -62,9 +63,9 @@ def ellipsis(face: ImageFont.FreeTypeFont, text: str, max_width: int) -> str:
     if text_size(face, text)[0] <= max_width:
         return text
     trimmed = text
-    while trimmed and text_size(face, trimmed + '…')[0] > max_width:
+    while trimmed and text_size(face, trimmed + "…")[0] > max_width:
         trimmed = trimmed[:-1]
-    return (trimmed + '…') if trimmed else '…'
+    return (trimmed + "…") if trimmed else "…"
 
 
 def nice_ticks(max_value: float, count: int = 4) -> list[float]:
@@ -85,7 +86,7 @@ def nice_ticks(max_value: float, count: int = 4) -> list[float]:
         if probe <= candidate:
             base = candidate
             break
-    step = base * (10 ** exp)
+    step = base * (10**exp)
     if step <= 0:
         return [0.0, max_value]
     # step >= max/count, so count steps always cover the tallest bar
@@ -94,7 +95,7 @@ def nice_ticks(max_value: float, count: int = 4) -> list[float]:
 
 def save(image: Image.Image) -> io.BytesIO:
     buf = io.BytesIO()
-    image.save(buf, format='PNG')
+    image.save(buf, format="PNG")
     buf.seek(0)
     return buf
 
@@ -116,7 +117,7 @@ def draw_stacked(
 ) -> None:
     left, top, right, bottom = plot
     draw.rectangle((left, top, right, bottom), fill=PANEL)
-    draw_text(draw, (left, top - 28), title, font=fonts['title'], fill=TEXT)
+    draw_text(draw, (left, top - 28), title, font=fonts["title"], fill=TEXT)
 
     peak = max((b + t for b, t in zip(bottoms, tops, strict=True)), default=0)
     ticks = nice_ticks(float(peak))
@@ -127,8 +128,8 @@ def draw_stacked(
         y = bottom - int((tick / scale_max) * plot_h)
         draw.line((left, y, right, y), fill=GRID, width=1)
         label = fmt_bytes(tick)
-        tw, _ = text_size(fonts['tick'], label)
-        draw_text(draw, (left - tw - 8, y - 7), label, font=fonts['tick'], fill=TEXT_DIM)
+        tw, _ = text_size(fonts["tick"], label)
+        draw_text(draw, (left - tw - 8, y - 7), label, font=fonts["tick"], fill=TEXT_DIM)
 
     draw.line((left, bottom, right, bottom), fill=BORDER, width=1)
     draw.line((left, top, left, bottom), fill=BORDER, width=1)
@@ -149,29 +150,31 @@ def draw_stacked(
         if up_h:
             draw.rectangle((x0, bottom - down_h - up_h, x1, bottom - down_h), fill=top_color)
         if i % step == 0:
-            tw, _ = text_size(fonts['tick'], label)
-            draw_text(draw, (int(cx - tw / 2), bottom + 8), label, font=fonts['tick'], fill=TEXT_DIM)
+            tw, _ = text_size(fonts["tick"], label)
+            draw_text(
+                draw, (int(cx - tw / 2), bottom + 8), label, font=fonts["tick"], fill=TEXT_DIM
+            )
 
     if empty_label is not None:
-        tw, th = text_size(fonts['body'], empty_label)
+        tw, th = text_size(fonts["body"], empty_label)
         draw_text(
             draw,
             ((left + right - tw) // 2, (top + bottom - th) // 2),
             empty_label,
-            font=fonts['body'],
+            font=fonts["body"],
             fill=TEXT_DIM,
         )
 
     sw = 14
     gap = 8
     down_name, up_name = legend
-    up_w, _ = text_size(fonts['tick'], up_name)
-    down_w, _ = text_size(fonts['tick'], down_name)
+    up_w, _ = text_size(fonts["tick"], up_name)
+    down_w, _ = text_size(fonts["tick"], down_name)
     legend_w = sw + 6 + down_w + 16 + sw + 6 + up_w
     lx = right - legend_w
     ly = top + 8
     draw.rectangle((lx, ly, lx + sw, ly + sw), fill=bottom_color)
-    draw_text(draw, (lx + sw + 6, ly - 1), down_name, font=fonts['tick'], fill=TEXT_DIM)
+    draw_text(draw, (lx + sw + 6, ly - 1), down_name, font=fonts["tick"], fill=TEXT_DIM)
     ux = lx + sw + 6 + down_w + 16
     draw.rectangle((ux, ly, ux + sw, ly + sw), fill=top_color)
-    draw_text(draw, (ux + sw + gap, ly - 1), up_name, font=fonts['tick'], fill=TEXT_DIM)
+    draw_text(draw, (ux + sw + gap, ly - 1), up_name, font=fonts["tick"], fill=TEXT_DIM)

@@ -48,7 +48,7 @@ class SnapshotsMixin(BWatchHost):
         data: StateSnapshot = {
             "ts": midnight,
             "host": asdict(SysUtil.full_info()),
-            "panels": panels_data
+            "panels": panels_data,
         }
 
         self.db.upsert_state_snapshot(midnight, data)
@@ -98,7 +98,10 @@ class SnapshotsMixin(BWatchHost):
             tuple[
                 BandwidthInfo | None,
                 BandwidthInfo | None,
-                int, int, int, int,
+                int,
+                int,
+                int,
+                int,
                 BandwidthInfo | None,
                 BandwidthInfo | None,
             ],
@@ -109,8 +112,8 @@ class SnapshotsMixin(BWatchHost):
         need_wl = False
         for state in self.sub.user_svc.list_user_states():
             username = state["username"]
-            bw_limit = int(state['bw_limit_gb'])
-            wl_limit = int(state['wl_limit_gb'])
+            bw_limit = int(state["bw_limit_gb"])
+            wl_limit = int(state["wl_limit_gb"])
             if bw_limit == 0 and wl_limit == 0:
                 continue
             eligible_users.append(username)
@@ -146,8 +149,8 @@ class SnapshotsMixin(BWatchHost):
 
         for username in eligible_users:
             state = states[username]
-            bw_limit = int(state['bw_limit_gb'])
-            wl_limit = int(state['wl_limit_gb'])
+            bw_limit = int(state["bw_limit_gb"])
+            wl_limit = int(state["wl_limit_gb"])
             current: BandwidthInfo | None = None
             wl_current: BandwidthInfo | None = None
             if bw_limit != 0:
@@ -157,16 +160,31 @@ class SnapshotsMixin(BWatchHost):
 
             up, down, next_main = self._daily_snapshot_delta(current, mem_snapshot.get(username))
             wl_up, wl_down, next_wl = self._daily_snapshot_delta(
-                wl_current, wl_mem_snapshot.get(username),
+                wl_current,
+                wl_mem_snapshot.get(username),
             )
             snapshot_data[username] = (
-                current, wl_current, up, down, wl_up, wl_down, next_main, next_wl,
+                current,
+                wl_current,
+                up,
+                down,
+                wl_up,
+                wl_down,
+                next_main,
+                next_wl,
             )
 
         snapshot_rows: list[tuple[str, int, int, int, int, int]] = []
         with self._mem_lock:
             for username, (
-                _current, _wl_current, up, down, wl_up, wl_down, next_main, next_wl,
+                _current,
+                _wl_current,
+                up,
+                down,
+                wl_up,
+                wl_down,
+                next_main,
+                next_wl,
             ) in snapshot_data.items():
                 if next_main is not None:
                     self.snap_mem[username] = next_main

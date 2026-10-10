@@ -77,24 +77,35 @@ def web_api(database: Database, flask_app: Flask) -> tuple[Flask, Database]:
     password_hash = PasswordHasher().hash("secret")
     subscription = make_subscription(database, app=flask_app)
     database.create_user(
-        username="alice", uuid=str(uuid.uuid4()), token="a" * 40,
-        fingerprint="chrome", displayname="Alice",
-        ext_username="alice-login", ext_password_hash=password_hash,
+        username="alice",
+        uuid=str(uuid.uuid4()),
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        ext_username="alice-login",
+        ext_password_hash=password_hash,
     )
     subscription.password_svc.hash = lambda value: password_hash  # type: ignore[assignment]
     watcher = make_watch(database, subscription)
     WebApi(
-        app=flask_app, cfg=config_mock(subscription_config()),
-        sub=subscription, bw=watcher,
+        app=flask_app,
+        cfg=config_mock(subscription_config()),
+        sub=subscription,
+        bw=watcher,
     )
     return flask_app, database
 
 
 def _prefixed_client(database: Database, flask_app: Flask) -> FlaskClient:
-    subscription = make_subscription(database, app=flask_app, uri="custom", lang_cfg=_web_lang_cfg())
+    subscription = make_subscription(
+        database, app=flask_app, uri="custom", lang_cfg=_web_lang_cfg()
+    )
     database.create_user(
-        username="alice", uuid=str(uuid.uuid4()), token="a" * 40,
-        fingerprint="chrome", displayname="Alice",
+        username="alice",
+        uuid=str(uuid.uuid4()),
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
     )
     database.set_auth_token("alice", "a" * 100)
     WebApi(

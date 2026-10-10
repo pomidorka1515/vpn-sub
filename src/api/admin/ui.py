@@ -20,18 +20,18 @@ class UiRoutes(AdminApiMixin):
 
     def reg_handles(self) -> None:
         conf = self.cfg.view()
-        prefix = '/' + '/'.join(p.strip('/ ') for p in (conf['uri'],) if p and p.strip('/ '))
+        prefix = "/" + "/".join(p.strip("/ ") for p in (conf["uri"],) if p and p.strip("/ "))
         for path, handler in (
-            ('/admin', 'admin_ui'),
-            ('/admin/token', 'admin_token'),
-            ('/admin/login', 'admin_login_page'),
-            ('/admin/session', 'admin_session'),
-            ('/admin/logout', 'admin_logout'),
+            ("/admin", "admin_ui"),
+            ("/admin/token", "admin_token"),
+            ("/admin/login", "admin_login_page"),
+            ("/admin/session", "admin_session"),
+            ("/admin/logout", "admin_logout"),
         ):
             func = getattr(type(self), handler)
-            url = '/' + '/'.join(p.strip('/') for p in (prefix, path) if p.strip('/'))
-            methods = ['POST'] if handler in ('admin_session', 'admin_logout') else ['GET']
-            if handler == 'admin_session':
+            url = "/" + "/".join(p.strip("/") for p in (prefix, path) if p.strip("/"))
+            methods = ["POST"] if handler in ("admin_session", "admin_logout") else ["GET"]
+            if handler == "admin_session":
                 func = rate_limit(10)(func)
             func = func.__get__(self, type(self))
             self.app.add_url_rule(url, handler, func, methods=methods, strict_slashes=False)
@@ -39,19 +39,19 @@ class UiRoutes(AdminApiMixin):
     def admin_ui(self) -> ResponseType:
         if not self._admin_cookie_ok():
             return make_response(redirect(self._admin_login_path()))
-        lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, 'admin')
+        lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, "admin")
         conf = self.cfg.view()
         html = render_template(
-            'admin.html',
-            prefix='/' + '/'.join(p for p in conf['uri'].split('/') if p),
+            "admin.html",
+            prefix="/" + "/".join(p for p in conf["uri"].split("/") if p),
             asset_version=asset_version(),
             lang=lang,
             L=strings,
             L_en=fallback,
         )
-        response = Response(html, mimetype='text/html')
-        if request.args.get('lang', '').lower() in ('en', 'ru'):
-            response.set_cookie('lang', lang, max_age=31536000, samesite='Lax', path='/')
+        response = Response(html, mimetype="text/html")
+        if request.args.get("lang", "").lower() in ("en", "ru"):
+            response.set_cookie("lang", lang, max_age=31536000, samesite="Lax", path="/")
         return response
 
     def admin_token(self) -> ResponseType:
@@ -67,8 +67,10 @@ class UiRoutes(AdminApiMixin):
         username = body.get("username")
         password = body.get("password")
         if (
-            not isinstance(username, str) or not isinstance(password, str)
-            or not username or not password
+            not isinstance(username, str)
+            or not isinstance(password, str)
+            or not username
+            or not password
         ):
             return err("Invalid credentials.", 401)
         if not self._admin_credentials_ok(username, password):
@@ -103,14 +105,14 @@ class UiRoutes(AdminApiMixin):
 
     def _admin_prefix(self) -> str:
         conf = self.cfg.view()
-        return '/' + '/'.join(p.strip('/ ') for p in (conf['uri'],) if p and p.strip('/ '))
+        return "/" + "/".join(p.strip("/ ") for p in (conf["uri"],) if p and p.strip("/ "))
 
     def _admin_login_path(self) -> str:
-        return self._admin_prefix().rstrip('/') + '/admin/login'
+        return self._admin_prefix().rstrip("/") + "/admin/login"
 
     def _admin_cookie_path(self) -> str:
-        prefix = self._admin_prefix().rstrip('/')
-        return (prefix + '/admin') if prefix else '/admin'
+        prefix = self._admin_prefix().rstrip("/")
+        return (prefix + "/admin") if prefix else "/admin"
 
     def _admin_credentials_ok(self, username: str, password: str) -> bool:
         conf = self.cfg.view()
@@ -131,17 +133,17 @@ class UiRoutes(AdminApiMixin):
         return compare(cookie, stored)
 
     def admin_login_page(self) -> ResponseType:
-        lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, 'admin_auth')
+        lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, "admin_auth")
         conf = self.cfg.view()
         html = render_template(
-            'admin-auth.html',
-            prefix='/' + '/'.join(p for p in conf['uri'].split('/') if p),
+            "admin-auth.html",
+            prefix="/" + "/".join(p for p in conf["uri"].split("/") if p),
             asset_version=asset_version(),
             lang=lang,
             L=strings,
             L_en=fallback,
         )
-        response = Response(html, mimetype='text/html')
-        if request.args.get('lang', '').lower() in ('en', 'ru'):
-            response.set_cookie('lang', lang, max_age=31536000, samesite='Lax', path='/')
+        response = Response(html, mimetype="text/html")
+        if request.args.get("lang", "").lower() in ("en", "ru"):
+            response.set_cookie("lang", lang, max_age=31536000, samesite="Lax", path="/")
         return response

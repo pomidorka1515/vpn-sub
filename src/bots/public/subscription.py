@@ -1,4 +1,5 @@
 """Public subscription information workflows."""
+
 from __future__ import annotations
 
 import time
@@ -22,7 +23,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         info = self.sub.telegram_svc.get_info_telegram(uid)
         if not info:
             return
-        daystext = t['days_word']
+        daystext = t["days_word"]
         unlimited = f"<i>{t['unlimited']}</i>"
 
         def quota(used: float, limit: int) -> str:
@@ -35,13 +36,13 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             date_end = datetime.fromtimestamp(info.time, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
-            time_str = t['lifetime']
+            time_str = t["lifetime"]
 
         status = "🟢" if info.enabled else "🔴"
         wl_status = "🟢" if info.wl_enabled else "🔴"
         online = "🟢" if info.online else "🔴"
         bw = info.bandwidth
-        text = t['info_text'].format(
+        text = t["info_text"].format(
             username=info.displayname,
             status=status,
             wl_status=wl_status,
@@ -55,7 +56,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             wl_up=fmt_bytes(bw.wl_total.upload),
             wl_down=fmt_bytes(bw.wl_total.download),
             days=time_str,
-            fingerprint=info.fingerprint
+            fingerprint=info.fingerprint,
         )
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_menu(uid))
 
@@ -66,21 +67,22 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             return
 
         conf = self.cfg.view()
-        sub_uri = conf['uri'].strip("/")
-        domain = conf['domain'].rstrip("/")
+        sub_uri = conf["uri"].strip("/")
+        domain = conf["domain"].rstrip("/")
 
         link = f"{domain}/{sub_uri}?token={info.token}&lang={lang}"
 
         qr = make_qr(link)
 
-        text = t['get_sub_text'].format(
-            link=link
-        )
+        text = t["get_sub_text"].format(link=link)
 
-        domain = conf['domain']
+        domain = conf["domain"]
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-            types.InlineKeyboardButton(t['get_sub_btn_link'], url=link),
-            types.InlineKeyboardButton(t['get_sub_btn_happ'], url=f"{domain}/{sub_uri}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote("happ://add/")}")
+            types.InlineKeyboardButton(t["get_sub_btn_link"], url=link),
+            types.InlineKeyboardButton(
+                t["get_sub_btn_happ"],
+                url=f"{domain}/{sub_uri}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote('happ://add/')}",
+            ),
         )
         self.bot.send_photo(chat_id, qr, text, parse_mode="Markdown", reply_markup=markup)
