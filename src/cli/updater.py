@@ -463,7 +463,7 @@ def _swap(log: Logger, present: dict[str, Path], files: dict[str, Path]) -> list
             backup = path.with_name(f"{name}.bak")
             staged = path.with_name(f"{name}.new")
             shutil.copy2(path, backup)
-            os.chmod(files[name], 0o755)
+            os.chmod(files[name], 0o755) # noqa: S103
             files[name].replace(staged)
             staged.replace(path)
             replaced.append(name)

@@ -40,7 +40,7 @@ def resolve_lockfile_path(data_path: str, lockfile_path: str | None = None) -> s
         return f"{data_path}.lock"
     if lockfile_path.endswith(("/", os.sep)) or os.path.isdir(lockfile_path):
         absolute = os.path.abspath(data_path)
-        digest = hashlib.sha1(absolute.encode()).hexdigest()[:8]
+        digest = hashlib.sha1(absolute.encode(), usedforsecurity=False).hexdigest()[:8]
         name = f"{os.path.basename(data_path)}.{digest}.lock"
         return os.path.join(lockfile_path, name)
     return lockfile_path

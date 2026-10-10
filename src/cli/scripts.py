@@ -133,7 +133,7 @@ def _script(name: str, digest: str) -> bytes:
         content = base64.b64decode(encoded, validate=True)
     except binascii.Error as exc:
         raise ValueError(f"{name} content is not base64") from exc
-    check = hashlib.sha1(f"blob {len(content)}\0".encode("ascii") + content)
+    check = hashlib.sha1(f"blob {len(content)}\0".encode("ascii") + content, usedforsecurity=False)
     if not hmac.compare_digest(check.hexdigest(), sha) or not hmac.compare_digest(sha, digest):
         raise ValueError(f"{name} blob digest does not match the release tag")
     return content

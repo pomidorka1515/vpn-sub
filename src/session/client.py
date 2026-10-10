@@ -129,7 +129,7 @@ class XUiSession:
             self.port = str(port)
             self.address = address
             self.name = name
-            self.local = self.address in ("localhost", "::1", "127.0.0.1", "0.0.0.0")
+            self.local = self.address in ("localhost", "::1", "127.0.0.1", "0.0.0.0") # noqa: S104
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
 
             resolved_stamp = stamp_path if stamp_path is not None else default_inbound_stamp_path(

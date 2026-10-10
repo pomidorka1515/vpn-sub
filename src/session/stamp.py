@@ -32,7 +32,7 @@ def stamp_path(
     """
     if directory is None:
         directory = str(runtime_dir())
-    digest = hashlib.sha1(base_url.encode()).hexdigest()[:8]
+    digest = hashlib.sha1(base_url.encode(), usedforsecurity=False).hexdigest()[:8]
     safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
     return os.path.join(directory, f"{kind}.{safe}.{digest}.stamp")
 

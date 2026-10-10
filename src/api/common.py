@@ -65,7 +65,7 @@ def admin_module_names() -> tuple[str, ...]:
 @lru_cache(maxsize=1)
 def asset_version() -> str:
     """Cache-busting version for static assets, derived from shared frontend files."""
-    digest = sha1()
+    digest = sha1(usedforsecurity=False)
     for name in (*_ASSET_FILES, 'browser.html'):
         digest.update((RES_DIR / name).read_bytes())
     for name in admin_module_names():
