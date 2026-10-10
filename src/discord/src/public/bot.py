@@ -76,7 +76,7 @@ class PublicBot(
             ("delete", self.cmd_delete, "Delete your account"),
         )
         def bind(
-            command_name: str, 
+            command_name: str,
             command_handler: Callable[[discord.Interaction[Client]], Coro]
         ) -> Callable[[discord.Interaction[Client]], Coro]:
             async def wrapped(interaction: discord.Interaction) -> None:

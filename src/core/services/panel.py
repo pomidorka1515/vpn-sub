@@ -200,7 +200,7 @@ class PanelService(BaseService):
                 panel=panel.name, mode=panel.mode, ttl=ttl, count=len(cached),
             )
             return cached  # NOTE: cache stores dataclasses!
-        
+
         try:
             response = panel.get(f"panel/api/inbounds/list")
             data: dict[str, list[dict[str, object]]] = response.json()

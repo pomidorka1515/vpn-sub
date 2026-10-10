@@ -86,6 +86,10 @@ select = [
     "PL",     # Pylint
 ]
 
+ignore = [
+	"E501",   # i dont need this
+]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "typing.TypeVar".msg = "Use 3.12 syntax: `class MyClass[T]:` or `def func[T]():`"
 "typing.ParamSpec".msg = "Use 3.12 syntax."

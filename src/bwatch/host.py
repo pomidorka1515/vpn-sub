@@ -45,7 +45,7 @@ class BWatchHost:
         if not self.verbose:
             return
         trace(self.log, operation, event, **fields)
-    
+
     # Implemented by SchedulerMixin / SnapshotsMixin. Declared here so sibling
     # mixins can call them; pyright does not see methods across mixin classes.
     @staticmethod

@@ -104,7 +104,7 @@ def format(template: str, **values: object) -> str:
     return template.format_map(
         _PartialFormatter(values)
     )
-    
+
 
 def tuple_hook(value: object) -> object:
     if isinstance(value, list):
@@ -129,7 +129,7 @@ def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
     """
     Format bytes into a tuple.
     Returns:
-        tuple[amount, label]  
+        tuple[amount, label]
         Example: ("193", "MB")
     """
     for unit, div in (
@@ -165,7 +165,7 @@ def fmt_time(seconds: int, lang: str = "ru") -> str:
     m, _ = divmod(seconds, 60)
     h, m = divmod(m, 60)
     d, h = divmod(h, 24)
-    
+
     if d > 0:
         return f"{d}{t_d} {h}{t_h} {m}{t_m}"
     if h > 0:

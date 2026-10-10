@@ -145,22 +145,22 @@ class Route(NamedTuple):
         if self.rate_limit is not None:
             func = rate_limit(self.rate_limit)(func)
         func = func.__get__(api, type(api))
-        
+
         url = '/' + '/'.join([
             p.strip('/') for p in (api.uri, self.path) if p.strip('/')
         ])
-        
+
         api.app.add_url_rule(url, self.handler, func, methods=[self.method])
 
 class BaseApi(ABC):
     """Base class for API handlers. Enforces required attributes and route registration."""
-    
+
     ROUTES: list[Route]  # subclasses must define this
-    
+
     def __init__(self,
-                 app: Flask, 
+                 app: Flask,
                  cfg: Config[AppConfig],
-                 sub: Subscription, 
+                 sub: Subscription,
                  bw: BWatch,
                  uri: str):
         self.log = Logger(type(self).__name__)
@@ -176,10 +176,10 @@ class BaseApi(ABC):
     def __init_subclass__(cls, **kwargs: object) -> None:
         """Called when a class inherits from BaseApi. Validates at import time."""
         super().__init_subclass__(**kwargs)
-        
+
         if not hasattr(cls, 'ROUTES'):
             raise TypeError(f"{cls.__name__} must define ROUTES")
-        
+
         for route in cls.ROUTES:
             route.validate()
             if not hasattr(cls, route.handler):
@@ -187,11 +187,11 @@ class BaseApi(ABC):
                     f"{cls.__name__}.ROUTES references '{route.handler}' "
                     f"but no such method exists"
                 )
-    
+
     def _register_routes(self) -> None:
         for route in self.ROUTES:
             route.register(self)
-    
+
     def reg_handles(self) -> None:
         """Optional: subclass setup beyond route registration (error handlers, etc)."""
         pass

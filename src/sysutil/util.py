@@ -44,7 +44,7 @@ class SysUtil:
 
     def __init__(self) -> None:
         raise NotImplementedError("SysUtil is a namespace, not an instance")
-    
+
     @staticmethod
     def _cpu_sample() -> tuple[int, int]:
         """Total and idle jiffies from the aggregate `/proc/stat` line."""
@@ -65,7 +65,7 @@ class SysUtil:
     @staticmethod
     def cpu(sleep: int | float = 0.3) -> float:
         """CPU % over interval. Needs two reads
-        
+
         Args:
             sleep: amount of time to wait between calls, defaults to 0.3"""
         previous = SysUtil._cpu_sample()
@@ -91,7 +91,7 @@ class SysUtil:
     @staticmethod
     def cpu_info() -> CPUInfo:
         cores = os.cpu_count()
-        
+
         with open('/proc/cpuinfo') as f:
             cpu_name = ""
             max_mhz: float | int = 0
@@ -101,7 +101,7 @@ class SysUtil:
                 elif line.startswith('cpu MHz'):
                     mhz = float(line.split(':', 1)[1].strip())
                     max_mhz = max(max_mhz, mhz)
-        
+
         return CPUInfo(
             cores=cores,
             name=cpu_name,
@@ -112,7 +112,7 @@ class SysUtil:
     def loadavg() -> LoadAverage:
         with open('/proc/loadavg') as f:
             one, five, fifteen = f.read().split()[:3]
-        
+
         return LoadAverage(
             load_1m=float(one),
             load_5m=float(five),
@@ -146,7 +146,7 @@ class SysUtil:
     @staticmethod
     def memory() -> SystemMemory:
         mem_data: dict[str, int] = {}
-        
+
         with open("/proc/meminfo", "r") as f:
             for line in f:
                 parts = line.split()
@@ -156,7 +156,7 @@ class SysUtil:
                         mem_data[key] = int(parts[1]) * 1024
                     except ValueError:
                         continue
-        
+
         ram_total = mem_data.get("MemTotal", 0)
         ram_available = mem_data.get("MemAvailable", ram_total)
         ram_used = ram_total - ram_available
@@ -167,17 +167,17 @@ class SysUtil:
 
         return SystemMemory(
             ram=RamInfo(
-                total=ram_total, 
-                available=ram_available, 
+                total=ram_total,
+                available=ram_available,
                 used=ram_used
             ),
             swap=SwapInfo(
-                total=swap_total, 
-                free=swap_free, 
+                total=swap_total,
+                free=swap_free,
                 used=swap_used
             )
         )
-    
+
     @staticmethod
     def _ip_is_reportable(ip: str, family: int) -> bool:
         """
@@ -224,23 +224,23 @@ class SysUtil:
             ipv4=ipv4 or None,
             ipv6=ipv6 or None,
         )
-    
+
     @staticmethod
     def connections() -> ConnCount:
         """TCP/UDP connection counts"""
         tcp_count = 0
         udp_count = 0
-        
+
         for state_file in Path('/proc/net').glob('tcp*'):
             with open(state_file) as f:
                 f.readline()  # skip header
                 tcp_count += sum(1 for _ in f)
-        
+
         for udp_file in Path('/proc/net').glob('udp*'):
             with open(udp_file) as f:
                 f.readline()
                 udp_count += sum(1 for _ in f)
-        
+
         return ConnCount(
             tcp=tcp_count - 2,
             udp=udp_count - 2
@@ -256,10 +256,10 @@ class SysUtil:
         """
         current_proc = psutil.Process()
         children = current_proc.children(recursive=True)
-    
+
         total_rss: int = 0
         total_swap: int = 0
-    
+
         for proc in [current_proc] + children:
             try:
                 mem = proc.memory_full_info()
@@ -267,20 +267,20 @@ class SysUtil:
                 total_swap += mem.swap
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
-    
+
         return AppMemory(
             ram=float(total_rss),
             swap=float(total_swap),
         )
-    
+
     @staticmethod
     def app_uptime() -> float:
         with open('/proc/uptime') as f:
             system_uptime = float(f.read().split()[0])
-    
+
         with open(f'/proc/{os.getpid()}/stat') as f:
             starttime_ticks = int(f.read().split()[21])
-    
+
         clk_tck = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
         return system_uptime - (starttime_ticks / clk_tck)
 
@@ -331,7 +331,7 @@ class SysUtil:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
         return tuple(found)
-    
+
     @staticmethod
     def health() -> HealthStatus:
         """Cheap process status. Does not sleep or touch the network."""
@@ -348,7 +348,7 @@ class SysUtil:
             gc_thresholds=gc.get_threshold(), # collection thresholds
             gc_stats=tuple(from_dict(GCGenStats, stats) for stats in gc.get_stats()) # detailed per-generation stats
         )
-    
+
     @classmethod
     def full_info(cls) -> FullSystemInfo:
         return FullSystemInfo(

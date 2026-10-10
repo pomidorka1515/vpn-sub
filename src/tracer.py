@@ -104,7 +104,7 @@ def trace(
         f"{operation.color}{operation}{Colors.RESET}: {event}" \
         + (" " if fields else "") + " ".join(
             f"{k}=" + (
-                v if isinstance(v, str) 
+                v if isinstance(v, str)
                 else json.dumps(v, ensure_ascii=True, separators=(",", ":"))
             )
             for k, v in fields.items()

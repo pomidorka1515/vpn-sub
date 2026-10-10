@@ -35,7 +35,7 @@ class BaseService:
         if not self.res.verbose:
             return
         trace(self.log, operation, event, **fields)
-    
+
     @property
     def log(self) -> Logger:
         return self.res.log

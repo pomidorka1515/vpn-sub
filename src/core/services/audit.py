@@ -10,8 +10,8 @@ __all__ = ["AuditService", "AUDIT_VALUES"]
 AUDIT_VALUES = Literal[
     'sub_hit',
     'user_refresh', 'user_delete', 'user_reset',
-    'user_update', 'user_update_params', 'user_add', 
-    'user_update_uuid', 'user_consume_code', 
+    'user_update', 'user_update_params', 'user_add',
+    'user_update_uuid', 'user_consume_code',
     'code_add', 'code_delete',
     'config_update',
 
@@ -19,12 +19,12 @@ AUDIT_VALUES = Literal[
 
 class AuditService(BaseService):
     def audit(
-        self, 
+        self,
         *,
         name: AUDIT_VALUES,
         info: Mapping[str, JsonValue] | None = None
     ) -> None:
-        """Call a JSONL config manager to append an action. 
+        """Call a JSONL config manager to append an action.
         Ignores everything if the audit config is not set."""
         if not self.audit_cfg:
             return

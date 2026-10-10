@@ -20,7 +20,7 @@ class TelegramService(BaseService):
         super().__init__(res)
         self.user_svc: BusinessUserService = user_svc
         self.code_svc: CodeService = code_svc
-    
+
     def get_telegram_language(self, tgid: int | str) -> str:
         return self.db.get_telegram_language(tgid)
 
@@ -37,14 +37,14 @@ class TelegramService(BaseService):
             Op.telegram.set_telegram_language, "set",
             tgid=str(tgid), language=language,
         )
-    
+
     def get_info_telegram(self, tgid: int) -> UserInfo:
         """Returns all user info by telegram ID. Raises NotFoundError if absent."""
         username = self.db.tgid_to_user(tgid)
         if username is None:
             raise NotFoundError("Unknown Telegram user")
         return self.user_svc.get_info(username, pretty=False)
-    
+
     def is_registered(self, tgid: int) -> bool:
         """Check if a telegram user is already registered."""
         return self.db.tgid_to_user(tgid) is not None
@@ -68,14 +68,14 @@ class TelegramService(BaseService):
             Op.telegram.set_telegram_user, "set",
             tgid=str(tgid), username=username,
         )
-    
+
     def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
         """Apply a bonus code for a Telegram user."""
         username = self.get_username_telegram(value)
         if not isinstance(username, str) or not username:
             raise NotFoundError("Unknown Telegram user")
         return self.code_svc.apply_bonus_code(username=username, code=code)
-    
+
     @overload
     def get_username_telegram(self, tgid: int | str, reverse: Literal[False] = False) -> str | None: ...
 

@@ -167,7 +167,7 @@ class Application:
             if self.public_bot is not None:
                 self.public_bot.start()
 
-        
+
         match sys.version_info[:2]:
             case (3, minor) if minor >= 13:
                 pass
@@ -177,9 +177,9 @@ class Application:
                 raise RuntimeError(f"Error: Python 3.12+ required (detected 3.{minor})")
             case _:
                 raise RuntimeError(f"Error: Python 3.12+ required (detected {sys.version})")
-        
+
         log.info(f"{Colors.BOLD}Launch successful!{Colors.RESET}")
-    
+
     def stop(self) -> None:
         if self._stop_event.is_set():
             return

@@ -87,7 +87,7 @@ class FakeSession:
     closed = False
 
     def __init__(
-        self, 
+        self,
         handler: Handler
     ) -> None:
         self.handler = handler
@@ -113,7 +113,7 @@ class FakeSession:
         return self.handler(method, url, json, params, headers)
 
 
-class FakeUser: 
+class FakeUser:
     def __init__(self, user_id: int) -> None:
         self.id = user_id
 

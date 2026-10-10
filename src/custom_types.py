@@ -89,7 +89,7 @@ class OnlineStatus(NamedTuple):
 
 ### Stub Protocols ###
 
-    
+
 class SupportsKeysAndGetItem[KT, VT](Protocol):
     def keys(self) -> Iterable[KT]: ...
     def __getitem__(self, __k: KT) -> VT: ...
@@ -101,8 +101,8 @@ class SupportsItems[K, V](Protocol):
 ### requests-stubs/session.pyi ###
 _FileSpec = (
     SupportsRead[str | bytes] | str | bytes
-    | tuple[str | None, SupportsRead[str | bytes] | str | bytes] 
-    | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str] 
+    | tuple[str | None, SupportsRead[str | bytes] | str | bytes]
+    | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str]
     | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str, Mapping[str, str]]
 )
 
@@ -120,10 +120,10 @@ class RequestKwargs(TypedDict, total=False):
     headers: Mapping[str, str | bytes | None] | None
     cookies: None | RequestsCookieJar | MutableMapping[str, str]
     files: Mapping[str, _FileSpec] | Iterable[tuple[str, _FileSpec]] | None
-    auth: tuple[str, str] | AuthBase | Callable[[PreparedRequest], PreparedRequest] | None 
-    timeout: float | tuple[float | None, float | None] | None 
+    auth: tuple[str, str] | AuthBase | Callable[[PreparedRequest], PreparedRequest] | None
+    timeout: float | tuple[float | None, float | None] | None
     allow_redirects: bool
-    proxies: MutableMapping[str, str] | None 
+    proxies: MutableMapping[str, str] | None
     hooks: Mapping[str, Iterable[Callable[[Response], object]] | Callable[[Response], object]] | None
     stream: bool | None
     verify: bool | str | None
@@ -221,38 +221,38 @@ class MigrationReport:
 class MemoryStats:
     current: int
     total: int
-    
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class SwapStats:
     current: int
     total: int
-    
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class DiskStats:
     current: int
     total: int
-    
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class XrayStats:
     state: str
     errorMsg: str
     version: str
-    
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class NetIOStats:
     up: int
     down: int
-    
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class NetTrafficStats:
     sent: int
     recv: int
-    
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class PublicIPStats:
     ipv4: str
     ipv6: str
-    
+
 @dataclass(slots=True, frozen=True, kw_only=True)
 class AppStats:
     threads: int

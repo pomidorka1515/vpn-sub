@@ -19,7 +19,7 @@ class CodeService(BaseService):
     ) -> None:
         super().__init__(res)
         self.audit_svc: AuditService = audit_svc
-    
+
     def get_code(self, code: str) -> CodeObject:
         """Search for a code. Raises NotFoundError if it does not exist."""
 

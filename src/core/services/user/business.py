@@ -105,7 +105,7 @@ class BusinessUserService(BaseService):
         self.user_svc: CommonUserService = user_svc
         self.audit_svc: AuditService = audit_svc
         self.bandwidth_svc: BandwidthService = bandwidth_svc
-    
+
     def _drop_cache(self, panel: XUiSession | None = None) -> None:
         """Drop cached inbounds. Call after mutations, on the caller.
 
@@ -150,7 +150,7 @@ class BusinessUserService(BaseService):
 
     def get_info(self, username: str, pretty: bool = False) -> UserInfo:
         """Get all info about a user. Raises NotFoundError if it does not exist."""
-        
+
         conf = self.cfg.view()
         user = self.user_svc.user(username)
         bandwidths = self.bandwidth_svc.bandwidth(username=username)
@@ -417,9 +417,9 @@ class BusinessUserService(BaseService):
         )
         self._invalidate_clients(panel)
 
-    def update_user(self, 
-                    username: str, 
-                    enable: bool | None = None, 
+    def update_user(self,
+                    username: str,
+                    enable: bool | None = None,
                     timee: bool | None = None,
                     wl_enable: bool | None = None) -> None:
         """Disable/enable a user. wl_enable controls specifically the whitelist node.
@@ -440,12 +440,12 @@ class BusinessUserService(BaseService):
                     panel, username, enable, known[panel.name],
                 ),
             )
-            
+
             fields: UserFields = {"status": enable}
             if timee is not None:
                 fields["status_time"] = timee
             self.db.update_user(username, **fields)
-            
+
             audit_info['enable'] = enable
         if wl_enable is not None:
             # Only push the change to the whitelist panel if one is actually
@@ -522,7 +522,7 @@ class BusinessUserService(BaseService):
         else:
             ext_username = None
 
-        
+
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
         displayname = sanitize(displayname, "display")
@@ -535,7 +535,7 @@ class BusinessUserService(BaseService):
             )
         except DuplicateError:
             raise ConflictError("Username or external username exists")
-        
+
         try:
             self.add_users(username=username, _called_internally=True)
             created = NewUserInfo(

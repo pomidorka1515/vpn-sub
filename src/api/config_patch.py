@@ -137,7 +137,7 @@ def apply_config_patch(
     """
     if not isinstance(values, Mapping):
         raise ValidationError("values must be an object")
-    
+
     required = set(REQUIRED_KEYS)
     for key in values:
         if key == "$schema":

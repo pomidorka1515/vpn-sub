@@ -65,9 +65,9 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         conf = self.cfg.view()
         sub_uri = conf['uri'].strip("/")
         domain = conf['domain'].rstrip("/")
-        
+
         link = f"{domain}/{sub_uri}?token={info.token}&lang={lang}"
-            
+
         qr = make_qr(link)
 
         text = t['get_sub_text'].format(

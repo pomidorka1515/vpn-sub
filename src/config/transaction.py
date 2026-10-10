@@ -13,7 +13,7 @@ from .constants import JsonValue, JsonDict, MISSING, MISSING_TYPE
 from .atomic import file_signature, atomic_write_json, ensure_parent_dir
 if TYPE_CHECKING:
     from .core import Config
-    
+
 from errors import ConfigError
 
 
