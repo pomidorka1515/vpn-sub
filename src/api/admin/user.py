@@ -179,7 +179,7 @@ class UserRoutes(AdminApiMixin):
             try:
                 value = int(cast(str | int, content.get(name)))
             except (ValueError, TypeError):
-                raise ValueError(name)
+                raise ValueError(name) from None
             if value < 0:
                 raise ValueError(name)
             return value

@@ -531,8 +531,8 @@ class BusinessUserService(BaseService):
                 wl_limit_gb=wl_limit, ext_username=ext_username,
                 ext_password_hash=ext_password,
             )
-        except DuplicateError:
-            raise ConflictError("Username or external username exists")
+        except DuplicateError as exc:
+            raise ConflictError("Username or external username exists") from exc
 
         try:
             self.add_users(username=username, _called_internally=True)
@@ -630,8 +630,8 @@ class BusinessUserService(BaseService):
                 bw_limit=limit, wl_bw_limit=wl_limit, expiry_time=timestamp,
                 ext_username=ext_username, ext_password=password_hash,
             )
-        except DuplicateError:
-            raise ConflictError("Ext username exists")
+        except DuplicateError as exc:
+            raise ConflictError("Ext username exists") from exc
 
         self.trace(
             Op.user.update_params, "updated",
@@ -717,9 +717,9 @@ class BusinessUserService(BaseService):
 
         try:
             self.db.update_user(username, uuid=uid)
-        except DuplicateError:
+        except DuplicateError as exc:
             self._mark_rollback_failure(username, "db duplicate uuid")
-            raise ConflictError("UUID exists")
+            raise ConflictError("UUID exists") from exc
         self.trace(
             Op.user.update_uuid, "updated",
             username=username, uuid=uid,

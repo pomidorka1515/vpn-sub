@@ -104,8 +104,8 @@ class CodeService(BaseService):
         }
         try:
             self.db.add_code(code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses)
-        except DuplicateError:
-            raise ConflictError(f"code '{code}' already exists")
+        except DuplicateError as exc:
+            raise ConflictError(f"code '{code}' already exists") from exc
         self.trace(
             Op.code.add_code, "created",
             code=code, action=action, perma=permanent,

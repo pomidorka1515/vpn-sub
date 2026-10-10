@@ -348,10 +348,11 @@ def test_uuid_db_conflict_marks_failure(database: Database) -> None:
         fingerprint="chrome", displayname="Bob",
     )
 
-    from errors import ConflictError
-    with pytest.raises(ConflictError):
+    from errors import ConflictError, DuplicateError
+    with pytest.raises(ConflictError) as conflict:
         subscription.business_svc.update_uuid("alice", NEW_UUID)
 
+    assert isinstance(conflict.value.__cause__, DuplicateError)
     failures = subscription.business_code_svc.get_rollback_failures()
     assert failures["uuid"]["alice"]["reason"] == "db duplicate uuid"
 

@@ -49,8 +49,10 @@ def test_all_daily_snapshot_failures_raise_and_persist_counts(
         raise RuntimeError("panel unavailable")
 
     subscription.bandwidth_svc.all_traffic = fail_traffic  # type: ignore[method-assign]
-    with pytest.raises(PanelUnavailableError):
+    with pytest.raises(PanelUnavailableError) as failure_info:
         watch.record_daily_snapshot()
+    assert isinstance(failure_info.value.__cause__, RuntimeError)
+    assert str(failure_info.value.__cause__) == "panel unavailable"
     failure = watch.get_daily_snapshot_failure()
     assert failure is not None
     assert (failure["failed"], failure["eligible"]) == (1, 1)

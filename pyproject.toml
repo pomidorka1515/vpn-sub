@@ -101,6 +101,7 @@ ignore = [
 	"F405",    # mypy/pyright will catch any invalid method/variable either way
 	"SIM117",  # nested with(), chaining can lead to unexpected behaviour in tests
 	"SIM102",  # nested ifs
+	"PLW2901", # redefined loop name
 ]
 
 extend-safe-fixes = ["W293", "W291"]

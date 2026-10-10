@@ -124,7 +124,7 @@ class SnapshotsMixin(BWatchHost):
                 main_map = self.sub.bandwidth_svc.all_traffic(pool=pool)
             if need_wl:
                 wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True, pool=pool)
-        except Exception:
+        except Exception as exc:
             self.log.error(
                 "failed to record daily bandwidth snapshot",
                 exc_info=True,
@@ -139,7 +139,7 @@ class SnapshotsMixin(BWatchHost):
                 raise PanelUnavailableError(
                     "Daily bandwidth snapshot failed for "
                     f"{len(eligible_users)}/{len(eligible_users)} eligible user(s)"
-                )
+                ) from exc
             raise
 
         for username in eligible_users:

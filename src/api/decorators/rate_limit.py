@@ -112,7 +112,7 @@ def close_rate_limit() -> None:
 
 
 def _replace_client(client: _RateLimitClient | None) -> _RateLimitClient | None:
-    global _client
+    global _client # noqa: PLW0603
     with _client_lock:
         previous = _client
         _client = client

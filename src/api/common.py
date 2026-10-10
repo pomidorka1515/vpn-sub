@@ -192,6 +192,6 @@ class BaseApi(ABC):
         for route in self.ROUTES:
             route.register(self)
 
-    def reg_handles(self) -> None:
+    def reg_handles(self) -> None: # noqa: B027
         """Optional: subclass setup beyond route registration (error handlers, etc)."""
         pass
