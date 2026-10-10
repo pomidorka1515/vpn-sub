@@ -10,8 +10,8 @@ from typing import Literal, cast
 import pytest
 
 from config import AppConfig, Config, ConfigLike, JsonDict, JsonValue, LinesConfig
-from config.protocols import _ConfigTransactionLike
-from config.transaction import _ConfigTransaction
+from config import ConfigTransactionLike
+from config.transaction import ConfigTransaction
 from errors import (
     ConfigError,
     FileCorruptionError,
@@ -184,8 +184,8 @@ def test_view_reloads_external_changes(app_cfg: Config[AppConfig]) -> None:
 
 
 def test_transaction_view_is_active_and_commits_nested_edits(app_cfg: Config[AppConfig]) -> None:
-    real_transaction = _ConfigTransaction(app_cfg)
-    transaction: _ConfigTransactionLike[AppConfig] = real_transaction
+    real_transaction = ConfigTransaction(app_cfg)
+    transaction: ConfigTransactionLike[AppConfig] = real_transaction
     with pytest.raises(RuntimeError, match="not active"):
         transaction.view()
     with transaction as tx:

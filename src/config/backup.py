@@ -8,16 +8,16 @@ import threading
 from datetime import datetime, timezone
 from typing import cast
 
-from .jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
+from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 from .constants import CONFIG_TYPES, JsonValue
 
 from loggers import Logger
 
-def _instance_backup_dir(path: str, backup_dir: str) -> str:
+def instance_backup_dir(path: str, backup_dir: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0]
     return os.path.join(backup_dir, name)
 
-def _do_backup(
+def do_backup(
     path: str,
     indent: int,
     instance_dir: str,
@@ -70,8 +70,8 @@ def _do_backup(
                 with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
                 if jsonc:
-                    content = _strip_jsonc_comments(content)
-                    content = _strip_jsonc_trailing_commas(content)
+                    content = strip_jsonc_comments(content)
+                    content = strip_jsonc_trailing_commas(content)
                 loaded = json.loads(content)
             except FileNotFoundError:
                 return
@@ -101,7 +101,7 @@ def _do_backup(
 
     log.debug(f"backup saved: {backup_path}")
 
-def _prune_backups(
+def prune_backups(
     instance_dir: str,
     retention: int,
     log: Logger,
@@ -118,7 +118,7 @@ def _prune_backups(
         except OSError as e:
             log.error(f"prune failed for {f}: {e}")
 
-def _make_backup_thread(
+def make_backup_thread(
     *, # NOTE: kwargs only for safety
     path: str,
     indent: int,
@@ -137,8 +137,8 @@ def _make_backup_thread(
         backup_dir: Path to backup.
         backup_interval: Time in seconds between backups.
         stop_event: Threading event to use.
-        raw: see _do_backup raw kwarg.
-        jsonc: see _do_backup jsonc kwarg.
+        raw: see do_backup raw kwarg.
+        jsonc: see do_backup jsonc kwarg.
     """
     def log_failure(log: Logger, failures: int, exc: Exception) -> None:
         if failures == 1:
@@ -151,12 +151,12 @@ def _make_backup_thread(
 
     def loop() -> None:
         log = Logger("Backup")
-        instance_dir = _instance_backup_dir(path, backup_dir)
+        instance_dir = instance_backup_dir(path, backup_dir)
         failures = 0
         while not stop_event.wait(backup_interval):
             try:
-                _do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
-                _prune_backups(instance_dir, backup_retention, log, config_type=config_type)
+                do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
+                prune_backups(instance_dir, backup_retention, log, config_type=config_type)
                 log.info("backup successful")
                 failures = 0
                 continue
@@ -168,8 +168,8 @@ def _make_backup_thread(
             if stop_event.wait(retry_interval):
                 break
             try:
-                _do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
-                _prune_backups(instance_dir, backup_retention, log, config_type=config_type)
+                do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
+                prune_backups(instance_dir, backup_retention, log, config_type=config_type)
                 log.info("backup retry successful")
                 failures = 0
                 continue

@@ -4,7 +4,7 @@ version = "0.0.0" # just use tags. this isnt a package you install
 description = "VPN subscription management service. Flask + Telegram bots + 3x-ui panel glue."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
-requires-python = ">=3.13"
+requires-python = ">=3.14" # 3.13 is supported, 3.14 for development
 dependencies = [
     "jsonschema>=4.20.0",
     "requests>=2.31.0",
@@ -74,7 +74,8 @@ packages = [
 python_version = "3.14"
 cache_dir = "$MYPY_CONFIG_FILE_DIR/.mypy_cache"
 # IMPORTANT: discord launcher collides with `src/app.py`,
-# the actual implementation is in `src/discord/src/runtime.py`, this file doesn't need type checking.
+# the actual implementation is in `src/discord/src/runtime.py`,
+# this file doesn't need type checking.
 exclude = ['src/discord/src/app.py']
 
 files = [
@@ -133,11 +134,6 @@ show_column_numbers = true
 show_error_context  = true
 
 # -- per-module relaxations ---------------------------------------------
-# Config exports are shared across its implementation modules.
-[[tool.mypy.overrides]]
-module = ["config", "config.*"]
-no_implicit_reexport           = false
-
 # Config's snapshot tuples and mapping signatures differ from MutableMapping.
 [[tool.mypy.overrides]]
 module = ["config.core", "config.transaction"]
@@ -188,8 +184,6 @@ useLibraryCodeForTypes = false # why the fuck is this on by default
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]
 root = "src/config"
-reportPrivateUsage = false
-reportUnusedFunction = false
 # Config's snapshot tuples and mapping signatures differ from MutableMapping
 reportIncompatibleMethodOverride = false
 

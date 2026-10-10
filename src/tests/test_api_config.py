@@ -326,7 +326,7 @@ def test_config_set_failed_commit_does_not_back_up_or_audit(
             del data
             raise OSError("disk full")
 
-        monkeypatch.setattr(cfg, "_atomic_write", fail_write)
+        monkeypatch.setattr(cfg, "atomic_write", fail_write)
         response = _set(flask_app, base, {"sub_name": "after"})
         assert response.status_code == 500
         assert path.read_bytes() == before

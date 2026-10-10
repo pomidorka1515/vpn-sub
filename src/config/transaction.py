@@ -11,14 +11,14 @@ from typing import overload, Self, TYPE_CHECKING, Literal, cast
 
 from .constants import JsonValue, JsonDict
 from .protocols import MISSING, MISSING_TYPE
-from .atomic import _file_signature, _atomic_write_json, _ensure_parent_dir
+from .atomic import file_signature, atomic_write_json, ensure_parent_dir
 if TYPE_CHECKING:
     from .core import Config
     
 from errors import ConfigError
 
 
-class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyright: ignore[reportUnusedClass]
+class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
     """A batch edit working copy.
 
     Values returned here are live within the transaction on purpose, so nested
@@ -37,46 +37,46 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
 
     def __enter__(self) -> Self:
         cfg: Config[Doc] = self._config
-        cfg._lock.acquire()
+        cfg.lock.acquire()
         self._cfg_lock_acquired = True
         lock_fp: io.BufferedRandom | None = None
 
         try:
-            if cfg._active_transaction is not None:
+            if cfg.active_transaction is not None:
                 raise RuntimeError("Nested batch edits are not supported.")
 
-            _ensure_parent_dir(cfg._path)
-            _ensure_parent_dir(cfg._lockfile_path)
-            lock_fp = open(cfg._lockfile_path, "a+b")
+            ensure_parent_dir(cfg.path)
+            ensure_parent_dir(cfg.lockfile_path)
+            lock_fp = open(cfg.lockfile_path, "a+b")
             fcntl.flock(lock_fp, fcntl.LOCK_EX)
 
-            signature = _file_signature(cfg._path)
+            signature = file_signature(cfg.path)
 
             if signature is None:
                 current: dict[str, JsonValue] = {}
-                cfg._validate_schema(current)
-                signature = _atomic_write_json(
-                    cfg._path, current,
-                    indent=cfg._indent, minify=cfg._minify, sync_mode=cfg._sync_mode,
+                cfg.validate_schema(current)
+                signature = atomic_write_json(
+                    cfg.path, current,
+                    indent=cfg.indent, minify=cfg.minify, sync_mode=cfg.sync_mode,
                 )
                 if signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
-                cfg._data = current
-                cfg._last_signature = signature
+                cfg.data = current
+                cfg.last_signature = signature
 
-            elif signature == cfg._last_signature:
-                current = copy.deepcopy(cfg._data)
+            elif signature == cfg.last_signature:
+                current = copy.deepcopy(cfg.data)
 
             else:
-                current = cfg._read_json_object()
-                cfg._validate_schema(current)
-                cfg._data = current
-                cfg._last_signature = signature
+                current = cfg.read_json_object()
+                cfg.validate_schema(current)
+                cfg.data = current
+                cfg.last_signature = signature
 
             self.original = copy.deepcopy(current)
             self.data = copy.deepcopy(current)
             self.owner_thread_id = threading.get_ident()
-            cfg._active_transaction = self
+            cfg.active_transaction = self
             self._lock_fp = lock_fp
             return self
 
@@ -90,8 +90,8 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
                 self.data = None
                 self.original = None
                 self.owner_thread_id = None
-                cfg._active_transaction = None
-                cfg._lock.release()
+                cfg.active_transaction = None
+                cfg.lock.release()
             raise
 
     def __exit__(
@@ -108,23 +108,23 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
                     raise RuntimeError("Transaction is not active.")
 
                 if self.data != self.original:
-                    cfg._validate_schema(self.data)
-                    cfg._atomic_write(self.data)
+                    cfg.validate_schema(self.data)
+                    cfg.atomic_write(self.data)
 
-                    signature = _file_signature(cfg._path)
+                    signature = file_signature(cfg.path)
                     if signature is None:
                         raise ConfigError(
                             "Config file disappeared immediately after commit."
                         )
 
-                    if cfg._isolate_commits:
-                        cfg._data = copy.deepcopy(self.data)
+                    if cfg.isolate_commits:
+                        cfg.data = copy.deepcopy(self.data)
                     else:
-                        cfg._data = self.data
+                        cfg.data = self.data
 
-                    cfg._last_signature = signature
+                    cfg.last_signature = signature
                 else:
-                    cfg._data = self.original
+                    cfg.data = self.original
 
             return False
 
@@ -138,33 +138,33 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
                 self.data = None
                 self.original = None
                 self.owner_thread_id = None
-                cfg._active_transaction = None
-                cfg._context_transaction = None
-                cfg._lock.release()
+                cfg.active_transaction = None
+                cfg.context_transaction = None
+                cfg.lock.release()
                 self._cfg_lock_acquired = False
 
-    def _require_active(self) -> JsonDict:
+    def require_active(self) -> JsonDict:
         if self.data is None:
             raise RuntimeError("Transaction is not active.")
         return self.data
 
     def __getitem__(self, key: str) -> JsonValue:
-        return self._require_active()[key]
+        return self.require_active()[key]
 
     def __setitem__(self, key: str, value: JsonValue) -> None:
-        self._require_active()[key] = value
+        self.require_active()[key] = value
 
     def __delitem__(self, key: str) -> None:
-        del self._require_active()[key]
+        del self.require_active()[key]
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._require_active())
+        return iter(self.require_active())
 
     def __len__(self) -> int:
-        return len(self._require_active())
+        return len(self.require_active())
 
     def __contains__(self, key: str) -> bool:
-        return key in self._require_active()
+        return key in self.require_active()
 
     @overload
     def get(self, key: str) -> JsonValue: ...
@@ -177,19 +177,19 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
         key: str,
         default: _T | MISSING_TYPE = MISSING,
     ) -> JsonValue | _T:
-        data = self._require_active()
+        data = self.require_active()
         value = data.get(key) if default is MISSING else data.get(key, cast(_T, default))
         return value
 
     def view(self) -> Doc:
         """Return the active working document; nested edits are live."""
-        return cast(Doc, self._require_active())
+        return cast(Doc, self.require_active())
 
     def copy(self) -> JsonDict:
-        return copy.deepcopy(self._require_active())
+        return copy.deepcopy(self.require_active())
 
     def clear(self) -> None:
-        self._require_active().clear()
+        self.require_active().clear()
 
     @overload
     def pop(self, key: str) -> JsonValue: ...
@@ -198,14 +198,14 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
     def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
 
     def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
-        data = self._require_active()
+        data = self.require_active()
         if default is MISSING:
             return data.pop(key)
         d: JsonValue = default  # type: ignore[assignment]
         return data.pop(key, d)
 
     def popitem(self) -> tuple[str, JsonValue]:
-        return self._require_active().popitem()
+        return self.require_active().popitem()
 
     @overload
     def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
@@ -214,7 +214,7 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...
 
     def setdefault(self, key: str, default: JsonValue = None) -> JsonValue:
-        return self._require_active().setdefault(key, default)
+        return self.require_active().setdefault(key, default)
 
     @overload
     def update(self, **kwargs: JsonValue) -> None: ...
@@ -231,7 +231,7 @@ class _ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]): # pyri
         __m: Mapping[str, JsonValue] | Iterable[tuple[str, JsonValue]] | None = None,
         **kwargs: JsonValue
     ) -> None:
-        data = self._require_active()
+        data = self.require_active()
 
         if __m is not None:
             data.update(__m, **kwargs)

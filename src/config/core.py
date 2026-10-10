@@ -11,11 +11,11 @@ from typing import overload, cast, Callable, Literal
 
 from .constants import JsonValue, JsonDict, SYNC_MODES
 from .protocols import MISSING, MISSING_TYPE
-from .protocols import _ConfigTransactionLike
-from .atomic import FileSignature, _file_signature, _locked_file, _atomic_write_json, resolve_lockfile_path
-from .backup import _prune_backups, _do_backup, _make_backup_thread, _instance_backup_dir
-from .schema import _load_schema, _validate_schema, _read_json_object
-from .transaction import _ConfigTransaction
+from .protocols import ConfigTransactionLike
+from .atomic import FileSignature, file_signature, locked_file, atomic_write_json, resolve_lockfile_path
+from .backup import prune_backups, do_backup, make_backup_thread, instance_backup_dir
+from .schema import load_schema, validate_schema, read_json_object
+from .transaction import ConfigTransaction
 
 from errors import ConfigError, ReadOnlyConfigError
 from loggers import Logger
@@ -108,16 +108,16 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         # False = faster but unsafe if refs escape the transaction
         self._isolate_commits: bool = isolate_commits
 
-        self._data: dict[str, JsonValue] = {}
-        self._last_signature: FileSignature | None = None
+        self.data: dict[str, JsonValue] = {}
+        self.last_signature: FileSignature | None = None
 
-        self._lock = threading.RLock()
-        self._active_transaction: _ConfigTransaction[Doc] | None = None
-        self._context_transaction: _ConfigTransaction[Doc] | None = None
+        self.lock = threading.RLock()
+        self.active_transaction: ConfigTransaction[Doc] | None = None
+        self.context_transaction: ConfigTransaction[Doc] | None = None
 
-        self._schema_cache_path: str | None = None
-        self._schema_cache_signature: FileSignature | None = None
-        self._schema_cache: dict[str, JsonValue] | None = None
+        self.schema_cache_path: str | None = None
+        self.schema_cache_signature: FileSignature | None = None
+        self.schema_cache: dict[str, JsonValue] | None = None
 
         self._warned_update_callable: bool = False
 
@@ -133,7 +133,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
             self.reload()
 
         if self._backup_dir and start_backup:
-            self._backup_t: threading.Thread | None = _make_backup_thread(
+            self._backup_t: threading.Thread | None = make_backup_thread(
                 path=self._path,
                 indent=self._indent,
                 backup_dir=self._backup_dir,
@@ -221,17 +221,17 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         """
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
-        self._write_backup(None)
+        self.write_backup(None)
 
     def backup_data(self, data: Mapping[str, JsonValue]) -> None:
         """Snapshot a document that is not yet the file. Same retention as backup_now()."""
-        self._write_backup(dict(data))
+        self.write_backup(dict(data))
 
-    def _write_backup(self, data: dict[str, JsonValue] | None) -> None:
+    def write_backup(self, data: dict[str, JsonValue] | None) -> None:
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
-        instance_dir = _instance_backup_dir(self._path, self._backup_dir)
-        _do_backup(
+        instance_dir = instance_backup_dir(self._path, self._backup_dir)
+        do_backup(
             self._path,
             self._indent,
             instance_dir,
@@ -240,13 +240,13 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
             jsonc=self._read_only_jsonc,
             data=data,
         )
-        _prune_backups(instance_dir, self._backup_retention, self.log, config_type='json')
+        prune_backups(instance_dir, self._backup_retention, self.log, config_type='json')
 
     def validate_document(self, data: Mapping[str, JsonValue]) -> None:
         """Schema-check a document without writing. Raises SchemaValidationError."""
-        self._validate_schema(dict(data))
+        self.validate_schema(dict(data))
 
-    def _raise_if_read_only(self) -> None:
+    def raise_if_read_only(self) -> None:
         if self._read_only:
             raise ReadOnlyConfigError("Cannot modify read-only config instance")
 
@@ -256,14 +256,14 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         Returns:
             True if the data was actually reloaded, False if the file was unchanged.
         """
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            return self._reload_locked(
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            return self.reload_locked(
                 create_if_missing=not self._read_only_jsonc,
                 exclusive=True,
             )
 
-    def edit(self) -> _ConfigTransactionLike[Doc]:
+    def edit(self) -> ConfigTransactionLike[Doc]:
         """Open an explicit transaction.
 
         Usage:
@@ -271,8 +271,8 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 tx["x"].pop("124", None)
                 tx["count"] += 1
         """
-        self._raise_if_read_only()
-        return cast(_ConfigTransactionLike[Doc], _ConfigTransaction(self))
+        self.raise_if_read_only()
+        return cast(ConfigTransactionLike[Doc], ConfigTransaction(self))
 
     def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
         """Run a callback inside a transaction and return its result.
@@ -286,19 +286,19 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         Returns:
             Deep-copied return value of the callback.
         """
-        self._raise_if_read_only()
+        self.raise_if_read_only()
         with self.edit() as tx:
-            result = callback(cast(_ConfigTransaction[Doc], tx))
-        return self._detach(result)
+            result = callback(cast(ConfigTransaction[Doc], tx))
+        return self.detach(result)
 
-    def __enter__(self) -> _ConfigTransactionLike[Doc]:
-        self._raise_if_read_only()
+    def __enter__(self) -> ConfigTransactionLike[Doc]:
+        self.raise_if_read_only()
         tx = self.edit()
-        self._context_transaction = cast(_ConfigTransaction[Doc], tx)
+        self.context_transaction = cast(ConfigTransaction[Doc], tx)
         try:
             return tx.__enter__()
         except Exception:
-            self._context_transaction = None
+            self.context_transaction = None
             raise
 
     def __exit__(
@@ -307,37 +307,37 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> Literal[False] | None:
-        tx = self._context_transaction
-        self._context_transaction = None
+        tx = self.context_transaction
+        self.context_transaction = None
         if tx is None:
             raise RuntimeError("Config.__exit__ called without a matching __enter__().")
         return tx.__exit__(exc_type, exc_val, exc_tb)
 
     def __getitem__(self, key: str) -> JsonValue:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return self._detach(self._data[key])
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return self.detach(self.data[key])
 
     def __setitem__(self, key: str, value: JsonValue) -> None:
-        self._raise_if_read_only()
-        self._run_edit(lambda tx: tx.__setitem__(key, value))
+        self.raise_if_read_only()
+        self.run_edit(lambda tx: tx.__setitem__(key, value))
 
     def __delitem__(self, key: str) -> None:
-        self._raise_if_read_only()
-        self._run_edit(lambda tx: tx.__delitem__(key))
+        self.raise_if_read_only()
+        self.run_edit(lambda tx: tx.__delitem__(key))
 
     def __contains__(self, key: str) -> bool:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return key in self._data
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return key in self.data
 
     def __len__(self) -> int:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return len(self._data)
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return len(self.data)
 
     @overload
     def get(self, key: str) -> JsonValue: ...
@@ -350,53 +350,53 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         key: str,
         default: _T | MISSING_TYPE = MISSING,
     ) -> JsonValue | _T:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            value = self._data.get(key) if default is MISSING else self._data.get(key, cast(_T, default))
-            return self._detach(value)
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            value = self.data.get(key) if default is MISSING else self.data.get(key, cast(_T, default))
+            return self.detach(value)
 
     def __iter__(self) -> Iterator[str]:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return iter(tuple(self._data.keys()))
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return iter(tuple(self.data.keys()))
 
     def keys(self) -> tuple[str, ...]:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return tuple(self._data.keys())
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return tuple(self.data.keys())
 
     def values(self) -> tuple[JsonValue, ...]:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return tuple(self._detach(v) for v in self._data.values())
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return tuple(self.detach(v) for v in self.data.values())
 
     def items(self) -> tuple[tuple[str, JsonValue], ...]:
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return tuple((k, self._detach(v)) for k, v in self._data.items())
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return tuple((k, self.detach(v)) for k, v in self.data.items())
 
     def view(self) -> Doc:
         """Return a detached snapshot under the caller's document contract."""
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return self._detach(cast(Doc, self._data))
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return self.detach(cast(Doc, self.data))
 
     def copy(self) -> JsonDict:
         """Return a deep copy of the current config data as a plain dict."""
-        with self._lock:
-            self._raise_if_used_inside_transaction()
-            self._ensure_recent_locked()
-            return copy.deepcopy(self._data)
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return copy.deepcopy(self.data)
 
     def clear(self) -> None:
-        self._raise_if_read_only()
-        self._run_edit(lambda tx: tx.clear())
+        self.raise_if_read_only()
+        self.run_edit(lambda tx: tx.clear())
 
     @overload
     def pop(self, key: str) -> JsonValue: ...
@@ -405,17 +405,17 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def pop[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
 
     def pop[_TJ: JsonValue](self, key: str, default: _TJ | MISSING_TYPE = MISSING) -> JsonValue | _TJ:
-        self._raise_if_read_only()
-        def action(tx: _ConfigTransaction[Doc]) -> JsonValue:
+        self.raise_if_read_only()
+        def action(tx: ConfigTransaction[Doc]) -> JsonValue:
             if default is MISSING:
                 return tx.pop(key)
             d: JsonValue = default  # type: ignore[assignment]
             return tx.pop(key, d)
-        return self._run_edit(action)
+        return self.run_edit(action)
 
     def popitem(self) -> tuple[str, JsonValue]:
-        self._raise_if_read_only()
-        return self._run_edit(lambda tx: tx.popitem())
+        self.raise_if_read_only()
+        return self.run_edit(lambda tx: tx.popitem())
 
     @overload
     def setdefault[_TJ: JsonValue](self, key: str, default: _TJ) -> JsonValue | _TJ: ...
@@ -424,8 +424,8 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def setdefault(self, key: str, default: None = None) -> JsonValue: ...
 
     def setdefault(self, key: str, default: JsonValue = None) -> JsonValue:
-        self._raise_if_read_only()
-        return self._run_edit(lambda tx: tx.setdefault(key, default))
+        self.raise_if_read_only()
+        return self.run_edit(lambda tx: tx.setdefault(key, default))
 
     @overload
     def update(self, **kwargs: JsonValue) -> None: ...
@@ -442,7 +442,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         **kwargs: JsonValue
     ) -> None:
         """Atomic mapping-style update."""
-        self._raise_if_read_only()
+        self.raise_if_read_only()
 
         if __m is not None:
             # dict() handles both mappings and iterables safely
@@ -450,20 +450,20 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         else:
             updates = kwargs
 
-        self._run_edit(lambda tx: tx.update(updates))
+        self.run_edit(lambda tx: tx.update(updates))
 
-    def _run_edit[_TJ: JsonValue](self, action: Callable[[_ConfigTransaction[Doc]], _TJ]) -> _TJ:
+    def run_edit[_TJ: JsonValue](self, action: Callable[[ConfigTransaction[Doc]], _TJ]) -> _TJ:
         with self.edit() as tx:
-            result = action(cast(_ConfigTransaction[Doc], tx))
-        return self._detach(result)
+            result = action(cast(ConfigTransaction[Doc], tx))
+        return self.detach(result)
 
-    def _raise_if_used_inside_transaction(self) -> None:
+    def raise_if_used_inside_transaction(self) -> None:
         """Raise if the calling thread already owns an active transaction.
 
         Direct Config access (e.g. cfg["key"]) inside a transaction block would
         bypass the working copy and cause a stale-read / lost-write hazard.
         """
-        tx = self._active_transaction
+        tx = self.active_transaction
         if tx is None:
             return
         if tx.owner_thread_id == threading.get_ident():
@@ -472,75 +472,75 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 "while a batch edit is active."
             )
 
-    def _read_json_object(self) -> dict[str, JsonValue]:
-        return _read_json_object(self)
+    def read_json_object(self) -> dict[str, JsonValue]:
+        return read_json_object(self)
 
-    def _load_schema(self, data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
-        return _load_schema(self, data)
+    def load_schema(self, data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
+        return load_schema(self, data)
 
-    def _validate_schema(self, data: dict[str, JsonValue]) -> None:
-        return _validate_schema(self, data)
+    def validate_schema(self, data: dict[str, JsonValue]) -> None:
+        return validate_schema(self, data)
 
-    def _reload_locked(self, *, create_if_missing: bool, exclusive: bool) -> bool:
-        with _locked_file(self._path, exclusive=exclusive, lockfile_path=self._lockfile_path):
-            signature = _file_signature(self._path)
+    def reload_locked(self, *, create_if_missing: bool, exclusive: bool) -> bool:
+        with locked_file(self._path, exclusive=exclusive, lockfile_path=self._lockfile_path):
+            signature = file_signature(self._path)
 
             if signature is None:
                 if not create_if_missing:
                     raise FileNotFoundError(self._path)
 
                 empty: dict[str, JsonValue] = {}
-                self._validate_schema(empty)
-                new_signature = _atomic_write_json(
+                self.validate_schema(empty)
+                new_signature = atomic_write_json(
                     self._path, empty,
                     indent=self._indent, minify=self._minify, sync_mode=self._sync_mode,
                 )
                 if new_signature is None:
                     raise ConfigError("Config file disappeared immediately after create.")
 
-                self._data = {}
-                self._last_signature = new_signature
+                self.data = {}
+                self.last_signature = new_signature
                 return True
 
-            if signature == self._last_signature:
+            if signature == self.last_signature:
                 return False
 
-            data = self._read_json_object()
-            self._validate_schema(data)
-            self._data = data
-            self._last_signature = signature
+            data = self.read_json_object()
+            self.validate_schema(data)
+            self.data = data
+            self.last_signature = signature
             return True
 
-    def _ensure_recent_locked(self) -> None:
+    def ensure_recent_locked(self) -> None:
         """Reload from disk under a shared lock if the file has changed.
 
         Called before every read to guarantee consistency in multi-process
         deployments where another worker may have committed a write.
         """
-        with _locked_file(self._path, exclusive=False, lockfile_path=self._lockfile_path):
-            signature = _file_signature(self._path)
+        with locked_file(self._path, exclusive=False, lockfile_path=self._lockfile_path):
+            signature = file_signature(self._path)
             if signature is None:
                 raise ConfigError(
                     f"Config file '{self._path}' disappeared while in use."
                 )
 
-            if signature == self._last_signature:
+            if signature == self.last_signature:
                 return
 
-            data = self._read_json_object()
-            self._validate_schema(data)
-            self._data = data
-            self._last_signature = signature
+            data = self.read_json_object()
+            self.validate_schema(data)
+            self.data = data
+            self.last_signature = signature
 
-    def _atomic_write(self, data: dict[str, JsonValue]) -> None:
-        self._raise_if_read_only()
-        _atomic_write_json(
+    def atomic_write(self, data: dict[str, JsonValue]) -> None:
+        self.raise_if_read_only()
+        atomic_write_json(
             self._path, data,
             indent=self._indent, minify=self._minify, sync_mode=self._sync_mode,
         )
 
     @staticmethod
-    def _detach[_T: object](value: _T) -> _T:
+    def detach[_T: object](value: _T) -> _T:
         if isinstance(value, (dict, list)):
             return copy.deepcopy(cast(_T, value))
         return value

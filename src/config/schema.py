@@ -7,21 +7,21 @@ import os
 from collections.abc import Mapping
 from typing import cast, TYPE_CHECKING
 from .constants import JsonValue
-from .atomic import _stat_signature
-from .jsonc import _strip_jsonc_comments, _strip_jsonc_trailing_commas
+from .atomic import stat_signature
+from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 
 if TYPE_CHECKING:
     from .core import Config
 
 from errors import SchemaValidationError, ConfigError, FileCorruptionError
 
-def _read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
+def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
     try:
         with open(cfg.path, "r", encoding="utf-8") as handle:
             content = handle.read()
         if cfg.read_only_jsonc:
-            content = _strip_jsonc_comments(content)
-            content = _strip_jsonc_trailing_commas(content)
+            content = strip_jsonc_comments(content)
+            content = strip_jsonc_trailing_commas(content)
         data = json.loads(content)
     except FileNotFoundError:
         raise
@@ -36,7 +36,7 @@ def _read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
         )
     return cast(dict[str, JsonValue], data)
 
-def _load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
+def load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mapping[str, JsonValue] | None:
     schema_ref = data.get("$schema")
     forced = cfg.schema_path
     if forced is not None:
@@ -64,13 +64,13 @@ def _load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mappin
         schema_path = os.path.normpath(
             os.path.join(os.path.dirname(cfg.path), schema_ref)
         )
-    schema_sig = _stat_signature(schema_path)
+    schema_sig = stat_signature(schema_path)
 
     if (
-        schema_path == cfg._schema_cache_path
-        and schema_sig == cfg._schema_cache_signature
+        schema_path == cfg.schema_cache_path
+        and schema_sig == cfg.schema_cache_signature
     ):
-        return cfg._schema_cache
+        return cfg.schema_cache
 
     try:
         with open(schema_path, "r", encoding="utf-8") as handle:
@@ -92,13 +92,13 @@ def _load_schema[Doc](cfg: Config[Doc], data: Mapping[str, JsonValue]) -> Mappin
             f"Schema file '{schema_path}' must contain a JSON object."
         )
 
-    cfg._schema_cache_path = schema_path
-    cfg._schema_cache_signature = schema_sig
-    cfg._schema_cache = schema
+    cfg.schema_cache_path = schema_path
+    cfg.schema_cache_signature = schema_sig
+    cfg.schema_cache = schema
     return schema
 
-def _validate_schema[Doc](cfg: Config[Doc], data: dict[str, JsonValue]) -> None:
-    schema = _load_schema(cfg, data)
+def validate_schema[Doc](cfg: Config[Doc], data: dict[str, JsonValue]) -> None:
+    schema = load_schema(cfg, data)
     if schema is None:
         return
 

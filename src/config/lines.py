@@ -10,8 +10,8 @@ from types import TracebackType
 from typing import Callable, Literal, Self
 
 from .constants import SYNC_MODES, JsonValue, JsonDict
-from .atomic import CompactReturn, _ensure_parent_dir, _locked_file, _fsync_parent_dir, resolve_lockfile_path
-from .backup import _make_backup_thread, _instance_backup_dir, _do_backup, _prune_backups
+from .atomic import CompactReturn, ensure_parent_dir, locked_file, fsync_parent_dir, resolve_lockfile_path
+from .backup import make_backup_thread, instance_backup_dir, do_backup, prune_backups
 
 from errors import ConfigError
 from loggers import Logger
@@ -74,12 +74,12 @@ class LinesConfig:
             self._backup_retention: int = backup_retention
             self._backup_stop = threading.Event()
 
-            _ensure_parent_dir(path_str)
+            ensure_parent_dir(path_str)
             if not os.path.exists(self._path):
                 with open(self._path, "a", encoding="utf-8"):
                     pass
             if self._backup_dir and start_backup:
-                self._backup_t: threading.Thread | None  = _make_backup_thread(
+                self._backup_t: threading.Thread | None  = make_backup_thread(
                     path=self._path,
                     indent=4,
                     backup_dir=self._backup_dir,
@@ -109,14 +109,14 @@ class LinesConfig:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 with open(self._path, "a", encoding="utf-8") as f:
                     f.write(line)
                     if self._sync_mode != "none":
                         f.flush()
                         os.fsync(f.fileno())
                 if self._sync_mode == "full":
-                    _fsync_parent_dir(self._path)
+                    fsync_parent_dir(self._path)
 
     def append_many(self, records: Sequence[Mapping[str, JsonValue]]) -> None:
         """Append multiple records in a single atomic write. Thread-safe.
@@ -126,19 +126,19 @@ class LinesConfig:
         """
         lines = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 with open(self._path, "a", encoding="utf-8") as f:
                     f.write(lines)
                     if self._sync_mode != "none":
                         f.flush()
                         os.fsync(f.fileno())
                 if self._sync_mode == "full":
-                    _fsync_parent_dir(self._path)
+                    fsync_parent_dir(self._path)
 
     def __iter__(self) -> Iterator[JsonDict]:
         """Iterate over all lines. Thread-safe at read-time."""
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         for line in f:
@@ -152,7 +152,7 @@ class LinesConfig:
         """Iterate over the last n lines. Thread-safe at read-time."""
         raw_lines: bytes = b""
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "rb") as f:
                         f.seek(0, io.SEEK_END)
@@ -191,7 +191,7 @@ class LinesConfig:
         """
         result: list[JsonDict] = []
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         for line in f:
@@ -207,7 +207,7 @@ class LinesConfig:
     def count(self) -> int:
         """Count total lines. Thread-safe at read-time."""
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         return sum(1 for line in f if line.strip())
@@ -222,7 +222,7 @@ class LinesConfig:
         block on a process mid-append/compact/clear that holds it.
         """
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 # 'r+' acquires a shared (advisory) lock on the data fd.
                 # This is the minimum lock level needed for truncation —
                 # unlike 'w' mode, it won't deadlock if another process is
@@ -234,7 +234,7 @@ class LinesConfig:
                         f.flush()
                         os.fsync(f.fileno())
                 if self._sync_mode == "full":
-                    _fsync_parent_dir(self._path)
+                    fsync_parent_dir(self._path)
 
     def compact(self, keep: Callable[[Mapping[str, JsonValue]], bool] | None = None) -> CompactReturn:
         """Rewrite the file keeping only records that satisfy `keep`. Thread-safe.
@@ -252,7 +252,7 @@ class LinesConfig:
         """
         dir_path = os.path.dirname(self._path) or "."
         with self._lock:
-            with _locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         records = [json.loads(line) for line in f if line.strip()]
@@ -273,7 +273,7 @@ class LinesConfig:
                             os.fsync(f.fileno())
                     os.replace(tmp, self._path)
                     if self._sync_mode == "full":
-                        _fsync_parent_dir(self._path)
+                        fsync_parent_dir(self._path)
                 except Exception:
                     try:
                         os.unlink(tmp)
@@ -293,9 +293,9 @@ class LinesConfig:
         """
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
-        instance_dir = _instance_backup_dir(self._path, self._backup_dir)
-        _do_backup(self._path, 4, instance_dir, self.log, raw=True)
-        _prune_backups(instance_dir, self._backup_retention, self.log, config_type='jsonl')
+        instance_dir = instance_backup_dir(self._path, self._backup_dir)
+        do_backup(self._path, 4, instance_dir, self.log, raw=True)
+        prune_backups(instance_dir, self._backup_retention, self.log, config_type='jsonl')
 
     def close(self) -> None:
         """Stop backup thread. Does not affect the data file."""

@@ -23,7 +23,7 @@ class CompactReturn(NamedTuple):
 
 
 
-def _ensure_parent_dir(path: str) -> None:
+def ensure_parent_dir(path: str) -> None:
     dir_path = os.path.dirname(path)
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
@@ -46,15 +46,15 @@ def resolve_lockfile_path(data_path: str, lockfile_path: str | None = None) -> s
     return lockfile_path
 
 @contextmanager
-def _locked_file(
+def locked_file(
     path: str,
     *,
     exclusive: bool,
     lockfile_path: str | None = None,
 ) -> Generator[None, None, None]:
-    _ensure_parent_dir(path)
+    ensure_parent_dir(path)
     resolved = lockfile_path if lockfile_path is not None else resolve_lockfile_path(path)
-    _ensure_parent_dir(resolved)
+    ensure_parent_dir(resolved)
     mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
     with open(resolved, "a+b") as lock_fp:
         fcntl.flock(lock_fp, mode)
@@ -63,7 +63,7 @@ def _locked_file(
         finally:
             fcntl.flock(lock_fp, fcntl.LOCK_UN)
 
-def _stat_signature(path: str) -> FileSignature | None:
+def stat_signature(path: str) -> FileSignature | None:
     try:
         stat_result = os.stat(path)
     except FileNotFoundError:
@@ -75,11 +75,11 @@ def _stat_signature(path: str) -> FileSignature | None:
         device=stat_result.st_dev,
     )
 
-def _file_signature(path: str) -> FileSignature | None:
-    return _stat_signature(path)
+def file_signature(path: str) -> FileSignature | None:
+    return stat_signature(path)
 
 
-def _fsync_parent_dir(path: str) -> None:
+def fsync_parent_dir(path: str) -> None:
     dir_path = os.path.dirname(path) or "."
     dir_fd = os.open(dir_path, os.O_RDONLY)
     try:
@@ -89,7 +89,7 @@ def _fsync_parent_dir(path: str) -> None:
 
 
 
-def _atomic_write_json(
+def atomic_write_json(
     path: str,
     data: Mapping[str, JsonValue],
     *,
@@ -98,7 +98,7 @@ def _atomic_write_json(
     sync_mode: SYNC_MODES,
 ) -> FileSignature | None:
     """Write atomically: temp file + os.replace. Returns new file signature."""
-    _ensure_parent_dir(path)
+    ensure_parent_dir(path)
     dir_path = os.path.dirname(path) or "."
 
     fd, temp_path = tempfile.mkstemp(dir=dir_path, prefix=".tmp_", suffix=".json")
@@ -127,7 +127,7 @@ def _atomic_write_json(
         os.replace(temp_path, path)
 
         if sync_mode == "full":
-            _fsync_parent_dir(path)
+            fsync_parent_dir(path)
 
     except Exception:
         try:
@@ -136,5 +136,4 @@ def _atomic_write_json(
             pass
         raise
 
-    return _file_signature(path)
-
+    return file_signature(path)

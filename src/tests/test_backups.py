@@ -10,7 +10,11 @@ from unittest.mock import patch
 
 import pytest
 
-from config.backup import _do_backup, _make_backup_thread, _prune_backups
+from config.backup import (
+    do_backup as config_do_backup,
+    make_backup_thread as config_make_backup_thread,
+    prune_backups as config_prune_backups,
+)
 from db.backup import do_backup, make_backup_thread, prune_backups
 from loggers import Logger
 
@@ -25,20 +29,20 @@ def test_config_backup_normalizes_json_and_jsonc(tmp_path: Path) -> None:
     instance = tmp_path / "backups"
     log = _log()
 
-    _do_backup(str(source), 2, str(instance), log, jsonc=True)
+    config_do_backup(str(source), 2, str(instance), log, jsonc=True)
     saved = list(instance.glob("*.json"))
     assert len(saved) == 1
     assert json.loads(saved[0].read_text(encoding="utf-8")) == {"name": "vpn", "port": 1}
 
     missing = tmp_path / "missing.json"
-    _do_backup(str(missing), 2, str(instance), log)
+    config_do_backup(str(missing), 2, str(instance), log)
     assert len(list(instance.glob("*.json"))) == 1
 
     source.write_text("{not json", encoding="utf-8")
     with patch.object(Logger, "warning") as warning:
-        _do_backup(str(source), 2, str(instance), log, jsonc=True)
+        config_do_backup(str(source), 2, str(instance), log, jsonc=True)
     warning.assert_called_once()
-    _do_backup(str(source), 2, str(instance), log)
+    config_do_backup(str(source), 2, str(instance), log)
     assert len(list(instance.glob("*.json"))) == 1
 
 
@@ -46,17 +50,17 @@ def test_config_raw_backup_copies_jsonl_and_cleans_temp(tmp_path: Path) -> None:
     source = tmp_path / "audit.jsonl"
     source.write_text('{"event": "hit"}\n', encoding="utf-8")
     instance = tmp_path / "raw"
-    _do_backup(str(source), 2, str(instance), _log(), raw=True, minify=True)
+    config_do_backup(str(source), 2, str(instance), _log(), raw=True, minify=True)
     saved = list(instance.glob("*.jsonl"))
     assert saved[0].read_text(encoding="utf-8") == '{"event": "hit"}\n'
 
     missing = tmp_path / "gone.jsonl"
-    _do_backup(str(missing), 2, str(instance), _log(), raw=True)
+    config_do_backup(str(missing), 2, str(instance), _log(), raw=True)
     assert list(instance.glob(".tmp-*")) == []
 
     with patch("config.backup.shutil.copy2", side_effect=OSError("disk")):
         with pytest.raises(OSError, match="disk"):
-            _do_backup(str(source), 2, str(instance), _log(), raw=True)
+            config_do_backup(str(source), 2, str(instance), _log(), raw=True)
     assert list(instance.glob(".tmp-*")) == []
 
 
@@ -73,7 +77,7 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
 
     with patch("config.backup.open", side_effect=fail_temp):
         with pytest.raises(OSError, match="unwritable"):
-            _do_backup(str(source), 2, str(instance), _log(), minify=True)
+            config_do_backup(str(source), 2, str(instance), _log(), minify=True)
     assert list(instance.glob(".tmp-*")) == []
 
 
@@ -85,7 +89,7 @@ def test_config_prune_keeps_newest_and_logs_unlink_errors(tmp_path: Path) -> Non
         (instance / name).write_text("{}", encoding="utf-8")
     (instance / "notes.txt").write_text("keep", encoding="utf-8")
     log = _log()
-    _prune_backups(str(instance), 1, log, "json")
+    config_prune_backups(str(instance), 1, log, "json")
     assert [path.name for path in instance.glob("*.json")] == ["20260101-000003.json"]
     assert (instance / "notes.txt").is_file()
 
@@ -94,7 +98,7 @@ def test_config_prune_keeps_newest_and_logs_unlink_errors(tmp_path: Path) -> Non
         patch("os.unlink", side_effect=OSError("busy")),
         patch.object(log, "error") as error,
     ):
-        _prune_backups(str(instance), 1, log, "json")
+        config_prune_backups(str(instance), 1, log, "json")
     error.assert_called()
     assert (instance / "20260101-000003.json").is_file()
 
@@ -118,11 +122,11 @@ def test_config_backup_thread_retries_then_succeeds(tmp_path: Path) -> None:
         return next(waits)
 
     with (
-        patch("config.backup._do_backup", side_effect=fail_once),
-        patch("config.backup._prune_backups"),
+        patch("config.backup.do_backup", side_effect=fail_once),
+        patch("config.backup.prune_backups"),
         patch.object(threading.Event, "wait", staticmethod(wait)),
     ):
-        thread = _make_backup_thread(
+        thread = config_make_backup_thread(
             path=str(source), indent=2, backup_dir=str(tmp_path / "out"),
             backup_interval=0, backup_retention=1, stop_event=stop,
             config_type="json",
@@ -142,12 +146,12 @@ def test_config_backup_thread_logs_repeated_failures(tmp_path: Path) -> None:
         return next(waits)
 
     with (
-        patch("config.backup._do_backup", side_effect=OSError("full")),
+        patch("config.backup.do_backup", side_effect=OSError("full")),
         patch.object(threading.Event, "wait", staticmethod(wait)),
         patch.object(Logger, "error") as error,
         patch.object(Logger, "critical") as critical,
     ):
-        _make_backup_thread(
+        config_make_backup_thread(
             path=str(source), indent=2, backup_dir=str(tmp_path),
             backup_interval=5, backup_retention=1, stop_event=stop,
             config_type="jsonl", raw=True,
