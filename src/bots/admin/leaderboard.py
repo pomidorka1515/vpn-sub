@@ -73,7 +73,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             category=bw_type,
             top_n=window,
             use_displaynames=True,
-            flip=True if order == "asc" else False
+            flip=order == "asc"
         )
 
         language = self.lang_cfg.view()

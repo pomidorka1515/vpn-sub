@@ -90,9 +90,8 @@ class CodeService(BaseService):
             raise ValidationError("days, gb, wl_gb must be integers")
         if days < 0 or gb < 0 or wl_gb < 0:
             raise ValidationError("days, gb, wl_gb must be non-negative")
-        if not permanent:
-            if uses < 1:
-                raise ValidationError("uses must be >= 1")
+        if not permanent and uses < 1:
+            raise ValidationError("uses must be >= 1")
 
         self.trace(
             Op.code.add_code, "start",

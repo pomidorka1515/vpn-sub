@@ -188,8 +188,7 @@ class XUiSession:
     def _format_url(self, url: str, /) -> str:
         base = self.base_url.rstrip("/")
         panel_prefix = "/panel"
-        if base.endswith(panel_prefix):
-            base = base[:-len(panel_prefix)]
+        base = base.removesuffix(panel_prefix)
         if not url.startswith(base):
             return f"{base}/{url.lstrip('/')}"
         return url
@@ -199,10 +198,8 @@ class XUiSession:
         path = url.split("?", 1)[0]
         base = self.base_url.rstrip("/")
         panel_prefix = "/panel"
-        if base.endswith(panel_prefix):
-            base = base[:-len(panel_prefix)]
-        if path.startswith(base):
-            path = path[len(base):]
+        base = base.removesuffix(panel_prefix)
+        path = path.removeprefix(base)
         if not path.startswith("/"):
             path = f"/{path}"
         return path or "/"

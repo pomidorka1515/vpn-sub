@@ -73,4 +73,4 @@ class OperationsRoutes(AdminApiMixin):
         return ok("Resolved")
 
     def teapot(self) -> ResponseType:
-        return err("I'm a teapot", 418, obj={"teapot": True if random() < 0.01 else False})  # is it really an error?
+        return err("I'm a teapot", 418, obj={"teapot": random() < 0.01})  # is it really an error?

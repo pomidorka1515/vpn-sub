@@ -100,6 +100,7 @@ ignore = [
 	"F403",    # star imports trigger these;
 	"F405",    # mypy/pyright will catch any invalid method/variable either way
 	"SIM117",  # nested with(), chaining can lead to unexpected behaviour in tests
+	"SIM102",  # nested ifs
 ]
 
 extend-safe-fixes = ["W293", "W291"]
@@ -107,6 +108,7 @@ extend-safe-fixes = ["W293", "W291"]
 [tool.ruff.lint.per-file-ignores]
 "**/tests/*" = [
     "PLR",
+    "B009",
     "B010",
 ]
 

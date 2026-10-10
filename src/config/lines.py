@@ -267,8 +267,7 @@ class LinesConfig:
                 os.close(fd)
                 try:
                     with open(tmp, "w", encoding="utf-8") as f:
-                        for r in kept:
-                            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+                        f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in kept)
                         if self._sync_mode != "none":
                             f.flush()
                             os.fsync(f.fileno())

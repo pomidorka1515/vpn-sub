@@ -204,7 +204,7 @@ class PanelService(BaseService):
         try:
             response = panel.get("panel/api/inbounds/list")
             data: dict[str, list[dict[str, object]]] = response.json()
-            if response.status_code not in (200,) or not data.get("success"):
+            if response.status_code != 200 or not data.get("success"):
                 raise PanelUnavailableError(
                     f"Panel {panel.name} inbound query failed: "
                     f"{data.get('msg') or response.status_code}"

@@ -172,7 +172,7 @@ def _confirm(log: Logger, question: str) -> bool:
 
 
 def _parse(value: str) -> tuple[int, ...] | None:
-    text = value[1:] if value.startswith("v") else value
+    text = value.removeprefix("v")
     text = text.split("-", 1)[0].split("+", 1)[0]
     parts = text.split(".")
     if not parts or any(not part.isdigit() for part in parts):

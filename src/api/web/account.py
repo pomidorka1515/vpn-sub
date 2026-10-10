@@ -83,12 +83,10 @@ class AccountRoutes(WebApiMixin):
             conf = self.cfg.view()
             if fingerprint not in conf['fingerprints']:
                 return err("Unknown fingerprint")
-        if displayname:
-            if len(displayname) > 16:
-                return err("displayname exceeds max. length of 16")
-        if ext_username:
-            if len(ext_username) > 32:
-                return err("username exceeds max. length of 32")
+        if displayname and len(displayname) > 16:
+            return err("displayname exceeds max. length of 16")
+        if ext_username and len(ext_username) > 32:
+            return err("username exceeds max. length of 32")
         # credential changes require the current password (guards stolen cookies)
         if ext_username or ext_password:
             if not current_password:
