@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Self
 
-from composition import PublicFeatureMixin
-
 import discord
+from composition import PublicFeatureMixin
 
 __all__ = ["PublicSettingsMixin"]
 

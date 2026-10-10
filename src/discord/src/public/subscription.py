@@ -4,12 +4,11 @@ import io
 import time
 from datetime import UTC, datetime
 
+import discord
 from composition import PublicFeatureMixin
 from payloads import number
-from webapi import StatsPayload
-
-import discord
 from util import fmt_bytes
+from webapi import StatsPayload
 
 __all__ = ["PublicSubscriptionMixin"]
 

@@ -4,11 +4,10 @@ import asyncio
 from collections.abc import Mapping
 from typing import Literal, cast
 
-from composition import AdminFeatureMixin
-from payloads import number, object_rows
-
 import discord
 from chart import leaderboard_chart
+from composition import AdminFeatureMixin
+from payloads import number, object_rows
 from util import fmt_bytes, truncate_utf8
 
 from .common import result_obj

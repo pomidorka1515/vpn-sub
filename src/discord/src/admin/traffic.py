@@ -4,12 +4,11 @@ import asyncio
 from collections.abc import Mapping
 from typing import cast
 
-from composition import AdminFeatureMixin
-from payloads import number, object_rows
-
 import discord
 from chart import bandwidth_chart
+from composition import AdminFeatureMixin
 from custom_types import BandwidthSnapshot
+from payloads import number, object_rows
 from util import fmt_bytes, format_usage, truncate_utf8
 
 from .common import obj_map, result_obj

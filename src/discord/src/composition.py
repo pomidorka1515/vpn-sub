@@ -11,12 +11,11 @@ __all__ = ["AdminFeatureMixin", "PublicFeatureMixin"]
 if TYPE_CHECKING:
     import asyncio
 
+    import discord
     from adminapi import AdminApiClient
+    from discord import app_commands
     from sessions import SessionStore
     from webapi import ApiResult, WebApiClient
-
-    import discord
-    from discord import app_commands
 
     class PublicFeatureMixin:
         bot: discord.Client

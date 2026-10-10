@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from discord_helpers import FakeInteraction, FakeUser, json_ok, make_public_bot, run
+
 from public.routing import PublicRoutingMixin
 
 

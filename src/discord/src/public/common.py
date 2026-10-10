@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import discord
 from common import DiscordIOMixin
 from composition import PublicFeatureMixin
-
-import discord
 
 __all__ = ["PublicCommonMixin"]
 

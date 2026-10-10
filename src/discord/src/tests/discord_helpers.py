@@ -7,15 +7,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+import discord
 from admin.bot import AdminBot
 from adminapi import AdminApiClient
+from config import Config, DiscordConfig, DiscordLangConfig
 from host import SharedDiscordClient
 from public.bot import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
-
-import discord
-from config import Config, DiscordConfig, DiscordLangConfig
 
 DISCORD_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = DISCORD_ROOT / "config.schema.json"

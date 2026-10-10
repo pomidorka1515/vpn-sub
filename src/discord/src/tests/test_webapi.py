@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from discord_helpers import FakeHeaders, FakeResponse, json_ok, make_web_client, run
+
 from webapi import extract_auth_token
 
 

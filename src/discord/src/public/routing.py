@@ -3,9 +3,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import cast
 
-from composition import PublicFeatureMixin
-
 import discord
+from composition import PublicFeatureMixin
 
 __all__ = ["PublicRoutingMixin"]
 

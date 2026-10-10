@@ -7,17 +7,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
+import discord
 from admin import AdminBot
 from adminapi import AdminApiClient
+from config import Config, DiscordConfig, DiscordLangConfig, LinesConfig
 from host import SharedDiscordClient
+from loggers import Logger
+from paths import bundled_root, compiled, program_dir
 from public import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
-
-import discord
-from config import Config, DiscordConfig, DiscordLangConfig, LinesConfig
-from loggers import Logger
-from paths import bundled_root, compiled, program_dir
 
 __all__ = [
     "DiscordApplication",
