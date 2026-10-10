@@ -74,12 +74,12 @@ class PublicSettingsMixin(PublicFeatureMixin):
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         username = self.sub.telegram_svc.get_username_telegram(uid)
-        if not isinstance(username, str): return
+        if not isinstance(username, str): return None
 
         new_name = text.strip()
         if len(new_name) > 16:
             self.bot.send_message(message.chat.id, t['length_displayname'].format(ln=16), reply_markup=self.get_menu(uid))
-            return
+            return None
 
         try:
             self.sub.business_svc.update_params(username=username, displayname=new_name)
@@ -96,12 +96,12 @@ class PublicSettingsMixin(PublicFeatureMixin):
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         username = self.sub.telegram_svc.get_username_telegram(uid)
-        if not isinstance(username, str): return
+        if not isinstance(username, str): return None
 
         new_login = text.strip()
         if len(new_login) > 32:
             self.bot.send_message(message.chat.id, t['length_username'].format(ln=16), reply_markup=self.get_menu(uid))
-            return
+            return None
 
         try:
             self.sub.business_svc.update_params(username=username, ext_username=new_login)
@@ -118,10 +118,10 @@ class PublicSettingsMixin(PublicFeatureMixin):
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
         username = self.sub.telegram_svc.get_username_telegram(uid)
-        if not isinstance(username, str): return
+        if not isinstance(username, str): return None
         if not self.sub.user_svc.get_external_username(username):
             self.bot.send_message(message.chat.id, t['no_account'], reply_markup=self.get_menu(uid))
-            return
+            return None
         new_pass = text.strip()
         self._delete_message(message.chat.id, message.message_id, secret=True)
 
@@ -129,7 +129,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         ext_username = self.sub.user_svc.get_external_username(username)
         if not ext_username:
             self.bot.send_message(message.chat.id, "❌ No login found", reply_markup=self.get_menu(uid))
-            return
+            return None
 
         try:
             self.sub.business_svc.update_params(username=username, ext_username=ext_username, ext_password=new_pass)

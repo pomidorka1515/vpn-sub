@@ -138,9 +138,8 @@ def get_subscription(
             headers=headers
         ), 200
 
-    else:
-        return Response(builders.build_link_array(
-            cfg=cfg, status=status, statusWl=statusWl, lang=lang,
-            bandwidths=bandwidths, user_uuid=user_uuid, is_happ=is_happ, need_dummy_link=need_dummy_link,
-            fingerprint=str(user['fingerprint']), lang_cfg=lang_cfg
-        ), mimetype="text/plain", headers=headers), 200
+    return Response(builders.build_link_array(
+        cfg=cfg, status=status, statusWl=statusWl, lang=lang,
+        bandwidths=bandwidths, user_uuid=user_uuid, is_happ=is_happ, need_dummy_link=need_dummy_link,
+        fingerprint=str(user['fingerprint']), lang_cfg=lang_cfg
+    ), mimetype="text/plain", headers=headers), 200

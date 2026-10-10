@@ -26,19 +26,19 @@ class PublicAccountMixin(PublicFeatureMixin):
         confirm = t['delete_confirm_input']
         if text.strip().lower() != confirm.lower():
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
-            return
+            return None
 
         username = self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str):
             self.bot.send_message(message.chat.id, "❌ Error", reply_markup=self.get_menu(uid))
-            return
+            return None
         try:
             self.sub.business_svc.delete_user(username=username, perma=True)
             self.bot.send_message(message.chat.id, t['delete_success'], reply_markup=self.get_menu(uid))
 
         except AppError as error:
             self._send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
-            return
+            return None
         except Exception as error:
             self.log.exception(f"Delete error for uid {uid}: {error}")
             self._send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
@@ -56,7 +56,7 @@ class PublicAccountMixin(PublicFeatureMixin):
             try:
                 username = self.sub.telegram_svc.get_username_telegram(uid)
                 if not isinstance(username, str):
-                    return
+                    return None
                 self.sub.business_svc.reset_user(username)
                 self.bot.send_message(message.chat.id, t['reset_success'], reply_markup=self.get_menu(uid))
             except AppError as error:
@@ -66,7 +66,7 @@ class PublicAccountMixin(PublicFeatureMixin):
                 self._send_message(message.chat.id, t['error_generic'], reply_markup=self.get_menu(uid))
         else:
             self.bot.send_message(message.chat.id, t['cancelled'], reply_markup=self.get_menu(uid))
-            return
+            return None
 
     def step_bonus(self, message: types.Message) -> None:
         text = cast(str, message.text)

@@ -37,6 +37,7 @@ class PublicLoginMixin(PublicFeatureMixin):
 
         msg = self.bot.send_message(message.chat.id, t['enter_pass'])
         self.bot.register_next_step_handler(msg, self.step_login_pass, email)  # pyright: ignore[reportUnknownMemberType]
+        return None
 
     def step_login_pass(self, message: types.Message, email: str) -> None:
         text = cast(str, message.text)
@@ -54,8 +55,9 @@ class PublicLoginMixin(PublicFeatureMixin):
             self.sub.telegram_svc.set_telegram_user(uid, internal_username)
             self.bot.send_message(message.chat.id, t['login_success'], reply_markup=self.get_menu(uid))
             self.send_info(message.chat.id, uid, lang)
-            return
+            return None
 
         self.bot.send_message(message.chat.id, t['login_fail'], reply_markup=self.get_menu(uid))
+        return None
 
 
