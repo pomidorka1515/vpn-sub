@@ -16,7 +16,7 @@ from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
     close_rate_limit,
 )
 from api.common import RES_DIR
-from config import Config, LangConfig, LinesConfigLike
+from config import Config, LangConfig, LinesConfig
 from db import Database
 from errors import AppError, DatabaseError
 from helpers import config_mock, make_subscription, make_watch, subscription_config
@@ -120,7 +120,7 @@ def test_user_refresh_aborts_on_non_panel_error(database: Database, flask_app: F
     Api(
         app=flask_app,
         cfg=config_mock(subscription_config(api_uri="api", api_token="secret")),
-        audit_cfg=cast(LinesConfigLike, _Audit()),
+        audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
     )
@@ -152,7 +152,7 @@ def _admin_api(
             api_token="secret",
             api_admin_ui_auth=list(api_admin_ui_auth),
         )),
-        audit_cfg=cast(LinesConfigLike, _Audit()),
+        audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
     )
@@ -281,7 +281,7 @@ def test_admin_logout_cookie_path_matches_login_when_uri_empty(
             api_token="secret",
             api_admin_ui_auth=["admin", "panel-secret"],
         )),
-        audit_cfg=cast(LinesConfigLike, _Audit()),
+        audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
     )
@@ -382,7 +382,7 @@ def _polling_api(
     Api(
         app=flask_app,
         cfg=config_mock(subscription_config(api_uri="api", api_token="secret")),
-        audit_cfg=cast(LinesConfigLike, _Audit()),
+        audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
         bw=make_watch(database, subscription),
     )

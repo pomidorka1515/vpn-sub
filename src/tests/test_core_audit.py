@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
-from config import LinesConfigLike
+from config import LinesConfig
 from db import Database
 from helpers import create_alice, make_subscription
 
@@ -28,7 +28,7 @@ def test_audit_is_silent_without_config(
 def test_audit_appends_when_configured(database: Database) -> None:
     audit = RecordingAudit()
     subscription = make_subscription(
-        database, audit_cfg=cast(LinesConfigLike, audit),
+        database, audit_cfg=cast(LinesConfig, audit),
     )
     create_alice(database)
     subscription.business_svc.update_params("alice", displayname="Alice 2")

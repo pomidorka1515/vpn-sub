@@ -4,7 +4,7 @@ from flask import Flask
 
 from api.common import BaseApi, Route
 from bwatch import BWatch
-from config import AppConfig, Config, LinesConfigLike
+from config import AppConfig, Config, LinesConfig
 from core import Subscription
 from loggers import Logger
 
@@ -46,7 +46,7 @@ class Api(
     def __init__(self,
                  app: Flask,
                  cfg: Config[AppConfig],
-                 audit_cfg: LinesConfigLike,
+                 audit_cfg: LinesConfig,
                  sub: Subscription,
                  bw: BWatch):
         self.log = Logger(type(self).__name__)

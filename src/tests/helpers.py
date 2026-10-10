@@ -13,7 +13,7 @@ from flask import Flask
 from requests import Response
 
 from bwatch import BWatch
-from config import AppConfig, Config, LangConfig, ProfileConfig, JsonValue, LinesConfigLike
+from config import AppConfig, Config, LangConfig, ProfileConfig, JsonValue, LinesConfig
 from bots import PublicBot, AdminBot
 from core import Subscription
 from custom_types import ClientTraffic, Inbound, PanelClient
@@ -76,7 +76,7 @@ def make_subscription(
     panels: list[object] | None = None,
     whitelist_panel: object | None = None,
     app: Flask | None = None,
-    audit_cfg: LinesConfigLike | None = None,
+    audit_cfg: LinesConfig | None = None,
     lang_cfg: Config[LangConfig] | None = None,
     **config_overrides: Unpack[AppOverrides],
 ) -> Subscription:

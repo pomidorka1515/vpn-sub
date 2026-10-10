@@ -14,7 +14,7 @@ from .level import TRACE, env_level
 
 if TYPE_CHECKING:
     from bots import AdminBot
-    from config import LinesConfigLike
+    from config import LinesConfig
 
 __all__ = ["Logger", "TRACE"]
 
@@ -92,7 +92,7 @@ class Logger(logging.Logger):
         tg_handler.setFormatter(simple_fmt)
         self.addHandler(tg_handler)
 
-    def set_jsonl_handler(self, lines_config: LinesConfigLike, level: int | None = None) -> None:
+    def set_jsonl_handler(self, lines_config: LinesConfig, level: int | None = None) -> None:
         self.handlers = [h for h in self.handlers if not isinstance(h, _JSONLinesLogger)]
         jsonl_handler = _JSONLinesLogger(lines_config)
         if level is None: jsonl_handler.setLevel(logging.INFO)

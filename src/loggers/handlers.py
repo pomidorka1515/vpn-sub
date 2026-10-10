@@ -9,7 +9,7 @@ from .common import _ANSI_ESCAPE, _safe_handle_error
 
 if TYPE_CHECKING:
     from bots import AdminBot
-    from config import LinesConfigLike
+    from config import LinesConfig
 
 __all__ = ["_JSONLinesLogger", "_TelegramLogger"]
 
@@ -39,7 +39,7 @@ class _TelegramLogger(logging.Handler):
 
 
 class _JSONLinesLogger(logging.Handler):
-    def __init__(self, config: LinesConfigLike):
+    def __init__(self, config: LinesConfig):
         """
         Logging handler to write logs into a .jsonl file.
         Uses LinesConfig manager.

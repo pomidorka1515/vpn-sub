@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from collections.abc import Mapping
 from typing import cast
 from gunicorn.config import Config as GunicornConfig
-from config import LinesConfigLike
+from config import LinesConfig
 
 import pytest
 
@@ -309,7 +309,7 @@ def test_jsonl_strips_message_colors() -> None:
         def append(self, record: Mapping[str, object]) -> None:
             stored.append(record)
 
-    handler = _JSONLinesLogger(cast(LinesConfigLike, _Lines()))
+    handler = _JSONLinesLogger(cast(LinesConfig, _Lines()))
     logger = Logger("colors")
     logger.handlers.clear()
     logger.addHandler(handler)

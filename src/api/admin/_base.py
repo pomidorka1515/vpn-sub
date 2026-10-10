@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import Flask
 
 from bwatch import BWatch
-from config import AppConfig, Config, LinesConfigLike
+from config import AppConfig, Config, LinesConfig
 from core import Subscription
 from loggers import Logger
 
@@ -18,4 +18,4 @@ class AdminApiMixin:
     uri: str
     log: Logger
     token: str
-    audit_cfg: LinesConfigLike
+    audit_cfg: LinesConfig

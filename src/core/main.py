@@ -4,7 +4,7 @@ from argon2 import PasswordHasher
 
 from .common import SharedCoreResources
 from errors import UnsupportedPlatformError
-from config import AppConfig, Config, LangConfig, LinesConfigLike
+from config import AppConfig, Config, LangConfig, LinesConfig
 from db import Database
 from flask import Flask, Response, request
 from builders import get_subscription
@@ -37,7 +37,7 @@ class Subscription:
         app: Flask,
         panels: list[XUiSession],
         whitelist_panel: XUiSession | None,
-        audit_cfg: LinesConfigLike | None = None,
+        audit_cfg: LinesConfig | None = None,
         verbose: bool = False
     ):
         log = Logger(type(self).__name__)

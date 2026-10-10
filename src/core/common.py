@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from flask import Flask
 from argon2 import PasswordHasher
 
-from config import AppConfig, Config, LangConfig, JsonValue, LinesConfigLike
+from config import AppConfig, Config, LangConfig, JsonValue, LinesConfig
 from db import Database
 from session import XUiSession
 from loggers import Logger
@@ -15,7 +15,7 @@ class SharedCoreResources:
     log: Logger
     cfg: Config[AppConfig]
     lang_cfg: Config[LangConfig]
-    audit_cfg: LinesConfigLike | None
+    audit_cfg: LinesConfig | None
     db: Database
     app: Flask
     legacy_salt: str
@@ -49,7 +49,7 @@ class BaseService:
         return self.res.lang_cfg
 
     @property
-    def audit_cfg(self) -> LinesConfigLike | None:
+    def audit_cfg(self) -> LinesConfig | None:
         return self.res.audit_cfg
 
     @property

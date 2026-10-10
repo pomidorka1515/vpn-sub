@@ -10,7 +10,7 @@ from pathlib import Path
 
 from api import Api
 from api.config_patch import REQUIRED_KEYS, config_etag
-from config import AppConfig, Config, JsonValue, LinesConfigLike
+from config import AppConfig, Config, JsonValue, LinesConfig
 from db import Database
 from helpers import make_subscription, make_watch
 
@@ -66,12 +66,12 @@ def _config_api(tmp_path: Path, flask_app: Flask) -> tuple[Config[AppConfig], Pa
     subscription = make_subscription(
         database,
         app=flask_app,
-        audit_cfg=cast(LinesConfigLike, audit),
+        audit_cfg=cast(LinesConfig, audit),
     )
     Api(
         app=flask_app,
         cfg=cfg,
-        audit_cfg=cast(LinesConfigLike, audit),
+        audit_cfg=cast(LinesConfig, audit),
         sub=subscription,
         bw=make_watch(subscription.res.db, subscription),
     )
