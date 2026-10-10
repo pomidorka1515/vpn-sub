@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Callable, Coroutine, Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from unittest.mock import MagicMock
 
 import discord
@@ -74,7 +74,7 @@ class FakeResponse:
     async def read(self) -> bytes:
         return self._body
 
-    async def __aenter__(self) -> FakeResponse:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *args: object) -> bool:

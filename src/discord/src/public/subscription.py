@@ -17,7 +17,7 @@ __all__ = ["PublicSubscriptionMixin"]
 
 
 class PublicSubscriptionMixin(PublicFeatureMixin):
-    def _quota(self, lang: str, used: int | float, limit: int | float) -> str:
+    def _quota(self, lang: str, used: float, limit: float) -> str:
         unlimited = self.text(lang, "unlimited") or "Unlimited"
         if not limit:
             return f"*{unlimited}*"

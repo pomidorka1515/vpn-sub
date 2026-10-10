@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import TYPE_CHECKING, Protocol, TypedDict
+from typing import TYPE_CHECKING, Protocol, Self, TypedDict
 
 import pytest
 
@@ -38,7 +38,7 @@ class StubResponse(Protocol):
     def raise_for_status(self) -> None: ...
     def json(self) -> object: ...
     def iter_content(self, chunk_size: int) -> tuple[bytes, ...]: ...
-    def __enter__(self) -> StubResponse: ...
+    def __enter__(self) -> Self: ...
     def __exit__(self, *_args: object) -> None: ...
 
 
@@ -97,7 +97,7 @@ def _response(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> StubR
         def iter_content(self, chunk_size: int) -> tuple[bytes, ...]:
             return chunks
 
-        def __enter__(self) -> _Response:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *_args: object) -> None:

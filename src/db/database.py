@@ -31,7 +31,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
         path: str | Path,
         timeout: float = 5.0,
         backup_dir: str | Path | None = None,
-        backup_interval: int | float = 7200,
+        backup_interval: float = 7200,
         backup_retention: int = 3,
         start_backup: bool = True,
     ) -> None:

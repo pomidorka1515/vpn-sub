@@ -53,7 +53,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         sync_mode: SYNC_MODES = 'data',
         isolate_commits: bool = True,
         backup_dir: str | Path | None = None,
-        backup_interval: int | float = 7200,
+        backup_interval: float = 7200,
         backup_retention: int = 3,
         lockfile_path: str | Path | None = None,
         start_backup: bool = True,
@@ -437,21 +437,22 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def update(self, **kwargs: JsonValue) -> None: ...
 
     @overload
-    def update(self, __m: Mapping[str, JsonValue], **kwargs: JsonValue) -> None: ...
+    def update(self, m: Mapping[str, JsonValue], /, **kwargs: JsonValue) -> None: ...
 
     @overload
-    def update(self, __m: Iterable[tuple[str, JsonValue]], **kwargs: JsonValue) -> None: ...
+    def update(self, m: Iterable[tuple[str, JsonValue]], /, **kwargs: JsonValue) -> None: ...
 
     def update( # pyright: ignore[reportInconsistentOverload]
         self,
-        __m: Mapping[str, JsonValue] | Iterable[tuple[str, JsonValue]] | None = None,
+        m: Mapping[str, JsonValue] | Iterable[tuple[str, JsonValue]] | None = None,
+        /,
         **kwargs: JsonValue
     ) -> None:
         """Atomic mapping-style update."""
         self.raise_if_read_only()
 
         # dict() handles both mappings and iterables safely
-        updates = dict(__m, **kwargs) if __m is not None else kwargs
+        updates = dict(m, **kwargs) if m is not None else kwargs
 
         self.run_edit(lambda tx: tx.update(updates))
 

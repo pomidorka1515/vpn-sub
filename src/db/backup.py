@@ -64,7 +64,7 @@ def make_backup_thread(
     path: str,
     timeout: float,
     backup_dir: str,
-    backup_interval: int | float,
+    backup_interval: float,
     backup_retention: int,
     stop_event: threading.Event,
 ) -> threading.Thread:

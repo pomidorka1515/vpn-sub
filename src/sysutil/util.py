@@ -62,7 +62,7 @@ class SysUtil:
         return round((total - idle) / total * 100, 1)
 
     @staticmethod
-    def cpu(sleep: int | float = 0.3) -> float:
+    def cpu(sleep: float = 0.3) -> float:
         """CPU % over interval. Needs two reads
 
         Args:

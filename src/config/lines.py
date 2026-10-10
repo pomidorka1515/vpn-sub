@@ -44,7 +44,7 @@ class LinesConfig:
         path: str | Path,
         sync_mode: SYNC_MODES = 'data',
         backup_dir: str | Path | None = None,
-        backup_interval: int | float = 7200,
+        backup_interval: float = 7200,
         backup_retention: int = 3,
         lockfile_path: str | Path | None = None,
         start_backup: bool = True,

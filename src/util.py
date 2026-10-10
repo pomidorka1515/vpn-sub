@@ -137,7 +137,7 @@ def parse_bool(value: object) -> bool | None:
         return bool(value)
     return None
 
-def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
+def fmt_bytes_tuple(value: float) -> tuple[str, str]:
     """
     Format bytes into a tuple.
     Returns:
@@ -153,7 +153,7 @@ def fmt_bytes_tuple(value: int | float) -> tuple[str, str]:
     return str(round(value / 10**6, 2)), "MB"
 
 
-def fmt_bytes(value: int | float) -> str:
+def fmt_bytes(value: float) -> str:
     """Format bytes as short human-readable string."""
     for unit, div in (
         ('TB', 10**12), ('GB', 10**9),
@@ -185,7 +185,7 @@ def fmt_time(seconds: int, lang: str = "ru") -> str:
     return f"{m}{t_m}"
 
 
-def format_usage(used: int | float, limit: int | float,
+def format_usage(used: float, limit: float,
                  unlimited: str = "Безлимит") -> tuple[str, str, str]:
     """Format used bytes, a GB limit, and the corresponding percentage."""
     if limit == 0:

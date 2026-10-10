@@ -16,7 +16,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Self, cast
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -505,7 +505,7 @@ class _Body:
     def __init__(self, response: Response) -> None:
         self._response = response
 
-    def __enter__(self) -> _Body:
+    def __enter__(self) -> Self:
         self._response.__enter__()
         return self
 

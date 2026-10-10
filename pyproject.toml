@@ -117,6 +117,7 @@ extend-select = [
     "T20",    # Bans print()
     "TC",     # Cleans up TYPE_CHECKING imports
     "PTH",    # Encourage pathlib
+    "PYI",    # Stricter type hints
 ]
 
 ignore = [
@@ -147,6 +148,9 @@ ignore = [
 ]
 
 extend-safe-fixes = ["W293", "W291"]
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = false
 
 [tool.ruff.lint.per-file-ignores]
 # Expected CLI failures use concise messages rather than tracebacks.

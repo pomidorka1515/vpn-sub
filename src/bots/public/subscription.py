@@ -25,7 +25,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         daystext = t['days_word']
         unlimited = f"<i>{t['unlimited']}</i>"
 
-        def quota(used: int | float, limit: int) -> str:
+        def quota(used: float, limit: int) -> str:
             if not limit:
                 return unlimited
             return f"{fmt_bytes(used)} / {limit} GB"
