@@ -68,7 +68,7 @@ class AdminCommonMixin(AdminFeatureMixin):
             else:
                 await interaction.response.send_message(**kwargs)
         except Exception:
-            self.log.error("failed to respond to admin interaction", exc_info=True)
+            self.log.exception("failed to respond to admin interaction")
 
     async def _defer(self, interaction: discord.Interaction, *, ephemeral: bool | None = None) -> None:
         if interaction.response.is_done():
@@ -76,7 +76,7 @@ class AdminCommonMixin(AdminFeatureMixin):
         try:
             await interaction.response.defer(ephemeral=self._ephemeral(interaction, ephemeral))
         except Exception:
-            self.log.error("failed to defer admin interaction", exc_info=True)
+            self.log.exception("failed to defer admin interaction")
 
     async def _send_modal(self, interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
         if interaction.response.is_done():
@@ -84,7 +84,7 @@ class AdminCommonMixin(AdminFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to send admin modal", exc_info=True)
+            self.log.exception("failed to send admin modal")
 
     def modal_values(self, interaction: discord.Interaction) -> dict[str, str]:
         out: dict[str, str] = {}

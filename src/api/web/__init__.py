@@ -35,7 +35,7 @@ class WebApi(
                  app: Flask,
                  cfg: Config[AppConfig],
                  sub: Subscription,
-                 bw: BWatch):
+                 bw: BWatch) -> None:
         self.log = Logger(type(self).__name__)
         conf = cfg.view()
         uri = '/' + '/'.join(p for p in conf['uri'].split('/') if p)

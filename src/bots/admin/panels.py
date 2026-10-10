@@ -78,6 +78,6 @@ class AdminPanelsMixin(AdminFeatureMixin):
             try:
                 self._cb_panel_info(chat_id, panel, last, status)
             except Exception:
-                self.log.error("panel operation failed for %s", panel.name, exc_info=True)
+                self.log.exception("panel operation failed for %s", panel.name)
                 self._send_message(chat_id, "❌ Внутренняя ошибка", parse_mode="HTML")
         self._delete_message(chat_id, msg.message_id)

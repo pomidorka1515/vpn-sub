@@ -64,7 +64,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 self.sub.business_svc.add_users(cc, known_clients=known)
             except PanelUnavailableError:
                 failures.append(cc)
-                self.log.error("user refresh failed for %s", cc, exc_info=True)
+                self.log.exception("user refresh failed for %s", cc)
             except Exception:
                 self.log.critical("bulk user refresh aborted for %s", cc, exc_info=True)
                 self._send_message(
@@ -132,7 +132,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         except AppError as error:
             self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
         except Exception:
-            self.log.error("Telegram handler failed", exc_info=True)
+            self.log.exception("Telegram handler failed")
             self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
 
     def _cb_del_user(self, chat_id: int, username: str) -> None:
@@ -142,7 +142,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
             return
         except Exception:
-            self.log.error("Telegram handler failed", exc_info=True)
+            self.log.exception("Telegram handler failed")
             self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
             return
         self._send_message(chat_id, f"✅ Пользователь <b>{username}</b> удален.", parse_mode="HTML", reply_markup=self.get_main_menu())
@@ -347,7 +347,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         except AppError as error:
             self._send_message(message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu())
         except Exception:
-            self.log.error("Telegram handler failed", exc_info=True)
+            self.log.exception("Telegram handler failed")
             self._send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
 
     def _step_info_user(self, message: types.Message) -> None:

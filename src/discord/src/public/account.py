@@ -36,7 +36,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to open bonus modal", exc_info=True)
+            self.log.exception("failed to open bonus modal")
 
     async def handle_bonus_modal(self, interaction: discord.Interaction) -> None:
         if not await self.require_login(interaction):
@@ -81,7 +81,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to open delete modal", exc_info=True)
+            self.log.exception("failed to open delete modal")
 
     async def confirm_logout(self, interaction: discord.Interaction) -> None:
         token = self.sessions.token(interaction.user.id)

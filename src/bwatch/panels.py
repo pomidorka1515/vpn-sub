@@ -57,7 +57,7 @@ class PanelsMixin(BWatchHost):
                 else:
                     self._panel_alerts.pop(key, None)
             except Exception:
-                self.log.error("health check failed for panel %s (%s)", panel.name, panel.address, exc_info=True)
+                self.log.exception("health check failed for panel %s (%s)", panel.name, panel.address)
 
     def reconcile_inbounds(self) -> None:
         """Re-sync every user to every panel (idempotent).
@@ -80,7 +80,7 @@ class PanelsMixin(BWatchHost):
                     username, _called_internally=True, known_clients=known,
                 )
             except AppError:
-                self.log.error("inbound reconcile failed for %s", username, exc_info=True)
+                self.log.exception("inbound reconcile failed for %s", username)
                 failures.append(username)
         if failures:
             shown = ", ".join(failures[:10])

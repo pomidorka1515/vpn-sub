@@ -81,7 +81,7 @@ class ConfigRoutes(AdminApiMixin):
             try:
                 self.cfg.backup_data(written)
             except Exception:
-                self.log.error("config backup failed after commit", exc_info=True)
+                self.log.exception("config backup failed after commit")
             self.sub.audit_svc.audit(
                 name="config_update",
                 info={"keys": changed},

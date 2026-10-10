@@ -108,7 +108,7 @@ class DiscordApplication:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                log.error("discord runner failed", exc_info=True)
+                log.exception("discord runner failed")
         await self.public_bot.stop()
         await self.admin_bot.stop()
         await self.http.close()
@@ -119,7 +119,7 @@ class DiscordApplication:
                 try:
                     close()
                 except Exception:
-                    log.error("resource cleanup failed", exc_info=True)
+                    log.exception("resource cleanup failed")
 
 
 def create_application(paths: DiscordPaths | None = None) -> DiscordApplication:
@@ -225,7 +225,7 @@ async def _run() -> None:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                log.error("discord runner failed", exc_info=True)
+                log.exception("discord runner failed")
     finally:
         await runtime.stop()
 

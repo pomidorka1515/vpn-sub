@@ -44,7 +44,7 @@ class SchedulerMixin(BWatchHost):
         try:
             operation()
         except Exception:
-            self.log.error("%s crashed", what, exc_info=True)
+            self.log.exception("%s crashed", what)
 
     def _run_jobs(self, jobs: tuple[tuple[str, str], ...]) -> None:
         for label, name in jobs:

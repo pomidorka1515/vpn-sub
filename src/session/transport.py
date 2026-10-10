@@ -26,7 +26,7 @@ SESSION_POOL_MAXSIZE = 8
 
 
 class FakeResponse(Response):
-    def __init__(self, json_data: Mapping[str, JsonValue], status_code: int):
+    def __init__(self, json_data: Mapping[str, JsonValue], status_code: int) -> None:
         super().__init__()
         self._content = json.dumps(json_data).encode("utf-8")
         self.status_code = status_code
@@ -57,7 +57,7 @@ class RequestsPanelTransport:
     a session remain responsible for its lifecycle and connection-pool limits.
     """
 
-    def __init__(self, session: Session, auth: tuple[str, str] | None = None):
+    def __init__(self, session: Session, auth: tuple[str, str] | None = None) -> None:
         self._session: Session = session
         self._auth: tuple[str, str] | None = auth
 

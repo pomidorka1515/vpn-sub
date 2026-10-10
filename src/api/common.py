@@ -164,7 +164,7 @@ class BaseApi(ABC):
                  cfg: Config[AppConfig],
                  sub: Subscription,
                  bw: BWatch,
-                 uri: str):
+                 uri: str) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.app = app

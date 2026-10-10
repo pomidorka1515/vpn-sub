@@ -24,7 +24,7 @@ class AdminCodesMixin(AdminFeatureMixin):
             text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{c}</code>" for c in codes])
             self._send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
         except Exception:
-            self.log.error("Telegram handler failed", exc_info=True)
+            self.log.exception("Telegram handler failed")
             self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
 
     def _step_info_code(self, message: types.Message) -> None:
@@ -46,7 +46,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         except AppError as error:
             self._send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
         except Exception:
-            self.log.error("Telegram handler failed", exc_info=True)
+            self.log.exception("Telegram handler failed")
             self._send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
 
     def _step_del_code(self, message: types.Message) -> None:
@@ -59,7 +59,7 @@ class AdminCodesMixin(AdminFeatureMixin):
             self._send_message(message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
             return
         except Exception:
-            self.log.error("Telegram handler failed", exc_info=True)
+            self.log.exception("Telegram handler failed")
             self._send_message(message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
             return
         self._send_message(message.chat.id, f"✅ Код <code>{code}</code> удалён.", parse_mode="HTML", reply_markup=self.get_codes_menu())
@@ -204,7 +204,6 @@ class AdminCodesMixin(AdminFeatureMixin):
         except AppError as error:
             self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
         except Exception:
-            self.log.error("Telegram handler failed", exc_info=True)
+            self.log.exception("Telegram handler failed")
             self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
-
 

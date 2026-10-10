@@ -179,7 +179,7 @@ class PanelService(BaseService):
             )
             return result
         except Exception as exc:
-            self.log.error("panel status is unknown for %s", panel.name, exc_info=True)
+            self.log.exception("panel status is unknown for %s", panel.name)
             self.trace(
                 Op.panel.getstatus, "unknown",
                 panel=panel.name, error=type(exc).__name__,

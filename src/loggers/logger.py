@@ -31,7 +31,7 @@ class Logger(logging.Logger):
     RESET = Colors.RESET
     TRACE = TRACE
 
-    def __init__(self, name: str, level: int | None = None):
+    def __init__(self, name: str, level: int | None = None) -> None:
         """Open a process logger.
 
         ``level`` overrides the threshold for this logger only. When it is

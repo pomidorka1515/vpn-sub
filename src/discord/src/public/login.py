@@ -85,7 +85,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to open login modal", exc_info=True)
+            self.log.exception("failed to open login modal")
 
     async def cmd_register(self, interaction: discord.Interaction) -> None:
         uid = interaction.user.id
@@ -104,7 +104,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to open register modal", exc_info=True)
+            self.log.exception("failed to open register modal")
 
     async def handle_login_modal(self, interaction: discord.Interaction) -> None:
         uid = interaction.user.id

@@ -15,7 +15,7 @@ __all__ = ["_JSONLinesLogger", "_TelegramLogger"]
 
 
 class _TelegramLogger(logging.Handler):
-    def __init__(self, bot: AdminBot):
+    def __init__(self, bot: AdminBot) -> None:
         """
         Logging handler to broadcast messages to a telegram bot (AdminBot).
         """
@@ -39,7 +39,7 @@ class _TelegramLogger(logging.Handler):
 
 
 class _JSONLinesLogger(logging.Handler):
-    def __init__(self, config: LinesConfig):
+    def __init__(self, config: LinesConfig) -> None:
         """
         Logging handler to write logs into a .jsonl file.
         Uses LinesConfig manager.

@@ -109,7 +109,7 @@ def close_rate_limit() -> None:
     try:
         client.close()
     except Exception:
-        log.error("rate limit store close failed", exc_info=True)
+        log.exception("rate limit store close failed")
 
 
 def _replace_client(client: _RateLimitClient | None) -> _RateLimitClient | None:
@@ -176,7 +176,7 @@ def rate_limit[**P, R](max_requests: int) -> Callable[
                     seen = client
                 allowed = shared.allow(ip, time.time())
             except Exception:
-                log.error("rate limit store failed", exc_info=True)
+                log.exception("rate limit store failed")
                 return err(msg="Too many requests.", code=429)
             if not allowed:
                 return err(msg="Too many requests.", code=429)

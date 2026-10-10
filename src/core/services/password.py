@@ -40,10 +40,9 @@ class PasswordService(BaseService):
                 )
                 return None
             except (InvalidHashError, VerificationError):
-                self.log.error(
+                self.log.exception(
                     "Corrupt or tampered argon2 password hash for %s",
                     ext_username,
-                    exc_info=True,
                 )
                 self.trace(
                     Op.password.validate_credentials, "corrupt",

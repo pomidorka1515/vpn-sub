@@ -140,6 +140,8 @@ ignore = [
 	"SIM117",  # nested with(), chaining can lead to unexpected behaviour in tests
 	"SIM102",  # nested ifs
 	"PLW2901", # redefined loop name
+	"G003",    # logging stuff
+	"G004",    
 ]
 
 extend-safe-fixes = ["W293", "W291"]

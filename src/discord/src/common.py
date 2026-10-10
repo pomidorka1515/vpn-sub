@@ -48,7 +48,7 @@ class DiscordIOMixin(PublicFeatureMixin):
             else:
                 await interaction.response.send_message(**kwargs)
         except Exception:
-            self.log.error("failed to respond to interaction", exc_info=True)
+            self.log.exception("failed to respond to interaction")
 
     async def _reply_key(
         self,
@@ -78,7 +78,7 @@ class DiscordIOMixin(PublicFeatureMixin):
         try:
             await interaction.response.defer(ephemeral=self._ephemeral(interaction, ephemeral))
         except Exception:
-            self.log.error("failed to defer interaction", exc_info=True)
+            self.log.exception("failed to defer interaction")
 
     def modal_values(self, interaction: discord.Interaction) -> dict[str, str]:
         out: dict[str, str] = {}

@@ -224,7 +224,7 @@ class Application:
             try:
                 resource.close()
             except Exception:
-                log.error("resource cleanup failed", exc_info=True)
+                log.exception("resource cleanup failed")
         if self._primary_lock_file is not None:
             self._primary_lock_file.close()
             self._primary_lock_file = None
@@ -440,7 +440,7 @@ def create_application(
                 try:
                     component.stop()
                 except Exception:
-                    log.error("startup component cleanup failed", exc_info=True)
+                    log.exception("startup component cleanup failed")
         resources: tuple[Closeable | None, ...] = (
             *panels,
             whitelist,
@@ -456,7 +456,7 @@ def create_application(
             try:
                 resource.close()
             except Exception:
-                log.error("startup cleanup failed", exc_info=True)
+                log.exception("startup cleanup failed")
         if lock_file is not None:
             lock_file.close()
         close_rate_limit()

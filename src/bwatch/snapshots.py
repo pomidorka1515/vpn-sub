@@ -125,9 +125,8 @@ class SnapshotsMixin(BWatchHost):
             if need_wl:
                 wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True, pool=pool)
         except Exception as exc:
-            self.log.error(
+            self.log.exception(
                 "failed to record daily bandwidth snapshot",
-                exc_info=True,
             )
             # No rows, no baseline advance — every eligible user counts as
             # failed so the metadata marker and the admin alert still fire.

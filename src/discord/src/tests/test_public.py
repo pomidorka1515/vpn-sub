@@ -166,7 +166,7 @@ def test_chart_uses_history_and_stats(public_bot_factory: PublicBotFactory) -> N
 
     async def fake_to_thread[**P](func: Callable[P, object], /, *args: P.args, **kwargs: P.kwargs) -> None:
         del func, args, kwargs
-        return None
+        return
 
     with patch("public.traffic.asyncio.to_thread", fake_to_thread):
         run(bot.render_chart(interaction, 14))  # type: ignore[arg-type]
@@ -407,7 +407,7 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
         del func, args, kwargs
         entered.set()
         await release.wait()
-        return None
+        return
 
     async def scenario() -> None:
         task = asyncio.create_task(bot.render_chart(first, 14))  # type: ignore[arg-type]

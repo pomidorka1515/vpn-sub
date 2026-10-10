@@ -177,8 +177,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
         default: T | MISSING_TYPE = MISSING,
     ) -> JsonValue | T:
         data = self.require_active()
-        value = data.get(key) if default is MISSING else data.get(key, cast(T, default))
-        return value
+        return data.get(key) if default is MISSING else data.get(key, cast(T, default))
 
     def view(self) -> Doc:
         """Return the active working document; nested edits are live."""

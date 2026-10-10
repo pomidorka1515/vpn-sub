@@ -50,7 +50,7 @@ class Api(
                  cfg: Config[AppConfig],
                  audit_cfg: LinesConfig,
                  sub: Subscription,
-                 bw: BWatch):
+                 bw: BWatch) -> None:
         self.log = Logger(type(self).__name__)
         conf = cfg.view()
         uri = '/' + '/'.join(p.strip('/ ') for p in (conf['uri'], conf.get('api_uri', '')) if p and p.strip('/ '))

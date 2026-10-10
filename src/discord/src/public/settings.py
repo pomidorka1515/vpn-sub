@@ -65,7 +65,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to open name modal", exc_info=True)
+            self.log.exception("failed to open name modal")
 
     async def open_login_modal(self, interaction: discord.Interaction) -> None:
         lang = self.get_lang(interaction.user.id)
@@ -78,7 +78,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to open login modal", exc_info=True)
+            self.log.exception("failed to open login modal")
 
     async def open_pass_modal(self, interaction: discord.Interaction) -> None:
         lang = self.get_lang(interaction.user.id)
@@ -91,7 +91,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         try:
             await interaction.response.send_modal(modal)
         except Exception:
-            self.log.error("failed to open password modal", exc_info=True)
+            self.log.exception("failed to open password modal")
 
     async def open_fingerprint_menu(self, interaction: discord.Interaction) -> None:
         token = self.sessions.token(interaction.user.id)

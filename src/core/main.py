@@ -39,7 +39,7 @@ class Subscription:
         whitelist_panel: XUiSession | None,
         audit_cfg: LinesConfig | None = None,
         verbose: bool = False
-    ):
+    ) -> None:
         log = Logger(type(self).__name__)
         with log.loading():
             self.panels = panels

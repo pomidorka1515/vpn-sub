@@ -119,7 +119,7 @@ class UserRoutes(AdminApiMixin):
                 self.sub.business_svc.add_users(cc, known_clients=known)
             except PanelUnavailableError:
                 failures.append(cc)
-                self.log.error("user refresh failed for %s", cc, exc_info=True)
+                self.log.exception("user refresh failed for %s", cc)
             except Exception:
                 self.log.critical("bulk user refresh aborted for %s", cc, exc_info=True)
                 return err(

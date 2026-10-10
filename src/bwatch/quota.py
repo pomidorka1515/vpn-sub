@@ -33,7 +33,7 @@ class QuotaMixin(BWatchHost):
             )
             return True
         except AppError:
-            self.log.error("background user update failed", exc_info=True)
+            self.log.exception("background user update failed")
             return False
 
     def _notifier(self) -> Notifier | None:
@@ -159,7 +159,7 @@ class QuotaMixin(BWatchHost):
             if need_wl:
                 wl_map = self.sub.bandwidth_svc.all_traffic(whitelist=True, pool=pool)
         except Exception:
-            self.log.error("bandwidth poll failed", exc_info=True)
+            self.log.exception("bandwidth poll failed")
             return None
         return main_map, wl_map
 

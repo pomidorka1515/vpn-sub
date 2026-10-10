@@ -67,7 +67,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
                     handler(data, chat_id, message)
                     return
         except Exception as error:
-            self.log.error(f"Ошибка в боте: {error}", exc_info=True)
+            self.log.exception(f"Ошибка в боте: {error}")
             self._send_message(chat_id, "⚠️ Внутренняя ошибка")
 
     def _handle_cancel(self, data: str, chat_id: int, message: types.Message) -> None:

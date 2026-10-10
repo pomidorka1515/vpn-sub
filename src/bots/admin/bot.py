@@ -32,7 +32,7 @@ class AdminBot(
 ):
     """Administrator bot assembled from the admin feature workflows."""
 
-    def __init__(self, sub: Subscription, lang_cfg: Config[LangConfig], cfg: Config[AppConfig]):
+    def __init__(self, sub: Subscription, lang_cfg: Config[LangConfig], cfg: Config[AppConfig]) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             configure_telegram_api()

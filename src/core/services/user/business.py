@@ -559,7 +559,7 @@ class BusinessUserService(BaseService):
             try:
                 self.db.delete_user(username)
             except Exception:
-                self.log.error("failed to roll back user %s", username, exc_info=True)
+                self.log.exception("failed to roll back user %s", username)
                 try:
                     self.delete_user(username=username, perma=True)
                 except Exception:

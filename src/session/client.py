@@ -77,7 +77,7 @@ class XUiSession:
         stamp_path: str | None = None,
         stamp_dir: str | None = None,
         client_stamp_path: str | None = None,
-    ):
+    ) -> None:
         """
         Initialize the panel client.
 
@@ -160,7 +160,7 @@ class XUiSession:
 
             if health_check_interval < 1:
                 raise ValueError("health_check_interval must be more than 1")
-            elif health_check_interval < 5:
+            if health_check_interval < 5:
                 self.log.warning("a low health_check_interval may cause lag. proceed with caution.")
 
             self._health_check_interval = health_check_interval

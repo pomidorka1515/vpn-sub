@@ -48,7 +48,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
                 uid=uid, username=username, days=days, lang=lang, chat_id=message.chat.id
             )
         except Exception:
-            self.log.error("chart submission failed", exc_info=True)
+            self.log.exception("chart submission failed")
             self._send_message(message.chat.id, t['error_generic'])
 
     def _render_chart(
@@ -111,6 +111,5 @@ class PublicTrafficMixin(PublicFeatureMixin):
         except AppError as error:
             self._send_message(chat_id, error.message, reply_markup=self.get_menu(uid))
         except Exception:
-            self.log.error(f"Chart error for uid {uid}", exc_info=True)
+            self.log.exception(f"Chart error for uid {uid}")
             self._send_message(chat_id, t['error_generic'], reply_markup=self.get_menu(uid))
-

@@ -85,7 +85,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
                     await handler(data, interaction)
                     return
         except Exception:
-            self.log.error("admin component dispatch failed", exc_info=True)
+            self.log.exception("admin component dispatch failed")
             await self._respond(interaction, "⚠️ Внутренняя ошибка", view=self.main_menu_view())
 
     async def dispatch_modal(self, interaction: discord.Interaction) -> None:
@@ -99,7 +99,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
             handler = cast(Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name))
             await handler(interaction)
         except Exception:
-            self.log.error("admin modal dispatch failed", exc_info=True)
+            self.log.exception("admin modal dispatch failed")
             await self._respond(interaction, "⚠️ Внутренняя ошибка", view=self.main_menu_view())
 
     async def _handle_cancel(self, data: str, interaction: discord.Interaction) -> None:

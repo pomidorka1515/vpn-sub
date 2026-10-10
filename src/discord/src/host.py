@@ -56,7 +56,7 @@ class SharedDiscordClient(discord.Client):
         try:
             await self.tree.sync()
         except Exception:
-            log.error("failed to sync slash commands", exc_info=True)
+            log.exception("failed to sync slash commands")
 
 
 def _custom_id(interaction: discord.Interaction) -> str:

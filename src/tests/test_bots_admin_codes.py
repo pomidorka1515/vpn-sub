@@ -21,13 +21,12 @@ def _message(text: str, chat_id: int = 7) -> types.Message:
 
 
 def _real_message(text: str, chat_id: int = 7) -> types.Message:
-    parsed = cast(types.Message, types.Message.de_json({  # type: ignore[no-untyped-call]
+    return cast(types.Message, types.Message.de_json({  # type: ignore[no-untyped-call]
         "message_id": 3,
         "date": 0,
         "chat": {"id": chat_id, "type": "private"},
         "text": text,
     }))
-    return parsed
 
 
 def _code(**overrides: Unpack[CodeOverrides]) -> CodeObject:
