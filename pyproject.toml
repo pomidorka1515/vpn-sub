@@ -73,6 +73,7 @@ packages = [
 
 [tool.ruff]
 target-version = "py314"
+src = ["src", "src/discord/src"]
 
 [tool.ruff.lint]
 select = [
@@ -105,35 +106,45 @@ extend-select = [
     "RSE",    # Unnecessary parentheses in raise statements
     "PGH",    # Blanket noqa/type-ignore directives
     "PERF",   # Performance patterns
+    "PT",     # Pytest assertions, fixtures, parametrization, and exception checks
     "RET",    # Consistent returns and redundant control flow
+    "S102",   # exec() calls
+    "S107",   # Hardcoded password defaults
+    "S113",   # HTTP requests without timeouts
+    "S201",   # Flask debug mode
+    "S202",   # Unsafe tar extraction
+    "S301",   # Unsafe pickle deserialization
+    "S307",   # eval() calls
+    "S323",   # Unverified SSL contexts
+    "S501",   # Disabled TLS certificate validation
+    "S506",   # Unsafe YAML loading
+    "S507",   # Disabled SSH host-key verification
+    "S602",   # subprocess calls with shell=True
+    "S604",   # Other calls with shell=True
+    "S605",   # Starting processes through a shell
+    "S608",   # SQL built through string interpolation
+    "S609",   # Shell wildcard injection
+    "S701",   # Disabled Jinja2 autoescaping
     "SLOT",   # Missing slots on immutable built-in subclasses
     "T10",    # Forgotten debugger calls
+    "TRY002", # Raising bare Exception rather than a specific exception
+    "TRY201", # Re-raising by name instead of preserving the traceback
+    "TRY203", # Useless exception handlers that only re-raise
+    "TRY400", # Preserve tracebacks when logging unexpected exceptions
+    "TRY401", # Avoid repeating exception text already in the traceback
     "YTT",    # Fragile Python-version checks
-    "RUF006", # Unretained asyncio tasks
-    "RUF008", # Mutable dataclass defaults
-    "RUF012", # Mutable class attributes without ClassVar
-    "RUF013", # Implicit Optional annotations
-    "RUF016", # Invalid index types
-    "RUF017", # Inefficient list summation
-    "RUF018", # Assignment expressions in assertions
-    "RUF019", # Unnecessary dictionary key checks
-    "RUF020", # Never-matching union members in isinstance
-    "RUF024", # Mutable values passed to dict.fromkeys
-    "RUF026", # Incorrect default_factory arguments
-    "RUF030", # Assert messages containing print calls
-    "RUF100", # Unused noqa directives
+    "RUF",    # Ruff-specific correctness and cleanup checks
 ]
 
 ignore = [
+	"RUF001", # Unicode characters in strings are intentional
+	"RUF002", # Unicode characters in docstrings are intentional
+	"RUF003", # Unicode characters in comments are intentional
 	"E501",    # i dont need this
 	"PLR2004", # "magic values", useless
 	"PLC0415", # "import should be at the top-level", lazy imports are intentional
 	"E701",    # "too many statements on 1 line"
-	"PLR0911", # "too many X" in something (branches, args, etc)
-	"PLR0912", 
-	"PLR0913", 
-	"PLR0915", 
-	"PLR0917",
+	"PLR09",   # "too many X"
 	"TID252",  # relative imports
 	"F403",    # star imports trigger these;
 	"F405",    # mypy/pyright will catch any invalid method/variable either way
@@ -147,6 +158,8 @@ ignore = [
 extend-safe-fixes = ["W293", "W291"]
 
 [tool.ruff.lint.per-file-ignores]
+# Expected CLI failures use concise messages rather than tracebacks.
+"src/cli/{scripts,updater}.py" = ["TRY400"]
 "**/tests/*" = [
     "PLR",
     "B009",
@@ -159,6 +172,8 @@ extend-safe-fixes = ["W293", "W291"]
 "typing.ParamSpec".msg = "Use 3.12 syntax."
 "typing.Generic".msg = "Use 3.12 syntax."
 "typing.Union".msg = "Use the union operator (` | `)."
+"typing.Optional".msg = "Use the union operator (` | None`)."
+"typing.TypeAlias".msg = "Use 3.12 syntax: `type Alias = ...`"
 "typing_extensions".msg = "Use stdlib `typing`."
 
 # Built-in types

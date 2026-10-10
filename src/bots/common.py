@@ -37,8 +37,8 @@ class TelegramIOMixin:
     def _send_message(self, chat_id: int, text: str, **kwargs: Unpack[MessageOptions]) -> None:
         try:
             self.bot.send_message(chat_id, text, **kwargs)
-        except Exception as error:
-            self.log.exception(f"failed to send message to chat {chat_id}: {error}")
+        except Exception:
+            self.log.exception("failed to send message to chat %s", chat_id)
 
     def _delete_message(self, chat_id: int, message_id: int, *, secret: bool = False) -> None:
         try:

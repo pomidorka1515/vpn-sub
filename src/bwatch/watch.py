@@ -60,15 +60,16 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
                 "bandwidth": 0.0,
                 "state": 0.0,
             }
-            self._threads: tuple[threading.Thread, ...] = tuple(
-                threading.Thread(
-                    target=self._loop,
-                    args=(interval, jobs),
-                    name=name,
-                    daemon=True,
-                )
-                for name, interval, jobs in self._INTERVALS
-            ) + (
+            self._threads: tuple[threading.Thread, ...] = (
+                *(
+                    threading.Thread(
+                        target=self._loop,
+                        args=(interval, jobs),
+                        name=name,
+                        daemon=True,
+                    )
+                    for name, interval, jobs in self._INTERVALS
+                ),
                 threading.Thread(
                     target=self._every_24h_snapshot,
                     name="Daily snapshots",

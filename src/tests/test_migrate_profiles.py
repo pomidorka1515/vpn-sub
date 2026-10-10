@@ -13,7 +13,8 @@ from config import JsonValue
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "migrate_profiles.py"
 _SPEC = importlib.util.spec_from_file_location("migrate_profiles", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
+assert _SPEC is not None
+assert _SPEC.loader is not None
 mp = importlib.util.module_from_spec(_SPEC)
 sys.modules["migrate_profiles"] = mp
 _SPEC.loader.exec_module(mp)

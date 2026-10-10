@@ -14,8 +14,8 @@ __all__ = [
     "Notice",
     "Notifier",
     "Scope",
-    "classify",
     "account_key",
-    "split_key",
+    "classify",
     "restored",
+    "split_key",
 ]

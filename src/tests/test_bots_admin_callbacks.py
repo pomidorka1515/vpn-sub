@@ -52,7 +52,7 @@ def test_callback_exception_is_reported(
     bot, _telegram, _subscription = admin
     with patch.object(AdminBot, "_handle_cancel", side_effect=RuntimeError("boom")):
         bot.handle_callbacks(_callback("cancel"))
-    cast(MagicMock, bot.log).error.assert_called()
+    cast(MagicMock, bot.log).exception.assert_called()
     cast(MagicMock, bot._send_message).assert_called_once_with(7, "⚠️ Внутренняя ошибка")
 
 

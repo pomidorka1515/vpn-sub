@@ -97,7 +97,8 @@ class UsersMixin(ConnectionMixin):
             with self.transaction(immediate=True) as conn:
                 if updates:
                     assignments = ", ".join(f"{key} = ?" for key in updates)
-                    conn.execute(f"UPDATE users SET {assignments} WHERE username = ?", (*updates.values(), username))
+                    # Column names come from the fixed mapping above; values are bound.
+                    conn.execute(f"UPDATE users SET {assignments} WHERE username = ?", (*updates.values(), username))  # noqa: S608
                 if "tgid" in fields:
                     telegram_id = fields["tgid"]
                     set_telegram_mapping(

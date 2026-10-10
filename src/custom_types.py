@@ -20,29 +20,43 @@ else:
 
 __all__ = [
 
-    'MigrationReport', 'UserRecord', 'CodeRecord',
-    'RegisterCodeResult', 'BonusResult',
-
-    'MemoryStats', 'SwapStats', 'DiskStats', 'XrayStats',
-    'NetIOStats', 'NetTrafficStats', 'PublicIPStats', 'AppStats',
-
-    'ServerMetricsObj', 'ServerMetricsResponse', 'ClientTraffic',
-    'Inbound', 'InboundListResponse',
-    'ClientPayload', 'PanelClient',
-    'ClientListResponse', 'ClientTrafficResponse',
-
-    'NewUserInfo', 'RegisterWithCodeInfo',
-    'CodeObject', 'ResetUserObject', 'ApplyBonusCodeObject',
-
-    'UserInfoBandwidthTotal', 'UserInfoBandwidth', 'UserInfo',
-
-    'PollingPanelInfo',
+    'AppStats',
+    'ApplyBonusCodeObject',
+    'BandwidthInfo',
     'BandwidthSnapshot',
-    'BandwidthInfo', 'BandwidthUpdate',
-
-    'JsonifyValue', 'HTTPMethod',
-
-    'RequestKwargs'
+    'BandwidthUpdate',
+    'BonusResult',
+    'ClientListResponse',
+    'ClientPayload',
+    'ClientTraffic',
+    'ClientTrafficResponse',
+    'CodeObject',
+    'CodeRecord',
+    'DiskStats',
+    'HTTPMethod',
+    'Inbound',
+    'InboundListResponse',
+    'JsonifyValue',
+    'MemoryStats',
+    'MigrationReport',
+    'NetIOStats',
+    'NetTrafficStats',
+    'NewUserInfo',
+    'PanelClient',
+    'PollingPanelInfo',
+    'PublicIPStats',
+    'RegisterCodeResult',
+    'RegisterWithCodeInfo',
+    'RequestKwargs',
+    'ResetUserObject',
+    'ServerMetricsObj',
+    'ServerMetricsResponse',
+    'SwapStats',
+    'UserInfo',
+    'UserInfoBandwidth',
+    'UserInfoBandwidthTotal',
+    'UserRecord',
+    'XrayStats'
 ]
 
 
@@ -115,7 +129,7 @@ class RequestKwargs(TypedDict, total=False):
     ) | None
     data: Iterable[bytes] | str | bytes | SupportsRead[str | bytes] | list[tuple[str, str | bytes | int | float | bool | None]] | tuple[tuple[str, str | bytes | int | float | bool | None], ...] | Mapping[str, str | bytes | int | float | bool | None] | None
     headers: Mapping[str, str | bytes | None] | None
-    cookies: None | RequestsCookieJar | MutableMapping[str, str]
+    cookies: RequestsCookieJar | MutableMapping[str, str] | None
     files: Mapping[str, _FileSpec] | Iterable[tuple[str, _FileSpec]] | None
     auth: tuple[str, str] | AuthBase | Callable[[PreparedRequest], PreparedRequest] | None
     timeout: float | tuple[float | None, float | None] | None

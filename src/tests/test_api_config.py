@@ -114,8 +114,10 @@ def test_config_get_returns_file_and_stable_etag(tmp_path: Path, flask_app: Flas
         on_disk = json.loads(path.read_text(encoding="utf-8"))
         assert payload["obj"] == on_disk
         body = first.data.decode("utf-8")
-        assert body.count("\n") == 1 and body.endswith("\n")
-        assert ": " not in body and ", " not in body
+        assert body.count("\n") == 1
+        assert body.endswith("\n")
+        assert ": " not in body
+        assert ", " not in body
         assert first.headers["ETag"] == f'"{config_etag(cast(dict[str, JsonValue], on_disk))}"'
         assert first.headers["Cache-Control"] == "no-store"
         obj_at = body.index('"obj":')

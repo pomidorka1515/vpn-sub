@@ -10,7 +10,7 @@ from bwatch import BWatch
 from core import Subscription
 from db import Database
 
-__all__ = ["db_path", "database", "subscription", "watch"]
+__all__ = ["database", "db_path", "subscription", "watch"]
 
 
 @pytest.fixture

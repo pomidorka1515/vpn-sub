@@ -41,7 +41,7 @@ BG_POOL: Executor = _BG_POOL
 class _OnlineSnapshot:
     """Classified online set. Ext names are applied later, so a rename is live."""
 
-    __slots__ = ("users", "panel_health", "stored_at")
+    __slots__ = ("panel_health", "stored_at", "users")
 
     def __init__(
         self,
@@ -652,11 +652,9 @@ class PanelService(BaseService):
                 panel_health[panel.name] = self._classify_onlines(
                     panel, outcome, online_users, known
                 )
-            except Exception as exc:
+            except Exception:
                 panel_health[panel.name] = "unavailable"
-                self.log.error(
-                    "Online check failed for panel %s", panel.name, exc_info=exc
-                )
+                self.log.exception("Online check failed for panel %s", panel.name)
 
         if panel_health and all(
             health == "unavailable" for health in panel_health.values()

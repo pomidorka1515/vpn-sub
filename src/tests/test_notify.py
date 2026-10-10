@@ -155,7 +155,8 @@ def test_missing_key_and_bad_format_are_not_sent() -> None:
     again = {"alice:expired:1"}
     assert broken.notify("alice", 7, missing, again) is False
     assert sink.sent == []
-    assert seen == {"alice:expired:1"} and again == {"alice:expired:1"}
+    assert seen == {"alice:expired:1"}
+    assert again == {"alice:expired:1"}
 
 
 def test_recovery_requires_a_prior_episode() -> None:

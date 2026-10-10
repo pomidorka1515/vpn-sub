@@ -69,7 +69,7 @@ class SchedulerMixin(BWatchHost):
         except Exception as exc:
             failures = self._snapshot_failures.get(kind, 0) + 1
             self._snapshot_failures[kind] = failures
-            self.log.error("Daily %s snapshot failed", kind, exc_info=exc)
+            self.log.exception("Daily %s snapshot failed", kind)
             if failures == 1 or failures % 3 == 0:
                 self._alert_admin(
                     f"⚠️ Daily {kind} snapshot failed ({failures} consecutive attempt(s)): {exc}"

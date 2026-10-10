@@ -6,7 +6,7 @@ from config import JsonValue
 
 from ..common import BaseService
 
-__all__ = ["AuditService", "AUDIT_VALUES"]
+__all__ = ["AUDIT_VALUES", "AuditService"]
 
 AUDIT_VALUES = Literal[
     'sub_hit',

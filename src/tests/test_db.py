@@ -339,7 +339,8 @@ def test_bulk_usage_and_snapshots_commit_once(database: Database) -> None:
     assert begins == 2
     alice = database.get_user("alice")
     bob = database.get_user("bob")
-    assert alice is not None and bob is not None
+    assert alice is not None
+    assert bob is not None
     assert (alice["bw_used"], bob["wl_used"]) == (3, 4)
     assert database.get_bandwidth_snapshots("bob", 0)[0]["wl_up"] == 5
     assert database.usernames() == {"alice", "bob"}

@@ -300,7 +300,7 @@ def test_running_lists_unit_and_stray_pid(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 def test_asset_requires_sha256() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="has no sha256 digest"):
         updater._asset({"name": "vpn-sub", "browser_download_url": "https://x", "size": 1, "digest": "md5:abc"})
 
 

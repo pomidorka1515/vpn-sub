@@ -109,7 +109,8 @@ def test_polls_overlap(database: Database) -> None:
     statuses = subscription.panel_svc.statuses()
     assert span.overlapped()
     assert len(statuses) == 2
-    assert statuses[0] is not None and statuses[1] is not None
+    assert statuses[0] is not None
+    assert statuses[1] is not None
 
 
 def test_online_users_follow_panel_list_order(database: Database) -> None:

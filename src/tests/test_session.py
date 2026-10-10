@@ -214,7 +214,7 @@ def test_clear_cache_invalidates_another_session(tmp_path: Path, clock: FakeCloc
 def test_clear_cache_keeps_the_list_when_the_stamp_cannot_move(panel: XUiSession) -> None:
     panel.cache = [make_inbound(1)]
     panel._stamp_path = "/proc/does-not-exist/inbounds.stamp"  # pyright: ignore[reportPrivateUsage]
-    with pytest.raises(OSError):
+    with pytest.raises(FileNotFoundError):
         panel.clear_cache()
     assert panel.cache is not None
 

@@ -216,11 +216,11 @@ def test_parse_level_accepts_names_and_floors_ints() -> None:
     assert parse_level("99") == logging.CRITICAL
     assert parse_level("-3") == TRACE
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="log level is empty"):
         parse_level("")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unknown log level"):
         parse_level("verbose")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unknown log level"):
         parse_level("nan")
 
 

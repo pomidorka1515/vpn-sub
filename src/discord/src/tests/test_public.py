@@ -90,7 +90,7 @@ def test_sub_works_in_guild_and_stays_ephemeral(public_bot_factory: PublicBotFac
     bot, _store, session = public_bot_factory(handler)
     interaction = FakeInteraction(guild_id=123)
     run(bot.cmd_sub(interaction))  # type: ignore[arg-type]
-    assert [str(call["url"]) for call in session.calls][0].endswith("/stats")
+    assert str(session.calls[0]["url"]).endswith("/stats")
     last = interaction.response.messages[-1]
     assert "subscription is ready" in str(last["content"])
     assert last.get("ephemeral") is True
@@ -279,10 +279,10 @@ def test_register_modal_validates_then_registers(public_bot_factory: PublicBotFa
 
 @pytest.mark.parametrize(
     ("obj", "needle"),
-    (
+    [
         ({"valid": False, "taken": False, "sanitized": "bad name"}, "too long"),
         ({"valid": True, "taken": True, "sanitized": "alice"}, "taken"),
-    ),
+    ],
 )
 def test_register_modal_taken_or_invalid_never_posts_register(
     public_bot_factory: PublicBotFactory,
@@ -341,10 +341,10 @@ def test_login_change_modal_validates_username(public_bot_factory: PublicBotFact
 
 @pytest.mark.parametrize(
     ("obj", "needle"),
-    (
+    [
         ({"valid": False, "taken": False, "sanitized": "x"}, "too long"),
         ({"valid": True, "taken": True, "sanitized": "newname"}, "taken"),
-    ),
+    ],
 )
 def test_login_change_modal_taken_or_invalid_never_posts_settings(
     public_bot_factory: PublicBotFactory,

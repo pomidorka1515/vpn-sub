@@ -56,8 +56,8 @@ def prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
         try:
             os.unlink(path)
             log.debug(f"pruned old backup: {path}")
-        except OSError as exc:
-            log.error(f"prune failed for {path}: {exc}")
+        except OSError:
+            log.exception("prune failed for %s", path)
 
 
 def make_backup_thread(

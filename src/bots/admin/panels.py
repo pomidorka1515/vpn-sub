@@ -44,7 +44,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
         text = f"""📊 <b>Статус сервера {panel.name}</b>
 
 🖥 <b>Система</b>
-├ <b>CPU:</b> <code>{int(round(obj.cpu))}%</code> (<code>{obj.cpuCores}</code>/<code>{obj.logicalPro}</code> ядер, <code>{int(round(obj.cpuSpeedMhz))} MHz</code>)
+├ <b>CPU:</b> <code>{round(obj.cpu)}%</code> (<code>{obj.cpuCores}</code>/<code>{obj.logicalPro}</code> ядер, <code>{round(obj.cpuSpeedMhz)} MHz</code>)
 ├ <b>Load:</b> <code>{obj.loads[0]}</code> | <code>{obj.loads[1]}</code> | <code>{obj.loads[2]}</code>
 ├ <b>RAM:</b> <code>{obj.mem.current / GB:.2f} GB</code> / <code>{obj.mem.total / GB:.2f} GB</code>
 └ <b>Uptime:</b> <code>{sys_up}</code>

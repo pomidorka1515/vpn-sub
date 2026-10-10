@@ -212,7 +212,8 @@ def test_admin_session_sets_httponly_cookie(
     assert "Path=/sub/admin" in signed_in.headers["Set-Cookie"]
     assert "HttpOnly" in signed_in.headers["Set-Cookie"]
     session = database.admin_ui_session()
-    assert session is not None and len(session) == 100
+    assert session is not None
+    assert len(session) == 100
 
 
 def test_admin_page_uses_local_assets(
@@ -248,7 +249,9 @@ def test_admin_relogin_invalidates_previous_cookie(
     )
     assert again.status_code == 200
     second = database.admin_ui_session()
-    assert first is not None and second is not None and second != first
+    assert first is not None
+    assert second is not None
+    assert second != first
     client.delete_cookie("admin_ui", path="/sub/admin")
     client.set_cookie("admin_ui", first, path="/sub/admin")
     assert client.get("/sub/admin").status_code == 302

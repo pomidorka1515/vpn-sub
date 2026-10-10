@@ -76,7 +76,7 @@ def test_list_and_info_codes(
     subscription.code_svc.list_code.side_effect = RuntimeError("boom")
     mixin._cb_list_codes(7)
     assert "Внутренняя ошибка" in cast(MagicMock, mixin._send_message).call_args.args[1]
-    cast(MagicMock, mixin.log).error.assert_called()
+    cast(MagicMock, mixin.log).exception.assert_called()
 
     mixin._step_info_code(_message("/start"))
     subscription.code_svc.get_code.assert_not_called()

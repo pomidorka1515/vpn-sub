@@ -201,8 +201,10 @@ def test_json_profiles_fill_transport_hosts() -> None:
     assert "host" not in stream["xhttpSettings"] or stream["xhttpSettings"]["host"] == ""
     assert stream["realitySettings"]["fingerprint"] == "chrome"
     ws = cast(ProfileTemplate, built[1])["outbounds"][0]["streamSettings"]
-    assert "wsSettings" in ws and "headers" in ws["wsSettings"]
-    assert "httpupgradeSettings" in ws and "host" in ws["httpupgradeSettings"]
+    assert "wsSettings" in ws
+    assert "headers" in ws["wsSettings"]
+    assert "httpupgradeSettings" in ws
+    assert "host" in ws["httpupgradeSettings"]
     assert ws["wsSettings"]["headers"]["Host"] == "edge.example"
     assert ws["httpupgradeSettings"]["host"] == "edge.example"
     assert built[0]["meta"] == {"serverDescription": "tls en"}

@@ -29,7 +29,7 @@ from typing import cast
 
 import jsonschema
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 type JsonDict = dict[str, JsonValue]
 
 _ROOT = Path(__file__).resolve().parent.parent

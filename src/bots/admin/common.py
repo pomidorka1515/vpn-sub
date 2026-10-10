@@ -31,8 +31,8 @@ class AdminCommonMixin(
         for uid in self.admin_uids:
             try:
                 self.bot.send_message(uid, text, parse_mode=parse_mode)
-            except Exception as e:
-                self.log.error(f"failed to send message to admin ID {uid}: {e}")
+            except Exception:
+                self.log.exception("failed to send message to admin ID %s", uid)
 
     def get_main_menu(self) -> types.InlineKeyboardMarkup:
         return types.InlineKeyboardMarkup(row_width=2).add(  # pyright: ignore[reportUnknownMemberType]

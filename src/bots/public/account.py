@@ -39,8 +39,8 @@ class PublicAccountMixin(PublicFeatureMixin):
         except AppError as error:
             self._send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
             return None
-        except Exception as error:
-            self.log.exception(f"Delete error for uid {uid}: {error}")
+        except Exception:
+            self.log.exception("Delete error for uid %s", uid)
             self._send_message(message.chat.id, "⚠️ Error", reply_markup=self.get_menu(uid))
 
     def step_reset(self, message: types.Message) -> None:
@@ -88,4 +88,3 @@ class PublicAccountMixin(PublicFeatureMixin):
         except Exception:
             self.log.exception(f"Bonus error for uid {uid}")
             self._send_message(message.chat.id, t['error_generic'], reply_markup=self.get_menu(uid))
-

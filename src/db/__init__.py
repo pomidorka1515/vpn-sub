@@ -13,9 +13,9 @@ from errors import CodeError, DatabaseError, DuplicateError, MigrationError
 from .database import Database
 
 __all__ = [
+    "CodeError",
     "Database",
     "DatabaseError",
     "DuplicateError",
-    "CodeError",
     "MigrationError",
 ]

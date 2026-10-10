@@ -17,9 +17,21 @@ from .documents import (
 from .lines import LinesConfig
 
 __all__ = [
-    "Config", "LinesConfig",
-    "FileSignature", "CompactReturn",
-    "JsonValue", "JsonDict",
-    "AppConfig", "BotConfig", "PublicBotConfig", "RedisConfig", "PanelConfig", "ProfileConfig",
-    "DiscordConfig", "DiscordBotConfig", "DiscordPrivateConfig", "LangConfig", "DiscordLangConfig",
+    "AppConfig",
+    "BotConfig",
+    "CompactReturn",
+    "Config",
+    "DiscordBotConfig",
+    "DiscordConfig",
+    "DiscordLangConfig",
+    "DiscordPrivateConfig",
+    "FileSignature",
+    "JsonDict",
+    "JsonValue",
+    "LangConfig",
+    "LinesConfig",
+    "PanelConfig",
+    "ProfileConfig",
+    "PublicBotConfig",
+    "RedisConfig",
 ]

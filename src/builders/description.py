@@ -57,7 +57,7 @@ def build_description(
             bw_limit_str = format(
                 bw_limit_str,
                 used=fmt_bytes(bw_used),
-                limit=f"{str(bw_limit)}GB"
+                limit=f"{bw_limit!s}GB"
             )
             desc = format(
                 desc,
@@ -78,7 +78,7 @@ def build_description(
             wl_bw_str = format(
                 wl_bw_str,
                 used=fmt_bytes(wl_used),
-                limit=f"{str(wl_limit)}GB"
+                limit=f"{wl_limit!s}GB"
             )
             desc = format(
                 desc,
@@ -110,7 +110,7 @@ def build_description(
                 up=fmt_bytes(int(bandwidths.upload)),
                 down=fmt_bytes(int(bandwidths.download)),
                 used=fmt_bytes(bw_used),
-                limit=f"{str(bw_limit)}GB"
+                limit=f"{bw_limit!s}GB"
             )
 
         if not statusTime:

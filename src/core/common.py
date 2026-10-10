@@ -9,7 +9,7 @@ from loggers import Logger
 from session import XUiSession
 from tracer import TraceOp, trace
 
-__all__ = ["SharedCoreResources", "BaseService"]
+__all__ = ["BaseService", "SharedCoreResources"]
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SharedCoreResources:

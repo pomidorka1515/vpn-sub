@@ -13,11 +13,22 @@ if TYPE_CHECKING:
     from flask import Response
 
 __all__ = [
-    "compare", "isuuid", "isusername", "isbrowser", "sanitize",
-    "format", "tuple_hook", "parse_bool",
-    "fmt_bytes_tuple", "fmt_bytes", "fmt_time",
-    "format_usage", "is_cancel_command", "truncate_utf8",
-    "generate_token", "make_qr",
+    "compare",
+    "fmt_bytes",
+    "fmt_bytes_tuple",
+    "fmt_time",
+    "format",
+    "format_usage",
+    "generate_token",
+    "is_cancel_command",
+    "isbrowser",
+    "isusername",
+    "isuuid",
+    "make_qr",
+    "parse_bool",
+    "sanitize",
+    "truncate_utf8",
+    "tuple_hook",
 ]
 
 _BROWSER_UA = re.compile(r'(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)')

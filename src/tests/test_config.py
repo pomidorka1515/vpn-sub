@@ -56,10 +56,14 @@ def test_transaction_commit_writes_nested_changes(cfg: Config) -> None:
 
 def test_transaction_exception_does_not_persist(cfg: Config) -> None:
     cfg["keep"] = 1
-    with pytest.raises(ValueError, match="abort"):
+
+    def abort_transaction() -> None:
         with cfg as tx:
             tx["keep"] = 2
             raise ValueError("abort")
+
+    with pytest.raises(ValueError, match="abort"):
+        abort_transaction()
     assert cfg["keep"] == 1
 
 
@@ -207,10 +211,14 @@ def test_transaction_view_is_active_and_commits_nested_edits(app_cfg: Config[App
 
 def test_transaction_view_rolls_back_nested_edits(app_cfg: Config[AppConfig]) -> None:
     transaction = app_cfg.edit()
-    with pytest.raises(ValueError, match="abort"):
+
+    def abort_transaction() -> None:
         with transaction as tx:
             tx.view()["3xui"]["local"]["inbounds_list"].append(2)
             raise ValueError("abort")
+
+    with pytest.raises(ValueError, match="abort"):
+        abort_transaction()
     assert app_cfg.view()["3xui"]["local"]["inbounds_list"] == [1]
     with pytest.raises(RuntimeError, match="not active"):
         transaction.view()

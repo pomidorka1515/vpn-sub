@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from bots import AdminBot
     from config import LinesConfig
 
-__all__ = ["Logger", "TRACE"]
+__all__ = ["TRACE", "Logger"]
 
 
 class Logger(logging.Logger):

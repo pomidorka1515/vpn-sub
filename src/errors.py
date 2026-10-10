@@ -10,13 +10,13 @@ __all__ = (
     "FileCorruptionError",
     "MigrationError",
     "NotFoundError",
+    "PanelRejectedError",
     "PanelUnavailableError",
     "ReadOnlyConfigError",
     "SchemaValidationError",
+    "UnsupportedPlatformError",
     "ValidationError",
-    "XUiSessionError",
-    "PanelRejectedError",
-    "UnsupportedPlatformError"
+    "XUiSessionError"
 )
 
 # ------------------------------------------------------------

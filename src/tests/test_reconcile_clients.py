@@ -15,7 +15,8 @@ from session import XUiSession
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "reconcile_clients.py"
 _SPEC = importlib.util.spec_from_file_location("reconcile_clients", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
+assert _SPEC is not None
+assert _SPEC.loader is not None
 rc = importlib.util.module_from_spec(_SPEC)
 sys.modules["reconcile_clients"] = rc  # dataclasses resolves types via sys.modules
 _SPEC.loader.exec_module(rc)

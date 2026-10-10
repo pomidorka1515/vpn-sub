@@ -155,7 +155,7 @@ def test_user_info_renders_expiry_and_errors(
     subscription.business_svc.get_info.side_effect = RuntimeError("boom")
     mixin._cb_info_user(7, "alice")
     assert "Внутренняя ошибка" in cast(MagicMock, mixin._send_message).call_args.args[1]
-    cast(MagicMock, mixin.log).error.assert_called()
+    cast(MagicMock, mixin.log).exception.assert_called()
 
 
 def test_delete_and_edit_options(

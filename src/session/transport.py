@@ -18,7 +18,7 @@ from config import JsonValue
 from custom_types import RequestKwargs
 from errors import XUiSessionError
 
-__all__ = ["XUiPanelTransport", "RequestsPanelTransport", "FakeResponse", "SESSION_POOL_MAXSIZE"]
+__all__ = ["SESSION_POOL_MAXSIZE", "FakeResponse", "RequestsPanelTransport", "XUiPanelTransport"]
 
 # panel-req (4) + panel-bg (4). urllib3's default of 10 discards a
 # connection once both sides are in flight against the same panel.

@@ -12,7 +12,7 @@ from typing import Literal
 
 from paths import runtime_dir
 
-__all__ = ["stamp_path", "inbound_stamp_path", "bump_stamp", "read_stamp"]
+__all__ = ["bump_stamp", "inbound_stamp_path", "read_stamp", "stamp_path"]
 
 StampKind = Literal["inbounds", "clients"]
 

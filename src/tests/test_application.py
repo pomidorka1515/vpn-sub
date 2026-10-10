@@ -194,8 +194,10 @@ def test_browser_subscription_embeds_local_fonts(paths: AppPaths) -> None:
 
 def test_background_components_are_not_started(paths: AppPaths) -> None:
     with factory(paths) as runtime:
-        assert runtime.admin_bot is not None and runtime.admin_bot.polling_thread is None
-        assert runtime.public_bot is not None and runtime.public_bot.polling_thread is None
+        assert runtime.admin_bot is not None
+        assert runtime.admin_bot.polling_thread is None
+        assert runtime.public_bot is not None
+        assert runtime.public_bot.polling_thread is None
         assert not runtime.bandwidth_watcher._threads[0].is_alive()  # pyright: ignore[reportPrivateUsage]
 
 
@@ -297,10 +299,14 @@ def test_secondary_process_does_not_recover_or_start_bots(paths: AppPaths) -> No
 def test_primary_starts_backup_threads_once(paths: AppPaths) -> None:
     with factory(paths) as runtime:
         assert runtime.primary
-        assert runtime.db._backup_t is not None and runtime.db._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
-        assert runtime.cfg._backup_t is not None and runtime.cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
-        assert runtime.log_cfg._backup_t is not None and runtime.log_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
-        assert runtime.audit_cfg._backup_t is not None and runtime.audit_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
+        assert runtime.db._backup_t is not None  # pyright: ignore[reportPrivateUsage]
+        assert runtime.db._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
+        assert runtime.cfg._backup_t is not None  # pyright: ignore[reportPrivateUsage]
+        assert runtime.cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
+        assert runtime.log_cfg._backup_t is not None  # pyright: ignore[reportPrivateUsage]
+        assert runtime.log_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
+        assert runtime.audit_cfg._backup_t is not None  # pyright: ignore[reportPrivateUsage]
+        assert runtime.audit_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_panel_failure_closes_created_resources(paths: AppPaths) -> None:

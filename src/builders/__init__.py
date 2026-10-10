@@ -19,12 +19,12 @@ from .links import build_link_array
 from .subscription import get_subscription
 
 __all__ = [
-    "build_description",
-    "build_link_array",
-    "build_json",
-    "get_subscription",
     "_browser_strings",
+    "build_description",
+    "build_json",
+    "build_link_array",
+    "embed_font_faces",
+    "get_subscription",
     "isbrowser",
     "render_template",
-    "embed_font_faces",
 ]

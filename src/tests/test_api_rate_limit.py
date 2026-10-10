@@ -76,7 +76,7 @@ def configured_rate_limit() -> Iterator[_SharedRedis]:
 
 
 def test_rejects_non_positive_limit() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="max_requests must be positive"):
         rate_limit(0)
 
 

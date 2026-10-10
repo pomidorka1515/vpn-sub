@@ -65,7 +65,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
         return f"""📊 **Статус сервера {name}**
 
 🖥 **Система**
-├ **CPU:** `{int(round(number(obj.get('cpu'))))}%` (`{obj.get('cpuCores')}`/`{obj.get('logicalPro')}` ядер, `{int(round(number(obj.get('cpuSpeedMhz'))))} MHz`)
+├ **CPU:** `{round(number(obj.get('cpu')))}%` (`{obj.get('cpuCores')}`/`{obj.get('logicalPro')}` ядер, `{round(number(obj.get('cpuSpeedMhz')))} MHz`)
 ├ **Load:** `{load0}` | `{load1}` | `{load2}`
 ├ **RAM:** `{number(mem.get('current')) / GB:.2f} GB` / `{number(mem.get('total')) / GB:.2f} GB`
 └ **Uptime:** `{sys_up}`

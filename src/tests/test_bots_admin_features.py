@@ -159,7 +159,7 @@ def test_render_chart_sends_photo_text_or_error(
     subscription.business_svc.get_info.side_effect = RuntimeError("boom")
     mixin._render_chart(username="alice", days=7, chat_id=7)
     assert "Внутренняя ошибка" in cast(MagicMock, mixin._send_message).call_args.args[1]
-    cast(MagicMock, mixin.log).error.assert_called()
+    cast(MagicMock, mixin.log).exception.assert_called()
 
 
 @pytest.fixture

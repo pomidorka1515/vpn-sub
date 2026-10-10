@@ -259,7 +259,7 @@ class SysUtil:
         total_rss: int = 0
         total_swap: int = 0
 
-        for proc in [current_proc] + children:
+        for proc in [current_proc, *children]:
             try:
                 mem = proc.memory_full_info()
                 total_rss += mem.rss

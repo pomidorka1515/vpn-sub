@@ -5,10 +5,21 @@ from dataclasses import dataclass
 from custom_types import NetTrafficStats, ServerMetricsObj
 
 __all__ = [
-    "CPUInfo", "LoadAverage", "RamInfo", "SwapInfo", "SystemMemory",
-    "IPList", "ConnCount", "AppMemory", "GCGenStats", "GCStats",
-    "ThreadInfo", "HealthStatus", "FullSystemInfo", "PollingSystemInfo",
+    "AppMemory",
+    "CPUInfo",
+    "ConnCount",
+    "FullSystemInfo",
+    "GCGenStats",
+    "GCStats",
+    "HealthStatus",
+    "IPList",
+    "LoadAverage",
+    "PollingSystemInfo",
+    "RamInfo",
     "StateSnapshot",
+    "SwapInfo",
+    "SystemMemory",
+    "ThreadInfo",
 ]
 
 
