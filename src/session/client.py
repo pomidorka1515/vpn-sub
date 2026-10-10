@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Unpack
 
 from requests import ConnectionError, RequestException, Response, Session, Timeout  # noqa: A004
@@ -143,7 +144,9 @@ class XUiSession:
                 resolved_client_stamp = default_client_stamp_path(
                     name, self.base_url, directory=stamp_dir,
                 )
-            if os.path.abspath(resolved_client_stamp) == os.path.abspath(resolved_stamp):
+            inbound_path = os.path.normpath(Path(resolved_stamp).absolute())
+            client_path = os.path.normpath(Path(resolved_client_stamp).absolute())
+            if client_path == inbound_path:
                 raise ValueError("client stamp must not be the inbound stamp")
             self._inbounds: GenerationCache[list[Inbound]] = GenerationCache(resolved_stamp, clock)
             self._clients: GenerationCache[dict[str, PanelClient]] = GenerationCache(

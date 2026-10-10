@@ -257,8 +257,8 @@ def _write(path: Path, data: Mapping[str, JsonValue]) -> None:
         if keep_backup:
             path.unlink()
         else:
-            os.replace(path, backup)
-        os.replace(temp_path, path)
+            path.replace(backup)
+        temp_path.replace(path)
     except Exception:
         temp_path.unlink(missing_ok=True)
         raise

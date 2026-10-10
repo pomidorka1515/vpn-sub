@@ -4,6 +4,7 @@ import copy
 import fcntl
 import threading
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
 from .atomic import atomic_write_json, ensure_parent_dir, file_signature
@@ -47,7 +48,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
             ensure_parent_dir(cfg.path)
             ensure_parent_dir(cfg.lockfile_path)
-            lock_fp = open(cfg.lockfile_path, "a+b")
+            lock_fp = Path(cfg.lockfile_path).open("a+b")
             fcntl.flock(lock_fp, fcntl.LOCK_EX)
 
             signature = file_signature(cfg.path)

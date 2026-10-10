@@ -116,6 +116,7 @@ extend-select = [
     "RUF",    # Ruff-specific correctness and cleanup checks
     "T20",    # Bans print()
     "TC",     # Cleans up TYPE_CHECKING imports
+    "PTH",    # Encourage pathlib
 ]
 
 ignore = [

@@ -1,11 +1,11 @@
 import contextlib
-import glob
 import json
 import os
 import shutil
 import tempfile
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import cast
 
 from loggers import Logger
@@ -15,8 +15,7 @@ from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:
-    name = os.path.splitext(os.path.basename(path))[0]
-    return os.path.join(backup_dir, name)
+    return str(Path(backup_dir) / Path(path).stem)
 
 def do_backup(
     path: str,
@@ -41,30 +40,30 @@ def do_backup(
         data: When set, snapshot this document instead of reading path. The
               scheduled thread leaves it unset so a backup still matches disk.
     """
-    os.makedirs(instance_dir, exist_ok=True)
+    Path(instance_dir).mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
     if raw:
-        backup_path = os.path.join(instance_dir, f"{timestamp}.jsonl")
+        backup_path = Path(instance_dir) / f"{timestamp}.jsonl"
         fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
         os.close(fd)
         try:
             shutil.copy2(path, tmp)
-            os.replace(tmp, backup_path)
+            Path(tmp).replace(backup_path)
         except FileNotFoundError:
             with contextlib.suppress(FileNotFoundError):
-                os.unlink(tmp)
+                Path(tmp).unlink()
             return
         except Exception:
             with contextlib.suppress(FileNotFoundError):
-                os.unlink(tmp)
+                Path(tmp).unlink()
             raise
     else:
-        backup_path = os.path.join(instance_dir, f"{timestamp}.json")
+        backup_path = Path(instance_dir) / f"{timestamp}.json"
         if data is None:
             try:
-                with open(path, encoding="utf-8") as f:
+                with Path(path).open(encoding="utf-8") as f:
                     content = f.read()
                 if jsonc:
                     content = strip_jsonc_comments(content)
@@ -83,15 +82,15 @@ def do_backup(
         fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
         os.close(fd)
         try:
-            with open(tmp, "w", encoding="utf-8") as f:
+            with Path(tmp).open("w", encoding="utf-8") as f:
                 if minify:
                     json.dump(data, f, indent=None, separators=(',', ':'), ensure_ascii=False)
                 else:
                     json.dump(data, f, indent=indent, ensure_ascii=False)
-            os.replace(tmp, backup_path)
+            Path(tmp).replace(backup_path)
         except Exception:
             with contextlib.suppress(FileNotFoundError):
-                os.unlink(tmp)
+                Path(tmp).unlink()
             raise
 
     log.debug(f"backup saved: {backup_path}")
@@ -104,11 +103,11 @@ def prune_backups(
 ) -> None:
     """Keep only the N most recent backups."""
     # Match both .json (Config) and .jsonl (LinesConfig) backup files.
-    files = sorted(glob.glob(os.path.join(instance_dir, f"*.{config_type}")))
+    files = sorted(Path(instance_dir).glob(f"*.{config_type}"))
     to_delete = files[:-retention]
     for f in to_delete:
         try:
-            os.unlink(f)
+            f.unlink()
             log.debug(f"pruned old backup: {f}")
         except OSError:
             log.exception("prune failed for %s", f)

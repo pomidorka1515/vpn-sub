@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 from contextlib import contextmanager, suppress
+from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
@@ -26,9 +27,7 @@ class CompactReturn(NamedTuple):
 
 
 def ensure_parent_dir(path: str) -> None:
-    dir_path = os.path.dirname(path)
-    if dir_path:
-        os.makedirs(dir_path, exist_ok=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
 
 def resolve_lockfile_path(data_path: str, lockfile_path: str | None = None) -> str:
     """Resolve an inter-process lock path.
@@ -40,11 +39,11 @@ def resolve_lockfile_path(data_path: str, lockfile_path: str | None = None) -> s
     """
     if lockfile_path is None:
         return f"{data_path}.lock"
-    if lockfile_path.endswith(("/", os.sep)) or os.path.isdir(lockfile_path):
-        absolute = os.path.abspath(data_path)
+    if lockfile_path.endswith(("/", os.sep)) or Path(lockfile_path).is_dir():
+        absolute = os.path.normpath(Path(data_path).absolute())
         digest = hashlib.sha1(absolute.encode(), usedforsecurity=False).hexdigest()[:8]
-        name = f"{os.path.basename(data_path)}.{digest}.lock"
-        return os.path.join(lockfile_path, name)
+        name = f"{Path(data_path).name}.{digest}.lock"
+        return str(Path(lockfile_path) / name)
     return lockfile_path
 
 @contextmanager
@@ -58,7 +57,7 @@ def locked_file(
     resolved = lockfile_path if lockfile_path is not None else resolve_lockfile_path(path)
     ensure_parent_dir(resolved)
     mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-    with open(resolved, "a+b") as lock_fp:
+    with Path(resolved).open("a+b") as lock_fp:
         fcntl.flock(lock_fp, mode)
         try:
             yield
@@ -67,7 +66,7 @@ def locked_file(
 
 def stat_signature(path: str) -> FileSignature | None:
     try:
-        stat_result = os.stat(path)
+        stat_result = Path(path).stat()
     except FileNotFoundError:
         return None
     return FileSignature(
@@ -82,7 +81,7 @@ def file_signature(path: str) -> FileSignature | None:
 
 
 def fsync_parent_dir(path: str) -> None:
-    dir_path = os.path.dirname(path) or "."
+    dir_path = Path(path).parent
     dir_fd = os.open(dir_path, os.O_RDONLY)
     try:
         os.fsync(dir_fd)
@@ -99,21 +98,21 @@ def atomic_write_json(
     indent: int,
     sync_mode: SYNC_MODES,
 ) -> FileSignature | None:
-    """Write atomically: temp file + os.replace. Returns new file signature."""
+    """Write atomically: temp file + Path.replace. Returns new file signature."""
     ensure_parent_dir(path)
-    dir_path = os.path.dirname(path) or "."
+    dir_path = Path(path).parent
 
     fd, temp_path = tempfile.mkstemp(dir=dir_path, prefix=".tmp_", suffix=".json")
     os.close(fd)
 
     try:
-        if os.path.exists(path):
-            existing = os.stat(path, follow_symlinks=False)
-            os.chmod(temp_path, existing.st_mode & 0o777)
+        if Path(path).exists():
+            existing = Path(path).stat(follow_symlinks=False)
+            Path(temp_path).chmod(existing.st_mode & 0o777)
             with suppress(PermissionError):
                 os.chown(temp_path, existing.st_uid, existing.st_gid)
 
-        with open(temp_path, "w", encoding="utf-8") as handle:
+        with Path(temp_path).open("w", encoding="utf-8") as handle:
             if minify:
                 json.dump(data, handle, indent=None, separators=(',', ':'), ensure_ascii=False)
             else:
@@ -124,14 +123,14 @@ def atomic_write_json(
                 handle.flush()
                 os.fsync(handle.fileno())
 
-        os.replace(temp_path, path)
+        Path(temp_path).replace(path)
 
         if sync_mode == "full":
             fsync_parent_dir(path)
 
     except Exception:
         with suppress(FileNotFoundError):
-            os.unlink(temp_path)
+            Path(temp_path).unlink()
         raise
 
     return file_signature(path)

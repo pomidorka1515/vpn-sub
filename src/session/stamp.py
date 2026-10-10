@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from pathlib import Path
 from typing import Literal
 
 from paths import runtime_dir
@@ -34,7 +35,7 @@ def stamp_path(
         directory = str(runtime_dir())
     digest = hashlib.sha1(base_url.encode(), usedforsecurity=False).hexdigest()[:8]
     safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name) or "panel"
-    return os.path.join(directory, f"{kind}.{safe}.{digest}.stamp")
+    return str(Path(directory) / f"{kind}.{safe}.{digest}.stamp")
 
 
 def inbound_stamp_path(name: str, base_url: str, *, directory: str | None = None) -> str:
@@ -53,7 +54,7 @@ def client_stamp_path(name: str, base_url: str, *, directory: str | None = None)
 
 def bump_stamp(path: str) -> None:
     """Move the stamp's mtime. A same-nanosecond utime is pushed forward."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     flags = os.O_CREAT | os.O_APPEND
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
@@ -74,7 +75,7 @@ def read_stamp(path: str) -> int:
     A missing file is not generation 0. Two workers can both observe "absent"
     and would then treat each other's later fills as still current.
     """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_CREAT | os.O_APPEND | getattr(os, "O_CLOEXEC", 0), 0o644)
     try:
         return os.fstat(fd).st_mtime_ns

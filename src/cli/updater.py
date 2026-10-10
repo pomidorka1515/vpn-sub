@@ -366,7 +366,7 @@ def _process_name(entry: Path, wanted: dict[Path, str]) -> str | None:
     """
     exe = entry / "exe"
     try:
-        text = os.readlink(exe)
+        text = str(exe.readlink())
     except OSError:
         text = ""
     if text.endswith(" (deleted)"):
@@ -465,7 +465,7 @@ def _swap(log: Logger, present: dict[str, Path], files: dict[str, Path]) -> list
             backup = path.with_name(f"{name}.bak")
             staged = path.with_name(f"{name}.new")
             shutil.copy2(path, backup)
-            os.chmod(files[name], 0o755) # noqa: S103
+            files[name].chmod(0o755)
             files[name].replace(staged)
             staged.replace(path)
             replaced.append(name)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING
 
 import pytest
@@ -52,5 +51,5 @@ def test_401_clears_session(session_store: SessionStore) -> None:
     assert record.lang == "en"
 
 def test_chmod_600(session_path: Path, session_store: SessionStore) -> None:
-    mode = os.stat(session_path).st_mode & 0o777
+    mode = session_path.stat().st_mode & 0o777
     assert mode == 0o600

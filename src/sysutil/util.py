@@ -47,7 +47,7 @@ class SysUtil:
     @staticmethod
     def _cpu_sample() -> tuple[int, int]:
         """Total and idle jiffies from the aggregate `/proc/stat` line."""
-        with open('/proc/stat') as f:
+        with Path('/proc/stat').open() as f:
             cpu_line = f.readline()
         # user, nice, system, idle, iowait, irq, softirq, steal
         parts = cpu_line.split()
@@ -91,7 +91,7 @@ class SysUtil:
     def cpu_info() -> CPUInfo:
         cores = os.cpu_count()
 
-        with open('/proc/cpuinfo') as f:
+        with Path('/proc/cpuinfo').open() as f:
             cpu_name = ""
             max_mhz: float | int = 0
             for line in f:
@@ -109,7 +109,7 @@ class SysUtil:
 
     @staticmethod
     def loadavg() -> LoadAverage:
-        with open('/proc/loadavg') as f:
+        with Path('/proc/loadavg').open() as f:
             one, five, fifteen = f.read().split()[:3]
 
         return LoadAverage(
@@ -125,7 +125,7 @@ class SysUtil:
     @staticmethod
     def network() -> NetTrafficStats:
         tx, rx = 0, 0
-        with open('/proc/net/dev') as f:
+        with Path('/proc/net/dev').open() as f:
             f.readline()  # skip headers
             f.readline()
             for line in f:
@@ -139,14 +139,14 @@ class SysUtil:
 
     @staticmethod
     def uptime() -> float:
-        with open('/proc/uptime') as f:
+        with Path('/proc/uptime').open() as f:
             return float(f.read().split()[0])
 
     @staticmethod
     def memory() -> SystemMemory:
         mem_data: dict[str, int] = {}
 
-        with open("/proc/meminfo") as f:
+        with Path("/proc/meminfo").open() as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 2:
@@ -231,12 +231,12 @@ class SysUtil:
         udp_count = 0
 
         for state_file in Path('/proc/net').glob('tcp*'):
-            with open(state_file) as f:
+            with state_file.open() as f:
                 f.readline()  # skip header
                 tcp_count += sum(1 for _ in f)
 
         for udp_file in Path('/proc/net').glob('udp*'):
-            with open(udp_file) as f:
+            with udp_file.open() as f:
                 f.readline()
                 udp_count += sum(1 for _ in f)
 
@@ -274,10 +274,10 @@ class SysUtil:
 
     @staticmethod
     def app_uptime() -> float:
-        with open('/proc/uptime') as f:
+        with Path('/proc/uptime').open() as f:
             system_uptime = float(f.read().split()[0])
 
-        with open(f'/proc/{os.getpid()}/stat') as f:
+        with Path(f'/proc/{os.getpid()}/stat').open() as f:
             starttime_ticks = int(f.read().split()[21])
 
         clk_tck = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
@@ -296,7 +296,7 @@ class SysUtil:
         """
         path = f"{psutil.PROCFS_PATH}/{pid}/task/{tid}/status"
         try:
-            with open(path, encoding="utf-8", errors="replace") as status:
+            with Path(path).open(encoding="utf-8", errors="replace") as status:
                 for line in status:
                     if not line.startswith("VmStk:"):
                         continue

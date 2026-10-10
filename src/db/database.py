@@ -4,6 +4,7 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager, suppress
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from errors import DatabaseError
@@ -19,7 +20,6 @@ from .users import UsersMixin
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-    from pathlib import Path
 
 
 class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
@@ -47,7 +47,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            self.path = os.path.abspath(path)
+            self.path = os.path.normpath(Path(path).absolute())
             self.timeout = timeout
             self._connections: dict[int, sqlite3.Connection] = {}
             self._connections_lock = threading.Lock()
@@ -57,10 +57,9 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
             self._backup_retention: int = backup_retention
             self._backup_stop = threading.Event()
             self._backup_t: threading.Thread | None = None
-            parent = os.path.dirname(self.path)
+            parent = Path(self.path).parent
             try:
-                if parent:
-                    os.makedirs(parent, exist_ok=True)
+                parent.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 raise DatabaseError(f"unable to create database directory {parent}: {exc}") from exc
             self.initialize()

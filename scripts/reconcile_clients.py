@@ -402,7 +402,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    with open(args.config, encoding="utf-8") as handle:
+    with Path(args.config).open(encoding="utf-8") as handle:
         config = cast(AppConfig, json.load(handle))
     panels_cfg = config["3xui"]
     selected_keys = list(panels_cfg) if not args.panel else list(args.panel)

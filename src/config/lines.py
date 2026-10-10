@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Self
 
 from errors import ConfigError
@@ -20,7 +21,6 @@ from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_ba
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
-    from pathlib import Path
     from types import TracebackType
 
     from .constants import SYNC_MODES, JsonDict, JsonValue
@@ -85,8 +85,8 @@ class LinesConfig:
             self._backup_stop = threading.Event()
 
             ensure_parent_dir(path_str)
-            if not os.path.exists(self._path):
-                with open(self._path, "a", encoding="utf-8"):
+            if not Path(self._path).exists():
+                with Path(self._path).open("a", encoding="utf-8"):
                     pass
             if self._backup_dir and start_backup:
                 self._backup_t: threading.Thread | None  = make_backup_thread(
@@ -113,14 +113,14 @@ class LinesConfig:
 
     @property
     def size(self) -> int:
-        return os.path.getsize(self.path)
+        return Path(self.path).stat().st_size
 
     def append(self, record: Mapping[str, JsonValue]) -> None:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
-                with open(self._path, "a", encoding="utf-8") as f:
+                with Path(self._path).open("a", encoding="utf-8") as f:
                     f.write(line)
                     if self._sync_mode != "none":
                         f.flush()
@@ -137,7 +137,7 @@ class LinesConfig:
         lines = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
-                with open(self._path, "a", encoding="utf-8") as f:
+                with Path(self._path).open("a", encoding="utf-8") as f:
                     f.write(lines)
                     if self._sync_mode != "none":
                         f.flush()
@@ -150,7 +150,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
-                    with open(self._path, encoding="utf-8") as f:
+                    with Path(self._path).open(encoding="utf-8") as f:
                         for line in f:
                             line = line.strip()
                             if line:
@@ -164,7 +164,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
-                    with open(self._path, "rb") as f:
+                    with Path(self._path).open("rb") as f:
                         f.seek(0, io.SEEK_END)
                         remaining: int = f.tell()
                         if remaining == 0:
@@ -203,7 +203,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
-                    with open(self._path, encoding="utf-8") as f:
+                    with Path(self._path).open(encoding="utf-8") as f:
                         for line in f:
                             line = line.strip()
                             if line:
@@ -219,7 +219,7 @@ class LinesConfig:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
-                    with open(self._path, encoding="utf-8") as f:
+                    with Path(self._path).open(encoding="utf-8") as f:
                         return sum(1 for line in f if line.strip())
                 except OSError:
                     return 0
@@ -238,7 +238,7 @@ class LinesConfig:
                 # unlike 'w' mode, it won't deadlock if another process is
                 # mid-append/compact/clear and holds the lockfile's exclusive
                 # lock while holding the data file's shared lock.
-                with open(self._path, "r+", encoding="utf-8") as f:
+                with Path(self._path).open("r+", encoding="utf-8") as f:
                     f.truncate(0)
                     if self._sync_mode != "none":
                         f.flush()
@@ -260,11 +260,11 @@ class LinesConfig:
         Returns:
             Tuple of (kept, removed) counts after compaction.
         """
-        dir_path = os.path.dirname(self._path) or "."
+        dir_path = Path(self._path).parent
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 try:
-                    with open(self._path, encoding="utf-8") as f:
+                    with Path(self._path).open(encoding="utf-8") as f:
                         records = [json.loads(line) for line in f if line.strip()]
                 except OSError:
                     return CompactReturn(0, 0)
@@ -275,17 +275,17 @@ class LinesConfig:
                 fd, tmp = tempfile.mkstemp(dir=dir_path, prefix=".tmp_compact_", suffix=".jsonl")
                 os.close(fd)
                 try:
-                    with open(tmp, "w", encoding="utf-8") as f:
+                    with Path(tmp).open("w", encoding="utf-8") as f:
                         f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in kept)
                         if self._sync_mode != "none":
                             f.flush()
                             os.fsync(f.fileno())
-                    os.replace(tmp, self._path)
+                    Path(tmp).replace(self._path)
                     if self._sync_mode == "full":
                         fsync_parent_dir(self._path)
                 except Exception:
                     with contextlib.suppress(FileNotFoundError):
-                        os.unlink(tmp)
+                        Path(tmp).unlink()
                     raise
 
         return CompactReturn(len(kept), removed)

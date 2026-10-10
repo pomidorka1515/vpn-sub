@@ -1,26 +1,25 @@
 from __future__ import annotations
 
 import contextlib
-import glob
 import os
 import sqlite3
 import tempfile
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 
 from loggers import Logger
 
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:
-    name = os.path.splitext(os.path.basename(path))[0]
-    return os.path.join(backup_dir, name)
+    return str(Path(backup_dir) / Path(path).stem)
 
 
 def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None:
     """Take an atomic SQLite snapshot in a per-instance backup directory."""
-    os.makedirs(instance_dir, exist_ok=True)
+    Path(instance_dir).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    backup_path = os.path.join(instance_dir, f"{timestamp}.sqlite3")
+    backup_path = Path(instance_dir) / f"{timestamp}.sqlite3"
     fd, temporary = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".sqlite3")
     os.close(fd)
 
@@ -35,14 +34,14 @@ def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None
         destination = None
         source.close()
         source = None
-        os.replace(temporary, backup_path)
+        Path(temporary).replace(backup_path)
     except Exception:
         if destination is not None:
             destination.close()
         if source is not None:
             source.close()
         with contextlib.suppress(FileNotFoundError):
-            os.unlink(temporary)
+            Path(temporary).unlink()
         raise
 
     log.debug(f"backup saved: {backup_path}")
@@ -50,11 +49,11 @@ def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None
 
 def prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
     """Keep only the N most recent database backups."""
-    files = sorted(glob.glob(os.path.join(instance_dir, "*.sqlite3")))
+    files = sorted(Path(instance_dir).glob("*.sqlite3"))
     to_delete = files[:-retention]
     for path in to_delete:
         try:
-            os.unlink(path)
+            path.unlink()
             log.debug(f"pruned old backup: {path}")
         except OSError:
             log.exception("prune failed for %s", path)

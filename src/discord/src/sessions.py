@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,7 +30,7 @@ class SessionStore:
         created = not path.exists()
         if created:
             path.write_text("{}\n", encoding="utf-8")
-        os.chmod(path, 0o600)
+        path.chmod(0o600)
         self._cfg = Config(
             path=path,
             indent=4,
@@ -40,11 +39,11 @@ class SessionStore:
             sync_mode="data",
             isolate_commits=True,
         )
-        os.chmod(path, 0o600)
+        path.chmod(0o600)
 
     def close(self) -> None:
         self._cfg.close()
-        os.chmod(self._cfg.path, 0o600)
+        Path(self._cfg.path).chmod(0o600)
 
     def _key(self, user_id: int | str) -> str:
         return str(user_id)
@@ -84,7 +83,7 @@ class SessionStore:
                 token = raw_token if isinstance(raw_token, str) else ""
             data[key] = {"token": token, "lang": lang}
         self._cfg.mutate(_edit)
-        os.chmod(self._cfg.path, 0o600)
+        Path(self._cfg.path).chmod(0o600)
 
     def set_token(self, user_id: int | str, token: str) -> None:
         key = self._key(user_id)
@@ -99,8 +98,7 @@ class SessionStore:
                 payload["lang"] = lang
             data[key] = payload
         self._cfg.mutate(_edit)
-        os.chmod(self._cfg.path, 0o600)
+        Path(self._cfg.path).chmod(0o600)
 
     def clear_token(self, user_id: int | str) -> None:
         self.set_token(user_id, "")
-

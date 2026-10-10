@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import threading
-from typing import TYPE_CHECKING, Literal, TextIO
+from pathlib import Path
+from typing import Literal, TextIO
 from unittest.mock import patch
 
 import pytest
@@ -20,9 +20,6 @@ from config.backup import (
 )
 from db.backup import do_backup, make_backup_thread, prune_backups
 from loggers import Logger
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _log() -> Logger:
@@ -74,14 +71,14 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
     source = tmp_path / "config.json"
     source.write_text("{}", encoding="utf-8")
     instance = tmp_path / "json"
-    real_open = open
+    real_open = Path.open
 
-    def fail_temp(path: str, mode: Literal["r", "w"] = "r", *, encoding: str | None = None) -> TextIO:
-        if path.endswith(".tmp"):
+    def fail_temp(path: Path, mode: Literal["r", "w"] = "r", *, encoding: str | None = None) -> TextIO:
+        if path.suffix == ".tmp":
             raise OSError("unwritable")
         return real_open(path, mode, encoding=encoding)
 
-    with patch("config.backup.open", side_effect=fail_temp):
+    with patch.object(Path, "open", autospec=True, side_effect=fail_temp):
         with pytest.raises(OSError, match="unwritable"):
             config_do_backup(str(source), 2, str(instance), _log(), minify=True)
     assert list(instance.glob(".tmp-*")) == []
@@ -101,7 +98,7 @@ def test_config_prune_keeps_newest_and_logs_unlink_errors(tmp_path: Path) -> Non
 
     (instance / "20260101-000004.json").write_text("{}", encoding="utf-8")
     with (
-        patch("os.unlink", side_effect=OSError("busy")),
+        patch.object(Path, "unlink", side_effect=OSError("busy")),
         patch.object(log, "error") as error,
     ):
         config_prune_backups(str(instance), 1, log, "json")
@@ -192,7 +189,7 @@ def test_database_backup_roundtrip_and_prune(tmp_path: Path) -> None:
 
     log = _log()
     with (
-        patch("os.unlink", side_effect=OSError("busy")),
+        patch.object(Path, "unlink", side_effect=OSError("busy")),
         patch.object(log, "error") as error,
     ):
         prune_backups(str(instance), 1, log)
@@ -232,4 +229,4 @@ def test_database_backup_thread_retries(tmp_path: Path) -> None:
     assert calls["count"] == 3
     error.assert_called()
     critical.assert_not_called()
-    assert os.path.basename(str(tmp_path))
+    assert tmp_path.name

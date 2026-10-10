@@ -4,6 +4,7 @@ import copy
 import os
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast, overload
 
 from errors import ConfigError, ReadOnlyConfigError
@@ -22,7 +23,6 @@ from .schema import load_schema, read_json_object, validate_schema
 from .transaction import ConfigTransaction
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from types import TracebackType
 
 
@@ -165,7 +165,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
     @property
     def size(self) -> int:
-        return os.path.getsize(self.path)
+        return Path(self.path).stat().st_size
 
     @property
     def indent(self) -> int:
