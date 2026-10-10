@@ -54,10 +54,7 @@ def build_link_array(
     if need_dummy_link:
         dt = lang_cfg['description'][lang]['bw_label']
         dt = urllib.parse.quote(
-            dt + "↑ {up} / ↓ {down}".format(
-                up=fmt_bytes(bandwidths.upload),
-                down=fmt_bytes(bandwidths.download)
-            )
+            dt + f"↑ {fmt_bytes(bandwidths.upload)} / ↓ {fmt_bytes(bandwidths.download)}"
         )
         generated_links.appendleft(
             f"vless://0@localhost:1?type=tcp&security=none#{dt}"

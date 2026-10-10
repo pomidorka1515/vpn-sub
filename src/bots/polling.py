@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import telebot
-import telebot.apihelper as apihelper
+from telebot import apihelper
 import time
 import threading
 from typing import cast
