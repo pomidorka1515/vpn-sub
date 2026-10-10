@@ -88,6 +88,18 @@ select = [
 
 ignore = [
 	"E501",   # i dont need this
+	"PLR2004", # "magic values", useless
+	"PLC0415", # "import should be at the top-level", lazy imports are intentional
+	"E701",    # "too many statements on 1 line"
+	"PLR0913", # "too many arguments in ..."
+]
+
+extend-safe-fixes = ["W293", "W291"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = [
+    "PLR",
+    "B010",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
