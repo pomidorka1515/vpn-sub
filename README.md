@@ -393,13 +393,19 @@ The Discord unit is the same shape as the main one, with `ExecStart=/opt/vpn-sub
 ## Development
 
 ```bash
-# 3.13+
-python3 -m venv venv
+# Python 3.14 for development
+python3.14 -m venv venv
 venv/bin/pip install -r requirements.txt && venv/bin/pip install -e ".[dev]"
+venv/bin/ruff check .
 venv/bin/pytest
 venv/bin/mypy && venv/bin/pyright
 venv/bin/python -m src.wsgi   # local run; production is the systemd unit above
 ```
+
+Ruff targets Python 3.14 and checks code style, modernization, common bugs, and  
+banned legacy typing imports. Run `venv/bin/ruff check . --fix` to apply safe  
+automatic fixes, then review the diff. CI runs `ruff check .` alongside pytest,  
+mypy, and pyright.  
 
 HTTP contracts: [docs/API.md](docs/API.md) (cookie `auth_token`) and
 [docs/API_ADMIN.md](docs/API_ADMIN.md) (`Authorization` header).

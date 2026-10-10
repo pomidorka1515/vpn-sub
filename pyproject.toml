@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 # pip install -e ".[dev]"
 dev = [
+    "ruff>=0.14",
     "mypy>=1.15",
     "pyright",
     "pytest>=8.0",
@@ -65,6 +66,85 @@ packages = [
     "sysutil",
     "cli",
 ]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "F",      # Pyflakes
+    "E", "W", # pycodestyle
+    "UP",     # pyupgrade
+    "TID",    # flake8-tidy-imports
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "FURB",   # refurb
+    "PL",     # Pylint
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.TypeVar".msg = "Use 3.12 syntax: `class MyClass[T]:` or `def func[T]():`"
+"typing.ParamSpec".msg = "Use 3.12 syntax."
+"typing.Generic".msg = "Use 3.12 syntax."
+"typing.Union".msg = "Use the union operator (` | `)."
+"typing_extensions".msg = "Use stdlib `typing`."
+
+# Built-in types
+"typing.List".msg = "Use built-in `list`."
+"typing.Dict".msg = "Use built-in `dict`."
+"typing.Tuple".msg = "Use built-in `tuple`."
+"typing.Set".msg = "Use built-in `set`."
+"typing.FrozenSet".msg = "Use built-in `frozenset`."
+"typing.Type".msg = "Use built-in `type`."
+
+# Collections
+"typing.DefaultDict".msg = "Use `collections.defaultdict`."
+"typing.OrderedDict".msg = "Use `collections.OrderedDict`."
+"typing.ChainMap".msg = "Use `collections.ChainMap`."
+"typing.Counter".msg = "Use `collections.Counter`."
+"typing.Deque".msg = "Use `collections.deque`."
+
+# Other concrete types
+"typing.Pattern".msg = "Use `re.Pattern`."
+"typing.Match".msg = "Use `re.Match`."
+"typing.Text".msg = "Use `str`."
+
+# Enforce collections.abc over typing
+"typing.AbstractSet".msg = "Use `collections.abc.Set`."
+"typing.ByteString".msg = "Use `collections.abc.Buffer`."
+"typing.Callable".msg = "Use `collections.abc.Callable`."
+"typing.Collection".msg = "Use `collections.abc.Collection`."
+"typing.Container".msg = "Use `collections.abc.Container`."
+"typing.ItemsView".msg = "Use `collections.abc.ItemsView`."
+"typing.KeysView".msg = "Use `collections.abc.KeysView`."
+"typing.Mapping".msg = "Use `collections.abc.Mapping`."
+"typing.MappingView".msg = "Use `collections.abc.MappingView`."
+"typing.MutableMapping".msg = "Use `collections.abc.MutableMapping`."
+"typing.MutableSequence".msg = "Use `collections.abc.MutableSequence`."
+"typing.MutableSet".msg = "Use `collections.abc.MutableSet`."
+"typing.Sequence".msg = "Use `collections.abc.Sequence`."
+"typing.ValuesView".msg = "Use `collections.abc.ValuesView`."
+"typing.Iterable".msg = "Use `collections.abc.Iterable`."
+"typing.Iterator".msg = "Use `collections.abc.Iterator`."
+"typing.Generator".msg = "Use `collections.abc.Generator`."
+"typing.Hashable".msg = "Use `collections.abc.Hashable`."
+"typing.Reversible".msg = "Use `collections.abc.Reversible`."
+"typing.Sized".msg = "Use `collections.abc.Sized`."
+
+# Asynchronous ABCs
+"typing.Coroutine".msg = "Use `collections.abc.Coroutine`."
+"typing.AsyncGenerator".msg = "Use `collections.abc.AsyncGenerator`."
+"typing.AsyncIterable".msg = "Use `collections.abc.AsyncIterable`."
+"typing.AsyncIterator".msg = "Use `collections.abc.AsyncIterator`."
+"typing.Awaitable".msg = "Use `collections.abc.Awaitable`."
+
+# Context managers
+"typing.ContextManager".msg = "Use `contextlib.AbstractContextManager`."
+"typing.AsyncContextManager".msg = "Use `contextlib.AbstractAsyncContextManager`."
 
 # ---------------------------------------------------------------------------
 # mypy

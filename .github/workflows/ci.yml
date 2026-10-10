@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        command: ["pytest", "mypy", "pyright"]
+        command: ["pytest", "mypy", "pyright", "ruff check ."]
 
     steps:
       - uses: actions/checkout@v4
