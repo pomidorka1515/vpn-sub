@@ -202,7 +202,7 @@ class PanelService(BaseService):
             return cached  # NOTE: cache stores dataclasses!
 
         try:
-            response = panel.get(f"panel/api/inbounds/list")
+            response = panel.get("panel/api/inbounds/list")
             data: dict[str, list[dict[str, object]]] = response.json()
             if response.status_code not in (200,) or not data.get("success"):
                 raise PanelUnavailableError(

@@ -305,7 +305,7 @@ def test_update_uuid_skips_panels_without_client(database: Database) -> None:
 
     subscription.business_svc.update_uuid("alice", NEW_UUID)
 
-    assert [url for url, _ in synced.posts] == [f"panel/api/clients/update/alice"]
+    assert [url for url, _ in synced.posts] == ["panel/api/clients/update/alice"]
     assert unsynced.posts == []
 
 
