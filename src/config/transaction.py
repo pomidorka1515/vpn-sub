@@ -9,8 +9,7 @@ from collections.abc import Mapping, MutableMapping, Iterator, Iterable
 from types import TracebackType
 from typing import overload, Self, TYPE_CHECKING, Literal, cast
 
-from .constants import JsonValue, JsonDict
-from .protocols import MISSING, MISSING_TYPE
+from .constants import JsonValue, JsonDict, MISSING, MISSING_TYPE
 from .atomic import file_signature, atomic_write_json, ensure_parent_dir
 if TYPE_CHECKING:
     from .core import Config

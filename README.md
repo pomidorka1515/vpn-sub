@@ -321,12 +321,6 @@ commit. Remote `$schema` URLs are rejected. Put panel tokens, bot tokens,
 `bot` and `publicbot` are optional. Omit either key, or leave its token empty,
 to run without that bot.
 
-### Seemingly useless casts to protocols
-All protocols in `src/custom_types.py` are fully compatible with their runtime
-classes.
-However, mypy cannot reliably validate that: the overloads are too complex.
-That's why casting is required.
-
 ### Direct exposure
 Binding this to `0.0.0.0` or `::` is not recommended.
 The app automatically blocks direct hits (see `REQUIRE_PROXY` env variable),

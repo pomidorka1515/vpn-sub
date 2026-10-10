@@ -9,9 +9,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import overload, cast, Callable, Literal
 
-from .constants import JsonValue, JsonDict, SYNC_MODES
-from .protocols import MISSING, MISSING_TYPE
-from .protocols import ConfigTransactionLike
+from .constants import JsonValue, JsonDict, SYNC_MODES, MISSING, MISSING_TYPE
 from .atomic import FileSignature, file_signature, locked_file, atomic_write_json, resolve_lockfile_path
 from .backup import prune_backups, do_backup, make_backup_thread, instance_backup_dir
 from .schema import load_schema, validate_schema, read_json_object
@@ -263,7 +261,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 exclusive=True,
             )
 
-    def edit(self) -> ConfigTransactionLike[Doc]:
+    def edit(self) -> ConfigTransaction[Doc]:
         """Open an explicit transaction.
 
         Usage:
@@ -272,7 +270,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 tx["count"] += 1
         """
         self.raise_if_read_only()
-        return cast(ConfigTransactionLike[Doc], ConfigTransaction(self))
+        return ConfigTransaction(self)
 
     def mutate[_T](self, callback: Callable[[MutableMapping[str, JsonValue]], _T]) -> _T:
         """Run a callback inside a transaction and return its result.
@@ -288,13 +286,13 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         """
         self.raise_if_read_only()
         with self.edit() as tx:
-            result = callback(cast(ConfigTransaction[Doc], tx))
+            result = callback(tx)
         return self.detach(result)
 
-    def __enter__(self) -> ConfigTransactionLike[Doc]:
+    def __enter__(self) -> ConfigTransaction[Doc]:
         self.raise_if_read_only()
         tx = self.edit()
-        self.context_transaction = cast(ConfigTransaction[Doc], tx)
+        self.context_transaction = tx
         try:
             return tx.__enter__()
         except Exception:
@@ -454,7 +452,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
     def run_edit[_TJ: JsonValue](self, action: Callable[[ConfigTransaction[Doc]], _TJ]) -> _TJ:
         with self.edit() as tx:
-            result = action(cast(ConfigTransaction[Doc], tx))
+            result = action(tx)
         return self.detach(result)
 
     def raise_if_used_inside_transaction(self) -> None:
