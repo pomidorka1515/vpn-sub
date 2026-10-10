@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 import os
 import sqlite3
 import threading
@@ -99,10 +99,8 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
             current = self._connections.get(self._thread_id())
             if current is conn:
                 del self._connections[self._thread_id()]
-        try:
+        with suppress(sqlite3.Error):
             conn.close()
-        except sqlite3.Error:
-            pass
 
     def _connect(self) -> sqlite3.Connection:
         conn: sqlite3.Connection | None = None
@@ -121,10 +119,8 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
                 previous = self._connections.get(self._thread_id())
                 self._connections[self._thread_id()] = conn
             if previous is not None and previous is not conn:
-                try:
+                with suppress(sqlite3.Error):
                     previous.close()
-                except sqlite3.Error:
-                    pass
             return conn
         except sqlite3.Error as exc:
             if conn is not None:
@@ -158,18 +154,14 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
                 yield conn
                 conn.execute("COMMIT")
             except sqlite3.Error as exc:
-                try:
+                with suppress(sqlite3.Error):
                     conn.execute("ROLLBACK")
-                except sqlite3.Error:
-                    pass
                 if conn.in_transaction or self._dead(exc):
                     self._discard(conn)
                 raise DatabaseError(str(exc)) from exc
             except Exception:
-                try:
+                with suppress(sqlite3.Error):
                     conn.execute("ROLLBACK")
-                except sqlite3.Error:
-                    pass
                 if conn.in_transaction:
                     self._discard(conn)
                 raise
@@ -221,7 +213,5 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
         self._local.conn = None
         self._local.opener = None
         for conn in connections:
-            try:
+            with suppress(sqlite3.Error):
                 conn.close()
-            except sqlite3.Error:
-                pass

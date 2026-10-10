@@ -73,7 +73,7 @@ class RequestsPanelTransport:
         if (
             kwargs.get("auth") is not None
             and headers is not None
-            and any(str(key).lower() == "authorization" for key in headers.keys())
+            and any(str(key).lower() == "authorization" for key in headers)
         ):
             raise XUiSessionError(
                 "refusing to send basic auth alongside an Authorization header: "

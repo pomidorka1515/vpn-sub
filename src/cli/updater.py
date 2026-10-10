@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from loggers import Logger
 from paths import compiled, program_dir
 from version import VERSION
+import contextlib
 
 __all__ = ["notice", "update"]
 
@@ -489,10 +490,8 @@ def _restore(log: Logger, present: dict[str, Path], replaced: list[str]) -> None
 
 def _cleanup(files: dict[str, Path]) -> None:
     for path in files.values():
-        try:
+        with contextlib.suppress(OSError):
             path.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 class RequestError(OSError):

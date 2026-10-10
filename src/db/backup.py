@@ -8,6 +8,7 @@ import tempfile
 import threading
 
 from loggers import Logger
+import contextlib
 
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:
@@ -40,10 +41,8 @@ def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None
             destination.close()
         if source is not None:
             source.close()
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(temporary)
-        except FileNotFoundError:
-            pass
         raise
 
     log.debug(f"backup saved: {backup_path}")

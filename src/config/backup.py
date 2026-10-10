@@ -12,6 +12,7 @@ from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 from .constants import CONFIG_TYPES, JsonValue
 
 from loggers import Logger
+import contextlib
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0]
@@ -52,16 +53,12 @@ def do_backup(
             shutil.copy2(path, tmp)
             os.replace(tmp, backup_path)
         except FileNotFoundError:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 os.unlink(tmp)
-            except FileNotFoundError:
-                pass
             return
         except Exception:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 os.unlink(tmp)
-            except FileNotFoundError:
-                pass
             raise
     else:
         backup_path = os.path.join(instance_dir, f"{timestamp}.json")
@@ -93,10 +90,8 @@ def do_backup(
                     json.dump(data, f, indent=indent, ensure_ascii=False)
             os.replace(tmp, backup_path)
         except Exception:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 os.unlink(tmp)
-            except FileNotFoundError:
-                pass
             raise
 
     log.debug(f"backup saved: {backup_path}")

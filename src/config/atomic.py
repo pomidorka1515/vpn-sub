@@ -5,7 +5,7 @@ import json
 import tempfile
 
 from typing import NamedTuple
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from collections.abc import Mapping, Generator
 
 from .constants import SYNC_MODES, JsonValue
@@ -108,10 +108,8 @@ def atomic_write_json(
         if os.path.exists(path):
             existing = os.stat(path, follow_symlinks=False)
             os.chmod(temp_path, existing.st_mode & 0o777)
-            try:
+            with suppress(PermissionError):
                 os.chown(temp_path, existing.st_uid, existing.st_gid)
-            except PermissionError:
-                pass
 
         with open(temp_path, "w", encoding="utf-8") as handle:
             if minify:
@@ -130,10 +128,8 @@ def atomic_write_json(
             fsync_parent_dir(path)
 
     except Exception:
-        try:
+        with suppress(FileNotFoundError):
             os.unlink(temp_path)
-        except FileNotFoundError:
-            pass
         raise
 
     return file_signature(path)

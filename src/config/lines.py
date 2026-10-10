@@ -16,6 +16,7 @@ from .backup import make_backup_thread, instance_backup_dir, do_backup, prune_ba
 
 from errors import ConfigError
 from loggers import Logger
+import contextlib
 
 class LinesConfig:
     """
@@ -275,10 +276,8 @@ class LinesConfig:
                     if self._sync_mode == "full":
                         fsync_parent_dir(self._path)
                 except Exception:
-                    try:
+                    with contextlib.suppress(FileNotFoundError):
                         os.unlink(tmp)
-                    except FileNotFoundError:
-                        pass
                     raise
 
         return CompactReturn(len(kept), removed)
