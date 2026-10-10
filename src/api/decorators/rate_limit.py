@@ -5,7 +5,8 @@ from collections.abc import Mapping
 from util import err
 from flask import request
 from functools import wraps
-from typing import Protocol, cast, Callable
+from typing import Protocol, cast
+from collections.abc import Callable
 from loggers import Logger
 import threading
 import time

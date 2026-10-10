@@ -7,7 +7,8 @@ import copy
 from collections.abc import Mapping, MutableMapping, Iterator, Iterable
 from pathlib import Path
 from types import TracebackType
-from typing import overload, cast, Callable, Literal
+from typing import overload, cast, Literal
+from collections.abc import Callable
 
 from .constants import JsonValue, JsonDict, SYNC_MODES, MISSING, MISSING_TYPE
 from .atomic import FileSignature, file_signature, locked_file, atomic_write_json, resolve_lockfile_path

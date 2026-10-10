@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import (
     Protocol, TYPE_CHECKING,
-    Literal, Sequence,
-    Callable, TypedDict, NamedTuple
+    Literal, TypedDict, NamedTuple
 )
+from collections.abc import Sequence, Callable
 from collections.abc import MutableMapping, Mapping, Iterable
 
 from dataclasses import dataclass, field

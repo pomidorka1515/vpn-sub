@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor
-from typing import Callable, Literal
+from typing import Literal
+from collections.abc import Callable
 import time
 
 from .host import BWatchHost

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Mapping, cast
+from typing import cast
+from collections.abc import Mapping
 
 import discord
 

@@ -92,6 +92,7 @@ ignore = [
 	"PLC0415", # "import should be at the top-level", lazy imports are intentional
 	"E701",    # "too many statements on 1 line"
 	"PLR0913", # "too many arguments in ..."
+	"PLR0917", # "too many positional arguments"
 ]
 
 extend-safe-fixes = ["W293", "W291"]

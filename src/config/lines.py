@@ -7,7 +7,8 @@ import io
 from pathlib import Path
 from collections.abc import Mapping, Iterator, Sequence
 from types import TracebackType
-from typing import Callable, Literal, Self
+from typing import Literal, Self
+from collections.abc import Callable
 
 from .constants import SYNC_MODES, JsonValue, JsonDict
 from .atomic import CompactReturn, ensure_parent_dir, locked_file, fsync_parent_dir, resolve_lockfile_path

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import cast, Callable
+from typing import cast
+from collections.abc import Callable
 from telebot import TeleBot
 from loggers import Logger
 from requests import Response

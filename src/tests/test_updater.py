@@ -7,7 +7,8 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Protocol, TypedDict, Callable
+from typing import Protocol, TypedDict
+from collections.abc import Callable
 
 import pytest
 

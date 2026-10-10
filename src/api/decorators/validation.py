@@ -1,5 +1,6 @@
 from functools import wraps
-from typing import Callable, cast
+from typing import cast
+from collections.abc import Callable
 from util import err
 from custom_types import JsonifyValue
 from ._common import WrappedReturn

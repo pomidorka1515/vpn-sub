@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Mapping, cast
+from typing import cast
+from collections.abc import Mapping
 
 import discord
 

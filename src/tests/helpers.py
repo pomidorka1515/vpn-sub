@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
-from typing import Callable, Unpack, cast
+from typing import Unpack, cast
+from collections.abc import Callable
 from typing_contracts import AppOverrides, ProfileOverrides, CreateUserOverrides
 from unittest.mock import MagicMock
 from copy import deepcopy

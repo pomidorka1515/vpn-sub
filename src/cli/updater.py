@@ -16,7 +16,8 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator, cast
+from typing import TYPE_CHECKING, cast
+from collections.abc import Iterator
 from types import TracebackType
 
 if TYPE_CHECKING:

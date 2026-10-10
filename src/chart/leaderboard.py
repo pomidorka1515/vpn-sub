@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import io
-from typing import Literal, Mapping
+from typing import Literal
+from collections.abc import Mapping
 
 from PIL import Image, ImageDraw
 
