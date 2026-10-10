@@ -86,6 +86,25 @@ select = [
     "PL",     # Pylint
 ]
 
+extend-select = [
+    "A",      # Shadowing built-ins
+    "C4",     # Unnecessary comprehensions
+    "DTZ",    # Timezone mistakes
+    "ISC",    # Implicit string concatenation
+    "LOG",    # Incorrect logging usage
+    "PIE",    # Redundant/unnecessary code
+    "RSE",    # Unnecessary parentheses in raise statements
+    "PGH",    # Blanket noqa/type-ignore directives
+    "PERF",   # Performance patterns
+    "T10",    # Forgotten debugger calls
+    "YTT",    # Fragile Python-version checks
+    "RUF006", # Unretained asyncio tasks
+    "RUF008", # Mutable dataclass defaults
+    "RUF012", # Mutable class attributes without ClassVar
+    "RUF019", # Unnecessary dictionary key checks
+    "RUF100", # Unused noqa directives
+]
+
 ignore = [
 	"E501",    # i dont need this
 	"PLR2004", # "magic values", useless
