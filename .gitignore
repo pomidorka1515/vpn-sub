@@ -4,6 +4,7 @@ data/
 .*/
 !.github/
 !.github/**
+!.git-blame-ignore-revs
 __pycache__/
 *.pyc
 *.pyo
