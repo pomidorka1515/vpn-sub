@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable, Mapping
 from typing import Literal, Unpack
 
-from requests import ConnectionError, RequestException, Response, Session, Timeout
+from requests import ConnectionError, RequestException, Response, Session, Timeout # noqa: A004
 
 from custom_types import Inbound, PanelClient, RequestKwargs
 from loggers import Logger, color_status

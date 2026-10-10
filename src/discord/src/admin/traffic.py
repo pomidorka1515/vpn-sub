@@ -79,19 +79,18 @@ class AdminTrafficMixin(AdminFeatureMixin):
 ├ Использовано: {wl_used_str} / {wl_limit_str}
 └ Процент: {wl_percent_str}"""
         text = truncate_utf8(text, 2000)
-        snapshots: list[BandwidthSnapshot] = []
         history_raw = history.obj
         items = object_rows(history_raw)
-        for item in items:
-            snapshots.append(
-                BandwidthSnapshot(
-                    ts=int(number(item.get("ts"))),
-                    up=int(number(item.get("up"))),
-                    down=int(number(item.get("down"))),
-                    wl_up=int(number(item.get("wl_up"))),
-                    wl_down=int(number(item.get("wl_down"))),
-                )
+        snapshots: list[BandwidthSnapshot] = [
+            BandwidthSnapshot(
+                ts=int(number(item.get("ts"))),
+                up=int(number(item.get("up"))),
+                down=int(number(item.get("down"))),
+                wl_up=int(number(item.get("wl_up"))),
+                wl_down=int(number(item.get("wl_down"))),
             )
+            for item in items
+        ]
         image = await asyncio.to_thread(
             bandwidth_chart,
             snapshots,

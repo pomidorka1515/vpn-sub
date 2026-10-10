@@ -6,7 +6,7 @@ import time
 from config import LangConfig
 from datetime import datetime, UTC
 
-from util import fmt_bytes, format
+from util import fmt_bytes, format # noqa: A004
 from custom_types import BandwidthInfo
 
 

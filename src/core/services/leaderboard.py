@@ -80,7 +80,7 @@ class LeaderboardService(BaseService):
         sorted_items: list[tuple[str, int]] = sorted(raw.items(), key=lambda x: x[1], reverse=not flip)
         if top_n > 0:
             sorted_items = sorted_items[:top_n]
-        result = {k: v for k, v in sorted_items}
+        result = dict(sorted_items)
         self.trace(
             Op.leaderboard.leaderboard, "ok",
             category=category, top_n=top_n,

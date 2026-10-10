@@ -70,9 +70,10 @@ class AdminCommonMixin(
         page_users = all_users[start_idx:end_idx]
 
         markup = types.InlineKeyboardMarkup(row_width=2)
-        buttons: list[types.InlineKeyboardButton] = []
-        for user in page_users:
-            buttons.append(types.InlineKeyboardButton(user, callback_data=f"{prefix}_{user}"))
+        buttons: list[types.InlineKeyboardButton] = [
+            types.InlineKeyboardButton(user, callback_data=f"{prefix}_{user}")
+            for user in page_users
+        ]
         markup.add(*buttons)  # pyright: ignore[reportUnknownMemberType]
 
         nav_buttons: list[types.InlineKeyboardButton] = []
@@ -102,4 +103,3 @@ class AdminCommonMixin(
 
     def stop(self) -> None:
         self.stop_polling()
-

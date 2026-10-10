@@ -24,7 +24,7 @@ from .services.code import CodeService, BusinessCodeService
 __all__ = ["Subscription"]
 
 if platform.system().lower() != "linux":
-    raise UnsupportedPlatformError()
+    raise UnsupportedPlatformError
 
 
 

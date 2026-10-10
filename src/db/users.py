@@ -90,7 +90,7 @@ class UsersMixin(ConnectionMixin):
             "expiry_time": "expires_at", "ext_username": "ext_username",
             "ext_password": "ext_password_hash", "tgid": None,
         }
-        updates = {mapping[k]: v for k, v in fields.items() if k in mapping and mapping[k]}
+        updates = {mapping[k]: v for k, v in fields.items() if mapping.get(k)}
         updates = {k: int(bool(v)) if k in ("enabled", "enabled_time", "enabled_wl") else v for k, v in updates.items()}
         try:
             with self.transaction(immediate=True) as conn:

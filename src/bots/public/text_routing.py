@@ -201,14 +201,13 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     def _handle_chart(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
         markup = types.InlineKeyboardMarkup(row_width=2)
-        buttons: list[types.InlineKeyboardButton] = []
-        for days in (3, 14, 30, 90):
-            buttons.append(
-                types.InlineKeyboardButton(
-                    t["btn_chart_days"].format(days=days),
-                    callback_data=f"chart_{days}",
-                )
+        buttons: list[types.InlineKeyboardButton] = [
+            types.InlineKeyboardButton(
+                t["btn_chart_days"].format(days=days),
+                callback_data=f"chart_{days}",
             )
+            for days in (3, 14, 30, 90)
+        ]
         markup.add(*buttons)  # pyright: ignore[reportUnknownMemberType]
         self.bot.send_message(
             message.chat.id, t["choose_chart_days"], reply_markup=markup

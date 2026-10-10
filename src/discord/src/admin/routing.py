@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Awaitable
-from typing import cast
+from typing import cast, ClassVar
 from collections.abc import Mapping
 
 import discord
@@ -46,7 +46,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
         ("admin:lbo:", "_handle_leaderboard_order", True),
     )
 
-    MODALS: dict[str, str] = {
+    MODALS: ClassVar[dict[str, str]] = {
         "admin:modal:add_user": "handle_add_user_modal",
         "admin:modal:reset_user": "handle_reset_user_modal",
         "admin:modal:edit_limit": "handle_edit_limit_modal",

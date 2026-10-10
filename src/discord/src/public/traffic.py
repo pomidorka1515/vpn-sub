@@ -107,18 +107,17 @@ class PublicTrafficMixin(PublicFeatureMixin):
                     wl_percent=wl_percent_str,
                 )
                 text = truncate_utf8(text, 1024)
-                snapshots: list[BandwidthSnapshot] = []
                 raw_history = history.obj or []
-                for item in raw_history:
-                    snapshots.append(
-                        BandwidthSnapshot(
-                            ts=int(number(item.get("ts"))),
-                            up=int(number(item.get("up"))),
-                            down=int(number(item.get("down"))),
-                            wl_up=int(number(item.get("wl_up"))),
-                            wl_down=int(number(item.get("wl_down"))),
-                        )
+                snapshots: list[BandwidthSnapshot] = [
+                    BandwidthSnapshot(
+                        ts=int(number(item.get("ts"))),
+                        up=int(number(item.get("up"))),
+                        down=int(number(item.get("down"))),
+                        wl_up=int(number(item.get("wl_up"))),
+                        wl_down=int(number(item.get("wl_down"))),
                     )
+                    for item in raw_history
+                ]
                 chart_lang = self._chart_lang(lang)
                 image = await asyncio.to_thread(
                     bandwidth_chart,

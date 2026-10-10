@@ -130,6 +130,7 @@ extend-safe-fixes = ["W293", "W291"]
     "PLR",
     "B009",
     "B010",
+    "RUF012"
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

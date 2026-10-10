@@ -104,9 +104,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
             return
         raw_fps = result.obj
         fps = raw_fps if isinstance(raw_fps, list) else []
-        options: list[discord.SelectOption] = []
-        for item in fps:
-            options.append(discord.SelectOption(label=item, value=item))
+        options: list[discord.SelectOption] = [
+            discord.SelectOption(label=item, value=item) for item in fps
+        ]
         if not options:
             await self._reply_key(interaction, "bad_response")
             return

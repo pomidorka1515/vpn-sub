@@ -4,7 +4,7 @@ import logging
 import time
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from types import TracebackType
 
 from .colors import Colors
@@ -20,7 +20,7 @@ __all__ = ["Logger", "TRACE"]
 
 
 class Logger(logging.Logger):
-    COLORS = {
+    COLORS: ClassVar[dict[str, str]] = {
         "TRACE": Colors.GREY,
         "DEBUG": Colors.CYAN,
         "INFO": Colors.GREEN,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING
 
 from .common import _ANSI_ESCAPE, _safe_handle_error
@@ -55,7 +55,7 @@ class _JSONLinesLogger(logging.Handler):
         """
         try:
             timestamp = record.created
-            date = datetime.fromtimestamp(timestamp).strftime("%d.%m.%Y %H:%M:%S")
+            date = datetime.fromtimestamp(timestamp, tz=UTC).strftime("%d.%m.%Y %H:%M:%S")
             level = record.levelname
             log_name = record.name
             thread_name = record.threadName
