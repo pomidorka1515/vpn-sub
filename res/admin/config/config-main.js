@@ -66,8 +66,10 @@ export function createMainEditor(markDirty) {
     if (!slot) return;
     const focus = document.activeElement;
     const focusId = focus && slot.contains(focus) ? focus.id : '';
+    const expanded = slot.querySelector('.config-box-collapse')?.open;
     destroyJsonEditors(slot);
     slot.outerHTML = boxHtml(key);
+    if (expanded) document.getElementById('cfg-box-' + key.replace('$', ''))?.querySelector('.config-box-collapse')?.setAttribute('open', '');
     bindBox(key);
     if (focusId) document.getElementById(focusId)?.focus();
   }
@@ -120,6 +122,12 @@ export function createMainEditor(markDirty) {
     const remove = optional && present && key !== 'bot' && key !== 'publicbot'
       ? `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`
       : '';
+    if (key === 'bypass_packages') {
+      return `<div class="config-box" id="cfg-box-${safeKey}"><details class="config-box-collapse">
+        <summary class="config-box-label">${escapeHtml(key)}</summary>
+        <div class="config-box-content">${hint}${control}</div>
+      </details>${fieldError('cfg-err-' + safeKey)}</div>`;
+    }
     return `<div class="config-box" id="cfg-box-${safeKey}">${label}${hint}${control}${remove}${fieldError('cfg-err-' + safeKey)}</div>`;
   }
 
