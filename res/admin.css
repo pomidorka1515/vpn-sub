@@ -384,3 +384,124 @@
 .modal { max-width: 480px; }
 .modal-title { letter-spacing: 0; }
 .info-value { max-width: 300px; }
+
+.config-banner {
+  margin-bottom: 12px; padding: 10px 12px;
+  border: 1px solid rgba(245,158,11,.35); border-radius: 8px;
+  background: rgba(245,158,11,.08); color: var(--text); font-size: 13px; line-height: 1.45;
+}
+.config-restart-saved { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.08); }
+.config-tabs {
+  display: flex; gap: 4px; margin-bottom: 16px;
+  background: var(--bg); border-radius: 8px; padding: 4px;
+  overflow: visible;
+}
+.config-tab {
+  padding: 8px 16px; border: none; background: none;
+  color: var(--text2); font-family: inherit; font-size: 13px;
+  font-weight: 500; border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.config-tab:hover { color: var(--text); }
+.config-tab.active { background: var(--surface2); color: var(--text); }
+.config-pane { display: none; }
+.config-pane.active { display: block; }
+.config-box {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 12px; background: var(--surface);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.config-box-label {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
+}
+.config-box input, .config-box textarea, .config-box select,
+.config-editor-body input, .config-editor-body textarea, .config-editor-body select,
+#tab-config .panel-card-body input, #tab-config .panel-card-body textarea, #tab-config .panel-card-body select {
+  width: 100%; padding: 8px 10px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: inherit; font-size: 13px; outline: none;
+}
+.config-box input:focus, .config-box textarea:focus, .config-box select:focus,
+.config-editor-body input:focus, .config-editor-body textarea:focus,
+#tab-config .panel-card-body input:focus, #tab-config .panel-card-body textarea:focus, #tab-config .panel-card-body select:focus {
+  border-color: var(--accent);
+}
+.config-json {
+  min-height: 160px; height: 160px; resize: vertical;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+}
+.config-error { color: var(--red); font-size: 12px; }
+.config-error[hidden], .config-load[hidden], .config-result[hidden], #configEditor[hidden], #configRestartSaved[hidden] { display: none; }
+.config-absent { font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 8px; }
+.config-sub { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.config-rows { display: flex; flex-direction: column; gap: 6px; }
+.config-rowline { display: flex; gap: 6px; align-items: center; }
+.config-rowline input { flex: 1; min-width: 0; }
+.config-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.config-pass { position: relative; }
+.config-pass input { padding-right: 40px; }
+.config-pass .pass-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border: none; background: none; color: var(--text2); cursor: pointer;
+}
+.config-pass .pass-toggle svg { width: 16px; height: 16px; }
+.config-locked { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text2); }
+.config-restart-icon {
+  width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--orange);
+  background: none; color: var(--orange); font-size: 12px; font-weight: 700;
+  cursor: help; flex-shrink: 0; line-height: 16px; padding: 0;
+}
+.config-restart-wrap { position: relative; display: inline-flex; }
+.config-restart-tooltip { display: none; position: absolute; top: 100%; right: 0; width: 220px; padding: 8px; border-radius: 6px; background: var(--surface2); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; text-align: left; white-space: normal; z-index: 20; }
+.config-restart-wrap:hover .config-restart-tooltip, .config-restart-wrap:focus-within .config-restart-tooltip { display: block; }
+.config-subtitle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); margin-bottom: 8px; }
+.config-card-delete { position: relative; z-index: 1; }
+.config-card-delete:disabled { opacity: .45; cursor: not-allowed; }
+.config-card-toggle { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; border: none; background: none; color: var(--text2); cursor: pointer; }
+.config-savebar {
+  position: sticky; bottom: 16px; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-top: 16px; padding: 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+}
+.config-dirty { flex-shrink: 0; font-size: 13px; color: var(--text2); white-space: nowrap; }
+.config-savebar-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
+.config-savebar-actions .btn { min-height: 40px; padding: 10px 18px; white-space: nowrap; }
+.config-result { flex: 1 1 200px; min-width: 0; font-size: 13px; color: var(--text2); overflow-wrap: anywhere; }
+.config-result:empty { display: none; }
+.config-result.ok { color: var(--green); }
+.config-result.error { color: var(--red); }
+.config-editor-modal { width: min(720px, calc(100vw - 32px)); max-width: 720px; max-height: 85vh; max-height: 85dvh; display: flex; flex-direction: column; }
+.config-editor-body { overflow: auto; min-height: 0; margin-bottom: 16px; overscroll-behavior: contain; }
+#configEditorOverlay { padding: 16px; }
+#tab-config .input-wrap, .config-editor-body .input-wrap { min-width: 0; }
+#tab-config .form-row > label, .config-editor-body .form-row > label { overflow-wrap: anywhere; }
+#tab-config .panel-card-body { padding-top: 16px; }
+#tab-config .panel-card-title { min-width: 0; flex-wrap: wrap; overflow-wrap: anywhere; }
+#tab-config .panel-card-meta { flex-shrink: 0; }
+.config-box-label, .config-locked, .config-error { overflow-wrap: anywhere; }
+#tab-config .btn-tiny, .config-editor-body .btn-tiny {
+  align-self: flex-start; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface2); color: var(--text2);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+#tab-config .btn-tiny.danger { color: var(--red); }
+.config-result .btn-tiny { margin: 8px 0 0; display: block; }
+.config-editor-modal .modal-title, .config-editor-modal .modal-actions { flex-shrink: 0; }
+#configEditorOverlay[hidden] { display: none; }
+@media (max-width: 600px) {
+  #tab-config .input-wrap, .config-editor-body .input-wrap { width: 100%; }
+  .config-editor-modal { padding: 16px; }
+  .config-tab { flex: 1 0 auto; padding: 10px 8px; }
+  .config-rowline:has([data-side]) { flex-wrap: wrap; }
+  .config-rowline:has([data-side]) input { flex: 1 1 100%; }
+  #tab-config input:not([type="checkbox"]), #tab-config textarea, #tab-config select,
+  .config-editor-body input:not([type="checkbox"]), .config-editor-body textarea, .config-editor-body select { font-size: 16px; min-height: 44px; }
+  #tab-config .btn-tiny, .config-editor-body .btn-tiny { min-height: 40px; }
+  .config-pass .pass-toggle { width: 40px; height: 40px; }
+  .config-savebar { bottom: max(12px, env(safe-area-inset-bottom)); }
+  .config-pair { grid-template-columns: 1fr; }
+  .config-savebar-actions { width: 100%; }
+  .config-savebar-actions .btn, .config-savebar-actions .btn-secondary { flex: 1; }
+}

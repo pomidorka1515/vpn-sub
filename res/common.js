@@ -58,7 +58,7 @@
     const opts = { method: method, credentials: 'same-origin', headers: headers };
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(body);
+      opts.body = body[Symbol.for('api.serialize')] ? body[Symbol.for('api.serialize')]() : JSON.stringify(body);
     }
     let r;
     try {
@@ -70,9 +70,13 @@
     }
     if (r.status === 204) return { success: true, status: 204 };
     if (r.status === 401 && cfg.on401) { cfg.on401(); return null; }
-    let data = {};
-    try { data = await r.json(); } catch (_) { data = { success: false, msg: r.statusText || w.t('invalid_response') }; }
-    return Object.assign({}, data, { status: r.status });
+    let data = {}, rawJson = '';
+    try { rawJson = await r.text(); data = JSON.parse(rawJson); } catch (_) { data = { success: false, msg: r.statusText || w.t('invalid_response') }; }
+    const result = Object.assign({}, data, { status: r.status });
+    Object.defineProperty(result, 'rawJson', { value: rawJson });
+    const etag = r.headers.get('ETag');
+    if (etag) result.etag = etag;
+    return result;
   };
   w.fmtBytes = function (b) {
     if (!Number.isFinite(b)) return w.t('na');

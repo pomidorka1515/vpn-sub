@@ -208,6 +208,10 @@ def test_prefixed_admin_modules(database: Database, flask_app: Flask) -> None:
     assert render_js.status_code == 200
     assert b"from './series.js?v=" in render_js.data
     assert b"from './theme.js?v=" in render_js.data
+    config_js = client.get("/custom/admin/config.js")
+    assert config_js.status_code == 200
+    assert config_js.mimetype == "text/javascript"
+    assert b"function saveConfig" in config_js.data
 
 
 def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) -> None:

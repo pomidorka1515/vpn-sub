@@ -15,6 +15,10 @@ import {
 } from './health.js';
 import { fetchLeaderboard } from './leaderboard.js';
 import { chartsOnTab, chartsRefreshTheme, chartsStop } from './charts.js';
+import {
+  configOnTab, showConfigSection, saveConfig, reloadConfig,
+  toggleConfigCard, deleteConfigCard, revealConfigPass,
+} from './config.js';
 
 
 
@@ -80,17 +84,41 @@ async function doLogout() {
   window.location.href = adminPath('/login');
 }
 
-function showTab(name) {
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector(`.tab[onclick*="${name}"]`)?.classList.add('active');
-  document.getElementById('tab-' + name)?.classList.add('active');
-  chartsOnTab(name);
+let leaving = false;
+
+async function showTab(name) {
+  if (leaving) return;
+  const current = document.querySelector('.tab-content.active');
+  if (current && current.id === 'tab-' + name) {
+    if (name === 'config') configOnTab();
+    return;
+  }
+  leaving = true;
+  try {
+    if (current && current.id === 'tab-config') {
+      const ok = await configOnTab.leave();
+      if (!ok) return;
+    }
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.tab[onclick*="${name}"]`)?.classList.add('active');
+    document.getElementById('tab-' + name)?.classList.add('active');
+    chartsOnTab(name);
+    if (name === 'config') configOnTab();
+  } finally {
+    leaving = false;
+  }
 }
 
 Object.assign(window, {
   showTab,
   doLogout,
+  showConfigSection,
+  saveConfig,
+  reloadConfig,
+  toggleConfigCard,
+  deleteConfigCard,
+  revealConfigPass,
   loadUsers,
   hideUserDetail,
   doResetUser,

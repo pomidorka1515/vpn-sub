@@ -41,6 +41,7 @@
     <button class="tab" onclick="showTab('charts')" data-t="charts">Charts</button>
     <button class="tab" onclick="showTab('health')" data-t="health">Health</button>
     <button class="tab" onclick="showTab('leaderboard')" data-t="leaderboard">Leaderboard</button>
+    <button class="tab" onclick="showTab('config')" data-t="config_tab">Config</button>
   </div>
 
   <div id="tab-users" class="tab-content active">
@@ -404,6 +405,30 @@
     </div>
   </div>
 
+  <div id="tab-config" class="tab-content">
+    <div class="config-banner" data-t="config_restart_banner">Some fields apply only after a restart. Restart is manual. This page does not restart the service.</div>
+    <div class="config-banner config-restart-saved" id="configRestartSaved" hidden></div>
+    <div class="config-tabs" role="tablist">
+      <button type="button" class="config-tab active" data-section="main" onclick="showConfigSection('main')" data-t="config_main">Main</button>
+      <button type="button" class="config-tab" data-section="inbounds" onclick="showConfigSection('inbounds')" data-t="config_inbounds">Inbounds</button>
+      <button type="button" class="config-tab" data-section="panels" onclick="showConfigSection('panels')"><span data-t="config_panels">Panels</span> <span class="config-restart-wrap"><span class="config-restart-icon" tabindex="0" data-t-aria="config_restart_tip" aria-label="Requires a restart">!</span><span class="config-restart-tooltip" role="tooltip" data-t="config_restart_tip">Requires a restart</span></span></button>
+    </div>
+    <div id="configLoad" class="config-load" hidden></div>
+    <div id="configEditor" hidden>
+      <div id="config-pane-main" class="config-pane active"></div>
+      <div id="config-pane-inbounds" class="config-pane"></div>
+      <div id="config-pane-panels" class="config-pane"></div>
+      <div class="config-savebar">
+        <span class="config-dirty" id="configDirty" data-t="config_saved_state">Saved</span>
+        <div class="config-savebar-actions">
+          <button type="button" class="btn btn-primary" id="configSave" onclick="saveConfig()" data-t="config_save" disabled>Save</button>
+          <button type="button" class="btn btn-secondary" id="configReload" onclick="reloadConfig()" data-t="config_reload">Reload</button>
+        </div>
+        <div class="config-result" id="configResult"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div class="modal-overlay" id="modalOverlay">
@@ -414,6 +439,17 @@
     <div class="modal-actions">
       <button class="modal-btn" id="modalCancel" data-t="cancel">Cancel</button>
       <button class="modal-btn danger" id="modalOk" data-t="confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="configEditorOverlay" hidden>
+  <div class="modal config-editor-modal" role="dialog" aria-modal="true" aria-labelledby="configEditorTitle">
+    <div class="modal-title" id="configEditorTitle"></div>
+    <div class="config-editor-body" id="configEditorBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn" id="configEditorCancel" data-t="cancel">Cancel</button>
+      <button type="button" class="modal-btn" id="configEditorOk" data-t="create">Create</button>
     </div>
   </div>
 </div>
