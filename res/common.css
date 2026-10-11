@@ -30,6 +30,9 @@ body {
   background: var(--bg); color: var(--text);
   min-height: 100vh; -webkit-font-smoothing: antialiased;
 }
+button, input[type="button"], input[type="submit"], input[type="reset"] {
+  border-radius: 8px;
+}
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
