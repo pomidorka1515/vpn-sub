@@ -34,6 +34,8 @@ _ASSET_FILES: tuple[str, ...] = (
     "dashboard.js",
     "history.js",
     "vendor/chart.umd.min.js",
+    "vendor/codemirror-5.65.16.min.js",
+    "vendor/codemirror-5.65.16.min.css",
     *(f"fonts/{name}" for name in sorted(FONT_FILES)),
 )
 

@@ -431,6 +431,24 @@
   font-family: 'JetBrains Mono', monospace; font-size: 12px;
 }
 .config-error { color: var(--red); font-size: 12px; }
+.config-json-editor { min-width: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.config-json-editor:focus-within { border-color: var(--accent); }
+.config-json-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 8px; background: var(--surface2); }
+.config-json-status { color: var(--green); font-size: 12px; }
+.config-json-status.error { color: var(--red); }
+.config-json-editor .CodeMirror { height: 220px; background: var(--bg); color: var(--text); font: 12px/1.6 'JetBrains Mono', monospace; resize: vertical; min-height: 160px; }
+.config-json-editor .CodeMirror-gutters { background: var(--surface); border-color: var(--border); }
+.config-json-editor .CodeMirror-linenumber { color: var(--text2); }
+.config-json-editor .CodeMirror-cursor { border-left-color: var(--text); }
+.config-json-editor .CodeMirror-selected { background: var(--surface2); }
+.config-json-editor .CodeMirror-focused .CodeMirror-selected { background: var(--border); }
+.config-json-editor .cm-property { color: var(--accent); }
+.config-json-editor .cm-string { color: var(--green); }
+.config-json-editor .cm-number { color: var(--orange); }
+.config-json-editor .cm-atom, .config-json-editor .cm-keyword { color: var(--red); }
+.config-json-editor .CodeMirror-matchingbracket { color: var(--accent); background: var(--surface2); }
+.config-json-editor .CodeMirror-nonmatchingbracket { color: var(--red); }
+.config-json-invalid { text-decoration: underline wavy var(--red); }
 .config-error[hidden], .config-load[hidden], .config-result[hidden], #configEditor[hidden], #configRestartSaved[hidden] { display: none; }
 .config-absent { font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 8px; }
 .config-sub { font-size: 11px; color: var(--text2); margin-top: 4px; }

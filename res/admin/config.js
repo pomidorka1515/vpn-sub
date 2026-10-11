@@ -1,3 +1,5 @@
+import { mountJsonEditor, destroyJsonEditors, refreshJsonEditors } from './json-editor.js';
+
 const RESTART_KEYS = ['uri', 'api_uri', 'api_token', '3xui', 'redis', 'bot', 'publicbot', 'panel_alert_cooldown', 'salt'];
 const OPTIONAL_KEYS = ['api_uri', 'fallback_domain', 'funny_strings', 'bot', 'publicbot'];
 const REQUIRED_KEYS = [
@@ -55,8 +57,19 @@ function parseConfigJson(text) {
     if (text[pos] === '"') {
       pos++;
       while (pos < text.length) {
-        if (text[pos++] === '\\') pos++;
-        else if (text[pos - 1] === '"') return JSON.parse(text.slice(start, pos));
+        if (text.charCodeAt(pos) < 32) throw new SyntaxError('Invalid JSON string');
+        if (text[pos] === '\\') {
+          pos++;
+          if (text[pos] === 'u') {
+            pos++;
+            for (let digit = 0; digit < 4; digit++, pos++) {
+              if (!/[0-9a-fA-F]/.test(text[pos] || '')) throw new SyntaxError('Invalid JSON escape');
+            }
+          } else {
+            if (!['"', '\\', '/', 'b', 'f', 'n', 'r', 't'].includes(text[pos])) throw new SyntaxError('Invalid JSON escape');
+            pos++;
+          }
+        } else if (text[pos++] === '"') return JSON.parse(text.slice(start, pos));
       }
       throw new SyntaxError('Invalid JSON');
     }
@@ -73,13 +86,15 @@ function parseConfigJson(text) {
           if (text[pos] !== '"') throw new SyntaxError('Invalid JSON');
           const key = value();
           whitespace();
-          if (text[pos++] !== ':') throw new SyntaxError('Invalid JSON');
+          if (text[pos] !== ':') throw new SyntaxError('Invalid JSON');
+          pos++;
           if (!Object.hasOwn(result, key)) configKeyOrder.get(result).push(key);
           result[key] = value();
         } else result.push(value());
         whitespace();
         if (text[pos] === end) { pos++; return result; }
-        if (text[pos++] !== ',') throw new SyntaxError('Invalid JSON');
+        if (text[pos] !== ',') throw new SyntaxError('Invalid JSON');
+        pos++;
       }
     }
     for (const [token, result] of [['true', true], ['false', false], ['null', null]]) {
@@ -91,10 +106,15 @@ function parseConfigJson(text) {
     pos += number[0].length;
     return new ConfigNumber(number[0]);
   };
-  const result = value();
-  whitespace();
-  if (pos !== text.length) throw new SyntaxError('Invalid JSON');
-  return result;
+  try {
+    const result = value();
+    whitespace();
+    if (pos !== text.length) throw new SyntaxError('Invalid JSON');
+    return result;
+  } catch (error) {
+    error.position = Math.min(pos, text.length);
+    throw error;
+  }
 }
 
 function stringifyConfig(value, pretty = false, depth = 0) {
@@ -254,19 +274,12 @@ function commitMainField(key) {
   markDirty();
 }
 
-function prettyTemplate(force) {
-  const input = document.getElementById('cfg-json_template');
-  if (!input) return;
-  try {
-    const parsed = parseConfigJson(input.value);
-    if (force || isPlainObject(parsed)) input.value = stringifyConfig(parsed, true);
-    editor.draft.json_template = parsed;
-  } catch {
-    editor.draft.json_template = input.value;
-  }
-  editor.jsonInputs.set('json_template', input.value);
-  validateField('json_template');
-  markDirty();
+function enhanceJsonInputs(root) {
+  root.querySelectorAll('textarea.config-json').forEach(textarea => mountJsonEditor(textarea, {
+    parse: parseConfigJson,
+    format: text => stringifyConfig(parseConfigJson(text), true),
+    label: textarea.dataset.field || 'json_template',
+  }));
 }
 
 function rowList(id, rows, kind) {
@@ -361,6 +374,7 @@ function paintBox(key) {
   if (!slot) return;
   const focus = document.activeElement;
   const focusId = focus && slot.contains(focus) ? focus.id : '';
+  destroyJsonEditors(slot);
   slot.outerHTML = boxHtml(key);
   bindBox(key);
   if (focusId) document.getElementById(focusId)?.focus();
@@ -463,7 +477,7 @@ function bindBox(key) {
     template.addEventListener('input', () => {
       commitMainField('json_template');
     });
-    template.addEventListener('blur', () => prettyTemplate(false));
+    enhanceJsonInputs(slot);
   }
 }
 
@@ -486,6 +500,7 @@ function removeOptional(key) {
 
 function renderMain() {
   const pane = document.getElementById('config-pane-main');
+  destroyJsonEditors(pane);
   pane.innerHTML = MAIN_SECTIONS.map(([title, keys]) => `
     <div class="section-title">${escapeHtml(t(title))}</div>
     ${keys.map(boxHtml).join('')}
@@ -589,6 +604,7 @@ function panelBody(id, panel) {
 
 function renderCards(kind) {
   const pane = document.getElementById('config-pane-' + kind);
+  destroyJsonEditors(pane);
   // Pending invalid renames and duplicate header rows belong to the draft too.
   const pendingIds = new Map([...pane.querySelectorAll('.panel-card')].map(card => [card.dataset.id, card.querySelector('[data-field="id"]')?.value]));
   const map = kind === 'inbounds' ? editor.draft.profiles : editor.draft['3xui'];
@@ -631,10 +647,8 @@ function bindCard(kind, id) {
     }
     input.addEventListener('input', commit);
     input.addEventListener('change', commit);
-    if (input.dataset.field === 'json' || input.dataset.field === 'xhttpExtra') {
-      input.addEventListener('blur', () => prettyCardJson(kind, id, input));
-    }
   });
+  if (kind === 'inbounds' && card.classList.contains('open')) enhanceJsonInputs(card);
   if (kind === 'panels') {
     bindRows('cfg-pn-rows-' + cssId(id), 'int', (rows, live) => {
       editor.draft['3xui'][id].inbounds_list = rows.map(row => INTEGER_RE.test(row.trim()) ? new ConfigNumber(row.trim()) : row);
@@ -738,14 +752,6 @@ function refreshCardTitle(kind, id) {
     : panelHeader(id, editor.draft['3xui'][id] || {});
 }
 
-function prettyCardJson(kind, id, input) {
-  try {
-    const parsed = parseConfigJson(input.value);
-    if (isPlainObject(parsed)) input.value = stringifyConfig(parsed, true);
-  } catch { /* keep the raw text so the field error stays visible */ }
-  commitCard(kind, id);
-}
-
 function renameCard(kind, oldId, raw) {
   const nextId = raw.trim();
   const map = kind === 'inbounds' ? editor.draft.profiles : editor.draft['3xui'];
@@ -784,7 +790,11 @@ export function toggleConfigCard(kind, id) {
   if (!card) return;
   card.classList.toggle('open');
   card.querySelector('.config-card-toggle').setAttribute('aria-expanded', String(card.classList.contains('open')));
-  if (card.classList.contains('open')) editor.open[kind].add(id);
+  if (card.classList.contains('open')) {
+    editor.open[kind].add(id);
+    if (kind === 'inbounds') enhanceJsonInputs(card);
+    refreshJsonEditors(card);
+  }
   else editor.open[kind].delete(id);
 }
 
@@ -1085,6 +1095,8 @@ function focusIssue(item) {
     editor.open[section].add(parts[1]);
     const card = cardRoot(section, parts[1]);
     card?.classList.add('open');
+    if (card && section === 'inbounds') enhanceJsonInputs(card);
+    if (card) refreshJsonEditors(card);
     card?.querySelector('.config-card-toggle').setAttribute('aria-expanded', 'true');
   }
   const target = document.getElementById(
@@ -1217,6 +1229,7 @@ async function loadConfig(force) {
   editor.nodeRows = null;
   editor.headerRows.clear();
   editor.jsonInputs.clear();
+  destroyJsonEditors(document.getElementById('configEditor'));
   document.getElementById('config-pane-inbounds').innerHTML = '';
   document.getElementById('config-pane-panels').innerHTML = '';
   editor.etag = res.etag || '';
@@ -1237,10 +1250,12 @@ async function loadConfig(force) {
 export function showConfigSection(name) {
   document.querySelectorAll('.config-tab').forEach(el => el.classList.toggle('active', el.dataset.section === name));
   document.querySelectorAll('.config-pane').forEach(el => el.classList.toggle('active', el.id === 'config-pane-' + name));
+  refreshJsonEditors(document.getElementById('config-pane-' + name));
 }
 
 export function configOnTab() {
   const active = document.getElementById('tab-config')?.classList.contains('active');
+  if (active) refreshJsonEditors(document.getElementById('tab-config'));
   if (!active || editor.fetched) return;
   loadConfig(false);
 }
@@ -1299,8 +1314,10 @@ function openNew(kind) {
   initPassToggles();
   overlay.hidden = false;
   overlay.classList.add('show');
+  if (kind === 'inbounds') enhanceJsonInputs(body);
   body.querySelector('input, textarea, select')?.focus();
   const close = (created) => {
+    destroyJsonEditors(body);
     overlay.classList.remove('show');
     overlay.hidden = true;
     document.body.style.overflow = previousOverflow;

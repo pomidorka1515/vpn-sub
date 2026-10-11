@@ -190,6 +190,12 @@ def test_prefixed_static_assets(database: Database, flask_app: Flask) -> None:
     assert b"Chart.js v4.4.1" in chart_js.data
     assert "immutable" in chart_js.headers["Cache-Control"]
 
+    for suffix, mimetype in (("js", "text/javascript"), ("css", "text/css")):
+        editor_asset = client.get(f"/custom/vendor/codemirror-5.65.16.min.{suffix}")
+        assert editor_asset.status_code == 200
+        assert editor_asset.mimetype == mimetype
+        assert "immutable" in editor_asset.headers["Cache-Control"]
+
 
 def test_prefixed_admin_modules(database: Database, flask_app: Flask) -> None:
     client = _prefixed_client(database, flask_app)
@@ -212,6 +218,10 @@ def test_prefixed_admin_modules(database: Database, flask_app: Flask) -> None:
     assert config_js.status_code == 200
     assert config_js.mimetype == "text/javascript"
     assert b"function saveConfig" in config_js.data
+    assert b"from './json-editor.js?v=" in config_js.data
+    editor_js = client.get("/custom/admin/json-editor.js")
+    assert editor_js.status_code == 200
+    assert b"codemirror-5.65.16.min.js" in editor_js.data
 
 
 def test_page_lang_uses_query_then_cookie(database: Database, flask_app: Flask) -> None:

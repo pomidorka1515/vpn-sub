@@ -68,6 +68,8 @@ class StaticRoutes(WebApiMixin):
         Route("GET", "/dashboard.js", "dashboard_js"),
         Route("GET", "/history.js", "history_js"),
         Route("GET", "/chart.umd.min.js", "chart_js"),
+        Route("GET", "/vendor/codemirror-5.65.16.min.js", "codemirror_js"),
+        Route("GET", "/vendor/codemirror-5.65.16.min.css", "codemirror_css"),
         Route("GET", "/panel", "gui_panel"),
         Route("GET", "/auth", "gui_auth"),
         Route("GET", "/history", "gui_history"),
@@ -134,6 +136,14 @@ class StaticRoutes(WebApiMixin):
 
     def chart_js(self) -> ResponseType:
         return self._static("vendor/chart.umd.min.js", "text/javascript")
+
+    def codemirror_js(self) -> ResponseType:
+        name = "vendor/codemirror-5.65.16.min.js"
+        return self._static(name, "text/javascript", (RES_DIR / name).read_bytes())
+
+    def codemirror_css(self) -> ResponseType:
+        name = "vendor/codemirror-5.65.16.min.css"
+        return self._static(name, "text/css", (RES_DIR / name).read_bytes())
 
     def gui_panel(self) -> ResponseType:
         auth_token = request.cookies.get("auth_token")
