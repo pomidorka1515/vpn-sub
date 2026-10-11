@@ -1,6 +1,6 @@
-# Self-hosted faces. __FONT_BASE__ is replaced with the URI prefix when served.
-# Outfit and JetBrains Mono are variable fonts; one file covers the used weights.
-# Outfit has no Cyrillic (UI copy is Outfit; identifiers are JetBrains Mono).
+/* Self-hosted faces. __FONT_BASE__ is replaced with the URI prefix when served.
+   Outfit and JetBrains Mono are variable fonts; one file covers the used weights.
+   Outfit has no Cyrillic (UI copy is Outfit; identifiers are JetBrains Mono). */
 @font-face {
   font-family: 'Outfit';
   font-style: normal;

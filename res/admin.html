@@ -225,7 +225,7 @@
       <div class="toolbar">
         <div class="toolbar-field">
           <input type="number" id="logCount" value="50" min="1" class="dark-num-input">
-          <span style="font-size:12px;color:var(--text2)" data-t="log_count_label">rows</span>
+          <span style="font-size:0.75rem;color:var(--text2)" data-t="log_count_label">rows</span>
         </div>
         <button class="btn-secondary" onclick="loadLogs()" id="btnLoadLogs" data-t="load_logs">Load Logs</button>
         <button class="btn-secondary" onclick="refreshLogs()" id="btnRefreshLogs" data-t="refresh">Refresh</button>
@@ -266,7 +266,7 @@
       <div class="card-title" data-t="snapshots">Snapshots</div>
       <div class="toolbar">
         <div class="toolbar-field">
-          <span style="font-size:12px;color:var(--text2)" data-t="cutoff_days">Cutoff (days)</span>
+          <span style="font-size:0.75rem;color:var(--text2)" data-t="cutoff_days">Cutoff (days)</span>
           <input type="number" id="snapCutoff" value="7" min="1" class="dark-num-input">
         </div>
         <button class="btn-secondary" onclick="loadSnapshots()" id="btnLoadSnapshots" data-t="load_snapshots">Load Snapshots</button>
@@ -349,7 +349,7 @@
 
     <div class="card">
       <div class="card-title" data-t="refresh_users">Refresh All Users</div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">This syncs all users to all panels. May take time.</p>
+      <p style="font-size:0.8125rem;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">This syncs all users to all panels. May take time.</p>
       <button class="btn-secondary" onclick="doRefreshUsers()" id="btnDoRefresh" data-t="refresh_users_btn">Refresh Users</button>
       <div class="result-box" id="refreshResult"></div>
     </div>

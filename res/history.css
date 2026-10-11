@@ -4,20 +4,20 @@
   padding: 6px 12px 6px 8px;
   border: 1px solid var(--border); border-radius: 6px;
   background: none; color: var(--text2);
-  font-family: inherit; font-size: 12px; cursor: pointer;
+  font-family: inherit; font-size: 0.75rem; cursor: pointer;
   transition: all .2s;
 }
 .btn-back:hover { border-color: var(--border-h); color: var(--text); }
-.btn-back .arrow { font-size: 14px; line-height: 1; }
+.btn-back .arrow { font-size: 0.875rem; line-height: 1; }
 .topbar-left { min-width: 0; }
 .topbar-right { flex-wrap: wrap; justify-content: flex-end; }
 
-.dash-content { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+.dash-content { max-width: 45rem; margin: 0 auto; padding: 2rem 1.25rem; }
 .page-title, .card-title, .card-sub, .chart-empty {
   overflow-wrap: anywhere;
 }
 .page-title {
-  font-size: 18px; font-weight: 500; margin-bottom: 22px;
+  font-size: 1.125rem; font-weight: 500; margin-bottom: 22px;
   letter-spacing: .2px;
 }
 .card-head {
@@ -26,7 +26,7 @@
 }
 .card-title { margin-bottom: 0; }
 .card-sub {
-  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
   color: var(--text2);
 }
 .card-sub .up-val { color: var(--accent-light); }
@@ -71,15 +71,15 @@
   flex-shrink: 0;
 }
 .range-value .num {
-  font-family: 'JetBrains Mono', monospace; font-size: 16px;
+  font-family: 'JetBrains Mono', monospace; font-size: 1rem;
   font-weight: 500; color: var(--text);
 }
-.range-value .suffix { font-size: 12px; color: var(--text2); }
+.range-value .suffix { font-size: 0.75rem; color: var(--text2); }
 
 .chart-wrap { position: relative; height: 280px; margin-top: 4px; }
 .chart-empty {
   text-align: center; padding: 80px 0; color: var(--text2);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .chart-wrap canvas { max-width: 100%; }
 

@@ -1,16 +1,16 @@
 :root { --orange: #f97316; }
-.dash-content { max-width: 680px; margin: 0 auto; padding: 32px 20px; }
+.dash-content { max-width: 42.5rem; margin: 0 auto; padding: 2rem 1.25rem; }
 .topbar-left { min-width: 0; }
 .topbar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .disabled-banner {
   display: none; padding: 12px 20px;
   background: rgba(239,68,68,.08); border-bottom: 1px solid rgba(239,68,68,.2);
-  text-align: center; font-size: 13px; color: var(--red); font-weight: 500;
+  text-align: center; font-size: 0.8125rem; color: var(--red); font-weight: 500;
 }
 .disabled-banner.show { display: block; }
 .status-bar {
   display: flex; align-items: center; gap: 8px;
-  margin-bottom: 28px; font-size: 13px; color: var(--text2);
+  margin-bottom: 28px; font-size: 0.8125rem; color: var(--text2);
 }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; }
 .status-dot.on { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,.4); }
@@ -21,14 +21,14 @@
 .sub-link-box {
   flex: 1; padding: 10px 12px; background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px;
-  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
   color: var(--text); overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; user-select: all; min-width: 0;
 }
 .btn-copy {
   padding: 10px 16px; background: var(--surface2);
   border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text2); font-family: inherit; font-size: 12px;
+  color: var(--text2); font-family: inherit; font-size: 0.75rem;
   cursor: pointer; transition: all .2s; white-space: nowrap;
 }
 .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
@@ -49,7 +49,7 @@
   position: absolute; top: -8px; right: -8px;
   width: 24px; height: 24px; border-radius: 50%;
   background: var(--surface); border: 1px solid var(--border);
-  color: var(--text2); font-size: 14px; font-weight: bold;
+  color: var(--text2); font-size: 0.875rem; font-weight: bold;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: all .2s;
 }
@@ -57,13 +57,13 @@
 
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .stat-item { padding: 14px; background: var(--bg); border-radius: 8px; }
-.stat-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
-.stat-value { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; }
-.stat-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.stat-label { font-size: 0.6875rem; color: var(--text2); margin-bottom: 4px; }
+.stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 500; }
+.stat-sub { font-size: 0.6875rem; color: var(--text2); margin-top: 2px; }
 
 .bw-section { margin-top: 14px; }
 .bw-row { margin-bottom: 12px; }
-.bw-header { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+.bw-header { display: flex; justify-content: space-between; gap: 8px; font-size: 0.75rem; margin-bottom: 5px; }
 .bw-header span:last-child { text-align: right; overflow-wrap: anywhere; }
 .bw-bar-bg { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
 .bw-bar-fill {
@@ -73,7 +73,7 @@
 .history-link { display: flex; justify-content: center; margin-top: 14px; }
 .btn-history {
   width: auto; padding: 9px 20px; background: var(--surface2);
-  border: 1px solid var(--border); color: var(--text2); font-size: 13px;
+  border: 1px solid var(--border); color: var(--text2); font-size: 0.8125rem;
 }
 .btn-history:hover { border-color: var(--border-h); color: var(--text); }
 
@@ -81,21 +81,21 @@
 .bonus-input {
   flex: 1; padding: 10px 12px; background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text); font-family: inherit; font-size: 14px;
+  color: var(--text); font-family: inherit; font-size: 0.875rem;
   outline: none; transition: border-color .2s;
 }
 .bonus-input:focus { border-color: var(--accent); }
-.bonus-msg { font-size: 13px; margin-top: 10px; min-height: 20px; }
+.bonus-msg { font-size: 0.8125rem; margin-top: 10px; min-height: 20px; }
 .bonus-msg.ok { color: var(--green); }
 .bonus-msg.err { color: var(--red); }
 
 .settings-grid { display: grid; gap: 14px; }
 .settings-row { display: flex; align-items: center; gap: 12px; }
-.settings-row label { font-size: 13px; color: var(--text2); width: 100px; flex-shrink: 0; }
+.settings-row label { font-size: 0.8125rem; color: var(--text2); width: 6.25rem; flex-shrink: 0; }
 .settings-row input, .settings-row select {
   flex: 1; padding: 8px 12px; background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text); font-family: inherit; font-size: 13px; outline: none;
+  color: var(--text); font-family: inherit; font-size: 0.8125rem; outline: none;
 }
 .settings-row .pass-wrap { flex: 1; position: relative; min-width: 0; }
 .settings-row .pass-wrap input { width: 100%; padding-right: 36px; }
@@ -116,7 +116,7 @@
 .settings-row select option { background: var(--surface); color: var(--text); }
 .settings-row input:focus, .settings-row select:focus { border-color: var(--accent); }
 .settings-actions { display: flex; gap: 8px; margin-top: 6px; }
-.settings-msg { font-size: 13px; margin-top: 10px; min-height: 20px; }
+.settings-msg { font-size: 0.8125rem; margin-top: 10px; min-height: 20px; }
 .settings-msg.ok { color: var(--green); }
 .settings-msg.err { color: var(--red); }
 
@@ -135,8 +135,8 @@
 
 .profile-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .profile-item:last-child { border-bottom: none; }
-.profile-name { font-size: 13px; font-weight: 500; color: var(--accent); margin-bottom: 4px; }
-.profile-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.profile-name { font-size: 0.8125rem; font-weight: 500; color: var(--accent); margin-bottom: 4px; }
+.profile-desc { font-size: 0.75rem; color: var(--text2); line-height: 1.5; }
 .profile-name, .profile-desc, .bonus-msg, .settings-msg, .disabled-banner, .status-bar {
   overflow-wrap: anywhere;
 }
@@ -144,7 +144,7 @@
   max-height: 360px; overflow-y: auto; margin: 4px 0 18px;
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
-.profiles-loading { font-size: 13px; color: var(--text2); padding: 18px 0; text-align: center; }
+.profiles-loading { font-size: 0.8125rem; color: var(--text2); padding: 18px 0; text-align: center; }
 .profiles-list .loading { padding: 18px 0; }
 
 @media (max-width: 500px) {
