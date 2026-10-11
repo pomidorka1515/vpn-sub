@@ -30,7 +30,7 @@ class _NullLogger:
 
     def warning(self, message: str, *args: object) -> None:
         if args:
-            message = message % args
+            message %= args
         self.warnings.append(message)
 
 

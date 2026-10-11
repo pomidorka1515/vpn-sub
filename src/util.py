@@ -3,6 +3,7 @@ import io
 import re
 import secrets
 import uuid
+from collections import UserDict
 from typing import TYPE_CHECKING, Literal, cast
 
 import qrcode
@@ -114,7 +115,7 @@ def err(msg: str | None = None, code: int = 400, obj: JsonifyValue = None) -> tu
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 
 
-class _PartialFormatter(dict[str, object]):
+class _PartialFormatter(UserDict[str, object]):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
 

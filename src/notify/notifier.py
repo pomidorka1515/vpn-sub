@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import UserDict
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
@@ -32,8 +33,8 @@ def split_key(stored: str) -> tuple[str, str] | None:
     username, separator, marker = stored.partition(":")
     if not separator or not username or not marker or marker.startswith(":"):
         return None
-    kind, _sep, bucket = marker.partition(":")
-    if not kind.isidentifier() or (_sep and not bucket):
+    kind, sep, bucket = marker.partition(":")
+    if not kind.isidentifier() or (sep and not bucket):
         return None
     return username, marker
 
@@ -101,8 +102,7 @@ class Notifier:
             seen.discard(account_key(username, recovery.kind_id))
         for prefix in notice.clears:
             stale = _account_kind(username, prefix, seen)
-            for marker in stale:
-                seen.discard(marker)
+            seen.difference_update(stale)
         return True
 
     def _render(self, telegram_id: int, notice: Notice) -> str | None:
@@ -127,7 +127,7 @@ class Notifier:
             return None
 
 
-class _Fields(dict[str, int]):
+class _Fields(UserDict[str, int]):
     """Format map that rejects a placeholder the notice did not supply."""
 
     def __missing__(self, key: str) -> int:

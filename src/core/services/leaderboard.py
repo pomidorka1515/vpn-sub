@@ -4,6 +4,7 @@ from tracer import Op
 
 from ..common import BaseService, SharedCoreResources
 from .panel import BG_POOL
+import operator
 
 if TYPE_CHECKING:
     from .bandwidth import BandwidthService
@@ -87,7 +88,7 @@ class LeaderboardService(BaseService):
                     raw[display] = used
 
         sorted_items: list[tuple[str, int]] = sorted(
-            raw.items(), key=lambda x: x[1], reverse=not flip,
+            raw.items(), key=operator.itemgetter(1), reverse=not flip,
         )
         if top_n > 0:
             sorted_items = sorted_items[:top_n]

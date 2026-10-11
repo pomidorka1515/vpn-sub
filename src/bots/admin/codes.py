@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import cast
 
 from telebot import types
 
@@ -204,7 +204,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         days: int,
         gb: int,
         wl_gb: int,
-        perma: Literal[True, False],
+        perma: bool,
     ) -> None:
         """
         flow:

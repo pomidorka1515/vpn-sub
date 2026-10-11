@@ -64,9 +64,9 @@ type JsonifyValue = (
     | int
     | float
     | bool
-    | Mapping[str, "JsonifyValue"]
-    | Sequence["JsonifyValue"]
-    | tuple["JsonifyValue", ...]
+    | Mapping[str, JsonifyValue]
+    | Sequence[JsonifyValue]
+    | tuple[JsonifyValue, ...]
     | None
 )
 type HTTPMethod = Literal["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]

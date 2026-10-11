@@ -10,6 +10,7 @@ from payloads import number, object_rows
 from util import fmt_bytes, truncate_utf8
 
 from .common import result_obj
+import operator
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -121,7 +122,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             bandwidth_type=bw_type,
             lang=self._chart_lang(),
         )
-        sorted_items = sorted(lb_data.items(), key=lambda x: x[1], reverse=(order == "desc"))
+        sorted_items = sorted(lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc"))
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         lines: list[str] = []
         for rank, (user, score) in enumerate(sorted_items, start=1):

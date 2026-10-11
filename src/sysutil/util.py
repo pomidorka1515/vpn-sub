@@ -48,7 +48,7 @@ class SysUtil:
     @staticmethod
     def _cpu_sample() -> tuple[int, int]:
         """Total and idle jiffies from the aggregate `/proc/stat` line."""
-        with Path("/proc/stat").open() as f:
+        with Path("/proc/stat").open(encoding="utf-8") as f:
             cpu_line = f.readline()
         # user, nice, system, idle, iowait, irq, softirq, steal
         parts = cpu_line.split()
@@ -94,7 +94,7 @@ class SysUtil:
     def cpu_info() -> CPUInfo:
         cores = os.cpu_count()
 
-        with Path("/proc/cpuinfo").open() as f:
+        with Path("/proc/cpuinfo").open(encoding="utf-8") as f:
             cpu_name = ""
             max_mhz: float | int = 0
             for line in f:
@@ -108,8 +108,7 @@ class SysUtil:
 
     @staticmethod
     def loadavg() -> LoadAverage:
-        with Path("/proc/loadavg").open() as f:
-            one, five, fifteen = f.read().split()[:3]
+        one, five, fifteen = Path("/proc/loadavg").read_text(encoding="utf-8").split()[:3]
 
         return LoadAverage(load_1m=float(one), load_5m=float(five), load_15m=float(fifteen))
 
@@ -120,7 +119,7 @@ class SysUtil:
     @staticmethod
     def network() -> NetTrafficStats:
         tx, rx = 0, 0
-        with Path("/proc/net/dev").open() as f:
+        with Path("/proc/net/dev").open(encoding="utf-8") as f:
             f.readline()  # skip headers
             f.readline()
             for line in f:
@@ -134,14 +133,13 @@ class SysUtil:
 
     @staticmethod
     def uptime() -> float:
-        with Path("/proc/uptime").open() as f:
-            return float(f.read().split()[0])
+        return float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
 
     @staticmethod
     def memory() -> SystemMemory:
         mem_data: dict[str, int] = {}
 
-        with Path("/proc/meminfo").open() as f:
+        with Path("/proc/meminfo").open(encoding="utf-8") as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 2:
@@ -254,11 +252,8 @@ class SysUtil:
 
     @staticmethod
     def app_uptime() -> float:
-        with Path("/proc/uptime").open() as f:
-            system_uptime = float(f.read().split()[0])
-
-        with Path(f"/proc/{os.getpid()}/stat").open() as f:
-            starttime_ticks = int(f.read().split()[21])
+        system_uptime = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+        starttime_ticks = int(Path(f"/proc/{os.getpid()}/stat").read_text(encoding="utf-8").split()[21])
 
         clk_tck = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
         return system_uptime - (starttime_ticks / clk_tck)

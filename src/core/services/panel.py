@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from threading import Condition
 from time import monotonic
 from typing import TYPE_CHECKING, Literal, cast, overload
@@ -39,20 +40,13 @@ _BG_POOL = ThreadPoolExecutor(max_workers=_BG_POOL_WORKERS, thread_name_prefix="
 BG_POOL: Executor = _BG_POOL
 
 
+@dataclass(slots=True, eq=False)
 class _OnlineSnapshot:
     """Classified online set. Ext names are applied later, so a rename is live."""
 
-    __slots__ = ("panel_health", "stored_at", "users")
-
-    def __init__(
-        self,
-        users: dict[str, None],
-        panel_health: dict[str, Literal["ok", "unavailable", "invalid"]],
-        stored_at: float,
-    ) -> None:
-        self.users = users
-        self.panel_health = panel_health
-        self.stored_at = stored_at
+    users: dict[str, None]
+    panel_health: dict[str, Literal["ok", "unavailable", "invalid"]]
+    stored_at: float
 
 
 class PanelService(BaseService):

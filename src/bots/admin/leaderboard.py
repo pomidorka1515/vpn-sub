@@ -10,6 +10,7 @@ from chart import leaderboard_chart
 from util import fmt_bytes
 
 from ..composition import AdminFeatureMixin
+import operator
 
 __all__ = ["AdminLeaderboardMixin"]
 
@@ -100,7 +101,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             self.bot.send_message(chat_id, "Нет данных!")
             return
 
-        sorted_items = sorted(lb_data.items(), key=lambda x: x[1], reverse=(order == "desc"))
+        sorted_items = sorted(lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc"))
 
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         lines: list[str] = []

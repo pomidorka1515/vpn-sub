@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, MutableMapping
+from itertools import starmap
 from typing import Literal, cast
 
 from config import JsonValue
@@ -197,5 +198,5 @@ def _json_equal(left: object, right: object) -> bool:
         left, right = cast(list[object], left), cast(list[object], right)
         if len(left) != len(right):
             return False
-        return all(_json_equal(item, other) for item, other in zip(left, right, strict=True))
+        return all(map(_json_equal, left, right, strict=True))
     return left == right

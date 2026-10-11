@@ -237,7 +237,7 @@ class RecordingLedger:
         return self.folded.get((panel, username))
 
     def set(self, panel: str, username: str, up: int, down: int) -> None:
-        self.folded[(panel, username)] = (up, down)
+        self.folded[panel, username] = (up, down)
 
     def clear(self, panel: str, username: str) -> None:
         self.folded.pop((panel, username), None)
@@ -282,7 +282,7 @@ def test_rerun_after_failed_delete_folds_only_new_traffic(database: Database) ->
         next(kw["json"] for u, kw in panel.posts if "updateTraffic/alice" in u),
     )
     assert (seed_body["upload"], seed_body["download"]) == (111, 202)
-    assert ledger.folded[("panel", "alice")] == (111, 202)
+    assert ledger.folded["panel", "alice"] == (111, 202)
     # the delete failure is reported, not swallowed
     assert report.errors
 

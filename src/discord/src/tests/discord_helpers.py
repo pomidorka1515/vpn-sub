@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import UserDict
 from collections.abc import Callable, Coroutine, Mapping
 from copy import deepcopy
 from pathlib import Path
@@ -41,7 +42,7 @@ type Handler = Callable[
 ]
 
 
-class FakeHeaders(dict[str, str]):
+class FakeHeaders(UserDict[str, str]):
     def getall(self, key: str, default: list[str] | None = None) -> list[str]:
         if key in self:
             return [self[key]]

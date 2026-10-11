@@ -1,3 +1,4 @@
+
 [project]
 name = "vpn-sub"
 version = "0.0.0" # just use tags. this isnt a package you install
@@ -106,6 +107,13 @@ ignore = [
     "C901",    # Method names aren't complex
     "D417",    # Docstrings often intentionally omit some arguments
     "N806",    # Some constants are flagged
+    "DOC201",
+    "DOC501",
+    "DOC402",
+    "PLR6301",
+    "E261",
+    "S404",
+    "RUF029",
 ]
 
 # Whitespace-only fixes are safe even inside multiline strings.
@@ -140,7 +148,9 @@ quote-annotations = false # Prefer postponed annotations over string annotations
     "S324",   # Weak hashes may be exercised by compatibility tests
     "ARG",    # Unused arguments/etc are useful in tests
     "SLF001", # Private access is unavoidable in tests
+    "PLC2701",# 
     "INP001", # Tests are not meant to be imported
+    "B903",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

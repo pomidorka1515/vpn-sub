@@ -21,8 +21,7 @@ from errors import ConfigError, FileCorruptionError, SchemaValidationError
 
 def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
     try:
-        with Path(cfg.path).open(encoding="utf-8") as handle:
-            content = handle.read()
+        content = Path(cfg.path).read_text(encoding="utf-8")
         if cfg.read_only_jsonc:
             content = strip_jsonc_comments(content)
             content = strip_jsonc_trailing_commas(content)

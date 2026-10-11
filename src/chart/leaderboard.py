@@ -24,6 +24,7 @@ from .draw import (
     save,
     text_size,
 )
+import operator
 
 if TYPE_CHECKING:
     import io
@@ -50,7 +51,7 @@ def leaderboard_chart(
 
     bw_key = f"bw_type_{bandwidth_type}"
     bw_label = lang.get(bw_key, lang["bw_type_total"])
-    sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)[:15]
+    sorted_users = sorted(data.items(), key=operator.itemgetter(1), reverse=True)[:15]
 
     width, height = LB_SIZE
     image = Image.new("RGB", (width, height), BG)
