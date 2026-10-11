@@ -19,7 +19,7 @@ function profileHeader(id, profile) {
 }
 
 function panelHeader(id, panel) {
-  return `<span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(panel.name || '')}</span> <span class="badge">${escapeHtml(panel.mode || '')}</span>`;
+  return `<span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(panel.name || '')}</span> <span class="badge config-panel-mode" data-mode="${attr(panel.mode || '')}">${escapeHtml(panel.mode ? panel.mode + ' mode' : '')}</span>`;
 }
 
 function cardShell(kind, id, titleHtml, body, open) {
@@ -67,7 +67,7 @@ function panelBody(id, panel) {
     <div class="form-row"><label>token</label><div class="input-wrap">${passWrap('cfg-pn-token-' + cssId(id), p.token ?? '')}${fieldError('cfg-pn-err-' + cssId(id) + '-token')}</div></div>
     <div class="form-row"><label>https</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="https" ${p.https ? 'checked' : ''}><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>whitelist</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist" ${p.whitelist ? 'checked' : ''}><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
-    <div class="form-row"><label>mode</label><div class="input-wrap"><select data-field="mode"><option value="blacklist"${p.mode === 'blacklist' ? ' selected' : ''}>blacklist</option><option value="whitelist"${p.mode === 'whitelist' ? ' selected' : ''}>whitelist</option></select>${fieldError('cfg-pn-err-' + cssId(id) + '-mode')}</div></div>
+    <div class="form-row"><label>mode</label><div class="input-wrap"><select data-field="mode"><option value="blacklist"${p.mode === 'blacklist' ? ' selected' : ''}>blacklist mode</option><option value="whitelist"${p.mode === 'whitelist' ? ' selected' : ''}>whitelist mode</option></select>${fieldError('cfg-pn-err-' + cssId(id) + '-mode')}</div></div>
     <div class="form-row"><label>inbounds_list</label><div class="input-wrap" id="cfg-pn-inbounds-${cssId(id)}">${rowList('cfg-pn-rows-' + cssId(id), (p.inbounds_list || []).map(String), 'int')}${fieldError('cfg-pn-err-' + cssId(id) + '-inbounds_list')}</div></div>
     <div class="form-row"><label>nginx_auth</label><div class="input-wrap">${auth ? `<div class="config-pair"><input type="text" data-field="nginx0" value="${attr(auth[0] ?? '')}">${passWrap('cfg-pn-nginx-password-' + cssId(id), auth[1] ?? '')}</div><button type="button" class="btn-tiny danger" data-nested-remove="nginx_auth">${escapeHtml(t('config_remove'))}</button>` : `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-nested-add="nginx_auth">${escapeHtml(t('config_add'))}</button></div>`}${fieldError('cfg-pn-err-' + cssId(id) + '-nginx_auth')}</div></div>
     <div class="form-row"><label>inject_headers</label><div class="input-wrap">${headers ? `${rowList('cfg-pn-headers-' + cssId(id), headers, 'pair')}<button type="button" class="btn-tiny danger" data-nested-remove="inject_headers">${escapeHtml(t('config_remove_headers'))}</button>` : `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-nested-add="inject_headers">${escapeHtml(t('config_add'))}</button></div>`}${fieldError('cfg-pn-err-' + cssId(id) + '-inject_headers')}</div></div>

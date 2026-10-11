@@ -146,7 +146,7 @@ function dialogPanel() {
     <div class="form-row"><label>token</label><div class="input-wrap">${passWrap('cfg-dlg-token', '')}</div></div>
     <div class="form-row"><label>https</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="https"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>whitelist</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
-    <div class="form-row"><label>mode</label><div class="input-wrap"><select data-field="mode"><option value="blacklist" selected>blacklist</option><option value="whitelist">whitelist</option></select></div></div>
+    <div class="form-row"><label>mode</label><div class="input-wrap"><select data-field="mode"><option value="blacklist" selected>blacklist mode</option><option value="whitelist">whitelist mode</option></select></div></div>
     <div class="form-row"><label>inbounds_list</label><div class="input-wrap">${rowList('cfg-dlg-inbounds', [], 'int')}</div></div>
     <div class="form-row"><label>nginx_auth</label><div class="input-wrap" data-dialog-nested="nginx_auth"></div></div>
     <div class="form-row"><label>inject_headers</label><div class="input-wrap" data-dialog-nested="inject_headers"></div></div>
