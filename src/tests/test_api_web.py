@@ -219,6 +219,15 @@ def test_prefixed_admin_modules(database: Database, flask_app: Flask) -> None:
     assert config_js.mimetype == "text/javascript"
     assert b"function saveConfig" in config_js.data
     assert b"from './json-editor.js?v=" in config_js.data
+    assert b"from './config/config-main.js?v=" in config_js.data
+    for module in ("state", "json", "controls", "main", "cards", "validation", "dialog"):
+        response = client.get(f"/custom/admin/config/config-{module}.js")
+        assert response.status_code == 200
+        assert response.mimetype == "text/javascript"
+        assert "immutable" in response.headers["Cache-Control"]
+        if module == "controls":
+            assert b"from '../json-editor.js?v=" in response.data
+            assert b"from './config-json.js?v=" in response.data
     editor_js = client.get("/custom/admin/json-editor.js")
     assert editor_js.status_code == 200
     assert b"codemirror-5.65.16.min.js" in editor_js.data
