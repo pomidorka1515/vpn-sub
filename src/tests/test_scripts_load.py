@@ -8,10 +8,8 @@ from typing import TYPE_CHECKING, Protocol
 
 import cli.scripts as scripts_load
 from cli.scripts import load_scripts
-from loggers import Logger
 
 if TYPE_CHECKING:
-    import logging
     from pathlib import Path
 
     import pytest
@@ -24,17 +22,6 @@ class StubResponse(Protocol):
 
 class GetStub(Protocol):
     def __call__(self, url: str, *_args: object, **_kwargs: object) -> StubResponse: ...
-
-
-class _Log(Logger):
-    def __init__(self) -> None:
-        super().__init__("scripts-test")
-        self.handlers.clear()
-        self.propagate = False
-        self.records: list[tuple[int, str]] = []
-
-    def handle(self, record: logging.LogRecord) -> None:
-        self.records.append((record.levelno, record.getMessage()))
 
 
 def _compiled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -79,7 +66,9 @@ def _get_stub(files: dict[str, bytes]) -> GetStub:
     return _get
 
 
-def test_refuses_outside_a_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refuses_outside_a_binary(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _plain(monkeypatch)
     called = False
 
@@ -89,18 +78,18 @@ def test_refuses_outside_a_binary(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError("network")
 
     monkeypatch.setattr(scripts_load, "_get", _get)
-    log = _Log()
-    assert load_scripts(log) == 1
-    assert log.records[0][1] == "load-scripts only runs from the vpn-sub binary"
+    assert load_scripts() == 1
+    assert capsys.readouterr().out == "load-scripts only runs from the vpn-sub binary\n"
     assert called is False
 
 
-def test_refuses_without_a_release_version(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refuses_without_a_release_version(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(scripts_load, "VERSION", "0.0.0")
-    log = _Log()
-    assert load_scripts(log) == 1
-    assert "no release version" in log.records[0][1]
+    assert load_scripts() == 1
+    assert "no release version" in capsys.readouterr().out
 
 
 def test_writes_schema_and_scripts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -120,8 +109,7 @@ def test_writes_schema_and_scripts(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     monkeypatch.setattr(scripts_load, "program_dir", lambda: install)
     monkeypatch.setattr(scripts_load, "bundled_root", lambda: bundled)
     monkeypatch.setattr(scripts_load, "_get", _get_stub(files))
-    log = _Log()
-    assert load_scripts(log) == 0
+    assert load_scripts() == 0
     assert (install / "config.schema.json").read_bytes() == b'{"type":"object"}\n'
     assert (install / "scripts" / "migrate_profiles.py").read_bytes() == files[
         "migrate_profiles.py"
@@ -135,6 +123,7 @@ def test_writes_schema_and_scripts(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 def test_digest_mismatch_does_not_write_the_script(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     bundled = tmp_path / "payload"
@@ -171,8 +160,7 @@ def test_digest_mismatch_does_not_write_the_script(
         return _Response()
 
     monkeypatch.setattr(scripts_load, "_get", _get)
-    log = _Log()
-    assert load_scripts(log) == 1
+    assert load_scripts() == 1
     assert (install / "config.schema.json").read_bytes() == b"{}\n"
     assert not (install / "scripts" / "migrate_profiles.py").exists()
-    assert any("download failed" in message for _level, message in log.records)
+    assert "download failed" in capsys.readouterr().out

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import os
 import sys
 from pathlib import Path
@@ -12,7 +11,6 @@ import pytest
 
 from cli import updater
 from cli.updater import notice, update
-from loggers import Logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -44,17 +42,6 @@ class StubResponse(Protocol):
 
 class GetStub(Protocol):
     def __call__(self, *_args: object, **_kwargs: object) -> StubResponse: ...
-
-
-class _Log(Logger):
-    def __init__(self) -> None:
-        super().__init__("updater-test")
-        self.handlers.clear()
-        self.propagate = False
-        self.records: list[tuple[int, str]] = []
-
-    def handle(self, record: logging.LogRecord) -> None:
-        self.records.append((record.levelno, record.getMessage()))
 
 
 def _compiled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -157,7 +144,9 @@ def _alive_stub() -> Callable[[object, object], list[updater.Running]]:
     return _running
 
 
-def test_notice_does_nothing_outside_a_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_notice_does_nothing_outside_a_binary(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _plain(monkeypatch)
     called = False
 
@@ -167,43 +156,46 @@ def test_notice_does_nothing_outside_a_binary(monkeypatch: pytest.MonkeyPatch) -
         raise AssertionError("network")
 
     monkeypatch.setattr(updater, "_get", _get)
-    log = _Log()
-    notice(log)
-    assert log.records == []
+    notice()
+    assert capsys.readouterr().out == ""
     assert called is False
 
 
-def test_update_refuses_outside_a_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_refuses_outside_a_binary(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _plain(monkeypatch)
-    log = _Log()
-    assert update(log) == 1
-    assert log.records[0][1] == "updater only runs from the vpn-sub binary"
+    assert update() == 1
+    assert capsys.readouterr().out == "updater only runs from the vpn-sub binary\n"
 
 
-def test_notice_logs_only_a_newer_release(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_notice_prints_only_a_newer_release(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "VERSION", "1.0.0")
     monkeypatch.setattr(updater, "_get", _get_stub(_release("v1.2.0")))
-    log = _Log()
-    notice(log)
-    assert log.records == [(logging.INFO, "update available: 1.0.0 -> v1.2.0 (vpn-sub --update)")]
+    notice()
+    assert capsys.readouterr().out == "update available: 1.0.0 -> v1.2.0 (vpn-sub --update)\n"
 
 
-def test_notice_is_quiet_when_current(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_notice_is_quiet_when_current(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "VERSION", "9.0.0")
     monkeypatch.setattr(updater, "_get", _get_stub(_release()))
-    log = _Log()
-    notice(log)
-    assert log.records == []
+    notice()
+    assert capsys.readouterr().out == ""
 
 
-def test_update_refuses_without_a_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_refuses_without_a_tty(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "_interactive", lambda: False)
-    log = _Log()
-    assert update(log) == 2
-    assert "terminal" in log.records[0][1]
+    assert update() == 2
+    assert "terminal" in capsys.readouterr().out
 
 
 def test_update_cancel_does_not_stop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -215,8 +207,7 @@ def test_update_cancel_does_not_stop(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     monkeypatch.setattr(updater, "_confirm", _bool_stub(False))
     monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
     monkeypatch.setattr(updater, "_get", _get_stub(_release()))
-    log = _Log()
-    assert update(log) == 0
+    assert update() == 0
     assert binary.read_bytes() == b"old\n"
 
 
@@ -232,8 +223,7 @@ def test_digest_mismatch_does_not_replace(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
     monkeypatch.setattr(updater, "_running", _empty_stub())
     monkeypatch.setattr(updater, "_get", _get_stub(payload))
-    log = _Log()
-    assert update(log) == 1
+    assert update() == 1
     assert binary.read_bytes() == b"old\n"
     assert not (tmp_path / "vpn-sub.bak").exists()
 
@@ -263,8 +253,7 @@ def test_second_replace_restores_the_first(monkeypatch: pytest.MonkeyPatch, tmp_
         asset["size"] = len(payload)
         asset["digest"] = "sha256:" + hashlib.sha256(payload).hexdigest()
     monkeypatch.setattr(updater, "_get", _get_stub(body, (payload,)))
-    log = _Log()
-    assert update(log) == 1
+    assert update() == 1
     assert first.read_bytes() == b"old-main"
     assert second.read_bytes() == b"old-discord"
 
@@ -280,8 +269,7 @@ def test_missing_sibling_is_skipped(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     monkeypatch.setattr(updater, "_running", _empty_stub())
     payload = _release(assets=("vpn-sub",))
     monkeypatch.setattr(updater, "_get", _get_stub(payload))
-    log = _Log()
-    assert update(log) == 0
+    assert update() == 0
     assert binary.read_bytes() == b"new\n"
     assert not (tmp_path / "vpn-sub-discord").exists()
 
@@ -297,7 +285,7 @@ def test_running_lists_unit_and_stray_pid(monkeypatch: pytest.MonkeyPatch, tmp_p
         _units_stub(),
     )
     monkeypatch.setattr(updater, "_processes", _processes_stub())
-    found = updater._running(_Log(), {"vpn-sub": binary, "vpn-sub-discord": discord})
+    found = updater._running({"vpn-sub": binary, "vpn-sub-discord": discord})
     assert found is not None
     assert [(item.pid, item.unit) for item in found] == [(10, "vpn-sub.service"), (11, None)]
 
@@ -315,7 +303,9 @@ def test_parse_strips_release_suffix() -> None:
     assert not updater._newer((5, 0), (5, 0, 0))
 
 
-def test_swap_refuses_symlink(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_swap_refuses_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     _compiled(monkeypatch)
     target = tmp_path / "real"
     target.write_bytes(b"old")
@@ -326,13 +316,14 @@ def test_swap_refuses_symlink(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     monkeypatch.setattr(updater, "_confirm", _bool_stub(True))
     monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
     monkeypatch.setattr(updater, "_get", _get_stub(_release(assets=("vpn-sub",))))
-    log = _Log()
-    assert update(log) == 1
+    assert update() == 1
     assert target.read_bytes() == b"old"
-    assert any("symlink" in message for _level, message in log.records)
+    assert "symlink" in capsys.readouterr().out
 
 
-def test_alive_pid_blocks_replace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_alive_pid_blocks_replace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     _compiled(monkeypatch)
     binary = tmp_path / "vpn-sub"
     binary.write_bytes(b"old\n")
@@ -347,11 +338,8 @@ def test_alive_pid_blocks_replace(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         _alive_stub(),
     )
     monkeypatch.setattr(updater, "_get", _get_stub(_release(assets=("vpn-sub",))))
-    log = _Log()
-    assert update(log) == 1
+    assert update() == 1
     assert binary.read_bytes() == b"old\n"
-    assert any(
-        "make sure both services are stopped before continuing" in message
-        for _level, message in log.records
-    )
-    assert any("still running" in message for _level, message in log.records)
+    output = capsys.readouterr().out
+    assert "make sure both services are stopped before continuing" in output
+    assert "still running" in output

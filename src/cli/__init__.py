@@ -15,12 +15,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from loggers import Logger
-
 __all__ = ["dispatch"]
 
 
-def dispatch(prog: str, probe: Callable[[], None], log: Logger) -> None:
+def dispatch(prog: str, probe: Callable[[], None]) -> None:
     """Run a flag from ``sys.argv`` and exit, or return when there is none.
 
     ``probe`` is supplied by the caller. The two binaries ship different files,
@@ -41,8 +39,8 @@ def dispatch(prog: str, probe: Callable[[], None], log: Logger) -> None:
     if flag == "--update":
         from cli.updater import update
 
-        raise SystemExit(update(log))
+        raise SystemExit(update())
     if flag == "--load-scripts":
         from cli.scripts import load_scripts
 
-        raise SystemExit(load_scripts(log))
+        raise SystemExit(load_scripts())

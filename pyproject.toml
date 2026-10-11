@@ -141,8 +141,8 @@ extend-safe-fixes = ["W293", "W291"]
 keep-runtime-typing = false # Modernize annotations even when evaluated at runtime
 
 [tool.ruff.lint.per-file-ignores]
-# Expected CLI failures use concise messages rather than tracebacks.
-"src/cli/{scripts,updater}.py" = ["TRY400"]
+# CLI output goes directly to the terminal.
+"src/cli/*" = ["T201"]
 
 # Standalone scripts may print user-facing output and intentionally have unused arguments.
 "scripts/*" = ["T201", "ARG"]

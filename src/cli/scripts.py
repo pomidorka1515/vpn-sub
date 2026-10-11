@@ -21,8 +21,6 @@ if TYPE_CHECKING:
 
     from requests import Response
 
-    from loggers import Logger
-
 from paths import bundled_root, compiled, program_dir
 from version import VERSION
 
@@ -34,7 +32,7 @@ TIMEOUT = 30.0
 _API = f"https://api.github.com/repos/{REPO}"
 
 
-def load_scripts(log: Logger) -> int:
+def load_scripts() -> int:
     """Write the packed schema beside the binary and download ``scripts/``.
 
     Requires a compiled binary. Does not ask: the files are the ones this
@@ -42,23 +40,23 @@ def load_scripts(log: Logger) -> int:
     Returns a process exit code.
     """
     if not compiled():
-        log.error("load-scripts only runs from the vpn-sub binary")
+        print("load-scripts only runs from the vpn-sub binary")
         return 1
     if VERSION == "0.0.0":
-        log.error(f"binary has no release version ({VERSION})")
+        print(f"binary has no release version ({VERSION})")
         return 1
 
     install = program_dir()
     schema = bundled_root() / SCHEMA
     if not schema.is_file():
-        log.error(f"schema file not found: {schema}")
+        print(f"schema file not found: {schema}")
         return 1
     try:
         _write(install / SCHEMA, schema.read_bytes())
     except OSError as exc:
-        log.error(f"could not write schema: {exc}")
+        print(f"could not write schema: {exc}")
         return 1
-    log.info(f"wrote {install / SCHEMA}")
+    print(f"wrote {install / SCHEMA}")
 
     scripts = install / "scripts"
     try:
@@ -68,11 +66,11 @@ def load_scripts(log: Logger) -> int:
             raise ValueError(f"v{VERSION} has no scripts")
         for name, digest in listed:
             target = scripts / name
-            log.info(f"downloading {name}")
+            print(f"downloading {name}")
             _write(target, _script(name, digest))
-            log.info(f"wrote {target}")
+            print(f"wrote {target}")
     except (OSError, RequestError, ValueError) as exc:
-        log.error(f"download failed: {exc}")
+        print(f"download failed: {exc}")
         return 1
     return 0
 

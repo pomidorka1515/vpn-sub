@@ -31,9 +31,7 @@ class Application(BaseApplication):
 
 def main() -> None:
     from cli.updater import notice
-    from loggers import Logger
-
-    notice(Logger("updater"))
+    notice()
     Application("%(prog)s", prog="vpn-sub").run()
 
 
@@ -62,7 +60,5 @@ def probe() -> None:
 
 if __name__ == "__main__":
     from cli import dispatch
-    from loggers import Logger
-
-    dispatch("vpn-sub", probe, Logger("updater"))
+    dispatch("vpn-sub", probe)
     main()

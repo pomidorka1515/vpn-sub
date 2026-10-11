@@ -24,8 +24,6 @@ if TYPE_CHECKING:
 
     from requests import Response
 
-    from loggers import Logger
-
 import contextlib
 
 from paths import compiled, program_dir
@@ -66,8 +64,8 @@ class Running:
     unit: str | None
 
 
-def notice(log: Logger) -> None:
-    """Log one line when a newer GitHub release exists.
+def notice() -> None:
+    """Print one line when a newer GitHub release exists.
 
     A timeout or a bad response is not an error. Boot must not wait on GitHub
     and must not ask a question: a systemd unit has no TTY to answer it.
@@ -81,10 +79,10 @@ def notice(log: Logger) -> None:
     current = _parse(VERSION)
     if current is None or not _newer(release.version, current):
         return
-    log.info(f"update available: {VERSION} -> {release.tag} (vpn-sub --update)")
+    print(f"update available: {VERSION} -> {release.tag} (vpn-sub --update)")
 
 
-def update(log: Logger) -> int:
+def update() -> int:
     """Download the latest release and replace the installed binaries.
 
     Requires a compiled binary and a TTY. Asks before downloading. If either
@@ -93,29 +91,29 @@ def update(log: Logger) -> int:
     process exit code.
     """
     if not compiled():
-        log.error("updater only runs from the vpn-sub binary")
+        print("updater only runs from the vpn-sub binary")
         return 1
     if not _interactive():
-        log.error("updater needs a terminal")
+        print("updater needs a terminal")
         return 2
     current = _parse(VERSION)
     if current is None:
-        log.error(f"binary has no release version ({VERSION})")
+        print(f"binary has no release version ({VERSION})")
         return 1
     try:
         release = _latest(UPDATE_TIMEOUT)
     except (OSError, RequestError, ValueError) as exc:
-        log.error(f"could not read the latest release: {exc}")
+        print(f"could not read the latest release: {exc}")
         return 1
     if not _newer(release.version, current):
-        log.info(f"already at {VERSION}; latest release is {release.tag}")
+        print(f"already at {VERSION}; latest release is {release.tag}")
         return 0
-    log.info(f"update available: {VERSION} -> {release.tag}")
-    log.info(release.page)
+    print(f"update available: {VERSION} -> {release.tag}")
+    print(release.page)
     if release.notes:
-        log.info(release.notes)
-    if not _confirm(log, f"update to {release.tag}?"):
-        log.info("update cancelled")
+        print(release.notes)
+    if not _confirm(f"update to {release.tag}?"):
+        print("update cancelled")
         return 0
 
     install = program_dir()
@@ -123,42 +121,42 @@ def update(log: Logger) -> int:
     present = {name: path for name, path in paths.items() if path.is_file()}
     linked = [name for name, path in present.items() if path.is_symlink()]
     if linked:
-        log.error(f"refusing to replace a symlink: {', '.join(linked)}")
+        print(f"refusing to replace a symlink: {', '.join(linked)}")
         return 1
     if not present:
-        log.error(f"no vpn-sub binary in {install}")
+        print(f"no vpn-sub binary in {install}")
         return 1
     missing = [asset for asset in present if asset not in release.assets]
     if missing:
-        log.error(f"release {release.tag} has no asset for {', '.join(missing)}")
+        print(f"release {release.tag} has no asset for {', '.join(missing)}")
         return 1
 
-    running = _running(log, paths)
+    running = _running(paths)
     if running is None:
         return 1
     if running:
         for item in running:
             unit = f" ({item.unit})" if item.unit else ""
-            log.info(f"running: {item.name} pid {item.pid}{unit}")
-        log.info("make sure both services are stopped before continuing")
-        if not _confirm(log, "both services are stopped?"):
-            log.info("update cancelled")
+            print(f"running: {item.name} pid {item.pid}{unit}")
+        print("make sure both services are stopped before continuing")
+        if not _confirm("both services are stopped?"):
+            print("update cancelled")
             return 0
-        running = _running(log, paths)
+        running = _running(paths)
         if running is None:
             return 1
         if running:
             listed = ", ".join(f"{item.name} pid {item.pid}" for item in running)
-            log.error(f"still running: {listed}")
+            print(f"still running: {listed}")
             return 1
 
-    files = _download(log, release, present)
+    files = _download(release, present)
     if files is None:
         return 1
-    replaced = _swap(log, present, files)
+    replaced = _swap(present, files)
     if replaced is None:
         return 1
-    log.info(f"updated to {release.tag}")
+    print(f"updated to {release.tag}")
     return 0
 
 
@@ -166,8 +164,8 @@ def _interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
-def _confirm(log: Logger, question: str) -> bool:
-    log.info(f"{question} [y/N]")
+def _confirm(question: str) -> bool:
+    print(f"{question} [y/N] ", end="", flush=True)
     try:
         answer = input().strip().lower()
     except EOFError:
@@ -243,10 +241,10 @@ def _asset(item: object) -> Asset | None:
     return Asset(name=name, url=url, size=size, digest=digest.removeprefix("sha256:"))
 
 
-def _running(log: Logger, paths: dict[str, Path]) -> list[Running] | None:
+def _running(paths: dict[str, Path]) -> list[Running] | None:
     wanted = {path.resolve(): name for name, path in paths.items()}
     found: dict[int, Running] = {}
-    units = _units(log, wanted)
+    units = _units(wanted)
     if units is None:
         return None
     for unit, pid, name in units:
@@ -256,10 +254,7 @@ def _running(log: Logger, paths: dict[str, Path]) -> list[Running] | None:
     return [found[pid] for pid in sorted(found)]
 
 
-def _units(
-    log: Logger,
-    wanted: dict[Path, str],
-) -> list[tuple[str, int, str]] | None:
+def _units(wanted: dict[Path, str]) -> list[tuple[str, int, str]] | None:
     systemctl = shutil.which("systemctl")
     if systemctl is None:
         return []
@@ -270,7 +265,7 @@ def _units(
         text=True,
     )
     if listed.returncode != 0:
-        log.error(listed.stderr.strip() or "systemctl list-units failed")
+        print(listed.stderr.strip() or "systemctl list-units failed")
         return None
     names = {line.split(maxsplit=1)[0] for line in listed.stdout.splitlines() if line.strip()}
     names.update(UNITS)
@@ -412,19 +407,19 @@ def _self_pids(wanted: dict[Path, str]) -> set[int]:
     return pids
 
 
-def _download(log: Logger, release: Release, present: dict[str, Path]) -> dict[str, Path] | None:
+def _download(release: Release, present: dict[str, Path]) -> dict[str, Path] | None:
     files: dict[str, Path] = {}
     current: Path | None = None
     try:
         for name, path in present.items():
             target = path.with_name(f".{name}.download")
             current = target.with_name(f"{target.name}.part")
-            log.info(f"downloading {name}")
+            print(f"downloading {name}")
             _fetch(release.assets[name], target)
             files[name] = target
             current = None
     except (OSError, RequestError, ValueError) as exc:
-        log.error(f"download failed: {exc}")
+        print(f"download failed: {exc}")
         if current is not None:
             files[current.name] = current
         _cleanup(files)
@@ -458,7 +453,7 @@ def _fetch(asset: Asset, target: Path) -> None:
         raise
 
 
-def _swap(log: Logger, present: dict[str, Path], files: dict[str, Path]) -> list[str] | None:
+def _swap(present: dict[str, Path], files: dict[str, Path]) -> list[str] | None:
     replaced: list[str] = []
     try:
         for name, path in present.items():
@@ -469,26 +464,26 @@ def _swap(log: Logger, present: dict[str, Path], files: dict[str, Path]) -> list
             files[name].replace(staged)
             staged.replace(path)
             replaced.append(name)
-            log.info(f"replaced {path}")
+            print(f"replaced {path}")
     except OSError as exc:
-        log.error(f"replace failed: {exc}")
-        _restore(log, present, replaced)
+        print(f"replace failed: {exc}")
+        _restore(present, replaced)
         _cleanup(files)
         return None
     _cleanup(files)
     return replaced
 
 
-def _restore(log: Logger, present: dict[str, Path], replaced: list[str]) -> None:
+def _restore(present: dict[str, Path], replaced: list[str]) -> None:
     for name in reversed(replaced):
         path = present[name]
         backup = path.with_name(f"{name}.bak")
         try:
             if backup.is_file():
                 backup.replace(path)
-                log.warning(f"restored {path}")
+                print(f"restored {path}")
         except OSError as exc:
-            log.error(f"could not restore {path}: {exc}")
+            print(f"could not restore {path}: {exc}")
 
 
 def _cleanup(files: dict[str, Path]) -> None:

@@ -234,7 +234,7 @@ async def _run() -> None:
 def main() -> None:
     from cli.updater import notice
 
-    notice(log)
+    notice()
     asyncio.run(_run())
 
 
@@ -258,5 +258,5 @@ def probe() -> None:
 if __name__ == "__main__":
     from cli import dispatch
 
-    dispatch("vpn-sub-discord", probe, log)
+    dispatch("vpn-sub-discord", probe)
     main()
