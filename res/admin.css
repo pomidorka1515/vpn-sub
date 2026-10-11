@@ -522,6 +522,15 @@
 .config-editor-modal .modal-title, .config-editor-modal .modal-actions { flex-shrink: 0; }
 #configEditorOverlay[hidden] { display: none; }
 @media (max-width: 600px) {
+  .config-box-label { position: relative; flex-wrap: wrap; }
+  #tab-config .panel-card-header, .config-subtitle { position: relative; }
+  #tab-config .panel-card-meta { position: static; }
+  .config-restart-wrap { position: static; flex-shrink: 0; }
+  .config-restart-icon { width: 44px; height: 44px; line-height: normal; }
+  .config-restart-tooltip {
+    left: 0; right: 0; width: auto; max-width: 100%;
+    box-sizing: border-box; overflow-wrap: anywhere;
+  }
   #tab-config .input-wrap, .config-editor-body .input-wrap { width: 100%; }
   .config-editor-modal { padding: 16px; }
   .config-tab { flex: 1 0 auto; padding: 10px 8px; }
