@@ -54,48 +54,8 @@ target-version = "py314" # Match the development Python version
 src = ["src", "src/discord/src"] # First-party import roots
 
 [tool.ruff.lint]
-# Rule families belong here; exceptions below use individual rule codes.
 select = [
-    "F",      # Pyflakes
-    "E", "W", # pycodestyle
-    "UP",     # pyupgrade
-    "TID",    # flake8-tidy-imports
-    "B",      # flake8-bugbear
-    "S",      # Security checks (flake8-bandit)
-    "SIM",    # flake8-simplify
-    "FURB",   # refurb
-    "PL",     # Pylint
-    "A",      # Shadowing built-ins
-    "ANN",    # Missing function annotations
-    "ARG",    # Unused function, method, and lambda arguments
-    "ASYNC",  # Async correctness and blocking calls
-    "BLE",    # Bare Exception/BaseException catches that hide failures
-    "C4",     # Unnecessary comprehensions
-    "DTZ",    # Timezone mistakes
-    "EXE",    # Executable permissions and shebangs
-    "FA",     # Future-annotations consistency
-    "FLY",    # Prefer f-strings over static joins
-    "G",      # Logging format and exception handling
-    "I",      # Import sorting and grouping
-    "ICN",    # Import alias conventions
-    "INT",    # Incorrect gettext usage
-    "ISC",    # Implicit string concatenation
-    "LOG",    # Incorrect logging usage
-    "PIE",    # Redundant/unnecessary code
-    "RSE",    # Unnecessary parentheses in raise statements
-    "PGH",    # Blanket noqa/type-ignore directives
-    "PERF",   # Performance patterns
-    "PT",     # Pytest assertions, fixtures, parametrization, and exception checks
-    "RET",    # Consistent returns and redundant control flow
-    "SLOT",   # Missing slots on immutable built-in subclasses
-    "T10",    # Forgotten debugger calls
-    "TRY",    # Exception handling
-    "YTT",    # Fragile Python-version checks
-    "RUF",    # Ruff-specific correctness and cleanup checks
-    "T20",    # Bans print()
-    "TC",     # Cleans up TYPE_CHECKING imports
-    "PTH",    # Encourage pathlib
-    "PYI",    # Stricter type hints
+	"ALL",     # Very evil.
 ]
 
 ignore = [
@@ -132,6 +92,8 @@ ignore = [
     "TC006",   # Runtime types are allowed in cast() calls
     "BLE",     # Exceptions are audited independently from ruff
     "ARG005",  # Libraries require arguments when passing callables
+    "D10",     # Undocumented functions/classes/etc are fine
+    "D21",     # Line break magic; wont bother
 ]
 
 # Whitespace-only fixes are safe even inside multiline strings.
