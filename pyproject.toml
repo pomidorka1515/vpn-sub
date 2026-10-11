@@ -80,8 +80,8 @@ ignore = [
     "PLR0915", # Statement counts are not limited
     "PLR0916", # Boolean expression counts are not limited
     "PLR0917", # Positional argument counts are not limited
-    "PLR1702",
-    "PLW0717",
+    "PLR1702", # Nested block counts are not limited
+    "PLW0717", # Try blocks may cover multiple related operations
     "TID252",  # Relative imports are allowed
     "F403",    # Star imports are intentional
     "F405",    # Mypy/pyright check names introduced by star imports
@@ -109,14 +109,14 @@ ignore = [
     "C901",    # Method names aren't complex
     "D417",    # Docstrings often intentionally omit some arguments
     "N806",    # Some constants are flagged
-    "DOC201",
-    "DOC501",
-    "DOC402",
-    "PLR6301",
-    "E261",
-    "S404",
-    "RUF029",
-    "RUF201",
+    "DOC201",  # Docstrings need not document every return value
+    "DOC501",  # Docstrings need not list every raised exception
+    "DOC402",  # Docstrings need not document every yielded value
+    "PLR6301", # Instance methods may preserve interfaces without using self
+    "E261",    # Inline comments may use a single separating space
+    "S404",    # Subprocess imports are intentional
+    "RUF029",  # Async callbacks may be required by libraries without awaiting
+    "RUF201",  # Rule codes are retained in configuration selectors
 ]
 
 # Whitespace-only fixes are safe even inside multiline strings.
@@ -141,21 +141,21 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 "src/tracer.py" = ["N801"]
 # Test helpers intentionally exercise dynamic attributes and insecure fixtures.
 "**/tests/*" = [
-    "B009",   # getattr() with a constant name is useful in attribute tests
-    "B010",   # setattr() with a constant name is useful in attribute tests
-    "RUF012", # Mutable class attributes are intentional in test doubles
-    "S101",   # Pytest uses assert statements
-    "S108",   # Temporary path literals are test fixtures
-    "S106",   # Hardcoded password arguments are test fixtures
-    "S105",   # Hardcoded password strings are test fixtures
-    "S324",   # Weak hashes may be exercised by compatibility tests
-    "ARG",    # Unused arguments/etc are useful in tests
-    "SLF001", # Private access is unavoidable in tests
-    "PLC2701",# 
-    "INP001", # Tests are not meant to be imported
-    "B903",
-    "RUF069",
-    "PLC1901",
+    "B009",    # getattr() with a constant name is useful in attribute tests
+    "B010",    # setattr() with a constant name is useful in attribute tests
+    "RUF012",  # Mutable class attributes are intentional in test doubles
+    "S101",    # Pytest uses assert statements
+    "S108",    # Temporary path literals are test fixtures
+    "S106",    # Hardcoded password arguments are test fixtures
+    "S105",    # Hardcoded password strings are test fixtures
+    "S324",    # Weak hashes may be exercised by compatibility tests
+    "ARG",     # Unused arguments/etc are useful in tests
+    "SLF001",  # Private access is unavoidable in tests
+    "PLC2701", # Tests may import private implementation helpers
+    "INP001",  # Tests are not meant to be imported
+    "B903",    # Test doubles may use plain classes instead of dataclasses
+    "RUF069",  # Exact float comparisons are intentional for known test values
+    "PLC1901", # Explicit empty-string comparisons clarify test expectations
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
