@@ -67,21 +67,33 @@ export function validateDraft(draft) {
   }
   if (typeof draft.json_template === 'string') issues.push(issue('json_template', t('config_err_json')));
   else if (isPlainObject(draft.json_template)) {
-    TEMPLATE_KEYS.forEach(key => {
-      if (!Object.prototype.hasOwnProperty.call(draft.json_template, key)) issues.push(issue('json_template', t('config_err_required')));
-    });
+    const missing = TEMPLATE_KEYS.filter(key => !Object.hasOwn(draft.json_template, key));
+    const errors = [];
     ['routing', 'servers'].forEach(key => {
-      if (Object.prototype.hasOwnProperty.call(draft.json_template, key) && !isPlainObject(draft.json_template[key])) {
-        issues.push(issue('json_template', t('config_err_json')));
+      if (!Object.hasOwn(draft.json_template, key)) return;
+      if (!isPlainObject(draft.json_template[key])) {
+        errors.push(t('config_err_object_field').replace('{field}', key));
+        return;
       }
+      const required = key === 'routing' ? ['rules', 'domainStrategy'] : ['servers', 'queryStrategy'];
+      required.forEach(field => {
+        if (!Object.hasOwn(draft.json_template[key], field)) missing.push(key + '.' + field);
+      });
     });
-    if (isPlainObject(draft.json_template.routing) && ['rules', 'domainStrategy'].some(key => !Object.hasOwn(draft.json_template.routing, key))) {
-      issues.push(issue('json_template', t('config_err_required')));
-    }
     const servers = draft.json_template.servers;
-    if (isPlainObject(servers) && (!Array.isArray(servers.servers) || typeof servers.queryStrategy !== 'string' || Object.keys(servers).some(key => !['servers', 'queryStrategy'].includes(key)))) {
-      issues.push(issue('json_template', t('config_err_json')));
+    if (isPlainObject(servers)) {
+      if (Object.hasOwn(servers, 'servers') && !Array.isArray(servers.servers)) {
+        errors.push(t('config_err_array_field').replace('{field}', 'servers.servers'));
+      }
+      if (Object.hasOwn(servers, 'queryStrategy') && typeof servers.queryStrategy !== 'string') {
+        errors.push(t('config_err_string_field').replace('{field}', 'servers.queryStrategy'));
+      }
+      Object.keys(servers).filter(key => !['servers', 'queryStrategy'].includes(key)).forEach(key => {
+        errors.push(t('config_err_unknown') + ': servers.' + key);
+      });
     }
+    if (missing.length) errors.unshift(t('config_err_missing_fields').replace('{fields}', missing.join(', ')));
+    if (errors.length) issues.push(issue('json_template', errors.join('; ')));
   } else if (draft.json_template !== undefined) issues.push(issue('json_template', t('config_err_json')));
 
   const nodes = isPlainObject(draft.nodes) ? draft.nodes : {};
