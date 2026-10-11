@@ -19,7 +19,7 @@ def build_description(
     lang: str,
     bandwidths: BandwidthInfo,
     status: bool,
-    statusTime: bool,
+    statusTime: bool, # noqa: N803
     ts: int,
     bw_limit: int,
     bw_used: int,

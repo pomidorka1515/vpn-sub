@@ -64,10 +64,12 @@ class SysUtil:
 
     @staticmethod
     def cpu(sleep: float = 0.3) -> float:
-        """CPU % over interval. Needs two reads
+        """CPU % over interval. Needs two reads.
 
         Args:
-            sleep: amount of time to wait between calls, defaults to 0.3"""
+            sleep: amount of time to wait between calls, defaults to 0.3
+
+        """
         previous = SysUtil._cpu_sample()
         time.sleep(sleep)
         return SysUtil._cpu_percent(previous, SysUtil._cpu_sample())
@@ -208,7 +210,7 @@ class SysUtil:
 
     @staticmethod
     def connections() -> ConnCount:
-        """TCP/UDP connection counts"""
+        """TCP/UDP connection counts."""
         tcp_count = 0
         udp_count = 0
 

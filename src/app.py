@@ -152,8 +152,8 @@ class Application:
 
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
     _primary_lock_file: BinaryIO | None = None
-    _start_background: bool = field(default=True, init=False)
-    _start_bots: bool = field(default=True, init=False)
+    _start_background: bool = True
+    _start_bots: bool = True
     _started: bool = field(default=False, init=False)
 
     def start(self) -> None:
@@ -535,10 +535,10 @@ def create_application(
             admin_bot=admin_bot,
             public_bot=public_bot,
             primary=primary,
+            _primary_lock_file=lock_file,
+            _start_background=options.start_background,
+            _start_bots=options.start_bots,
         )
-        runtime._primary_lock_file = lock_file  # pyright: ignore[reportPrivateUsage]
-        runtime._start_background = options.start_background  # pyright: ignore[reportPrivateUsage]
-        runtime._start_bots = options.start_bots  # pyright: ignore[reportPrivateUsage]
         _wire_loggers(runtime, api, webapi)
         if options.start_background:
             runtime.start()

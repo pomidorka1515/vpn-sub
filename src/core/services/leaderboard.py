@@ -45,7 +45,8 @@ class LeaderboardService(BaseService):
         Returns:
             A dict: {"username": 1293720471, "second_place": 12493630},
             where key is the username and value is bandwidth in bytes.
-        """
+
+        """ # noqa: D400
         raw: dict[str, int] = {}
         self.trace(
             Op.leaderboard.leaderboard,

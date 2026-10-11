@@ -43,7 +43,7 @@ class UsersMixin(ConnectionMixin):
             return {str(row[0]) for row in conn.execute("SELECT username FROM users")}
 
     def username_exts(self) -> dict[str, str | None]:
-        """username -> ext_username, loaded once for batch lookups."""
+        """Username -> ext_username, loaded once for batch lookups."""
         with self.connection() as conn:
             return {
                 str(row[0]): None if row[1] is None else str(row[1])

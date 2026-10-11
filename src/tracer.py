@@ -97,7 +97,7 @@ class Op:
 
 def trace(logger: Logger, operation: TraceOp, event: str, **fields: JsonValue) -> None:
     """
-    Logs a detailed action (DEBUG level)
+    Logs a detailed action (DEBUG level).
     """
     if not logger.isEnabledFor(logging.DEBUG):
         return

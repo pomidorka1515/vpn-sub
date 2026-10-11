@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from session import XUiSession
 
 
-class _UNFETCHED_SENTINEL:
+class _UNFETCHED_SENTINEL: # noqa: N801
     def __repr__(self) -> str:
         return "<unfetched panel>"
 

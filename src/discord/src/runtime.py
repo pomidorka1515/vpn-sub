@@ -84,6 +84,10 @@ class DiscordApplication:
     _stop: asyncio.Event = field(default_factory=asyncio.Event, init=False)
     _runner: asyncio.Task[None] | None = field(default=None, init=False)
 
+    @property
+    def runner(self) -> asyncio.Task[None] | None:
+        return self._runner
+
     async def start(self) -> None:
         await self.http.start()
         await self.admin_http.start()
@@ -210,7 +214,7 @@ async def _run() -> None:
 
     await runtime.start()
     try:
-        runner = runtime._runner
+        runner = runtime.runner
         waiters: list[asyncio.Task[bool] | asyncio.Task[None]] = [
             asyncio.ensure_future(stopping.wait()),
         ]

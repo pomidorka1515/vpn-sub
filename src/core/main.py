@@ -9,15 +9,18 @@ from errors import UnsupportedPlatformError
 from loggers import Logger
 
 from .common import SharedCoreResources
-from .services.audit import AuditService
-from .services.bandwidth import BandwidthService
-from .services.code import BusinessCodeService, CodeService
-from .services.leaderboard import LeaderboardService
-from .services.panel import PanelService
-from .services.password import PasswordService
-from .services.telegram import TelegramService
-from .services.user.business import BusinessUserService
-from .services.user.common import CommonUserService
+from .services import (
+    AuditService,
+    BandwidthService,
+    BusinessCodeService,
+    BusinessUserService,
+    CodeService,
+    CommonUserService,
+    LeaderboardService,
+    PanelService,
+    PasswordService,
+    TelegramService,
+)
 
 if TYPE_CHECKING:
     from config import AppConfig, Config, LangConfig, LinesConfig

@@ -48,7 +48,7 @@ class TelegramMixin(ConnectionMixin):
             return str(row[0]) if row else None
 
     def user_tgids(self) -> dict[str, str]:
-        """username -> telegram_id, loaded once for batch lookups."""
+        """Username -> telegram_id, loaded once for batch lookups."""
         with self.connection() as conn:
             return {
                 str(row[0]): str(row[1])

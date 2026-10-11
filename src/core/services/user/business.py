@@ -539,7 +539,7 @@ class BusinessUserService(BaseService):
         timee: int = 0,
     ) -> NewUserInfo:
         """Adds a new user. Raises a domain error if any argument is incorrect.
-        Now also suppports ext username and password (optional)"""
+        Now also suppports ext username and password (optional)."""
         self.trace(
             Op.user.add_new_user,
             "start",

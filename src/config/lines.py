@@ -37,6 +37,7 @@ class LinesConfig:
     - Uses a dedicated lock file for inter-process locking.
     - Sync behavior is consistent with Config (full/data/none via sync_mode).
     - Automatic backup support with configurable interval and retention.
+
     """
 
     def __init__(
@@ -65,6 +66,7 @@ class LinesConfig:
                 ``{basename}.{sha1(abspath)[:8]}.lock`` inside it so same-named
                 files do not collide. A file path is used as-is
                 (``/x/lock.file`` -> ``/x/lock.file``).
+
         """
         self.log = Logger(type(self).__name__)
         path_str = str(path)
@@ -261,6 +263,7 @@ class LinesConfig:
 
         Returns:
             Tuple of (kept, removed) counts after compaction.
+
         """
         dir_path = Path(self._path).parent
         with self._lock:
@@ -299,6 +302,7 @@ class LinesConfig:
 
         Raises:
             ConfigError: If no backup_dir was configured on this instance.
+
         """
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")

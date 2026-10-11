@@ -47,7 +47,7 @@ class SessionRoutes(WebApiMixin):
         return self.sub.password_svc.validate_credentials(username, password) or False
 
     def validate_username(self) -> ResponseType:
-        """Check if a username is valid (no illegal chars)"""
+        """Check if a username is valid (no illegal chars)."""
         raw = request.args.get("username", None)
         if not raw:
             return err("'username' field is missing")

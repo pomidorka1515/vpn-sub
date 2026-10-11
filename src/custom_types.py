@@ -342,7 +342,7 @@ class ServerMetricsObj:
     appStats: AppStats
 
     def format(self) -> None:
-        """Format ugly values from 3x-ui's API. (e.g. 2999.98MHz, etc)"""
+        """Format ugly values from 3x-ui's API. (e.g. 2999.98MHz, etc)."""
         self.cpu = round(self.cpu, 2)
         self.cpuSpeedMhz = int(self.cpuSpeedMhz)
 

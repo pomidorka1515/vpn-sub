@@ -118,6 +118,7 @@ class XUiSession:
             client_stamp_path: Generation file for the client map. Defaults to
                 a sibling of the inbound stamp. Tests pass a temp path. Must
                 not be the inbound stamp: the two caches invalidate apart.
+
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():

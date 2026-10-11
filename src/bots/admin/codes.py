@@ -209,7 +209,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         """
         flow:
         message = int -> perma = True, generate code directly without uses
-        message = actual message -> perma = False, msg text has uses param
+        message = actual message -> perma = False, msg text has uses param.
         """
         if isinstance(message, types.Message):
             text = cast(str, message.text)

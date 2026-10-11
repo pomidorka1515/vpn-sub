@@ -109,7 +109,7 @@ class AccountRoutes(WebApiMixin):
 
     @requires_webapi_auth
     def reset(self, username: str) -> ResponseType:
-        """Reset token and UUID (api wrapper)"""
+        """Reset token and UUID (api wrapper)."""
         x = self.sub.business_svc.reset_user(username)
         resp, code = ok(obj=asdict(x))
         self._clear_auth_cookies(resp)
@@ -129,7 +129,7 @@ class AccountRoutes(WebApiMixin):
 
     @requires_webapi_auth
     def stats(self, username: str) -> ResponseType:
-        """Get user info from token"""
+        """Get user info from token."""
         x = self.sub.business_svc.get_info(username)
         return ok(obj=asdict(x))
 

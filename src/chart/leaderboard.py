@@ -43,6 +43,7 @@ def leaderboard_chart(
             structure: {"username": 123456, "second_place": 123123}
         bandwidth_type: type of bandwidth.
         lang: language table, usually taken from `lang_cfg`
+
     """
     if not data:
         return None

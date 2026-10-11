@@ -44,6 +44,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
             backup_retention: Amount of concurrent backups kept on disk.
             start_backup: Start the scheduled backup thread. False keeps
                 backup_dir configured so backup_now() still works.
+
         """
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -198,6 +199,7 @@ class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
 
         Raises:
             DatabaseError: If no backup_dir was configured on this instance.
+
         """
         if self._backup_dir is None:
             raise DatabaseError("backup_now() requires a backup_dir to be configured.")

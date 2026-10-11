@@ -10,6 +10,8 @@ from flask import Response
 
 from util import err
 
+from .browser import _browser_strings
+
 if TYPE_CHECKING:
     from core import Subscription
 
@@ -40,7 +42,7 @@ def get_subscription(
         return err("Language can be either 'ru' or 'en'", 400)
 
     if builders.isbrowser(ua=ua):
-        html = builders.render_template("browser.html", **builders._browser_strings(obj, lang))
+        html = builders.render_template("browser.html", **_browser_strings(obj, lang))
         cfg = obj.res.cfg.view()
         prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
         html = builders.embed_font_faces(html, prefix)

@@ -40,6 +40,7 @@ def do_backup(
                writing the normalized backup.
         data: When set, snapshot this document instead of reading path. The
               scheduled thread leaves it unset so a backup still matches disk.
+
     """
     Path(instance_dir).mkdir(parents=True, exist_ok=True)
 
@@ -133,6 +134,7 @@ def make_backup_thread(
         stop_event: Threading event to use.
         raw: see do_backup raw kwarg.
         jsonc: see do_backup jsonc kwarg.
+
     """
 
     def log_failure(log: Logger, failures: int, exc: Exception) -> None:

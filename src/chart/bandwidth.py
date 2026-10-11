@@ -48,6 +48,7 @@ def bandwidth_chart(
 
     Returns:
         BytesIO containing PNG bytes, positioned at start. None if no data.
+
     """
     if not snapshots:
         return None

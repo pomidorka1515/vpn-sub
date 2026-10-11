@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 def build_link_array(
     cfg: AppConfig,
     status: bool,
-    statusWl: bool,
+    statusWl: bool, # noqa: N803
     lang: str,
     is_happ: bool,
     user_uuid: str,

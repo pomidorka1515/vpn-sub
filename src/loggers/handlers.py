@@ -28,6 +28,7 @@ class _TelegramLogger(logging.Handler):
         Args:
             record: The record to broadcast.
             **kwargs: Extra keyword arguments to pass into AdminBot.msg.
+
         """
         try:
             msg_text = self.format(record)
@@ -52,6 +53,7 @@ class _JSONLinesLogger(logging.Handler):
         """
         Args:
             record: The record to broadcast.
+
         """
         try:
             timestamp = record.created

@@ -10,7 +10,7 @@ type JsonValue = int | float | Mapping[str, JsonValue] | Sequence[JsonValue] | s
 type JsonDict = dict[str, JsonValue]
 
 
-class MISSING_TYPE:
+class MISSING_TYPE: # noqa: N801
     """Sentinel for missing default values."""
 
     def __repr__(self) -> str:

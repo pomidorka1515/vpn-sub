@@ -38,6 +38,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     - Uses atomic replace for writes.
     - `with cfg as tx:` returns a transaction object backed by a working copy.
     - Top-level JSON must be an object.
+
     """
 
     def __init__(
@@ -87,6 +88,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 ``{basename}.{sha1(abspath)[:8]}.lock`` inside it so same-named
                 files do not collide. A file path is used as-is
                 (``/x/lock.file`` -> ``/x/lock.file``).
+
         """
         self.log = Logger(type(self).__name__)
         path_str = str(path)
@@ -226,6 +228,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
         Raises:
             ConfigError: If no backup_dir was configured on this instance.
+
         """
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
@@ -263,6 +266,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
         Returns:
             True if the data was actually reloaded, False if the file was unchanged.
+
         """
         with self.lock:
             self.raise_if_used_inside_transaction()
@@ -293,6 +297,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
         Returns:
             Deep-copied return value of the callback.
+
         """
         self.raise_if_read_only()
         with self.edit() as tx:

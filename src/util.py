@@ -39,9 +39,12 @@ _BROWSER_UA = re.compile(
 def sanitize(s: str, kind: Literal["external", "display"], /) -> str:
     """
     Args:
+        s:
+            Strings to sanitize.
         kind:
             "external" -> whitelist: A-Z, a-z, 0-9, and _, - chars allowed, max length 32
-            "display"  -> blacklist: filters special chars, max length 16
+            "display"  -> blacklist: filters special chars, max length 16.
+
     """
     match kind:
         case "external":
@@ -53,10 +56,12 @@ def sanitize(s: str, kind: Literal["external", "display"], /) -> str:
 def generate_token(kind: Literal["sub", "auth"], /) -> str:
     """
     One central function to generate a token.
+
     Args:
         kind:
             "sub"  -> url-safe, for subscription links
-            "auth" -> for web-ui auth, longer
+            "auth" -> for web-ui auth, longer.
+
     """
     match kind:
         case "sub":
@@ -143,9 +148,11 @@ def parse_bool(value: object) -> bool | None:
 def fmt_bytes_tuple(value: float) -> tuple[str, str]:
     """
     Format bytes into a tuple.
+
     Returns:
         tuple[amount, label]
-        Example: ("193", "MB")
+        Example: ("193", "MB").
+
     """
     for unit, div in (("TB", 10**12), ("GB", 10**9), ("MB", 10**6), ("KB", 10**3)):
         if value >= div:

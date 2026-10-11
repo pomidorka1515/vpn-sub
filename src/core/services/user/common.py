@@ -17,7 +17,7 @@ class CommonUserService(BaseService):
         return bool(username) and self.db.user_exists(username)
 
     def user(self, username: str) -> UserRecord:
-        """Helper method"""
+        """Helper method."""
         user = self.db.get_user(username)
         if user is None:
             raise NotFoundError("Unknown username")

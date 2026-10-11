@@ -48,6 +48,7 @@ class CodeService(BaseService):
 
         Returns:
             ApplyBonusCodeObject: Applied bonus info on success.
+
         """
         if not isinstance(code, str) or not code:
             raise ValidationError("Unknown code")

@@ -108,7 +108,7 @@ def _safe_name(name: str) -> bool:
 
 
 def _script(name: str, digest: str) -> bytes:
-    """Download one script from the tag this binary was built from.
+    r"""Download one script from the tag this binary was built from.
 
     The contents API returns the file and the git blob sha in one response.
     The body is accepted only when ``sha1("blob <size>\\0" + body)`` matches
