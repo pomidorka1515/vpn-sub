@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError

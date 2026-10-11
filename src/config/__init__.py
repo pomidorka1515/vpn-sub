@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .atomic import CompactReturn, FileSignature
 from .constants import JsonDict, JsonValue
 from .core import Config

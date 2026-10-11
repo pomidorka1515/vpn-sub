@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .admin import Api
 from .common import BaseApi
 from .decorators.rate_limit import rate_limit

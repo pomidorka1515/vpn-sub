@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import secrets
 from functools import wraps
 from typing import TYPE_CHECKING, cast
