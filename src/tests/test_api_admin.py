@@ -12,7 +12,6 @@ from jinja2 import FileSystemLoader
 from api import Api
 from api.common import RES_DIR
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
-    _RateLimitScript,
     _replace_client,
     close_rate_limit,
 )
@@ -20,6 +19,9 @@ from config import Config, LangConfig, LinesConfig
 from errors import AppError, DatabaseError
 
 if TYPE_CHECKING:
+    from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
+        _RateLimitScript,
+    )
     from collections.abc import Iterator
 
     from flask.testing import FlaskClient

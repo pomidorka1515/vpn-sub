@@ -49,18 +49,21 @@ _SRC = _ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from config import AppConfig, JsonValue, PanelConfig  # noqa: E402
+from config import AppConfig, JsonValue  # noqa: E402
 from custom_types import (  # noqa: E402
     ClientListResponse,
     ClientPayload,
     InboundListResponse,
-    PanelClient,
 )
 from db import Database  # noqa: E402
 from paths import runtime_dir  # noqa: E402
 from session import XUiSession  # noqa: E402
 
 if TYPE_CHECKING:
+    from custom_types import (  # noqa: E402
+        PanelClient,
+    )
+    from config import PanelConfig
     from collections.abc import Mapping, Sequence
 
     from requests import Response
@@ -211,7 +214,7 @@ def _post(panel: XUiSession, url: str, body: dict[str, JsonValue], what: str) ->
         content = cast(dict[str, JsonValue], dict(response.json()))
     except Exception:
         content = {}
-    if response.status_code not in (200, 201) or not content.get("success"):
+    if response.status_code not in {200, 201} or not content.get("success"):
         raise ReconcileError(
             f"panel {panel.name}: {what} rejected: {content.get('msg') or response.status_code}",
         )

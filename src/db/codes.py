@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import time
-from typing import cast
+from typing import cast, TYPE_CHECKING
 
-from custom_types import BonusResult, CodeRecord, RegisterCodeResult
+from custom_types import CodeRecord
 from errors import CodeError, DatabaseError, DuplicateError
 
 from .common import ConnectionMixin, row_dict
+
+if TYPE_CHECKING:
+    from custom_types import BonusResult, RegisterCodeResult
 
 
 class CodesMixin(ConnectionMixin):

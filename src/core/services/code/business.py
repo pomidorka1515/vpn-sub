@@ -14,9 +14,10 @@ from errors import (
 from tracer import Op
 from util import generate_token, isusername, sanitize
 
-from ...common import BaseService, SharedCoreResources
+from ...common import BaseService
 
 if TYPE_CHECKING:
+    from ...common import SharedCoreResources
     from collections.abc import Mapping
 
     from ..audit import AuditService
@@ -130,7 +131,7 @@ class BusinessCodeService(BaseService):
 
     def clear_rollback_failure(self, kind: Literal["uuid", "registration"], username: str) -> None:
         """Clear a rollback marker after an administrator repairs the user."""
-        if kind not in ("uuid", "registration"):
+        if kind not in {"uuid", "registration"}:
             raise ValidationError("Invalid rollback marker kind")
         self.trace(
             Op.register.clear_rollback_failure,

@@ -20,9 +20,10 @@ from custom_types import (
 from errors import AppError, PanelRejectedError, PanelUnavailableError
 from tracer import Op
 
-from ..common import BaseService, SharedCoreResources
+from ..common import BaseService
 
 if TYPE_CHECKING:
+    from ..common import SharedCoreResources
     from collections.abc import Callable, Mapping, Sequence
 
     from requests import Response
@@ -537,7 +538,7 @@ class PanelService(BaseService):
     ) -> Literal["ok", "unavailable", "invalid"]:
         """Classify one onlines payload. Accepted emails stay even on a later break."""
         data: dict[str, object] = response.json()
-        if response.status_code not in (200, 201) or not data.get("success"):
+        if response.status_code not in {200, 201} or not data.get("success"):
             self.log.error(
                 "Online check failed for panel %s: %s",
                 panel.name,

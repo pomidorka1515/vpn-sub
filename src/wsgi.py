@@ -7,7 +7,7 @@ from app import AppOptions, create_application
 
 runtime = create_application(
     options=AppOptions(
-        require_proxy=os.getenv("REQUIRE_PROXY", "1").lower() not in ("0", "false", "no"),
+        require_proxy=os.getenv("REQUIRE_PROXY", "1").lower() not in {"0", "false", "no"},
     ),
 )
 app = runtime.app

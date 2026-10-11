@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from config import Config, JsonDict, JsonValue
+from config import Config
 
 if TYPE_CHECKING:
+    from config import JsonDict, JsonValue
     from collections.abc import MutableMapping
 
 __all__ = ["SessionRecord", "SessionStore"]
@@ -58,7 +59,7 @@ class SessionStore:
         return SessionRecord(
             user_id=key,
             token=token if isinstance(token, str) else "",
-            lang=lang if lang in ("en", "ru") else None,
+            lang=lang if lang in {"en", "ru"} else None,
         )
 
     def logged_in(self, user_id: int | str) -> bool:
@@ -72,7 +73,7 @@ class SessionStore:
         return self.get(user_id).lang
 
     def set_lang(self, user_id: int | str, lang: str) -> None:
-        if lang not in ("en", "ru"):
+        if lang not in {"en", "ru"}:
             return
         key = self._key(user_id)
 
@@ -97,7 +98,7 @@ class SessionStore:
                 raw_lang = current.get("lang")
                 lang = raw_lang if isinstance(raw_lang, str) else ""
             payload: JsonDict = {"token": token}
-            if lang in ("en", "ru"):
+            if lang in {"en", "ru"}:
                 payload["lang"] = lang
             data[key] = payload
 

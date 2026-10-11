@@ -7,7 +7,6 @@ from flask import Response, make_response, redirect, render_template, request, s
 
 from api.common import (
     RES_DIR,
-    ResponseType,
     Route,
     admin_module_names,
     asset_version,
@@ -18,6 +17,9 @@ from fonts import FONT_FILES, embed_font_faces
 from util import err
 
 if TYPE_CHECKING:
+    from api.common import (
+        ResponseType,
+    )
     from collections.abc import Callable
 
 
@@ -172,6 +174,6 @@ class StaticRoutes(WebApiMixin):
             L_en=fallback,
         )
         response = Response(html, mimetype="text/html")
-        if request.args.get("lang", "").lower() in ("en", "ru"):
+        if request.args.get("lang", "").lower() in {"en", "ru"}:
             response.set_cookie("lang", lang, max_age=31536000, samesite="Lax", path="/")
         return response

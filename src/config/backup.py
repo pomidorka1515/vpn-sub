@@ -6,12 +6,15 @@ import tempfile
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import cast, TYPE_CHECKING
 
 from loggers import Logger
 
-from .constants import CONFIG_TYPES, JsonValue
+from .constants import JsonValue
 from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
+
+if TYPE_CHECKING:
+    from .constants import CONFIG_TYPES
 
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:

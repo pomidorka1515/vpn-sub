@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import ClassVar, cast
+from typing import ClassVar, cast, TYPE_CHECKING
 
 from flask import g, make_response, request, send_file
 
-from api.common import ResponseType, Route
+from api.common import Route
 from api.decorators import requires_fields, requires_fields_strict, requires_webapi_auth
 from api.web._base import WebApiMixin
 from util import err, make_qr, ok, parse_bool
+
+if TYPE_CHECKING:
+    from api.common import ResponseType
 
 
 class AccountRoutes(WebApiMixin):
@@ -28,7 +31,7 @@ class AccountRoutes(WebApiMixin):
     @requires_webapi_auth
     def qr(self, username: str) -> ResponseType:
         lang = request.args.get("lang", "en")
-        if lang not in ("en", "ru"):
+        if lang not in {"en", "ru"}:
             lang = "en"
 
         token = self.sub.user_svc.get_token(username)
@@ -52,7 +55,7 @@ class AccountRoutes(WebApiMixin):
     def profiles(self, username: str) -> ResponseType:
         del username
         lang = request.args.get("lang")
-        if lang not in ("ru", "en"):
+        if lang not in {"ru", "en"}:
             return err("Unknown language", 400)
 
         index = 0 if lang == "en" else 1

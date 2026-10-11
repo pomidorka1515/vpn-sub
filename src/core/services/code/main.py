@@ -11,9 +11,10 @@ from errors import (
 )
 from tracer import Op
 
-from ...common import BaseService, SharedCoreResources
+from ...common import BaseService
 
 if TYPE_CHECKING:
+    from ...common import SharedCoreResources
     from ..audit import AuditService
 
 # pyright: reportUnnecessaryIsInstance=false
@@ -103,7 +104,7 @@ class CodeService(BaseService):
 
         if not isinstance(code, str) or not code:
             raise ValidationError("code must be a non-empty string")
-        if action not in ("register", "bonus"):
+        if action not in {"register", "bonus"}:
             raise ValidationError(f"action must be 'register' or 'bonus', got '{action}'")
         if not all(isinstance(x, int) for x in (days, gb, wl_gb, uses)):
             raise ValidationError("days, gb, wl_gb must be integers")

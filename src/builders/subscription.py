@@ -38,7 +38,7 @@ def get_subscription(
 
     if not username:
         return err("Invalid token.", 401)
-    if lang not in ("ru", "en"):
+    if lang not in {"ru", "en"}:
         return err("Language can be either 'ru' or 'en'", 400)
 
     if builders.isbrowser(ua=ua):

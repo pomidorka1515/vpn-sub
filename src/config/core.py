@@ -11,18 +11,21 @@ from errors import ConfigError, ReadOnlyConfigError
 from loggers import Logger
 
 from .atomic import (
-    FileSignature,
     atomic_write_json,
     file_signature,
     locked_file,
     resolve_lockfile_path,
 )
 from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
-from .constants import MISSING, MISSING_TYPE, SYNC_MODES, JsonDict, JsonValue
+from .constants import MISSING, JsonDict, JsonValue
 from .schema import load_schema, read_json_object, validate_schema
 from .transaction import ConfigTransaction
 
 if TYPE_CHECKING:
+    from .constants import MISSING_TYPE, SYNC_MODES
+    from .atomic import (
+        FileSignature,
+    )
     from types import TracebackType
 
 
@@ -110,7 +113,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         self._strict_schema: bool = strict_schema
         self._schema_path: str | None = os.path.normpath(str(schema_path)) if schema_path else None
 
-        if sync_mode not in ("full", "data", "none"):
+        if sync_mode not in {"full", "data", "none"}:
             raise ValueError("sync_mode must be 'full', 'data', or 'none'")
         self._sync_mode: SYNC_MODES = sync_mode
 

@@ -9,9 +9,10 @@ import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
-from loggers import Colors, Logger
+from loggers import Colors
 
 if TYPE_CHECKING:
+    from loggers import Logger
     from config import JsonValue
 
 __all__ = ["Op", "trace"]

@@ -92,7 +92,7 @@ class PublicRoutingMixin(PublicFeatureMixin):
         return None
 
     def _requires_auth(self, custom_id: str) -> bool:
-        if custom_id in ("menu_main", "confirm_cancel"):
+        if custom_id in {"menu_main", "confirm_cancel"}:
             return False
         if custom_id in _AUTH_IDS or custom_id in _AUTH_MODALS:
             return True

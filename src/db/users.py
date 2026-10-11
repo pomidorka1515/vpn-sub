@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import time
-from typing import Unpack, cast
+from typing import Unpack, cast, TYPE_CHECKING
 
-from custom_types import UserFields, UserRecord
+from custom_types import UserRecord
 from errors import DatabaseError, DuplicateError
 
 from .common import ConnectionMixin
 from .telegram import set_telegram_mapping
+
+if TYPE_CHECKING:
+    from custom_types import UserFields
 
 
 class UsersMixin(ConnectionMixin):
@@ -120,7 +123,7 @@ class UsersMixin(ConnectionMixin):
         }
         updates = {mapping[k]: v for k, v in fields.items() if mapping.get(k)}
         updates = {
-            k: int(bool(v)) if k in ("enabled", "enabled_time", "enabled_wl") else v
+            k: int(bool(v)) if k in {"enabled", "enabled_time", "enabled_wl"} else v
             for k, v in updates.items()
         }
         try:

@@ -2,17 +2,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal, TypedDict
 
-from config import JsonValue, ProfileConfig
+from config import ProfileConfig
 from config.documents import (
     BotConfig,
     PanelConfig,
-    ProfileOutbound,
     ProfileTemplate,
     PublicBotConfig,
     RedisConfig,
 )
 
 if TYPE_CHECKING:
+    from config.documents import (
+        ProfileOutbound,
+    )
+    from config import JsonValue
     from collections.abc import Callable, Mapping
 
     from requests import Session

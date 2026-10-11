@@ -6,11 +6,12 @@ from typing import TYPE_CHECKING, ClassVar, Literal, cast
 from flask import g, request
 
 from api.admin._base import AdminApiMixin
-from api.common import ResponseType, Route
+from api.common import Route
 from api.decorators import requires_admin_auth, requires_args, requires_fields_strict
 from util import err, ok, parse_bool
 
 if TYPE_CHECKING:
+    from api.common import ResponseType
     from custom_types import JsonifyValue
 
 
@@ -74,7 +75,7 @@ class CodeRoutes(AdminApiMixin):
                         return err(f"{k} must be a string, got: {v}")
                     data[k] = v
 
-        if data["action"] not in ("register", "bonus"):
+        if data["action"] not in {"register", "bonus"}:
             return err("action must be 'register' or 'bonus'")
 
         if cast(int, data["days"]) < 0 or cast(int, data["gb"]) < 0 or cast(int, data["wl_gb"]) < 0:

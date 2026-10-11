@@ -5,17 +5,20 @@ from collections import UserDict
 from collections.abc import Callable, Coroutine, Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import discord
 from admin.bot import AdminBot
 from adminapi import AdminApiClient
-from config import Config, DiscordConfig, DiscordLangConfig
+from config import Config, DiscordLangConfig
 from host import SharedDiscordClient
 from public.bot import PublicBot
 from sessions import SessionStore
 from webapi import WebApiClient
+
+if TYPE_CHECKING:
+    from config import DiscordConfig
 
 DISCORD_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = DISCORD_ROOT / "config.schema.json"

@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal, cast, TYPE_CHECKING
 
 from flask import g
 
 from api.admin._base import AdminApiMixin
-from api.common import ResponseType, Route
+from api.common import Route
 from api.config_patch import apply_config_patch, config_etag
 from api.decorators import requires_admin_auth, requires_fields_strict
 from config import JsonValue
 from custom_types import JsonifyValue
 from errors import ConfigError, SchemaValidationError, ValidationError
 from util import err, ok
+
+if TYPE_CHECKING:
+    from api.common import ResponseType
 
 
 class ConfigRoutes(AdminApiMixin):

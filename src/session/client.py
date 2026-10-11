@@ -18,11 +18,13 @@ from .stamp import inbound_stamp_path as default_inbound_stamp_path
 from .transport import (
     FakeResponse,
     RequestsPanelTransport,
-    XUiPanelTransport,
     new_session,
 )
 
 if TYPE_CHECKING:
+    from .transport import (
+        XUiPanelTransport,
+    )
     from collections.abc import Callable, Mapping
 
     from custom_types import Inbound, PanelClient, RequestKwargs
@@ -125,7 +127,7 @@ class XUiSession:
             if not api_token:
                 raise ValueError("api_token must be a non-empty API token")
             self._api_token = api_token
-            if mode not in ("whitelist", "blacklist"):
+            if mode not in {"whitelist", "blacklist"}:
                 raise ValueError("mode must be 'whitelist' or 'blacklist'")
             self.inbounds_list = inbounds_list or ()
             self.mode: Literal["whitelist", "blacklist"] = mode
@@ -134,7 +136,7 @@ class XUiSession:
             self.port = str(port)
             self.address = address
             self.name = name
-            self.local = self.address in ("localhost", "::1", "127.0.0.1", "0.0.0.0")  # noqa: S104
+            self.local = self.address in {"localhost", "::1", "127.0.0.1", "0.0.0.0"}  # noqa: S104
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
 
             resolved_stamp = (
@@ -282,7 +284,7 @@ class XUiSession:
             return
 
         self._log_request("GET", "panel/api/inbounds/list", response)
-        if response.status_code in (401, 403):
+        if response.status_code in {401, 403}:
             self._mark_dead(f"token rejected (HTTP {response.status_code})")
             return
 

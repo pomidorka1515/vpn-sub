@@ -32,7 +32,7 @@ class Kind(Enum):
     @property
     def opens_recovery(self) -> Kind | None:
         """Recovery this outage makes newsworthy, or None."""
-        if self in (Kind.TRAFFIC_EXHAUSTED, Kind.EXPIRED):
+        if self in {Kind.TRAFFIC_EXHAUSTED, Kind.EXPIRED}:
             return Kind.RESTORED
         if self is Kind.WHITELIST_EXHAUSTED:
             return Kind.WHITELIST_RESTORED

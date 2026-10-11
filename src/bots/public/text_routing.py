@@ -39,10 +39,10 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         text = message.text
 
         for button_name, handler_name, requires_reg in self.ROUTES:
-            if text not in (
+            if text not in {
                 self.TEXTS["ru"][button_name],
                 self.TEXTS["en"][button_name],
-            ):
+            }:
                 continue
             if requires_reg and not self.sub.telegram_svc.is_registered(uid):
                 return

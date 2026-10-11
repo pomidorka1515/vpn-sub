@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import pytest
 
-from config import AppConfig, Config, JsonDict, JsonValue, LinesConfig
+from config import AppConfig, Config, JsonDict, LinesConfig
 from config.transaction import ConfigTransaction
 from errors import (
     ConfigError,
@@ -18,6 +18,7 @@ from errors import (
 )
 
 if TYPE_CHECKING:
+    from config import JsonValue
     from collections.abc import Iterator
 
 

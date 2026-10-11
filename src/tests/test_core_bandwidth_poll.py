@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING
 
 from helpers import create_alice, make_watch
 
-from custom_types import BandwidthInfo, UserFields
+from custom_types import BandwidthInfo
 from errors import PanelRejectedError
 
 if TYPE_CHECKING:
+    from custom_types import UserFields
     import sqlite3
     from collections.abc import Callable
 

@@ -2,11 +2,12 @@ from typing import TYPE_CHECKING, Literal
 
 from tracer import Op
 
-from ..common import BaseService, SharedCoreResources
+from ..common import BaseService
 from .panel import BG_POOL
 import operator
 
 if TYPE_CHECKING:
+    from ..common import SharedCoreResources
     from .bandwidth import BandwidthService
     from .user.common import CommonUserService
 

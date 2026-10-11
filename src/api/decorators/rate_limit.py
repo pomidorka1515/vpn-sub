@@ -4,7 +4,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from functools import wraps
-from typing import Protocol, cast
+from typing import Protocol, cast, TYPE_CHECKING
 
 from flask import request
 
@@ -12,7 +12,10 @@ from loggers import Logger
 from util import err
 
 from ..common import BaseApi
-from ._common import Decorated, DecoratedReturn, WrappedReturn
+from ._common import DecoratedReturn
+
+if TYPE_CHECKING:
+    from ._common import Decorated, WrappedReturn
 
 _RATE_LIMIT_WINDOW = 60.0
 _REDIS_SOCKET_TIMEOUT = 0.2

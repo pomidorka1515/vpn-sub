@@ -104,7 +104,7 @@ def _listing() -> tuple[tuple[str, str], ...]:
 
 
 def _safe_name(name: str) -> bool:
-    return name not in (".", "..") and "/" not in name and "\\" not in name
+    return name not in {".", ".."} and "/" not in name and "\\" not in name
 
 
 def _script(name: str, digest: str) -> bytes:

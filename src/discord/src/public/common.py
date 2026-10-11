@@ -10,10 +10,10 @@ __all__ = ["PublicCommonMixin"]
 class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
     def get_lang(self, user_id: int) -> str:
         lang = self.sessions.lang(user_id)
-        return lang if lang in ("en", "ru") else "en"
+        return lang if lang in {"en", "ru"} else "en"
 
     def has_lang(self, user_id: int) -> bool:
-        return self.sessions.lang(user_id) in ("en", "ru")
+        return self.sessions.lang(user_id) in {"en", "ru"}
 
     def is_logged_in(self, user_id: int) -> bool:
         return self.sessions.logged_in(user_id)
@@ -208,7 +208,7 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         await self._reply_key(interaction, "support_text")
 
     async def set_lang_callback(self, interaction: discord.Interaction, lang: str) -> None:
-        if lang not in ("en", "ru"):
+        if lang not in {"en", "ru"}:
             return
         self.sessions.set_lang(interaction.user.id, lang)
         await self._reply_key(

@@ -170,7 +170,7 @@ def _confirm(question: str) -> bool:
         answer = input().strip().lower()
     except EOFError:
         return False
-    return answer in ("y", "yes")
+    return answer in {"y", "yes"}
 
 
 def _parse(value: str) -> tuple[int, ...] | None:
@@ -282,7 +282,7 @@ def _units(wanted: dict[Path, str]) -> list[tuple[str, int, str]] | None:
         if shown.returncode != 0:
             continue
         props = _properties(shown.stdout)
-        if props.get("ActiveState") not in ("active", "activating", "deactivating"):
+        if props.get("ActiveState") not in {"active", "activating", "deactivating"}:
             continue
         pid = _pid(props.get("MainPID", ""))
         if pid is None or pid == os.getpid():

@@ -159,7 +159,7 @@ class PublicLoginMixin(PublicFeatureMixin):
             return
         result = await self.http.register(username, password, code, name)
         if not result.ok:
-            if result.status in (400, 404, 409) and result.msg:
+            if result.status in {400, 404, 409} and result.msg:
                 await self._respond(interaction, result.msg)
                 return
             if not await self.consume_result(interaction, result):

@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from composition import AdminFeatureMixin
-from payloads import ResponseOptions, obj_map
+from payloads import obj_map
 
 if TYPE_CHECKING:
+    from payloads import ResponseOptions
     from webapi import ApiResult
 
 __all__ = ["AdminCommonMixin", "obj_map", "result_obj", "str_list"]

@@ -11,11 +11,12 @@ from flask import Flask
 from helpers import config_mock, language_config, subscription_config
 
 from builders import build_description, build_json, build_link_array, get_subscription
-from config.documents import ProfileOutbound, ProfileStream, ProfileTemplate
+from config.documents import ProfileOutbound, ProfileTemplate
 from core import Subscription
 from custom_types import BandwidthInfo
 
 if TYPE_CHECKING:
+    from config.documents import ProfileStream
     from typing_contracts import AppOverrides, UserRecordOverrides
 
     from config import AppConfig, LangConfig, ProfileConfig

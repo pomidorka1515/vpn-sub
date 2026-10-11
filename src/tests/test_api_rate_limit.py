@@ -8,12 +8,14 @@ from flask import Flask
 
 from api import BaseApi, rate_limit
 from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
-    _RateLimitScript,
     _replace_client,
     close_rate_limit,
 )
 
 if TYPE_CHECKING:
+    from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
+        _RateLimitScript,
+    )
     from collections.abc import Iterator
 
     from flask.ctx import RequestContext

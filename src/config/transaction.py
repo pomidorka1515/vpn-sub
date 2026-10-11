@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
 from .atomic import atomic_write_json, ensure_parent_dir, file_signature
-from .constants import MISSING, MISSING_TYPE, JsonDict, JsonValue
+from .constants import MISSING, JsonDict, JsonValue
 
 if TYPE_CHECKING:
+    from .constants import MISSING_TYPE
     import io
     from types import TracebackType
 

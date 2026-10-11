@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import ClassVar, cast
+from typing import ClassVar, cast, TYPE_CHECKING
 
 from flask import g, request
 
 from api.admin._base import AdminApiMixin
-from api.common import ResponseType, Route
+from api.common import Route
 from api.decorators import requires_admin_auth, requires_args, requires_fields_strict
 from errors import PanelUnavailableError
 from util import err, ok, parse_bool
+
+if TYPE_CHECKING:
+    from api.common import ResponseType
 
 
 class UserRoutes(AdminApiMixin):
@@ -39,7 +42,7 @@ class UserRoutes(AdminApiMixin):
     @requires_args("user")
     def user_info(self) -> ResponseType:
         username = request.args["user"]
-        pretty = request.args.get("beautify", "").lower() in ("1", "true", "yes")
+        pretty = request.args.get("beautify", "").lower() in {"1", "true", "yes"}
         x = self.sub.business_svc.get_info(username=username, pretty=pretty)
         return ok(obj=asdict(x))
 
@@ -63,17 +66,17 @@ class UserRoutes(AdminApiMixin):
         data: dict[str, str | int] = {}
 
         for k, v in raw_data.items():
-            if k in ("user", "displayname"):
+            if k in {"user", "displayname"}:
                 if not isinstance(v, str):
                     return err(f"{k} must be a string")
                 data[k] = v
 
-            elif k in ("ext_username", "ext_password", "token", "userid", "fingerprint"):
+            elif k in {"ext_username", "ext_password", "token", "userid", "fingerprint"}:
                 if v is not None and not isinstance(v, str):
                     return err(f"{k} must be a string or null")
                 data[k] = cast(str, v)
 
-            elif k in ("limit", "wl_limit", "time"):
+            elif k in {"limit", "wl_limit", "time"}:
                 try:
                     data[k] = int(cast(str, v))
                 except ValueError, TypeError:

@@ -6,11 +6,12 @@ from typing import TYPE_CHECKING, ClassVar
 from flask import request
 
 from api.admin._base import AdminApiMixin
-from api.common import ResponseType, Route
+from api.common import Route
 from api.decorators import requires_admin_auth
 from util import err, ok
 
 if TYPE_CHECKING:
+    from api.common import ResponseType
     from custom_types import JsonifyValue
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from api.common import BaseApi, Route
+from api.common import BaseApi
 from loggers import Logger
 
 from .account import AccountRoutes
@@ -10,6 +10,7 @@ from .session import SessionRoutes
 from .static import StaticRoutes
 
 if TYPE_CHECKING:
+    from api.common import Route
     from flask import Flask
 
     from bwatch import BWatch

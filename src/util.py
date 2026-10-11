@@ -137,9 +137,9 @@ def parse_bool(value: object) -> bool | None:
         return value
     if isinstance(value, str):
         value = value.lower().strip()
-        if value in ("true", "yes", "1", "on", "y"):
+        if value in {"true", "yes", "1", "on", "y"}:
             return True
-        if value in ("false", "no", "0", "off", "n"):
+        if value in {"false", "no", "0", "off", "n"}:
             return False
     if isinstance(value, int):
         return bool(value)
@@ -170,7 +170,7 @@ def fmt_bytes(value: float) -> str:
 
 
 def fmt_time(seconds: int, lang: str = "ru") -> str:
-    if lang not in ("ru", "en"):
+    if lang not in {"ru", "en"}:
         lang = "ru"
     t_s = "с" if lang == "ru" else "s"
     t_d = "д" if lang == "ru" else "d"

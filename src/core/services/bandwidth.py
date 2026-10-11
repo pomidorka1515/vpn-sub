@@ -4,14 +4,16 @@ from typing import TYPE_CHECKING
 from dacite import Config as DConfig
 from dacite import from_dict
 
-from custom_types import BandwidthInfo, BandwidthSnapshot, PanelClient
+from custom_types import BandwidthInfo, BandwidthSnapshot
 from errors import AppError, PanelUnavailableError
 from sysutil import StateSnapshot
 from tracer import Op
 
-from ..common import BaseService, SharedCoreResources
+from ..common import BaseService
 
 if TYPE_CHECKING:
+    from custom_types import PanelClient
+    from ..common import SharedCoreResources
     from concurrent.futures import Executor
 
     from session import XUiSession

@@ -28,7 +28,7 @@ def dispatch(prog: str, probe: Callable[[], None]) -> None:
     if len(sys.argv) <= 1:
         return
     flag = sys.argv[1]
-    if flag in ("--help", "-h"):
+    if flag in {"--help", "-h"}:
         from cli.help import print_help
 
         print_help(prog)

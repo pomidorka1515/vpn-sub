@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from tracer import TraceOp, trace
+from tracer import trace
 
 if TYPE_CHECKING:
+    from tracer import TraceOp
     import threading
     from concurrent.futures import Executor
 

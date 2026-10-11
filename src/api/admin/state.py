@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, TYPE_CHECKING
 
 from flask import g
 
 from api.admin._base import AdminApiMixin
-from api.common import ResponseType, Route
+from api.common import Route
 from api.decorators import requires_admin_auth, requires_fields_strict
-from custom_types import JsonifyValue, PollingPanelInfo
+from custom_types import PollingPanelInfo
 from sysutil import SysUtil
 from util import err, ok
+
+if TYPE_CHECKING:
+    from api.common import ResponseType
+    from custom_types import JsonifyValue
 
 
 class StateRoutes(AdminApiMixin):
@@ -99,7 +103,7 @@ class StateRoutes(AdminApiMixin):
         use_displaynames: bool = content.get("displaynames")
         flip: bool = content.get("flip")
 
-        if category not in ("total", "monthly", "wl_monthly"):
+        if category not in {"total", "monthly", "wl_monthly"}:
             return err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
 
         data = self.sub.leaderboard_svc.leaderboard(

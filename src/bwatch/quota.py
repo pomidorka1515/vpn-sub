@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import time
 
-from custom_types import BandwidthInfo, BandwidthUpdate, UserRecord
+from custom_types import BandwidthInfo, BandwidthUpdate
 from errors import AppError
 from notify import (
-    Notice,
     Notifier,
     classify,
     restored,
@@ -13,6 +12,13 @@ from notify import (
 from notify.kinds import Kind, Scope
 
 from .host import BWatchHost
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from notify import (
+        Notice,
+    )
+    from custom_types import UserRecord
 
 
 class QuotaMixin(BWatchHost):

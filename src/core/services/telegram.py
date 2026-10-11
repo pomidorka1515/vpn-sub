@@ -3,9 +3,10 @@ from typing import TYPE_CHECKING, Literal, overload
 from errors import NotFoundError
 from tracer import Op
 
-from ..common import BaseService, SharedCoreResources
+from ..common import BaseService
 
 if TYPE_CHECKING:
+    from ..common import SharedCoreResources
     from custom_types import ApplyBonusCodeObject, UserInfo
 
     from .code import CodeService

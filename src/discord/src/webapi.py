@@ -71,10 +71,10 @@ def _mapping(value: object) -> dict[str, object]:
 def _stats(value: object) -> StatsPayload:
     obj = _mapping(value)
     for key, item in obj.items():
-        if key in ("_", "token", "link", "displayname", "uuid", "fingerprint"):
+        if key in {"_", "token", "link", "displayname", "uuid", "fingerprint"}:
             if not isinstance(item, str):
                 raise ValueError(key)
-        elif key in ("enabled", "wl_enabled", "online"):
+        elif key in {"enabled", "wl_enabled", "online"}:
             if not isinstance(item, bool):
                 raise ValueError(key)
         elif key == "time":
@@ -82,13 +82,13 @@ def _stats(value: object) -> StatsPayload:
                 raise ValueError(key)
         elif key == "bandwidth":
             for field, amount in _mapping(item).items():
-                if field in ("total", "wl_total"):
+                if field in {"total", "wl_total"}:
                     for number in _mapping(amount).values():
                         if not isinstance(number, (int, float)):
                             raise ValueError(field)
-                elif field in ("monthly", "wl_monthly", "limit", "wl_limit"):
+                elif field in {"monthly", "wl_monthly", "limit", "wl_limit"}:
                     if not isinstance(amount, (int, float)) or (
-                        field in ("limit", "wl_limit") and not isinstance(amount, int)
+                        field in {"limit", "wl_limit"} and not isinstance(amount, int)
                     ):
                         raise ValueError(field)
     return cast(StatsPayload, obj)

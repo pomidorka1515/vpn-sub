@@ -10,9 +10,7 @@ from urllib.parse import quote
 from custom_types import (
     ClientPayload,
     NewUserInfo,
-    PanelClient,
     ResetUserObject,
-    UserFields,
     UserInfo,
     UserInfoBandwidth,
     UserInfoBandwidthTotal,
@@ -27,9 +25,14 @@ from errors import (
 from tracer import Op
 from util import *
 
-from ...common import BaseService, SharedCoreResources
+from ...common import BaseService
 
 if TYPE_CHECKING:
+    from ...common import SharedCoreResources
+    from custom_types import (
+        PanelClient,
+        UserFields,
+    )
     from collections.abc import Mapping
 
     from config.constants import JsonValue
@@ -78,7 +81,7 @@ def _panel_post_json(
         content: dict[str, object] = response.json()
     except Exception:
         content = {}
-    if response.status_code not in (200, 201) or not content.get("success"):
+    if response.status_code not in {200, 201} or not content.get("success"):
         raise PanelRejectedError(
             f"Panel {panel.name} {what} rejected: {content.get('msg') or response.status_code}",
         )

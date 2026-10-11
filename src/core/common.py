@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from tracer import TraceOp, trace
+from tracer import trace
 
 if TYPE_CHECKING:
+    from tracer import TraceOp
     from argon2 import PasswordHasher
     from flask import Flask
 

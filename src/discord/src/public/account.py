@@ -89,7 +89,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         await self._defer(interaction)
         if token:
             result = await self.http.logout(token)
-            if result.status not in (200, 401) and not result.ok:
+            if result.status not in {200, 401} and not result.ok:
                 if not await self.consume_result(interaction, result):
                     return
         self.sessions.clear_token(interaction.user.id)

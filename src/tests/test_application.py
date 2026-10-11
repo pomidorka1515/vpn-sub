@@ -10,10 +10,11 @@ import pytest
 from requests import Response
 
 from api.decorators.rate_limit import close_rate_limit
-from app import Application, AppOptions, AppPaths, create_application, verbose_overrides
+from app import AppOptions, AppPaths, create_application, verbose_overrides
 from paths import runtime_dir
 
 if TYPE_CHECKING:
+    from app import Application
     from config import JsonValue
     from custom_types import RequestKwargs
 

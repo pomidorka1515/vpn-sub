@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 from uuid import uuid4
 
 from flask import Response, g, request
 
-from api.common import ResponseType, Route
+from api.common import Route
 from api.decorators import (
     requires_fields_strict,
     requires_no_auth,
@@ -14,6 +14,9 @@ from api.decorators import (
 )
 from api.web._base import WebApiMixin
 from util import err, generate_token, ok, sanitize
+
+if TYPE_CHECKING:
+    from api.common import ResponseType
 
 
 class SessionRoutes(WebApiMixin):

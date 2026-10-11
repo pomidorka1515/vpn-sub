@@ -6,9 +6,10 @@ from flask import request
 
 from util import compare, err
 
-from ._common import Decorated, DecoratedInject, WrappedReturn
+from ._common import Decorated
 
 if TYPE_CHECKING:
+    from ._common import DecoratedInject, WrappedReturn
     from ..admin._base import AdminApiMixin
     from ..web._base import WebApiMixin
 

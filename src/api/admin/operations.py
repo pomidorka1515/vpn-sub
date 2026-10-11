@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from random import random
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 from flask import g
 
 from api.admin._base import AdminApiMixin
-from api.common import ResponseType, Route
+from api.common import Route
 from api.decorators import requires_admin_auth, requires_fields_strict
 from errors import DatabaseError
 from sysutil import SysUtil
 from util import err, ok
+
+if TYPE_CHECKING:
+    from api.common import ResponseType
 
 
 class OperationsRoutes(AdminApiMixin):

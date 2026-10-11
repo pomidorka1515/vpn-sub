@@ -14,12 +14,13 @@ from requests import Response
 
 from bots import AdminBot, PublicBot
 from bwatch import BWatch
-from config import AppConfig, Config, JsonValue, LangConfig, LinesConfig, ProfileConfig
+from config import Config
 from core import Subscription
 from custom_types import ClientTraffic, Inbound, PanelClient
 from session import XUiSession
 
 if TYPE_CHECKING:
+    from config import AppConfig, JsonValue, LangConfig, LinesConfig, ProfileConfig
     from typing_contracts import AppOverrides, CreateUserOverrides, ProfileOverrides
 
     from db import Database

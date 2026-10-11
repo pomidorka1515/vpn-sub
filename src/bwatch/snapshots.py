@@ -4,13 +4,14 @@ import time
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
-from custom_types import BandwidthInfo, UserRecord
+from custom_types import BandwidthInfo
 from errors import PanelUnavailableError
 from sysutil import SysUtil
 
 from .host import BWatchHost
 
 if TYPE_CHECKING:
+    from custom_types import UserRecord
     from config.constants import JsonDict
     from db.state import StateSnapshot
 

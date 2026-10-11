@@ -87,7 +87,7 @@ class _ProxyGuard:
 
     def __call__(self, environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
         peer = environ.get("REMOTE_ADDR")
-        if peer not in ("127.0.0.1", "::1"):
+        if peer not in {"127.0.0.1", "::1"}:
             log.error("direct access attempt from %s; refusing", peer)
             body = b'{"success": false, "msg": "direct access forbidden", "obj": null}'
             start_response(
