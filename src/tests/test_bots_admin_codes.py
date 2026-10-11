@@ -31,7 +31,7 @@ def _real_message(text: str, chat_id: int = 7) -> types.Message:
                 "date": 0,
                 "chat": {"id": chat_id, "type": "private"},
                 "text": text,
-            }
+            },
         ),
     )
 

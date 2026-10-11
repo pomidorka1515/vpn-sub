@@ -36,14 +36,14 @@ class TelegramMixin(ConnectionMixin):
     def tgid_to_user(self, tgid: str | int) -> str | None:
         with self.connection() as conn:
             row = conn.execute(
-                "SELECT username FROM telegram_mappings WHERE telegram_id = ?", (str(tgid),)
+                "SELECT username FROM telegram_mappings WHERE telegram_id = ?", (str(tgid),),
             ).fetchone()
             return str(row[0]) if row else None
 
     def user_to_tgid(self, username: str) -> str | None:
         with self.connection() as conn:
             row = conn.execute(
-                "SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,)
+                "SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,),
             ).fetchone()
             return str(row[0]) if row else None
 
@@ -67,7 +67,7 @@ class TelegramMixin(ConnectionMixin):
         with self.connection() as conn:
             return (
                 conn.execute(
-                    "SELECT 1 FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),)
+                    "SELECT 1 FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),),
                 ).fetchone()
                 is not None
             )

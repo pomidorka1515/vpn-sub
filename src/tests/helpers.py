@@ -366,7 +366,7 @@ class FakePanel:
             found = next((c for c in self.clients if c.email == email), None)
             if found is None:
                 return json_http(
-                    {"success": False, "msg": "Obtain (record not found)", "obj": None}, 200
+                    {"success": False, "msg": "Obtain (record not found)", "obj": None}, 200,
                 )
             client_row = asdict(found)
             inbound_ids = client_row.pop("inboundIds")
@@ -458,7 +458,7 @@ class FakePanel:
                     total=0,
                     reset=0,
                 ),
-            )
+            ),
         )
         return json_http({"success": True, "msg": "", "obj": None}, 200)
 

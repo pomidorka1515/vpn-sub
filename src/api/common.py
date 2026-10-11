@@ -108,7 +108,7 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
 
 
 def web_lang_tables(
-    lang_cfg: Config[LangConfig], page: str
+    lang_cfg: Config[LangConfig], page: str,
 ) -> tuple[str, dict[str, str], dict[str, str]]:
     """Active page strings, plus the English table used when a key is missing."""
     if page not in _WEB_PAGES:
@@ -165,7 +165,7 @@ class BaseApi(ABC):
     ROUTES: ClassVar[tuple[Route, ...]]
 
     def __init__(
-        self, app: Flask, cfg: Config[AppConfig], sub: Subscription, bw: BWatch, uri: str
+        self, app: Flask, cfg: Config[AppConfig], sub: Subscription, bw: BWatch, uri: str,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -188,7 +188,7 @@ class BaseApi(ABC):
             route.validate()
             if not hasattr(cls, route.handler):
                 raise TypeError(
-                    f"{cls.__name__}.ROUTES references '{route.handler}' but no such method exists"
+                    f"{cls.__name__}.ROUTES references '{route.handler}' but no such method exists",
                 )
 
     def _register_routes(self) -> None:

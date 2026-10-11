@@ -47,7 +47,7 @@ class StaticRoutes(WebApiMixin):
     _admin_module = ""
     for _admin_module in admin_module_names():
         locals()["admin_" + _admin_module.replace("/", "_") + "_js"] = _admin_module_method(
-            _admin_module
+            _admin_module,
         )
     del _admin_module
 
@@ -87,7 +87,7 @@ class StaticRoutes(WebApiMixin):
         # url is versioned via ?v= (asset_version), so long caching is safe
         if body is None:
             response = make_response(
-                send_file(RES_DIR / name, mimetype=mimetype, etag=True, max_age=31536000)
+                send_file(RES_DIR / name, mimetype=mimetype, etag=True, max_age=31536000),
             )
         else:
             response = make_response(body)

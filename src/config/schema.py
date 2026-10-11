@@ -38,7 +38,7 @@ def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
 
 
 def load_schema[Doc](
-    cfg: Config[Doc], data: Mapping[str, JsonValue]
+    cfg: Config[Doc], data: Mapping[str, JsonValue],
 ) -> Mapping[str, JsonValue] | None:
     schema_ref = data.get("$schema")
     forced = cfg.schema_path
@@ -76,7 +76,7 @@ def load_schema[Doc](
         return None
     except json.JSONDecodeError as exc:
         raise SchemaValidationError(
-            f"Schema file '{schema_path}' is not valid JSON: {exc}"
+            f"Schema file '{schema_path}' is not valid JSON: {exc}",
         ) from exc
 
     if not isinstance(schema, dict):  # pyright: ignore[reportUnnecessaryIsInstance]

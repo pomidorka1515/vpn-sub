@@ -162,7 +162,7 @@ def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
                 "whitelist": False,
                 "inbounds_list": [1],
                 "mode": "whitelist",
-            }
+            },
         },
         "bot": {"token": "test", "whitelist": [1]},
     }
@@ -398,7 +398,7 @@ def test_local_schema_validation_error(tmp_path: Path) -> None:
                 "required": ["name"],
                 "properties": {"name": {"type": "string"}},
                 "additionalProperties": True,
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -416,7 +416,7 @@ def test_local_schema_accepts_valid_document(tmp_path: Path) -> None:
                 "required": ["name"],
                 "properties": {"name": {"type": "string"}},
                 "additionalProperties": True,
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -506,7 +506,7 @@ def test_lines_append_tail_and_compact(tmp_path: Path) -> None:
             (
                 {"id": 2, "keep": False},
                 {"id": 3, "keep": True, "text": "привет"},
-            )
+            ),
         )
         assert lines.count() == 3
         assert lines.first(1) == [{"id": 1, "keep": True}]

@@ -103,7 +103,7 @@ def test_list_users_empty_and_paginated(
     assert "<code>c</code>" in text
     assert "<code>a</code>" not in text
     assert "page_list_users_0" in _buttons(
-        cast(MagicMock, mixin._send_message).call_args.kwargs["reply_markup"]
+        cast(MagicMock, mixin._send_message).call_args.kwargs["reply_markup"],
     )
 
 

@@ -54,7 +54,7 @@ SCHEMA_PROPERTIES: frozenset[str] = frozenset(
         "api_uri",
         "fallback_domain",
         "funny_strings",
-    )
+    ),
 )
 
 type PatchStatus = Literal["updated", "unchanged"]

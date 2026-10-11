@@ -55,13 +55,13 @@ class StateRoutes(AdminApiMixin):
                     tcpCount=obj.tcpCount,
                     udpCount=obj.udpCount,
                     uptime=obj.uptime,
-                )
+                ),
             )
         return ok(
             obj={
                 "host": asdict(SysUtil.polling_info()),
                 "panels": panels_data,
-            }
+            },
         )
 
     @requires_admin_auth
@@ -103,11 +103,11 @@ class StateRoutes(AdminApiMixin):
             return err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
 
         data = self.sub.leaderboard_svc.leaderboard(
-            category=category, top_n=top_n, use_displaynames=use_displaynames, flip=flip
+            category=category, top_n=top_n, use_displaynames=use_displaynames, flip=flip,
         )
         return ok(
             obj=[
                 {"place": i, "username": user, "amount": amount}
                 for i, (user, amount) in enumerate(data.items(), start=1)
-            ]
+            ],
         )

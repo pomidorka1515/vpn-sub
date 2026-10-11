@@ -78,7 +78,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
             wl_monthly = bandwidths.wl_monthly
 
             wl_used_str, wl_limit_str, wl_percent_str = format_usage(
-                wl_monthly, wl_limit, t["unlimited"]
+                wl_monthly, wl_limit, t["unlimited"],
             )
 
             text = t["chart_text"].format(
@@ -99,7 +99,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
 
             language = self.lang_cfg.view()
             chart_img = bandwidth_chart(
-                snapshots, label=info.displayname, lang=language["chart"][lang]
+                snapshots, label=info.displayname, lang=language["chart"][lang],
             )
             if chart_img is not None:
                 self.bot.send_photo(

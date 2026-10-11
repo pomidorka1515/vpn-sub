@@ -35,7 +35,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         info: object = result_obj(result)
         if not isinstance(info, dict):
             await self._respond(
-                interaction, "❌ Некорректный ответ сервиса.", view=self.codes_menu_view()
+                interaction, "❌ Некорректный ответ сервиса.", view=self.codes_menu_view(),
             )
             return
         typed = obj_map(cast(object, info))
@@ -65,7 +65,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         code_name = self.modal_values(interaction).get("code", "").strip()
         if not code_name:
             await self._respond(
-                interaction, "❌ Введите название кода.", view=self.codes_menu_view()
+                interaction, "❌ Введите название кода.", view=self.codes_menu_view(),
             )
             return
         self._pending_codes[interaction.user.id] = {"name": code_name}
@@ -75,19 +75,19 @@ class AdminCodesMixin(AdminFeatureMixin):
                 label="📝 register",
                 custom_id="admin:codetype:register",
                 style=discord.ButtonStyle.secondary,
-            )
+            ),
         )
         view.add_item(
             discord.ui.Button(
                 label="🎁 bonus",
                 custom_id="admin:codetype:bonus",
                 style=discord.ButtonStyle.secondary,
-            )
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label="🔙 Отмена", custom_id="admin:codes", style=discord.ButtonStyle.primary
-            )
+                label="🔙 Отмена", custom_id="admin:codes", style=discord.ButtonStyle.primary,
+            ),
         )
         await self._respond(interaction, f"Код: **{code_name}**\nВыберите тип:", view=view)
 
@@ -95,7 +95,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         pending = self._pending_codes.get(interaction.user.id)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view()
+                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view(),
             )
             return
         values = self.modal_values(interaction)
@@ -112,18 +112,18 @@ class AdminCodesMixin(AdminFeatureMixin):
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(
-                label="Да", custom_id="admin:code_perma:yes", style=discord.ButtonStyle.success
-            )
+                label="Да", custom_id="admin:code_perma:yes", style=discord.ButtonStyle.success,
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label="Нет", custom_id="admin:code_perma:no", style=discord.ButtonStyle.secondary
-            )
+                label="Нет", custom_id="admin:code_perma:no", style=discord.ButtonStyle.secondary,
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label="🔙 Отмена", custom_id="admin:codes", style=discord.ButtonStyle.primary
-            )
+                label="🔙 Отмена", custom_id="admin:codes", style=discord.ButtonStyle.primary,
+            ),
         )
         await self._respond(interaction, "Перманентный код?", view=view)
 
@@ -131,7 +131,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         pending = self._pending_codes.get(interaction.user.id)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view()
+                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view(),
             )
             return
         try:
@@ -152,7 +152,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         pending = self._pending_codes.pop(interaction.user.id, None)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view()
+                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view(),
             )
             return
         code_name = str(pending.get("name") or "")

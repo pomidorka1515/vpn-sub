@@ -44,7 +44,7 @@ def test_bandwidth_chart_empty_returns_none() -> None:
 def test_bandwidth_chart_returns_png() -> None:
     snaps = [
         BandwidthSnapshot(
-            ts=1_700_000_000 + i * 86_400, up=i * 1_000, down=i * 2_000, wl_up=100, wl_down=200
+            ts=1_700_000_000 + i * 86_400, up=i * 1_000, down=i * 2_000, wl_up=100, wl_down=200,
         )
         for i in range(3)
     ]

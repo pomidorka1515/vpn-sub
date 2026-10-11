@@ -85,7 +85,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
             types.InlineKeyboardButton(
                 t["btn_login_credentials"],
                 callback_data="login_credentials",
-            )
+            ),
         )
         self.bot.send_message(message.chat.id, t["choose_login"], reply_markup=markup)
 

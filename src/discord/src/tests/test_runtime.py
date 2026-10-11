@@ -42,7 +42,7 @@ def discord_env(tmp_path: Path) -> Iterator[Path]:
 
 
 def test_admin_api_uri_defaults_to_privapi(
-    discord_env: Path, monkeypatch: pytest.MonkeyPatch
+    discord_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     del discord_env
     monkeypatch.delenv("SUB_API_URI", raising=False)
@@ -68,11 +68,11 @@ def test_empty_public_token_fails(discord_env: Path) -> None:
 
 
 def test_compiled_binary_forces_bundled_schema(
-    discord_env: Path, monkeypatch: pytest.MonkeyPatch
+    discord_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (discord_env / "discord.json").write_text(
         json.dumps(
-            {"public": {"token": "bot-token"}, "private": {"whitelist": [], "api_token": "t"}}
+            {"public": {"token": "bot-token"}, "private": {"whitelist": [], "api_token": "t"}},
         ),
         encoding="utf-8",
     )

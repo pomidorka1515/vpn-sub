@@ -32,7 +32,7 @@ def build_description(
         desc = descTable["main"]
 
         desc = format(
-            desc, up=fmt_bytes(int(bandwidths.upload)), down=fmt_bytes(int(bandwidths.download))
+            desc, up=fmt_bytes(int(bandwidths.upload)), down=fmt_bytes(int(bandwidths.download)),
         )
 
         if ts != 0:

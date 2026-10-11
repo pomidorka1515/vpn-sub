@@ -37,7 +37,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
             for days in (3, 14, 30, 90)
         ]
         view.add_item(
-            discord.ui.Select(custom_id="chart_select", options=options, min_values=1, max_values=1)
+            discord.ui.Select(custom_id="chart_select", options=options, min_values=1, max_values=1),
         )
         return view
 

@@ -23,7 +23,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             types.InlineKeyboardButton("📊 Общий (total)", callback_data="lbt_total"),
             types.InlineKeyboardButton("📅 Месячный (monthly)", callback_data="lbt_monthly"),
             types.InlineKeyboardButton(
-                "🛡 Белый список (wl_monthly)", callback_data="lbt_wl_monthly"
+                "🛡 Белый список (wl_monthly)", callback_data="lbt_wl_monthly",
             ),
         )
         self.bot.send_message(
@@ -79,7 +79,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             self._handle_leaderboard_result(chat_id, bw_type, order, window)
         else:
             self.bot.send_message(
-                chat_id, "❌ Сессия истекла, начните заново.", reply_markup=self.get_main_menu()
+                chat_id, "❌ Сессия истекла, начните заново.", reply_markup=self.get_main_menu(),
             )
 
     def _handle_leaderboard_result(
@@ -90,7 +90,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         window: int,
     ) -> None:
         lb_data = self.sub.leaderboard_svc.leaderboard(
-            category=bw_type, top_n=window, use_displaynames=True, flip=order == "asc"
+            category=bw_type, top_n=window, use_displaynames=True, flip=order == "asc",
         )
 
         language = self.lang_cfg.view()

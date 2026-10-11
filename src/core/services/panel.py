@@ -246,7 +246,7 @@ class PanelService(BaseService):
             if response.status_code != 200 or not data.get("success"):
                 raise PanelUnavailableError(
                     f"Panel {panel.name} inbound query failed: "
-                    f"{data.get('msg') or response.status_code}"
+                    f"{data.get('msg') or response.status_code}",
                 )
             raw_inbounds: list[dict[str, object]] = data["obj"]
             raw_count = len(raw_inbounds)
@@ -335,7 +335,7 @@ class PanelService(BaseService):
         return {panel.name: snapshot for panel, snapshot in zip(panels, snapshots, strict=True)}
 
     def _status_error(
-        self, panel: XUiSession, what: str, response: Response
+        self, panel: XUiSession, what: str, response: Response,
     ) -> PanelUnavailableError:
         """Classify a non-200 response as unavailability.
 
@@ -396,13 +396,13 @@ class PanelService(BaseService):
                 return None
             if not isinstance(raw, dict):
                 raise PanelUnavailableError(
-                    f"Panel {panel.name} client query failed: obj is not an object"
+                    f"Panel {panel.name} client query failed: obj is not an object",
                 )
             obj = cast(dict[str, object], raw)
             client_raw: object = obj.get("client", obj)
             if not isinstance(client_raw, dict):
                 raise PanelUnavailableError(
-                    f"Panel {panel.name} client query failed: obj.client is not an object"
+                    f"Panel {panel.name} client query failed: obj.client is not an object",
                 )
             merged: dict[str, object] = dict(cast(dict[str, object], client_raw))
             inbound_ids_raw: object = obj.get("inboundIds")
@@ -449,7 +449,7 @@ class PanelService(BaseService):
             if not data.get("success"):
                 raise PanelRejectedError(
                     f"Panel {panel.name} client list query failed: "
-                    f"{data.get('msg') or response.status_code}"
+                    f"{data.get('msg') or response.status_code}",
                 )
             # unattached clients come back as inboundIds: null
             # dacite rejects that against list[int] and would fail the
@@ -475,7 +475,7 @@ class PanelService(BaseService):
             raise
         except Exception as exc:
             raise PanelUnavailableError(
-                f"Panel {panel.name} client list query failed: {exc}"
+                f"Panel {panel.name} client list query failed: {exc}",
             ) from exc
 
     def client_traffic(self, panel: XUiSession, email: str) -> ClientTraffic | None:
@@ -495,7 +495,7 @@ class PanelService(BaseService):
             if not data.get("success"):
                 raise PanelRejectedError(
                     f"Panel {panel.name} traffic query failed: "
-                    f"{data.get('msg') or response.status_code}"
+                    f"{data.get('msg') or response.status_code}",
                 )
             raw: object = data.get("obj")
             if raw is None:
@@ -707,7 +707,7 @@ class PanelService(BaseService):
                     (panel.name for panel in live),
                     self.map_panels(live, self._fetch_onlines, pool),
                     strict=True,
-                )
+                ),
             )
 
         for panel in self.panels:
@@ -721,7 +721,7 @@ class PanelService(BaseService):
                 continue
             try:
                 panel_health[panel.name] = self._classify_onlines(
-                    panel, outcome, online_users, known
+                    panel, outcome, online_users, known,
                 )
             except Exception:
                 panel_health[panel.name] = "unavailable"

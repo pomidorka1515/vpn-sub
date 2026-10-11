@@ -48,7 +48,7 @@ class StateMixin(ConnectionMixin):
     def reset_monthly(self, month: str, today: str) -> bool:
         with self.transaction(immediate=True) as conn:
             current = conn.execute(
-                "SELECT value FROM app_metadata WHERE key = 'last_reset_month'"
+                "SELECT value FROM app_metadata WHERE key = 'last_reset_month'",
             ).fetchone()
             if current is not None and current[0] == month:
                 return False
@@ -75,7 +75,7 @@ class StateMixin(ConnectionMixin):
             return {
                 str(row[0])
                 for row in conn.execute(
-                    "SELECT kind FROM notification_state WHERE telegram_id = ''"
+                    "SELECT kind FROM notification_state WHERE telegram_id = ''",
                 )
             }
 
@@ -155,7 +155,7 @@ class StateMixin(ConnectionMixin):
         self.set_metadata("admin_ui_session", token or "")
 
     def add_bandwidth_snapshot(
-        self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int
+        self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int,
     ) -> None:
         with self.transaction(immediate=True) as conn:
             conn.execute(
@@ -217,7 +217,7 @@ class StateMixin(ConnectionMixin):
     def get_state_snapshots(self, cutoff: int) -> list[StateSnapshot]:
         with self.connection() as conn:
             rows = conn.execute(
-                "SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC", (cutoff,)
+                "SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC", (cutoff,),
             ).fetchall()
         return [cast(StateSnapshot, json.loads(str(row[0]))) for row in rows]
 

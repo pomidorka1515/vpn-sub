@@ -96,7 +96,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
             raise ConfigError("read_only_jsonc requires read_only=True")
         if not path_str.endswith(valid_exts):
             self.log.warning(
-                f"path doesnt end with .json{'c' if read_only else ''}, did you specify the correct path?"
+                f"path doesnt end with .json{'c' if read_only else ''}, did you specify the correct path?",
             )
         self._path: str = path_str
         self._lockfile_path: str = resolve_lockfile_path(
@@ -479,7 +479,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         if tx.owner_thread_id == threading.get_ident():
             raise RuntimeError(
                 "Use the transaction object returned by 'with cfg as tx' "
-                "while a batch edit is active."
+                "while a batch edit is active.",
             )
 
     def read_json_object(self) -> dict[str, JsonValue]:

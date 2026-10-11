@@ -30,7 +30,7 @@ DESC = {
         "bw": " bw {used}/{limit}",
         "wl_bw": " wl {used}/{limit}",
         "wl_bw_exceeded": " wl exceeded {used}/{limit}",
-    }
+    },
 }
 
 
@@ -155,7 +155,7 @@ def _link_config() -> AppConfig:
                 },
             },
             "nodes": {"edge": "edge.example", "wl-node": "wl.example"},
-        }
+        },
     )
     return config
 
@@ -223,7 +223,7 @@ def _json_template() -> ProfileTemplate:
             {
                 "settings": {"vnext": [{"address": "", "users": [{"id": ""}]}]},
                 "streamSettings": {},
-            }
+            },
         ],
     }
 
@@ -252,7 +252,7 @@ def test_json_profiles_fill_transport_hosts() -> None:
                     "xhttpSettings": {"host": ""},
                     "grpcSettings": {"authority": ""},
                     "realitySettings": {"fingerprint": ""},
-                }
+                },
             ),
         },
         "ws": {
@@ -272,7 +272,7 @@ def test_json_profiles_fill_transport_hosts() -> None:
             "json_template": _json_template(),
             "profiles": profiles,
             "nodes": {"edge": "edge.example"},
-        }
+        },
     )
     built = build_json(cfg, "user-uuid", "en", "chrome")
     tls = built[0]["outbounds"]
@@ -324,7 +324,7 @@ def _subscription(
             "bypass_packages": ["com.example"],
             "ping_check_url": "https://example.test/204",
             "profiles": {},
-        }
+        },
     )
     config.update(cfg or {})
     subscription = MagicMock(
@@ -456,7 +456,7 @@ def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch
             "uri": "sub",
             "sub_name": "VPN",
             "bypass_packages": ["a", "b"],
-        }
+        },
     )
     response, status = get_subscription(
         subscription,

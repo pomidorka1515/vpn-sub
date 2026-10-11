@@ -138,7 +138,7 @@ def build_profiles(data: Mapping[str, JsonValue]) -> tuple[dict[str, JsonDict], 
     names = cast(JsonDict, profiles)
     if any(_is_object(value) for value in names.values()):
         raise MigrateError(
-            "mixed config: profiles values are already objects and legacy keys are still present"
+            "mixed config: profiles values are already objects and legacy keys are still present",
         )
 
     ids = list(names)

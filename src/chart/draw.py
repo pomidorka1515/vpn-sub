@@ -152,7 +152,7 @@ def draw_stacked(
         if i % step == 0:
             tw, _ = text_size(fonts["tick"], label)
             draw_text(
-                draw, (int(cx - tw / 2), bottom + 8), label, font=fonts["tick"], fill=TEXT_DIM
+                draw, (int(cx - tw / 2), bottom + 8), label, font=fonts["tick"], fill=TEXT_DIM,
             )
 
     if empty_label is not None:

@@ -40,7 +40,7 @@ class PublicBot(
     """Public bot assembled from the public feature workflows."""
 
     def __init__(
-        self, sub: Subscription, cfg: Config[AppConfig], lang_cfg: Config[LangConfig]
+        self, sub: Subscription, cfg: Config[AppConfig], lang_cfg: Config[LangConfig],
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -74,10 +74,10 @@ class PublicBot(
             )
             for prefix, handler in callbacks:
                 self.bot.callback_query_handler(  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownMemberType]
-                    func=lambda call, p=prefix: call.data.startswith(p)  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+                    func=lambda call, p=prefix: call.data.startswith(p),  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
                 )(handler)  # pyright: ignore[reportUnknownLambdaType]
             self.bot.message_handler(func=lambda g: True)(self.handle_text)  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             self._executor = ThreadPoolExecutor(
-                max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart"
+                max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart",
             )
             self.polling_thread: threading.Thread | None = None

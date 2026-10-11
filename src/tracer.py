@@ -108,5 +108,5 @@ def trace(logger: Logger, operation: TraceOp, event: str, **fields: JsonValue) -
             f"{k}="
             + (v if isinstance(v, str) else json.dumps(v, ensure_ascii=True, separators=(",", ":")))
             for k, v in fields.items()
-        )
+        ),
     )

@@ -305,7 +305,7 @@ class SysUtil:
                         cpu=round(thread.user_time + thread.system_time, 1),
                         ctx_switches=switches.voluntary + switches.involuntary,
                         stack=SysUtil._thread_stack(current.pid, thread.id),
-                    )
+                    ),
                 )
             except psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess:
                 continue

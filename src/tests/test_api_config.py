@@ -54,7 +54,7 @@ def _bad_node_profiles() -> dict[str, JsonValue]:
 
 
 def _config_api(
-    tmp_path: Path, flask_app: Flask
+    tmp_path: Path, flask_app: Flask,
 ) -> tuple[Config[AppConfig], Path, _RecordingAudit]:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(_valid_config(), indent=4) + "\n", encoding="utf-8")
@@ -100,7 +100,7 @@ def test_config_get_requires_token(tmp_path: Path, flask_app: Flask) -> None:
         denied = flask_app.test_client().get("/sub/privapi/api/config/get")
         assert denied.status_code == 401
         denied_set = flask_app.test_client().post(
-            "/sub/privapi/api/config/set", json={"base": "x", "values": {}}
+            "/sub/privapi/api/config/set", json={"base": "x", "values": {}},
         )
         assert denied_set.status_code == 401
     finally:

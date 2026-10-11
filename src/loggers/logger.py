@@ -115,7 +115,7 @@ class Logger(logging.Logger):
             yield
             dt = (time.monotonic() - t0) * 1000
             self.info(
-                f"Loaded {Colors.BOLD}{self.name}{Colors.RESET}! {Colors.ITALIC}({dt:.1f}ms){Colors.RESET}"
+                f"Loaded {Colors.BOLD}{self.name}{Colors.RESET}! {Colors.ITALIC}({dt:.1f}ms){Colors.RESET}",
             )
         except Exception:
             self.error(f"Failed to load {self.name}.")

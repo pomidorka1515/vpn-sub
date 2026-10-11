@@ -98,7 +98,7 @@ def web_api(database: Database, flask_app: Flask) -> tuple[Flask, Database]:
 
 def _prefixed_client(database: Database, flask_app: Flask) -> FlaskClient:
     subscription = make_subscription(
-        database, app=flask_app, uri="custom", lang_cfg=_web_lang_cfg()
+        database, app=flask_app, uri="custom", lang_cfg=_web_lang_cfg(),
     )
     database.create_user(
         username="alice",
@@ -267,7 +267,7 @@ def test_login_uses_isolated_auth_token(
     app, _database = web_api
     client = app.test_client()
     legacy_cookie_response = client.get(
-        "/sub/webapi/stats", headers={"Cookie": "token=" + "a" * 40}
+        "/sub/webapi/stats", headers={"Cookie": "token=" + "a" * 40},
     )
     assert legacy_cookie_response.status_code == 401
 

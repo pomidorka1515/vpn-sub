@@ -212,7 +212,7 @@ async def _run() -> None:
     try:
         runner = runtime._runner
         waiters: list[asyncio.Task[bool] | asyncio.Task[None]] = [
-            asyncio.ensure_future(stopping.wait())
+            asyncio.ensure_future(stopping.wait()),
         ]
         if isinstance(runner, asyncio.Task):
             waiters.append(runner)

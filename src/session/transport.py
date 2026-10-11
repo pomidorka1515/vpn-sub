@@ -80,7 +80,7 @@ class RequestsPanelTransport:
         ):
             raise XUiSessionError(
                 "refusing to send basic auth alongside an Authorization header: "
-                "requests would silently overwrite the header"
+                "requests would silently overwrite the header",
             )
         return self._session.request(method, url, **kwargs)
 

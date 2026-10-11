@@ -80,7 +80,7 @@ def _panel_post_json(
         content = {}
     if response.status_code not in (200, 201) or not content.get("success"):
         raise PanelRejectedError(
-            f"Panel {panel.name} {what} rejected: {content.get('msg') or response.status_code}"
+            f"Panel {panel.name} {what} rejected: {content.get('msg') or response.status_code}",
         )
     return content
 
@@ -193,7 +193,7 @@ class BusinessUserService(BaseService):
             online=self.panel_svc.is_online(username),
             bandwidth=UserInfoBandwidth(
                 total=UserInfoBandwidthTotal(
-                    upload=bandwidths.upload, download=bandwidths.download, total=bandwidths.total
+                    upload=bandwidths.upload, download=bandwidths.download, total=bandwidths.total,
                 ),
                 wl_total=UserInfoBandwidthTotal(
                     upload=wl_bandwidths.upload,
@@ -309,7 +309,7 @@ class BusinessUserService(BaseService):
                 # else's identity — refuse loudly instead.
                 raise PanelRejectedError(
                     f"Panel {panel.name} reports email {username!r} is "
-                    f"already used by a different client (uuid {existing.uuid})"
+                    f"already used by a different client (uuid {existing.uuid})",
                 )
             else:
                 missing = [i for i in inbound_ids if i not in existing.inboundIds]
@@ -801,7 +801,7 @@ class BusinessUserService(BaseService):
         # Later panels may already hold the new UUID; that is the recorded
         # state, not something this method rolls back.
         for panel, exc in zip(
-            self.panels, self.panel_svc.map_panels(self.panels, write), strict=True
+            self.panels, self.panel_svc.map_panels(self.panels, write), strict=True,
         ):
             if exc is None:
                 continue
@@ -837,7 +837,7 @@ class BusinessUserService(BaseService):
         self.user_svc.set_auth_token(username, None)
         self.trace(Op.user.reset_user, "reset", username=username, uuid=newid)
         self.audit_svc.audit(
-            name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"}
+            name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"},
         )
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)

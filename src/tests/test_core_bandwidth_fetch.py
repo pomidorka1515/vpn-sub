@@ -21,20 +21,20 @@ def test_whitelist_total_uses_only_whitelist_panel(database: Database) -> None:
         clients=[
             make_panel_client("alice", [1], up=100, down=200),
             make_panel_client("stranger", [1], up=9_000, down=9_000),
-        ]
+        ],
     )
     whitelist = FakePanel(
         clients=[
             make_panel_client("alice", [2], up=10, down=20),
             make_panel_client("stranger", [2], up=8_000, down=8_000),
-        ]
+        ],
     )
     subscription = make_subscription(database, panels=[regular], whitelist_panel=whitelist)
     create_alice(database)
 
     assert subscription.bandwidth_svc.bandwidth("alice") == BandwidthInfo(100, 200, 300)
     assert subscription.bandwidth_svc.bandwidth("alice", whitelist=True) == BandwidthInfo(
-        10, 20, 30
+        10, 20, 30,
     )
     assert subscription.bandwidth_svc.bandwidth("alice").total == 300
 

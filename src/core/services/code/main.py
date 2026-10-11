@@ -133,7 +133,7 @@ class CodeService(BaseService):
         }
         try:
             self.db.add_code(
-                code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses
+                code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses,
             )
         except DuplicateError as exc:
             raise ConflictError(f"code '{code}' already exists") from exc

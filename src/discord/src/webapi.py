@@ -142,7 +142,7 @@ def _parsed[T](result: ApiResult, parser: Callable[[object], T]) -> ApiResult[T 
         except ValueError:
             ok, msg = False, "bad_response"
     return ApiResult(
-        ok, result.status, msg, obj, result.raw_headers, result.body, result.auth_token
+        ok, result.status, msg, obj, result.raw_headers, result.body, result.auth_token,
     )
 
 
@@ -354,19 +354,19 @@ class WebApiClient:
 
     async def validate_username(self, username: str) -> ApiResult[UsernamePayload | None]:
         return _parsed(
-            await self._request("GET", "/validate", params={"username": username}), _username
+            await self._request("GET", "/validate", params={"username": username}), _username,
         )
 
     async def profiles(self, token: str, lang: str) -> ApiResult[dict[str, str] | None]:
         return _parsed(
-            await self._request("GET", "/profiles", token=token, params={"lang": lang}), _strings
+            await self._request("GET", "/profiles", token=token, params={"lang": lang}), _strings,
         )
 
     async def history(
-        self, token: str, days: int
+        self, token: str, days: int,
     ) -> ApiResult[list[BandwidthSnapshotPayload] | None]:
         return _parsed(
-            await self._request("GET", "/history", token=token, params={"days": days}), _history
+            await self._request("GET", "/history", token=token, params={"days": days}), _history,
         )
 
     async def qr(self, token: str, *, happ: bool, lang: str) -> ApiResult:

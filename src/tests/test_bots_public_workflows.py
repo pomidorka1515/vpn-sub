@@ -127,9 +127,9 @@ def _wire[M: (PublicSettingsMixin, PublicAccountMixin, PublicLoginMixin, PublicT
             uri="/sub/",
             domain="https://example.test/",
             profiles={
-                "fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"])
+                "fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"]),
             },
-        )
+        ),
     )
     setattr(mixin, "get_lang", MagicMock(return_value="en"))
     setattr(mixin, "get_menu", MagicMock(return_value="menu"))
@@ -174,7 +174,7 @@ def test_settings_callback_requires_registration_and_dispatches(
     ):
         mixin.settings_callback(_call(action))
         registered = cast(
-            Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1]
+            Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1],
         )
         assert getattr(registered, "__func__", registered) is getattr(step, "__func__", step)
 
@@ -199,7 +199,7 @@ def test_fingerprint_and_settings_steps(
     subscription.business_svc.update_params.side_effect = None
     mixin.fp_callback(_call("fp_firefox"))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", fingerprint="firefox"
+        username="alice", fingerprint="firefox",
     )
     assert "fp ok" in telegram.send_message.call_args.args[1]
 
@@ -208,7 +208,7 @@ def test_fingerprint_and_settings_steps(
     subscription.telegram_svc.get_username_telegram.return_value = 1
     mixin.step_settings_name(_message("Bob"))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", fingerprint="firefox"
+        username="alice", fingerprint="firefox",
     )
 
     subscription.telegram_svc.get_username_telegram.return_value = "alice"
@@ -332,10 +332,10 @@ def test_login_flow(
     cast(MagicMock, mixin._answer_callback).assert_called_once()
     mixin.login_callback(_call("login_credentials"))
     registered = cast(
-        Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1]
+        Callable[[types.Message], None], telegram.register_next_step_handler.call_args.args[1],
     )
     assert getattr(registered, "__func__", registered) is getattr(
-        mixin.step_login_email, "__func__", mixin.step_login_email
+        mixin.step_login_email, "__func__", mixin.step_login_email,
     )
 
     mixin.step_login_email(_message("/start"))

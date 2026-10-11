@@ -131,7 +131,7 @@ def test_verbose_overrides_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_factory_applies_verbose_overrides(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch, core, panels")
     with factory(paths) as runtime:
@@ -164,7 +164,7 @@ def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:
 
 
 def test_compiled_binary_forces_bundled_schema(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from paths import bundled_root
 
@@ -298,7 +298,7 @@ def test_secondary_process_does_not_recover_or_start_bots(paths: AppPaths) -> No
             assert runtime.log_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
             assert runtime.audit_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
             with mock.patch.object(
-                runtime.subscription.business_code_svc, "recover_rollback_failures"
+                runtime.subscription.business_code_svc, "recover_rollback_failures",
             ) as recover:
                 with mock.patch.object(runtime.bandwidth_watcher, "start") as watcher_start:
                     assert runtime.admin_bot is not None

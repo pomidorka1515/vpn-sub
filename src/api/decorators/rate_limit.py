@@ -84,7 +84,7 @@ _client_lock = threading.Lock()
 
 
 def configure_rate_limit(
-    url: str, socket_timeout: float = _REDIS_SOCKET_TIMEOUT
+    url: str, socket_timeout: float = _REDIS_SOCKET_TIMEOUT,
 ) -> _RateLimitClient:
     """Open the process-wide client. Every worker must point at the same Redis."""
     from redis import Redis

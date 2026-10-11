@@ -33,7 +33,7 @@ class SnapshotsMixin(BWatchHost):
         panels_data: dict[str, JsonDict] = {}
         panel_errors: list[str] = []
         for panel, status in zip(
-            self.sub.panels, self.sub.panel_svc.statuses(pool=self._panel_pool()), strict=True
+            self.sub.panels, self.sub.panel_svc.statuses(pool=self._panel_pool()), strict=True,
         ):
             if status is None:
                 panel_errors.append(panel.name)
@@ -41,7 +41,7 @@ class SnapshotsMixin(BWatchHost):
                 panels_data[panel.name] = asdict(status.obj)
         if panel_errors:
             raise PanelUnavailableError(
-                "state snapshot could not read panel status: " + ", ".join(panel_errors)
+                "state snapshot could not read panel status: " + ", ".join(panel_errors),
             )
 
         midnight = int(time.time()) - (int(time.time()) % 86400)
@@ -143,7 +143,7 @@ class SnapshotsMixin(BWatchHost):
                 )
                 raise PanelUnavailableError(
                     "Daily bandwidth snapshot failed for "
-                    f"{len(eligible_users)}/{len(eligible_users)} eligible user(s)"
+                    f"{len(eligible_users)}/{len(eligible_users)} eligible user(s)",
                 ) from exc
             raise
 

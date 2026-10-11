@@ -30,7 +30,7 @@ def test_print_help_writes_stdout(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_main_help_exits_before_boot(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["vpn-sub", "--help"])
     with pytest.raises(SystemExit) as caught:
@@ -41,7 +41,7 @@ def test_main_help_exits_before_boot(
 
 
 def test_main_short_help_exits(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["vpn-sub", "-h"])
     with pytest.raises(SystemExit) as caught:
@@ -51,7 +51,7 @@ def test_main_short_help_exits(
 
 
 def test_discord_help_exits_before_boot(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(DISCORD))  # pyright: ignore[reportUnknownMemberType]  # Upstream parameter is untyped.
     monkeypatch.setattr(sys, "argv", ["vpn-sub-discord", "--help"])

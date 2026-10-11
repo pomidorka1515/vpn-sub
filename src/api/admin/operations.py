@@ -55,7 +55,7 @@ class OperationsRoutes(AdminApiMixin):
                 "degraded": snapshot_failure is not None or any(rollback_failures.values()),
                 "daily_snapshot_failure": snapshot_failure,
                 "rollback_failures": rollback_failures,
-            }
+            },
         )
 
     @requires_admin_auth
@@ -64,7 +64,7 @@ class OperationsRoutes(AdminApiMixin):
             obj={
                 "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
                 "rollback_failures": self.sub.business_code_svc.get_rollback_failures(),
-            }
+            },
         )
 
     @requires_admin_auth

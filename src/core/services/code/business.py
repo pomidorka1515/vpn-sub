@@ -64,7 +64,7 @@ class BusinessCodeService(BaseService):
             )
             try:
                 self.db.set_metadata(
-                    f"registration_rollback_failed:{username}", str(int(time.time()))
+                    f"registration_rollback_failed:{username}", str(int(time.time())),
                 )
                 self.trace(
                     Op.register.rollback_registered_user,
@@ -234,7 +234,7 @@ class BusinessCodeService(BaseService):
             self.user_svc.add_users(username=username, _called_internally=True)
         except Exception:
             self.log.critical(
-                f"register_with_code backend sync failed for {username}", exc_info=True
+                f"register_with_code backend sync failed for {username}", exc_info=True,
             )
             self._rollback_registered_user(username=username)
             raise

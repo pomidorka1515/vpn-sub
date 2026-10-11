@@ -179,7 +179,7 @@ def _envelope(panel: XUiSession, response: Response, what: str) -> dict[str, Jso
         raise ReconcileError(f"panel {panel.name}: {what} returned invalid JSON") from exc
     if response.status_code != 200 or not data.get("success"):
         raise ReconcileError(
-            f"panel {panel.name}: {what} failed: {data.get('msg') or response.status_code}"
+            f"panel {panel.name}: {what} failed: {data.get('msg') or response.status_code}",
         )
     return data
 
@@ -213,7 +213,7 @@ def _post(panel: XUiSession, url: str, body: dict[str, JsonValue], what: str) ->
         content = {}
     if response.status_code not in (200, 201) or not content.get("success"):
         raise ReconcileError(
-            f"panel {panel.name}: {what} rejected: {content.get('msg') or response.status_code}"
+            f"panel {panel.name}: {what} rejected: {content.get('msg') or response.status_code}",
         )
 
 

@@ -247,7 +247,7 @@ class LinesConfig:
                     fsync_parent_dir(self._path)
 
     def compact(
-        self, keep: Callable[[Mapping[str, JsonValue]], bool] | None = None
+        self, keep: Callable[[Mapping[str, JsonValue]], bool] | None = None,
     ) -> CompactReturn:
         """Rewrite the file keeping only records that satisfy `keep`. Thread-safe.
 

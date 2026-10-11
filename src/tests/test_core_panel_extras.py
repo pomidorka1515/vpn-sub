@@ -187,7 +187,7 @@ def test_list_clients_parses_attachments(
         clients=[
             make_panel_client("alice", [1, 2], up=1, down=2),
             make_panel_client("bob", [2], up=3, down=4),
-        ]
+        ],
     )
     clients = subscription.panel_svc.list_clients(cast(XUiSession, panel))
     assert [c.email for c in clients] == ["alice", "bob"]
@@ -202,7 +202,7 @@ def test_clients_snapshot_lists_once_within_ttl(subscription: Subscription) -> N
         clients=[
             make_panel_client("alice", [1]),
             make_panel_client("bob", [2]),
-        ]
+        ],
     )
     first = subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))
     second = subscription.panel_svc.clients_snapshot(cast(XUiSession, panel))

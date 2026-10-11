@@ -36,7 +36,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         try:
             self.sub.business_svc.delete_user(username=username, perma=True)
             self.bot.send_message(
-                message.chat.id, t["delete_success"], reply_markup=self.get_menu(uid)
+                message.chat.id, t["delete_success"], reply_markup=self.get_menu(uid),
             )
 
         except AppError as error:
@@ -63,14 +63,14 @@ class PublicAccountMixin(PublicFeatureMixin):
                     return None
                 self.sub.business_svc.reset_user(username)
                 self.bot.send_message(
-                    message.chat.id, t["reset_success"], reply_markup=self.get_menu(uid)
+                    message.chat.id, t["reset_success"], reply_markup=self.get_menu(uid),
                 )
             except AppError as error:
                 self._send_message(message.chat.id, error.message, reply_markup=self.get_menu(uid))
             except Exception:
                 self.log.critical("reset_user failed", exc_info=True)
                 self._send_message(
-                    message.chat.id, t["error_generic"], reply_markup=self.get_menu(uid)
+                    message.chat.id, t["error_generic"], reply_markup=self.get_menu(uid),
                 )
         else:
             self.bot.send_message(message.chat.id, t["cancelled"], reply_markup=self.get_menu(uid))
@@ -90,7 +90,7 @@ class PublicAccountMixin(PublicFeatureMixin):
         try:
             self.sub.telegram_svc.bonus_code(value=uid, code=code)
             self.bot.send_message(
-                message.chat.id, t["bonus_success"], reply_markup=self.get_menu(uid)
+                message.chat.id, t["bonus_success"], reply_markup=self.get_menu(uid),
             )
             self.send_info(message.chat.id, uid, lang)
         except AppError:

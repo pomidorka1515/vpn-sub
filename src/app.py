@@ -179,7 +179,7 @@ class Application:
                 pass
             case (3, 12):
                 log.warning(
-                    "This app was built for Python 3.13+, consider switching to avoid bugs (found: 3.12)"
+                    "This app was built for Python 3.13+, consider switching to avoid bugs (found: 3.12)",
                 )
             case (3, minor):
                 raise RuntimeError(f"Error: Python 3.12+ required (detected 3.{minor})")
@@ -256,7 +256,7 @@ def _build_flask_app(options: AppOptions) -> Flask:
     flask_app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
     if options.proxy_hops > 0:
         flask_app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
-            flask_app.wsgi_app, x_for=options.proxy_hops, x_proto=1, x_host=1
+            flask_app.wsgi_app, x_for=options.proxy_hops, x_proto=1, x_host=1,
         )
     if options.require_proxy:
         flask_app.wsgi_app = _ProxyGuard(flask_app.wsgi_app)  # type: ignore[method-assign]
@@ -295,7 +295,7 @@ def _acquire_primary_lock(path: Path) -> tuple[bool, BinaryIO | None]:
 
 
 def _build_configs(
-    paths: AppPaths, *, start_backup: bool
+    paths: AppPaths, *, start_backup: bool,
 ) -> tuple[
     Config[AppConfig],  # main
     Config[LangConfig],  # lang

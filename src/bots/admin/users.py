@@ -24,7 +24,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
         if not all_users:
             self.bot.send_message(
-                chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu()
+                chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu(),
             )
             return
 
@@ -41,16 +41,16 @@ class AdminUsersMixin(AdminFeatureMixin):
         nav_buttons: list[types.InlineKeyboardButton] = []
         if page > 0:
             nav_buttons.append(
-                types.InlineKeyboardButton("◀️", callback_data="page_list_users_" + str(page - 1))
+                types.InlineKeyboardButton("◀️", callback_data="page_list_users_" + str(page - 1)),
             )
         if page < total_pages - 1:
             nav_buttons.append(
-                types.InlineKeyboardButton("▶️", callback_data="page_list_users_" + str(page + 1))
+                types.InlineKeyboardButton("▶️", callback_data="page_list_users_" + str(page + 1)),
             )
         if nav_buttons:
             markup.add(*nav_buttons)  # pyright: ignore[reportUnknownMemberType]
             markup.add(
-                types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop")
+                types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"),
             )  # pyright: ignore[reportUnknownMemberType]
 
         markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
@@ -60,11 +60,11 @@ class AdminUsersMixin(AdminFeatureMixin):
         online_users = self.sub.panel_svc.get_online_users(new=True)
         if not online_users:
             self._send_message(
-                chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu()
+                chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu(),
             )
             return
         text = "👥 <b>Список пользователей онлайн:</b>\n\n" + "\n".join(
-            [f"- <code>{u}</code>{', логин: ' + v if v else ''}" for u, v in online_users.items()]
+            [f"- <code>{u}</code>{', логин: ' + v if v else ''}" for u, v in online_users.items()],
         )
         self._send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
 
@@ -95,7 +95,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
         else:
             self._send_message(
-                chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu()
+                chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu(),
             )
 
     def _cb_info_user(self, chat_id: int, username: str) -> None:
@@ -141,7 +141,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             markup = types.InlineKeyboardMarkup(row_width=2)
             markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(
-                    "✏️ Изменить пользователя", callback_data=f"edit_user_{username}"
+                    "✏️ Изменить пользователя", callback_data=f"edit_user_{username}",
                 ),
                 types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"),
             )
@@ -229,14 +229,14 @@ class AdminUsersMixin(AdminFeatureMixin):
             limit = int(text.strip())
         except ValueError:
             self.bot.send_message(
-                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu()
+                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu(),
             )
             return
         try:
             self.sub.business_svc.update_params(username=username, limit=limit)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -269,14 +269,14 @@ class AdminUsersMixin(AdminFeatureMixin):
             wl_limit = int(text.strip())
         except ValueError:
             self.bot.send_message(
-                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu()
+                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu(),
             )
             return
         try:
             self.sub.business_svc.update_params(username=username, wl_limit=wl_limit)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -313,7 +313,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             days = int(text.strip())
         except ValueError:
             self.bot.send_message(
-                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu()
+                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu(),
             )
             return
         timee = int(time.time() + (days * 86400)) if days else 0
@@ -321,7 +321,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             self.sub.business_svc.update_params(username=username, timee=timee)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -371,7 +371,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             self.sub.business_svc.update_params(username=username, displayname=new_name)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -392,7 +392,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             obj = self.sub.business_svc.reset_user(username)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+                message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
             )
             return
 
@@ -426,7 +426,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         displayname = text.strip()
 
         msg = self.bot.send_message(
-            message.chat.id, "Введите лимит в гигабайтах (или 0 для безлимита):"
+            message.chat.id, "Введите лимит в гигабайтах (или 0 для безлимита):",
         )
         self.bot.register_next_step_handler(msg, self._step_add_user_limit, username, displayname)  # pyright: ignore[reportUnknownMemberType]
 
@@ -444,14 +444,14 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
             return
         msg = self.bot.send_message(
-            message.chat.id, "Введите кол-во дней подписки (0 для безлимита):"
+            message.chat.id, "Введите кол-во дней подписки (0 для безлимита):",
         )
         self.bot.register_next_step_handler(
-            msg, self._step_add_user_time, username, displayname, limit
+            msg, self._step_add_user_time, username, displayname, limit,
         )  # pyright: ignore[reportUnknownMemberType]
 
     def _step_add_user_time(
-        self, message: types.Message, username: str, displayname: str, limit: int
+        self, message: types.Message, username: str, displayname: str, limit: int,
     ) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
@@ -470,7 +470,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         timee = int(time.time() + (timee * 86400)) if timee else 0
         try:
             self.sub.business_svc.add_new_user(
-                username=username, displayname=displayname, limit=limit, timee=timee
+                username=username, displayname=displayname, limit=limit, timee=timee,
             )
             self._send_message(
                 message.chat.id,
@@ -480,12 +480,12 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
         except AppError as error:
             self._send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
             )
         except Exception:
             self.log.exception("Telegram handler failed")
             self._send_message(
-                message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu()
+                message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu(),
             )
 
     def _step_info_user(self, message: types.Message) -> None:

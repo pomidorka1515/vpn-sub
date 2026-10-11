@@ -42,7 +42,7 @@ class _Poller:
         self._stop_event = stop_event
 
     def infinity_polling(
-        self, *, timeout: int, long_polling_timeout: int, logger_level: int | None
+        self, *, timeout: int, long_polling_timeout: int, logger_level: int | None,
     ) -> None:
         self.polling_started.set()
         self._stop_event.wait(_STOP_WAIT_SECONDS)
@@ -133,7 +133,7 @@ def test_polling_errors_are_logged_without_token_or_traceback(
     raised = threading.Event()
 
     def infinity_polling(
-        *, timeout: int, long_polling_timeout: int, logger_level: int | None
+        *, timeout: int, long_polling_timeout: int, logger_level: int | None,
     ) -> None:
         if not raised.is_set():
             raised.set()
@@ -141,7 +141,7 @@ def test_polling_errors_are_logged_without_token_or_traceback(
                 f"HTTPSConnectionPool(host='api.telegram.org', port=443): "
                 f"Max retries exceeded with url: /bot{token}/getUpdates "
                 f"(Caused by ProtocolError('Connection aborted.', "
-                f"ConnectionResetError(104, 'Connection reset by peer')))"
+                f"ConnectionResetError(104, 'Connection reset by peer')))",
             )
         stop_event.wait(_STOP_WAIT_SECONDS)
 
@@ -169,7 +169,7 @@ def test_transient_polling_errors_are_left_to_library_backoff() -> None:
     logger = _NullLogger()
     handler = _PollingExceptionHandler(cast(Logger, logger), None)
     reset = ConnectionError(
-        "('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
+        "('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
     )
     exception = cast(
         Callable[[str, Response, dict[str, object]], apihelper.ApiTelegramException],

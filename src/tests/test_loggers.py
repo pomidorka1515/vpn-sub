@@ -150,7 +150,7 @@ def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> N
             timedelta(milliseconds=1),
         )
         assert [message for _, message in logged] == [
-            f'203.0.113.10 > "GET /health HTTP/1.1" {color}{status}{Colors.RESET} 4b "dashboard"'
+            f'203.0.113.10 > "GET /health HTTP/1.1" {color}{status}{Colors.RESET} 4b "dashboard"',
         ]
 
     assert _color_status("-") == "-"
@@ -321,7 +321,7 @@ def test_jsonl_strips_message_colors() -> None:
     logger.propagate = False
 
     logger.info(
-        f"{Colors.BOLD}{Colors.ITALIC}{Colors.RED}Hello {Colors.GREEN}World!{Colors.RESET} regular"
+        f"{Colors.BOLD}{Colors.ITALIC}{Colors.RED}Hello {Colors.GREEN}World!{Colors.RESET} regular",
     )
 
     assert stored[0]["text"] == "Hello World! regular"

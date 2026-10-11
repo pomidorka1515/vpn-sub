@@ -79,7 +79,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
 ├ <b>RAM:</b> <code>{obj.appStats.mem / MB:.2f} MB</code>
 └ <b>Uptime:</b> <code>{app_up}</code>"""
         self.bot.send_message(
-            chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None
+            chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None,
         )
 
     def _cb_all_panels_status(self, chat_id: int) -> None:

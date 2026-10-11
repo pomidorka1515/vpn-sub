@@ -30,7 +30,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
 
         if action == "set_name":
             msg = self.bot.send_message(
-                message.chat.id, t["settings_name_prompt"], reply_markup=types.ReplyKeyboardRemove()
+                message.chat.id, t["settings_name_prompt"], reply_markup=types.ReplyKeyboardRemove(),
             )
             self.bot.register_next_step_handler(msg, self.step_settings_name)  # pyright: ignore[reportUnknownMemberType]
         elif action == "set_fp":
@@ -53,7 +53,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             self.bot.register_next_step_handler(msg, self.step_settings_login)  # pyright: ignore[reportUnknownMemberType]
         elif action == "set_pass":
             msg = self.bot.send_message(
-                message.chat.id, t["settings_pass_prompt"], reply_markup=types.ReplyKeyboardRemove()
+                message.chat.id, t["settings_pass_prompt"], reply_markup=types.ReplyKeyboardRemove(),
             )
             self.bot.register_next_step_handler(msg, self.step_settings_pass)  # pyright: ignore[reportUnknownMemberType]
 
@@ -76,11 +76,11 @@ class PublicSettingsMixin(PublicFeatureMixin):
             self.sub.business_svc.update_params(username=username, fingerprint=fp)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid)
+                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid),
             )
         else:
             self.bot.send_message(
-                message.chat.id, t["settings_fp_success"], reply_markup=self.get_menu(uid)
+                message.chat.id, t["settings_fp_success"], reply_markup=self.get_menu(uid),
             )
         self._delete_message(message.chat.id, message.message_id)
 
@@ -108,11 +108,11 @@ class PublicSettingsMixin(PublicFeatureMixin):
             self.sub.business_svc.update_params(username=username, displayname=new_name)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid)
+                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid),
             )
         else:
             self.bot.send_message(
-                message.chat.id, t["settings_name_success"], reply_markup=self.get_menu(uid)
+                message.chat.id, t["settings_name_success"], reply_markup=self.get_menu(uid),
             )
 
     def step_settings_login(self, message: types.Message) -> None:
@@ -129,7 +129,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         new_login = text.strip()
         if len(new_login) > 32:
             self.bot.send_message(
-                message.chat.id, t["length_username"].format(ln=16), reply_markup=self.get_menu(uid)
+                message.chat.id, t["length_username"].format(ln=16), reply_markup=self.get_menu(uid),
             )
             return None
 
@@ -137,11 +137,11 @@ class PublicSettingsMixin(PublicFeatureMixin):
             self.sub.business_svc.update_params(username=username, ext_username=new_login)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid)
+                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid),
             )
         else:
             self.bot.send_message(
-                message.chat.id, t["settings_login_success"], reply_markup=self.get_menu(uid)
+                message.chat.id, t["settings_login_success"], reply_markup=self.get_menu(uid),
             )
 
     def step_settings_pass(self, message: types.Message) -> None:
@@ -164,19 +164,19 @@ class PublicSettingsMixin(PublicFeatureMixin):
         ext_username = self.sub.user_svc.get_external_username(username)
         if not ext_username:
             self.bot.send_message(
-                message.chat.id, "❌ No login found", reply_markup=self.get_menu(uid)
+                message.chat.id, "❌ No login found", reply_markup=self.get_menu(uid),
             )
             return None
 
         try:
             self.sub.business_svc.update_params(
-                username=username, ext_username=ext_username, ext_password=new_pass
+                username=username, ext_username=ext_username, ext_password=new_pass,
             )
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid)
+                message.chat.id, f"❌ {error.message}", reply_markup=self.get_menu(uid),
             )
         else:
             self.bot.send_message(
-                message.chat.id, t["settings_pass_success"], reply_markup=self.get_menu(uid)
+                message.chat.id, t["settings_pass_success"], reply_markup=self.get_menu(uid),
             )

@@ -67,7 +67,7 @@ def _get_stub(files: dict[str, bytes]) -> GetStub:
 
 
 def test_refuses_outside_a_binary(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     _plain(monkeypatch)
     called = False
@@ -84,7 +84,7 @@ def test_refuses_outside_a_binary(
 
 
 def test_refuses_without_a_release_version(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(scripts_load, "VERSION", "0.0.0")

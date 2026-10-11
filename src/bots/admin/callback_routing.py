@@ -108,7 +108,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
     def _handle_add_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
         msg = self.bot.send_message(
-            chat_id, "Введите username нового пользователя (или /start для отмены):"
+            chat_id, "Введите username нового пользователя (или /start для отмены):",
         )
         self.bot.register_next_step_handler(msg, self._step_add_user_name)  # pyright: ignore[reportUnknownMemberType]
 
@@ -116,7 +116,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         del data
         if not self.sub.user_svc.list_users():
             self.bot.send_message(
-                chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu()
+                chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu(),
             )
             return
         page = self._pagination_state.get(chat_id, {}).get("info_page", 0)
@@ -172,7 +172,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
     def _handle_codes_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
         self.bot.edit_message_text(
-            "🎟 Управление кодами:", chat_id, message.message_id, reply_markup=self.get_codes_menu()
+            "🎟 Управление кодами:", chat_id, message.message_id, reply_markup=self.get_codes_menu(),
         )
 
     def _handle_list_codes(self, data: str, chat_id: int, message: types.Message) -> None:
@@ -206,14 +206,14 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             return
         code_type = data.split("codetype_", 1)[1]
         msg = self.bot.send_message(
-            chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML"
+            chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML",
         )
         self.bot.register_next_step_handler(msg, self._step_add_code_days, code_type, code_name)  # pyright: ignore[reportUnknownMemberType]
 
     def _handle_chart(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
         msg = self.bot.send_message(
-            chat_id, "Введите username пользователя (или /start для отмены):"
+            chat_id, "Введите username пользователя (или /start для отмены):",
         )
         self.bot.register_next_step_handler(msg, self._step_chart_username)  # pyright: ignore[reportUnknownMemberType]
 
@@ -230,7 +230,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         pending = self._pending_edits.get(chat_id)
         if not pending:
             self.bot.send_message(
-                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu()
+                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu(),
             )
             return
         handlers = {
@@ -249,7 +249,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         pending = self._pending_edits.get(chat_id)
         if not pending:
             self.bot.send_message(
-                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu()
+                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu(),
             )
             return
         fp = data.split("fp_save_", 1)[1]
@@ -257,7 +257,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
         except AppError as error:
             self._send_message(
-                chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+                chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
             )
         else:
             self._send_message(

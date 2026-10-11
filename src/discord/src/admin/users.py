@@ -22,12 +22,12 @@ class AdminUsersMixin(AdminFeatureMixin):
         users = str_list(payload)
         if payload is not None and not isinstance(payload, list):
             await self._respond(
-                interaction, "❌ Некорректный ответ сервиса.", view=self.main_menu_view()
+                interaction, "❌ Некорректный ответ сервиса.", view=self.main_menu_view(),
             )
             return
         if not users:
             await self._respond(
-                interaction, "Список пользователей пуст.", view=self.main_menu_view()
+                interaction, "Список пользователей пуст.", view=self.main_menu_view(),
             )
             return
         total = len(users)
@@ -44,7 +44,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                     label="◀️",
                     custom_id=f"admin:page:list:{page - 1}",
                     style=discord.ButtonStyle.secondary,
-                )
+                ),
             )
         if page < total_pages - 1:
             view.add_item(
@@ -52,7 +52,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                     label="▶️",
                     custom_id=f"admin:page:list:{page + 1}",
                     style=discord.ButtonStyle.secondary,
-                )
+                ),
             )
         if total_pages > 1:
             view.add_item(
@@ -61,12 +61,12 @@ class AdminUsersMixin(AdminFeatureMixin):
                     custom_id="admin:noop",
                     style=discord.ButtonStyle.secondary,
                     disabled=True,
-                )
+                ),
             )
         view.add_item(
             discord.ui.Button(
-                label="🔙 В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary
-            )
+                label="🔙 В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary,
+            ),
         )
         await self._respond(interaction, text, view=view)
 
@@ -87,7 +87,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 users = {str(item): None for item in cast(list[object], nested)}
         if not users:
             await self._respond(
-                interaction, "Нет пользователей в сети.", view=self.main_menu_view()
+                interaction, "Нет пользователей в сети.", view=self.main_menu_view(),
             )
             return
         lines = [f"- `{u}`{', логин: ' + v if v else ''}" for u, v in users.items()]
@@ -132,7 +132,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
             return
         await self._respond(
-            interaction, "✅ Все пользователи успешно обновлены.", view=self.main_menu_view()
+            interaction, "✅ Все пользователи успешно обновлены.", view=self.main_menu_view(),
         )
 
     async def _cb_info_user(self, interaction: discord.Interaction, username: str) -> None:
@@ -143,7 +143,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         info: object = result_obj(result)
         if not isinstance(info, dict):
             await self._respond(
-                interaction, "❌ Некорректный ответ сервиса.", view=self.main_menu_view()
+                interaction, "❌ Некорректный ответ сервиса.", view=self.main_menu_view(),
             )
             return
         typed = obj_map(cast(object, info))
@@ -183,12 +183,12 @@ class AdminUsersMixin(AdminFeatureMixin):
                 label="✏️ Изменить пользователя",
                 custom_id=f"admin:edit_user:{username}",
                 style=discord.ButtonStyle.secondary,
-            )
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label="🔙 В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary
-            )
+                label="🔙 В меню", custom_id="admin:cancel", style=discord.ButtonStyle.primary,
+            ),
         )
         await self._respond(interaction, text, view=view)
 
@@ -198,7 +198,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         if not await self.consume_result(interaction, result):
             return
         await self._respond(
-            interaction, f"✅ Пользователь **{username}** удален.", view=self.main_menu_view()
+            interaction, f"✅ Пользователь **{username}** удален.", view=self.main_menu_view(),
         )
 
     async def _cb_edit_user_options(self, interaction: discord.Interaction, username: str) -> None:
@@ -208,39 +208,39 @@ class AdminUsersMixin(AdminFeatureMixin):
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(
-                label="🔐 Отпечаток", custom_id="admin:edit:fp", style=discord.ButtonStyle.secondary
-            )
+                label="🔐 Отпечаток", custom_id="admin:edit:fp", style=discord.ButtonStyle.secondary,
+            ),
         )
         view.add_item(
             discord.ui.Button(
                 label="📊 Месячный лимит",
                 custom_id="admin:edit:limit",
                 style=discord.ButtonStyle.secondary,
-            )
+            ),
         )
         view.add_item(
             discord.ui.Button(
                 label="🌍 Мес. лимит WL",
                 custom_id="admin:edit:wl_limit",
                 style=discord.ButtonStyle.secondary,
-            )
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label="⏰ Срок", custom_id="admin:edit:time", style=discord.ButtonStyle.secondary
-            )
+                label="⏰ Срок", custom_id="admin:edit:time", style=discord.ButtonStyle.secondary,
+            ),
         )
         view.add_item(
             discord.ui.Button(
                 label="🏷 Отображаемое имя",
                 custom_id="admin:edit:name",
                 style=discord.ButtonStyle.secondary,
-            )
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label="🔙 Отмена", custom_id="admin:cancel", style=discord.ButtonStyle.primary
-            )
+                label="🔙 Отмена", custom_id="admin:cancel", style=discord.ButtonStyle.primary,
+            ),
         )
         self._pending_edits[interaction.user.id] = {"username": username}
         await self._respond(interaction, f"✏️ Что изменить для **{username}**?", view=view)
@@ -266,12 +266,12 @@ class AdminUsersMixin(AdminFeatureMixin):
                     label=label,
                     custom_id=f"admin:fp_save:{name}",
                     style=discord.ButtonStyle.secondary,
-                )
+                ),
             )
         view.add_item(
             discord.ui.Button(
-                label="🔙 Отмена", custom_id="admin:cancel", style=discord.ButtonStyle.primary
-            )
+                label="🔙 Отмена", custom_id="admin:cancel", style=discord.ButtonStyle.primary,
+            ),
         )
         await self._respond(
             interaction,
@@ -290,7 +290,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 custom_id="limit",
                 min_length=1,
                 max_length=8,
-            )
+            ),
         )
         await self._send_modal(interaction, modal)
 
@@ -303,7 +303,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 custom_id="wl_limit",
                 min_length=1,
                 max_length=8,
-            )
+            ),
         )
         await self._send_modal(interaction, modal)
 
@@ -316,7 +316,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 custom_id="days",
                 min_length=1,
                 max_length=8,
-            )
+            ),
         )
         await self._send_modal(interaction, modal)
 
@@ -329,7 +329,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 custom_id="name",
                 min_length=1,
                 max_length=16,
-            )
+            ),
         )
         await self._send_modal(interaction, modal)
 
@@ -358,7 +358,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             days = int(values.get("days", "0").strip())
         except ValueError:
             await self._respond(
-                interaction, "❌ Лимит и дни должны быть числами.", view=self.main_menu_view()
+                interaction, "❌ Лимит и дни должны быть числами.", view=self.main_menu_view(),
             )
             return
         timee = int(time.time() + (days * 86400)) if days else 0
@@ -376,7 +376,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         pending = self._pending_edits.get(interaction.user.id)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view(),
             )
             return
         try:
@@ -389,14 +389,14 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
-            interaction, f"✅ Месячный лимит обновлён: `{limit}` GB", view=self.main_menu_view()
+            interaction, f"✅ Месячный лимит обновлён: `{limit}` GB", view=self.main_menu_view(),
         )
 
     async def handle_edit_wl_limit_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view(),
             )
             return
         try:
@@ -409,14 +409,14 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
-            interaction, f"✅ Лимит обновлён: `{wl_limit}` GB", view=self.main_menu_view()
+            interaction, f"✅ Лимит обновлён: `{wl_limit}` GB", view=self.main_menu_view(),
         )
 
     async def handle_edit_time_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view(),
             )
             return
         try:
@@ -438,14 +438,14 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
             return
         await self._respond(
-            interaction, "✅ Срок установлен в безлимит.", view=self.main_menu_view()
+            interaction, "✅ Срок установлен в безлимит.", view=self.main_menu_view(),
         )
 
     async def handle_edit_name_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view(),
             )
             return
         new_name = self.modal_values(interaction).get("name", "").strip()
@@ -461,5 +461,5 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
-            interaction, f"✅ Имя обновлено: `{new_name}`", view=self.main_menu_view()
+            interaction, f"✅ Имя обновлено: `{new_name}`", view=self.main_menu_view(),
         )

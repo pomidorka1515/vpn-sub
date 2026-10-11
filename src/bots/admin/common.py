@@ -80,17 +80,17 @@ class AdminCommonMixin(
         nav_buttons: list[types.InlineKeyboardButton] = []
         if page > 0:
             nav_buttons.append(
-                types.InlineKeyboardButton("◀️", callback_data=f"page_{prefix}_{page - 1}")
+                types.InlineKeyboardButton("◀️", callback_data=f"page_{prefix}_{page - 1}"),
             )
         if page < total_pages - 1:
             nav_buttons.append(
-                types.InlineKeyboardButton("▶️", callback_data=f"page_{prefix}_{page + 1}")
+                types.InlineKeyboardButton("▶️", callback_data=f"page_{prefix}_{page + 1}"),
             )
 
         if nav_buttons:
             markup.add(*nav_buttons)  # pyright: ignore[reportUnknownMemberType]
             markup.add(
-                types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop")
+                types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"),
             )  # pyright: ignore[reportUnknownMemberType]
 
         markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]

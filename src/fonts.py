@@ -9,7 +9,7 @@ FONT_FILES: frozenset[str] = frozenset(
         "outfit-latin.woff2",
         "jetbrains-mono-latin.woff2",
         "jetbrains-mono-cyrillic.woff2",
-    }
+    },
 )
 _FONT_PLACEHOLDER = "__FONT_BASE__"
 FONTS_MARKER = "/* __FONTS__ */"

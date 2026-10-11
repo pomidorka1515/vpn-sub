@@ -162,7 +162,7 @@ def _admin_api(
                 api_uri=api_uri,
                 api_token="secret",
                 api_admin_ui_auth=list(api_admin_ui_auth),
-            )
+            ),
         ),
         audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
@@ -306,7 +306,7 @@ def test_admin_logout_cookie_path_matches_login_when_uri_empty(
                 api_uri="api",
                 api_token="secret",
                 api_admin_ui_auth=["admin", "panel-secret"],
-            )
+            ),
         ),
         audit_cfg=cast(LinesConfig, _Audit()),
         sub=subscription,
@@ -314,7 +314,7 @@ def test_admin_logout_cookie_path_matches_login_when_uri_empty(
     )
     client = flask_app.test_client()
     signed_in = client.post(
-        "/admin/session", json={"username": "admin", "password": "panel-secret"}
+        "/admin/session", json={"username": "admin", "password": "panel-secret"},
     )
     assert signed_in.status_code == 200
     assert "Path=/admin" in signed_in.headers["Set-Cookie"]

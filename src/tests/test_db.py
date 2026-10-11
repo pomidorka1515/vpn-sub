@@ -40,7 +40,7 @@ def test_schema_initialization_is_idempotent(db_path: Path) -> None:
             )
             assert (
                 conn.execute(
-                    "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
+                    "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'",
                 ).fetchone()[0]
                 == ""
             )
@@ -92,15 +92,15 @@ def test_migration_repairs_negative_bandwidth_snapshot_values(
             wl_limit_gb, wl_used, ext_username, ext_password_hash, created_at
         FROM old_users;
         DROP TABLE old_users;
-        UPDATE schema_version SET version = 1;"""
+        UPDATE schema_version SET version = 1;""",
     )
     connection.execute(
         """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
-        VALUES ('alice', 20, -1, 2, -3, 4)"""
+        VALUES ('alice', 20, -1, 2, -3, 4)""",
     )
     connection.execute(
         """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
-        VALUES ('alice', 30, 5, -6, 7, 8)"""
+        VALUES ('alice', 30, 5, -6, 7, 8)""",
     )
     connection.commit()
     connection.close()
@@ -144,7 +144,7 @@ def test_auth_token_migration_and_lookup(database: Database, db_path: Path) -> N
             wl_limit_gb, wl_used, ext_username, ext_password_hash, created_at
         FROM old_users;
         DROP TABLE old_users;
-        UPDATE schema_version SET version = 2;"""
+        UPDATE schema_version SET version = 2;""",
     )
     connection.close()
 
@@ -181,7 +181,7 @@ def test_admin_ui_session_migration_from_version_3(database: Database, db_path: 
             )
             assert (
                 conn.execute(
-                    "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'"
+                    "SELECT value FROM app_metadata WHERE key = 'admin_ui_session'",
                 ).fetchone()[0]
                 == ""
             )
@@ -359,7 +359,7 @@ def test_bulk_usage_and_snapshots_commit_once(database: Database) -> None:
             [
                 ("alice", 10, 1, 2, 0, 0),
                 ("bob", 10, 0, 0, 5, 6),
-            ]
+            ],
         )
         database.increment_usages({})
         database.add_bandwidth_snapshots([])

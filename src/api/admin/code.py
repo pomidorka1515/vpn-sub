@@ -42,7 +42,7 @@ class CodeRoutes(AdminApiMixin):
     def code_add(self) -> ResponseType:
         content = g.json_obj
         raw_data: dict[
-            Literal["name", "action", "permanent", "uses", "days", "gb", "wl_gb"], JsonifyValue
+            Literal["name", "action", "permanent", "uses", "days", "gb", "wl_gb"], JsonifyValue,
         ] = {
             "name": content.get("code"),
             "action": content.get("action"),

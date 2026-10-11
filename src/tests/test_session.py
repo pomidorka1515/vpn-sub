@@ -204,10 +204,10 @@ def test_cache_age_uses_the_session_clock(panel: XUiSession, clock: FakeClock) -
 def test_clear_cache_invalidates_another_session(tmp_path: Path, clock: FakeClock) -> None:
     stamp = tmp_path / "inbounds.stamp"
     first = XUiSession(
-        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)),
     )
     second = XUiSession(
-        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)),
     )
     try:
         first.cache = [make_inbound(1)]
@@ -234,10 +234,10 @@ def test_clear_cache_keeps_the_list_when_the_stamp_cannot_move(panel: XUiSession
 def test_fresh_cache_misses_when_the_stamp_moves(tmp_path: Path, clock: FakeClock) -> None:
     stamp = tmp_path / "inbounds.stamp"
     first = XUiSession(
-        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)),
     )
     second = XUiSession(
-        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)),
     )
     try:
         first.cache = [make_inbound(1)]
@@ -253,7 +253,7 @@ def test_fresh_cache_misses_when_the_stamp_moves(tmp_path: Path, clock: FakeCloc
 def test_cache_fill_does_not_revive_a_cleared_stamp(tmp_path: Path, clock: FakeClock) -> None:
     stamp = tmp_path / "inbounds.stamp"
     session = XUiSession(
-        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp))
+        **session_kwargs(transport=RecordingTransport(), clock=clock, stamp_path=str(stamp)),
     )
     try:
         session.cache = [make_inbound(1)]
@@ -286,7 +286,7 @@ def test_client_cache_uses_its_own_stamp(tmp_path: Path, clock: FakeClock) -> No
             clock=clock,
             stamp_path=str(inbound_stamp),
             client_stamp_path=str(client_stamp),
-        )
+        ),
     )
     try:
         session.cache = [make_inbound(1)]
@@ -311,7 +311,7 @@ def test_client_stamp_must_not_be_the_inbound_stamp(tmp_path: Path) -> None:
                 transport=RecordingTransport(),
                 stamp_path=str(stamp),
                 client_stamp_path=str(stamp),
-            )
+            ),
         )
 
 
@@ -326,8 +326,8 @@ def test_invalid_mode_is_rejected(transport: RecordingTransport) -> None:
     with pytest.raises(ValueError, match="whitelist"):
         XUiSession(
             **session_kwargs(
-                transport=transport, mode=cast(Literal["whitelist", "blacklist"], "both")
-            )
+                transport=transport, mode=cast(Literal["whitelist", "blacklist"], "both"),
+            ),
         )
 
 
@@ -412,7 +412,7 @@ def test_verbose_logs_completed_requests(
             clock=clock,
             uri="secret/panel",
             verbose=True,
-        )
+        ),
     )
     session.log.addHandler(caplog.handler)
     try:

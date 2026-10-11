@@ -85,7 +85,7 @@ def classify(state: UserRecord, now: int) -> tuple[Notice, ...]:
                     "1",
                     {"limit_gb": wl_limit},
                     clears=("whitelist_soon",),
-                )
+                ),
             )
     else:
         wl_bucket = _traffic_bucket(wl_used, wl_limit)
@@ -97,7 +97,7 @@ def classify(state: UserRecord, now: int) -> tuple[Notice, ...]:
                     used_gb=_gb(wl_used),
                     limit_gb=wl_limit,
                     percent=wl_bucket,
-                )
+                ),
             )
 
     bw_limit = int(state["bw_limit_gb"])
@@ -110,7 +110,7 @@ def classify(state: UserRecord, now: int) -> tuple[Notice, ...]:
                 "1",
                 {"limit_gb": bw_limit},
                 clears=("traffic_soon",),
-            )
+            ),
         )
     elif bool(state["enabled"]):
         bucket = _traffic_bucket(bw_used, bw_limit)
@@ -122,7 +122,7 @@ def classify(state: UserRecord, now: int) -> tuple[Notice, ...]:
                     used_gb=_gb(bw_used),
                     limit_gb=bw_limit,
                     percent=bucket,
-                )
+                ),
             )
     return tuple(notices)
 
@@ -151,7 +151,7 @@ def restored(
                 "",
                 {},
                 clears=tuple(clears),
-            )
+            ),
         )
     if whitelist:
         notices.append(
@@ -160,6 +160,6 @@ def restored(
                 "",
                 {},
                 clears=("whitelist_exhausted", "whitelist_soon"),
-            )
+            ),
         )
     return tuple(notices)

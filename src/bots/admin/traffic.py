@@ -30,7 +30,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
             self.sub.user_svc.get_user_state(username)
         except AppError as error:
             self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+                message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
             )
             return
 
@@ -48,7 +48,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
                 raise ValueError
         except ValueError:
             self.bot.send_message(
-                message.chat.id, "❌ Введите число от 1 до 90.", reply_markup=self.get_main_menu()
+                message.chat.id, "❌ Введите число от 1 до 90.", reply_markup=self.get_main_menu(),
             )
             return
 
@@ -103,7 +103,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
             text = truncate_utf8(text, 1024)
             language = self.lang_cfg.view()
             chart_img = bandwidth_chart(
-                snapshots, label=info.displayname, lang=language["chart"]["ru"]
+                snapshots, label=info.displayname, lang=language["chart"]["ru"],
             )
             if chart_img is not None:
                 self.bot.send_photo(

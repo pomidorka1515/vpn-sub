@@ -105,7 +105,7 @@ class FakeSession:
                 "json": dict(json) if json is not None else None,
                 "params": dict(params) if params is not None else None,
                 "headers": dict(headers) if headers is not None else None,
-            }
+            },
         )
         return self.handler(method, url, json, params, headers)
 
@@ -197,7 +197,7 @@ def modal_data(custom_id: str, fields: Mapping[str, str]) -> dict[str, object]:
     return {
         "custom_id": custom_id,
         "components": [
-            {"components": [{"custom_id": key, "value": value} for key, value in fields.items()]}
+            {"components": [{"custom_id": key, "value": value} for key, value in fields.items()]},
         ],
     }
 
@@ -240,7 +240,7 @@ def make_public_bot(
             {
                 "public": {"token": "discord-token"},
                 "private": {"whitelist": [7], "api_token": "api-token"},
-            }
+            },
         ),
         LANG,
         WebApiClient("http://127.0.0.1:5550", "sub", session=session),  # type: ignore[arg-type]

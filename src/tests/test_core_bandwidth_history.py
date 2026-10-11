@@ -37,7 +37,7 @@ def _state_payload(ts: int) -> StateSnapshot:
                     "cpu": 12.4,
                     "ctx_switches": 4021,
                     "stack": 65536,
-                }
+                },
             ],
             "app_gc_stats": {
                 "gc_counts": [1, 0, 0],

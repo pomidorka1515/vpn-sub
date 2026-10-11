@@ -92,7 +92,7 @@ class DuplicateError(DatabaseError):
 
 class CodeError(DatabaseError):
     def __init__(
-        self, message: str = "The provided code is either invalid, expired or exhausted."
+        self, message: str = "The provided code is either invalid, expired or exhausted.",
     ) -> None:
         super().__init__(message, status=400)
 

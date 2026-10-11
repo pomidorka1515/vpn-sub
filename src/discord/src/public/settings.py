@@ -12,7 +12,7 @@ class NameModal(discord.ui.Modal):
     def __init__(self, title: str, label: str) -> None:
         super().__init__(title=title, custom_id="settings_name_modal")
         self.name: discord.ui.TextInput[Self] = discord.ui.TextInput(
-            label=label, custom_id="name", min_length=1, max_length=16
+            label=label, custom_id="name", min_length=1, max_length=16,
         )
         self.add_item(self.name)
 
@@ -21,7 +21,7 @@ class LoginChangeModal(discord.ui.Modal):
     def __init__(self, title: str, login_label: str, password_label: str) -> None:
         super().__init__(title=title, custom_id="settings_login_modal")
         self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(
-            label=login_label, custom_id="username", min_length=1, max_length=32
+            label=login_label, custom_id="username", min_length=1, max_length=32,
         )
         self.current_password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=password_label,
@@ -37,7 +37,7 @@ class PasswordChangeModal(discord.ui.Modal):
     def __init__(self, title: str, new_label: str, current_label: str) -> None:
         super().__init__(title=title, custom_id="settings_pass_modal")
         self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(
-            label=new_label, custom_id="password", min_length=1, max_length=128
+            label=new_label, custom_id="password", min_length=1, max_length=128,
         )
         self.current_password: discord.ui.TextInput[Self] = discord.ui.TextInput(
             label=current_label,
@@ -55,23 +55,23 @@ class PublicSettingsMixin(PublicFeatureMixin):
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(
-                label=t["name_label"], custom_id="set_name", style=discord.ButtonStyle.secondary
-            )
+                label=t["name_label"], custom_id="set_name", style=discord.ButtonStyle.secondary,
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["fp_label"], custom_id="set_fp", style=discord.ButtonStyle.secondary
-            )
+                label=t["fp_label"], custom_id="set_fp", style=discord.ButtonStyle.secondary,
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["login_label"], custom_id="set_login", style=discord.ButtonStyle.secondary
-            )
+                label=t["login_label"], custom_id="set_login", style=discord.ButtonStyle.secondary,
+            ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["pass_label"], custom_id="set_pass", style=discord.ButtonStyle.secondary
-            )
+                label=t["pass_label"], custom_id="set_pass", style=discord.ButtonStyle.secondary,
+            ),
         )
         return view
 
@@ -83,7 +83,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         lang = self.get_lang(interaction.user.id)
         t = self.TEXTS[lang]
         modal = NameModal(
-            title=t.get("name_label", "Name"), label=t.get("settings_name_prompt", "Name")
+            title=t.get("name_label", "Name"), label=t.get("settings_name_prompt", "Name"),
         )
         try:
             await interaction.response.send_modal(modal)
@@ -137,7 +137,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         select: discord.ui.Select[discord.ui.View] = discord.ui.Select(
             custom_id="fp_select",
             placeholder=self.TEXTS[self.get_lang(interaction.user.id)].get(
-                "settings_fp_prompt", "Fingerprint"
+                "settings_fp_prompt", "Fingerprint",
             ),
             options=options[:25],
         )
@@ -197,7 +197,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "username_taken")
             return
         result = await self.http.settings(
-            token, username=username, current_password=current_password
+            token, username=username, current_password=current_password,
         )
         if not await self.consume_result(interaction, result):
             return
@@ -213,7 +213,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             return
         await self._defer(interaction)
         result = await self.http.settings(
-            token, password=password, current_password=current_password
+            token, password=password, current_password=current_password,
         )
         if not await self.consume_result(interaction, result):
             return

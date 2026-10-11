@@ -37,14 +37,14 @@ class PublicCommonMixin(
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         if not is_reg:
             markup.add(  # pyright: ignore[reportUnknownMemberType]
-                types.KeyboardButton(t["btn_login"])
+                types.KeyboardButton(t["btn_login"]),
             )
         else:
             markup.add(  # pyright: ignore[reportUnknownMemberType]
-                types.KeyboardButton(t["btn_main_account"]), types.KeyboardButton(t["btn_main_sub"])
+                types.KeyboardButton(t["btn_main_account"]), types.KeyboardButton(t["btn_main_sub"]),
             )
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-            types.KeyboardButton(t["btn_lang"]), types.KeyboardButton(t["btn_support"])
+            types.KeyboardButton(t["btn_lang"]), types.KeyboardButton(t["btn_support"]),
         )
         return markup
 

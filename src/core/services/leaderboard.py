@@ -86,7 +86,7 @@ class LeaderboardService(BaseService):
                     raw[display] = used
 
         sorted_items: list[tuple[str, int]] = sorted(
-            raw.items(), key=lambda x: x[1], reverse=not flip
+            raw.items(), key=lambda x: x[1], reverse=not flip,
         )
         if top_n > 0:
             sorted_items = sorted_items[:top_n]

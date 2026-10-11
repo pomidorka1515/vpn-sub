@@ -199,7 +199,7 @@ def test_main_is_dry_run_by_default(
             str(db_path),
             "--panel",
             "p1",
-        ]
+        ],
     )
 
     assert code == 0
@@ -221,7 +221,7 @@ def test_main_rejects_unknown_panel_key(
             str(db_path),
             "--panel",
             "nope",
-        ]
+        ],
     )
     assert code == 2
 
