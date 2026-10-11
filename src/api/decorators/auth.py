@@ -9,9 +9,9 @@ from util import compare, err
 from ._common import Decorated
 
 if TYPE_CHECKING:
-    from ._common import DecoratedInject, WrappedReturn
     from ..admin._base import AdminApiMixin
     from ..web._base import WebApiMixin
+    from ._common import DecoratedInject, WrappedReturn
 
 ADMIN_UI_COOKIE = "admin_ui"
 ADMIN_UI_SESSION_LEN = 100

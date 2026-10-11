@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Coroutine
+from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any
 
 from loggers import Logger
@@ -15,6 +15,7 @@ from .traffic import PublicTrafficMixin
 
 if TYPE_CHECKING:
     import asyncio
+    from collections.abc import Callable
 
     import discord
     from config import Config, DiscordConfig, DiscordLangConfig

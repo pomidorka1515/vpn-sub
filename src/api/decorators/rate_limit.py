@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from functools import wraps
-from typing import Protocol, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
 from flask import request
 
@@ -15,6 +15,8 @@ from ..common import BaseApi
 from ._common import DecoratedReturn
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ._common import Decorated, WrappedReturn
 
 _RATE_LIMIT_WINDOW = 60.0
@@ -121,7 +123,7 @@ def close_rate_limit() -> None:
 
 
 def _replace_client(client: _RateLimitClient | None) -> _RateLimitClient | None:
-    global _client  # noqa: PLW0603
+    global _client  # ruff: ignore[global-statement]
     with _client_lock:
         previous = _client
         _client = client

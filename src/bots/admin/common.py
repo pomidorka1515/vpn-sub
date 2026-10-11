@@ -89,9 +89,9 @@ class AdminCommonMixin(
 
         if nav_buttons:
             markup.add(*nav_buttons)  # pyright: ignore[reportUnknownMemberType]
-            markup.add(
+            markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"),
-            )  # pyright: ignore[reportUnknownMemberType]
+            )
 
         markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         return markup

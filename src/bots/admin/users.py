@@ -49,9 +49,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
         if nav_buttons:
             markup.add(*nav_buttons)  # pyright: ignore[reportUnknownMemberType]
-            markup.add(
+            markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(f"📄 {page + 1}/{total_pages}", callback_data="noop"),
-            )  # pyright: ignore[reportUnknownMemberType]
+            )
 
         markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         self._send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
@@ -446,9 +446,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         msg = self.bot.send_message(
             message.chat.id, "Введите кол-во дней подписки (0 для безлимита):",
         )
-        self.bot.register_next_step_handler(
+        self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
             msg, self._step_add_user_time, username, displayname, limit,
-        )  # pyright: ignore[reportUnknownMemberType]
+        )
 
     def _step_add_user_time(
         self, message: types.Message, username: str, displayname: str, limit: int,

@@ -6,7 +6,7 @@ import tempfile
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from loggers import Logger
 

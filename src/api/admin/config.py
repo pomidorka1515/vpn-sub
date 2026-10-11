@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-from typing import ClassVar, Literal, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 from flask import g
 

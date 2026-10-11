@@ -2,7 +2,7 @@ import platform
 from typing import TYPE_CHECKING
 
 from argon2 import PasswordHasher
-from flask import Flask, Response, request
+from flask import request
 
 from builders import get_subscription
 from errors import UnsupportedPlatformError
@@ -23,6 +23,8 @@ from .services import (
 )
 
 if TYPE_CHECKING:
+    from flask import Flask, Response
+
     from config import AppConfig, Config, LangConfig, LinesConfig
     from db import Database
     from session import XUiSession

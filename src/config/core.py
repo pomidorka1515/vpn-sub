@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import os
 import threading
-from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+from collections.abc import MutableMapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast, overload
 
@@ -22,11 +22,13 @@ from .schema import load_schema, read_json_object, validate_schema
 from .transaction import ConfigTransaction
 
 if TYPE_CHECKING:
-    from .constants import MISSING_TYPE, SYNC_MODES
+    from collections.abc import Callable, Iterable, Iterator, Mapping
+    from types import TracebackType
+
     from .atomic import (
         FileSignature,
     )
-    from types import TracebackType
+    from .constants import MISSING_TYPE, SYNC_MODES
 
 
 class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):

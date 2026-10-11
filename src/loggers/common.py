@@ -16,4 +16,4 @@ def _safe_handle_error(handler: logging.Handler, record: logging.LogRecord) -> N
     try:
         handler.handleError(record)
     except Exception:
-        print(f"logging handler {handler!r} failed while handling {record!r}", file=sys.stderr)  # noqa: T201
+        print(f"logging handler {handler!r} failed while handling {record!r}", file=sys.stderr)  # ruff: ignore[print]

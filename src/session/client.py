@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Unpack
 
-from requests import ConnectionError, RequestException, Response, Session, Timeout  # noqa: A004
+from requests import ConnectionError, RequestException, Timeout  # ruff: ignore[builtin-import-shadowing]
 
 from loggers import Logger, color_status
 
@@ -22,12 +22,15 @@ from .transport import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from requests import Response, Session
+
+    from custom_types import Inbound, PanelClient, RequestKwargs
+
     from .transport import (
         XUiPanelTransport,
     )
-    from collections.abc import Callable, Mapping
-
-    from custom_types import Inbound, PanelClient, RequestKwargs
 
 __all__ = ["XUiSession"]
 
@@ -136,7 +139,7 @@ class XUiSession:
             self.port = str(port)
             self.address = address
             self.name = name
-            self.local = self.address in {"localhost", "::1", "127.0.0.1", "0.0.0.0"}  # noqa: S104
+            self.local = self.address in {"localhost", "::1", "127.0.0.1", "0.0.0.0"}  # ruff: ignore[hardcoded-bind-all-interfaces]
             self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
 
             resolved_stamp = (

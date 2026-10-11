@@ -49,24 +49,25 @@ _SRC = _ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from config import AppConfig, JsonValue  # noqa: E402
-from custom_types import (  # noqa: E402
+from config import AppConfig, JsonValue  # ruff: ignore[module-import-not-at-top-of-file]
+from custom_types import (  # ruff: ignore[module-import-not-at-top-of-file]
     ClientListResponse,
     ClientPayload,
     InboundListResponse,
 )
-from db import Database  # noqa: E402
-from paths import runtime_dir  # noqa: E402
-from session import XUiSession  # noqa: E402
+from db import Database  # ruff: ignore[module-import-not-at-top-of-file]
+from paths import runtime_dir  # ruff: ignore[module-import-not-at-top-of-file]
+from session import XUiSession  # ruff: ignore[module-import-not-at-top-of-file]
 
 if TYPE_CHECKING:
-    from custom_types import (  # noqa: E402
-        PanelClient,
-    )
-    from config import PanelConfig
     from collections.abc import Mapping, Sequence
 
     from requests import Response
+
+    from config import PanelConfig
+    from custom_types import (
+        PanelClient,
+    )
 
 
 class ReconcileError(RuntimeError):

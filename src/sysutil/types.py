@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 # Dacite resolves these annotations at runtime when hydrating snapshots.
-from custom_types import NetTrafficStats, ServerMetricsObj  # noqa: TC001
+from custom_types import NetTrafficStats, ServerMetricsObj  # ruff: ignore[typing-only-first-party-import]
 
 __all__ = [
     "AppMemory",

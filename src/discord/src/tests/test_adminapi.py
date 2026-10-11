@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from discord_helpers import FakeResponse, json_ok, make_admin_client, run
+from typing import TYPE_CHECKING
+
+from discord_helpers import json_ok, make_admin_client, run
+
+if TYPE_CHECKING:
+    from discord_helpers import FakeResponse
 
 
 def test_admin_client_sends_authorization_header() -> None:

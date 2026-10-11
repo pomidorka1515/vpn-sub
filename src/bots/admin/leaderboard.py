@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import operator
 from typing import Literal, cast
 
 from telebot import types
@@ -10,7 +11,6 @@ from chart import leaderboard_chart
 from util import fmt_bytes
 
 from ..composition import AdminFeatureMixin
-import operator
 
 __all__ = ["AdminLeaderboardMixin"]
 

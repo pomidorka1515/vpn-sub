@@ -19,16 +19,17 @@ from config import Config, LangConfig, LinesConfig
 from errors import AppError, DatabaseError
 
 if TYPE_CHECKING:
-    from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
-        _RateLimitScript,
-    )
     from collections.abc import Iterator
 
     from flask.testing import FlaskClient
 
+    from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
+        _RateLimitScript,
+    )
     from db import Database
 
 _LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
+pytestmark = pytest.mark.usefixtures("open_rate_limit")
 
 
 class _OrderedJSONProvider(DefaultJSONProvider):
@@ -66,7 +67,7 @@ class _OpenRedis:
         return None
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def open_rate_limit() -> Iterator[None]:
     _replace_client(_OpenRedis())
     yield

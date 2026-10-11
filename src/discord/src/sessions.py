@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING
 from config import Config
 
 if TYPE_CHECKING:
-    from config import JsonDict, JsonValue
     from collections.abc import MutableMapping
+
+    from config import JsonDict, JsonValue
 
 __all__ = ["SessionRecord", "SessionStore"]
 
@@ -59,7 +60,7 @@ class SessionStore:
         return SessionRecord(
             user_id=key,
             token=token if isinstance(token, str) else "",
-            lang=lang if lang in {"en", "ru"} else None,
+            lang=lang if isinstance(lang, str) and lang in {"en", "ru"} else None,
         )
 
     def logged_in(self, user_id: int | str) -> bool:

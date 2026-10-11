@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
@@ -14,6 +14,7 @@ from bots import PublicBot
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from concurrent.futures import Future
 
 
 def _public_message(text: str) -> types.Message:

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 from urllib.parse import urljoin
 
 import aiohttp
 
 from custom_types import BandwidthSnapshotPayload
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 __all__ = ["ApiResult", "WebApiClient", "extract_auth_token"]
 

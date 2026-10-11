@@ -20,9 +20,9 @@ from custom_types import ClientTraffic, Inbound, PanelClient
 from session import XUiSession
 
 if TYPE_CHECKING:
-    from config import AppConfig, JsonValue, LangConfig, LinesConfig, ProfileConfig
     from typing_contracts import AppOverrides, CreateUserOverrides, ProfileOverrides
 
+    from config import AppConfig, JsonValue, LangConfig, LinesConfig, ProfileConfig
     from db import Database
 
 USER_UUID = "01234567-89ab-cdef-0123-456789abcdef"

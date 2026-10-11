@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from custom_types import CodeRecord
 from errors import CodeError, DatabaseError, DuplicateError

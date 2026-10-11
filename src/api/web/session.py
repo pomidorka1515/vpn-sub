@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from flask import Response, g, request
+from flask import g, request
 
 from api.common import Route
 from api.decorators import (
@@ -16,6 +16,8 @@ from api.web._base import WebApiMixin
 from util import err, generate_token, ok, sanitize
 
 if TYPE_CHECKING:
+    from flask import Response
+
     from api.common import ResponseType
 
 

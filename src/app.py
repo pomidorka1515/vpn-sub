@@ -4,12 +4,12 @@ import fcntl
 import os
 import sys
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Protocol, Self, cast
 
-from flask import Flask, Response, request
+from flask import Flask, request
 from flask.json.provider import DefaultJSONProvider
 from jinja2 import FileSystemLoader
 from werkzeug.exceptions import HTTPException
@@ -30,7 +30,10 @@ from session import XUiPanelTransport, XUiSession
 from util import err
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
+
+    from flask import Response
 
 threading.main_thread().name = "main"
 
@@ -411,7 +414,7 @@ def _nonempty_token(section: object) -> bool:
     if not isinstance(section, dict):
         return False
     token = cast(dict[str, object], section).get("token")
-    return isinstance(token, str) and token != ""
+    return isinstance(token, str) and bool(token)
 
 
 def create_application(

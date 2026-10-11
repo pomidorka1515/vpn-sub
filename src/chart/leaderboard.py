@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import operator
 from typing import TYPE_CHECKING, Literal
 
 from PIL import Image, ImageDraw
@@ -24,7 +25,6 @@ from .draw import (
     save,
     text_size,
 )
-import operator
 
 if TYPE_CHECKING:
     import io

@@ -17,9 +17,9 @@ from util import generate_token, isusername, sanitize
 from ...common import BaseService
 
 if TYPE_CHECKING:
-    from ...common import SharedCoreResources
     from collections.abc import Mapping
 
+    from ...common import SharedCoreResources
     from ..audit import AuditService
     from ..password import PasswordService
     from ..user.business import BusinessUserService

@@ -11,8 +11,8 @@ from sysutil import SysUtil
 from .host import BWatchHost
 
 if TYPE_CHECKING:
-    from custom_types import UserRecord
     from config.constants import JsonDict
+    from custom_types import UserRecord
     from db.state import StateSnapshot
 
 

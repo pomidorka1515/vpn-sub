@@ -1,10 +1,10 @@
+import operator
 from typing import TYPE_CHECKING, Literal
 
 from tracer import Op
 
 from ..common import BaseService
 from .panel import BG_POOL
-import operator
 
 if TYPE_CHECKING:
     from ..common import SharedCoreResources
@@ -48,7 +48,7 @@ class LeaderboardService(BaseService):
             A dict: {"username": 1293720471, "second_place": 12493630},
             where key is the username and value is bandwidth in bytes.
 
-        """ # noqa: D400
+        """ # ruff: ignore[missing-trailing-period]
         raw: dict[str, int] = {}
         self.trace(
             Op.leaderboard.leaderboard,

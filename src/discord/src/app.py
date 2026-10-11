@@ -43,7 +43,7 @@ def _bootstrap_sys_path() -> None:
 
 _bootstrap_sys_path()
 
-from runtime import (  # noqa: E402
+from runtime import (  # ruff: ignore[module-import-not-at-top-of-file]
     DiscordApplication,
     DiscordPaths,
     create_application,

@@ -17,10 +17,11 @@ from fonts import FONT_FILES, embed_font_faces
 from util import err
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from api.common import (
         ResponseType,
     )
-    from collections.abc import Callable
 
 
 def _admin_module_method(name: str) -> Callable[[WebApiMixin], ResponseType]:

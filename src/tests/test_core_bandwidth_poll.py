@@ -9,12 +9,12 @@ from custom_types import BandwidthInfo
 from errors import PanelRejectedError
 
 if TYPE_CHECKING:
-    from custom_types import UserFields
     import sqlite3
     from collections.abc import Callable
 
     from bwatch import BWatch
     from core import Subscription
+    from custom_types import UserFields
     from db import Database
 
 

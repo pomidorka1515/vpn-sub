@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import telebot
-from telebot import types
 
 from bots.handler_backend import LockedHandlerBackend
 from bots.polling import configure_telegram_api
@@ -22,6 +21,8 @@ from .traffic import PublicTrafficMixin
 if TYPE_CHECKING:
     import threading
     from collections.abc import Callable
+
+    from telebot import types
 
     from config import AppConfig, Config, LangConfig
     from core import Subscription

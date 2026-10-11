@@ -117,9 +117,9 @@ class AdminCodesMixin(AdminFeatureMixin):
         msg = self.bot.send_message(
             message.chat.id, "Введите количество гигабайтов (в гб, или 0 для безлимита):",
         )
-        self.bot.register_next_step_handler(
+        self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
             msg, self._step_add_code_time, code_type, code_name, days,
-        )  # pyright: ignore[reportUnknownMemberType]
+        )
 
     def _step_add_code_time(
         self, message: types.Message, code_type: str, code_name: str, days: int,
@@ -138,9 +138,9 @@ class AdminCodesMixin(AdminFeatureMixin):
             message.chat.id,
             "Введите количество гигабайтов для ВЛ локаций (в гб, или 0 для безлимита)",
         )
-        self.bot.register_next_step_handler(
+        self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
             msg, self._step_add_code_wl_time, code_type, code_name, days, gb,
-        )  # pyright: ignore[reportUnknownMemberType]
+        )
 
     def _step_add_code_wl_time(
         self, message: types.Message, code_type: str, code_name: str, days: int, gb: int,
@@ -156,9 +156,9 @@ class AdminCodesMixin(AdminFeatureMixin):
             )
             return
         msg = self.bot.send_message(message.chat.id, "Перманентный код? Да/Нет:")
-        self.bot.register_next_step_handler(
+        self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
             msg, self._step_add_code_perma, code_type, code_name, days, gb, wl_gb,
-        )  # pyright: ignore[reportUnknownMemberType]
+        )
 
     def _step_add_code_perma(
         self, message: types.Message, code_type: str, code_name: str, days: int, gb: int, wl_gb: int,
@@ -182,9 +182,9 @@ class AdminCodesMixin(AdminFeatureMixin):
 
         if not perma:
             msg = self.bot.send_message(message.chat.id, "Кол-во использований? (>= 1)")
-            self.bot.register_next_step_handler(
+            self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
                 msg, self._step_add_code_uses, code_type, code_name, days, gb, wl_gb, perma,
-            )  # pyright: ignore[reportUnknownMemberType]
+            )
         else:
             self._step_add_code_uses(
                 message=message.chat.id,

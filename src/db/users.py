@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Unpack, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Unpack, cast
 
 from custom_types import UserRecord
 from errors import DatabaseError, DuplicateError
@@ -132,7 +132,7 @@ class UsersMixin(ConnectionMixin):
                     assignments = ", ".join(f"{key} = ?" for key in updates)
                     # Column names come from the fixed mapping above; values are bound.
                     conn.execute(
-                        f"UPDATE users SET {assignments} WHERE username = ?",  # noqa: S608
+                        f"UPDATE users SET {assignments} WHERE username = ?",  # ruff: ignore[hardcoded-sql-expression]
                         (*updates.values(), username),
                     )
                 if "tgid" in fields:

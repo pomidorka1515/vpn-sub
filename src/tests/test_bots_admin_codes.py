@@ -25,7 +25,7 @@ def _message(text: str, chat_id: int = 7) -> types.Message:
 def _real_message(text: str, chat_id: int = 7) -> types.Message:
     return cast(
         types.Message,
-        types.Message.de_json(
+        types.Message.de_json(  # pyright: ignore[reportUnknownMemberType]
             {  # type: ignore[no-untyped-call]
                 "message_id": 3,
                 "date": 0,

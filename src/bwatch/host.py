@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Literal
 from tracer import trace
 
 if TYPE_CHECKING:
-    from tracer import TraceOp
     import threading
     from concurrent.futures import Executor
 
@@ -15,6 +14,7 @@ if TYPE_CHECKING:
     from custom_types import BandwidthInfo
     from db import Database
     from loggers import Logger
+    from tracer import TraceOp
 
 
 class BWatchHost:

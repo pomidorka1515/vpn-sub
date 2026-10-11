@@ -18,8 +18,9 @@ from errors import (
 )
 
 if TYPE_CHECKING:
-    from config import JsonValue
     from collections.abc import Iterator
+
+    from config import JsonValue
 
 
 @pytest.fixture

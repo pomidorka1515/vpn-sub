@@ -15,9 +15,9 @@ from .ui import UiRoutes
 from .user import UserRoutes
 
 if TYPE_CHECKING:
-    from api.common import Route
     from flask import Flask
 
+    from api.common import Route
     from bwatch import BWatch
     from config import AppConfig, Config, LinesConfig
     from core import Subscription

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from .draw import (
     BG,
@@ -26,6 +26,8 @@ from .draw import (
 if TYPE_CHECKING:
     import io
     from collections.abc import Mapping
+
+    from PIL import ImageFont
 
     from custom_types import BandwidthSnapshot
 

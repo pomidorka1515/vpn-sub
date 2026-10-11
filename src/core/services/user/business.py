@@ -28,16 +28,16 @@ from util import *
 from ...common import BaseService
 
 if TYPE_CHECKING:
-    from ...common import SharedCoreResources
+    from collections.abc import Mapping
+
+    from config.constants import JsonValue
     from custom_types import (
         PanelClient,
         UserFields,
     )
-    from collections.abc import Mapping
-
-    from config.constants import JsonValue
     from session import XUiSession
 
+    from ...common import SharedCoreResources
     from ..audit import AuditService
     from ..bandwidth import BandwidthService
     from ..panel import PanelService

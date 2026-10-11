@@ -5,13 +5,15 @@ from functools import lru_cache
 from hashlib import sha1
 from typing import TYPE_CHECKING, ClassVar, NamedTuple, cast
 
-from flask import Flask, Response, request
+from flask import Response, request
 
 from fonts import FONT_FILES
 from loggers import Logger
 from paths import bundled_root
 
 if TYPE_CHECKING:
+    from flask import Flask
+
     from bwatch import BWatch
     from config import AppConfig, Config, LangConfig
     from core import Subscription
@@ -195,5 +197,5 @@ class BaseApi(ABC):
         for route in self.ROUTES:
             route.register(self)
 
-    def reg_handles(self) -> None:  # noqa: B027
+    def reg_handles(self) -> None:  # ruff: ignore[empty-method-without-abstract-decorator]
         """Optional: subclass setup beyond route registration (error handlers, etc)."""

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Condition
 from time import monotonic
@@ -23,12 +23,14 @@ from tracer import Op
 from ..common import BaseService
 
 if TYPE_CHECKING:
-    from ..common import SharedCoreResources
     from collections.abc import Callable, Mapping, Sequence
+    from concurrent.futures import Executor, Future
 
     from requests import Response
 
     from session import XUiSession
+
+    from ..common import SharedCoreResources
 
 __all__ = ["BG_POOL", "PanelService"]
 

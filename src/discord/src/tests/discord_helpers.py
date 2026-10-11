@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from collections import UserDict
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Self, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
 from unittest.mock import MagicMock
 
 import discord
@@ -18,6 +18,8 @@ from sessions import SessionStore
 from webapi import WebApiClient
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     from config import DiscordConfig
 
 DISCORD_ROOT = Path(__file__).resolve().parents[2]

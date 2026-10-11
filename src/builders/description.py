@@ -6,7 +6,7 @@ import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from util import fmt_bytes, format  # noqa: A004
+from util import fmt_bytes, format  # ruff: ignore[builtin-import-shadowing]
 
 if TYPE_CHECKING:
     from config import LangConfig
@@ -19,7 +19,7 @@ def build_description(
     lang: str,
     bandwidths: BandwidthInfo,
     status: bool,
-    statusTime: bool, # noqa: N803
+    statusTime: bool, # ruff: ignore[invalid-argument-name]
     ts: int,
     bw_limit: int,
     bw_used: int,

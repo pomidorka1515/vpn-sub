@@ -6,9 +6,9 @@ from tracer import Op
 from ..common import BaseService
 
 if TYPE_CHECKING:
-    from ..common import SharedCoreResources
     from custom_types import ApplyBonusCodeObject, UserInfo
 
+    from ..common import SharedCoreResources
     from .code import CodeService
     from .user.business import BusinessUserService
 

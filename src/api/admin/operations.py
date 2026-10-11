@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from random import random
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from flask import g
 

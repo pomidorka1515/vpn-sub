@@ -121,7 +121,7 @@ class _PartialFormatter(UserDict[str, object]):
 
 
 # intentionally shadows `builtins.format`
-def format(template: str, **values: object) -> str:  # noqa: A001
+def format(template: str, **values: object) -> str:  # ruff: ignore[builtin-variable-shadowing]
     return template.format_map(_PartialFormatter(values))
 
 

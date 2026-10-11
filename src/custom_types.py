@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypedDict
 
 # Dacite does not resolve PEP 695 recursive aliases when checking fields.
 # Keep JSON checking for callers while its runtime check accepts raw objects.
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, MutableMapping
+
     from requests import Response
     from requests.auth import AuthBase
     from requests.cookies import RequestsCookieJar
@@ -110,7 +112,7 @@ class OnlineStatus(NamedTuple):
 # pyright: reportUnnecessaryIsInstance=false
 # pylint: disable=protected-access
 
-### Stub Protocols ###
+# Stub Protocols ###
 
 
 class SupportsKeysAndGetItem[KT, VT](Protocol):
@@ -126,7 +128,7 @@ class SupportsItems[K, V](Protocol):
     def items(self) -> Iterable[tuple[K, V]]: ...
 
 
-### requests-stubs/session.pyi ###
+# requests-stubs/session.pyi ###
 _FileSpec = (
     SupportsRead[str | bytes]
     | str
@@ -184,7 +186,7 @@ class RequestKwargs(TypedDict, total=False):
     json: JsonValue
 
 
-### db.py ###
+# db.py ###
 
 
 class UserRecord(TypedDict):
@@ -271,7 +273,7 @@ class MigrationReport:
     already_migrated: bool = False
 
 
-### 3x-ui status object ###
+# 3x-ui status object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class MemoryStats:
     current: int
@@ -354,7 +356,7 @@ class ServerMetricsResponse:
     obj: ServerMetricsObj
 
 
-### 3x-ui inbound list object ###
+# 3x-ui inbound list object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ClientTraffic:
     id: int
@@ -406,7 +408,7 @@ class InboundListResponse:
     obj: list[Inbound]
 
 
-### 3x-ui clients-first API objects ###
+# 3x-ui clients-first API objects ###
 @dataclass(slots=True, kw_only=True)
 class ClientPayload:  # NOTE: this must NOT be frozen
     email: str
@@ -456,7 +458,7 @@ class ClientTrafficResponse:
     obj: ClientTraffic
 
 
-### add_new_user() ###
+# add_new_user() ###
 
 
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -468,7 +470,7 @@ class NewUserInfo:
     displayname: str
 
 
-### register_with_code() ###
+# register_with_code() ###
 
 
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -482,7 +484,7 @@ class RegisterWithCodeInfo:
     time: int
 
 
-### Code Object ###
+# Code Object ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class CodeObject:
     code: str
@@ -494,14 +496,14 @@ class CodeObject:
     wl_gb: int
 
 
-### reset_user() ###
+# reset_user() ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ResetUserObject:
     uuid: str
     token: str
 
 
-### get_info() ###
+# get_info() ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class UserInfoBandwidthTotal:
     upload: int | float
@@ -509,7 +511,7 @@ class UserInfoBandwidthTotal:
     total: int | float
 
 
-### apply_bonus_code() ###
+# apply_bonus_code() ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class ApplyBonusCodeObject:
     days: int
@@ -522,7 +524,7 @@ class ApplyBonusCodeObject:
     wl_limit: int
 
 
-### User Info ###
+# User Info ###
 @dataclass(slots=True, frozen=True, kw_only=True)
 class UserInfoBandwidth:
     total: UserInfoBandwidthTotal
@@ -571,7 +573,7 @@ class PollingPanelInfo:
     uptime: int
 
 
-### Snapshots ###
+# Snapshots ###
 @dataclass(slots=True, frozen=True)
 class BandwidthSnapshot:
     ts: int

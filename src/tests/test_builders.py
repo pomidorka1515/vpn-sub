@@ -16,10 +16,10 @@ from core import Subscription
 from custom_types import BandwidthInfo
 
 if TYPE_CHECKING:
-    from config.documents import ProfileStream
     from typing_contracts import AppOverrides, UserRecordOverrides
 
     from config import AppConfig, LangConfig, ProfileConfig
+    from config.documents import ProfileStream
 
 DESC = {
     "en": {

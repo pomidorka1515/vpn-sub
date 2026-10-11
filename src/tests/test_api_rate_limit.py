@@ -13,12 +13,16 @@ from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
 )
 
 if TYPE_CHECKING:
-    from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
-        _RateLimitScript,
-    )
     from collections.abc import Iterator
 
     from flask.ctx import RequestContext
+
+    from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
+        _RateLimitScript,
+    )
+
+
+pytestmark = pytest.mark.usefixtures("configured_rate_limit")
 
 
 @pytest.fixture
@@ -71,7 +75,7 @@ class _SharedRedis:
         self.closed = True
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def configured_rate_limit() -> Iterator[_SharedRedis]:
     client = _SharedRedis()
     _replace_client(client)

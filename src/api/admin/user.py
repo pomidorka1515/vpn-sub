@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import ClassVar, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from flask import g, request
 

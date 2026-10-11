@@ -10,9 +10,9 @@ from .session import SessionRoutes
 from .static import StaticRoutes
 
 if TYPE_CHECKING:
-    from api.common import Route
     from flask import Flask
 
+    from api.common import Route
     from bwatch import BWatch
     from config import AppConfig, Config
     from core import Subscription

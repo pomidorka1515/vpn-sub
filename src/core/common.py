@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 from tracer import trace
 
 if TYPE_CHECKING:
-    from tracer import TraceOp
     from argon2 import PasswordHasher
     from flask import Flask
 
@@ -12,6 +11,7 @@ if TYPE_CHECKING:
     from db import Database
     from loggers import Logger
     from session import XUiSession
+    from tracer import TraceOp
 
 __all__ = ["BaseService", "SharedCoreResources"]
 

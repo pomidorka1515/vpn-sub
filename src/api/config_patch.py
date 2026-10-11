@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Mapping, MutableMapping
-from itertools import starmap
-from typing import Literal, cast
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Literal, cast
 
 from config import JsonValue
 from errors import ValidationError
+
+if TYPE_CHECKING:
+    from collections.abc import MutableMapping
 
 # pyright: reportUnnecessaryIsInstance=false
 
@@ -74,7 +76,7 @@ def config_etag(data: Mapping[str, JsonValue]) -> str:
 
 
 def _nonempty_str(value: object) -> bool:
-    return isinstance(value, str) and value != ""
+    return isinstance(value, str) and bool(value)
 
 
 def check_config_document(data: Mapping[str, object]) -> None:

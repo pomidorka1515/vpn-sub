@@ -12,14 +12,14 @@ from config.documents import (
 )
 
 if TYPE_CHECKING:
-    from config.documents import (
-        ProfileOutbound,
-    )
-    from config import JsonValue
     from collections.abc import Callable, Mapping
 
     from requests import Session
 
+    from config import JsonValue
+    from config.documents import (
+        ProfileOutbound,
+    )
     from custom_types import Inbound, PanelClient, UserInfoBandwidth
     from session.transport import XUiPanelTransport
 

@@ -80,6 +80,8 @@ ignore = [
     "PLR0915", # Statement counts are not limited
     "PLR0916", # Boolean expression counts are not limited
     "PLR0917", # Positional argument counts are not limited
+    "PLR1702",
+    "PLW0717",
     "TID252",  # Relative imports are allowed
     "F403",    # Star imports are intentional
     "F405",    # Mypy/pyright check names introduced by star imports
@@ -114,6 +116,7 @@ ignore = [
     "E261",
     "S404",
     "RUF029",
+    "RUF201",
 ]
 
 # Whitespace-only fixes are safe even inside multiline strings.
@@ -151,6 +154,8 @@ quote-annotations = false # Prefer postponed annotations over string annotations
     "PLC2701",# 
     "INP001", # Tests are not meant to be imported
     "B903",
+    "RUF069",
+    "PLC1901",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

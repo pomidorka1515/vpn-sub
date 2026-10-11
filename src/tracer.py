@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Self
 from loggers import Colors
 
 if TYPE_CHECKING:
-    from loggers import Logger
     from config import JsonValue
+    from loggers import Logger
 
 __all__ = ["Op", "trace"]
 

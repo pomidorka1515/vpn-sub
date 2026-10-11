@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -22,6 +22,7 @@ from public.bot import PublicBot
 from sessions import SessionStore
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 PublicBotFactory = Callable[[Handler], tuple[PublicBot, SessionStore, FakeSession]]

@@ -12,12 +12,12 @@ from tracer import Op
 from ..common import BaseService
 
 if TYPE_CHECKING:
-    from custom_types import PanelClient
-    from ..common import SharedCoreResources
     from concurrent.futures import Executor
 
+    from custom_types import PanelClient
     from session import XUiSession
 
+    from ..common import SharedCoreResources
     from .panel import PanelService
     from .user.common import CommonUserService
 

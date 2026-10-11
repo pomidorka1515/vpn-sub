@@ -120,7 +120,7 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             self._snapshot_due_at[kind] = now + delay
         self.is_first()  # also run the monthly reset check immediately
 
-        ### Start Threads ###
+        # Start Threads ###
 
         for thread in self._threads:
             thread.start()
