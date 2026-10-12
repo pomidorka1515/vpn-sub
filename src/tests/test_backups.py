@@ -75,10 +75,11 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
 
     def fail_temp(
         path: Path, mode: Literal["r", "w"] = "r", *, encoding: str | None = None,
+        errors: str | None = None, newline: str | None = None,
     ) -> TextIO:
         if path.suffix == ".tmp":
             raise OSError("unwritable")
-        return real_open(path, mode, encoding=encoding)
+        return real_open(path, mode, encoding=encoding, errors=errors, newline=newline)
 
     with patch.object(Path, "open", autospec=True, side_effect=fail_temp):
         with pytest.raises(OSError, match="unwritable"):

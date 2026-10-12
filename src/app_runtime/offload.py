@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from .tasks import TaskRegistry
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+class BoundedOffload:
+    """Bound submissions, retaining ownership until the thread actually finishes.
+
+    Cancellation only ends the caller's wait. A permit is not released until
+    the synchronous operation has completed, and close drains before dependents
+    may be released. The loop's executor is used; no executor starts on import.
+    """
+
+    def __init__(self, *, capacity: int, name: str) -> None:
+        self._tasks = TaskRegistry(capacity=capacity)
+        self._name = name
+
+    @property
+    def active_count(self) -> int:
+        return self._tasks.active_count
+
+    def stop_admission(self) -> None:
+        self._tasks.stop_admission()
+
+    async def run[**P, T](self, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+        await asyncio.sleep(0)
+
+        async def operation() -> T:
+            return await asyncio.to_thread(function, *args, **kwargs)
+
+        task = self._tasks.create(operation, name=f"offload:{self._name}")
+        return await asyncio.shield(task)
+
+    async def close(self) -> None:
+        await self._tasks.drain()
+
+
+@dataclass(frozen=True, slots=True)
+class OffloadServices:
+    files: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=4, name="files"))
+    passwords: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=2, name="passwords"))
+    rendering: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=2, name="rendering"))
+    metrics: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=2, name="metrics"))
+
+    def stop_admission(self) -> None:
+        for service in (self.files, self.passwords, self.rendering, self.metrics):
+            service.stop_admission()
+
+    async def close(self) -> None:
+        await asyncio.gather(*(service.close() for service in (
+            self.files, self.passwords, self.rendering, self.metrics,
+        )))
