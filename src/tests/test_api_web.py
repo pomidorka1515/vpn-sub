@@ -53,6 +53,9 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, AsyncDatabase]) ->
         assert b"'/custom'" in body
         assert b"/sub/" not in body
         assert f"/custom/{asset}?v=".encode() in body
+        assert b'href="/custom/common.css?v=' in body
+        if page == "history":
+            assert b"window.CHART_JS = '/custom/chart.umd.min.js?v=" in body
         assert b"fonts.googleapis" not in body
         assert b"fonts.gstatic" not in body
         assert b"jsdelivr" not in body
@@ -79,6 +82,19 @@ async def test_prefixed_static_assets(web_api: tuple[Quart, AsyncDatabase], path
     body = await response.get_data()
     assert isinstance(body, bytes)
     assert fragment in body
+    extras = {
+        "common.css": (b"--accent:", b"url('/custom/fonts/jetbrains-mono-cyrillic.woff2')"),
+        "admin/charts.js": (b"from './charts/render.js?v=",),
+        "admin/charts/render.js": (b"from './theme.js?v=",),
+        "admin/config.js": (b"function saveConfig", b"from './json-editor.js?v="),
+    }
+    for part in extras.get(path, ()):
+        assert part in body
+    if path == "common.css":
+        for part in (b"fonts.googleapis", b"fonts.gstatic", b"__FONT_BASE__", b"/* __FONTS__ */"):
+            assert part not in body
+    if path.endswith(".woff2"):
+        assert body[:4] == b"wOF2"
     assert "immutable" in response.headers["Cache-Control"]
 
 
@@ -92,6 +108,7 @@ async def test_nested_config_modules(web_api: tuple[Quart, AsyncDatabase], modul
         body = await response.get_data()
         assert isinstance(body, bytes)
         assert b"from '../json-editor.js?v=" in body
+        assert b"from './config-json.js?v=" in body
 
 
 @pytest.mark.parametrize("path", ["fonts/DejaVuSans.ttf", "fonts/../common.css", "admin/not-a-module.js"])
@@ -102,14 +119,18 @@ async def test_unknown_assets(web_api: tuple[Quart, AsyncDatabase], path: str) -
 async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, AsyncDatabase]) -> None:
     client = web_api[0].test_client()
     russian = await client.get("/custom/auth?lang=ru")
+    assert russian.status_code == 200
     assert '"sign_in": "\\u0412\\u0445\\u043e\\u0434"' in await russian.get_data(as_text=True)
     assert "lang=ru" in russian.headers.get("Set-Cookie", "")
     unknown = await client.get("/custom/auth?lang=xx")
+    assert unknown.status_code == 200
     assert '"sign_in": "Sign in"' in await unknown.get_data(as_text=True)
     assert "lang=" not in unknown.headers.get("Set-Cookie", "")
     client.set_cookie("localhost", "lang", "ru")
     response = await client.get("/custom/auth")
+    assert response.status_code == 200
     assert "window.LANG_CODE = 'ru'" in await response.get_data(as_text=True)
+    assert '"sign_in": "\\u0412\\u0445\\u043e\\u0434"' in await response.get_data(as_text=True)
 
 
 async def login(client: TestClientProtocol) -> str:

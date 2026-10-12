@@ -82,6 +82,7 @@ async def test_config_get_contract(config_api: tuple[Quart, AsyncConfig[AppConfi
     assert body.endswith("\n")
     assert ": " not in body
     assert ", " not in body
+    assert body.index('"obj":') < body.index('"$schema":')
     assert first.headers["ETag"] == second.headers["ETag"] == f'"{base_for(path)}"'
     assert first.headers["Cache-Control"] == "no-store"
 
@@ -100,6 +101,7 @@ async def test_config_commit_and_conflict(config_api: tuple[Quart, AsyncConfig[A
     original["sub_name"] = "after"
     assert json.loads(path.read_bytes()) == original
     assert '\n    "sub_name": "after"' in path.read_text()
+    assert path.read_text().endswith("\n")
     assert cfg.view()["sub_name"] == "after"
     assert audit.records[-1]["action"] == "config_update"
     assert audit.records[-1]["info"] == {"keys": ["sub_name"]}
@@ -109,6 +111,21 @@ async def test_config_commit_and_conflict(config_api: tuple[Quart, AsyncConfig[A
     assert response.status_code == 409
     assert (await response.get_json())["obj"]["base"] == base_for(path)
     assert path.read_bytes() == before
+
+
+@pytest.mark.asyncio
+async def test_unknown_profile_node_preserves_config(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]) -> None:
+    app, cfg, path, audit = config_api
+    before = path.read_bytes()
+    profiles = json.loads(before)["profiles"]
+    profiles["profile1"]["node"] = "missing"
+    response = await set_config(app, base_for(path), {"profiles": profiles})
+    assert response.status_code == 400
+    assert "not a key of nodes" in (await response.get_json())["msg"]
+    assert path.read_bytes() == before
+    assert cfg.view() == json.loads(before)
+    assert not audit.records
+    assert not (path.parent / "backup").exists()
 
 
 @pytest.mark.asyncio
@@ -147,7 +164,10 @@ async def test_unchanged_patch_does_not_write(config_api: tuple[Quart, AsyncConf
     app, _, path, audit = config_api
     before = path.read_bytes(), path.stat().st_mtime_ns
     response = await set_config(app, base_for(path), {"sub_name": "before"})
-    assert (await response.get_json())["msg"] == "Unchanged"
+    assert response.status_code == 200
+    payload = await response.get_json()
+    assert payload["msg"] == "Unchanged"
+    assert payload["obj"]["restart"] == []
     assert (path.read_bytes(), path.stat().st_mtime_ns) == before
     assert not audit.records
 
@@ -171,5 +191,10 @@ async def test_failed_commit_does_not_publish_or_audit(config_api: tuple[Quart, 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("data", "content_type"), [(b"{", "application/json"), (b"[]", "application/json"), (b"{}", "text/plain"), (b'{"values":{}}', "application/json"), (b"x" * (1024 * 1024 + 1), "application/json")])
 async def test_malformed_and_oversized_bodies(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit], data: bytes, content_type: str) -> None:
+    _, cfg, path, audit = config_api
+    before = path.read_bytes()
     response = await config_api[0].test_client().post("/sub/privapi/api/config/set", data=data, headers={**HEADERS, "Content-Type": content_type})
     assert response.status_code == (413 if len(data) > 1024 * 1024 else 400)
+    assert path.read_bytes() == before
+    assert cfg.view() == json.loads(before)
+    assert not audit.records

@@ -19,6 +19,53 @@ def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert verbose_overrides(",, ") == frozenset()
     monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch,core,panels")
     assert verbose_overrides() == frozenset({"bwatch", "core", "panels"})
+    assert verbose_overrides("bwatch,nope") == frozenset({"bwatch", "nope"})
+    monkeypatch.delenv("VERBOSE_LOGGING_OVERRIDES")
+    assert verbose_overrides() == frozenset()
+
+
+def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    from paths import runtime_dir
+
+    for name in ("DIR_DATA", "DIR_BACKUPS", "PATH_CONFIG", "PATH_LANG", "PATH_DB", "PATH_LOG", "PATH_AUDIT"):
+        monkeypatch.delenv(name, raising=False)
+    root = Path(__file__).resolve().parents[2]
+    data = root / "data"
+    assert AppPaths.from_env() == AppPaths(data=data, backups=data / "backup", config=data / "config.json", language=root / "lang.jsonc", database=data / "state.sqlite3", log=data / "log.jsonl", audit=data / "audit.jsonl", primary_lock=runtime_dir(data) / ".primary.lock")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("compiled", [False, True])
+async def test_factory_schema_verbose_and_browser_assets(paths: AppPaths, monkeypatch: pytest.MonkeyPatch, compiled: bool) -> None:
+    from async_core_helpers import PanelTransport
+    from helpers import FakePanel
+
+    from paths import bundled_root
+
+    monkeypatch.setattr("app.compiled", lambda: compiled)
+    monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "core,panels")
+    runtime = await create_application(paths, AppOptions(start_background=False, limiter=AsyncRateLimiter("redis://test", client=OpenRedis()), panel_transport_factory=lambda: PanelTransport(FakePanel())))
+    try:
+        deps = runtime.dependencies
+        assert deps.cfg._require_store().schema_path == (str((bundled_root() / "config.schema.json").resolve()) if compiled else None)
+        assert deps.subscription.res.verbose is True
+        assert deps.panels
+        assert all(panel.verbose for panel in deps.panels)
+        assert paths.audit.exists()
+        client = runtime.app.test_client()
+        assert (await client.get("/sub/privapi/api/health")).status_code == 401
+        token = "a" * 40
+        await deps.db.create_user(username="alice", uuid="01234567-89ab-cdef-0123-456789abcdef", token=token, fingerprint="chrome", displayname="Alice")
+        response = await client.get(f"/sub?token={token}&lang=en", headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"})
+        assert response.status_code == 403
+        assert response.mimetype == "text/html"
+        body = await response.get_data()
+        assert isinstance(body, bytes)
+        assert b"url('/sub/fonts/outfit-latin.woff2')" in body
+        for part in (b"fonts.googleapis", b"fonts.gstatic", b"__FONT_BASE__", b"/* __FONTS__ */"):
+            assert part not in body
+    finally:
+        await runtime.stop()
 
 
 @pytest.fixture

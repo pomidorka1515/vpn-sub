@@ -57,6 +57,8 @@ async def test_shared_windows_scope_ip_and_expiry(monkeypatch: pytest.MonkeyPatc
     assert not await second.allow("route", "ip", 1)
     assert await second.allow("other", "ip", 1)
     assert await second.allow("route", "other-ip", 1)
+    monkeypatch.setattr(time, "time", lambda: 159.999)
+    assert not await second.allow("route", "ip", 1)
     monkeypatch.setattr(time, "time", lambda: 160)
     assert await second.allow("route", "ip", 1)
     await first.close()
@@ -92,3 +94,47 @@ async def test_failure_is_fail_closed() -> None:
     async with app.test_request_context("/test"):  # pyright: ignore[reportUnknownMemberType]  # Upstream auth parameter is untyped.
         assert (await handler.endpoint())[1] == 429
     await limiter.close()
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_rejects_non_positive_limit(limit: int) -> None:
+    from api import rate_limit
+
+    with pytest.raises(ValueError, match="max_requests must be positive"):
+        rate_limit(limit)
+
+
+@pytest.mark.asyncio
+async def test_reused_decorator_and_unknown_address() -> None:
+    from api import AsyncBaseApi, rate_limit
+
+    decorator = rate_limit(1)
+
+    class Handler(AsyncBaseApi):
+        ROUTES = ()
+
+        @decorator
+        async def first(self) -> str:
+            return "first"
+
+        @decorator
+        async def second(self) -> str:
+            return "second"
+
+    store = RedisStore()
+    limiter = AsyncRateLimiter("redis://test", client=store)
+    await limiter.start()
+    handler = object.__new__(Handler)
+    handler.limiter = limiter
+    app = Quart(__name__)
+    try:
+        async with app.test_request_context("/test", scope_base={"client": None}):  # pyright: ignore[reportUnknownMemberType]  # Upstream auth parameter is untyped.
+            assert await handler.first() == "first"
+            assert await handler.second() == "second"
+            denied = await handler.first()
+            assert isinstance(denied, tuple)
+            assert denied[1] == 429
+        assert len(store.events) == 2
+        assert all(key.endswith(":<unknown>") for key in store.events)
+    finally:
+        await limiter.close()
