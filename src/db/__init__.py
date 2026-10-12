@@ -2,17 +2,19 @@
 
 The JSON configuration contains deployment and presentation settings. This
 package owns mutable user, code, quota, Telegram, notification and snapshot
-state. Connections are deliberately short lived: every operation obtains a
-connection for its transaction, which is safe for Flask and background threads.
+state. ``AsyncDatabase`` owns a task-safe writer and leased read connections;
+``Database`` retains the synchronous interface for staged callers.
 """
 
 from __future__ import annotations
 
 from errors import CodeError, DatabaseError, DuplicateError, MigrationError
 
+from .async_database import AsyncDatabase
 from .database import Database
 
 __all__ = [
+    "AsyncDatabase",
     "CodeError",
     "Database",
     "DatabaseError",
