@@ -99,8 +99,6 @@ class Runtime[DependenciesT]:
     async def _shutdown(self) -> None:
         await self.tasks.drain(cancel=True)
         await self.mutations.drain()
-        self.offloads.stop_admission()
-        await self.offloads.close()
         errors: list[Exception] = []
         while self._opened:
             resource = self._opened.pop()
@@ -109,6 +107,8 @@ class Runtime[DependenciesT]:
             except Exception as error:
                 error.add_note(f"closing runtime resource: {resource.name}")
                 errors.append(error)
+        self.offloads.stop_admission()
+        await self.offloads.close()
         self.state = RuntimeState.STOPPED
         if errors:
             raise ExceptionGroup("runtime cleanup failed", errors)

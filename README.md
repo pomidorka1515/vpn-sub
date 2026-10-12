@@ -1,8 +1,9 @@
 # vpn-sub
 
-VPN subscription management service. Flask + Telegram bots + a Discord bot +
+VPN subscription management service. Quart + Telegram bots + a Discord bot +
 3x-ui panel glue.  
-Flask and Telegram are fully synchronous. Discord is a separate asyncio process.  
+HTTP, core services, panel I/O and SQLite use asyncio. Discord is a separate asyncio process.  
+The async migration is staged: the current application does not yet start BWatch or Telegram bots. Their conversion and production cutover are pending; see [docs/ASYNC_API.md](docs/ASYNC_API.md).  
 SQLite holds users, codes, and quotas. `config.json` is deployment and
 presentation only.  
 Designed to run on a single small VPS.
@@ -16,7 +17,7 @@ Designed to run on a single small VPS.
 - Tracks bandwidth and auto-disables users who exceed quota or expire, including
   a separate whitelist quota
 - Telegram admin bot and public user bot, plus one Discord bot (public commands
-  and `/admin`) that talks to Flask over loopback
+   and `/admin`) that talks to the HTTP API over loopback
 - SQLite is the source of truth for users, codes, quotas, and bandwidth
 
 ## Key features
@@ -60,25 +61,22 @@ Designed to run on a single small VPS.
   verify). JSONL audit trail. `config.json` validated against
   `config.schema.json` on load and commit; remote schemas are rejected.
   Scheduled backups of config and the SQLite database.
-- **Shared rate limits.** Redis sliding window. Every gunicorn thread uses the
+- **Shared rate limits.** Redis sliding window. Every request uses the
   same counters.
 
 ## Limitations
 
 - Single VPS, Linux only. `Subscription` refuses to import on anything else.
-- One gunicorn worker. `src/gunicorn.conf.py` is `workers = 1`, `threads = 3`.
-  Extra workers duplicate background threads and Telegram bots. A file lock
-  (`<DIR_RUNTIME>/.primary.lock`) elects one primary; a process that loses the
-  lock still serves HTTP but does not start `BWatch` or the bots. Not a
-  multi-node design.
+- One Hypercorn serving process and one event loop. A file lock  
+  (`<DIR_RUNTIME>/.primary.lock`) rejects secondary instances. Not a multi-node design.  
 - Local Redis is required. The app pings it at startup and will not boot if it
   is down. A later outage fails rate-limited routes closed with 429.
 - Not highly available. Panel, database, and bots all live on the same box. A
   dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`).
   2.x needs the one-time reconcile below. No other panel software.
-- Discord does not share the process. It only talks to Flask over loopback.
-  Start Flask first. Killing one does not stop the other.
+- Discord does not share the process. It only talks to Quart over loopback.
+  Start the HTTP service first. Killing one does not stop the other.
 - Personal project. Untagged `main` is rolling development. Tests are for this
   repo, not a supported public suite.
 - Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure
@@ -88,20 +86,15 @@ Designed to run on a single small VPS.
 
 ## Architecture
 
-Startup order is fixed and handled by `create_application()`: configs, database,
-panels, `Subscription`, then `BWatch` and Telegram bots. Discord is not in that
-list.
+Startup is handled by `await create_application()`: primary lock, config stores,  
+database, Redis, panels and `AsyncSubscription` recovery. Watcher/bot composition is pending.  
 
 - `src/app.py` — `create_application()` factory: builds the `Application`
-  runtime (paths, configs, DB, panels, subscription, watcher, Telegram bots,
-  Flask app) and wires everything together
-- `src/wsgi.py` — gunicorn entrypoint (`wsgi:app`); constructs the application
-  and registers shutdown at exit
+  runtime (paths, config snapshots, async DB, Redis, panels, subscription and Quart app)  
+- `src/asgi.py` — ASGI entrypoint (`asgi:app`); lifespan hooks start and stop the runtime  
 - `src/main.py` — process entry for a checkout (`python -m main`) and for the
-  Nuitka binary. Runs gunicorn in-process with the same settings as
-  `src/gunicorn.conf.py`
-- `src/serve.py` — those gunicorn settings. The config file and `main` both read
-  them
+  Nuitka binary. Runs Hypercorn in-process on one event loop  
+- `src/serve.py` and `src/gunicorn.conf.py` — retired server settings awaiting final cleanup  
 - `src/core/` — `Subscription` and the user, code, panel, bandwidth, and audit
   services
 - `src/bwatch/` — `BWatch`: quota, expiry, panel health, snapshots
@@ -109,13 +102,13 @@ list.
 - `src/config/` — atomic JSON config with thread + cross-process locking
 - `src/db/` — SQLite. Users, codes, quotas, and bandwidth live here.
   `config.json` is deployment and presentation only
-- `src/api/` — Flask routes (`Api` for admin, `WebApi` for end users)
+- `src/api/` — Quart routes (`AsyncApi` for admin, `AsyncWebApi` for end users)  
 - `src/api/decorators/rate_limit.py` — Redis sliding-window limiter, shared by
   every worker
 - `src/bots/` — Telegram `AdminBot` (management), `PublicBot` (user
   self-service)
 - `src/discord/` — Discord bots as a **separate process**. Not started by
-  gunicorn or `create_application()`. One token serves public commands and
+  Hypercorn or `create_application()`. One token serves public commands and
   `/admin`. See [src/discord/README.md](src/discord/README.md).
 - `res/` — admin and user HTML. `docs/` — [public API](docs/API.md),
   [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
@@ -162,7 +155,7 @@ default port, not something this app chooses:
 }
 ```
 
-Start Redis before gunicorn. Startup pings that URL and exits if it is down. If
+Start Redis before the HTTP service. Startup pings that URL and exits if it is down. If
 Redis dies later, rate-limited routes return 429.
 
 ### Scripts
@@ -225,17 +218,16 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
 | `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
 | `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
-| `GUNICORN_BIND` | `127.0.0.1:5550`         | Address gunicorn listens on (`src/gunicorn.conf.py`). Loopback only.    |
-| `LOGLEVEL`      | `DEBUG`                  | Threshold for every `Logger()`. Does not affect gunicorn.               |
-| `LOGLEVEL_GUNICORN` | `DEBUG`              | HTTP access-log threshold.                                              |
+| `APP_BIND`      | `127.0.0.1:5550`         | Hypercorn listener for `main`/the binary. Overrides temporary `GUNICORN_BIND` fallback. |
+| `LOGLEVEL`      | `DEBUG`                  | Threshold for application `Logger()` instances. |
 | `VERBOSE_LOGGING_OVERRIDES` | *(unset)*   | Comma-separated components to start with verbose traces.                |
 
-`LOGLEVEL` and `LOGLEVEL_GUNICORN` accept a level name or an integer. Names
+`LOGLEVEL` accepts a level name or an integer. Names
 are case-insensitive: `TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`, `ERROR`,
 `CRITICAL` / `FATAL`. An integer is rounded down to the nearest level (`15`
 is `DEBUG`, `0` is `TRACE`, `99` is `CRITICAL`). Unset, blank, or unrecognized
-values use the default. `LOGLEVEL` does not change gunicorn's own error log.
-`LOGLEVEL_GUNICORN` only decides whether an access line is emitted.
+values use the default. ASGI access records use the `http.access` Python logger;  
+`LOGLEVEL_GUNICORN` belongs to the retired logger and does not configure it. Hypercorn's default access log is disabled by `main`.  
 
 `VERBOSE_LOGGING_OVERRIDES` turns on the existing `verbose` flag for named
 components: `bwatch`, `core` (`Subscription`), and `panels` (`XUiSession`,
@@ -329,11 +321,10 @@ Override this at your own risk: it's always best to leave TLS, etc. to reverse
 proxies.
 
 ## Deployment
-- Meant to run under gunicorn behind nginx (in front of the service, TLS).
+- The async HTTP entrypoint runs under Hypercorn behind nginx (TLS).  
   Application rate limits use local Redis.
 - Systemd unit recommended for persistence
-- Startup order matters: Redis → configs → DB → panels → Subscription → BWatch +
-  Telegram bots (the app steps are handled by `create_application()`)
+- Start Redis before the application; production cutover waits for watcher/bot lifecycle integration.  
 - Route every user mutation through `Subscription`. The admin API, WebAPI, and
   Telegram bots already do. Discord mutates users only by calling those HTTP
   APIs.
@@ -349,7 +340,7 @@ glibc at least as new as Ubuntu 22.04 (`>=2.35`). Do not build them with a
 free-threading interpreter (`python3.14t`, `sys.abiflags == "t"`). The workflow
 refuses that ABI.
 
-`vpn-sub --probe` and `vpn-sub-discord --probe` only check that the packed
+`vpn-sub --probe` also imports the async HTTP/runtime stack. Both probes check that the packed  
 `lang.jsonc` and `config.schema.json` (and, for the main binary, `res/`) can be
 opened. They do not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.
@@ -388,7 +379,7 @@ directory during the 5s default grace window; systemd's `TimeoutStopSec` is what
 bounds a stuck stop.
 
 The Discord unit is the same shape as the main one, with `ExecStart=/opt/vpn-sub/vpn-sub-discord` and
-`SUB_HTTP_URL`, `SUB_URI`, and `SUB_API_URI` set to the Flask side. Start Flask first.
+`SUB_HTTP_URL`, `SUB_URI`, and `SUB_API_URI` set to the HTTP service. Start that service first.  
 
 ## Development
 
@@ -399,7 +390,9 @@ venv/bin/pip install -r requirements.txt && venv/bin/pip install -e ".[dev]"
 venv/bin/ruff check .
 venv/bin/pytest
 venv/bin/mypy && venv/bin/pyright
-venv/bin/python -m src.wsgi   # local run; production is the systemd unit above
+PYTHONPATH=src venv/bin/python -m main  # same entrypoint as the main binary
+# Alternative checkout server (keep one worker):
+PYTHONPATH=src venv/bin/hypercorn --bind 127.0.0.1:5550 --workers 1 asgi:app
 ```
 
 Ruff targets Python 3.14 and checks code style, modernization, common bugs, and  

@@ -1,350 +1,122 @@
 from __future__ import annotations
 
 import json
-import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict, Unpack
-from unittest import mock
 
 import pytest
-from requests import Response
+from async_api_helpers import OpenRedis
+from quart import request
 
-from api.decorators.rate_limit import close_rate_limit
+from api.application import create_api_application
+from api.decorators.rate_limit import AsyncRateLimiter
 from app import AppOptions, AppPaths, create_application, verbose_overrides
-from paths import runtime_dir
-
-if TYPE_CHECKING:
-    from app import Application
-    from config import JsonValue
-    from custom_types import RequestKwargs
+from app_runtime.lifecycle import RuntimeState
 
 
-def json_response(data: dict[str, JsonValue], status_code: int = 200) -> Response:
-    response = Response()
-    response.status_code = status_code
-    response._content = json.dumps(data).encode("utf-8")
-    response.headers["Content-Type"] = "application/json"
-    return response
-
-
-class RecordingTransport:
-    def __init__(self, response: dict[str, JsonValue]) -> None:
-        self.response = response
-
-    def request(self, method: str, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
-        return json_response(self.response)
-
-
-def build_paths(root: Path) -> AppPaths:
-    data = root / "data"
-    return AppPaths(
-        data=data,
-        backups=data / "backup",
-        config=root / "config.json",
-        language=Path(__file__).resolve().parents[2] / "lang.jsonc",
-        database=data / "state.sqlite3",
-        log=data / "log.jsonl",
-        audit=data / "audit.jsonl",
-        primary_lock=data / ".primary.lock",
-    )
+def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    for raw in ("bwatch", "bwatch,", ",bwatch,", " BWATCH "):
+        assert verbose_overrides(raw) == frozenset({"bwatch"})
+    assert verbose_overrides(",, ") == frozenset()
+    monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch,core,panels")
+    assert verbose_overrides() == frozenset({"bwatch", "core", "panels"})
 
 
 @pytest.fixture
 def paths(tmp_path: Path) -> AppPaths:
-    paths = build_paths(tmp_path)
-    project_root = Path(__file__).resolve().parents[2]
-    config = json.loads((project_root / "docs/EXAMPLE.config.json").read_text())
-    config["$schema"] = "config.schema.json"
-    config["api_uri"] = "api"
-    config["api_token"] = "secret"
-    config["bot"]["token"] = "123:test-admin-bot"
-    config["publicbot"]["token"] = "123:test-public-bot"
-    second_panel = dict(config["3xui"]["local_panel"])
-    second_panel["name"] = "second"
-    config["3xui"]["second_panel"] = second_panel
-    paths.config.write_text(json.dumps(config), encoding="utf-8")
-    (tmp_path / "config.schema.json").write_text(
-        (project_root / "config.schema.json").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-    return paths
+    root = Path(__file__).resolve().parents[2]
+    data = tmp_path / "data"
+    data.mkdir()
+    config = data / "config.json"
+    document = json.loads((root / "docs/EXAMPLE.config.json").read_text())
+    document["$schema"] = str(root / "config.schema.json")
+    document["bot"]["token"] = ""
+    config.write_text(json.dumps(document))
+    return AppPaths(data=data, backups=data / "backup", config=config, language=root / "lang.jsonc", database=data / "state.sqlite3", log=data / "log.jsonl", audit=data / "audit.jsonl", primary_lock=data / ".primary.lock")
 
 
-class FactoryOptions(TypedDict, total=False):
-    start_bots: bool
-    proxy_hops: int
-    require_proxy: bool
+@pytest.mark.asyncio
+async def test_factory_routes_and_idempotent_stop(paths: AppPaths) -> None:
+    from async_core_helpers import PanelTransport
+    from helpers import FakePanel
 
-
-def factory(paths: AppPaths, **options: Unpack[FactoryOptions]) -> Application:
-    with mock.patch("api.decorators.rate_limit.configure_rate_limit", return_value=mock.Mock()):
-        runtime = create_application(
-            paths=paths,
-            options=AppOptions(
-                start_background=False,
-                panel_transport_factory=lambda: RecordingTransport({"success": True}),
-                **options,
-            ),
-        )
-    close_rate_limit()
-    return runtime
-
-
-def test_from_env_defaults_to_project_root() -> None:
-    project_root = Path(__file__).resolve().parents[2]
-    data = project_root / "data"
-    assert AppPaths.from_env() == AppPaths(
-        data=data,
-        backups=data / "backup",
-        config=data / "config.json",
-        language=project_root / "lang.jsonc",
-        database=data / "state.sqlite3",
-        log=data / "log.jsonl",
-        audit=data / "audit.jsonl",
-        primary_lock=runtime_dir(data) / ".primary.lock",
-    )
-
-
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        (None, frozenset[str]()),
-        ("", frozenset[str]()),
-        (",", frozenset[str]()),
-        ("  ,  ", frozenset[str]()),
-        ("bwatch", frozenset({"bwatch"})),
-        ("bwatch,", frozenset({"bwatch"})),
-        (",bwatch,", frozenset({"bwatch"})),
-        ("BWATCH", frozenset({"bwatch"})),
-        ("bwatch, core, panels", frozenset({"bwatch", "core", "panels"})),
-        ("bwatch,nope", frozenset({"bwatch", "nope"})),
-    ],
-)
-def test_verbose_overrides_parses_loose_lists(raw: str | None, expected: frozenset[str]) -> None:
-    assert verbose_overrides(raw) == expected
-
-
-def test_verbose_overrides_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch,")
-    assert verbose_overrides() == frozenset({"bwatch"})
-    monkeypatch.delenv("VERBOSE_LOGGING_OVERRIDES")
-    assert verbose_overrides() == frozenset()
-
-
-def test_factory_applies_verbose_overrides(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "bwatch, core, panels")
-    with factory(paths) as runtime:
-        assert runtime.subscription.res.verbose is True
-        assert runtime.bandwidth_watcher.verbose is True
-        assert runtime.panels
-        assert all(panel.verbose for panel in runtime.panels)
-
-
-def test_factory_creates_routes_and_respects_paths(paths: AppPaths) -> None:
-    with factory(paths) as runtime:
-        client = runtime.app.test_client()
-        assert client.get("/sub/api/api/health").status_code == 401
-        assert (
-            client.get(
-                "/sub/api/api/health",
-                headers={"Authorization": "secret"},
-            ).status_code
-            == 200
-        )
-        assert any(rule.rule == "/sub" for rule in runtime.app.url_map.iter_rules())
-        sub_response = client.get("/sub")
-        assert sub_response.status_code == 401
-        assert not sub_response.get_json()["success"]
+    runtime = await create_application(paths, AppOptions(start_background=False, limiter=AsyncRateLimiter("redis://test", client=OpenRedis()), panel_transport_factory=lambda: PanelTransport(FakePanel())))
+    try:
+        assert runtime.ready
+        assert runtime.app.extensions["runtime"] is runtime
         assert paths.database.exists()
-        assert paths.log.exists()
-        assert paths.audit.exists()
         assert paths.primary_lock.exists()
-        assert len(runtime.panels) == 2
+        assert (await runtime.app.test_client().get("/sub")).status_code == 401
+        assert any(rule.rule == "/sub" for rule in runtime.app.url_map.iter_rules())
+        with pytest.raises(RuntimeError, match="primary lock"):
+            await create_application(paths, AppOptions(start_background=False, limiter=AsyncRateLimiter("redis://test", client=OpenRedis())))
+    finally:
+        await runtime.stop()
+    await runtime.stop()
+    assert runtime.state is RuntimeState.STOPPED
 
 
-def test_compiled_binary_forces_bundled_schema(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from paths import bundled_root
+@pytest.mark.asyncio
+async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
+    class BrokenRedis(OpenRedis):
+        async def ping(self) -> bool:
+            raise OSError("Redis unavailable")
 
-    monkeypatch.setattr("app.compiled", lambda: True)
-    with factory(paths) as runtime:
-        assert runtime.cfg.schema_path == str((bundled_root() / "config.schema.json").resolve())
+    with pytest.raises(OSError, match="Redis unavailable"):
+        await create_application(paths, AppOptions(limiter=AsyncRateLimiter("redis://test", client=BrokenRedis())))
+    # Primary lock was released by failed composition.
+    from app_runtime.composition import PrimaryLock
 
-
-def test_checkout_does_not_force_schema(paths: AppPaths) -> None:
-    with factory(paths) as runtime:
-        assert runtime.cfg.schema_path is None
-
-
-def test_browser_subscription_embeds_local_fonts(paths: AppPaths) -> None:
-    with factory(paths) as runtime:
-        token = "a" * 40
-        runtime.subscription.res.db.create_user(
-            username="alice",
-            uuid=str(uuid.uuid4()),
-            token=token,
-            fingerprint="chrome",
-            displayname="Alice",
-        )
-        client = runtime.app.test_client()
-        response = client.get(
-            f"/sub?token={token}&lang=en",
-            headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"},
-        )
-        assert response.status_code == 403
-        assert response.mimetype == "text/html"
-        assert b"fonts.googleapis" not in response.data
-        assert b"fonts.gstatic" not in response.data
-        assert b"url('/sub/fonts/outfit-latin.woff2')" in response.data
-        assert b"__FONT_BASE__" not in response.data
-        assert b"/* __FONTS__ */" not in response.data
+    lock = PrimaryLock(paths.primary_lock)
+    await lock.start()
+    await lock.close()
 
 
-def test_background_components_are_not_started(paths: AppPaths) -> None:
-    with factory(paths) as runtime:
-        assert runtime.admin_bot is not None
-        assert runtime.admin_bot.polling_thread is None
-        assert runtime.public_bot is not None
-        assert runtime.public_bot.polling_thread is None
-        assert not runtime.bandwidth_watcher._threads[0].is_alive()  # pyright: ignore[reportPrivateUsage]
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("peer", "forwarded", "expected", "status"), [("127.0.0.1", "203.0.113.5", "203.0.113.5", 200), ("::1", "203.0.113.5", "203.0.113.5", 200), ("10.0.0.1", "127.0.0.1", "", 400)])
+async def test_proxy_guard_before_forwarding(peer: str, forwarded: str, expected: str, status: int) -> None:
+    app = create_api_application(require_proxy=True)
+
+    @app.route("/remote")
+    async def remote() -> str:
+        return request.remote_addr or ""
+
+    response = await app.test_client().get("/remote", headers={"X-Forwarded-For": forwarded}, scope_base={"client": (peer, 1234)})
+    assert response.status_code == status
+    if status == 200:
+        assert await response.get_data(as_text=True) == expected
 
 
-def test_omitted_or_empty_bot_is_not_started(paths: AppPaths) -> None:
-    config = json.loads(paths.config.read_text(encoding="utf-8"))
-    del config["bot"]
-    config["publicbot"]["token"] = ""
-    paths.config.write_text(json.dumps(config), encoding="utf-8")
-    with factory(paths) as runtime:
-        assert runtime.admin_bot is None
-        assert runtime.public_bot is None
-        assert runtime.bandwidth_watcher.admin_bot is None
-        assert runtime.bandwidth_watcher.bot is None
-        client = runtime.app.test_client()
-        assert (
-            client.get(
-                "/sub/api/api/health",
-                headers={"Authorization": "secret"},
-            ).status_code
-            == 200
-        )
+@pytest.mark.asyncio
+async def test_untrusted_peer_cannot_spoof_forwarded_headers() -> None:
+    app = create_api_application()
+
+    @app.route("/remote")
+    async def remote() -> str:
+        return f"{request.remote_addr}|{request.scheme}|{request.host}"
+
+    response = await app.test_client().get("/remote", headers={"X-Forwarded-For": "203.0.113.5", "X-Forwarded-Proto": "https", "X-Forwarded-Host": "evil.test"}, scope_base={"client": ("10.0.0.1", 1234)})
+    assert await response.get_data(as_text=True) == "10.0.0.1|http|localhost"
 
 
-def test_stop_is_idempotent(paths: AppPaths) -> None:
-    runtime = factory(paths)
-    runtime.stop()
-    runtime.stop()
-    assert runtime._stop_event.is_set()  # pyright: ignore[reportPrivateUsage]
+@pytest.mark.asyncio
+async def test_access_logging_redacts_tokens(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
 
+    app = create_api_application(proxy_hops=0)
 
-def test_proxy_fix_sets_remote_addr(paths: AppPaths) -> None:
-    remote_addresses: list[str | None] = []
-    with factory(paths, proxy_hops=1) as runtime:
+    @app.route("/sub")
+    async def subscription() -> str:
+        return "ok"
 
-        @runtime.app.route("/__remote")
-        def remote() -> str:  # pyright: ignore[reportUnusedFunction]
-            from flask import request
+    @app.route("/api/state/polling")
+    async def polling() -> str:
+        return "ok"
 
-            remote_addresses.append(request.remote_addr)
-            return ""
-
-        with runtime.app.test_client() as client:
-            response = client.get(
-                "/__remote",
-                headers={"X-Forwarded-For": "203.0.113.5"},
-                environ_base={"REMOTE_ADDR": "10.0.0.1"},
-            )
-            assert response.status_code == 200
-        assert remote_addresses == ["203.0.113.5"]
-
-
-def test_require_proxy_allows_only_loopback(paths: AppPaths) -> None:
-    with factory(paths, require_proxy=True) as runtime:
-        client = runtime.app.test_client()
-        response = client.get(
-            "/sub/api/api/health",
-            headers={"Authorization": "secret"},
-            environ_base={"REMOTE_ADDR": "127.0.0.1"},
-        )
-        assert response.status_code == 200
-        response = client.get(
-            "/sub/api/api/health",
-            headers={"Authorization": "secret", "X-Forwarded-For": "203.0.113.5"},
-            environ_base={"REMOTE_ADDR": "127.0.0.1"},
-        )
-        assert response.status_code == 200
-        response = client.get(
-            "/sub/api/api/health",
-            headers={"Authorization": "secret", "X-Forwarded-For": "203.0.113.5"},
-            environ_base={"REMOTE_ADDR": "10.0.0.1"},
-        )
-        assert response.status_code == 400
-        assert not response.get_json()["success"]
-
-
-def test_secondary_process_does_not_recover_or_start_bots(paths: AppPaths) -> None:
-    paths.data.mkdir(parents=True, exist_ok=True)
-    with paths.primary_lock.open("a+b") as lock:
-        import fcntl
-
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        with factory(paths) as runtime:
-            assert not runtime.primary
-            assert runtime.db.backup_dir is not None
-            assert runtime.cfg.backup_dir is not None
-            assert runtime.db._backup_t is None  # pyright: ignore[reportPrivateUsage]
-            assert runtime.cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
-            assert runtime.log_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
-            assert runtime.audit_cfg._backup_t is None  # pyright: ignore[reportPrivateUsage]
-            with mock.patch.object(
-                runtime.subscription.business_code_svc, "recover_rollback_failures",
-            ) as recover:
-                with mock.patch.object(runtime.bandwidth_watcher, "start") as watcher_start:
-                    assert runtime.admin_bot is not None
-                    assert runtime.public_bot is not None
-                    with mock.patch.object(runtime.admin_bot, "start") as admin_start:
-                        with mock.patch.object(runtime.public_bot, "start") as public_start:
-                            runtime.start()
-            recover.assert_not_called()
-            watcher_start.assert_not_called()
-            admin_start.assert_not_called()
-            public_start.assert_not_called()
-
-
-def test_primary_starts_backup_threads_once(paths: AppPaths) -> None:
-    with factory(paths) as runtime:
-        assert runtime.primary
-        assert runtime.db._backup_t is not None  # pyright: ignore[reportPrivateUsage]
-        assert runtime.db._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
-        assert runtime.cfg._backup_t is not None  # pyright: ignore[reportPrivateUsage]
-        assert runtime.cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
-        assert runtime.log_cfg._backup_t is not None  # pyright: ignore[reportPrivateUsage]
-        assert runtime.log_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
-        assert runtime.audit_cfg._backup_t is not None  # pyright: ignore[reportPrivateUsage]
-        assert runtime.audit_cfg._backup_t.is_alive()  # pyright: ignore[reportPrivateUsage]
-
-
-def test_panel_failure_closes_created_resources(paths: AppPaths) -> None:
-    calls: list[int] = []
-
-    def transport_factory() -> RecordingTransport:
-        calls.append(len(calls))
-        if len(calls) > 1:
-            raise RuntimeError("second panel construction failed")
-        return RecordingTransport({"success": True})
-
-    with mock.patch("app.Database") as database:
-        database.return_value.close = mock.Mock()
-        with mock.patch("api.decorators.rate_limit.configure_rate_limit", return_value=mock.Mock()):
-            with pytest.raises(RuntimeError, match="second panel"):
-                create_application(
-                    paths=paths,
-                    options=AppOptions(
-                        start_background=False,
-                        panel_transport_factory=transport_factory,
-                    ),
-                )
-        close_rate_limit()
-        database.return_value.close.assert_called()
+    with caplog.at_level(5, logger="http.access"):
+        await app.test_client().get("/sub?token=secret&password=hidden", headers={"User-Agent": "token=agentsecret"})
+        await app.test_client().get("/api/state/polling")
+    assert "secret" not in caplog.text
+    assert "hidden" not in caplog.text
+    records = [record for record in caplog.records if record.name == "http.access"]
+    assert records[0].levelno == logging.DEBUG
+    assert records[1].levelno == 5

@@ -6,11 +6,12 @@ import math
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal, cast
 
-from config import JsonValue
 from errors import ValidationError
 
 if TYPE_CHECKING:
     from collections.abc import MutableMapping
+
+    from config import JsonValue
 
 # pyright: reportUnnecessaryIsInstance=false
 
@@ -88,28 +89,28 @@ def check_config_document(data: Mapping[str, object]) -> None:
     profiles = data.get("profiles")
     nodes = data.get("nodes")
     if isinstance(profiles, Mapping) and isinstance(nodes, Mapping):
-        profiles, nodes = cast(Mapping[str, object], profiles), cast(Mapping[str, object], nodes)
+        profiles, nodes = cast("Mapping[str, object]", profiles), cast("Mapping[str, object]", nodes)
         for profile_id, profile in profiles.items():
             if not isinstance(profile, Mapping):
                 continue
-            profile = cast(Mapping[str, object], profile)
+            profile = cast("Mapping[str, object]", profile)
             node = profile.get("node")
             if isinstance(node, str) and node not in nodes:
                 raise ValidationError(f"profiles.{profile_id}.node {node!r} is not a key of nodes")
 
     panels = data.get("3xui")
-    if isinstance(panels, Mapping) and len(cast(Mapping[str, object], panels)) == 0:
+    if isinstance(panels, Mapping) and len(cast("Mapping[str, object]", panels)) == 0:
         raise ValidationError("3xui must contain at least one panel")
 
     publicbot = data.get("publicbot")
     if isinstance(publicbot, Mapping):
-        token = cast(Mapping[str, object], publicbot).get("token")
+        token = cast("Mapping[str, object]", publicbot).get("token")
         if not isinstance(token, str):
             raise ValidationError("publicbot.token must be a string")
 
     bot = data.get("bot")
     if isinstance(bot, Mapping):
-        token = cast(Mapping[str, object], bot).get("token")
+        token = cast("Mapping[str, object]", bot).get("token")
         if not isinstance(token, str):
             raise ValidationError("bot.token must be a string")
 
@@ -119,10 +120,10 @@ def check_config_document(data: Mapping[str, object]) -> None:
     auth = data.get("api_admin_ui_auth")
     if (
         isinstance(auth, list)
-        and len(cast(list[object], auth)) == 2
+        and len(cast("list[object]", auth)) == 2
         and (
-            not _nonempty_str(cast(list[object], auth)[0])
-            or not _nonempty_str(cast(list[object], auth)[1])
+            not _nonempty_str(cast("list[object]", auth)[0])
+            or not _nonempty_str(cast("list[object]", auth)[1])
         )
     ):
         raise ValidationError("api_admin_ui_auth entries must not be empty")
@@ -158,7 +159,7 @@ def apply_config_patch(
             continue
         if not _is_json_value(value):
             raise ValidationError(f"{key} is not a JSON value")
-        working[key] = cast(JsonValue, value)
+        working[key] = cast("JsonValue", value)
     check_config_document(working)
     if _json_equal(dict(working), preimage):
         return "unchanged", [], []
@@ -180,10 +181,10 @@ def _is_json_value(value: object) -> bool:
     if isinstance(value, Mapping):
         return all(
             isinstance(key, str) and _is_json_value(item)
-            for key, item in cast(Mapping[str, object], value).items()
+            for key, item in cast("Mapping[str, object]", value).items()
         )
     if isinstance(value, list):
-        return all(_is_json_value(item) for item in cast(list[object], value))
+        return all(_is_json_value(item) for item in cast("list[object]", value))
     return False
 
 
@@ -192,12 +193,12 @@ def _json_equal(left: object, right: object) -> bool:
     if type(left) is not type(right):
         return False
     if isinstance(left, Mapping) and isinstance(right, Mapping):
-        left, right = cast(Mapping[object, object], left), cast(Mapping[object, object], right)
+        left, right = cast("Mapping[object, object]", left), cast("Mapping[object, object]", right)
         if left.keys() != right.keys():
             return False
         return all(_json_equal(left[key], right[key]) for key in left)
     if isinstance(left, list) and isinstance(right, list):
-        left, right = cast(list[object], left), cast(list[object], right)
+        left, right = cast("list[object]", left), cast("list[object]", right)
         if len(left) != len(right):
             return False
         return all(map(_json_equal, left, right, strict=True))

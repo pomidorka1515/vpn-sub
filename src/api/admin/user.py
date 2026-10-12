@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, cast
 
-from flask import g, request
+from quart import g, request
 
-from api.admin._base import AdminApiMixin
+from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_args, requires_fields_strict
 from errors import PanelUnavailableError
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from api.common import ResponseType
 
 
-class UserRoutes(AdminApiMixin):
+class AsyncUserRoutes(AsyncAdminApiMixin):
     """Admin user and fingerprint routes."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
@@ -32,23 +32,23 @@ class UserRoutes(AdminApiMixin):
     )
 
     @requires_admin_auth
-    def user_list(self) -> ResponseType:
-        users = self.sub.user_svc.list_users()
+    async def user_list(self) -> ResponseType:
+        users = await self.sub.user_svc.list_users()
         if not users:
             return ok(obj=[])
         return ok(obj=users)
 
     @requires_admin_auth
     @requires_args("user")
-    def user_info(self) -> ResponseType:
+    async def user_info(self) -> ResponseType:
         username = request.args["user"]
         pretty = request.args.get("beautify", "").lower() in {"1", "true", "yes"}
-        x = self.sub.business_svc.get_info(username=username, pretty=pretty)
+        x = await self.sub.business_svc.get_info(username=username, pretty=pretty)
         return ok(obj=asdict(x))
 
     @requires_admin_auth
     @requires_fields_strict(("user", str), ("displayname", str))
-    def user_add(self) -> ResponseType:
+    async def user_add(self) -> ResponseType:
         content = g.json_obj
         raw_data: dict[str, object] = {
             "user": content.get("user"),
@@ -74,49 +74,48 @@ class UserRoutes(AdminApiMixin):
             elif k in {"ext_username", "ext_password", "token", "userid", "fingerprint"}:
                 if v is not None and not isinstance(v, str):
                     return err(f"{k} must be a string or null")
-                data[k] = cast(str, v)
+                data[k] = cast("str", v)
 
             elif k in {"limit", "wl_limit", "time"}:
                 try:
-                    data[k] = int(cast(str, v))
+                    data[k] = int(cast("str", v))
                 except ValueError, TypeError:
                     return err(f"{k} must be an integer, got: {v}")
-                if cast(int, data[k]) < 0:
+                if cast("int", data[k]) < 0:
                     return err(f"{k} must be non-negative")
 
-        self.sub.business_svc.add_new_user(
-            username=cast(str, data["user"]),
-            displayname=cast(str, data["displayname"]),
-            ext_username=cast(str, data["ext_username"]),
-            ext_password=cast(str, data["ext_password"]),
-            token=cast(str, data["token"]),
-            userid=cast(str, data["userid"]),
-            fingerprint=cast(str, data["fingerprint"]),
-            limit=cast(int, data["limit"]),
-            wl_limit=cast(int, data["wl_limit"]),
-            timee=cast(int, data["time"]),
+        await self.sub.business_svc.add_new_user(
+            username=cast("str", data["user"]),
+            displayname=cast("str", data["displayname"]),
+            ext_username=cast("str", data["ext_username"]),
+            ext_password=cast("str", data["ext_password"]),
+            token=cast("str", data["token"]),
+            userid=cast("str", data["userid"]),
+            fingerprint=cast("str", data["fingerprint"]),
+            limit=cast("int", data["limit"]),
+            wl_limit=cast("int", data["wl_limit"]),
+            timee=cast("int", data["time"]),
         )
         return ok("Created", 201)
 
     @requires_admin_auth
     @requires_fields_strict(("user", str))
-    def user_delete(self) -> ResponseType:
+    async def user_delete(self) -> ResponseType:
         content = g.json_obj
         username: str = content.get("user")
         perma = parse_bool(content.get("perma", "true"))
         if perma is None:
             return err("'perma' must be bool-like")
-        self.sub.business_svc.delete_user(username, perma)
+        await self.sub.business_svc.delete_user(username, perma)
         return ok("Deleted")
 
     @requires_admin_auth
-    def user_refresh(self) -> ResponseType:
-        users = self.sub.user_svc.list_users()
+    async def user_refresh(self) -> ResponseType:
+        users = await self.sub.user_svc.list_users()
         failures: list[str] = []
-        known = self.sub.panel_svc.client_maps(self.sub.panels)
         for cc in users:
             try:
-                self.sub.business_svc.add_users(cc, known_clients=known)
+                await self.sub.business_svc.add_users(cc)
             except PanelUnavailableError:
                 failures.append(cc)
                 self.log.exception("user refresh failed for %s", cc)
@@ -150,24 +149,24 @@ class UserRoutes(AdminApiMixin):
         return ok("Refreshed all users.")
 
     @requires_admin_auth
-    def user_onlines(self) -> ResponseType:
+    async def user_onlines(self) -> ResponseType:
         new = parse_bool(request.args.get("keyed", False))
         if new is None:
             return err("'keyed' must be bool-like")
-        status = self.sub.panel_svc.get_online_status(new)
+        status = await self.sub.panel_svc.get_online_status(new)
         return ok(obj={"users": status.users, "panel_health": status.panel_health})
 
     @requires_admin_auth
     @requires_fields_strict(("user", str))
-    def user_reset(self) -> ResponseType:
+    async def user_reset(self) -> ResponseType:
         content = g.json_obj
         username: str = content.get("user")
-        x = self.sub.business_svc.reset_user(username)
+        x = await self.sub.business_svc.reset_user(username)
         return ok(obj=asdict(x))
 
     @requires_admin_auth
     @requires_fields_strict(("user", str))
-    def user_update(self) -> ResponseType:
+    async def user_update(self) -> ResponseType:
         content = g.json_obj
         username: str = content.get("user")
         fingerprint = content.get("fingerprint")
@@ -181,7 +180,7 @@ class UserRoutes(AdminApiMixin):
             if name not in content:
                 return None
             try:
-                value = int(cast(str | int, content.get(name)))
+                value = int(cast("str | int", content.get(name)))
             except ValueError, TypeError:
                 raise ValueError(name) from None
             if value < 0:
@@ -195,7 +194,7 @@ class UserRoutes(AdminApiMixin):
         except ValueError as error:
             return err(f"{error.args[0]} must be a non-negative integer")
 
-        self.sub.business_svc.update_params(
+        await self.sub.business_svc.update_params(
             username=username,
             displayname=displayname,
             fingerprint=fingerprint,
@@ -207,17 +206,17 @@ class UserRoutes(AdminApiMixin):
 
     @requires_admin_auth
     @requires_args("user")
-    def user_history(self) -> ResponseType:
+    async def user_history(self) -> ResponseType:
         username = request.args["user"]
         try:
             days = int(request.args.get("days", 30))
         except ValueError, TypeError:
             return err("'days' must be an integer")
         days = max(1, min(days, 90))
-        snapshots = self.sub.bandwidth_svc.get_bw_history(username, days)
+        snapshots = await self.sub.bandwidth_svc.get_bw_history(username, days)
         return ok(obj=[asdict(s) for s in snapshots])
 
     @requires_admin_auth
-    def fingerprints(self) -> ResponseType:
+    async def fingerprints(self) -> ResponseType:
         conf = self.cfg.view()
         return ok(obj=conf["fingerprints"])

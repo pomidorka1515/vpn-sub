@@ -3,22 +3,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from flask import Flask
+    from quart import Quart
 
-    from bwatch import BWatch
-    from config import AppConfig, Config, LinesConfig
-    from core import Subscription
+    from api.common import SnapshotStatus
+    from config import AppConfig
+    from config.async_store import AsyncConfig, AsyncLinesConfig
+    from core import AsyncSubscription
     from loggers import Logger
 
 
-class AdminApiMixin:
+class AsyncAdminApiMixin:
     """Attributes every admin route group reads from the composed Api."""
 
-    app: Flask
-    cfg: Config[AppConfig]
-    sub: Subscription
-    bw: BWatch
+    app: Quart
+    cfg: AsyncConfig[AppConfig]
+    sub: AsyncSubscription
+    bw: SnapshotStatus
     uri: str
     log: Logger
     token: str
-    audit_cfg: LinesConfig
+    audit_cfg: AsyncLinesConfig

@@ -3,12 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+import pytest_asyncio
 from helpers import make_subscription, make_watch
 
-from db import Database
+from db import AsyncDatabase, Database
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import AsyncIterator, Iterator
     from pathlib import Path
 
     from bwatch import BWatch
@@ -27,6 +28,16 @@ def database(db_path: Path) -> Iterator[Database]:
     db = Database(path=db_path, timeout=2)
     yield db
     db.close()
+
+
+@pytest_asyncio.fixture
+async def async_database(db_path: Path) -> AsyncIterator[AsyncDatabase]:
+    db = AsyncDatabase(path=db_path, timeout=2, start_backup=False)
+    await db.start()
+    try:
+        yield db
+    finally:
+        await db.close()
 
 
 @pytest.fixture

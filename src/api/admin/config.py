@@ -1,24 +1,25 @@
 from __future__ import annotations
 
-from collections.abc import MutableMapping
 from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
-from flask import g
+from quart import g
 
-from api.admin._base import AdminApiMixin
+from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
 from api.config_patch import apply_config_patch, config_etag
 from api.decorators import requires_admin_auth, requires_fields_strict
-from config import JsonValue
-from custom_types import JsonifyValue
-from errors import ConfigError, SchemaValidationError, ValidationError
+from errors import SchemaValidationError, ValidationError
 from util import err, ok
 
 if TYPE_CHECKING:
+    from collections.abc import MutableMapping
+
     from api.common import ResponseType
+    from config import JsonValue
+    from custom_types import JsonifyValue
 
 
-class ConfigRoutes(AdminApiMixin):
+class AsyncConfigRoutes(AsyncAdminApiMixin):
     """Admin config read and patch routes."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
@@ -27,46 +28,42 @@ class ConfigRoutes(AdminApiMixin):
     )
 
     @requires_admin_auth
-    def config_get(self) -> ResponseType:
-        data = self.cfg.copy()
-        response, code = ok(obj=cast(JsonifyValue, data))
-        response.headers["ETag"] = f'"{config_etag(data)}"'
+    async def config_get(self) -> ResponseType:
+        data = self.cfg.view()
+        response, code = ok(obj=cast("JsonifyValue", data))
+        response.headers["ETag"] = f'"{config_etag(cast("dict[str, JsonValue]", data))}"'
         response.headers["Cache-Control"] = "no-store"
         return response, code
 
     @requires_admin_auth
     @requires_fields_strict()
-    def config_set(self) -> ResponseType:
-        body = cast(dict[str, JsonValue], g.json_obj)
+    async def config_set(self) -> ResponseType:
+        body = cast("dict[str, JsonValue]", g.json_obj)
         base = body.get("base")
         values = body.get("values")
         if not isinstance(base, str) or not isinstance(values, dict):
             return err("base must be a string and values must be an object")
 
-        if any(not isinstance(key, str) for key in cast(dict[object, object], values)):
+        if any(not isinstance(key, str) for key in cast("dict[object, object]", values)):
             return err("values must be an object")
         base = base.strip().removeprefix("W/").strip().strip('"')
 
         conflict: str | None = None
-        status: Literal["updated", "unchanged"] = "unchanged"
+        statuses: list[Literal["updated", "unchanged"]] = ["unchanged"]
         changed: list[str] = []
         restart: list[str] = []
-        written: dict[str, JsonValue] | None = None
+
+        def patch(tx: MutableMapping[str, JsonValue]) -> None:
+            nonlocal conflict, changed, restart
+            current_hash = config_etag(dict(tx))
+            if current_hash != base:
+                conflict = current_hash
+                return
+            status, changed, restart = apply_config_patch(tx, values)
+            statuses[0] = status
+
         try:
-            with self.cfg.edit() as tx:
-                current = tx.copy()
-                current_hash = config_etag(current)
-                if current_hash != base:
-                    conflict = current_hash
-                if conflict is None:
-                    status, changed, restart = apply_config_patch(
-                        cast(MutableMapping[str, JsonValue], tx),
-                        values,
-                    )
-                    if status == "updated":
-                        # Fail before commit. __exit__ validates again, then replaces.
-                        self.cfg.validate_document(tx.copy())
-                        written = tx.copy()
+            await self.cfg.mutate(patch)
         except ValidationError as exc:
             return err(exc.message)
         except SchemaValidationError as exc:
@@ -76,20 +73,19 @@ class ConfigRoutes(AdminApiMixin):
         if conflict is not None:
             return err("Config changed since it was loaded", 409, {"base": conflict})
 
+        status = statuses[0]
         if status == "updated":
-            if written is None:
-                raise ConfigError("Config update was not committed")
             # The file is already replaced. A backup failure must not turn a
             # committed edit into a 500, and must not skip the audit.
             try:
-                self.cfg.backup_data(written)
+                await self.cfg.backup_now()
             except Exception:
                 self.log.exception("config backup failed after commit")
-            self.sub.audit_svc.audit(
+            await self.sub.audit_svc.audit(
                 name="config_update",
                 info={"keys": changed},
             )
-        new_hash = config_etag(self.cfg.copy())
+        new_hash = config_etag(cast("dict[str, JsonValue]", self.cfg.view()))
         return ok(
             "Updated" if status == "updated" else "Unchanged",
             obj={"base": new_hash, "restart": restart},

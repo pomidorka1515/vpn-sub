@@ -3,37 +3,37 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from flask import Flask, Response
+    from quart import Quart, Response
 
-    from api.common import ResponseType
-    from bwatch import BWatch
-    from config import AppConfig, Config
-    from core import Subscription
+    from api.common import ResponseType, SnapshotStatus
+    from config import AppConfig
+    from config.async_store import AsyncConfig
+    from core import AsyncSubscription
     from loggers import Logger
 
 
-class WebApiMixin:
+class AsyncWebApiMixin:
     """Attributes every web route group reads from the composed WebApi."""
 
-    app: Flask
-    cfg: Config[AppConfig]
-    sub: Subscription
-    bw: BWatch
+    app: Quart
+    cfg: AsyncConfig[AppConfig]
+    sub: AsyncSubscription
+    bw: SnapshotStatus
     uri: str
     log: Logger
     prefix: str
 
-    def validate_auth_token(self, auth_token: str | None = None) -> str | None:
+    async def validate_auth_token(self, auth_token: str | None = None) -> str | None:
         raise NotImplementedError
 
-    def validate_credentials(self, username: str, password: str) -> str | bool:
+    async def validate_credentials(self, username: str, password: str) -> str | bool:
         raise NotImplementedError
 
     def _clear_auth_cookies(self, response: Response) -> None:
         raise NotImplementedError
 
-    def _static(self, name: str, mimetype: str, body: bytes | None = None) -> ResponseType:
+    async def _static(self, name: str, mimetype: str, body: bytes | None = None) -> ResponseType:
         raise NotImplementedError
 
-    def _page(self, name: str) -> Response:
+    async def _page(self, name: str) -> Response:
         raise NotImplementedError

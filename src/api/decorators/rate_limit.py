@@ -1,23 +1,22 @@
 from __future__ import annotations
 
-import threading
 import time
-from collections.abc import Mapping
 from functools import wraps
 from typing import TYPE_CHECKING, Protocol, cast
 
-from flask import request
+from quart import request
 
 from loggers import Logger
 from util import err
 
-from ..common import BaseApi
-from ._common import DecoratedReturn
-
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from ._common import Decorated, WrappedReturn
+    from api.common import AsyncBaseApi
+    from config import AppConfig
+    from core.async_common import Snapshot
+
+    from ._common import Decorated, DecoratedReturn, WrappedReturn
 
 _RATE_LIMIT_WINDOW = 60.0
 _REDIS_SOCKET_TIMEOUT = 0.2
@@ -44,154 +43,74 @@ return 0
 log = Logger("rate_limit")
 
 
-class _RateLimitScript(Protocol):
-    def __call__(
-        self,
-        keys: tuple[str, ...],
-        args: tuple[float, float, str, int, int],
-    ) -> int: ...
+class RateLimitScript(Protocol):
+    async def __call__(self, *, keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int: ...
 
 
-class _RateLimitClient(Protocol):
-    def register_script(self, script: str) -> _RateLimitScript: ...
+class RateLimitClient(Protocol):
+    def register_script(self, script: str) -> RateLimitScript: ...
 
-    def ping(self) -> bool: ...
+    async def ping(self) -> bool: ...
 
-    def close(self) -> None: ...
-
-
-class _RedisRateLimiter:
-    """One shared sorted set per route and client. Redis runs the update atomically."""
-
-    def __init__(self, max_requests: int, scope: str, client: _RateLimitClient) -> None:
-        if max_requests <= 0:
-            raise ValueError(f"max_requests must be positive, got {max_requests}")
-        self.max_requests = max_requests
-        self._scope = scope
-        self._script = client.register_script(_RATE_LIMIT_SCRIPT)
-
-    def allow(self, key: str, now: float) -> bool:
-        allowed = self._script(
-            keys=(f"ratelimit:{self._scope}:{key}",),
-            args=(
-                now,
-                _RATE_LIMIT_WINDOW,
-                f"{now}:{time.time_ns()}",
-                self.max_requests,
-                int(_RATE_LIMIT_WINDOW),
-            ),
-        )
-        return int(allowed) == 1
+    async def aclose(self) -> None: ...
 
 
-_client: _RateLimitClient | None = None
-_client_lock = threading.Lock()
+class AsyncRateLimiter:
+    """Runtime-owned Redis client; no connections or tasks at import time."""
+
+    def __init__(self, url: str, *, socket_timeout: float = _REDIS_SOCKET_TIMEOUT, client: RateLimitClient | None = None) -> None:
+        if not url or socket_timeout <= 0:
+            raise ValueError("Redis URL and positive socket timeout are required")
+        self.url = url
+        self.socket_timeout = socket_timeout
+        self._client = client
+        self._owned = client is None
+        self._script: RateLimitScript | None = None
+
+    @classmethod
+    def from_config(cls, cfg: Snapshot[AppConfig]) -> AsyncRateLimiter:
+        section = cfg.view()["redis"]
+        return cls(section["url"], socket_timeout=section.get("socket_timeout", _REDIS_SOCKET_TIMEOUT))
+
+    async def start(self) -> None:
+        if self._client is None:
+            from redis.asyncio import Redis
+
+            self._client = cast("RateLimitClient", Redis.from_url(self.url, socket_connect_timeout=self.socket_timeout, socket_timeout=self.socket_timeout, decode_responses=True))  # pyright: ignore[reportUnknownMemberType]  # Upstream kwargs are untyped.
+        await self._client.ping()
+        self._script = self._client.register_script(_RATE_LIMIT_SCRIPT)
+
+    async def allow(self, scope: str, key: str, max_requests: int) -> bool:
+        if self._script is None:
+            raise RuntimeError("Redis limiter has not started")
+        now = time.time()
+        return int(await self._script(keys=(f"ratelimit:{scope}:{key}",), args=(now, _RATE_LIMIT_WINDOW, f"{now}:{time.time_ns()}", max_requests, int(_RATE_LIMIT_WINDOW)))) == 1
+
+    async def close(self) -> None:
+        self._script = None
+        if self._owned and self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
 
-def configure_rate_limit(
-    url: str, socket_timeout: float = _REDIS_SOCKET_TIMEOUT,
-) -> _RateLimitClient:
-    """Open the process-wide client. Every worker must point at the same Redis."""
-    from redis import Redis
-
-    if not url:
-        raise ValueError("redis url must not be empty")
-    if socket_timeout <= 0:
-        raise ValueError(f"socket_timeout must be positive, got {socket_timeout}")
-    client = cast(
-        _RateLimitClient,
-        Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
-            url,
-            socket_connect_timeout=socket_timeout,
-            socket_timeout=socket_timeout,
-            decode_responses=True,
-        ),
-    )
-    client.ping()
-    _replace_client(client)
-    return client
-
-
-def close_rate_limit() -> None:
-    client = _replace_client(None)
-    if client is None:
-        return
-    try:
-        client.close()
-    except Exception:
-        log.exception("rate limit store close failed")
-
-
-def _replace_client(client: _RateLimitClient | None) -> _RateLimitClient | None:
-    global _client  # ruff: ignore[global-statement]
-    with _client_lock:
-        previous = _client
-        _client = client
-        return previous
-
-
-def _get_client() -> _RateLimitClient:
-    with _client_lock:
-        client = _client
-    if client is None:
-        raise RuntimeError("redis rate limiter is not configured")
-    return client
-
-
-class _RateLimitConfig(Protocol):
-    def get(self, key: str) -> object: ...
-
-
-def _redis_config(cfg: _RateLimitConfig) -> tuple[str, float]:
-    raw = cfg.get("redis")
-    if not isinstance(raw, Mapping):
-        raise RuntimeError("redis config is required")
-    section = cast(Mapping[str, object], raw)
-    url = section.get("url")
-    if not isinstance(url, str) or not url:
-        raise ValueError("redis.url must be a non-empty string")
-    timeout = section.get("socket_timeout", _REDIS_SOCKET_TIMEOUT)
-    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
-        raise ValueError(f"redis.socket_timeout must be positive, got {timeout}")
-    return url, float(timeout)
-
-
-def configure_rate_limit_from_config(cfg: _RateLimitConfig) -> _RateLimitClient:
-    return configure_rate_limit(*_redis_config(cfg))
-
-
-def rate_limit[**P, R](
-    max_requests: int,
-) -> Callable[
-    [Decorated[BaseApi, P, R]],
-    DecoratedReturn[BaseApi, P, R],
-]:
-    """Rate-limit a handler by client IP using a shared Redis sliding window."""
+def rate_limit[API_T: AsyncBaseApi, **P, R](max_requests: int) -> Callable[[Decorated[API_T, P, R]], DecoratedReturn[API_T, P, R]]:
     if max_requests <= 0:
-        raise ValueError(f"max_requests must be positive, got {max_requests}")
+        raise ValueError("max_requests must be positive")
 
-    def decorator(f: Decorated[BaseApi, P, R]) -> DecoratedReturn[BaseApi, P, R]:
+    def decorator(f: Decorated[API_T, P, R]) -> DecoratedReturn[API_T, P, R]:
         scope = f"{f.__module__}.{f.__qualname__}:{max_requests}"
-        shared: _RedisRateLimiter | None = None
-        seen: _RateLimitClient | None = None
 
         @wraps(f)
-        def wrapper(self: BaseApi, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
-            nonlocal shared, seen
-            ip = request.remote_addr or "<unknown>"
+        async def wrapper(self: API_T, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
             try:
-                client = _get_client()
-                if shared is None or seen is not client:
-                    shared = _RedisRateLimiter(max_requests, scope, client)
-                    seen = client
-                allowed = shared.allow(ip, time.time())
+                allowed = await self.limiter.allow(scope, request.remote_addr or "<unknown>", max_requests)
             except Exception:
-                log.exception("rate limit store failed")
-                return err(msg="Too many requests.", code=429)
+                log.error("rate limit store failed")  # ruff: ignore[error-instead-of-exception] credentials may occur in exception text
+                return err("Too many requests.", 429)
             if not allowed:
-                return err(msg="Too many requests.", code=429)
-            return f(self, *args, **kwargs)
+                return err("Too many requests.", 429)
+            return await f(self, *args, **kwargs)
 
-        return cast(DecoratedReturn[BaseApi, P, R], wrapper)
+        return cast("DecoratedReturn[API_T, P, R]", wrapper)
 
     return decorator

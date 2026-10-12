@@ -9,22 +9,21 @@ from typing import TYPE_CHECKING, Unpack, cast
 from unittest.mock import MagicMock
 from urllib.parse import unquote
 
-from flask import Flask
 from requests import Response
 
-from api.subscription import register_subscription_route
-from bots import AdminBot, PublicBot
 from bwatch import BWatch
 from config import Config
 from core import Subscription
 from custom_types import ClientTraffic, Inbound, PanelClient
-from session import XUiSession
 
 if TYPE_CHECKING:
+    from flask import Flask
     from typing_contracts import AppOverrides, CreateUserOverrides, ProfileOverrides
 
+    from bots import AdminBot, PublicBot
     from config import AppConfig, JsonValue, LangConfig, LinesConfig, ProfileConfig
     from db import Database
+    from session import XUiSession
 
 USER_UUID = "01234567-89ab-cdef-0123-456789abcdef"
 TOKEN_A = "a" * 40
@@ -92,16 +91,14 @@ def make_subscription(
     lang_cfg: Config[LangConfig] | None = None,
     **config_overrides: Unpack[AppOverrides],
 ) -> Subscription:
-    subscription = Subscription(
+    return Subscription(
         cfg=config_mock(subscription_config(**config_overrides)),
         lang_cfg=config_mock(language_config()) if lang_cfg is None else lang_cfg,
         db=database,
-        panels=cast(list[XUiSession], panels or []),
-        whitelist_panel=cast(XUiSession | None, whitelist_panel),
+        panels=cast("list[XUiSession]", panels or []),
+        whitelist_panel=cast("XUiSession | None", whitelist_panel),
         audit_cfg=audit_cfg,
     )
-    register_subscription_route(app or Flask(__name__), subscription)
-    return subscription
 
 
 def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]) -> None:
@@ -141,8 +138,8 @@ def make_watch(
         cfg=config_mock(subscription_config()),
         db=database,
         sub=subscription,
-        bot=cast(PublicBot | None, bot),
-        admin_bot=cast(AdminBot | None, admin_bot),
+        bot=cast("PublicBot | None", bot),
+        admin_bot=cast("AdminBot | None", admin_bot),
     )
 
 
@@ -416,7 +413,7 @@ class FakePanel:
         if self._post_payload is not None:
             return json_http(self._post_payload, self._post_status)
         raw_body: object = kwargs.get("json")
-        body = dict(cast(dict[str, object], raw_body)) if isinstance(raw_body, dict) else {}
+        body = dict(cast("dict[str, object]", raw_body)) if isinstance(raw_body, dict) else {}
         return self._route_post(url, body)
 
     def _find(self, email: str) -> PanelClient | None:
@@ -427,7 +424,7 @@ class FakePanel:
         raw: object = body.get("client")
         if not isinstance(raw, dict):
             return json_http({"success": False, "msg": "missing client", "obj": None}, 200)
-        client = cast(dict[str, object], raw)
+        client = cast("dict[str, object]", raw)
         email = str(client.get("email", ""))
         if self._find(email) is not None:
             return json_http({"success": False, "msg": "duplicate email", "obj": None}, 200)
@@ -469,7 +466,7 @@ class FakePanel:
         enable = "bulkEnable" in url
         raw_emails = body.get("emails", [])
         assert isinstance(raw_emails, list)
-        emails = [str(e) for e in cast(list[object], raw_emails)]
+        emails = [str(e) for e in cast("list[object]", raw_emails)]
         missing = [e for e in emails if self._find(e) is None]
         if missing:
             return json_http(
@@ -554,7 +551,7 @@ def _integer(value: object) -> int:
 
 def _integer_list(value: object) -> list[int]:
     assert isinstance(value, list)
-    return [_integer(item) for item in cast(list[object], value)]
+    return [_integer(item) for item in cast("list[object]", value)]
 
 
 def _telegram_id(value: object) -> str | int:

@@ -19,12 +19,11 @@ jobs:
             pythonpath: src
             entry: src/main.py
             extra: >-
-              --include-module=wsgi
-              --include-module=serve
+              --include-module=asgi
+              --include-package=hypercorn
               --include-module=paths
               --include-module=version
               --include-package=cli
-              --include-module=gunicorn.workers.gthread
               --include-data-dir=res=res
               --include-data-files=lang.jsonc=lang.jsonc
               --include-data-files=config.schema.json=config.schema.json
@@ -48,7 +47,8 @@ jobs:
             entry: src/discord/src/runtime.py
             extra: >-
               --nofollow-import-to=flask
-              --nofollow-import-to=gunicorn
+              --nofollow-import-to=quart
+              --nofollow-import-to=hypercorn
               --nofollow-import-to=telebot
               --include-module=paths
               --include-module=version
@@ -238,7 +238,7 @@ jobs:
         if: matrix.name == 'vpn-sub'
         run: |
           set -euo pipefail
-          # --probe imports gunicorn and checks that res/, lang.jsonc, and
+          # --probe imports the async HTTP/runtime stack and checks res/, lang.jsonc, and
           # config.schema.json were packed. It does not boot the service: a
           # missing config or Redis must not look like a bad binary, and a
           # crash must not look like success. Exit 0 is the only pass.
@@ -248,7 +248,7 @@ jobs:
         if: matrix.name == 'vpn-sub-discord'
         run: |
           set -euo pipefail
-          # Same contract as the Flask probe, including the packed schema.
+          # Same resource contract as the main probe, including the packed schema.
           # A missing discord.json or a Discord login is not this test. Exit 0
           # is the only pass; a crash is not.
           build/dist/vpn-sub-discord --probe

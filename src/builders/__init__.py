@@ -7,7 +7,7 @@ because subscription generation (and its tests) patch them on this package.
 
 from __future__ import annotations
 
-from flask import render_template
+from quart import render_template
 
 from fonts import embed_font_faces
 from util import isbrowser

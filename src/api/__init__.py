@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from .admin import Api
-from .common import BaseApi
+from .admin import AsyncApi
+from .common import AsyncBaseApi
 from .decorators.rate_limit import rate_limit
-from .web import WebApi
+from .web import AsyncWebApi
 
-__all__ = ["Api", "BaseApi", "WebApi", "rate_limit"]
+__all__ = ["AsyncApi", "AsyncBaseApi", "AsyncWebApi", "rate_limit"]

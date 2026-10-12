@@ -2,7 +2,7 @@
 [project]
 name = "vpn-sub"
 version = "0.0.0" # just use tags. this isnt a package you install
-description = "VPN subscription management service. Flask + Telegram bots + 3x-ui panel glue."
+description = "VPN subscription management service. Quart + Telegram bots + 3x-ui panel glue."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.14" # 3.13 is supported, 3.14 for development
@@ -11,6 +11,8 @@ dependencies = [
     "requests>=2.31.0",
     "pyTelegramBotAPI>=4.15.0",
     "Flask>=3.0.0",
+    "Quart>=0.20,<1",
+    "hypercorn>=0.17.3,<1",
     "qrcode>=7.4",
     "Pillow>=10.0.0",
     "gunicorn>=21.0.0",
@@ -343,7 +345,7 @@ typeCheckingMode = "strict"
 reportDeprecated = false
 venvPath = "."
 venv = "venv"
-useLibraryCodeForTypes = false # why the fuck is this on by default
+useLibraryCodeForTypes = true # Resolve Quart's inherited Flask sansio types.
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]

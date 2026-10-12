@@ -2,59 +2,61 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from api.common import BaseApi
+from api.common import AsyncBaseApi
 from loggers import Logger
 
-from .code import CodeRoutes
-from .config import ConfigRoutes
-from .logs import LogsRoutes
-from .operations import OperationsRoutes
-from .panel import PanelRoutes
-from .state import StateRoutes
-from .ui import UiRoutes
-from .user import UserRoutes
+from .code import AsyncCodeRoutes
+from .config import AsyncConfigRoutes
+from .logs import AsyncLogsRoutes
+from .operations import AsyncOperationsRoutes
+from .panel import AsyncPanelRoutes
+from .state import AsyncStateRoutes
+from .ui import AsyncUiRoutes
+from .user import AsyncUserRoutes
 
 if TYPE_CHECKING:
-    from flask import Flask
+    from quart import Quart
 
-    from api.common import Route
-    from bwatch import BWatch
-    from config import AppConfig, Config, LinesConfig
-    from core import Subscription
+    from api.common import Route, SnapshotStatus
+    from api.decorators.rate_limit import AsyncRateLimiter
+    from config import AppConfig
+    from config.async_store import AsyncConfig, AsyncLinesConfig
+    from core import AsyncSubscription
 
-__all__ = ["Api"]
+__all__ = ["AsyncApi"]
 
 
-class Api(
-    UserRoutes,
-    PanelRoutes,
-    CodeRoutes,
-    StateRoutes,
-    LogsRoutes,
-    OperationsRoutes,
-    ConfigRoutes,
-    UiRoutes,
-    BaseApi,
+class AsyncApi(
+    AsyncUserRoutes,
+    AsyncPanelRoutes,
+    AsyncCodeRoutes,
+    AsyncStateRoutes,
+    AsyncLogsRoutes,
+    AsyncOperationsRoutes,
+    AsyncConfigRoutes,
+    AsyncUiRoutes,
+    AsyncBaseApi,
 ):
     """Private admin API."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
-        *UserRoutes.ROUTES,
-        *PanelRoutes.ROUTES,
-        *CodeRoutes.ROUTES,
-        *StateRoutes.ROUTES,
-        *LogsRoutes.ROUTES,
-        *OperationsRoutes.ROUTES,
-        *ConfigRoutes.ROUTES,
+        *AsyncUserRoutes.ROUTES,
+        *AsyncPanelRoutes.ROUTES,
+        *AsyncCodeRoutes.ROUTES,
+        *AsyncStateRoutes.ROUTES,
+        *AsyncLogsRoutes.ROUTES,
+        *AsyncOperationsRoutes.ROUTES,
+        *AsyncConfigRoutes.ROUTES,
     )
 
     def __init__(
         self,
-        app: Flask,
-        cfg: Config[AppConfig],
-        audit_cfg: LinesConfig,
-        sub: Subscription,
-        bw: BWatch,
+        app: Quart,
+        cfg: AsyncConfig[AppConfig],
+        audit_cfg: AsyncLinesConfig,
+        sub: AsyncSubscription,
+        bw: SnapshotStatus,
+        limiter: AsyncRateLimiter,
     ) -> None:
         self.log = Logger(type(self).__name__)
         conf = cfg.view()
@@ -63,4 +65,4 @@ class Api(
         )
         self.token = conf["api_token"]
         self.audit_cfg = audit_cfg
-        super().__init__(app, cfg, sub, bw, uri)
+        super().__init__(app, cfg, sub, bw, uri, limiter)

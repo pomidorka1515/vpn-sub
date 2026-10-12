@@ -4,11 +4,11 @@ import base64
 import json
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from flask import Flask
 from helpers import config_mock, language_config, subscription_config
+from quart import Quart
 
 from builders import build_description, build_json, build_link_array, get_subscription
 from config.documents import ProfileOutbound, ProfileTemplate
@@ -330,9 +330,9 @@ def _subscription(
     config.update(cfg or {})
     subscription = MagicMock(
         spec=Subscription,
-        user_svc=MagicMock(),
-        audit_svc=MagicMock(),
-        bandwidth_svc=MagicMock(),
+        user_svc=AsyncMock(),
+        audit_svc=AsyncMock(),
+        bandwidth_svc=AsyncMock(),
         res=SimpleNamespace(
             cfg=MagicMock(),
             lang_cfg=MagicMock(),
@@ -348,13 +348,14 @@ def _subscription(
     return subscription
 
 
-def test_subscription_rejects_bad_input_and_browser_clients(
+@pytest.mark.asyncio
+async def test_subscription_rejects_bad_input_and_browser_clients(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     subscription = _subscription()
-    app = Flask(__name__)
-    with app.app_context():
-        response, status = get_subscription(
+    app = Quart(__name__)
+    async with app.app_context():
+        response, status = await get_subscription(
             subscription,
             token="",
             lang="en",
@@ -365,7 +366,7 @@ def test_subscription_rejects_bad_input_and_browser_clients(
         assert status == 401
 
         subscription.user_svc.usertotoken.return_value = ""
-        response, status = get_subscription(
+        response, status = await get_subscription(
             subscription,
             token="bad",
             lang="en",
@@ -377,7 +378,7 @@ def test_subscription_rejects_bad_input_and_browser_clients(
         subscription.audit_svc.audit.assert_called()
 
         subscription = _subscription()
-        response, status = get_subscription(
+        response, status = await get_subscription(
             subscription,
             token="tok",
             lang="de",
@@ -391,7 +392,7 @@ def test_subscription_rejects_bad_input_and_browser_clients(
             del ua
             return True
 
-        def render(name: str, **kwargs: object) -> str:
+        async def render(name: str, **kwargs: object) -> str:
             return f"{name}:{kwargs['forbidden_title']}"
 
         def embed(html: str, prefix: str) -> str:
@@ -403,7 +404,7 @@ def test_subscription_rejects_bad_input_and_browser_clients(
             render,
         )
         monkeypatch.setattr("builders.embed_font_faces", embed)
-        response, status = get_subscription(
+        response, status = await get_subscription(
             subscription,
             token="tok",
             lang="en",
@@ -412,10 +413,11 @@ def test_subscription_rejects_bad_input_and_browser_clients(
             force_json="",
         )
         assert status == 403
-        assert response.get_data(as_text=True) == "/sub|browser.html:No browser"
+        assert await response.get_data(as_text=True) == "/sub|browser.html:No browser"
 
 
-def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch) -> None:
     def not_browser(ua: str) -> bool:
         del ua
         return False
@@ -437,7 +439,7 @@ def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("builders.build_json", happ_json)
 
     subscription = _subscription(user={"bw_limit_gb": 2, "bw_used": 1_000_000_000, "enabled": 0})
-    response, status = get_subscription(
+    response, status = await get_subscription(
         subscription,
         token="tok",
         lang="en",
@@ -446,7 +448,7 @@ def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch
         force_json="",
     )
     assert status == 200
-    assert response.get_data(as_text=True) == "links"
+    assert await response.get_data(as_text=True) == "links"
     assert response.headers["Profile-Title"] == "VPN"
     assert "total=" in response.headers["Subscription-Userinfo"]
 
@@ -459,7 +461,7 @@ def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch
             "bypass_packages": ["a", "b"],
         },
     )
-    response, status = get_subscription(
+    response, status = await get_subscription(
         subscription,
         token="tok",
         lang="ru",
@@ -469,7 +471,7 @@ def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.MonkeyPatch
     )
     assert status == 200
     assert response.mimetype == "application/json"
-    assert json.loads(response.get_data(as_text=True)) == [{"remarks": "ru"}]
+    assert json.loads(await response.get_data(as_text=True)) == [{"remarks": "ru"}]
     assert response.headers["providerid"] == "provider"
     assert "force_json=1" in response.headers["fallback-url"]
     assert response.headers["per-app-proxy-list"] == "a,b"

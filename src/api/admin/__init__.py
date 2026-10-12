@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from .routes import Api
+from .routes import AsyncApi
 
-__all__ = ["Api"]
+__all__ = ["AsyncApi"]

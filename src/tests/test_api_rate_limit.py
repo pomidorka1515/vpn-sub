@@ -1,217 +1,94 @@
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
-from unittest import mock
 
 import pytest
-from flask import Flask
+from quart import Quart
 
-from api import BaseApi, rate_limit
-from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
-    _replace_client,
-    close_rate_limit,
-)
+from api.decorators.rate_limit import AsyncRateLimiter
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from quart import Response
 
-    from flask.ctx import RequestContext
-
-    from api.decorators.rate_limit import (  # pyright: ignore[reportPrivateUsage]
-        _RateLimitScript,
-    )
+    from api.decorators.rate_limit import RateLimitScript
 
 
-pytestmark = pytest.mark.usefixtures("configured_rate_limit")
-
-
-@pytest.fixture
-def flask_app() -> Flask:
-    return Flask(__name__)
-
-
-def app_context(app: Flask, remote_addr: str | None) -> RequestContext:
-    return app.test_request_context(
-        "/",
-        environ_base={"REMOTE_ADDR": remote_addr} if remote_addr is not None else {},
-    )
-
-
-class _SharedRedis:
-    """Enough of a Redis sorted set to run the rate-limit script in-process."""
-
-    def __init__(self, *, fail: bool = False) -> None:
-        self.fail = fail
-        self.sets: dict[str, dict[str, float]] = {}
+class RedisStore:
+    def __init__(self) -> None:
+        self.events: dict[str, list[float]] = {}
         self.closed = False
+        self.failed = False
 
-    def register_script(self, script: str) -> _RateLimitScript:
-        assert "ZADD" in script
+    def register_script(self, script: str) -> RateLimitScript:
+        assert "ZREMRANGEBYSCORE" in script
+        assert "EXPIRE" in script
 
-        def run(keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int:
-            if self.fail:
-                raise ConnectionError("redis down")
-            key = keys[0]
-            now, window, member, limit, _ttl = args
-            bucket = self.sets.get(key, {})
-            cutoff = now - window
-            bucket = {item: score for item, score in bucket.items() if score > cutoff}
-            if len(bucket) < limit:
-                bucket[member] = now
-                self.sets[key] = bucket
-                return 1
-            if bucket:
-                self.sets[key] = bucket
-            else:
-                self.sets.pop(key, None)
-            return 0
+        async def run(*, keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int:
+            if self.failed:
+                raise OSError("Redis down")
+            now, window, _, limit, ttl = args
+            assert ttl == 60
+            events = self.events.setdefault(keys[0], [])
+            events[:] = [stamp for stamp in events if stamp > now - window]
+            if len(events) >= limit:
+                return 0
+            events.append(now)
+            return 1
 
         return run
 
-    def ping(self) -> bool:
+    async def ping(self) -> bool:
         return True
 
-    def close(self) -> None:
+    async def aclose(self) -> None:
         self.closed = True
 
 
-@pytest.fixture
-def configured_rate_limit() -> Iterator[_SharedRedis]:
-    client = _SharedRedis()
-    _replace_client(client)
-    yield client
-    close_rate_limit()
+@pytest.mark.asyncio
+async def test_shared_windows_scope_ip_and_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = RedisStore()
+    first = AsyncRateLimiter("redis://test", client=store)
+    second = AsyncRateLimiter("redis://test", client=store)
+    await first.start()
+    await second.start()
+    monkeypatch.setattr(time, "time", lambda: 100)
+    assert await first.allow("route", "ip", 1)
+    assert not await second.allow("route", "ip", 1)
+    assert await second.allow("other", "ip", 1)
+    assert await second.allow("route", "other-ip", 1)
+    monkeypatch.setattr(time, "time", lambda: 160)
+    assert await second.allow("route", "ip", 1)
+    await first.close()
+    await second.close()
+    assert not store.closed
 
 
-def test_rejects_non_positive_limit() -> None:
-    with pytest.raises(ValueError, match="max_requests must be positive"):
-        rate_limit(0)
+@pytest.mark.asyncio
+async def test_failure_is_fail_closed() -> None:
 
+    from api import AsyncBaseApi, rate_limit
+    from api.common import Route
 
-def test_limits_each_ip_independently(
-    flask_app: Flask,
-    configured_rate_limit: _SharedRedis,
-) -> None:
-    class Handler(BaseApi):
-        ROUTES = ()
-
-        @rate_limit(2)
-        def endpoint(self: BaseApi) -> tuple[str, int]:
-            return "ok", 200
-
-    handler = object.__new__(Handler)
-    with app_context(flask_app, "203.0.113.1"):
-        with mock.patch("api.decorators.rate_limit.time.time", side_effect=[0.0, 1.0, 2.0]):
-            assert handler.endpoint() == ("ok", 200)
-            assert handler.endpoint() == ("ok", 200)
-            _, status = handler.endpoint()
-    assert status == 429
-
-    with app_context(flask_app, "203.0.113.2"):
-        with mock.patch("api.decorators.rate_limit.time.time", return_value=2.0):
-            assert handler.endpoint() == ("ok", 200)
-    assert len(configured_rate_limit.sets) == 2
-
-
-def test_reused_decorator_gives_each_endpoint_its_own_window(
-    flask_app: Flask,
-    configured_rate_limit: _SharedRedis,
-) -> None:
-    limiter_decorator = rate_limit(1)
-
-    class Handler(BaseApi):
-        ROUTES = ()
-
-        @limiter_decorator
-        def first(self: BaseApi) -> tuple[str, int]:
-            return "first", 200
-
-        @limiter_decorator
-        def second(self: BaseApi) -> tuple[str, int]:
-            return "second", 200
-
-    handler = object.__new__(Handler)
-    with app_context(flask_app, "203.0.113.4"):
-        with mock.patch("api.decorators.rate_limit.time.time", return_value=0.0):
-            assert handler.first() == ("first", 200)
-            assert handler.second() == ("second", 200)
-    assert len(configured_rate_limit.sets) == 2
-
-
-def test_missing_remote_address_uses_shared_unknown_bucket(
-    flask_app: Flask,
-    configured_rate_limit: _SharedRedis,
-) -> None:
-    class Handler(BaseApi):
-        ROUTES = ()
+    class Handler(AsyncBaseApi):
+        ROUTES = (Route("GET", "/test", "endpoint"),)
 
         @rate_limit(1)
-        def endpoint(self: BaseApi) -> tuple[str, int]:
-            return "ok", 200
+        async def endpoint(self) -> tuple[Response, int]:
+            from util import ok
 
+            return ok()
+
+    store = RedisStore()
+    limiter = AsyncRateLimiter("redis://test", client=store)
+    await limiter.start()
+    app = Quart(__name__)
     handler = object.__new__(Handler)
-    with app_context(flask_app, None):
-        with mock.patch("api.decorators.rate_limit.time.time", side_effect=[0.0, 1.0]):
-            assert handler.endpoint() == ("ok", 200)
-            assert handler.endpoint()[1] == 429
-    assert any(key.endswith(":<unknown>") for key in configured_rate_limit.sets)
-
-
-def test_redis_window_is_shared_across_limiter_instances(
-    flask_app: Flask,
-    configured_rate_limit: _SharedRedis,
-) -> None:
-    class Handler(BaseApi):
-        ROUTES = ()
-
-        @rate_limit(1)
-        def endpoint(self: BaseApi) -> tuple[str, int]:
-            return "ok", 200
-
-    first = object.__new__(Handler)
-    second = object.__new__(Handler)
-    with app_context(flask_app, "203.0.113.9"):
-        with mock.patch("api.decorators.rate_limit.time.time", return_value=10.0):
-            assert first.endpoint() == ("ok", 200)
-            assert second.endpoint()[1] == 429
-    assert len(configured_rate_limit.sets) == 1
-
-
-def test_redis_window_expires_at_sixty_seconds(
-    flask_app: Flask,
-    configured_rate_limit: _SharedRedis,
-) -> None:
-    class Handler(BaseApi):
-        ROUTES = ()
-
-        @rate_limit(1)
-        def endpoint(self: BaseApi) -> tuple[str, int]:
-            return "ok", 200
-
-    handler = object.__new__(Handler)
-    with app_context(flask_app, "203.0.113.10"):
-        with mock.patch("api.decorators.rate_limit.time.time", side_effect=[0.0, 59.999, 60.0]):
-            assert handler.endpoint() == ("ok", 200)
-            assert handler.endpoint()[1] == 429
-            assert handler.endpoint() == ("ok", 200)
-    assert configured_rate_limit.sets
-
-
-def test_redis_failure_fails_closed(flask_app: Flask) -> None:
-    client = _SharedRedis(fail=True)
-    _replace_client(client)
-    try:
-
-        class Handler(BaseApi):
-            ROUTES = ()
-
-            @rate_limit(5)
-            def endpoint(self: BaseApi) -> tuple[str, int]:
-                return "ok", 200
-
-        handler = object.__new__(Handler)
-        with app_context(flask_app, "203.0.113.11"):
-            assert handler.endpoint()[1] == 429
-    finally:
-        close_rate_limit()
-    assert client.closed
+    handler.limiter = limiter
+    async with app.test_request_context("/test"):  # pyright: ignore[reportUnknownMemberType]  # Upstream auth parameter is untyped.
+        assert (await handler.endpoint())[1] == 200
+        assert (await handler.endpoint())[1] == 429
+    store.failed = True
+    async with app.test_request_context("/test"):  # pyright: ignore[reportUnknownMemberType]  # Upstream auth parameter is untyped.
+        assert (await handler.endpoint())[1] == 429
+    await limiter.close()

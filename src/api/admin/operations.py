@@ -3,9 +3,9 @@ from __future__ import annotations
 from random import random
 from typing import TYPE_CHECKING, ClassVar
 
-from flask import g
+from quart import g
 
-from api.admin._base import AdminApiMixin
+from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_fields_strict
 from errors import DatabaseError
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from api.common import ResponseType
 
 
-class OperationsRoutes(AdminApiMixin):
+class AsyncOperationsRoutes(AsyncAdminApiMixin):
     """Admin health, rollback, and novelty routes."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
@@ -27,15 +27,15 @@ class OperationsRoutes(AdminApiMixin):
     )
 
     @requires_admin_auth
-    def health(self) -> ResponseType:
-        status = SysUtil.health()
+    async def health(self) -> ResponseType:
+        status = await self.sub.res.offloads.metrics.run(SysUtil.health)
         memory = {
             "ram": round(status.memory.ram / 1024 / 1024, 2),
             "swap": round(status.memory.swap / 1024 / 1024, 2),
         }
         try:
-            with self.sub.res.db.connection() as conn:
-                conn.execute("SELECT 1")
+            async with self.sub.res.db.connection() as conn:
+                await conn.row("SELECT 1")
         except DatabaseError:
             return err(
                 "Database unavailable",
@@ -48,7 +48,7 @@ class OperationsRoutes(AdminApiMixin):
                 },
             )
         snapshot_failure = self.bw.get_daily_snapshot_failure()
-        rollback_failures = self.sub.business_code_svc.get_rollback_failures()
+        rollback_failures = await self.sub.business_code_svc.get_rollback_failures()
         return ok(
             obj={
                 "db": True,
@@ -62,27 +62,27 @@ class OperationsRoutes(AdminApiMixin):
         )
 
     @requires_admin_auth
-    def operation_status(self) -> ResponseType:
+    async def operation_status(self) -> ResponseType:
         return ok(
             obj={
                 "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
-                "rollback_failures": self.sub.business_code_svc.get_rollback_failures(),
+                "rollback_failures": await self.sub.business_code_svc.get_rollback_failures(),
             },
         )
 
     @requires_admin_auth
     @requires_fields_strict(("kind", str), ("user", str))
-    def operation_rollback_resolve(self) -> ResponseType:
+    async def operation_rollback_resolve(self) -> ResponseType:
         content = g.json_obj
         kind_value: str = content.get("kind")
         username: str = content.get("user")
         if kind_value == "uuid":
-            self.sub.business_code_svc.clear_rollback_failure("uuid", username)
+            await self.sub.business_code_svc.clear_rollback_failure("uuid", username)
         elif kind_value == "registration":
-            self.sub.business_code_svc.clear_rollback_failure("registration", username)
+            await self.sub.business_code_svc.clear_rollback_failure("registration", username)
         else:
             return err("kind must be 'uuid' or 'registration'")
         return ok("Resolved")
 
-    def teapot(self) -> ResponseType:
+    async def teapot(self) -> ResponseType:
         return err("I'm a teapot", 418, obj={"teapot": random() < 0.01})  # is it really an error?

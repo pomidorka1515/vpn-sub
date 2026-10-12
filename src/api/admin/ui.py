@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from flask import Response, make_response, redirect, render_template, request
+from quart import Response, make_response, redirect, render_template, request
 
-from api.admin._base import AdminApiMixin
+from api.admin._base import AsyncAdminApiMixin
 from api.common import asset_version, web_lang_tables
 from api.decorators.auth import (
     ADMIN_UI_COOKIE,
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from api.common import ResponseType
 
 
-class UiRoutes(AdminApiMixin):
+class AsyncUiRoutes(AsyncAdminApiMixin):
     """Admin HTML pages and cookie session."""
 
     def reg_handles(self) -> None:
@@ -39,15 +39,15 @@ class UiRoutes(AdminApiMixin):
             func = func.__get__(self, type(self))
             self.app.add_url_rule(url, handler, func, methods=methods, strict_slashes=False)
 
-    def admin_ui(self) -> ResponseType:
-        if not self._admin_cookie_ok():
-            return make_response(redirect(self._admin_login_path()))
+    async def admin_ui(self) -> ResponseType:
+        if not await self._admin_cookie_ok():
+            return await make_response(redirect(self._admin_login_path()))
         lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, "admin")
         conf = self.cfg.view()
-        html = render_template(
+        html = await render_template(
             "admin.html",
             prefix="/" + "/".join(p for p in conf["uri"].split("/") if p),
-            asset_version=asset_version(),
+            asset_version=await self.sub.res.offloads.files.run(asset_version),
             lang=lang,
             L=strings,
             L_en=fallback,
@@ -57,16 +57,16 @@ class UiRoutes(AdminApiMixin):
             response.set_cookie("lang", lang, max_age=31536000, samesite="Lax", path="/")
         return response
 
-    def admin_token(self) -> ResponseType:
-        if not self._admin_cookie_ok():
+    async def admin_token(self) -> ResponseType:
+        if not await self._admin_cookie_ok():
             return err("Unauthorized", 401)
         return ok(obj={"token": self.token, "api_root": self.uri})
 
-    def admin_session(self) -> ResponseType:
-        content = request.get_json(silent=True)
+    async def admin_session(self) -> ResponseType:
+        content = await request.get_json(silent=True)
         if not isinstance(content, dict):
             return err("Body must be a JSON dict.", 400)
-        body = cast(dict[str, object], content)
+        body = cast("dict[str, object]", content)
         username = body.get("username")
         password = body.get("password")
         if (
@@ -79,7 +79,7 @@ class UiRoutes(AdminApiMixin):
         if not self._admin_credentials_ok(username, password):
             return err("Invalid credentials.", 401)
         session = new_admin_ui_session()
-        self.sub.res.db.set_admin_ui_session(session)
+        await self.sub.res.db.set_admin_ui_session(session)
         response, code = ok(msg="Successful login")
         response.set_cookie(
             key=ADMIN_UI_COOKIE,
@@ -92,8 +92,8 @@ class UiRoutes(AdminApiMixin):
         )
         return response, code
 
-    def admin_logout(self) -> ResponseType:
-        self.sub.res.db.set_admin_ui_session(None)
+    async def admin_logout(self) -> ResponseType:
+        await self.sub.res.db.set_admin_ui_session(None)
         response, code = ok(msg="Logged out")
         response.set_cookie(
             key=ADMIN_UI_COOKIE,
@@ -120,28 +120,28 @@ class UiRoutes(AdminApiMixin):
     def _admin_credentials_ok(self, username: str, password: str) -> bool:
         conf = self.cfg.view()
         configured = conf["api_admin_ui_auth"]
-        expected_user = cast(object, configured[0])
-        expected_password = cast(object, configured[1])
+        expected_user = cast("object", configured[0])
+        expected_password = cast("object", configured[1])
         if not isinstance(expected_user, str) or not isinstance(expected_password, str):
             return False
         return compare(username, expected_user) and compare(password, expected_password)
 
-    def _admin_cookie_ok(self) -> bool:
+    async def _admin_cookie_ok(self) -> bool:
         cookie = request.cookies.get(ADMIN_UI_COOKIE)
         if not cookie or len(cookie) != ADMIN_UI_SESSION_LEN:
             return False
-        stored = self.sub.res.db.admin_ui_session()
+        stored = await self.sub.res.db.admin_ui_session()
         if not stored or len(stored) != ADMIN_UI_SESSION_LEN:
             return False
         return compare(cookie, stored)
 
-    def admin_login_page(self) -> ResponseType:
+    async def admin_login_page(self) -> ResponseType:
         lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, "admin_auth")
         conf = self.cfg.view()
-        html = render_template(
+        html = await render_template(
             "admin-auth.html",
             prefix="/" + "/".join(p for p in conf["uri"].split("/") if p),
-            asset_version=asset_version(),
+            asset_version=await self.sub.res.offloads.files.run(asset_version),
             lang=lang,
             L=strings,
             L_en=fallback,

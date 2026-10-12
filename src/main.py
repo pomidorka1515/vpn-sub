@@ -1,49 +1,49 @@
 """Process entrypoint for the subscription service.
 
 Works under plain Python (``python -m main`` with ``src`` on ``PYTHONPATH``)
-and as a Nuitka binary. Both paths run gunicorn in-process with the settings
-in ``serve``. Do not shell out to ``venv/bin/gunicorn``: a frozen binary has
-no interpreter and no config file to hand it.
+and as a Nuitka binary. Both paths run Hypercorn in-process on one event loop.
+``APP_BIND`` selects the listener, with ``GUNICORN_BIND`` as a temporary fallback.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from gunicorn.app.base import BaseApplication
-from gunicorn.util import import_app
+import asyncio
+import os
 
 from paths import compiled
-from serve import options
-
-if TYPE_CHECKING:
-    from wsgiref.types import WSGIApplication
-
-
-class Application(BaseApplication):
-    def load_config(self) -> None:
-        for key, value in options().items():
-            self.cfg.set(key, value)
-
-    def load(self) -> WSGIApplication:  # type: ignore[override]
-        return import_app(self.cfg.wsgi_app)  # type: ignore[return-value]
 
 
 def main() -> None:
     from cli.updater import notice
     notice()
-    Application("%(prog)s", prog="vpn-sub").run()
+    asyncio.run(serve_application())
+
+
+async def serve_application() -> None:
+    from hypercorn.asyncio import serve  # pyright: ignore[reportUnknownVariableType]  # Upstream WSGI signature is untyped.
+    from hypercorn.config import Config
+
+    from asgi import app
+
+    config = Config()
+    config.bind = [os.getenv("APP_BIND", os.getenv("GUNICORN_BIND", "127.0.0.1:5550"))]
+    config.workers = 1
+    config.accesslog = None  # API middleware owns the redacted access log.
+    await serve(app, config)
 
 
 def probe() -> None:
-    """Prove the payload can see shipped files, then exit.
+    """Import the async stack and verify bundled resources without starting it.
 
-    Does not import ``wsgi``. That module calls ``create_application()`` and
-    would require Redis, ``config.json``, and a panel. A missing import fails
-    before this function runs, because this module imports gunicorn. A payload
-    that cannot see ``res/``, ``lang.jsonc``, or ``config.schema.json`` fails here.
+    ASGI import registers lifespan hooks but opens no runtime connections.
+    Missing async dependencies or bundled resources fail the probe.
     """
+    from importlib import import_module
+
     from paths import bundled_root
+
+    for module in ("asgi", "hypercorn.asyncio", "session.async_transport", "db.async_database"):
+        import_module(module)
 
     root = bundled_root()
     language = root / "lang.jsonc"

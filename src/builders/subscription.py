@@ -6,18 +6,18 @@ import base64
 import json
 from typing import TYPE_CHECKING
 
-from flask import Response
+from quart import Response
 
 from util import err
 
 from .browser import _browser_strings
 
 if TYPE_CHECKING:
-    from core import Subscription
+    from core import AsyncSubscription
 
 
-def get_subscription(
-    obj: Subscription, /, *, token: str, lang: str, ua: str, ip: str, force_json: str,
+async def get_subscription(
+    obj: AsyncSubscription, /, *, token: str, lang: str, ua: str, ip: str, force_json: str,
 ) -> tuple[Response, int]:
     # ===================================
     # intentionally separate from `Subscription`/`WebApi`:
@@ -30,8 +30,8 @@ def get_subscription(
 
     if not token:
         return err("Invalid token.", 401)
-    username = obj.user_svc.usertotoken(token)
-    obj.audit_svc.audit(
+    username = await obj.user_svc.usertotoken(token)
+    await obj.audit_svc.audit(
         name="sub_hit",
         info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json},
     )
@@ -42,17 +42,17 @@ def get_subscription(
         return err("Language can be either 'ru' or 'en'", 400)
 
     if builders.isbrowser(ua=ua):
-        html = builders.render_template("browser.html", **_browser_strings(obj, lang))
+        html = await builders.render_template("browser.html", **_browser_strings(obj, lang))
         cfg = obj.res.cfg.view()
         prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
         html = builders.embed_font_faces(html, prefix)
         return Response(html, mimetype="text/html"), 403
 
-    bandwidths = obj.bandwidth_svc.bandwidth(username)
+    bandwidths = await obj.bandwidth_svc.bandwidth(username)
 
     cfg = obj.res.cfg.view()
     lang_cfg = obj.res.lang_cfg.view()
-    user = obj.user_svc.user(username)
+    user = await obj.user_svc.user(username)
 
     displayname = str(user["displayname"])
     need_dummy_link = "v2rayn" in ua.lower()  # catches both v2rayn and v2rayng

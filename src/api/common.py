@@ -5,25 +5,32 @@ from abc import ABC
 from collections.abc import Mapping
 from functools import lru_cache
 from hashlib import sha1
-from typing import TYPE_CHECKING, ClassVar, NamedTuple, cast
+from typing import TYPE_CHECKING, ClassVar, NamedTuple, Protocol, cast
 
-from flask import Response, request
+from quart import Response, request
+from werkzeug.wrappers import Response as WerkzeugResponse
 
 from fonts import FONT_FILES
 from loggers import Logger
 from paths import bundled_root
 
 if TYPE_CHECKING:
-    from flask import Flask
+    from quart import Quart
 
-    from bwatch import BWatch
-    from config import AppConfig, Config, LangConfig
-    from core import Subscription
-    from custom_types import HTTPMethod
+    from api.decorators.rate_limit import AsyncRateLimiter
+    from config import AppConfig, LangConfig
+    from config.async_store import AsyncConfig
+    from core import AsyncSubscription
+    from core.async_common import Snapshot
+    from custom_types import HTTPMethod, JsonifyValue
 
-type ResponseType = tuple[Response, int] | Response
+type ResponseType = tuple[Response, int] | Response | WerkzeugResponse
 
 RES_DIR = bundled_root() / "res"
+
+
+class SnapshotStatus(Protocol):
+    def get_daily_snapshot_failure(self) -> JsonifyValue: ...
 
 
 _ASSET_FILES: tuple[str, ...] = (
@@ -99,7 +106,7 @@ def _string_map(value: object) -> dict[str, str]:
         return {}
     return {
         key: text
-        for key, text in cast(Mapping[object, object], value).items()
+        for key, text in cast("Mapping[object, object]", value).items()
         if isinstance(key, str) and isinstance(text, str)
     }
 
@@ -107,20 +114,20 @@ def _string_map(value: object) -> dict[str, str]:
 def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
     section = web.get(name)
     if isinstance(section, Mapping):
-        return cast(Mapping[str, object], section)
+        return cast("Mapping[str, object]", section)
     return {}
 
 
 def web_lang_tables(
-    lang_cfg: Config[LangConfig], page: str,
+    lang_cfg: Snapshot[LangConfig], page: str,
 ) -> tuple[str, dict[str, str], dict[str, str]]:
     """Active page strings, plus the English table used when a key is missing."""
     if page not in _WEB_PAGES:
         raise ValueError(f"unknown web page '{page}'")
     lang = resolve_web_lang()
     language = lang_cfg.view()
-    raw = cast(object, language.get("web"))
-    web: Mapping[str, object] = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
+    raw = cast("object", language.get("web"))
+    web: Mapping[str, object] = cast("Mapping[str, object]", raw) if isinstance(raw, Mapping) else {}
     shared = _section(web, "shared")
     page_table = _section(web, page)
 
@@ -146,7 +153,7 @@ class Route(NamedTuple):
         if self.rate_limit is not None and self.rate_limit <= 0:
             raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
 
-    def register(self, api: BaseApi) -> None:
+    def register(self, api: AsyncBaseApi) -> None:
         from .decorators.rate_limit import rate_limit  # intentional lazy loading
 
         try:
@@ -163,13 +170,14 @@ class Route(NamedTuple):
         api.app.add_url_rule(url, self.handler, func, methods=[self.method])
 
 
-class BaseApi(ABC):
+class AsyncBaseApi(ABC):
     """Base class for API handlers. Enforces required attributes and route registration."""
 
     ROUTES: ClassVar[tuple[Route, ...]]
 
     def __init__(
-        self, app: Flask, cfg: Config[AppConfig], sub: Subscription, bw: BWatch, uri: str,
+        self, app: Quart, cfg: AsyncConfig[AppConfig], sub: AsyncSubscription, bw: SnapshotStatus, uri: str,
+        limiter: AsyncRateLimiter,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -178,6 +186,7 @@ class BaseApi(ABC):
             self.sub = sub
             self.bw = bw
             self.uri = uri
+            self.limiter = limiter
             self._register_routes()
             self.reg_handles()
 

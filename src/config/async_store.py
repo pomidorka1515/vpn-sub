@@ -206,6 +206,12 @@ class AsyncLinesConfig:
 
         await asyncio.shield(self._operations.create(operation, name="lines:backup-now"))
 
+    async def read_all(self) -> list[JsonDict]:
+        return await self._files.run(self._require_store().read_all)
+
+    async def tail(self, count: int) -> list[JsonDict]:
+        return await self._files.run(lambda: list(self._require_store().tail(count)))
+
     async def close(self) -> None:
         if self._close_task is None:
             self._operations.stop_admission()

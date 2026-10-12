@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import qrcode
 
 if TYPE_CHECKING:
-    from flask import Response
+    from quart import Response
 
     from custom_types import JsonifyValue
 
@@ -105,14 +105,14 @@ def isusername(s: str) -> bool:
 
 def ok(msg: str | None = None, code: int = 200, obj: JsonifyValue = None) -> tuple[Response, int]:
     """Internal helper function to return a successful Response."""
-    from flask import jsonify
+    from quart import jsonify
 
     return jsonify({"success": True, "msg": msg, "obj": obj}), code
 
 
 def err(msg: str | None = None, code: int = 400, obj: JsonifyValue = None) -> tuple[Response, int]:
     """Internal helper function to return an error Response."""
-    from flask import jsonify
+    from quart import jsonify
 
     return jsonify({"success": False, "msg": msg, "obj": obj}), code
 

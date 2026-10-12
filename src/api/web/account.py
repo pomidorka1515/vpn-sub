@@ -3,18 +3,18 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, cast
 
-from flask import g, make_response, request, send_file
+from quart import g, make_response, request, send_file  # pyright: ignore[reportUnknownVariableType]  # Upstream PathLike lacks a type argument.
 
 from api.common import Route
 from api.decorators import requires_fields, requires_fields_strict, requires_webapi_auth
-from api.web._base import WebApiMixin
+from api.web._base import AsyncWebApiMixin
 from util import err, make_qr, ok, parse_bool
 
 if TYPE_CHECKING:
     from api.common import ResponseType
 
 
-class AccountRoutes(WebApiMixin):
+class AsyncAccountRoutes(AsyncWebApiMixin):
     """Authenticated account, stats, and subscription helpers."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
@@ -29,12 +29,12 @@ class AccountRoutes(WebApiMixin):
     )
 
     @requires_webapi_auth
-    def qr(self, username: str) -> ResponseType:
+    async def qr(self, username: str) -> ResponseType:
         lang = request.args.get("lang", "en")
         if lang not in {"en", "ru"}:
             lang = "en"
 
-        token = self.sub.user_svc.get_token(username)
+        token = await self.sub.user_svc.get_token(username)
         conf = self.cfg.view()
         domain = conf["domain"]
         link = f"{domain}/{conf['uri'].strip('/')}?token={token}&lang={lang}"
@@ -43,16 +43,16 @@ class AccountRoutes(WebApiMixin):
             link = f"happ://add/{link}"
 
         try:
-            buf = make_qr(link)
+            buf = await self.sub.res.offloads.rendering.run(make_qr, link)
         except ValueError:
             return err("Invalid request", 400)
 
-        response = make_response(send_file(buf, mimetype="image/png"))
+        response = await make_response(await send_file(buf, mimetype="image/png"))
         response.headers["Cache-Control"] = "private, max-age=300"
         return response
 
     @requires_webapi_auth
-    def profiles(self, username: str) -> ResponseType:
+    async def profiles(self, username: str) -> ResponseType:
         del username
         lang = request.args.get("lang")
         if lang not in {"ru", "en"}:
@@ -68,14 +68,14 @@ class AccountRoutes(WebApiMixin):
         return ok(obj=obj)
 
     @requires_webapi_auth
-    def fps(self, username: str) -> ResponseType:
+    async def fps(self, username: str) -> ResponseType:
         del username
         conf = self.cfg.view()
         return ok(obj=conf["fingerprints"])
 
     @requires_webapi_auth
     @requires_fields()
-    def settings(self, username: str) -> ResponseType:
+    async def settings(self, username: str) -> ResponseType:
         """Update users display name or fingerprint.
         Changing ext_username or ext_password requires `current_password` in body."""
         content = g.json_obj
@@ -96,12 +96,12 @@ class AccountRoutes(WebApiMixin):
         if ext_username or ext_password:
             if not current_password:
                 return err("current_password required to change credentials", 400)
-            cur_ext = self.sub.user_svc.get_external_username(username)
+            cur_ext = await self.sub.user_svc.get_external_username(username)
             if not cur_ext:
                 return err("Account has no credentials set", 400)
-            if self.sub.password_svc.validate_credentials(cur_ext, current_password) != username:
+            if await self.sub.password_svc.validate_credentials(cur_ext, current_password) != username:
                 return err("Invalid current password", 401)
-        self.sub.business_svc.update_params(
+        await self.sub.business_svc.update_params(
             username=username,
             ext_username=ext_username,
             ext_password=ext_password,
@@ -111,38 +111,38 @@ class AccountRoutes(WebApiMixin):
         return ok()
 
     @requires_webapi_auth
-    def reset(self, username: str) -> ResponseType:
+    async def reset(self, username: str) -> ResponseType:
         """Reset token and UUID (api wrapper)."""
-        x = self.sub.business_svc.reset_user(username)
+        x = await self.sub.business_svc.reset_user(username)
         resp, code = ok(obj=asdict(x))
         self._clear_auth_cookies(resp)
         return resp, code
 
     @requires_webapi_auth
     @requires_fields_strict(("code", str))
-    def bonus(self, username: str) -> ResponseType:
+    async def bonus(self, username: str) -> ResponseType:
         """Apply bonus code."""
         content = g.json_obj
 
-        result = self.sub.code_svc.apply_bonus_code(
+        result = await self.sub.code_svc.apply_bonus_code(
             username=username,
-            code=cast(str, content["code"]),
+            code=cast("str", content["code"]),
         )
         return ok(obj=asdict(result))
 
     @requires_webapi_auth
-    def stats(self, username: str) -> ResponseType:
+    async def stats(self, username: str) -> ResponseType:
         """Get user info from token."""
-        x = self.sub.business_svc.get_info(username)
+        x = await self.sub.business_svc.get_info(username)
         return ok(obj=asdict(x))
 
     @requires_webapi_auth
-    def bandwidth_history(self, username: str) -> ResponseType:
+    async def bandwidth_history(self, username: str) -> ResponseType:
         """Return bandwidth history snapshots for the authenticated user."""
         try:
             days = int(request.args.get("days", 30))
         except ValueError, TypeError:
             return err("'days' must be an integer")
         days = max(1, min(days, 90))
-        snapshots = self.sub.bandwidth_svc.get_bw_history(username, days)
+        snapshots = await self.sub.bandwidth_svc.get_bw_history(username, days)
         return ok(obj=[asdict(s) for s in snapshots])
