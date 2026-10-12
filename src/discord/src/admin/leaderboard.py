@@ -57,7 +57,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             ),
         )
         await self._respond(
-            interaction, "🏆 **Таблица лидеров**\n\nВыберите тип трафика:", view=view,
+            interaction,
+            "🏆 **Таблица лидеров**\n\nВыберите тип трафика:",
+            view=view,
         )
 
     async def _cb_leaderboard_order(self, interaction: discord.Interaction) -> None:
@@ -82,7 +84,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         pending = self._pending_leaderboard.pop(interaction.user.id, None)
         if not pending:
             await self._respond(
-                interaction, "❌ Сессия истекла, начните заново.", view=self.main_menu_view(),
+                interaction,
+                "❌ Сессия истекла, начните заново.",
+                view=self.main_menu_view(),
             )
             return
         try:
@@ -91,7 +95,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
                 raise ValueError
         except ValueError:
             await self._respond(
-                interaction, "❌ Введите неотрицательное целое число.", view=self.main_menu_view(),
+                interaction,
+                "❌ Введите неотрицательное целое число.",
+                view=self.main_menu_view(),
             )
             return
         bw_type = cast(Literal["total", "monthly", "wl_monthly"], pending.get("type", "total"))
@@ -122,7 +128,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             bandwidth_type=bw_type,
             lang=self._chart_lang(),
         )
-        sorted_items = sorted(lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc"))
+        sorted_items = sorted(
+            lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc")
+        )
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         lines: list[str] = []
         for rank, (user, score) in enumerate(sorted_items, start=1):

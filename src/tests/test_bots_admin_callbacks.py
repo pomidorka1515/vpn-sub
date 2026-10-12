@@ -102,7 +102,8 @@ async def test_menus_prompt_next_step_or_report_empty(
     ):
         await bot.handle_callbacks(_callback(data))
         registered = cast(
-            Callable[[types.Message], None], cast(MagicMock, bot._expect).call_args.args[1],
+            Callable[[types.Message], None],
+            cast(MagicMock, bot._expect).call_args.args[1],
         )
         assert getattr(registered, "__func__", registered) is getattr(handler, "__func__", handler)
 

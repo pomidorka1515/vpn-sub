@@ -152,7 +152,7 @@ def test_missing_key_and_bad_format_are_not_sent() -> None:
     empty = Notifier(texts={"en": {}}, send=sink, language=lambda _tgid: "en")
     assert empty.notify("alice", 7, missing, seen) is False
     broken = Notifier(
-        texts={"en": {"warning_restored": "back {missing} extra"}}, # ruff: ignore[missing-f-string-syntax]
+        texts={"en": {"warning_restored": "back {missing} extra"}},  # ruff: ignore[missing-f-string-syntax]
         send=sink,
         language=lambda _tgid: "en",
     )

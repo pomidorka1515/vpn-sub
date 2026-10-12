@@ -103,7 +103,10 @@ def do_backup(
 
 
 def prune_backups(
-    instance_dir: str, retention: int, log: Logger, config_type: CONFIG_TYPES,
+    instance_dir: str,
+    retention: int,
+    log: Logger,
+    config_type: CONFIG_TYPES,
 ) -> None:
     """Keep only the N most recent backups."""
     # Match both .json (Config) and .jsonl (LinesConfig) backup files.

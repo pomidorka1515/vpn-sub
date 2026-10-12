@@ -12,14 +12,29 @@ if TYPE_CHECKING:
 
 
 class AsyncLeaderboardService(AsyncBaseService):
-    def __init__(self, res: AsyncCoreResources, *, user_svc: AsyncCommonUserService, bandwidth_svc: AsyncBandwidthService) -> None:
+    def __init__(
+        self,
+        res: AsyncCoreResources,
+        *,
+        user_svc: AsyncCommonUserService,
+        bandwidth_svc: AsyncBandwidthService,
+    ) -> None:
         super().__init__(res)
         self.user_svc = user_svc
         self.bandwidth_svc = bandwidth_svc
 
-    async def leaderboard(self, category: Literal["total", "monthly", "wl_monthly"], *, top_n: int = 0, use_displaynames: bool = False, flip: bool = False) -> dict[str, int]:
+    async def leaderboard(
+        self,
+        category: Literal["total", "monthly", "wl_monthly"],
+        *,
+        top_n: int = 0,
+        use_displaynames: bool = False,
+        flip: bool = False,
+    ) -> dict[str, int]:
         records = await self.user_svc.list_user_states()
-        totals = await self.bandwidth_svc.all_traffic(work="background") if category == "total" else {}
+        totals = (
+            await self.bandwidth_svc.all_traffic(work="background") if category == "total" else {}
+        )
         raw: dict[str, int] = {}
         for record in records:
             name = record["displayname"] if use_displaynames else record["username"]

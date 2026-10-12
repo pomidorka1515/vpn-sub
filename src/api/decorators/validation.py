@@ -77,7 +77,9 @@ def requires_fields_strict[**P, R](
     return decorator
 
 
-def requires_args[**P, R](*arg: str) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[WrappedReturn[R]]]]:
+def requires_args[**P, R](
+    *arg: str,
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[WrappedReturn[R]]]]:
     """Validate request.args has all named fields. Returns 400 on failure."""
 
     def decorator(f: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[WrappedReturn[R]]]:

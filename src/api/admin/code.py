@@ -43,7 +43,8 @@ class AsyncCodeRoutes(AsyncAdminApiMixin):
     async def code_add(self) -> ResponseType:
         content = g.json_obj
         raw_data: dict[
-            Literal["name", "action", "permanent", "uses", "days", "gb", "wl_gb"], JsonifyValue,
+            Literal["name", "action", "permanent", "uses", "days", "gb", "wl_gb"],
+            JsonifyValue,
         ] = {
             "name": content.get("code"),
             "action": content.get("action"),
@@ -78,7 +79,11 @@ class AsyncCodeRoutes(AsyncAdminApiMixin):
         if data["action"] not in {"register", "bonus"}:
             return err("action must be 'register' or 'bonus'")
 
-        if cast("int", data["days"]) < 0 or cast("int", data["gb"]) < 0 or cast("int", data["wl_gb"]) < 0:
+        if (
+            cast("int", data["days"]) < 0
+            or cast("int", data["gb"]) < 0
+            or cast("int", data["wl_gb"]) < 0
+        ):
             return err("days, gb, and wl_gb must be non-negative")
 
         await self.sub.code_svc.add_code(

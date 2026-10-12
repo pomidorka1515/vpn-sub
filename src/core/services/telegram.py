@@ -19,7 +19,11 @@ __all__ = ["TelegramService"]
 
 class TelegramService(BaseService):
     def __init__(
-        self, res: SharedCoreResources, *, user_svc: BusinessUserService, code_svc: CodeService,
+        self,
+        res: SharedCoreResources,
+        *,
+        user_svc: BusinessUserService,
+        code_svc: CodeService,
     ) -> None:
         super().__init__(res)
         self.user_svc: BusinessUserService = user_svc
@@ -93,7 +97,9 @@ class TelegramService(BaseService):
 
     @overload
     def get_username_telegram(
-        self, tgid: int | str, reverse: Literal[False] = False,
+        self,
+        tgid: int | str,
+        reverse: Literal[False] = False,
     ) -> str | None: ...
 
     @overload

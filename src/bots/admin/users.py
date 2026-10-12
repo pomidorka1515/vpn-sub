@@ -24,7 +24,9 @@ class AdminUsersMixin(AdminFeatureMixin):
 
         if not all_users:
             await self.bot.send_message(
-                chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu(),
+                chat_id,
+                "Список пользователей пуст.",
+                reply_markup=self.get_main_menu(),
             )
             return
 
@@ -62,13 +64,17 @@ class AdminUsersMixin(AdminFeatureMixin):
             online_users = dict.fromkeys(online_users)
         if not online_users:
             await self._send_message(
-                chat_id, "Нет пользователей в сети.", reply_markup=self.get_main_menu(),
+                chat_id,
+                "Нет пользователей в сети.",
+                reply_markup=self.get_main_menu(),
             )
             return
         text = "👥 <b>Список пользователей онлайн:</b>\n\n" + "\n".join(
             [f"- <code>{u}</code>{', логин: ' + v if v else ''}" for u, v in online_users.items()],
         )
-        await self._send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu())
+        await self._send_message(
+            chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu()
+        )
 
     async def _cb_refresh(self, chat_id: int) -> None:
         failures: list[str] = []
@@ -96,7 +102,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
         else:
             await self._send_message(
-                chat_id, "✅ Все пользователи успешно обновлены.", reply_markup=self.get_main_menu(),
+                chat_id,
+                "✅ Все пользователи успешно обновлены.",
+                reply_markup=self.get_main_menu(),
             )
 
     async def _cb_info_user(self, chat_id: int, username: str) -> None:
@@ -142,26 +150,35 @@ class AdminUsersMixin(AdminFeatureMixin):
             markup = types.InlineKeyboardMarkup(row_width=2)
             markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(
-                    "✏️ Изменить пользователя", callback_data=f"edit_user_{username}",
+                    "✏️ Изменить пользователя",
+                    callback_data=f"edit_user_{username}",
                 ),
                 types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"),
             )
             await self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         except AppError as error:
-            await self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self._send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
         except Exception:
             self.log.exception("Telegram handler failed")
-            await self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
+            await self._send_message(
+                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu()
+            )
 
     async def _cb_del_user(self, chat_id: int, username: str) -> None:
         try:
             await self.sub.business_svc.delete_user(username=username, perma=True)
         except AppError as error:
-            await self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self._send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
             return
         except Exception:
             self.log.exception("Telegram handler failed")
-            await self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
+            await self._send_message(
+                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu()
+            )
             return
         await self._send_message(
             chat_id,
@@ -192,7 +209,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
-            await self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self.bot.send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
             return
         current = info.fingerprint
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -212,7 +231,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
-            await self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self.bot.send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
             return
         current = info.bandwidth.limit
         msg = await self.bot.send_message(
@@ -230,14 +251,18 @@ class AdminUsersMixin(AdminFeatureMixin):
             limit = int(text.strip())
         except ValueError:
             await self.bot.send_message(
-                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                "❌ Введите число.",
+                reply_markup=self.get_main_menu(),
             )
             return
         try:
             await self.sub.business_svc.update_params(username=username, limit=limit)
         except AppError as error:
             await self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                f"❌ Ошибка: {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -252,7 +277,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
-            await self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self.bot.send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
             return
         current = info.bandwidth.wl_limit
         msg = await self.bot.send_message(
@@ -270,14 +297,18 @@ class AdminUsersMixin(AdminFeatureMixin):
             wl_limit = int(text.strip())
         except ValueError:
             await self.bot.send_message(
-                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                "❌ Введите число.",
+                reply_markup=self.get_main_menu(),
             )
             return
         try:
             await self.sub.business_svc.update_params(username=username, wl_limit=wl_limit)
         except AppError as error:
             await self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                f"❌ Ошибка: {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -292,7 +323,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
-            await self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self.bot.send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
             return
         current_time = info.time
         if current_time:
@@ -314,7 +347,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             days = int(text.strip())
         except ValueError:
             await self.bot.send_message(
-                message.chat.id, "❌ Введите число.", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                "❌ Введите число.",
+                reply_markup=self.get_main_menu(),
             )
             return
         timee = int(time.time() + (days * 86400)) if days else 0
@@ -322,7 +357,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self.sub.business_svc.update_params(username=username, timee=timee)
         except AppError as error:
             await self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                f"❌ Ошибка: {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -346,7 +383,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
-            await self.bot.send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self.bot.send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
             return
         current = info.displayname
         msg = await self.bot.send_message(
@@ -372,7 +411,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self.sub.business_svc.update_params(username=username, displayname=new_name)
         except AppError as error:
             await self.bot.send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                f"❌ Ошибка: {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         self._pending_edits.pop(message.chat.id, None)
@@ -393,7 +434,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             obj = await self.sub.business_svc.reset_user(username)
         except AppError as error:
             await self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
 
@@ -427,11 +470,14 @@ class AdminUsersMixin(AdminFeatureMixin):
         displayname = text.strip()
 
         msg = await self.bot.send_message(
-            message.chat.id, "Введите лимит в гигабайтах (или 0 для безлимита):",
+            message.chat.id,
+            "Введите лимит в гигабайтах (или 0 для безлимита):",
         )
         self._expect(msg, self._step_add_user_limit, username, displayname)  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_add_user_limit(self, message: types.Message, username: str, displayname: str) -> None:
+    async def _step_add_user_limit(
+        self, message: types.Message, username: str, displayname: str
+    ) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
             return
@@ -445,14 +491,23 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
             return
         msg = await self.bot.send_message(
-            message.chat.id, "Введите кол-во дней подписки (0 для безлимита):",
+            message.chat.id,
+            "Введите кол-во дней подписки (0 для безлимита):",
         )
         self._expect(  # pyright: ignore[reportUnknownMemberType]
-            msg, self._step_add_user_time, username, displayname, limit,
+            msg,
+            self._step_add_user_time,
+            username,
+            displayname,
+            limit,
         )
 
     async def _step_add_user_time(
-        self, message: types.Message, username: str, displayname: str, limit: int,
+        self,
+        message: types.Message,
+        username: str,
+        displayname: str,
+        limit: int,
     ) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
@@ -471,7 +526,10 @@ class AdminUsersMixin(AdminFeatureMixin):
         timee = int(time.time() + (timee * 86400)) if timee else 0
         try:
             await self.sub.business_svc.add_new_user(
-                username=username, displayname=displayname, limit=limit, timee=timee,
+                username=username,
+                displayname=displayname,
+                limit=limit,
+                timee=timee,
             )
             await self._send_message(
                 message.chat.id,
@@ -481,12 +539,16 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
         except AppError as error:
             await self._send_message(
-                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                f"❌ Ошибка: {error.message}",
+                reply_markup=self.get_main_menu(),
             )
         except Exception:
             self.log.exception("Telegram handler failed")
             await self._send_message(
-                message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                "❌ Внутренняя ошибка",
+                reply_markup=self.get_main_menu(),
             )
 
     async def _step_info_user(self, message: types.Message) -> None:

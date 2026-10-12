@@ -253,7 +253,9 @@ class SysUtil:
     @staticmethod
     def app_uptime() -> float:
         system_uptime = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
-        starttime_ticks = int(Path(f"/proc/{os.getpid()}/stat").read_text(encoding="utf-8").split()[21])
+        starttime_ticks = int(
+            Path(f"/proc/{os.getpid()}/stat").read_text(encoding="utf-8").split()[21]
+        )
 
         clk_tck = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
         return system_uptime - (starttime_ticks / clk_tck)

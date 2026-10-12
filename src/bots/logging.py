@@ -21,7 +21,11 @@ class AsyncBotLogging:
 
     async def start(self) -> None:
         await self.delivery.start()
-        self._loggers = [logger for logger in logging.Logger.manager.loggerDict.values() if isinstance(logger, logging.Logger)]
+        self._loggers = [
+            logger
+            for logger in logging.Logger.manager.loggerDict.values()
+            if isinstance(logger, logging.Logger)
+        ]
         for logger in self._loggers:
             logger.addHandler(self.handler)
 

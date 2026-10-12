@@ -275,7 +275,11 @@ def test_bonus_on_zero_quota_reenables_on_next_poll(
 ) -> None:
     create_alice(database, bw_limit_gb=0, wl_limit_gb=0, expires_at=0)
     database.update_user(
-        "alice", status=False, status_time=False, status_wl=False, bw_used=5 * 10**9,
+        "alice",
+        status=False,
+        status_time=False,
+        status_wl=False,
+        bw_used=5 * 10**9,
     )
     subscription.code_svc.add_code("bonus1", "bonus", gb=3, wl_gb=1, uses=1)
     subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")

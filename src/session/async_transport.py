@@ -49,7 +49,10 @@ class PanelResponse:
 
 class AsyncXUiPanelTransport(Protocol):
     async def request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse: ...
 
 
@@ -61,9 +64,14 @@ class AiohttpPanelTransport:
     """
 
     def __init__(
-        self, session: aiohttp.ClientSession | None = None,
-        auth: tuple[str, str] | None = None, *, limit: int = 8,
-        timeout: float = 5.0, connect_timeout: float = 5.0, read_timeout: float = 5.0,
+        self,
+        session: aiohttp.ClientSession | None = None,
+        auth: tuple[str, str] | None = None,
+        *,
+        limit: int = 8,
+        timeout: float = 5.0,
+        connect_timeout: float = 5.0,
+        read_timeout: float = 5.0,
     ) -> None:
         if min(timeout, connect_timeout, read_timeout) <= 0:
             raise ValueError("timeouts must be positive")
@@ -95,17 +103,24 @@ class AiohttpPanelTransport:
         self._started = True
 
     async def request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse:
         if not self._started:
             raise RuntimeError("transport has not started")
         task = self._requests.create(
-            lambda: self._request(method, url, **kwargs), name="panel-http",
+            lambda: self._request(method, url, **kwargs),
+            name="panel-http",
         )
         return await task
 
     async def _request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse:
         session = self._session
         if session is None:
@@ -126,12 +141,18 @@ class AiohttpPanelTransport:
         if total <= 0:
             raise ValueError("timeout must be positive")
         deadline = aiohttp.ClientTimeout(
-            total=total, connect=min(total, self._connect_timeout),
+            total=total,
+            connect=min(total, self._connect_timeout),
             sock_read=min(total, self._read_timeout),
         )
         async with session.request(
-            method, url, headers=headers, params=kwargs.get("params"),
-            json=kwargs.get("json"), data=kwargs.get("data"), timeout=deadline,
+            method,
+            url,
+            headers=headers,
+            params=kwargs.get("params"),
+            json=kwargs.get("json"),
+            data=kwargs.get("data"),
+            timeout=deadline,
             auth=aiohttp.BasicAuth(*auth) if auth is not None else None,
             allow_redirects=False,
         ) as response:
@@ -157,7 +178,10 @@ class FakeAsyncPanelTransport:
         self.calls: list[tuple[str, str, AsyncRequestKwargs]] = []
 
     async def request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse:
         self.calls.append((method, url, kwargs))
         if not self.outcomes:

@@ -168,7 +168,9 @@ async def test_add_code_wizard_rejects_bad_numbers_and_creates_code(
     await mixin._step_add_code_perma(_message("Нет"), "register", "WELCOME", 30, 10, 1)
     assert mixin._step_add_code_uses in cast(MagicMock, mixin._expect).call_args.args
 
-    await mixin._step_add_code_uses(_real_message("/start"), "register", "WELCOME", 30, 10, 1, False)
+    await mixin._step_add_code_uses(
+        _real_message("/start"), "register", "WELCOME", 30, 10, 1, False
+    )
     telegram.send_message.reset_mock()
     await mixin._step_add_code_uses(_real_message("0"), "register", "WELCOME", 30, 10, 1, False)
     assert "больше 0" in telegram.send_message.call_args.args[1]

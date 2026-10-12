@@ -80,7 +80,8 @@ class PublicBot(
         )
 
         def bind(
-            command_name: str, command_handler: Callable[[discord.Interaction[Client]], Coro],
+            command_name: str,
+            command_handler: Callable[[discord.Interaction[Client]], Coro],
         ) -> Callable[[discord.Interaction[Client]], Coro]:
             async def wrapped(interaction: discord.Interaction) -> None:
                 if self.command_requires_auth(command_name) and not self.is_logged_in(

@@ -36,14 +36,18 @@ async def db(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
 
 
 @pytest.mark.asyncio
-async def test_cancelled_registration_settles_siblings_then_compensates(db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_cancelled_registration_settles_siblings_then_compensates(
+    db: AsyncDatabase, tmp_path: Path
+) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
     rejected = FakePanel(name="rejected", inbounds=[make_inbound(1)])
     sub = await make_async_subscription(db, tmp_path, [accepted, rejected])
     started, release = asyncio.Event(), asyncio.Event()
     original = sub.business_svc._post
 
-    async def post(panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str) -> None:
+    async def post(
+        panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str
+    ) -> None:
         if route.endswith("clients/add") and panel is sub.panels[0]:
             await original(panel, route, body, what)
             started.set()
@@ -58,7 +62,15 @@ async def test_cancelled_registration_settles_siblings_then_compensates(db: Asyn
     task: asyncio.Task[object] | None = None
     try:
         await sub.code_svc.add_code("invite", "register")
-        task = asyncio.create_task(sub.business_code_svc.register_with_code(code="invite", username="alice", displayname="Alice", ext_username="alice", ext_password="secret"))
+        task = asyncio.create_task(
+            sub.business_code_svc.register_with_code(
+                code="invite",
+                username="alice",
+                displayname="Alice",
+                ext_username="alice",
+                ext_password="secret",
+            )
+        )
         await started.wait()
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -84,14 +96,20 @@ async def test_cancelled_registration_settles_siblings_then_compensates(db: Asyn
 
 
 @pytest.mark.asyncio
-async def test_reset_delete_race_does_not_resurrect_client(db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_reset_delete_race_does_not_resurrect_client(
+    db: AsyncDatabase, tmp_path: Path
+) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])], inbounds=[make_inbound(1)])
     sub = await make_async_subscription(db, tmp_path, [panel])
-    await db.create_user(username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice")
+    await db.create_user(
+        username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice"
+    )
     started, release = asyncio.Event(), asyncio.Event()
     original = sub.business_svc._post
 
-    async def update(panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str) -> None:
+    async def update(
+        panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str
+    ) -> None:
         started.set()
         await release.wait()
         await original(panel, route, body, what)
@@ -120,8 +138,12 @@ async def test_reset_delete_race_does_not_resurrect_client(db: AsyncDatabase, tm
 
 
 @pytest.mark.asyncio
-async def test_fanout_waits_for_later_write_before_raising(db: AsyncDatabase, tmp_path: Path) -> None:
-    sub = await make_async_subscription(db, tmp_path, [FakePanel(name="first"), FakePanel(name="later")])
+async def test_fanout_waits_for_later_write_before_raising(
+    db: AsyncDatabase, tmp_path: Path
+) -> None:
+    sub = await make_async_subscription(
+        db, tmp_path, [FakePanel(name="first"), FakePanel(name="later")]
+    )
     started, release = asyncio.Event(), asyncio.Event()
     finished: list[str] = []
 
@@ -149,8 +171,12 @@ async def test_fanout_waits_for_later_write_before_raising(db: AsyncDatabase, tm
 
 
 @pytest.mark.asyncio
-async def test_background_capacity_does_not_block_foreground(db: AsyncDatabase, tmp_path: Path) -> None:
-    sub = await make_async_subscription(db, tmp_path, [FakePanel(name=str(index)) for index in range(12)])
+async def test_background_capacity_does_not_block_foreground(
+    db: AsyncDatabase, tmp_path: Path
+) -> None:
+    sub = await make_async_subscription(
+        db, tmp_path, [FakePanel(name=str(index)) for index in range(12)]
+    )
     started, release = asyncio.Event(), asyncio.Event()
     active = peak = 0
 
@@ -184,7 +210,9 @@ async def test_background_capacity_does_not_block_foreground(db: AsyncDatabase, 
 async def test_cache_invalidation_and_cancelled_single_flight_waiter(tmp_path: Path) -> None:
     files = BoundedOffload(capacity=1, name="test-files")
     tasks = TaskRegistry()
-    cache = AsyncGenerationCache[list[str]](str(tmp_path / "clients.stamp"), files=files, tasks=tasks)
+    cache = AsyncGenerationCache[list[str]](
+        str(tmp_path / "clients.stamp"), files=files, tasks=tasks
+    )
     started, release = asyncio.Event(), asyncio.Event()
     calls = 0
 
@@ -226,7 +254,9 @@ async def test_cache_invalidation_and_cancelled_single_flight_waiter(tmp_path: P
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("external", [False, True])
-async def test_refresh_cannot_publish_after_generation_changes(tmp_path: Path, external: bool) -> None:
+async def test_refresh_cannot_publish_after_generation_changes(
+    tmp_path: Path, external: bool
+) -> None:
     files = BoundedOffload(capacity=1, name="test-files")
     tasks = TaskRegistry()
     path = str(tmp_path / "clients.stamp")
@@ -298,15 +328,26 @@ async def test_ordered_multi_user_locks_bounded_admission_and_forced_cancel() ->
         assert coordinator.lock_count == 0
     finally:
         release.set()
-        await asyncio.gather(one, *([two] if two else []), *([drain] if drain else []), return_exceptions=True)
+        await asyncio.gather(
+            one, *([two] if two else []), *([drain] if drain else []), return_exceptions=True
+        )
         await registry.drain()
 
 
 @pytest.mark.asyncio
-async def test_quota_rechecks_limit_after_waiting_for_admin_mutation(db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_quota_rechecks_limit_after_waiting_for_admin_mutation(
+    db: AsyncDatabase, tmp_path: Path
+) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])])
     sub = await make_async_subscription(db, tmp_path, [panel])
-    await db.create_user(username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice", bw_limit_gb=1)
+    await db.create_user(
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=1,
+    )
     await db.increment_usage("alice", regular=2 * 10**9)
     started, release = asyncio.Event(), asyncio.Event()
 

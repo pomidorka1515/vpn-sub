@@ -79,11 +79,21 @@ def test_registration_rollback_failure_preserves_sync_error(database: Database) 
 
 def test_registration_partial_panel_writes_are_removed_before_refund(database: Database) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
-    rejected = FakePanel(name="rejected", inbounds=[make_inbound(1)], post_payload={"success": False, "msg": "rejected", "obj": None})
+    rejected = FakePanel(
+        name="rejected",
+        inbounds=[make_inbound(1)],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
     subscription = make_subscription(database, panels=[accepted, rejected])
     database.add_code("invite", "register")
     with pytest.raises(PanelRejectedError):
-        subscription.business_code_svc.register_with_code(code="invite", username="alice", displayname="Alice", ext_username="alice", ext_password="secret")
+        subscription.business_code_svc.register_with_code(
+            code="invite",
+            username="alice",
+            displayname="Alice",
+            ext_username="alice",
+            ext_password="secret",
+        )
     assert accepted.clients == []
     assert not database.user_exists("alice")
     code = database.get_code("invite")
@@ -93,7 +103,11 @@ def test_registration_partial_panel_writes_are_removed_before_refund(database: D
 
 def test_admin_creation_partial_panel_writes_are_removed(database: Database) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
-    rejected = FakePanel(name="rejected", inbounds=[make_inbound(1)], post_payload={"success": False, "msg": "rejected", "obj": None})
+    rejected = FakePanel(
+        name="rejected",
+        inbounds=[make_inbound(1)],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
     subscription = make_subscription(database, panels=[accepted, rejected])
     with pytest.raises(PanelRejectedError):
         subscription.business_svc.add_new_user("alice", "Alice")

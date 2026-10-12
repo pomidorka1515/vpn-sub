@@ -55,7 +55,8 @@ def _plain(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _release(
-    tag: str = "v9.0.0", assets: tuple[str, ...] = ("vpn-sub", "vpn-sub-discord"),
+    tag: str = "v9.0.0",
+    assets: tuple[str, ...] = ("vpn-sub", "vpn-sub-discord"),
 ) -> ReleasePayload:
     return {
         "tag_name": tag,
@@ -145,7 +146,8 @@ def _alive_stub() -> Callable[[object, object], list[updater.Running]]:
 
 
 def test_notice_does_nothing_outside_a_binary(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _plain(monkeypatch)
     called = False
@@ -162,7 +164,8 @@ def test_notice_does_nothing_outside_a_binary(
 
 
 def test_update_refuses_outside_a_binary(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _plain(monkeypatch)
     assert update() == 1
@@ -170,7 +173,8 @@ def test_update_refuses_outside_a_binary(
 
 
 def test_notice_prints_only_a_newer_release(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "VERSION", "1.0.0")
@@ -180,7 +184,8 @@ def test_notice_prints_only_a_newer_release(
 
 
 def test_notice_is_quiet_when_current(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "VERSION", "9.0.0")
@@ -190,7 +195,8 @@ def test_notice_is_quiet_when_current(
 
 
 def test_update_refuses_without_a_tty(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "_interactive", lambda: False)
@@ -293,7 +299,12 @@ def test_running_lists_unit_and_stray_pid(monkeypatch: pytest.MonkeyPatch, tmp_p
 def test_asset_requires_sha256() -> None:
     with pytest.raises(ValueError, match="has no sha256 digest"):
         updater._asset(
-            {"name": "vpn-sub", "browser_download_url": "https://x", "size": 1, "digest": "md5:abc"},
+            {
+                "name": "vpn-sub",
+                "browser_download_url": "https://x",
+                "size": 1,
+                "digest": "md5:abc",
+            },
         )
 
 
@@ -304,7 +315,9 @@ def test_parse_strips_release_suffix() -> None:
 
 
 def test_swap_refuses_symlink(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     target = tmp_path / "real"
@@ -322,7 +335,9 @@ def test_swap_refuses_symlink(
 
 
 def test_alive_pid_blocks_replace(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     binary = tmp_path / "vpn-sub"

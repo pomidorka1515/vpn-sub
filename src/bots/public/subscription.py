@@ -58,7 +58,9 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             days=time_str,
             fingerprint=info.fingerprint,
         )
-        await self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=await self.get_menu(uid))
+        await self.bot.send_message(
+            chat_id, text, parse_mode="HTML", reply_markup=await self.get_menu(uid)
+        )
 
     async def send_link(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]

@@ -47,10 +47,12 @@ class PublicCommonMixin(
             )
         else:
             markup.add(  # pyright: ignore[reportUnknownMemberType]
-                types.KeyboardButton(t["btn_main_account"]), types.KeyboardButton(t["btn_main_sub"]),
+                types.KeyboardButton(t["btn_main_account"]),
+                types.KeyboardButton(t["btn_main_sub"]),
             )
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-            types.KeyboardButton(t["btn_lang"]), types.KeyboardButton(t["btn_support"]),
+            types.KeyboardButton(t["btn_lang"]),
+            types.KeyboardButton(t["btn_support"]),
         )
         return markup
 
@@ -73,9 +75,13 @@ class PublicCommonMixin(
             lang = await self.get_lang(uid)
             t = self.TEXTS[lang]
             msg_text = (
-                t["welcome_reg"] if await self.sub.telegram_svc.is_registered(uid) else t["welcome_new"]
+                t["welcome_reg"]
+                if await self.sub.telegram_svc.is_registered(uid)
+                else t["welcome_new"]
             )
-            await self.bot.send_message(message.chat.id, msg_text, reply_markup=await self.get_menu(uid))
+            await self.bot.send_message(
+                message.chat.id, msg_text, reply_markup=await self.get_menu(uid)
+            )
 
     async def set_lang_callback(self, call: types.CallbackQuery) -> None:
         data = cast(str, call.data)
@@ -86,12 +92,18 @@ class PublicCommonMixin(
 
         await self._answer_callback(call.id)
         t = self.TEXTS[new_lang]
-        await self.bot.send_message(message.chat.id, t["lang_set"], reply_markup=await self.get_menu(uid))
+        await self.bot.send_message(
+            message.chat.id, t["lang_set"], reply_markup=await self.get_menu(uid)
+        )
 
         await self._delete_message(message.chat.id, message.message_id)
 
     def _menu_message(self, text: str) -> bool:
-        return any(text == texts.get(button) for texts in self.TEXTS.values() for button, _, _ in self.ROUTES)
+        return any(
+            text == texts.get(button)
+            for texts in self.TEXTS.values()
+            for button, _, _ in self.ROUTES
+        )
 
     async def handle_callbacks(self, call: types.CallbackQuery) -> None:
         data = call.data or ""

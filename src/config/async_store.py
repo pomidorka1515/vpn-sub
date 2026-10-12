@@ -27,7 +27,9 @@ class FileSchedules:
     def __init__(self) -> None:
         self.tasks = TaskRegistry()
 
-    def add(self, operation: Callable[[], Awaitable[object]], *, interval: float, name: str) -> None:
+    def add(
+        self, operation: Callable[[], Awaitable[object]], *, interval: float, name: str
+    ) -> None:
         if interval <= 0:
             raise ValueError("file schedule interval must be positive")
 
@@ -53,7 +55,10 @@ class AsyncConfig[Doc = JsonDict]:
     """
 
     def __init__(
-        self, factory: Callable[[], Config[Doc]], *, files: BoundedOffload,
+        self,
+        factory: Callable[[], Config[Doc]],
+        *,
+        files: BoundedOffload,
         reload_interval: float = 5,
     ) -> None:
         if reload_interval <= 0:
@@ -87,7 +92,9 @@ class AsyncConfig[Doc = JsonDict]:
             self._snapshot = await self._files.run(self._store.view)
             self._schedules.add(self.reload, interval=self._reload_interval, name="config:reload")
             if self._store.backup_dir is not None:
-                self._schedules.add(self.backup_now, interval=self._store.backup_interval, name="config:backup")
+                self._schedules.add(
+                    self.backup_now, interval=self._store.backup_interval, name="config:backup"
+                )
 
     def view(self) -> Doc:
         if self._snapshot is None:
@@ -183,7 +190,9 @@ class AsyncLinesConfig:
             if self._store is None:
                 self._store = await self._files.run(self._factory)
                 if self._store.backup_dir is not None:
-                    self._schedules.add(self.backup_now, interval=self._store.backup_interval, name="lines:backup")
+                    self._schedules.add(
+                        self.backup_now, interval=self._store.backup_interval, name="lines:backup"
+                    )
 
     def _require_store(self) -> LinesConfig:
         if self._store is None:

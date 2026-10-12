@@ -55,7 +55,9 @@ class PublicTrafficMixin(PublicFeatureMixin):
             self.log.exception("chart submission failed")
             await self._send_message(message.chat.id, t["error_generic"])
 
-    async def _render_chart(self, *, uid: int, username: str, days: int, lang: str, chat_id: int) -> None:
+    async def _render_chart(
+        self, *, uid: int, username: str, days: int, lang: str, chat_id: int
+    ) -> None:
         t = self.TEXTS[lang]
         try:
             snapshots = await self.sub.bandwidth_svc.get_bw_history(username, days=days)
@@ -77,7 +79,9 @@ class PublicTrafficMixin(PublicFeatureMixin):
             wl_monthly = bandwidths.wl_monthly
 
             wl_used_str, wl_limit_str, wl_percent_str = format_usage(
-                wl_monthly, wl_limit, t["unlimited"],
+                wl_monthly,
+                wl_limit,
+                t["unlimited"],
             )
 
             text = t["chart_text"].format(
@@ -97,8 +101,11 @@ class PublicTrafficMixin(PublicFeatureMixin):
             text = truncate_utf8(text, 1024)
 
             language = self.lang_cfg.view()
-            chart_img = await self.sub.res.offloads.rendering.run(bandwidth_chart,
-                snapshots, label=info.displayname, lang=language["chart"][lang],
+            chart_img = await self.sub.res.offloads.rendering.run(
+                bandwidth_chart,
+                snapshots,
+                label=info.displayname,
+                lang=language["chart"][lang],
             )
             if chart_img is not None:
                 await self.bot.send_photo(
@@ -119,4 +126,6 @@ class PublicTrafficMixin(PublicFeatureMixin):
             await self._send_message(chat_id, error.message, reply_markup=await self.get_menu(uid))
         except Exception:
             self.log.exception(f"Chart error for uid {uid}")
-            await self._send_message(chat_id, t["error_generic"], reply_markup=await self.get_menu(uid))
+            await self._send_message(
+                chat_id, t["error_generic"], reply_markup=await self.get_menu(uid)
+            )

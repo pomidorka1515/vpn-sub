@@ -16,7 +16,9 @@ class PanelsMixin(BWatchHost):
         # Dead panels stay out so they do not pick up getstatus's error log.
         # Alert math stays on this thread; _panel_alerts is single-threaded.
         for panel, status in zip(
-            live, self.sub.panel_svc.statuses(live, self._panel_pool()), strict=True,
+            live,
+            self.sub.panel_svc.statuses(live, self._panel_pool()),
+            strict=True,
         ):
             try:
                 if not status:
@@ -58,7 +60,9 @@ class PanelsMixin(BWatchHost):
                     self._panel_alerts.pop(key, None)
             except Exception:
                 self.log.exception(
-                    "health check failed for panel %s (%s)", panel.name, panel.address,
+                    "health check failed for panel %s (%s)",
+                    panel.name,
+                    panel.address,
                 )
 
     def reconcile_inbounds(self) -> None:

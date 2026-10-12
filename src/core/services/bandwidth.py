@@ -28,7 +28,11 @@ __all__ = ["BandwidthService"]
 
 class BandwidthService(BaseService):
     def __init__(
-        self, res: SharedCoreResources, *, panel_svc: PanelService, user_svc: CommonUserService,
+        self,
+        res: SharedCoreResources,
+        *,
+        panel_svc: PanelService,
+        user_svc: CommonUserService,
     ) -> None:
         super().__init__(res)
         self.panel_svc: PanelService = panel_svc

@@ -196,7 +196,9 @@ class BusinessUserService(BaseService):
             online=self.panel_svc.is_online(username),
             bandwidth=UserInfoBandwidth(
                 total=UserInfoBandwidthTotal(
-                    upload=bandwidths.upload, download=bandwidths.download, total=bandwidths.total,
+                    upload=bandwidths.upload,
+                    download=bandwidths.download,
+                    total=bandwidths.total,
                 ),
                 wl_total=UserInfoBandwidthTotal(
                     upload=wl_bandwidths.upload,
@@ -410,13 +412,19 @@ class BusinessUserService(BaseService):
 
     def rollback_panel_clients(self, username: str, expected_uuid: str) -> None:
         """Remove partial registration writes before dropping their DB identity."""
+
         def delete(panel: XUiSession) -> None:
             current = self.panel_svc.get_client(panel, username)
             if current is None:
                 return
             if current.uuid != expected_uuid:
                 raise PanelRejectedError(f"Panel {panel.name} rollback refused a foreign UUID")
-            _panel_post_json(panel, f"panel/api/clients/del/{quote(username, safe='')}", {}, "registration rollback")
+            _panel_post_json(
+                panel,
+                f"panel/api/clients/del/{quote(username, safe='')}",
+                {},
+                "registration rollback",
+            )
             self._invalidate_clients(panel)
 
         self.panel_svc.map_panels(self.panels, delete)
@@ -629,7 +637,9 @@ class BusinessUserService(BaseService):
                 self.rollback_panel_clients(username, userid)
                 self.db.delete_user(username)
             except Exception:
-                self.log.exception("failed to roll back user %s; retaining recovery marker", username)
+                self.log.exception(
+                    "failed to roll back user %s; retaining recovery marker", username
+                )
                 try:
                     self.db.set_metadata(f"user_create_pending:{username}", userid)
                 except Exception:
@@ -818,7 +828,9 @@ class BusinessUserService(BaseService):
         # Later panels may already hold the new UUID; that is the recorded
         # state, not something this method rolls back.
         for panel, exc in zip(
-            self.panels, self.panel_svc.map_panels(self.panels, write), strict=True,
+            self.panels,
+            self.panel_svc.map_panels(self.panels, write),
+            strict=True,
         ):
             if exc is None:
                 continue
@@ -854,7 +866,8 @@ class BusinessUserService(BaseService):
         self.user_svc.set_auth_token(username, None)
         self.trace(Op.user.reset_user, "reset", username=username, uuid=newid)
         self.audit_svc.audit(
-            name="user_reset", info={"username": username, "uuid": newid, "token": "redacted"},
+            name="user_reset",
+            info={"username": username, "uuid": newid, "token": "redacted"},
         )
         self._drop_cache()
         return ResetUserObject(uuid=newid, token=newt)

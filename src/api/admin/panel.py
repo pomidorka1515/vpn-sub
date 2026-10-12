@@ -25,7 +25,9 @@ class AsyncPanelRoutes(AsyncAdminApiMixin):
         query = request.args.get("name", None)
         if query is None:
             result: dict[str, dict[str, JsonifyValue] | None] = {}
-            for panel, status in zip(self.sub.panels, await self.sub.panel_svc.statuses(), strict=True):
+            for panel, status in zip(
+                self.sub.panels, await self.sub.panel_svc.statuses(), strict=True
+            ):
                 _ = status
                 if _ is None:
                     self.log.error(f"getstatus: {panel.name} returned None")

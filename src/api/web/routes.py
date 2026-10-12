@@ -35,7 +35,14 @@ class AsyncWebApi(
         *AsyncAccountRoutes.ROUTES,
     )
 
-    def __init__(self, app: Quart, cfg: AsyncConfig[AppConfig], sub: AsyncSubscription, bw: SnapshotStatus, limiter: AsyncRateLimiter) -> None:
+    def __init__(
+        self,
+        app: Quart,
+        cfg: AsyncConfig[AppConfig],
+        sub: AsyncSubscription,
+        bw: SnapshotStatus,
+        limiter: AsyncRateLimiter,
+    ) -> None:
         self.log = Logger(type(self).__name__)
         conf = cfg.view()
         uri = "/" + "/".join(p for p in conf["uri"].split("/") if p)

@@ -27,8 +27,13 @@ if TYPE_CHECKING:
 
 def client(transport: AsyncXUiPanelTransport, *, verbose: bool = False) -> AsyncXUiSession:
     return AsyncXUiSession(
-        name="test", address="127.0.0.1", port=2053, uri="/secret/panel/",
-        api_token="private-token", transport=transport, health_check_interval=3600,
+        name="test",
+        address="127.0.0.1",
+        port=2053,
+        uri="/secret/panel/",
+        api_token="private-token",
+        transport=transport,
+        health_check_interval=3600,
         inject_headers={"X-Panel": "injected", "authorization": "bad-token"},
         verbose=verbose,
     )
@@ -37,11 +42,13 @@ def client(transport: AsyncXUiPanelTransport, *, verbose: bool = False) -> Async
 @pytest_asyncio.fixture
 async def endpoint() -> AsyncIterator[str]:
     async def echo(request: web.Request) -> web.Response:
-        return web.json_response({
-            "auth": request.headers.get("Authorization"),
-            "header": request.headers.get("X-Test"),
-            "body": await request.json() if request.can_read_body else None,
-        })
+        return web.json_response(
+            {
+                "auth": request.headers.get("Authorization"),
+                "header": request.headers.get("X-Test"),
+                "body": await request.json() if request.can_read_body else None,
+            }
+        )
 
     app = web.Application()
     app.router.add_route("*", "/echo", echo)
@@ -77,7 +84,8 @@ async def test_lifecycle_headers_url_and_normal_response() -> None:
     await panel.start()
     try:
         response = await panel.post(
-            "panel/api/server/status", headers={"X-Panel": "caller", "AUTHORIZATION": "evil"},
+            "panel/api/server/status",
+            headers={"X-Panel": "caller", "AUTHORIZATION": "evil"},
             json={"value": 1},
         )
         assert response.json() == {"success": True}
@@ -115,15 +123,21 @@ async def test_token_rejection_is_permanent(status: int) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [
-    TimeoutError("secret-token"), aiohttp.ClientConnectionError("secret-url"),
-    aiohttp.ClientError("secret-query"),
-])
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError("secret-token"),
+        aiohttp.ClientConnectionError("secret-url"),
+        aiohttp.ClientError("secret-query"),
+    ],
+)
 async def test_unavailable_recovery_and_redaction(
-    error: Exception, capfd: pytest.CaptureFixture[str],
+    error: Exception,
+    capfd: pytest.CaptureFixture[str],
 ) -> None:
     transport = FakeAsyncPanelTransport(
-        error, PanelResponse.from_json({"success": True}),
+        error,
+        PanelResponse.from_json({"success": True}),
         PanelResponse.from_json({"success": True}),
     )
     panel = client(transport, verbose=True)
@@ -136,19 +150,32 @@ async def test_unavailable_recovery_and_redaction(
         assert not panel.dead
         await panel.get("panel/api/server/status?token=private-query")
         output = capfd.readouterr().err
-        assert all(value not in output for value in (
-            "secret-token", "secret-url", "secret-query", "private-token", "private-query", "/secret/",
-        ))
+        assert all(
+            value not in output
+            for value in (
+                "secret-token",
+                "secret-url",
+                "secret-query",
+                "private-token",
+                "private-query",
+                "/secret/",
+            )
+        )
         assert "panel/api/server/status" in output
     finally:
         await panel.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("response", [
-    PanelResponse(200, b"not json"), PanelResponse.from_json({"success": False, "msg": "secret"}),
-    PanelResponse.from_json([], 200), PanelResponse.from_json({}, 500),
-])
+@pytest.mark.parametrize(
+    "response",
+    [
+        PanelResponse(200, b"not json"),
+        PanelResponse.from_json({"success": False, "msg": "secret"}),
+        PanelResponse.from_json([], 200),
+        PanelResponse.from_json({}, 500),
+    ],
+)
 async def test_invalid_health_response_marks_dead(response: PanelResponse) -> None:
     panel = client(FakeAsyncPanelTransport(response))
     await panel.start()
@@ -166,7 +193,10 @@ class BlockingTransport:
         self.cancelled = asyncio.Event()
 
     async def request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse:
         self.entered.set()
         try:
@@ -216,8 +246,13 @@ async def test_close_drains_inflight_and_survives_waiter_cancellation() -> None:
 async def test_bounded_client_admission() -> None:
     transport = BlockingTransport()
     panel = AsyncXUiSession(
-        name="test", address="127.0.0.1", port=2053, uri="secret",
-        api_token="token", transport=transport, request_limit=1,
+        name="test",
+        address="127.0.0.1",
+        port=2053,
+        uri="secret",
+        api_token="token",
+        transport=transport,
+        request_limit=1,
     )
     await panel.start()
     request = asyncio.create_task(panel.get("panel/api/inbounds/list"))
@@ -237,11 +272,15 @@ async def test_real_aiohttp_buffering_auth_and_injected_session_ownership(endpoi
         transport = AiohttpPanelTransport(session)
         await transport.start()
         response = await transport.request(
-            "POST", endpoint, headers={"Authorization": "Bearer token", "X-Test": "header"},
+            "POST",
+            endpoint,
+            headers={"Authorization": "Bearer token", "X-Test": "header"},
             json={"value": 1},
         )
         assert response.json() == {
-            "auth": "Bearer token", "header": "header", "body": {"value": 1},
+            "auth": "Bearer token",
+            "header": "header",
+            "body": {"value": 1},
         }
         assert response.headers["content-type"].startswith("application/json")
         await transport.close()
@@ -333,8 +372,13 @@ async def test_real_timeout_cancellation_and_transport_limit() -> None:
 async def test_health_task_is_started_explicitly_and_settled_on_close() -> None:
     transport = BlockingTransport()
     panel = AsyncXUiSession(
-        name="test", address="127.0.0.1", port=2053, uri="secret",
-        api_token="token", transport=transport, health_check_interval=1,
+        name="test",
+        address="127.0.0.1",
+        port=2053,
+        uri="secret",
+        api_token="token",
+        transport=transport,
+        health_check_interval=1,
     )
     assert panel._health.active_count == 0
     await panel.start()
@@ -352,8 +396,12 @@ async def test_health_task_is_started_explicitly_and_settled_on_close() -> None:
 async def test_client_does_not_close_injected_session(endpoint: str) -> None:
     async with aiohttp.ClientSession() as session:
         panel = AsyncXUiSession(
-            name="test", address="127.0.0.1", port=2053, uri="secret",
-            api_token="token", session=session,
+            name="test",
+            address="127.0.0.1",
+            port=2053,
+            uri="secret",
+            api_token="token",
+            session=session,
         )
         await panel.start()
         await panel.close()

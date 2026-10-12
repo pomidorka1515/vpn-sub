@@ -39,15 +39,23 @@ class FakeResource:
 @pytest.mark.asyncio
 async def test_start_failure_unwinds_partial_resource_in_reverse_order() -> None:
     events: list[str] = []
-    resources = tuple(OwnedResource(name, FakeResource(name, events, fail_start=name == "panels"))
-                      for name in ("lock", "database", "panels", "bots"))
+    resources = tuple(
+        OwnedResource(name, FakeResource(name, events, fail_start=name == "panels"))
+        for name in ("lock", "database", "panels", "bots")
+    )
     runtime = Runtime(object(), resources=resources)
     assert events == []
     with pytest.raises(ValueError, match="startup failed"):
         await runtime.start()
     await runtime.stop()
-    assert events == ["start:lock", "start:database", "start:panels",
-                      "close:panels", "close:database", "close:lock"]
+    assert events == [
+        "start:lock",
+        "start:database",
+        "start:panels",
+        "close:panels",
+        "close:database",
+        "close:lock",
+    ]
     assert runtime.state is RuntimeState.STOPPED
     assert not runtime.ready
 
@@ -55,10 +63,13 @@ async def test_start_failure_unwinds_partial_resource_in_reverse_order() -> None
 @pytest.mark.asyncio
 async def test_repeated_stop_and_cleanup_failure_visibility() -> None:
     events: list[str] = []
-    runtime = Runtime("dependencies", resources=(
-        OwnedResource("lock", FakeResource("lock", events)),
-        OwnedResource("database", FakeResource("database", events, fail_close=True)),
-    ))
+    runtime = Runtime(
+        "dependencies",
+        resources=(
+            OwnedResource("lock", FakeResource("lock", events)),
+            OwnedResource("database", FakeResource("database", events, fail_close=True)),
+        ),
+    )
     await runtime.start()
     await runtime.start()
     assert runtime.require_ready() == "dependencies"

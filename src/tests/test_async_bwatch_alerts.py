@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("used", "disabled"), [(10**9, False), (10**9 + 1, True)])
-async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(tmp_path: Path, used: int, disabled: bool) -> None:
+async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(
+    tmp_path: Path, used: int, disabled: bool
+) -> None:
     db = AsyncDatabase(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_async_subscription(db, tmp_path)
@@ -28,10 +30,22 @@ async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(tmp_
     async def language(_id: int) -> str:
         return "en"
 
-    notifier = AsyncNotifier(texts={"en": {"traffic_exhausted": "exhausted", "traffic_soon": "soon"}}, send=send, language=language)
+    notifier = AsyncNotifier(
+        texts={"en": {"traffic_exhausted": "exhausted", "traffic_soon": "soon"}},
+        send=send,
+        language=language,
+    )
     watch = AsyncBWatch(sub.res.cfg, db, sub, notifier=notifier, scheduled=False)
     try:
-        await db.create_user(username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=0)
+        await db.create_user(
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=0,
+        )
         await db.increment_usages({"alice": (used, 0)})
         state = await db.get_user("alice")
         assert state is not None

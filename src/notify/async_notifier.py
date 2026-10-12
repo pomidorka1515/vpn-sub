@@ -16,13 +16,21 @@ if TYPE_CHECKING:
 class AsyncNotifier(Notifier):
     """Serialize delivery; callers persist accepted markers before releasing ownership."""
 
-    def __init__(self, *, texts: Texts, send: Callable[[int, str], Awaitable[object]], language: Callable[[int], Awaitable[str]]) -> None:
+    def __init__(
+        self,
+        *,
+        texts: Texts,
+        send: Callable[[int, str], Awaitable[object]],
+        language: Callable[[int], Awaitable[str]],
+    ) -> None:
         super().__init__(texts=texts, send=lambda _id, _text: None, language=lambda _id: "en")
         self._async_send = send
         self._async_language = language
         self._delivery_lock = asyncio.Lock()
 
-    async def deliver(self, username: str, telegram_id: int | None, notice: Notice, seen: set[str]) -> bool:
+    async def deliver(
+        self, username: str, telegram_id: int | None, notice: Notice, seen: set[str]
+    ) -> bool:
         async with self._delivery_lock:
             key = account_key(username, notice.marker)
             if telegram_id is None or key in seen:
@@ -31,7 +39,9 @@ class AsyncNotifier(Notifier):
                 return False
             try:
                 lang = await self._async_language(telegram_id)
-                template = (self._texts.get(lang) or self._texts.get("en") or {}).get(notice.kind.text_key)
+                template = (self._texts.get(lang) or self._texts.get("en") or {}).get(
+                    notice.kind.text_key
+                )
                 if not template:
                     return False
                 text = template.format_map(notice.fields)

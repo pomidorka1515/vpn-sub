@@ -77,7 +77,10 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
             else:
                 panels_data[panel.name] = asdict(res)
 
-        obj: dict[str, JsonifyValue] = {"host": asdict(await self.sub.res.offloads.metrics.run(SysUtil.full_info)), "panels": panels_data}
+        obj: dict[str, JsonifyValue] = {
+            "host": asdict(await self.sub.res.offloads.metrics.run(SysUtil.full_info)),
+            "panels": panels_data,
+        }
         return ok(obj=obj)
 
     @requires_admin_auth
@@ -107,7 +110,10 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
             return err(msg="category field must be either 'total', 'monthly' or 'wl_monthly'")
 
         data = await self.sub.leaderboard_svc.leaderboard(
-            category=category, top_n=top_n, use_displaynames=use_displaynames, flip=flip,
+            category=category,
+            top_n=top_n,
+            use_displaynames=use_displaynames,
+            flip=flip,
         )
         return ok(
             obj=[

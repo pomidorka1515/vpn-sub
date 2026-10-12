@@ -13,7 +13,15 @@ from core.services.async_user import AsyncBusinessUserService, AsyncCommonUserSe
 
 def telegram_mock() -> MagicMock:
     bot = MagicMock()
-    for method in ("send_message", "send_photo", "edit_message_text", "delete_message", "answer_callback_query", "get_updates", "process_new_updates"):
+    for method in (
+        "send_message",
+        "send_photo",
+        "edit_message_text",
+        "delete_message",
+        "answer_callback_query",
+        "get_updates",
+        "process_new_updates",
+    ):
         setattr(bot, method, AsyncMock())
     return bot
 

@@ -31,14 +31,22 @@ class AsyncXUiSession:
     """
 
     def __init__(
-        self, *, name: str, address: str, port: int | str, uri: str,
-        api_token: str, https: bool = False,
+        self,
+        *,
+        name: str,
+        address: str,
+        port: int | str,
+        uri: str,
+        api_token: str,
+        https: bool = False,
         nginx_auth: tuple[str, str] | None = None,
         inject_headers: Mapping[str, str] | None = None,
-        health_check_interval: float = 20.0, verbose: bool = False,
+        health_check_interval: float = 20.0,
+        verbose: bool = False,
         transport: AsyncXUiPanelTransport | None = None,
         session: aiohttp.ClientSession | None = None,
-        request_limit: int = 8, request_timeout: float = 5.0,
+        request_limit: int = 8,
+        request_timeout: float = 5.0,
         inbounds_list: tuple[int, ...] = (),
         mode: Literal["whitelist", "blacklist"] = "blacklist",
         stamp_dir: str | None = None,
@@ -75,7 +83,8 @@ class AsyncXUiSession:
         self._token_rejected = False
         self._owned_transport = (
             AiohttpPanelTransport(session, nginx_auth, limit=request_limit, timeout=request_timeout)
-            if transport is None else None
+            if transport is None
+            else None
         )
         self._transport: AsyncXUiPanelTransport
         if self._owned_transport is not None:
@@ -113,7 +122,8 @@ class AsyncXUiSession:
 
     def _down_response(self, reason: str) -> PanelResponse:
         return PanelResponse.from_json(
-            {"success": False, "msg": f"Panel {self.name} is down: {reason}", "obj": None}, 503,
+            {"success": False, "msg": f"Panel {self.name} is down: {reason}", "obj": None},
+            503,
         )
 
     def _mark_dead(self, reason: str) -> None:
@@ -123,17 +133,25 @@ class AsyncXUiSession:
             self.log.warning(f"panel {self.name}: marked down: {reason}")
 
     async def request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
+        self,
+        method: str,
+        url: str,
+        **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse:
         if not self._started or self._close_task is not None:
             raise RuntimeError("panel client is not running")
         task = self._requests.create(
-            lambda: self._request(method, url, health=False, **kwargs), name="panel-request",
+            lambda: self._request(method, url, health=False, **kwargs),
+            name="panel-request",
         )
         return await task
 
     async def _request(
-        self, method: str, url: str, *, health: bool,
+        self,
+        method: str,
+        url: str,
+        *,
+        health: bool,
         **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse:
         if self._token_rejected or (self.dead and not health):
@@ -186,7 +204,7 @@ class AsyncXUiSession:
             return
         try:
             payload = response.json()
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except json.JSONDecodeError, UnicodeDecodeError:
             self._mark_dead("invalid health response")
             return
         if not isinstance(payload, dict) or not payload.get("success"):

@@ -11,7 +11,19 @@ if TYPE_CHECKING:
 
 def client_payload_from(client: PanelClient) -> ClientPayload:
     """Echo the complete row on full-replacement panel updates."""
-    return ClientPayload(email=client.email, id=client.uuid, flow=client.flow, limitIp=client.limitIp, totalGB=client.totalGB, expiryTime=client.expiryTime, enable=client.enable, tgId=client.tgId, subId=client.subId, comment=client.comment, reset=client.reset)
+    return ClientPayload(
+        email=client.email,
+        id=client.uuid,
+        flow=client.flow,
+        limitIp=client.limitIp,
+        totalGB=client.totalGB,
+        expiryTime=client.expiryTime,
+        enable=client.enable,
+        tgId=client.tgId,
+        subId=client.subId,
+        comment=client.comment,
+        reset=client.reset,
+    )
 
 
 def already_exists(exc: PanelRejectedError) -> bool:

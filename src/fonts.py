@@ -1,4 +1,5 @@
 """Self-hosted webfonts. Kept out of api/ so builders can use it without a cycle."""
+
 from __future__ import annotations
 
 from paths import bundled_root

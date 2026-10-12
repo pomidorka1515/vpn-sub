@@ -117,5 +117,10 @@ class AdminCommonMixin(
 
     async def close(self) -> None:
         await super().close()
-        for values in (self._pending_codes, self._pending_edits, self._pending_leaderboard, self._pagination_state):
+        for values in (
+            self._pending_codes,
+            self._pending_edits,
+            self._pending_leaderboard,
+            self._pagination_state,
+        ):
             values.clear()

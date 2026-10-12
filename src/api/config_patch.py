@@ -89,7 +89,10 @@ def check_config_document(data: Mapping[str, object]) -> None:
     profiles = data.get("profiles")
     nodes = data.get("nodes")
     if isinstance(profiles, Mapping) and isinstance(nodes, Mapping):
-        profiles, nodes = cast("Mapping[str, object]", profiles), cast("Mapping[str, object]", nodes)
+        profiles, nodes = (
+            cast("Mapping[str, object]", profiles),
+            cast("Mapping[str, object]", nodes),
+        )
         for profile_id, profile in profiles.items():
             if not isinstance(profile, Mapping):
                 continue

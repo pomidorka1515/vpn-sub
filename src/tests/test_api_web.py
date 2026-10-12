@@ -30,8 +30,24 @@ async def web_api(async_database: AsyncDatabase) -> AsyncIterator[tuple[Quart, A
     async for app in api_app():
         language = Config[LangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
         sub = await make_subscription(async_database, app=app, lang_cfg=language, uri="custom")
-        await async_database.create_user(username="alice", uuid=str(uuid.uuid4()), token="a" * 40, fingerprint="chrome", displayname="Alice", ext_username="alice-login", ext_password_hash=PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1).hash("secret"))
-        AsyncWebApi(app=app, cfg=config_snapshot(subscription_config(uri="custom")), sub=sub, bw=make_watch(async_database, sub), limiter=app.extensions["limiter"])
+        await async_database.create_user(
+            username="alice",
+            uuid=str(uuid.uuid4()),
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            ext_username="alice-login",
+            ext_password_hash=PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1).hash(
+                "secret"
+            ),
+        )
+        AsyncWebApi(
+            app=app,
+            cfg=config_snapshot(subscription_config(uri="custom")),
+            sub=sub,
+            bw=make_watch(async_database, sub),
+            limiter=app.extensions["limiter"],
+        )
         yield app, async_database
         language.close()
 
@@ -61,21 +77,26 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, AsyncDatabase]) ->
         assert b"jsdelivr" not in body
 
 
-@pytest.mark.parametrize(("path", "mimetype", "fragment"), [
-    ("common.css", "text/css", b"url('/custom/fonts/outfit-latin.woff2')"),
-    ("fonts/outfit-latin.woff2", "font/woff2", b"wOF2"),
-    ("dashboard.js", "text/javascript", b"function loadStats"),
-    ("history.js", "text/javascript", b"function loadHistory"),
-    ("chart.umd.min.js", "text/javascript", b"Chart.js v4.4.1"),
-    ("admin/main.js", "text/javascript", b"from './state.js?v="),
-    ("admin/charts.js", "text/javascript", b"from './charts/spec.js?v="),
-    ("admin/charts/render.js", "text/javascript", b"from './series.js?v="),
-    ("admin/config.js", "text/javascript", b"from './config/config-main.js?v="),
-    ("admin/json-editor.js", "text/javascript", b"codemirror-5.65.16.min.js"),
-    ("vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
-    ("vendor/codemirror-5.65.16.min.css", "text/css", b"CodeMirror"),
-])
-async def test_prefixed_static_assets(web_api: tuple[Quart, AsyncDatabase], path: str, mimetype: str, fragment: bytes) -> None:
+@pytest.mark.parametrize(
+    ("path", "mimetype", "fragment"),
+    [
+        ("common.css", "text/css", b"url('/custom/fonts/outfit-latin.woff2')"),
+        ("fonts/outfit-latin.woff2", "font/woff2", b"wOF2"),
+        ("dashboard.js", "text/javascript", b"function loadStats"),
+        ("history.js", "text/javascript", b"function loadHistory"),
+        ("chart.umd.min.js", "text/javascript", b"Chart.js v4.4.1"),
+        ("admin/main.js", "text/javascript", b"from './state.js?v="),
+        ("admin/charts.js", "text/javascript", b"from './charts/spec.js?v="),
+        ("admin/charts/render.js", "text/javascript", b"from './series.js?v="),
+        ("admin/config.js", "text/javascript", b"from './config/config-main.js?v="),
+        ("admin/json-editor.js", "text/javascript", b"codemirror-5.65.16.min.js"),
+        ("vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
+        ("vendor/codemirror-5.65.16.min.css", "text/css", b"CodeMirror"),
+    ],
+)
+async def test_prefixed_static_assets(
+    web_api: tuple[Quart, AsyncDatabase], path: str, mimetype: str, fragment: bytes
+) -> None:
     response = await web_api[0].test_client().get(f"/custom/{path}")
     assert response.status_code == 200
     assert response.mimetype == mimetype
@@ -98,7 +119,9 @@ async def test_prefixed_static_assets(web_api: tuple[Quart, AsyncDatabase], path
     assert "immutable" in response.headers["Cache-Control"]
 
 
-@pytest.mark.parametrize("module", ["state", "json", "controls", "main", "cards", "validation", "dialog"])
+@pytest.mark.parametrize(
+    "module", ["state", "json", "controls", "main", "cards", "validation", "dialog"]
+)
 async def test_nested_config_modules(web_api: tuple[Quart, AsyncDatabase], module: str) -> None:
     response = await web_api[0].test_client().get(f"/custom/admin/config/config-{module}.js")
     assert response.status_code == 200
@@ -111,7 +134,9 @@ async def test_nested_config_modules(web_api: tuple[Quart, AsyncDatabase], modul
         assert b"from './config-json.js?v=" in body
 
 
-@pytest.mark.parametrize("path", ["fonts/DejaVuSans.ttf", "fonts/../common.css", "admin/not-a-module.js"])
+@pytest.mark.parametrize(
+    "path", ["fonts/DejaVuSans.ttf", "fonts/../common.css", "admin/not-a-module.js"]
+)
 async def test_unknown_assets(web_api: tuple[Quart, AsyncDatabase], path: str) -> None:
     assert (await web_api[0].test_client().get(f"/custom/{path}")).status_code == 404
 
@@ -134,7 +159,9 @@ async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, AsyncDatab
 
 
 async def login(client: TestClientProtocol) -> str:
-    response = await client.post("/custom/webapi/login", json={"username": "alice-login", "password": "secret"})
+    response = await client.post(
+        "/custom/webapi/login", json={"username": "alice-login", "password": "secret"}
+    )
     assert response.status_code == 200
     cookies = response.headers.getlist("Set-Cookie")
     assert any(cookie.startswith("token=;") for cookie in cookies)

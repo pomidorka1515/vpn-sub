@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 def build_link_array(
     cfg: AppConfig,
     status: bool,
-    statusWl: bool, # ruff: ignore[invalid-argument-name]
+    statusWl: bool,  # ruff: ignore[invalid-argument-name]
     lang: str,
     is_happ: bool,
     user_uuid: str,

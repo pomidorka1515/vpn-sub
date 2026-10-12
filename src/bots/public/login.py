@@ -27,7 +27,9 @@ class PublicLoginMixin(PublicFeatureMixin):
 
         if action == "login_credentials":
             msg = await self.bot.send_message(
-                message.chat.id, t["enter_email"], reply_markup=types.ReplyKeyboardRemove(),
+                message.chat.id,
+                t["enter_email"],
+                reply_markup=types.ReplyKeyboardRemove(),
             )
             self._expect(msg, self.step_login_email)  # pyright: ignore[reportUnknownMemberType]
 
@@ -61,10 +63,14 @@ class PublicLoginMixin(PublicFeatureMixin):
         if internal_username:
             await self.sub.telegram_svc.set_telegram_user(uid, internal_username)
             await self.bot.send_message(
-                message.chat.id, t["login_success"], reply_markup=await self.get_menu(uid),
+                message.chat.id,
+                t["login_success"],
+                reply_markup=await self.get_menu(uid),
             )
             await self.send_info(message.chat.id, uid, lang)
             return None
 
-        await self.bot.send_message(message.chat.id, t["login_fail"], reply_markup=await self.get_menu(uid))
+        await self.bot.send_message(
+            message.chat.id, t["login_fail"], reply_markup=await self.get_menu(uid)
+        )
         return None

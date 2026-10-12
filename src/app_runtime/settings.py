@@ -36,7 +36,16 @@ class AppPaths:
     @classmethod
     def from_env(cls) -> AppPaths:
         data = Path(os.getenv("DIR_DATA", program_dir() / "data"))
-        return cls(data=data, backups=Path(os.getenv("DIR_BACKUPS", data / "backup")), config=Path(os.getenv("PATH_CONFIG", data / "config.json")), language=Path(os.getenv("PATH_LANG", bundled_root() / "lang.jsonc")), database=Path(os.getenv("PATH_DB", data / "state.sqlite3")), log=Path(os.getenv("PATH_LOG", data / "log.jsonl")), audit=Path(os.getenv("PATH_AUDIT", data / "audit.jsonl")), primary_lock=runtime_dir(data) / ".primary.lock")
+        return cls(
+            data=data,
+            backups=Path(os.getenv("DIR_BACKUPS", data / "backup")),
+            config=Path(os.getenv("PATH_CONFIG", data / "config.json")),
+            language=Path(os.getenv("PATH_LANG", bundled_root() / "lang.jsonc")),
+            database=Path(os.getenv("PATH_DB", data / "state.sqlite3")),
+            log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
+            audit=Path(os.getenv("PATH_AUDIT", data / "audit.jsonl")),
+            primary_lock=runtime_dir(data) / ".primary.lock",
+        )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

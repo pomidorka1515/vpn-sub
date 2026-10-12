@@ -46,7 +46,9 @@ class AdminTrafficMixin(AdminFeatureMixin):
                 raise ValueError
         except ValueError:
             await self._respond(
-                interaction, "❌ Введите число от 1 до 90.", view=self.main_menu_view(),
+                interaction,
+                "❌ Введите число от 1 до 90.",
+                view=self.main_menu_view(),
             )
             return
         await self._defer(interaction)
@@ -60,7 +62,9 @@ class AdminTrafficMixin(AdminFeatureMixin):
         payload: object = result_obj(info)
         if not isinstance(payload, dict):
             await self._respond(
-                interaction, "❌ Некорректный ответ сервиса.", view=self.main_menu_view(),
+                interaction,
+                "❌ Некорректный ответ сервиса.",
+                view=self.main_menu_view(),
             )
             return
         obj = obj_map(cast(object, payload))
@@ -68,10 +72,12 @@ class AdminTrafficMixin(AdminFeatureMixin):
         total = obj_map(bandwidth.get("total"))
         wl_total = obj_map(bandwidth.get("wl_total"))
         used_str, limit_str, percent_str = format_usage(
-            number(bandwidth.get("monthly")), number(bandwidth.get("limit")),
+            number(bandwidth.get("monthly")),
+            number(bandwidth.get("limit")),
         )
         wl_used_str, wl_limit_str, wl_percent_str = format_usage(
-            number(bandwidth.get("wl_monthly")), number(bandwidth.get("wl_limit")),
+            number(bandwidth.get("wl_monthly")),
+            number(bandwidth.get("wl_limit")),
         )
         text = f"""📈 **График трафика за {days} дней**
 
@@ -113,5 +119,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
             await self._respond(interaction, text, file=file, view=self.main_menu_view())
             return
         await self._respond(
-            interaction, text + "\n\n❌ Нет данных для графика", view=self.main_menu_view(),
+            interaction,
+            text + "\n\n❌ Нет данных для графика",
+            view=self.main_menu_view(),
         )

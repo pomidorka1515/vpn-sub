@@ -329,7 +329,8 @@ def test_invalid_mode_is_rejected(transport: RecordingTransport) -> None:
     with pytest.raises(ValueError, match="whitelist"):
         XUiSession(
             **session_kwargs(
-                transport=transport, mode=cast(Literal["whitelist", "blacklist"], "both"),
+                transport=transport,
+                mode=cast(Literal["whitelist", "blacklist"], "both"),
             ),
         )
 

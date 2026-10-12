@@ -9,7 +9,9 @@ from app import AppOptions, create_application
 if TYPE_CHECKING:
     from app import Application
 
-options = AppOptions(require_proxy=os.getenv("REQUIRE_PROXY", "1").lower() not in {"0", "false", "no"})
+options = AppOptions(
+    require_proxy=os.getenv("REQUIRE_PROXY", "1").lower() not in {"0", "false", "no"}
+)
 app = create_api_application(proxy_hops=options.proxy_hops, require_proxy=options.require_proxy)
 runtime: Application | None = None
 

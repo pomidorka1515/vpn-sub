@@ -99,7 +99,10 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
             cur_ext = await self.sub.user_svc.get_external_username(username)
             if not cur_ext:
                 return err("Account has no credentials set", 400)
-            if await self.sub.password_svc.validate_credentials(cur_ext, current_password) != username:
+            if (
+                await self.sub.password_svc.validate_credentials(cur_ext, current_password)
+                != username
+            ):
                 return err("Invalid current password", 401)
         await self.sub.business_svc.update_params(
             username=username,

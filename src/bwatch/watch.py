@@ -54,7 +54,8 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             self.snap_wl_mem: dict[str, BandwidthInfo] = {}
             self._snapshot_initialized: bool = False
             self._panel_alerts: dict[
-                str, int | float,
+                str,
+                int | float,
             ] = {}  # only used by 1 thread, no lock needed yet
             conf = self.cfg.view()
             self._panel_alert_cooldown: int = conf["panel_alert_cooldown"] or 3600
@@ -109,7 +110,8 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
 
         # Run first snapshot immediately; the scheduler tracks retries per kind.
         initial_snapshots: tuple[
-            tuple[Literal["bandwidth", "state"], Callable[[], object]], ...,
+            tuple[Literal["bandwidth", "state"], Callable[[], object]],
+            ...,
         ] = (
             ("bandwidth", self.record_daily_snapshot),
             ("state", self.record_snap_snapshot),

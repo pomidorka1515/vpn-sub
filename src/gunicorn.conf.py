@@ -3,6 +3,7 @@
 ``worker_class`` is the class object here. ``main`` passes the import path
 instead; see ``serve.options``.
 """
+
 from __future__ import annotations
 
 from serve import NamedThreadWorker, options

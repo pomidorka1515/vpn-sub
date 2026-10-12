@@ -15,6 +15,7 @@ from paths import compiled
 
 def main() -> None:
     from cli.updater import notice
+
     notice()
     asyncio.run(serve_application())
 
@@ -60,5 +61,6 @@ def probe() -> None:
 
 if __name__ == "__main__":
     from cli import dispatch
+
     dispatch("vpn-sub", probe)
     main()

@@ -40,6 +40,7 @@ def _browser_strings(obj: AsyncSubscription, lang: str) -> dict[str, str]:
         "forbidden_title": text("forbidden_title", "403 Forbidden"),
         "use_vpn_client": text("use_vpn_client", "use a VPN client!"),
         "use_vpn_client_hint": text(
-            "use_vpn_client_hint", "use a VPN client to get the subscription",
+            "use_vpn_client_hint",
+            "use a VPN client to get the subscription",
         ),
     }

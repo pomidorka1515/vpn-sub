@@ -21,7 +21,13 @@ if TYPE_CHECKING:
 
 
 class AsyncBandwidthService(AsyncBaseService):
-    def __init__(self, res: AsyncCoreResources, *, panel_svc: AsyncPanelService, user_svc: AsyncCommonUserService) -> None:
+    def __init__(
+        self,
+        res: AsyncCoreResources,
+        *,
+        panel_svc: AsyncPanelService,
+        user_svc: AsyncCommonUserService,
+    ) -> None:
         super().__init__(res)
         self.panel_svc = panel_svc
         self.user_svc = user_svc
@@ -31,14 +37,22 @@ class AsyncBandwidthService(AsyncBaseService):
             return [self.whitelist_panel] if self.whitelist_panel else []
         return [panel for panel in self.panels if panel != self.whitelist_panel]
 
-    async def bandwidth(self, username: str, whitelist: bool = False, *, work: WorkClass = "foreground") -> BandwidthInfo:
+    async def bandwidth(
+        self, username: str, whitelist: bool = False, *, work: WorkClass = "foreground"
+    ) -> BandwidthInfo:
         await self.user_svc.user(username)
-        rows = await self.panel_svc.map_panels(self._target_panels(whitelist), lambda panel: self.panel_svc.client_traffic(panel, username), work=work)
+        rows = await self.panel_svc.map_panels(
+            self._target_panels(whitelist),
+            lambda panel: self.panel_svc.client_traffic(panel, username),
+            work=work,
+        )
         up = sum(row.up for row in rows if row is not None)
         down = sum(row.down for row in rows if row is not None)
         return BandwidthInfo(up, down, up + down)
 
-    async def all_traffic(self, whitelist: bool = False, *, work: WorkClass = "foreground") -> dict[str, BandwidthInfo]:
+    async def all_traffic(
+        self, whitelist: bool = False, *, work: WorkClass = "foreground"
+    ) -> dict[str, BandwidthInfo]:
         panels = self._target_panels(whitelist)
         if not panels:
             return {}
@@ -63,7 +77,15 @@ class AsyncBandwidthService(AsyncBaseService):
         return {email: BandwidthInfo(up, down, up + down) for email, (up, down) in totals.items()}
 
     async def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
-        return [BandwidthSnapshot(**row) for row in await self.db.get_bandwidth_snapshots(username, int(time.time()) - days * 86400)]
+        return [
+            BandwidthSnapshot(**row)
+            for row in await self.db.get_bandwidth_snapshots(
+                username, int(time.time()) - days * 86400
+            )
+        ]
 
     async def get_snapshots(self, days: int = 30) -> list[StateSnapshot]:
-        return [from_dict(StateSnapshot, row, config=DConfig(cast=[tuple])) for row in await self.db.get_state_snapshots(int(time.time()) - days * 86400)]
+        return [
+            from_dict(StateSnapshot, row, config=DConfig(cast=[tuple]))
+            for row in await self.db.get_state_snapshots(int(time.time()) - days * 86400)
+        ]

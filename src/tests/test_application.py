@@ -28,16 +28,35 @@ def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> None:
     from paths import runtime_dir
 
-    for name in ("DIR_DATA", "DIR_BACKUPS", "PATH_CONFIG", "PATH_LANG", "PATH_DB", "PATH_LOG", "PATH_AUDIT"):
+    for name in (
+        "DIR_DATA",
+        "DIR_BACKUPS",
+        "PATH_CONFIG",
+        "PATH_LANG",
+        "PATH_DB",
+        "PATH_LOG",
+        "PATH_AUDIT",
+    ):
         monkeypatch.delenv(name, raising=False)
     root = Path(__file__).resolve().parents[2]
     data = root / "data"
-    assert AppPaths.from_env() == AppPaths(data=data, backups=data / "backup", config=data / "config.json", language=root / "lang.jsonc", database=data / "state.sqlite3", log=data / "log.jsonl", audit=data / "audit.jsonl", primary_lock=runtime_dir(data) / ".primary.lock")
+    assert AppPaths.from_env() == AppPaths(
+        data=data,
+        backups=data / "backup",
+        config=data / "config.json",
+        language=root / "lang.jsonc",
+        database=data / "state.sqlite3",
+        log=data / "log.jsonl",
+        audit=data / "audit.jsonl",
+        primary_lock=runtime_dir(data) / ".primary.lock",
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("compiled", [False, True])
-async def test_factory_schema_verbose_and_browser_assets(paths: AppPaths, monkeypatch: pytest.MonkeyPatch, compiled: bool) -> None:
+async def test_factory_schema_verbose_and_browser_assets(
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, compiled: bool
+) -> None:
     from async_core_helpers import PanelTransport
     from helpers import FakePanel
 
@@ -45,10 +64,19 @@ async def test_factory_schema_verbose_and_browser_assets(paths: AppPaths, monkey
 
     monkeypatch.setattr("app.compiled", lambda: compiled)
     monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "core,panels")
-    runtime = await create_application(paths, AppOptions(start_background=False, limiter=AsyncRateLimiter("redis://test", client=OpenRedis()), panel_transport_factory=lambda: PanelTransport(FakePanel())))
+    runtime = await create_application(
+        paths,
+        AppOptions(
+            start_background=False,
+            limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+            panel_transport_factory=lambda: PanelTransport(FakePanel()),
+        ),
+    )
     try:
         deps = runtime.dependencies
-        assert deps.cfg._require_store().schema_path == (str((bundled_root() / "config.schema.json").resolve()) if compiled else None)
+        assert deps.cfg._require_store().schema_path == (
+            str((bundled_root() / "config.schema.json").resolve()) if compiled else None
+        )
         assert deps.subscription.res.verbose is True
         assert deps.panels
         assert all(panel.verbose for panel in deps.panels)
@@ -56,8 +84,16 @@ async def test_factory_schema_verbose_and_browser_assets(paths: AppPaths, monkey
         client = runtime.app.test_client()
         assert (await client.get("/sub/privapi/api/health")).status_code == 401
         token = "a" * 40
-        await deps.db.create_user(username="alice", uuid="01234567-89ab-cdef-0123-456789abcdef", token=token, fingerprint="chrome", displayname="Alice")
-        response = await client.get(f"/sub?token={token}&lang=en", headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"})
+        await deps.db.create_user(
+            username="alice",
+            uuid="01234567-89ab-cdef-0123-456789abcdef",
+            token=token,
+            fingerprint="chrome",
+            displayname="Alice",
+        )
+        response = await client.get(
+            f"/sub?token={token}&lang=en", headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"}
+        )
         assert response.status_code == 403
         assert response.mimetype == "text/html"
         body = await response.get_data()
@@ -79,7 +115,16 @@ def paths(tmp_path: Path) -> AppPaths:
     document["$schema"] = str(root / "config.schema.json")
     document["bot"]["token"] = ""
     config.write_text(json.dumps(document))
-    return AppPaths(data=data, backups=data / "backup", config=config, language=root / "lang.jsonc", database=data / "state.sqlite3", log=data / "log.jsonl", audit=data / "audit.jsonl", primary_lock=data / ".primary.lock")
+    return AppPaths(
+        data=data,
+        backups=data / "backup",
+        config=config,
+        language=root / "lang.jsonc",
+        database=data / "state.sqlite3",
+        log=data / "log.jsonl",
+        audit=data / "audit.jsonl",
+        primary_lock=data / ".primary.lock",
+    )
 
 
 @pytest.mark.asyncio
@@ -87,7 +132,14 @@ async def test_factory_routes_and_idempotent_stop(paths: AppPaths) -> None:
     from async_core_helpers import PanelTransport
     from helpers import FakePanel
 
-    runtime = await create_application(paths, AppOptions(start_background=False, limiter=AsyncRateLimiter("redis://test", client=OpenRedis()), panel_transport_factory=lambda: PanelTransport(FakePanel())))
+    runtime = await create_application(
+        paths,
+        AppOptions(
+            start_background=False,
+            limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+            panel_transport_factory=lambda: PanelTransport(FakePanel()),
+        ),
+    )
     try:
         assert runtime.ready
         assert runtime.app.extensions["runtime"] is runtime
@@ -96,7 +148,13 @@ async def test_factory_routes_and_idempotent_stop(paths: AppPaths) -> None:
         assert (await runtime.app.test_client().get("/sub")).status_code == 401
         assert any(rule.rule == "/sub" for rule in runtime.app.url_map.iter_rules())
         with pytest.raises(RuntimeError, match="primary lock"):
-            await create_application(paths, AppOptions(start_background=False, limiter=AsyncRateLimiter("redis://test", client=OpenRedis())))
+            await create_application(
+                paths,
+                AppOptions(
+                    start_background=False,
+                    limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+                ),
+            )
     finally:
         await runtime.stop()
     await runtime.stop()
@@ -110,7 +168,9 @@ async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
             raise OSError("Redis unavailable")
 
     with pytest.raises(OSError, match="Redis unavailable"):
-        await create_application(paths, AppOptions(limiter=AsyncRateLimiter("redis://test", client=BrokenRedis())))
+        await create_application(
+            paths, AppOptions(limiter=AsyncRateLimiter("redis://test", client=BrokenRedis()))
+        )
     # Primary lock was released by failed composition.
     from app_runtime.composition import PrimaryLock
 
@@ -121,7 +181,9 @@ async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("enabled", [False, True])
-async def test_factory_optional_async_bots_and_notice_wiring(paths: AppPaths, enabled: bool) -> None:
+async def test_factory_optional_async_bots_and_notice_wiring(
+    paths: AppPaths, enabled: bool
+) -> None:
     from unittest.mock import AsyncMock, patch
 
     from async_core_helpers import PanelTransport
@@ -135,8 +197,18 @@ async def test_factory_optional_async_bots_and_notice_wiring(paths: AppPaths, en
     async def polling() -> None:
         await asyncio.Event().wait()
 
-    with patch("bots.polling.TelegramPollingMixin._poll_forever", new=AsyncMock(side_effect=polling)):
-        runtime = await create_application(paths, AppOptions(start_background=False, start_bots=enabled, limiter=AsyncRateLimiter("redis://test", client=OpenRedis()), panel_transport_factory=lambda: PanelTransport(FakePanel())))
+    with patch(
+        "bots.polling.TelegramPollingMixin._poll_forever", new=AsyncMock(side_effect=polling)
+    ):
+        runtime = await create_application(
+            paths,
+            AppOptions(
+                start_background=False,
+                start_bots=enabled,
+                limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+                panel_transport_factory=lambda: PanelTransport(FakePanel()),
+            ),
+        )
         try:
             dependencies = runtime.dependencies
             assert (dependencies.admin_bot is not None) is enabled
@@ -152,15 +224,26 @@ async def test_factory_optional_async_bots_and_notice_wiring(paths: AppPaths, en
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("peer", "forwarded", "expected", "status"), [("127.0.0.1", "203.0.113.5", "203.0.113.5", 200), ("::1", "203.0.113.5", "203.0.113.5", 200), ("10.0.0.1", "127.0.0.1", "", 400)])
-async def test_proxy_guard_before_forwarding(peer: str, forwarded: str, expected: str, status: int) -> None:
+@pytest.mark.parametrize(
+    ("peer", "forwarded", "expected", "status"),
+    [
+        ("127.0.0.1", "203.0.113.5", "203.0.113.5", 200),
+        ("::1", "203.0.113.5", "203.0.113.5", 200),
+        ("10.0.0.1", "127.0.0.1", "", 400),
+    ],
+)
+async def test_proxy_guard_before_forwarding(
+    peer: str, forwarded: str, expected: str, status: int
+) -> None:
     app = create_api_application(require_proxy=True)
 
     @app.route("/remote")
     async def remote() -> str:
         return request.remote_addr or ""
 
-    response = await app.test_client().get("/remote", headers={"X-Forwarded-For": forwarded}, scope_base={"client": (peer, 1234)})
+    response = await app.test_client().get(
+        "/remote", headers={"X-Forwarded-For": forwarded}, scope_base={"client": (peer, 1234)}
+    )
     assert response.status_code == status
     if status == 200:
         assert await response.get_data(as_text=True) == expected
@@ -174,7 +257,15 @@ async def test_untrusted_peer_cannot_spoof_forwarded_headers() -> None:
     async def remote() -> str:
         return f"{request.remote_addr}|{request.scheme}|{request.host}"
 
-    response = await app.test_client().get("/remote", headers={"X-Forwarded-For": "203.0.113.5", "X-Forwarded-Proto": "https", "X-Forwarded-Host": "evil.test"}, scope_base={"client": ("10.0.0.1", 1234)})
+    response = await app.test_client().get(
+        "/remote",
+        headers={
+            "X-Forwarded-For": "203.0.113.5",
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "evil.test",
+        },
+        scope_base={"client": ("10.0.0.1", 1234)},
+    )
     assert await response.get_data(as_text=True) == "10.0.0.1|http|localhost"
 
 
@@ -193,7 +284,9 @@ async def test_access_logging_redacts_tokens(caplog: pytest.LogCaptureFixture) -
         return "ok"
 
     with caplog.at_level(5, logger="http.access"):
-        await app.test_client().get("/sub?token=secret&password=hidden", headers={"User-Agent": "token=agentsecret"})
+        await app.test_client().get(
+            "/sub?token=secret&password=hidden", headers={"User-Agent": "token=agentsecret"}
+        )
         await app.test_client().get("/api/state/polling")
     assert "secret" not in caplog.text
     assert "hidden" not in caplog.text

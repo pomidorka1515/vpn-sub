@@ -74,8 +74,12 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
     real_open = Path.open
 
     def fail_temp(
-        path: Path, mode: Literal["r", "w"] = "r", *, encoding: str | None = None,
-        errors: str | None = None, newline: str | None = None,
+        path: Path,
+        mode: Literal["r", "w"] = "r",
+        *,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
     ) -> TextIO:
         if path.suffix == ".tmp":
             raise OSError("unwritable")

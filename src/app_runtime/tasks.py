@@ -41,7 +41,10 @@ class TaskRegistry:
         self._accepting = False
 
     def create[T](
-        self, factory: Callable[[], Coroutine[object, object, T]], *, name: str,
+        self,
+        factory: Callable[[], Coroutine[object, object, T]],
+        *,
+        name: str,
     ) -> asyncio.Task[T]:
         if not self._accepting:
             raise AdmissionClosedError("task admission is closed")
@@ -83,7 +86,10 @@ class MutationRegistry(TaskRegistry):
         super().__init__(capacity=capacity)
 
     async def run[T](
-        self, factory: Callable[[], Coroutine[object, object, T]], *, name: str,
+        self,
+        factory: Callable[[], Coroutine[object, object, T]],
+        *,
+        name: str,
     ) -> T:
         # Deliver cancellation before admission; after this point ownership is
         # transferred to the registry, not the HTTP/bot/watcher caller.

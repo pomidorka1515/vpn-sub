@@ -40,7 +40,8 @@ class CodesMixin(ConnectionMixin):
         with self.connection() as conn:
             row = row_dict(
                 conn.execute(
-                    "SELECT * FROM codes WHERE code = ? AND (permanent = 1 OR uses > 0)", (code,),
+                    "SELECT * FROM codes WHERE code = ? AND (permanent = 1 OR uses > 0)",
+                    (code,),
                 ).fetchone(),
             )
             if row is not None:
@@ -98,7 +99,8 @@ class CodesMixin(ConnectionMixin):
         try:
             with self.transaction(immediate=True) as conn:
                 row = conn.execute(
-                    "SELECT * FROM codes WHERE code = ? AND action = 'register'", (code,),
+                    "SELECT * FROM codes WHERE code = ? AND action = 'register'",
+                    (code,),
                 ).fetchone()
                 if row is None or (not row["permanent"] and int(row["uses"]) < 1):
                     raise CodeError("invalid code")
@@ -150,7 +152,8 @@ class CodesMixin(ConnectionMixin):
             if user is None:
                 raise CodeError("unknown user")
             code_row = conn.execute(
-                "SELECT * FROM codes WHERE code = ? AND action = 'bonus'", (code,),
+                "SELECT * FROM codes WHERE code = ? AND action = 'bonus'",
+                (code,),
             ).fetchone()
             if code_row is None or (not code_row["permanent"] and int(code_row["uses"]) < 1):
                 raise CodeError("unknown code")
@@ -195,7 +198,8 @@ class CodesMixin(ConnectionMixin):
     def confirm_registration_sync(self, username: str) -> None:
         with self.transaction(immediate=True) as conn:
             row = conn.execute(
-                "SELECT code FROM pending_registration_sync WHERE username = ?", (username,),
+                "SELECT code FROM pending_registration_sync WHERE username = ?",
+                (username,),
             ).fetchone()
             conn.execute("DELETE FROM pending_registration_sync WHERE username = ?", (username,))
             if row is not None:

@@ -100,7 +100,9 @@ class AdminPanelsMixin(AdminFeatureMixin):
         raw: object = result_obj(result)
         if not isinstance(raw, dict) or not raw:
             await self._respond(
-                interaction, "❌ Статус панелей неизвестен", view=self.main_menu_view(),
+                interaction,
+                "❌ Статус панелей неизвестен",
+                view=self.main_menu_view(),
             )
             return
         panels = obj_map(cast(object, raw))

@@ -36,8 +36,12 @@ class LogDelivery[T]:
     """
 
     def __init__(
-        self, deliver: Callable[[T], Awaitable[None]], *, name: str,
-        capacity: int = 256, drain_timeout: float = 5,
+        self,
+        deliver: Callable[[T], Awaitable[None]],
+        *,
+        name: str,
+        capacity: int = 256,
+        drain_timeout: float = 5,
         fallback: Callable[[str], None] = stderr_fallback,
     ) -> None:
         if capacity < 1 or drain_timeout <= 0:
@@ -129,14 +133,18 @@ class AsyncJSONLinesLogger(logging.Handler):
             text = _ANSI_ESCAPE.sub("", self.format(record))
             payload: JsonDict = {
                 "ts": record.created,
-                "date": datetime.fromtimestamp(record.created, tz=UTC).strftime("%d.%m.%Y %H:%M:%S"),
+                "date": datetime.fromtimestamp(record.created, tz=UTC).strftime(
+                    "%d.%m.%Y %H:%M:%S"
+                ),
                 "level": record.levelname,
                 "name": record.name,
                 "threadname": record.threadName,
                 "taskname": record.taskName,
                 "text": text,
             }
-            self.delivery.submit(payload, important=record.levelno >= logging.ERROR, fallback_text=text)
+            self.delivery.submit(
+                payload, important=record.levelno >= logging.ERROR, fallback_text=text
+            )
         except Exception:
             self.handleError(record)
 
@@ -153,7 +161,8 @@ class AsyncTelegramLogger(logging.Handler):
             text = _ANSI_ESCAPE.sub("", self.format(record))
             self.delivery.submit(
                 f"<code>{html.escape(text)}</code>",
-                important=record.levelno >= logging.ERROR, fallback_text=text,
+                important=record.levelno >= logging.ERROR,
+                fallback_text=text,
             )
         except Exception:
             self.handleError(record)

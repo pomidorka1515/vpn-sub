@@ -42,7 +42,9 @@ class ConversationMixin:
         if message.from_user is None or message.text is None:
             return
         key = (message.chat.id, message.from_user.id)
-        task = self._handlers.create(lambda: self._route_message(key, message), name=f"{type(self).__name__}:message")
+        task = self._handlers.create(
+            lambda: self._route_message(key, message), name=f"{type(self).__name__}:message"
+        )
         await asyncio.shield(task)
 
     async def _route_message(self, key: ConversationKey, message: types.Message) -> None:
@@ -69,7 +71,9 @@ class ConversationMixin:
         if call.message is None or call.data is None:
             return
         key = (call.message.chat.id, call.from_user.id)
-        task = self._handlers.create(lambda: self._route_callback(key, call), name=f"{type(self).__name__}:callback")
+        task = self._handlers.create(
+            lambda: self._route_callback(key, call), name=f"{type(self).__name__}:callback"
+        )
         await asyncio.shield(task)
 
     async def _route_callback(self, key: ConversationKey, call: types.CallbackQuery) -> None:

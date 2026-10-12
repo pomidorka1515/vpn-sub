@@ -42,7 +42,14 @@ def config_snapshot(document: AppConfig) -> AsyncConfig[AppConfig]:
     return cast("AsyncConfig[AppConfig]", cast("object", config_mock(document)))
 
 
-async def make_subscription(database: AsyncDatabase, *, app: Quart, lang_cfg: Config[LangConfig] | None = None, panels: list[FakePanel] | None = None, **overrides: Unpack[AppOverrides]) -> AsyncSubscription:
+async def make_subscription(
+    database: AsyncDatabase,
+    *,
+    app: Quart,
+    lang_cfg: Config[LangConfig] | None = None,
+    panels: list[FakePanel] | None = None,
+    **overrides: Unpack[AppOverrides],
+) -> AsyncSubscription:
     sub = await make_async_subscription(database, Path(database.path).parent, panels=panels)
     sub.res.cfg.view.side_effect = lambda: subscription_config(**overrides)  # type: ignore[attr-defined]
     if lang_cfg is not None:

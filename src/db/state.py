@@ -155,7 +155,13 @@ class StateMixin(ConnectionMixin):
         self.set_metadata("admin_ui_session", token or "")
 
     def add_bandwidth_snapshot(
-        self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int,
+        self,
+        username: str,
+        ts: int,
+        up: int,
+        down: int,
+        wl_up: int,
+        wl_down: int,
     ) -> None:
         with self.transaction(immediate=True) as conn:
             conn.execute(
@@ -217,7 +223,8 @@ class StateMixin(ConnectionMixin):
     def get_state_snapshots(self, cutoff: int) -> list[StateSnapshot]:
         with self.connection() as conn:
             rows = conn.execute(
-                "SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC", (cutoff,),
+                "SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC",
+                (cutoff,),
             ).fetchall()
         return [cast(StateSnapshot, json.loads(str(row[0]))) for row in rows]
 

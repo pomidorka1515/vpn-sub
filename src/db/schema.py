@@ -147,7 +147,8 @@ class SchemaMixin(ConnectionMixin):
                     )
                     version = 4
                 conn.execute(
-                    "UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,),
+                    "UPDATE schema_version SET version = ? WHERE id = 1",
+                    (self.SCHEMA_VERSION,),
                 )
                 conn.execute("COMMIT")
             except sqlite3.Error:

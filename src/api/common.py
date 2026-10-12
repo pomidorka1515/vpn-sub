@@ -119,7 +119,8 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
 
 
 def web_lang_tables(
-    lang_cfg: Snapshot[LangConfig], page: str,
+    lang_cfg: Snapshot[LangConfig],
+    page: str,
 ) -> tuple[str, dict[str, str], dict[str, str]]:
     """Active page strings, plus the English table used when a key is missing."""
     if page not in _WEB_PAGES:
@@ -127,7 +128,9 @@ def web_lang_tables(
     lang = resolve_web_lang()
     language = lang_cfg.view()
     raw = cast("object", language.get("web"))
-    web: Mapping[str, object] = cast("Mapping[str, object]", raw) if isinstance(raw, Mapping) else {}
+    web: Mapping[str, object] = (
+        cast("Mapping[str, object]", raw) if isinstance(raw, Mapping) else {}
+    )
     shared = _section(web, "shared")
     page_table = _section(web, page)
 
@@ -176,7 +179,12 @@ class AsyncBaseApi(ABC):
     ROUTES: ClassVar[tuple[Route, ...]]
 
     def __init__(
-        self, app: Quart, cfg: AsyncConfig[AppConfig], sub: AsyncSubscription, bw: SnapshotStatus, uri: str,
+        self,
+        app: Quart,
+        cfg: AsyncConfig[AppConfig],
+        sub: AsyncSubscription,
+        bw: SnapshotStatus,
+        uri: str,
         limiter: AsyncRateLimiter,
     ) -> None:
         self.log = Logger(type(self).__name__)

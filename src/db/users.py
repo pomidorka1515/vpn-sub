@@ -162,14 +162,16 @@ class UsersMixin(ConnectionMixin):
     def auth_token_to_user(self, auth_token: str) -> str | None:
         with self.connection() as conn:
             row = conn.execute(
-                "SELECT username FROM users WHERE auth_token = ?", (auth_token,),
+                "SELECT username FROM users WHERE auth_token = ?",
+                (auth_token,),
             ).fetchone()
             return str(row[0]) if row else None
 
     def set_auth_token(self, username: str, auth_token: str | None) -> None:
         with self.transaction(immediate=True) as conn:
             cursor = conn.execute(
-                "UPDATE users SET auth_token = ? WHERE username = ?", (auth_token, username),
+                "UPDATE users SET auth_token = ? WHERE username = ?",
+                (auth_token, username),
             )
             if cursor.rowcount != 1:
                 raise DatabaseError("failed to set auth token")
@@ -177,20 +179,23 @@ class UsersMixin(ConnectionMixin):
     def ext_to_user(self, ext_username: str) -> str | None:
         with self.connection() as conn:
             row = conn.execute(
-                "SELECT username FROM users WHERE ext_username = ?", (ext_username,),
+                "SELECT username FROM users WHERE ext_username = ?",
+                (ext_username,),
             ).fetchone()
             return str(row[0]) if row else None
 
     def user_to_ext(self, username: str) -> str | None:
         with self.connection() as conn:
             row = conn.execute(
-                "SELECT ext_username FROM users WHERE username = ?", (username,),
+                "SELECT ext_username FROM users WHERE username = ?",
+                (username,),
             ).fetchone()
             return str(row[0]) if row and row[0] is not None else None
 
     def ext_password(self, ext_username: str) -> str | None:
         with self.connection() as conn:
             row = conn.execute(
-                "SELECT ext_password_hash FROM users WHERE ext_username = ?", (ext_username,),
+                "SELECT ext_password_hash FROM users WHERE ext_username = ?",
+                (ext_username,),
             ).fetchone()
             return str(row[0]) if row and row[0] is not None else None

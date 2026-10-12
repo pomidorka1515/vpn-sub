@@ -100,7 +100,11 @@ def leaderboard_chart(
         draw_text(draw, (left - 12 - tw, int(cy - th / 2)), shown, font=tick_font, fill=TEXT_DIM)
         value_label = fmt_bytes(value)
         draw_text(
-            draw, (left + bar_w + 8, int(cy - th / 2)), value_label, font=tick_font, fill=TEXT_DIM,
+            draw,
+            (left + bar_w + 8, int(cy - th / 2)),
+            value_label,
+            font=tick_font,
+            fill=TEXT_DIM,
         )
 
     return save(image)

@@ -37,7 +37,8 @@ def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
 
 
 def load_schema[Doc](
-    cfg: Config[Doc], data: Mapping[str, JsonValue],
+    cfg: Config[Doc],
+    data: Mapping[str, JsonValue],
 ) -> Mapping[str, JsonValue] | None:
     schema_ref = data.get("$schema")
     forced = cfg.schema_path

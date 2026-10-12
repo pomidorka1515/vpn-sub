@@ -17,7 +17,14 @@ if TYPE_CHECKING:
 
 
 async def get_subscription(
-    obj: AsyncSubscription, /, *, token: str, lang: str, ua: str, ip: str, force_json: str,
+    obj: AsyncSubscription,
+    /,
+    *,
+    token: str,
+    lang: str,
+    ua: str,
+    ip: str,
+    force_json: str,
 ) -> tuple[Response, int]:
     # ===================================
     # intentionally separate from `Subscription`/`WebApi`:
@@ -135,7 +142,10 @@ async def get_subscription(
         return Response(
             response=json.dumps(
                 builders.build_json(
-                    cfg=cfg, user_uuid=user_uuid, lang=lang, fingerprint=str(user["fingerprint"]),
+                    cfg=cfg,
+                    user_uuid=user_uuid,
+                    lang=lang,
+                    fingerprint=str(user["fingerprint"]),
                 ),
                 ensure_ascii=False,
             ),

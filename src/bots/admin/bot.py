@@ -37,7 +37,10 @@ class AsyncAdminBot(
     """Administrator bot assembled from the admin feature workflows."""
 
     def __init__(
-        self, sub: AsyncSubscription, lang_cfg: Snapshot[LangConfig], cfg: Snapshot[AppConfig],
+        self,
+        sub: AsyncSubscription,
+        lang_cfg: Snapshot[LangConfig],
+        cfg: Snapshot[AppConfig],
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
@@ -51,10 +54,18 @@ class AsyncAdminBot(
             self.admin_uids: list[int] = conf["bot"]["whitelist"]
             self._initialize_polling()
             self._initialize_conversations()
-            self._pending_codes: MutableMapping[str | int, str] = PendingValues[str](self._conversation)
-            self._pending_edits: MutableMapping[str | int, dict[str, str]] = PendingValues[dict[str, str]](self._conversation)
-            self._pagination_state: MutableMapping[str | int, dict[str, int]] = PendingValues[dict[str, int]](self._conversation)
-            self._pending_leaderboard: MutableMapping[str | int, dict[str, str | int]] = PendingValues[dict[str, str | int]](self._conversation)
+            self._pending_codes: MutableMapping[str | int, str] = PendingValues[str](
+                self._conversation
+            )
+            self._pending_edits: MutableMapping[str | int, dict[str, str]] = PendingValues[
+                dict[str, str]
+            ](self._conversation)
+            self._pagination_state: MutableMapping[str | int, dict[str, int]] = PendingValues[
+                dict[str, int]
+            ](self._conversation)
+            self._pending_leaderboard: MutableMapping[str | int, dict[str, str | int]] = (
+                PendingValues[dict[str, str | int]](self._conversation)
+            )
 
             self.bot.message_handler(func=lambda message: True)(self._message_entry)  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownMemberType]
             self.bot.callback_query_handler(func=lambda call: True)(self._callback_entry)  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]

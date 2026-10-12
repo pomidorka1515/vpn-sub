@@ -337,7 +337,10 @@ class PanelService(BaseService):
         return {panel.name: snapshot for panel, snapshot in zip(panels, snapshots, strict=True)}
 
     def _status_error(
-        self, panel: XUiSession, what: str, response: Response,
+        self,
+        panel: XUiSession,
+        what: str,
+        response: Response,
     ) -> PanelUnavailableError:
         """Classify a non-200 response as unavailability.
 
@@ -723,7 +726,10 @@ class PanelService(BaseService):
                 continue
             try:
                 panel_health[panel.name] = self._classify_onlines(
-                    panel, outcome, online_users, known,
+                    panel,
+                    outcome,
+                    online_users,
+                    known,
                 )
             except Exception:
                 panel_health[panel.name] = "unavailable"

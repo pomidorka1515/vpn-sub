@@ -34,7 +34,10 @@ class AsyncPublicBot(
     """Public bot assembled from the public feature workflows."""
 
     def __init__(
-        self, sub: AsyncSubscription, cfg: Snapshot[AppConfig], lang_cfg: Snapshot[LangConfig],
+        self,
+        sub: AsyncSubscription,
+        cfg: Snapshot[AppConfig],
+        lang_cfg: Snapshot[LangConfig],
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():

@@ -76,7 +76,9 @@ class SchedulerMixin(BWatchHost):
             failures = self._snapshot_failures.pop(kind, 0)
             if failures:
                 self.log.info(
-                    "Daily %s snapshot recovered after %d failed attempts", kind, failures,
+                    "Daily %s snapshot recovered after %d failed attempts",
+                    kind,
+                    failures,
                 )
             return 86400.0
         except Exception as exc:

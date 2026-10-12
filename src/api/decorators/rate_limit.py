@@ -44,7 +44,9 @@ log = Logger("rate_limit")
 
 
 class RateLimitScript(Protocol):
-    async def __call__(self, *, keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int: ...
+    async def __call__(
+        self, *, keys: tuple[str, ...], args: tuple[float, float, str, int, int]
+    ) -> int: ...
 
 
 class RateLimitClient(Protocol):
@@ -58,7 +60,13 @@ class RateLimitClient(Protocol):
 class AsyncRateLimiter:
     """Runtime-owned Redis client; no connections or tasks at import time."""
 
-    def __init__(self, url: str, *, socket_timeout: float = _REDIS_SOCKET_TIMEOUT, client: RateLimitClient | None = None) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        socket_timeout: float = _REDIS_SOCKET_TIMEOUT,
+        client: RateLimitClient | None = None,
+    ) -> None:
         if not url or socket_timeout <= 0:
             raise ValueError("Redis URL and positive socket timeout are required")
         self.url = url
@@ -70,13 +78,23 @@ class AsyncRateLimiter:
     @classmethod
     def from_config(cls, cfg: Snapshot[AppConfig]) -> AsyncRateLimiter:
         section = cfg.view()["redis"]
-        return cls(section["url"], socket_timeout=section.get("socket_timeout", _REDIS_SOCKET_TIMEOUT))
+        return cls(
+            section["url"], socket_timeout=section.get("socket_timeout", _REDIS_SOCKET_TIMEOUT)
+        )
 
     async def start(self) -> None:
         if self._client is None:
             from redis.asyncio import Redis
 
-            self._client = cast("RateLimitClient", Redis.from_url(self.url, socket_connect_timeout=self.socket_timeout, socket_timeout=self.socket_timeout, decode_responses=True))  # pyright: ignore[reportUnknownMemberType]  # Upstream kwargs are untyped.
+            self._client = cast(
+                "RateLimitClient",
+                Redis.from_url(
+                    self.url,
+                    socket_connect_timeout=self.socket_timeout,
+                    socket_timeout=self.socket_timeout,
+                    decode_responses=True,
+                ),
+            )  # pyright: ignore[reportUnknownMemberType]  # Upstream kwargs are untyped.
         await self._client.ping()
         self._script = self._client.register_script(_RATE_LIMIT_SCRIPT)
 
@@ -84,7 +102,21 @@ class AsyncRateLimiter:
         if self._script is None:
             raise RuntimeError("Redis limiter has not started")
         now = time.time()
-        return int(await self._script(keys=(f"ratelimit:{scope}:{key}",), args=(now, _RATE_LIMIT_WINDOW, f"{now}:{time.time_ns()}", max_requests, int(_RATE_LIMIT_WINDOW)))) == 1
+        return (
+            int(
+                await self._script(
+                    keys=(f"ratelimit:{scope}:{key}",),
+                    args=(
+                        now,
+                        _RATE_LIMIT_WINDOW,
+                        f"{now}:{time.time_ns()}",
+                        max_requests,
+                        int(_RATE_LIMIT_WINDOW),
+                    ),
+                )
+            )
+            == 1
+        )
 
     async def close(self) -> None:
         self._script = None
@@ -93,7 +125,9 @@ class AsyncRateLimiter:
             self._client = None
 
 
-def rate_limit[API_T: AsyncBaseApi, **P, R](max_requests: int) -> Callable[[Decorated[API_T, P, R]], DecoratedReturn[API_T, P, R]]:
+def rate_limit[API_T: AsyncBaseApi, **P, R](
+    max_requests: int,
+) -> Callable[[Decorated[API_T, P, R]], DecoratedReturn[API_T, P, R]]:
     if max_requests <= 0:
         raise ValueError("max_requests must be positive")
 
@@ -103,7 +137,9 @@ def rate_limit[API_T: AsyncBaseApi, **P, R](max_requests: int) -> Callable[[Deco
         @wraps(f)
         async def wrapper(self: API_T, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
             try:
-                allowed = await self.limiter.allow(scope, request.remote_addr or "<unknown>", max_requests)
+                allowed = await self.limiter.allow(
+                    scope, request.remote_addr or "<unknown>", max_requests
+                )
             except Exception:
                 log.error("rate limit store failed")  # ruff: ignore[error-instead-of-exception] credentials may occur in exception text
                 return err("Too many requests.", 429)

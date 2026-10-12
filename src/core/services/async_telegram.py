@@ -15,7 +15,13 @@ if TYPE_CHECKING:
 
 
 class AsyncTelegramService(AsyncBaseService):
-    def __init__(self, res: AsyncCoreResources, *, user_svc: AsyncBusinessUserService, code_svc: AsyncCodeService) -> None:
+    def __init__(
+        self,
+        res: AsyncCoreResources,
+        *,
+        user_svc: AsyncBusinessUserService,
+        code_svc: AsyncCodeService,
+    ) -> None:
         super().__init__(res)
         self.user_svc = user_svc
         self.code_svc = code_svc
@@ -59,12 +65,18 @@ class AsyncTelegramService(AsyncBaseService):
         return await self.code_svc.apply_bonus_code(username=username, code=code)
 
     @overload
-    async def get_username_telegram(self, tgid: int | str, reverse: Literal[False] = False) -> str | None: ...
+    async def get_username_telegram(
+        self, tgid: int | str, reverse: Literal[False] = False
+    ) -> str | None: ...
 
     @overload
-    async def get_username_telegram(self, tgid: int | str, reverse: Literal[True]) -> int | None: ...
+    async def get_username_telegram(
+        self, tgid: int | str, reverse: Literal[True]
+    ) -> int | None: ...
 
-    async def get_username_telegram(self, tgid: int | str, reverse: bool = False) -> int | str | None:
+    async def get_username_telegram(
+        self, tgid: int | str, reverse: bool = False
+    ) -> int | str | None:
         if not reverse:
             return await self.db.tgid_to_user(tgid)
         mapped = await self.db.user_to_tgid(str(tgid))

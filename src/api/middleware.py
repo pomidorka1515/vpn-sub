@@ -27,7 +27,9 @@ class ProxyMiddleware:
         self.hops = hops
         self.require_proxy = require_proxy
 
-    async def __call__(self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable) -> None:
+    async def __call__(
+        self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
+    ) -> None:
         if scope["type"] == "lifespan":
             await self.app(scope, receive, send)
             return
@@ -35,10 +37,18 @@ class ProxyMiddleware:
         trusted = peer is not None and peer[0] in {"127.0.0.1", "::1"}
         if self.require_proxy and not trusted:
             if scope["type"] == "websocket":
-                await send({"type": "websocket.close", "code": 1008, "reason": "direct access forbidden"})
+                await send(
+                    {"type": "websocket.close", "code": 1008, "reason": "direct access forbidden"}
+                )
                 return
             body = b'{"success": false, "msg": "direct access forbidden", "obj": null}'
-            await send({"type": "http.response.start", "status": 400, "headers": [(b"content-type", b"application/json")]})
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 400,
+                    "headers": [(b"content-type", b"application/json")],
+                }
+            )
             await send({"type": "http.response.body", "body": body, "more_body": False})
             return
         scope = scope.copy()
@@ -49,10 +59,14 @@ class ProxyMiddleware:
                 scope["client"] = (addresses[-self.hops].strip(), 0)
             scheme = headers.get(b"x-forwarded-proto", b"").decode("latin1").split(",")[-1].strip()
             if scheme in {"http", "https"}:
-                scope["scheme"] = scheme if scope["type"] == "http" else {"http": "ws", "https": "wss"}[scheme]
+                scope["scheme"] = (
+                    scheme if scope["type"] == "http" else {"http": "ws", "https": "wss"}[scheme]
+                )
             host = headers.get(b"x-forwarded-host", b"").split(b",")[-1].strip()
             if host:
-                scope["headers"] = [(key, value) for key, value in scope["headers"] if key != b"host"] + [(b"host", host)]
+                scope["headers"] = [
+                    (key, value) for key, value in scope["headers"] if key != b"host"
+                ] + [(b"host", host)]
         status = 500
 
         async def logged_send(message: ASGISendEvent) -> None:
@@ -67,6 +81,20 @@ class ProxyMiddleware:
         finally:
             if scope["type"] == "http":
                 path = scope["path"]
-                level = TRACE if 200 <= status < 300 and path.rstrip("/").endswith("/api/state/polling") else logging.DEBUG if 200 <= status < 300 else logging.INFO
+                level = (
+                    TRACE
+                    if 200 <= status < 300 and path.rstrip("/").endswith("/api/state/polling")
+                    else logging.DEBUG
+                    if 200 <= status < 300
+                    else logging.INFO
+                )
                 client = scope.get("client")  # pyright: ignore[reportUnknownMemberType]  # Upstream extensions contain unparameterized dicts.
-                log.log(level, '%s > "%s %s HTTP/%s" %d', (client or ("-", 0))[0], scope["method"], path, scope["http_version"], status)
+                log.log(
+                    level,
+                    '%s > "%s %s HTTP/%s" %d',
+                    (client or ("-", 0))[0],
+                    scope["method"],
+                    path,
+                    scope["http_version"],
+                    status,
+                )

@@ -30,9 +30,15 @@ NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 
 @pytest.mark.asyncio
-async def test_online_health_cache_rename_and_retry(async_db: AsyncDatabase, tmp_path: Path) -> None:
-    good = FakePanel(name="good", post_payload={"success": True, "msg": "", "obj": ["alice", "foreign"]})
-    invalid = FakePanel(name="invalid", post_payload={"success": True, "msg": "", "obj": ["alice", 1]})
+async def test_online_health_cache_rename_and_retry(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
+    good = FakePanel(
+        name="good", post_payload={"success": True, "msg": "", "obj": ["alice", "foreign"]}
+    )
+    invalid = FakePanel(
+        name="invalid", post_payload={"success": True, "msg": "", "obj": ["alice", 1]}
+    )
     dead = FakePanel(name="dead")
     sub = await make_async_subscription(async_db, tmp_path, [good, invalid, dead])
     sub.panels[2].dead = True
@@ -56,12 +62,16 @@ async def test_online_health_cache_rename_and_retry(async_db: AsyncDatabase, tmp
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_accepted_add_is_compensated(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_ambiguous_accepted_add_is_compensated(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     panel = FakePanel(inbounds=[make_inbound(1)])
     sub = await make_async_subscription(async_db, tmp_path, [panel])
     original = sub.business_svc._post
 
-    async def lost_response(panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str) -> None:
+    async def lost_response(
+        panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str
+    ) -> None:
         sub.business_svc._post = original  # type: ignore[method-assign]
         await original(panel, route, body, what)
         raise PanelUnavailableError("response lost after accepted add")
@@ -70,12 +80,20 @@ async def test_ambiguous_accepted_add_is_compensated(async_db: AsyncDatabase, tm
         await sub.code_svc.add_code("invite", "register")
         sub.business_svc._post = lost_response  # type: ignore[method-assign]
         with pytest.raises(PanelUnavailableError):
-            await sub.business_code_svc.register_with_code(code="invite", username="alice", displayname="Alice", ext_username="alice", ext_password="secret")
+            await sub.business_code_svc.register_with_code(
+                code="invite",
+                username="alice",
+                displayname="Alice",
+                ext_username="alice",
+                ext_password="secret",
+            )
         assert panel.clients == []
         assert not await async_db.user_exists("alice")
         assert await async_db.get_code("invite") is not None
         with pytest.raises(PanelUnavailableError):
-            sub.panel_svc.response_data(sub.panels[0], PanelResponse.from_json({"success": False}, 404), "client query")
+            sub.panel_svc.response_data(
+                sub.panels[0], PanelResponse.from_json({"success": False}, 404), "client query"
+            )
     finally:
         await close_async_subscription(sub)
 
@@ -91,16 +109,28 @@ async def async_db(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
 
 
 async def create_alice(db: AsyncDatabase) -> None:
-    await db.create_user(username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice", bw_limit_gb=10, wl_limit_gb=5)
+    await db.create_user(
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=10,
+        wl_limit_gb=5,
+    )
 
 
 @pytest.mark.asyncio
-async def test_user_code_credentials_and_telegram_workflow(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_user_code_credentials_and_telegram_workflow(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         with pytest.raises(NotFoundError):
             await sub.business_svc.get_info("missing")
-        created = await sub.business_svc.add_new_user("alice", "Alice", ext_username="alice-login", ext_password="secret", limit=10)
+        created = await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice-login", ext_password="secret", limit=10
+        )
         with pytest.raises(ConflictError):
             await sub.business_svc.add_new_user("alice", "Alice")
         with pytest.raises(ValidationError):
@@ -132,13 +162,23 @@ async def test_user_code_credentials_and_telegram_workflow(async_db: AsyncDataba
 
 
 @pytest.mark.asyncio
-async def test_bandwidth_history_leaderboard_and_legacy_password(async_db: AsyncDatabase, tmp_path: Path) -> None:
-    regular = FakePanel(name="regular", clients=[make_panel_client("alice", [1, 2], up=10, down=20), make_panel_client("foreign", [1], up=999, down=999)])
+async def test_bandwidth_history_leaderboard_and_legacy_password(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
+    regular = FakePanel(
+        name="regular",
+        clients=[
+            make_panel_client("alice", [1, 2], up=10, down=20),
+            make_panel_client("foreign", [1], up=999, down=999),
+        ],
+    )
     whitelist = FakePanel(name="whitelist", clients=[make_panel_client("alice", [3], up=5, down=7)])
     sub = await make_async_subscription(async_db, tmp_path, [regular], whitelist)
     try:
         await create_alice(async_db)
-        await async_db.set_user("alice", ext_username="alice", ext_password=sub.password_svc.legacy_hash("secret"))
+        await async_db.set_user(
+            "alice", ext_username="alice", ext_password=sub.password_svc.legacy_hash("secret")
+        )
         assert await sub.password_svc.validate_credentials("alice", "secret") == "alice"
         stored = await async_db.ext_password("alice")
         assert stored is not None
@@ -153,7 +193,9 @@ async def test_bandwidth_history_leaderboard_and_legacy_password(async_db: Async
         assert totals["alice"].total == 30
         await async_db.increment_usage("alice", regular=100, whitelist=50)
         assert await sub.leaderboard_svc.leaderboard("total") == {"alice": 30}
-        assert await sub.leaderboard_svc.leaderboard("monthly", use_displaynames=True) == {"Alice": 100}
+        assert await sub.leaderboard_svc.leaderboard("monthly", use_displaynames=True) == {
+            "Alice": 100
+        }
         assert await sub.leaderboard_svc.leaderboard("wl_monthly") == {"alice": 50}
         assert await sub.bandwidth_svc.get_bw_history("alice") == []
         assert await sub.bandwidth_svc.get_snapshots() == []
@@ -162,9 +204,15 @@ async def test_bandwidth_history_leaderboard_and_legacy_password(async_db: Async
 
 
 @pytest.mark.asyncio
-async def test_uuid_partial_failure_retains_manual_repair_marker(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_uuid_partial_failure_retains_manual_repair_marker(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     accepted = FakePanel(name="accepted", clients=[make_panel_client("alice", [1])])
-    rejected = FakePanel(name="rejected", clients=[make_panel_client("alice", [1])], post_payload={"success": False, "msg": "rejected", "obj": None})
+    rejected = FakePanel(
+        name="rejected",
+        clients=[make_panel_client("alice", [1])],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
     sub = await make_async_subscription(async_db, tmp_path, [accepted, rejected])
     try:
         await create_alice(async_db)
@@ -183,8 +231,14 @@ async def test_uuid_partial_failure_retains_manual_repair_marker(async_db: Async
 
 
 @pytest.mark.asyncio
-async def test_failed_disable_and_delete_are_recovered(async_db: AsyncDatabase, tmp_path: Path) -> None:
-    panel = FakePanel(clients=[make_panel_client("alice", [1])], inbounds=[make_inbound(1)], post_payload={"success": False, "msg": "rejected", "obj": None})
+async def test_failed_disable_and_delete_are_recovered(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
+    panel = FakePanel(
+        clients=[make_panel_client("alice", [1])],
+        inbounds=[make_inbound(1)],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
     sub = await make_async_subscription(async_db, tmp_path, [panel])
     try:
         await create_alice(async_db)
@@ -214,8 +268,13 @@ async def test_failed_disable_and_delete_are_recovered(async_db: AsyncDatabase, 
 
 
 @pytest.mark.asyncio
-async def test_panel_payloads_reconcile_and_whitelist_separation(async_db: AsyncDatabase, tmp_path: Path) -> None:
-    regular = FakePanel(name="regular", inbounds=[make_inbound(1), make_inbound(2), make_inbound(3, protocol="trojan")])
+async def test_panel_payloads_reconcile_and_whitelist_separation(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
+    regular = FakePanel(
+        name="regular",
+        inbounds=[make_inbound(1), make_inbound(2), make_inbound(3, protocol="trojan")],
+    )
     whitelist = FakePanel(name="whitelist", inbounds=[make_inbound(4)])
     sub = await make_async_subscription(async_db, tmp_path, [regular], whitelist)
     try:
@@ -224,7 +283,11 @@ async def test_panel_payloads_reconcile_and_whitelist_separation(async_db: Async
         body = regular.posts[0][1]["json"]
         assert isinstance(body, dict)
         assert body["inboundIds"] == [1, 2]
-        assert (regular.clients[0].totalGB, regular.clients[0].expiryTime, regular.clients[0].limitIp) == (0, 0, 0)
+        assert (
+            regular.clients[0].totalGB,
+            regular.clients[0].expiryTime,
+            regular.clients[0].limitIp,
+        ) == (0, 0, 0)
         regular._inbounds.append(make_inbound(5))
         await sub.panel_svc.invalidate_inbounds(sub.panels[0])
         assert await sub.business_svc.reconcile() == []
@@ -235,7 +298,12 @@ async def test_panel_payloads_reconcile_and_whitelist_separation(async_db: Async
         regular.clients[0] = replace(regular.clients[0], comment="keep", tgId="777", subId="sub-id")
         await sub.business_svc.update_uuid("alice", NEW_UUID)
         updated = regular.clients[0]
-        assert (updated.uuid, updated.comment, updated.tgId, updated.subId) == (NEW_UUID, "keep", "777", "sub-id")
+        assert (updated.uuid, updated.comment, updated.tgId, updated.subId) == (
+            NEW_UUID,
+            "keep",
+            "777",
+            "sub-id",
+        )
     finally:
         await close_async_subscription(sub)
 
@@ -245,7 +313,19 @@ async def test_registration_one_shot_code_race(async_db: AsyncDatabase, tmp_path
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         await sub.code_svc.add_code("invite", "register")
-        results = await asyncio.gather(*(sub.business_code_svc.register_with_code(code="invite", username=name, displayname=name, ext_username=name, ext_password="secret") for name in ("alice", "bob")), return_exceptions=True)
+        results = await asyncio.gather(
+            *(
+                sub.business_code_svc.register_with_code(
+                    code="invite",
+                    username=name,
+                    displayname=name,
+                    ext_username=name,
+                    ext_password="secret",
+                )
+                for name in ("alice", "bob")
+            ),
+            return_exceptions=True,
+        )
         assert sum(not isinstance(result, Exception) for result in results) == 1
         assert sum(isinstance(result, NotFoundError) for result in results) == 1
         assert len(await async_db.list_users()) == 1
@@ -255,14 +335,26 @@ async def test_registration_one_shot_code_race(async_db: AsyncDatabase, tmp_path
 
 
 @pytest.mark.asyncio
-async def test_registration_partial_writes_cleaned_before_code_refund(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_registration_partial_writes_cleaned_before_code_refund(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
-    rejected = FakePanel(name="rejected", inbounds=[make_inbound(1)], post_payload={"success": False, "msg": "rejected", "obj": None})
+    rejected = FakePanel(
+        name="rejected",
+        inbounds=[make_inbound(1)],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
     sub = await make_async_subscription(async_db, tmp_path, [accepted, rejected])
     try:
         await sub.code_svc.add_code("invite", "register")
         with pytest.raises(PanelRejectedError):
-            await sub.business_code_svc.register_with_code(code="invite", username="alice", displayname="Alice", ext_username="alice", ext_password="secret")
+            await sub.business_code_svc.register_with_code(
+                code="invite",
+                username="alice",
+                displayname="Alice",
+                ext_username="alice",
+                ext_password="secret",
+            )
         assert accepted.clients == []
         assert not await async_db.user_exists("alice")
         code = await async_db.get_code("invite")
@@ -274,20 +366,34 @@ async def test_registration_partial_writes_cleaned_before_code_refund(async_db: 
 
 
 @pytest.mark.asyncio
-async def test_failed_panel_cleanup_retains_identity_and_recovery_refunds_once(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_failed_panel_cleanup_retains_identity_and_recovery_refunds_once(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
-    rejected = FakePanel(name="rejected", inbounds=[make_inbound(1)], post_payload={"success": False, "msg": "rejected", "obj": None})
+    rejected = FakePanel(
+        name="rejected",
+        inbounds=[make_inbound(1)],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
     sub = await make_async_subscription(async_db, tmp_path, [accepted, rejected])
     original = sub.business_svc.rollback_panel_clients
 
-    async def fail_cleanup(username: str, *, expected_uuid: str | None = None, work: str = "foreground") -> None:
+    async def fail_cleanup(
+        username: str, *, expected_uuid: str | None = None, work: str = "foreground"
+    ) -> None:
         raise PanelUnavailableError("cleanup unavailable")
 
     try:
         await sub.code_svc.add_code("invite", "register")
         sub.business_svc.rollback_panel_clients = fail_cleanup  # type: ignore[method-assign]
         with pytest.raises(PanelRejectedError):
-            await sub.business_code_svc.register_with_code(code="invite", username="alice", displayname="Alice", ext_username="alice", ext_password="secret")
+            await sub.business_code_svc.register_with_code(
+                code="invite",
+                username="alice",
+                displayname="Alice",
+                ext_username="alice",
+                ext_password="secret",
+            )
         assert await async_db.user_exists("alice")
         assert await async_db.pending_registrations() == ["alice"]
         assert await async_db.get_code("invite") is None
@@ -308,7 +414,14 @@ async def test_failed_panel_cleanup_retains_identity_and_recovery_refunds_once(a
 
 @pytest.mark.asyncio
 async def test_atomic_created_user_marker_and_rollback_repository(async_db: AsyncDatabase) -> None:
-    await async_db.create_user(username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice", pending_sync=True)
+    await async_db.create_user(
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        pending_sync=True,
+    )
     assert await async_db.get_metadata("user_create_pending:alice") == USER_UUID
     await async_db.set_metadata("user_sync_pending:alice", "reconcile")
     await async_db.rollback_created_user("alice", USER_UUID)
@@ -319,14 +432,19 @@ async def test_atomic_created_user_marker_and_rollback_repository(async_db: Asyn
 
 
 @pytest.mark.asyncio
-async def test_reset_finalization_and_startup_recovery(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_reset_finalization_and_startup_recovery(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     from errors import DatabaseError
 
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         await create_alice(async_db)
         await async_db.set_auth_token("alice", "x" * 100)
-        await async_db.set_metadata("user_reset_pending:alice", '{"uuid":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","token":"new-token"}')
+        await async_db.set_metadata(
+            "user_reset_pending:alice",
+            '{"uuid":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","token":"new-token"}',
+        )
         with pytest.raises(DatabaseError, match="reset UUID"):
             await async_db.finalize_reset("alice", NEW_UUID, "new-token")
         assert await async_db.get_metadata("user_reset_pending:alice") is not None
@@ -342,11 +460,20 @@ async def test_reset_finalization_and_startup_recovery(async_db: AsyncDatabase, 
 
 
 @pytest.mark.asyncio
-async def test_pending_creation_panel_cleanup_recovers(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_pending_creation_panel_cleanup_recovers(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])])
     sub = await make_async_subscription(async_db, tmp_path, [panel])
     try:
-        await async_db.create_user(username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice", pending_sync=True)
+        await async_db.create_user(
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            pending_sync=True,
+        )
         await sub.start()
         assert panel.clients == []
         assert not await async_db.user_exists("alice")
@@ -356,12 +483,23 @@ async def test_pending_creation_panel_cleanup_recovers(async_db: AsyncDatabase, 
 
 
 @pytest.mark.asyncio
-async def test_pending_registration_without_marker_is_recovered(async_db: AsyncDatabase, tmp_path: Path) -> None:
+async def test_pending_registration_without_marker_is_recovered(
+    async_db: AsyncDatabase, tmp_path: Path
+) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])])
     sub = await make_async_subscription(async_db, tmp_path, [panel])
     try:
         await async_db.add_code("invite", "register")
-        await async_db.register_with_code(code="invite", username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice", ext_username="alice", ext_password_hash="hash")
+        await async_db.register_with_code(
+            code="invite",
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            ext_username="alice",
+            ext_password_hash="hash",
+        )
         await sub.start()
         assert panel.clients == []
         assert await async_db.pending_registrations() == []

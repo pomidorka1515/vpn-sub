@@ -70,7 +70,9 @@ class Subscription:
             self.password_svc: PasswordService = PasswordService(self.res)
             self.user_svc: CommonUserService = CommonUserService(self.res)
             self.bandwidth_svc: BandwidthService = BandwidthService(
-                self.res, panel_svc=self.panel_svc, user_svc=self.user_svc,
+                self.res,
+                panel_svc=self.panel_svc,
+                user_svc=self.user_svc,
             )
             self.business_svc: BusinessUserService = BusinessUserService(
                 self.res,
@@ -82,7 +84,9 @@ class Subscription:
             )
             self.code_svc: CodeService = CodeService(self.res, audit_svc=self.audit_svc)
             self.telegram_svc: TelegramService = TelegramService(
-                self.res, code_svc=self.code_svc, user_svc=self.business_svc,
+                self.res,
+                code_svc=self.code_svc,
+                user_svc=self.business_svc,
             )
             self.business_code_svc: BusinessCodeService = BusinessCodeService(
                 self.res,
@@ -91,5 +95,7 @@ class Subscription:
                 user_svc=self.business_svc,
             )
             self.leaderboard_svc: LeaderboardService = LeaderboardService(
-                self.res, user_svc=self.user_svc, bandwidth_svc=self.bandwidth_svc,
+                self.res,
+                user_svc=self.user_svc,
+                bandwidth_svc=self.bandwidth_svc,
             )

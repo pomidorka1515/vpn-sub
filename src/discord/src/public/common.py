@@ -33,12 +33,16 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(
-                label="🇷🇺 Русский", custom_id="lang_ru", style=discord.ButtonStyle.secondary,
+                label="🇷🇺 Русский",
+                custom_id="lang_ru",
+                style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
-                label="🇬🇧 English", custom_id="lang_en", style=discord.ButtonStyle.secondary,
+                label="🇬🇧 English",
+                custom_id="lang_en",
+                style=discord.ButtonStyle.secondary,
             ),
         )
         return view
@@ -56,7 +60,9 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
             )
             view.add_item(
                 discord.ui.Button(
-                    label=t["btn_main_sub"], custom_id="menu_sub", style=discord.ButtonStyle.primary,
+                    label=t["btn_main_sub"],
+                    custom_id="menu_sub",
+                    style=discord.ButtonStyle.primary,
                 ),
             )
         else:
@@ -76,7 +82,9 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
             )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_lang"], custom_id="menu_lang", style=discord.ButtonStyle.secondary,
+                label=t["btn_lang"],
+                custom_id="menu_lang",
+                style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
@@ -93,7 +101,9 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(
-                label=t["btn_info"], custom_id="menu_info", style=discord.ButtonStyle.secondary,
+                label=t["btn_info"],
+                custom_id="menu_info",
+                style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
@@ -105,22 +115,30 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_bonus"], custom_id="menu_bonus", style=discord.ButtonStyle.secondary,
+                label=t["btn_bonus"],
+                custom_id="menu_bonus",
+                style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_reset"], custom_id="menu_reset", style=discord.ButtonStyle.danger,
+                label=t["btn_reset"],
+                custom_id="menu_reset",
+                style=discord.ButtonStyle.danger,
             ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_chart"], custom_id="menu_chart", style=discord.ButtonStyle.secondary,
+                label=t["btn_chart"],
+                custom_id="menu_chart",
+                style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_main_back"], custom_id="menu_main", style=discord.ButtonStyle.primary,
+                label=t["btn_main_back"],
+                custom_id="menu_main",
+                style=discord.ButtonStyle.primary,
             ),
         )
         return view
@@ -137,22 +155,30 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_logout"], custom_id="menu_logout", style=discord.ButtonStyle.danger,
+                label=t["btn_logout"],
+                custom_id="menu_logout",
+                style=discord.ButtonStyle.danger,
             ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_help"], custom_id="menu_help", style=discord.ButtonStyle.secondary,
+                label=t["btn_help"],
+                custom_id="menu_help",
+                style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_delete"], custom_id="menu_delete", style=discord.ButtonStyle.danger,
+                label=t["btn_delete"],
+                custom_id="menu_delete",
+                style=discord.ButtonStyle.danger,
             ),
         )
         view.add_item(
             discord.ui.Button(
-                label=t["btn_main_back"], custom_id="menu_main", style=discord.ButtonStyle.primary,
+                label=t["btn_main_back"],
+                custom_id="menu_main",
+                style=discord.ButtonStyle.primary,
             ),
         )
         return view
@@ -163,7 +189,9 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         confirm_label = t.get("btn_confirm", "✅")
         view.add_item(
             discord.ui.Button(
-                label=confirm_label, custom_id=f"confirm_{action}", style=discord.ButtonStyle.danger,
+                label=confirm_label,
+                custom_id=f"confirm_{action}",
+                style=discord.ButtonStyle.danger,
             ),
         )
         view.add_item(

@@ -88,7 +88,16 @@ class AsyncCommonUserService(AsyncBaseService):
 
 
 class AsyncBusinessUserService(AsyncBaseService):
-    def __init__(self, res: AsyncCoreResources, *, user_svc: AsyncCommonUserService, panel_svc: AsyncPanelService, password_svc: AsyncPasswordService, audit_svc: AsyncAuditService, bandwidth_svc: AsyncBandwidthService) -> None:
+    def __init__(
+        self,
+        res: AsyncCoreResources,
+        *,
+        user_svc: AsyncCommonUserService,
+        panel_svc: AsyncPanelService,
+        password_svc: AsyncPasswordService,
+        audit_svc: AsyncAuditService,
+        bandwidth_svc: AsyncBandwidthService,
+    ) -> None:
         super().__init__(res)
         self.user_svc = user_svc
         self.panel_svc = panel_svc
@@ -100,13 +109,22 @@ class AsyncBusinessUserService(AsyncBaseService):
         """A retained identity is reserved for recovery, not a new workflow."""
         if await self.db.registration_pending(username):
             raise ConflictError("User has a pending registration")
-        for prefix in ("registration_rollback_failed:", "user_create_pending:", "user_delete_pending:"):
+        for prefix in (
+            "registration_rollback_failed:",
+            "user_create_pending:",
+            "user_delete_pending:",
+        ):
             if await self.db.get_metadata(f"{prefix}{username}") is not None:
                 raise ConflictError("User requires pending operation recovery")
-        if not allow_reset and await self.db.get_metadata(f"user_reset_pending:{username}") is not None:
+        if (
+            not allow_reset
+            and await self.db.get_metadata(f"user_reset_pending:{username}") is not None
+        ):
             raise ConflictError("User requires reset recovery")
 
-    async def _post(self, panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str) -> None:
+    async def _post(
+        self, panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str
+    ) -> None:
         # Even an unavailable response may follow an accepted external write.
         # Invalidate on every attempted write, and preserve the original error.
         try:
@@ -118,7 +136,9 @@ class AsyncBusinessUserService(AsyncBaseService):
             try:
                 await self.panel_svc.invalidate_clients(panel)
             except Exception:
-                self.log.exception("cache invalidation failed after rejected write on %s", panel.name)
+                self.log.exception(
+                    "cache invalidation failed after rejected write on %s", panel.name
+                )
             raise
         else:
             await self.panel_svc.invalidate_clients(panel)
@@ -135,20 +155,34 @@ class AsyncBusinessUserService(AsyncBaseService):
         if pretty:
             bw, wl = bw.format_all_mb(), wl.format_all_mb()
         return UserInfo(
-            _=random.choice(conf.get("funny_strings", [])), token=user["token"],
+            _=random.choice(conf.get("funny_strings", [])),
+            token=user["token"],
             link=f"{conf['domain']}/{conf['uri'].strip('/')}?token={user['token']}",
-            displayname=user["displayname"], uuid=user["uuid"], fingerprint=user["fingerprint"],
-            enabled=bool(user["enabled"]), wl_enabled=bool(user["enabled_wl"]),
-            time=user["expires_at"], online=await self.panel_svc.is_online(username),
+            displayname=user["displayname"],
+            uuid=user["uuid"],
+            fingerprint=user["fingerprint"],
+            enabled=bool(user["enabled"]),
+            wl_enabled=bool(user["enabled_wl"]),
+            time=user["expires_at"],
+            online=await self.panel_svc.is_online(username),
             bandwidth=UserInfoBandwidth(
-                total=UserInfoBandwidthTotal(upload=bw.upload, download=bw.download, total=bw.total),
-                wl_total=UserInfoBandwidthTotal(upload=wl.upload, download=wl.download, total=wl.total),
-                monthly=user["bw_used"], wl_monthly=user["wl_used"], limit=user["bw_limit_gb"], wl_limit=user["wl_limit_gb"],
+                total=UserInfoBandwidthTotal(
+                    upload=bw.upload, download=bw.download, total=bw.total
+                ),
+                wl_total=UserInfoBandwidthTotal(
+                    upload=wl.upload, download=wl.download, total=wl.total
+                ),
+                monthly=user["bw_used"],
+                wl_monthly=user["wl_used"],
+                limit=user["bw_limit_gb"],
+                wl_limit=user["wl_limit_gb"],
             ),
         )
 
     @user_mutation
-    async def add_users(self, username: str, _called_internally: bool = False, *, work: WorkClass = "foreground") -> None:
+    async def add_users(
+        self, username: str, _called_internally: bool = False, *, work: WorkClass = "foreground"
+    ) -> None:
         if not _called_internally:
             await self.require_recovered(username)
         user = await self.user_svc.user(username)
@@ -159,14 +193,35 @@ class AsyncBusinessUserService(AsyncBaseService):
             await self.db.set_metadata(f"user_sync_pending:{username}", "reconcile")
 
         async def sync(panel: AsyncXUiSession) -> None:
-            inbound_ids = [row.id for row in await self.panel_svc.getinbounds(panel) if row.protocol == "vless"]
+            inbound_ids = [
+                row.id for row in await self.panel_svc.getinbounds(panel) if row.protocol == "vless"
+            ]
             if not inbound_ids:
                 return
             existing = known[panel.name].get(username)
             if existing is None:
-                payload = ClientPayload(email=username, id=user["uuid"], flow="xtls-rprx-vision", limitIp=0, totalGB=0, expiryTime=0, enable=bool(user["enabled_wl"] if panel == self.whitelist_panel else user["enabled"]), tgId=0, subId="", comment="", reset=0)
+                payload = ClientPayload(
+                    email=username,
+                    id=user["uuid"],
+                    flow="xtls-rprx-vision",
+                    limitIp=0,
+                    totalGB=0,
+                    expiryTime=0,
+                    enable=bool(
+                        user["enabled_wl"] if panel == self.whitelist_panel else user["enabled"]
+                    ),
+                    tgId=0,
+                    subId="",
+                    comment="",
+                    reset=0,
+                )
                 try:
-                    await self._post(panel, "panel/api/clients/add", {"client": asdict(payload), "inboundIds": inbound_ids}, "user add")
+                    await self._post(
+                        panel,
+                        "panel/api/clients/add",
+                        {"client": asdict(payload), "inboundIds": inbound_ids},
+                        "user add",
+                    )
                     return
                 except PanelRejectedError as exc:
                     if not already_exists(exc):
@@ -175,10 +230,17 @@ class AsyncBusinessUserService(AsyncBaseService):
                     if existing is None or existing.uuid != user["uuid"]:
                         raise
             if existing.uuid != user["uuid"]:
-                raise PanelRejectedError(f"Panel {panel.name} email {username!r} is owned by a different UUID")
+                raise PanelRejectedError(
+                    f"Panel {panel.name} email {username!r} is owned by a different UUID"
+                )
             missing = [value for value in inbound_ids if value not in existing.inboundIds]
             if missing:
-                await self._post(panel, f"panel/api/clients/{quote(username, safe='')}/attach", {"inboundIds": missing}, "user attach")
+                await self._post(
+                    panel,
+                    f"panel/api/clients/{quote(username, safe='')}/attach",
+                    {"inboundIds": missing},
+                    "user attach",
+                )
 
         await self.panel_svc.map_panels(self.panels, sync, work=work)
         if await self.db.get_metadata(f"user_sync_pending:{username}") == "reconcile":
@@ -188,7 +250,9 @@ class AsyncBusinessUserService(AsyncBaseService):
         await self._drop_cache()
 
     @user_mutation
-    async def rollback_panel_clients(self, username: str, *, expected_uuid: str | None = None, work: WorkClass = "foreground") -> None:
+    async def rollback_panel_clients(
+        self, username: str, *, expected_uuid: str | None = None, work: WorkClass = "foreground"
+    ) -> None:
         async def delete(panel: AsyncXUiSession) -> None:
             # Live reads make repeated compensation safe; unavailable is never
             # confused with absent, and foreign shared-panel clients survive.
@@ -197,15 +261,22 @@ class AsyncBusinessUserService(AsyncBaseService):
                 return
             if expected_uuid is not None and client.uuid != expected_uuid:
                 raise PanelRejectedError(f"Panel {panel.name} rollback refused a foreign UUID")
-            await self._post(panel, f"panel/api/clients/del/{quote(username, safe='')}", {}, "user delete")
+            await self._post(
+                panel, f"panel/api/clients/del/{quote(username, safe='')}", {}, "user delete"
+            )
 
         await self.panel_svc.map_panels(self.panels, delete, work=work)
 
     @user_mutation
-    async def delete_user(self, username: str, perma: bool = False, *, work: WorkClass = "foreground") -> None:
+    async def delete_user(
+        self, username: str, perma: bool = False, *, work: WorkClass = "foreground"
+    ) -> None:
         # Retrying a failed delete is safe; other pending workflows reserve
         # their identity until their own compensation has completed.
-        if await self.db.registration_pending(username) or await self.db.get_metadata(f"user_create_pending:{username}") is not None:
+        if (
+            await self.db.registration_pending(username)
+            or await self.db.get_metadata(f"user_create_pending:{username}") is not None
+        ):
             raise ConflictError("User requires registration recovery")
         user = await self.user_svc.user(username)
         key = f"user_delete_pending:{username}"
@@ -219,14 +290,30 @@ class AsyncBusinessUserService(AsyncBaseService):
         await self.audit_svc.audit(name="user_delete", info={"username": username, "perma": perma})
         await self._drop_cache()
 
-    async def _set_enabled(self, panel: AsyncXUiSession, username: str, enabled: bool, clients: Mapping[str, PanelClient]) -> None:
+    async def _set_enabled(
+        self,
+        panel: AsyncXUiSession,
+        username: str,
+        enabled: bool,
+        clients: Mapping[str, PanelClient],
+    ) -> None:
         if clients.get(username) is None:
             return
         action = "bulkEnable" if enabled else "bulkDisable"
-        await self._post(panel, f"panel/api/clients/{action}", {"emails": [username]}, "user update")
+        await self._post(
+            panel, f"panel/api/clients/{action}", {"emails": [username]}, "user update"
+        )
 
     @user_mutation
-    async def update_user(self, username: str, enable: bool | None = None, timee: bool | None = None, wl_enable: bool | None = None, *, work: WorkClass = "foreground") -> None:
+    async def update_user(
+        self,
+        username: str,
+        enable: bool | None = None,
+        timee: bool | None = None,
+        wl_enable: bool | None = None,
+        *,
+        work: WorkClass = "foreground",
+    ) -> None:
         await self.require_recovered(username)
         await self.user_svc.user(username)
         fields: UserFields = {}
@@ -236,14 +323,30 @@ class AsyncBusinessUserService(AsyncBaseService):
                 fields["status_time"] = timee
         if wl_enable is not None:
             fields["status_wl"] = wl_enable
-        await self.db.set_enabled_pending(username, enabled=enable, enabled_time=timee, enabled_wl=wl_enable)
-        await self._sync_enabled(username, main=enable is not None, whitelist=wl_enable is not None, work=work)
-        await self.audit_svc.audit(name="user_update", info={"username": username, **cast(dict[str, JsonValue], dict(fields))})
+        await self.db.set_enabled_pending(
+            username, enabled=enable, enabled_time=timee, enabled_wl=wl_enable
+        )
+        await self._sync_enabled(
+            username, main=enable is not None, whitelist=wl_enable is not None, work=work
+        )
+        await self.audit_svc.audit(
+            name="user_update",
+            info={"username": username, **cast(dict[str, JsonValue], dict(fields))},
+        )
         await self._drop_cache()
 
-    async def _sync_enabled(self, username: str, *, main: bool = True, whitelist: bool = True, work: WorkClass = "foreground") -> None:
+    async def _sync_enabled(
+        self,
+        username: str,
+        *,
+        main: bool = True,
+        whitelist: bool = True,
+        work: WorkClass = "foreground",
+    ) -> None:
         user = await self.user_svc.user(username)
-        panels = [panel for panel in self.panels if (whitelist if panel == self.whitelist_panel else main)]
+        panels = [
+            panel for panel in self.panels if (whitelist if panel == self.whitelist_panel else main)
+        ]
         known = await self.panel_svc.client_maps(panels, work=work)
 
         async def write(panel: AsyncXUiSession) -> None:
@@ -261,10 +364,24 @@ class AsyncBusinessUserService(AsyncBaseService):
         time_ok = user["expires_at"] == 0 or user["expires_at"] >= current
         main_ok = user["bw_limit_gb"] == 0 or user["bw_used"] < user["bw_limit_gb"] * 10**9
         wl_ok = user["wl_limit_gb"] == 0 or user["wl_used"] < user["wl_limit_gb"] * 10**9
-        await self.update_user(username, enable=time_ok and main_ok, timee=time_ok, wl_enable=wl_ok, work="background")
+        await self.update_user(
+            username, enable=time_ok and main_ok, timee=time_ok, wl_enable=wl_ok, work="background"
+        )
 
     @user_mutation
-    async def add_new_user(self, username: str, displayname: str, ext_username: str | None = None, ext_password: str | None = None, token: str | None = None, userid: str | None = None, fingerprint: str | None = None, limit: int = 0, wl_limit: int = 5, timee: int = 0) -> NewUserInfo:
+    async def add_new_user(
+        self,
+        username: str,
+        displayname: str,
+        ext_username: str | None = None,
+        ext_password: str | None = None,
+        token: str | None = None,
+        userid: str | None = None,
+        fingerprint: str | None = None,
+        limit: int = 0,
+        wl_limit: int = 5,
+        timee: int = 0,
+    ) -> NewUserInfo:
         await self.require_recovered(username)
         if not isusername(username):
             raise ValidationError("Invalid username")
@@ -286,7 +403,19 @@ class AsyncBusinessUserService(AsyncBaseService):
         hashed = await self.password_svc.hash(ext_password) if ext_password is not None else None
         external = sanitize(ext_username, "external") if ext_username and hashed else None
         try:
-            await self.db.create_user(username=username, uuid=userid, token=token, fingerprint=fingerprint, displayname=displayname, expires_at=timee, bw_limit_gb=limit, wl_limit_gb=wl_limit, ext_username=external, ext_password_hash=hashed, pending_sync=True)
+            await self.db.create_user(
+                username=username,
+                uuid=userid,
+                token=token,
+                fingerprint=fingerprint,
+                displayname=displayname,
+                expires_at=timee,
+                bw_limit_gb=limit,
+                wl_limit_gb=wl_limit,
+                ext_username=external,
+                ext_password_hash=hashed,
+                pending_sync=True,
+            )
         except DuplicateError as exc:
             raise ConflictError("Username or external username exists") from exc
         # Marker precedes writes and remains if panel cleanup cannot finish.
@@ -297,14 +426,35 @@ class AsyncBusinessUserService(AsyncBaseService):
                 await self.rollback_panel_clients(username, expected_uuid=userid)
                 await self.db.rollback_created_user(username, userid)
             except Exception:
-                self.log.critical("new user rollback failed for %s; marker retained", username, exc_info=True)
+                self.log.critical(
+                    "new user rollback failed for %s; marker retained", username, exc_info=True
+                )
             raise
         await self.db.delete_metadata(f"user_create_pending:{username}")
-        await self.audit_svc.audit(name="user_add", info={"username": username, "ext_username": external})
-        return NewUserInfo(username=username, token=token, uuid=userid, fingerprint=fingerprint, displayname=displayname)
+        await self.audit_svc.audit(
+            name="user_add", info={"username": username, "ext_username": external}
+        )
+        return NewUserInfo(
+            username=username,
+            token=token,
+            uuid=userid,
+            fingerprint=fingerprint,
+            displayname=displayname,
+        )
 
     @user_mutation
-    async def update_params(self, username: str, displayname: str | None = None, ext_username: str | None = None, ext_password: str | None = None, token: str | None = None, fingerprint: str | None = None, limit: int | None = None, wl_limit: int | None = None, timee: int | None = None) -> None:
+    async def update_params(
+        self,
+        username: str,
+        displayname: str | None = None,
+        ext_username: str | None = None,
+        ext_password: str | None = None,
+        token: str | None = None,
+        fingerprint: str | None = None,
+        limit: int | None = None,
+        wl_limit: int | None = None,
+        timee: int | None = None,
+    ) -> None:
         await self.require_recovered(username)
         user = await self.user_svc.user(username)
         fields: UserFields = {}
@@ -332,14 +482,28 @@ class AsyncBusinessUserService(AsyncBaseService):
             fields["wl_bw_limit"] = wl_limit
         if ext_password is not None:
             fields["ext_password"] = await self.password_svc.hash(ext_password)
-        if fields.get("ext_password") is not None and user["ext_username"] is None and ext_username is None:
+        if (
+            fields.get("ext_password") is not None
+            and user["ext_username"] is None
+            and ext_username is None
+        ):
             raise ValidationError("External username required")
         try:
             await self.db.update_user(username, **fields)
         except DuplicateError as exc:
             raise ConflictError("Ext username exists") from exc
         audit_fields = cast(dict[str, JsonValue], dict(fields))
-        await self.audit_svc.audit(name="user_update_params", info={"username": username, **{key: value for key, value in audit_fields.items() if key not in {"token", "ext_password"}}})
+        await self.audit_svc.audit(
+            name="user_update_params",
+            info={
+                "username": username,
+                **{
+                    key: value
+                    for key, value in audit_fields.items()
+                    if key not in {"token", "ext_password"}
+                },
+            },
+        )
         await self._drop_cache()
 
     @user_mutation
@@ -358,12 +522,21 @@ class AsyncBusinessUserService(AsyncBaseService):
             if current is not None:
                 payload = client_payload_from(current)
                 payload.id = uid
-                await self._post(panel, f"panel/api/clients/update/{quote(username, safe='')}", asdict(payload), "UUID update")
+                await self._post(
+                    panel,
+                    f"panel/api/clients/update/{quote(username, safe='')}",
+                    asdict(payload),
+                    "UUID update",
+                )
 
         outcomes = await self.panel_svc.outcomes(self.panels, write)
         for outcome in outcomes:
             if outcome.error is not None:
-                reason = outcome.error.message if isinstance(outcome.error, AppError) else type(outcome.error).__name__
+                reason = (
+                    outcome.error.message
+                    if isinstance(outcome.error, AppError)
+                    else type(outcome.error).__name__
+                )
                 await self.db.set_metadata(key, f"{int(time.time())}:{outcome.panel}: {reason}")
                 raise outcome.error
         try:
@@ -372,17 +545,23 @@ class AsyncBusinessUserService(AsyncBaseService):
             await self.db.set_metadata(key, f"{int(time.time())}:db duplicate uuid")
             raise ConflictError("UUID exists") from exc
         await self.db.delete_metadata(key)
-        await self.audit_svc.audit(name="user_update_uuid", info={"username": username, "uuid": uid})
+        await self.audit_svc.audit(
+            name="user_update_uuid", info={"username": username, "uuid": uid}
+        )
         await self._drop_cache()
 
     @user_mutation
     async def reset_user(self, username: str) -> ResetUserObject:
         await self.require_recovered(username)
         uid, token = str(uuid.uuid4()), generate_token("sub")
-        await self.db.set_metadata(f"user_reset_pending:{username}", json.dumps({"uuid": uid, "token": token}))
+        await self.db.set_metadata(
+            f"user_reset_pending:{username}", json.dumps({"uuid": uid, "token": token})
+        )
         await self.update_uuid(username, uid, _resetting=True)
         await self.db.finalize_reset(username, uid, token)
-        await self.audit_svc.audit(name="user_reset", info={"username": username, "uuid": uid, "token": "redacted"})
+        await self.audit_svc.audit(
+            name="user_reset", info={"username": username, "uuid": uid, "token": "redacted"}
+        )
         return ResetUserObject(uuid=uid, token=token)
 
     @user_mutation
@@ -405,11 +584,21 @@ class AsyncBusinessUserService(AsyncBaseService):
         return failures
 
     async def recover_pending(self) -> None:
-        for prefix in ("user_delete_pending:", "user_create_pending:", "user_reset_pending:", "user_sync_pending:"):
+        for prefix in (
+            "user_delete_pending:",
+            "user_create_pending:",
+            "user_reset_pending:",
+            "user_sync_pending:",
+        ):
             for key, value in (await self.db.list_metadata(prefix)).items():
                 username = key.removeprefix(prefix)
 
-                async def repair(username: str = username, key: str = key, value: str = value, prefix: str = prefix) -> None:
+                async def repair(
+                    username: str = username,
+                    key: str = key,
+                    value: str = value,
+                    prefix: str = prefix,
+                ) -> None:
                     user = await self.db.get_user(username)
                     if prefix == "user_create_pending:":
                         await self.rollback_panel_clients(username, expected_uuid=value)
@@ -426,7 +615,9 @@ class AsyncBusinessUserService(AsyncBaseService):
                             await self.db.delete_metadata(f"user_reset_pending:{username}")
                     elif prefix == "user_reset_pending:":
                         details = json.loads(value)
-                        await self.db.finalize_reset(username, str(details["uuid"]), str(details["token"]))
+                        await self.db.finalize_reset(
+                            username, str(details["uuid"]), str(details["token"])
+                        )
                     elif user is not None:
                         await self.reconcile_user(username)
                     await self.db.delete_metadata(key)
@@ -434,4 +625,6 @@ class AsyncBusinessUserService(AsyncBaseService):
                 try:
                     await self.res.coordinator.run([username], repair, name="core:recover-user")
                 except Exception:
-                    self.log.critical("user recovery failed for %s; marker retained", username, exc_info=True)
+                    self.log.critical(
+                        "user recovery failed for %s; marker retained", username, exc_info=True
+                    )

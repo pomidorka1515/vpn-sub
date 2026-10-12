@@ -157,10 +157,12 @@ def routing() -> tuple[PublicTextRoutingMixin, MagicMock, MagicMock]:
         subscription_config(
             profiles={
                 "fast": profile_config(
-                    name=["Fast", "Быстрый"], description=["fast en", "fast ru"],
+                    name=["Fast", "Быстрый"],
+                    description=["fast en", "fast ru"],
                 ),
                 "broken": profile_config(
-                    name=["Broken", "Сломан"], description=["broken en", "broken ru"],
+                    name=["Broken", "Сломан"],
+                    description=["broken en", "broken ru"],
                 ),
             },
         ),

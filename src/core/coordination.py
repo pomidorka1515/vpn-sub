@@ -31,7 +31,13 @@ class MutationCoordinator:
     def lock_count(self) -> int:
         return len(self._entries)
 
-    async def run[T](self, users: Sequence[str], operation: Callable[[], Coroutine[object, object, T]], *, name: str) -> T:
+    async def run[T](
+        self,
+        users: Sequence[str],
+        operation: Callable[[], Coroutine[object, object, T]],
+        *,
+        name: str,
+    ) -> T:
         keys = frozenset(users)
         task = asyncio.current_task()
         held = self._owners.get(task) if task is not None else None
@@ -44,7 +50,9 @@ class MutationCoordinator:
             owner = asyncio.current_task()
             if owner is None:
                 raise RuntimeError("mutation requires a task")
-            entries = [(key, self._entries.setdefault(key, _Entry(asyncio.Lock()))) for key in sorted(keys)]
+            entries = [
+                (key, self._entries.setdefault(key, _Entry(asyncio.Lock()))) for key in sorted(keys)
+            ]
             for _, entry in entries:
                 entry.borrowers += 1
             try:
@@ -83,7 +91,9 @@ class MutationCoordinator:
         return await self.registry.run(owned, name=name)
 
 
-def user_mutation[**P, T](function: Callable[P, Coroutine[object, object, T]]) -> Callable[P, Coroutine[object, object, T]]:
+def user_mutation[**P, T](
+    function: Callable[P, Coroutine[object, object, T]],
+) -> Callable[P, Coroutine[object, object, T]]:
     """Nested calls reuse ownership only in the actual owning task."""
     sig = signature(function)
 
@@ -96,6 +106,8 @@ def user_mutation[**P, T](function: Callable[P, Coroutine[object, object, T]]) -
         username = bound.arguments["username"]
         if not isinstance(service, AsyncBaseService) or not isinstance(username, str):
             raise TypeError("user mutation requires a service and username")
-        return await service.res.coordinator.run([username], lambda: function(*args, **kwargs), name=f"core:{function.__name__}")
+        return await service.res.coordinator.run(
+            [username], lambda: function(*args, **kwargs), name=f"core:{function.__name__}"
+        )
 
     return wrapped

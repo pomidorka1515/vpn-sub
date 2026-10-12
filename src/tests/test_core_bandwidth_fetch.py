@@ -34,7 +34,9 @@ def test_whitelist_total_uses_only_whitelist_panel(database: Database) -> None:
 
     assert subscription.bandwidth_svc.bandwidth("alice") == BandwidthInfo(100, 200, 300)
     assert subscription.bandwidth_svc.bandwidth("alice", whitelist=True) == BandwidthInfo(
-        10, 20, 30,
+        10,
+        20,
+        30,
     )
     assert subscription.bandwidth_svc.bandwidth("alice").total == 300
 

@@ -32,7 +32,14 @@ if TYPE_CHECKING:
 
     from session.async_client import AsyncXUiSession
 
-__all__ = ["AppOptions", "AppPaths", "Application", "PanelTransportFactory", "create_application", "verbose_overrides"]
+__all__ = [
+    "AppOptions",
+    "AppPaths",
+    "Application",
+    "PanelTransportFactory",
+    "create_application",
+    "verbose_overrides",
+]
 
 
 @dataclass(slots=True)
@@ -57,7 +64,9 @@ class Application(Runtime[ApplicationDependencies]):
         return self.dependencies.app
 
 
-async def create_application(paths: AppPaths | None = None, options: AppOptions | None = None, *, app: Quart | None = None) -> Application:
+async def create_application(
+    paths: AppPaths | None = None, options: AppOptions | None = None, *, app: Quart | None = None
+) -> Application:
     """Compose Quart against runtime-owned async dependencies, unwinding failures."""
     paths = paths or AppPaths.from_env()
     options = options or AppOptions()
@@ -70,12 +79,44 @@ async def create_application(paths: AppPaths | None = None, options: AppOptions 
 
     try:
         await open_resource(OwnedResource("primary lock", PrimaryLock(paths.primary_lock)))
-        cfg = AsyncConfig[AppConfig](lambda: Config[AppConfig](path=paths.config, indent=4, strict_schema=True, schema_path=bundled_root() / "config.schema.json" if compiled() else None, sync_mode="data", isolate_commits=True, backup_dir=paths.backups, lockfile_path=paths.primary_lock.parent, start_backup=False), files=offloads.files)
-        lang = AsyncConfig[LangConfig](lambda: Config[LangConfig](path=paths.language, read_only=True, read_only_jsonc=True, lockfile_path=paths.primary_lock.parent), files=offloads.files)
-        audit = AsyncLinesConfig(lambda: LinesConfig(path=paths.audit, sync_mode="data", backup_dir=paths.backups, lockfile_path=paths.primary_lock.parent, start_backup=False), files=offloads.files)
+        cfg = AsyncConfig[AppConfig](
+            lambda: Config[AppConfig](
+                path=paths.config,
+                indent=4,
+                strict_schema=True,
+                schema_path=bundled_root() / "config.schema.json" if compiled() else None,
+                sync_mode="data",
+                isolate_commits=True,
+                backup_dir=paths.backups,
+                lockfile_path=paths.primary_lock.parent,
+                start_backup=False,
+            ),
+            files=offloads.files,
+        )
+        lang = AsyncConfig[LangConfig](
+            lambda: Config[LangConfig](
+                path=paths.language,
+                read_only=True,
+                read_only_jsonc=True,
+                lockfile_path=paths.primary_lock.parent,
+            ),
+            files=offloads.files,
+        )
+        audit = AsyncLinesConfig(
+            lambda: LinesConfig(
+                path=paths.audit,
+                sync_mode="data",
+                backup_dir=paths.backups,
+                lockfile_path=paths.primary_lock.parent,
+                start_backup=False,
+            ),
+            files=offloads.files,
+        )
         for name, store in (("config", cfg), ("language", lang), ("audit", audit)):
             await open_resource(OwnedResource(name, store))
-        db = AsyncDatabase(path=paths.database, backup_dir=paths.backups, start_backup=options.start_background)
+        db = AsyncDatabase(
+            path=paths.database, backup_dir=paths.backups, start_backup=options.start_background
+        )
         await open_resource(OwnedResource("database", db))
         limiter = options.limiter or AsyncRateLimiter.from_config(cfg)
         await open_resource(OwnedResource("Redis", limiter))
@@ -84,16 +125,50 @@ async def create_application(paths: AppPaths | None = None, options: AppOptions 
         for panel in [*panels, *([whitelist] if whitelist else [])]:
             await open_resource(OwnedResource(f"panel:{panel.name}", panel))
         mutations = MutationRegistry()
-        sub = AsyncSubscription(cfg=cfg, lang_cfg=lang, db=db, panels=panels, whitelist_panel=whitelist, offloads=offloads, coordinator=MutationCoordinator(mutations), audit_svc=AsyncAuditService(audit), verbose="core" in overrides)
+        sub = AsyncSubscription(
+            cfg=cfg,
+            lang_cfg=lang,
+            db=db,
+            panels=panels,
+            whitelist_panel=whitelist,
+            offloads=offloads,
+            coordinator=MutationCoordinator(mutations),
+            audit_svc=AsyncAuditService(audit),
+            verbose="core" in overrides,
+        )
         await open_resource(OwnedResource("subscription", sub))
-        app = app or create_api_application(proxy_hops=options.proxy_hops, require_proxy=options.require_proxy)
+        app = app or create_api_application(
+            proxy_hops=options.proxy_hops, require_proxy=options.require_proxy
+        )
         conf = cfg.view()
-        admin_bot = AsyncAdminBot(sub, lang, cfg) if options.start_bots and conf.get("bot", {}).get("token") else None
-        public_bot = AsyncPublicBot(sub, cfg, lang) if options.start_bots and conf.get("publicbot", {}).get("token") else None
+        admin_bot = (
+            AsyncAdminBot(sub, lang, cfg)
+            if options.start_bots and conf.get("bot", {}).get("token")
+            else None
+        )
+        public_bot = (
+            AsyncPublicBot(sub, cfg, lang)
+            if options.start_bots and conf.get("publicbot", {}).get("token")
+            else None
+        )
         if admin_bot is not None or public_bot is not None:
             await open_resource(OwnedResource("Telegram session", AsyncTelegramSession()))
-        notifier = AsyncNotifier(texts=public_bot.TEXTS, send=public_bot.send_notice, language=public_bot.get_lang) if public_bot is not None else None
-        status = AsyncBWatch(cfg, db, sub, notifier=notifier, alert=admin_bot.msg if admin_bot is not None else None, scheduled=options.start_background, verbose="bwatch" in overrides)
+        notifier = (
+            AsyncNotifier(
+                texts=public_bot.TEXTS, send=public_bot.send_notice, language=public_bot.get_lang
+            )
+            if public_bot is not None
+            else None
+        )
+        status = AsyncBWatch(
+            cfg,
+            db,
+            sub,
+            notifier=notifier,
+            alert=admin_bot.msg if admin_bot is not None else None,
+            scheduled=options.start_background,
+            verbose="bwatch" in overrides,
+        )
         if admin_bot is not None:
             await open_resource(OwnedResource("Telegram log delivery", AsyncBotLogging(admin_bot)))
         await open_resource(OwnedResource("watcher", status))
@@ -103,11 +178,29 @@ async def create_application(paths: AppPaths | None = None, options: AppOptions 
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
         register_subscription_route(app, sub)
-        runtime = Application(ApplicationDependencies(app, cfg, lang, audit, db, panels, whitelist, sub, limiter, status, admin_bot, public_bot), resources=tuple(opened), offloads=offloads, mutations=mutations)
+        runtime = Application(
+            ApplicationDependencies(
+                app,
+                cfg,
+                lang,
+                audit,
+                db,
+                panels,
+                whitelist,
+                sub,
+                limiter,
+                status,
+                admin_bot,
+                public_bot,
+            ),
+            resources=tuple(opened),
+            offloads=offloads,
+            mutations=mutations,
+        )
         await runtime.start()
         app.extensions["runtime"] = runtime
         return runtime
-    except (Exception, asyncio.CancelledError):
+    except Exception, asyncio.CancelledError:
         for resource in reversed(opened):
             await resource.resource.close()
         await offloads.close()

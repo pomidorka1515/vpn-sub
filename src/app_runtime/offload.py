@@ -45,15 +45,29 @@ class BoundedOffload:
 @dataclass(frozen=True, slots=True)
 class OffloadServices:
     files: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=4, name="files"))
-    passwords: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=2, name="passwords"))
-    rendering: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=2, name="rendering"))
-    metrics: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=2, name="metrics"))
+    passwords: BoundedOffload = field(
+        default_factory=lambda: BoundedOffload(capacity=2, name="passwords")
+    )
+    rendering: BoundedOffload = field(
+        default_factory=lambda: BoundedOffload(capacity=2, name="rendering")
+    )
+    metrics: BoundedOffload = field(
+        default_factory=lambda: BoundedOffload(capacity=2, name="metrics")
+    )
 
     def stop_admission(self) -> None:
         for service in (self.files, self.passwords, self.rendering, self.metrics):
             service.stop_admission()
 
     async def close(self) -> None:
-        await asyncio.gather(*(service.close() for service in (
-            self.files, self.passwords, self.rendering, self.metrics,
-        )))
+        await asyncio.gather(
+            *(
+                service.close()
+                for service in (
+                    self.files,
+                    self.passwords,
+                    self.rendering,
+                    self.metrics,
+                )
+            )
+        )

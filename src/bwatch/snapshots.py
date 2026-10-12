@@ -34,7 +34,9 @@ class SnapshotsMixin(BWatchHost):
         panels_data: dict[str, JsonDict] = {}
         panel_errors: list[str] = []
         for panel, status in zip(
-            self.sub.panels, self.sub.panel_svc.statuses(pool=self._panel_pool()), strict=True,
+            self.sub.panels,
+            self.sub.panel_svc.statuses(pool=self._panel_pool()),
+            strict=True,
         ):
             if status is None:
                 panel_errors.append(panel.name)

@@ -25,13 +25,21 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
 
-class AsyncDatabase(AsyncUsersMixin, AsyncCodesMixin, AsyncTelegramMixin, AsyncStateMixin, AsyncSchemaMixin):
+class AsyncDatabase(
+    AsyncUsersMixin, AsyncCodesMixin, AsyncTelegramMixin, AsyncStateMixin, AsyncSchemaMixin
+):
     """Single-loop repository with a transaction-owned writer and leased readers."""
 
     def __init__(
-        self, *, path: str | Path, timeout: float = 5.0, read_connections: int = 2,
-        backup_dir: str | Path | None = None, backup_interval: float = 7200,
-        backup_retention: int = 3, start_backup: bool = True,
+        self,
+        *,
+        path: str | Path,
+        timeout: float = 5.0,
+        read_connections: int = 2,
+        backup_dir: str | Path | None = None,
+        backup_interval: float = 7200,
+        backup_retention: int = 3,
+        start_backup: bool = True,
     ) -> None:
         if read_connections < 1 or backup_interval <= 0 or backup_retention < 1:
             raise ValueError("connection count, backup interval and retention must be positive")
@@ -76,7 +84,8 @@ class AsyncDatabase(AsyncUsersMixin, AsyncCodesMixin, AsyncTelegramMixin, AsyncS
             for statement in (
                 "PRAGMA foreign_keys = ON",
                 f"PRAGMA busy_timeout = {max(1, int(self.timeout * 1000))}",
-                "PRAGMA journal_mode = WAL", "PRAGMA synchronous = NORMAL",
+                "PRAGMA journal_mode = WAL",
+                "PRAGMA synchronous = NORMAL",
             ):
                 await wrapped.execute(statement)
             if reader:
@@ -110,10 +119,16 @@ class AsyncDatabase(AsyncUsersMixin, AsyncCodesMixin, AsyncTelegramMixin, AsyncS
         task = asyncio.current_task()
         if not self._ready or self._closing or task is None:
             raise DatabaseError("database is not accepting operations")
-        if self._start_task is not None and not self._start_task.done() and task is not self._start_task:
+        if (
+            self._start_task is not None
+            and not self._start_task.done()
+            and task is not self._start_task
+        ):
             raise DatabaseError("database startup is not complete")
         if task in self._owners:
-            raise DatabaseError("nested repository leases are not supported; reuse the leased connection")
+            raise DatabaseError(
+                "nested repository leases are not supported; reuse the leased connection"
+            )
         return task
 
     @asynccontextmanager

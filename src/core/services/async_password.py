@@ -31,11 +31,15 @@ class AsyncPasswordService(AsyncBaseService):
                 return None
             if stored.startswith("$argon2id$"):
                 try:
-                    await self.res.offloads.passwords.run(self.res.password_hasher.verify, stored, password)
+                    await self.res.offloads.passwords.run(
+                        self.res.password_hasher.verify, stored, password
+                    )
                 except VerifyMismatchError:
                     return None
-                except (InvalidHashError, VerificationError):
-                    self.log.exception("Corrupt or tampered argon2 password hash for %s", ext_username)
+                except InvalidHashError, VerificationError:
+                    self.log.exception(
+                        "Corrupt or tampered argon2 password hash for %s", ext_username
+                    )
                     return None
             else:
                 if not compare(stored, self.legacy_hash(password)):

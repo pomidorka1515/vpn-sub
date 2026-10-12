@@ -10,7 +10,11 @@ if TYPE_CHECKING:
 
 def test_admin_client_sends_authorization_header() -> None:
     def handler(
-        method: str, url: str, json: object, params: object, headers: object,
+        method: str,
+        url: str,
+        json: object,
+        params: object,
+        headers: object,
     ) -> FakeResponse:
         del method, json, params
         assert url.endswith("/api/user/list")
@@ -26,7 +30,11 @@ def test_admin_client_sends_authorization_header() -> None:
 
 def test_admin_client_user_update_and_history() -> None:
     def handler(
-        method: str, url: str, json: object, params: object, headers: object,
+        method: str,
+        url: str,
+        json: object,
+        params: object,
+        headers: object,
     ) -> FakeResponse:
         del headers
         if url.endswith("/api/user/update"):

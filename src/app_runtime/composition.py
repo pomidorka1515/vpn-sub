@@ -49,11 +49,29 @@ class SnapshotStatus:
         return None
 
 
-def build_panels(cfg: Snapshot[AppConfig], paths: AppPaths, options: AppOptions, *, verbose: bool) -> tuple[list[AsyncXUiSession], AsyncXUiSession | None]:
+def build_panels(
+    cfg: Snapshot[AppConfig], paths: AppPaths, options: AppOptions, *, verbose: bool
+) -> tuple[list[AsyncXUiSession], AsyncXUiSession | None]:
     panels: list[AsyncXUiSession] = []
     whitelist: AsyncXUiSession | None = None
     for section in cfg.view()["3xui"].values():
-        panel = AsyncXUiSession(name=section["name"], address=section["address"], port=section["port"], uri=section["uri"], api_token=section["token"], https=section["https"], nginx_auth=cast(tuple[str, str] | None, tuple(section.get("nginx_auth", [])) or None), inbounds_list=tuple(section["inbounds_list"]), mode=section["mode"], inject_headers=section.get("inject_headers"), transport=options.panel_transport_factory() if options.panel_transport_factory else None, stamp_dir=str(paths.primary_lock.parent), verbose=verbose)
+        panel = AsyncXUiSession(
+            name=section["name"],
+            address=section["address"],
+            port=section["port"],
+            uri=section["uri"],
+            api_token=section["token"],
+            https=section["https"],
+            nginx_auth=cast(tuple[str, str] | None, tuple(section.get("nginx_auth", [])) or None),
+            inbounds_list=tuple(section["inbounds_list"]),
+            mode=section["mode"],
+            inject_headers=section.get("inject_headers"),
+            transport=options.panel_transport_factory()
+            if options.panel_transport_factory
+            else None,
+            stamp_dir=str(paths.primary_lock.parent),
+            verbose=verbose,
+        )
         if section["whitelist"]:
             whitelist = panel
         else:

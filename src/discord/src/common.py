@@ -74,7 +74,10 @@ class DiscordIOMixin(PublicFeatureMixin):
         )
 
     async def _defer(
-        self, interaction: discord.Interaction, *, ephemeral: bool | None = None,
+        self,
+        interaction: discord.Interaction,
+        *,
+        ephemeral: bool | None = None,
     ) -> None:
         if interaction.response.is_done():
             return

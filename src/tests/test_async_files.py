@@ -24,7 +24,9 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.asyncio
 
 
-async def test_snapshots_reload_failure_and_atomic_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_snapshots_reload_failure_and_atomic_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = tmp_path / "config.json"
     path.write_text('{"nested": {"value": 1}}')
     files = BoundedOffload(capacity=2, name="test-files")
@@ -67,7 +69,9 @@ async def test_snapshots_reload_failure_and_atomic_commit(tmp_path: Path, monkey
 
 async def test_cancelled_commit_finishes_and_close_drains(tmp_path: Path) -> None:
     files = BoundedOffload(capacity=2, name="test-files")
-    store = AsyncConfig(lambda: Config(path=tmp_path / "config.json", start_backup=False), files=files)
+    store = AsyncConfig(
+        lambda: Config(path=tmp_path / "config.json", start_backup=False), files=files
+    )
     await store.start()
     entered = threading.Event()
     release = threading.Event()
@@ -91,7 +95,9 @@ async def test_cancelled_commit_finishes_and_close_drains(tmp_path: Path) -> Non
     await files.close()
 
 
-async def test_audit_acknowledges_fsync_and_reports_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_audit_acknowledges_fsync_and_reports_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     files = BoundedOffload(capacity=2, name="test-files")
     path = tmp_path / "audit.jsonl"
     store = AsyncLinesConfig(lambda: LinesConfig(path, start_backup=False), files=files)
@@ -176,10 +182,16 @@ async def test_log_delivery_failure_no_recursion_and_timeout() -> None:
 
 async def test_owned_schedules_and_backup(tmp_path: Path) -> None:
     files = BoundedOffload(capacity=2, name="test-files")
-    store = AsyncConfig(lambda: Config(
-        path=tmp_path / "config.json", start_backup=False,
-        backup_dir=tmp_path / "backups", backup_interval=0.01,
-    ), files=files, reload_interval=0.01)
+    store = AsyncConfig(
+        lambda: Config(
+            path=tmp_path / "config.json",
+            start_backup=False,
+            backup_dir=tmp_path / "backups",
+            backup_interval=0.01,
+        ),
+        files=files,
+        reload_interval=0.01,
+    )
     await store.start()
     await store.backup_now()
     assert list((tmp_path / "backups").rglob("*.json"))

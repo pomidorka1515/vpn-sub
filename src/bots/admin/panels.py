@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from session.async_client import AsyncXUiSession
 
 
-class _UNFETCHED_SENTINEL: # ruff: ignore[invalid-class-name]
+class _UNFETCHED_SENTINEL:  # ruff: ignore[invalid-class-name]
     def __repr__(self) -> str:
         return "<unfetched panel>"
 
@@ -79,7 +79,10 @@ class AdminPanelsMixin(AdminFeatureMixin):
 ├ <b>RAM:</b> <code>{obj.appStats.mem / MB:.2f} MB</code>
 └ <b>Uptime:</b> <code>{app_up}</code>"""
         await self.bot.send_message(
-            chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu() if last else None,
+            chat_id,
+            text,
+            parse_mode="HTML",
+            reply_markup=self.get_main_menu() if last else None,
         )
 
     async def _cb_all_panels_status(self, chat_id: int) -> None:

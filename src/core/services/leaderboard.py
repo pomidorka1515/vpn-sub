@@ -50,7 +50,7 @@ class LeaderboardService(BaseService):
             A dict: {"username": 1293720471, "second_place": 12493630},
             where key is the username and value is bandwidth in bytes.
 
-        """ # ruff: ignore[missing-trailing-period]
+        """  # ruff: ignore[missing-trailing-period]
         raw: dict[str, int] = {}
         self.trace(
             Op.leaderboard.leaderboard,
@@ -91,7 +91,9 @@ class LeaderboardService(BaseService):
                     raw[display] = used
 
         sorted_items: list[tuple[str, int]] = sorted(
-            raw.items(), key=operator.itemgetter(1), reverse=not flip,
+            raw.items(),
+            key=operator.itemgetter(1),
+            reverse=not flip,
         )
         if top_n > 0:
             sorted_items = sorted_items[:top_n]

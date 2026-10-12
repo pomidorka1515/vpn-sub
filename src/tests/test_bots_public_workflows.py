@@ -130,7 +130,9 @@ def _wire[M: (PublicSettingsMixin, PublicAccountMixin, PublicLoginMixin, PublicT
             uri="/sub/",
             domain="https://example.test/",
             profiles={
-                "fast": profile_config(name=["Fast", "Быстрый"], description=["fast en", "fast ru"]),
+                "fast": profile_config(
+                    name=["Fast", "Быстрый"], description=["fast en", "fast ru"]
+                ),
             },
         ),
     )
@@ -178,7 +180,8 @@ async def test_settings_callback_requires_registration_and_dispatches(
     ):
         await mixin.settings_callback(_call(action))
         registered = cast(
-            Callable[[types.Message], None], cast(MagicMock, mixin._expect).call_args.args[1],
+            Callable[[types.Message], None],
+            cast(MagicMock, mixin._expect).call_args.args[1],
         )
         assert getattr(registered, "__func__", registered) is getattr(step, "__func__", step)
 
@@ -204,7 +207,8 @@ async def test_fingerprint_and_settings_steps(
     subscription.business_svc.update_params.side_effect = None
     await mixin.fp_callback(_call("fp_firefox"))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", fingerprint="firefox",
+        username="alice",
+        fingerprint="firefox",
     )
     assert "fp ok" in telegram.send_message.call_args.args[1]
 
@@ -213,7 +217,8 @@ async def test_fingerprint_and_settings_steps(
     subscription.telegram_svc.get_username_telegram.return_value = 1
     await mixin.step_settings_name(_message("Bob"))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", fingerprint="firefox",
+        username="alice",
+        fingerprint="firefox",
     )
 
     subscription.telegram_svc.get_username_telegram.return_value = "alice"
@@ -339,10 +344,13 @@ async def test_login_flow(
     cast(MagicMock, mixin._answer_callback).assert_called_once()
     await mixin.login_callback(_call("login_credentials"))
     registered = cast(
-        Callable[[types.Message], None], cast(MagicMock, mixin._expect).call_args.args[1],
+        Callable[[types.Message], None],
+        cast(MagicMock, mixin._expect).call_args.args[1],
     )
     assert getattr(registered, "__func__", registered) is getattr(
-        mixin.step_login_email, "__func__", mixin.step_login_email,
+        mixin.step_login_email,
+        "__func__",
+        mixin.step_login_email,
     )
 
     await mixin.step_login_email(_message("/start"))

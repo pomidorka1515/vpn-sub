@@ -24,7 +24,8 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             types.InlineKeyboardButton("📊 Общий (total)", callback_data="lbt_total"),
             types.InlineKeyboardButton("📅 Месячный (monthly)", callback_data="lbt_monthly"),
             types.InlineKeyboardButton(
-                "🛡 Белый список (wl_monthly)", callback_data="lbt_wl_monthly",
+                "🛡 Белый список (wl_monthly)",
+                callback_data="lbt_wl_monthly",
             ),
         )
         await self.bot.send_message(
@@ -58,7 +59,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
     async def _step_leaderboard_window(self, message: types.Message) -> None:
         chat_id = message.chat.id
         if message.text is None:
-            await self.bot.send_message(chat_id, "❌ Введите число.", reply_markup=self.get_main_menu())
+            await self.bot.send_message(
+                chat_id, "❌ Введите число.", reply_markup=self.get_main_menu()
+            )
             return
 
         try:
@@ -80,7 +83,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             await self._handle_leaderboard_result(chat_id, bw_type, order, window)
         else:
             await self.bot.send_message(
-                chat_id, "❌ Сессия истекла, начните заново.", reply_markup=self.get_main_menu(),
+                chat_id,
+                "❌ Сессия истекла, начните заново.",
+                reply_markup=self.get_main_menu(),
             )
 
     async def _handle_leaderboard_result(
@@ -91,17 +96,24 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         window: int,
     ) -> None:
         lb_data = await self.sub.leaderboard_svc.leaderboard(
-            category=bw_type, top_n=window, use_displaynames=True, flip=order == "asc",
+            category=bw_type,
+            top_n=window,
+            use_displaynames=True,
+            flip=order == "asc",
         )
 
         language = self.lang_cfg.view()
-        chart = await self.sub.res.offloads.rendering.run(leaderboard_chart, lb_data, bandwidth_type=bw_type, lang=language["chart"]["ru"])
+        chart = await self.sub.res.offloads.rendering.run(
+            leaderboard_chart, lb_data, bandwidth_type=bw_type, lang=language["chart"]["ru"]
+        )
 
         if chart is None:
             await self.bot.send_message(chat_id, "Нет данных!")
             return
 
-        sorted_items = sorted(lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc"))
+        sorted_items = sorted(
+            lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc")
+        )
 
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         lines: list[str] = []

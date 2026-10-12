@@ -19,7 +19,7 @@ def build_description(
     lang: str,
     bandwidths: BandwidthInfo,
     status: bool,
-    statusTime: bool, # ruff: ignore[invalid-argument-name]
+    statusTime: bool,  # ruff: ignore[invalid-argument-name]
     ts: int,
     bw_limit: int,
     bw_used: int,
@@ -32,7 +32,9 @@ def build_description(
         desc = descTable["main"]
 
         desc = format(
-            desc, up=fmt_bytes(int(bandwidths.upload)), down=fmt_bytes(int(bandwidths.download)),
+            desc,
+            up=fmt_bytes(int(bandwidths.upload)),
+            down=fmt_bytes(int(bandwidths.download)),
         )
 
         if ts != 0:

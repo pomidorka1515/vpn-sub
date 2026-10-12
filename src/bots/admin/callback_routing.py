@@ -92,7 +92,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         del data, message
         await self._cb_list_users(chat_id)
 
-    async def _handle_list_users_page(self, data: str, chat_id: int, message: types.Message) -> None:
+    async def _handle_list_users_page(
+        self, data: str, chat_id: int, message: types.Message
+    ) -> None:
         del message
         await self._cb_list_users(chat_id, int(data.rsplit("_", 1)[1]))
 
@@ -108,7 +110,8 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
     async def _handle_add_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
         msg = await self.bot.send_message(
-            chat_id, "Введите username нового пользователя (или /start для отмены):",
+            chat_id,
+            "Введите username нового пользователя (или /start для отмены):",
         )
         self._expect(msg, self._step_add_user_name)  # pyright: ignore[reportUnknownMemberType]
 
@@ -116,7 +119,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         del data
         if not await self.sub.user_svc.list_users():
             await self.bot.send_message(
-                chat_id, "Список пользователей пуст.", reply_markup=self.get_main_menu(),
+                chat_id,
+                "Список пользователей пуст.",
+                reply_markup=self.get_main_menu(),
             )
             return
         page = self._pagination_state.get(chat_id, {}).get("info_page", 0)
@@ -172,7 +177,10 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
     async def _handle_codes_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
         await self.bot.edit_message_text(
-            "🎟 Управление кодами:", chat_id, message.message_id, reply_markup=self.get_codes_menu(),
+            "🎟 Управление кодами:",
+            chat_id,
+            message.message_id,
+            reply_markup=self.get_codes_menu(),
         )
 
     async def _handle_list_codes(self, data: str, chat_id: int, message: types.Message) -> None:
@@ -186,7 +194,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     async def _handle_delete_code(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
-        msg = await self.bot.send_message(chat_id, "Введите код для удаления (или /start для отмены):")
+        msg = await self.bot.send_message(
+            chat_id, "Введите код для удаления (или /start для отмены):"
+        )
         self._expect(msg, self._step_del_code)  # pyright: ignore[reportUnknownMemberType]
 
     async def _handle_add_code(self, data: str, chat_id: int, message: types.Message) -> None:
@@ -206,14 +216,17 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             return
         code_type = data.split("codetype_", 1)[1]
         msg = await self.bot.send_message(
-            chat_id, f"Тип: <b>{code_type}</b>\nВведите количество дней:", parse_mode="HTML",
+            chat_id,
+            f"Тип: <b>{code_type}</b>\nВведите количество дней:",
+            parse_mode="HTML",
         )
         self._expect(msg, self._step_add_code_days, code_type, code_name)  # pyright: ignore[reportUnknownMemberType]
 
     async def _handle_chart(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
         msg = await self.bot.send_message(
-            chat_id, "Введите username пользователя (или /start для отмены):",
+            chat_id,
+            "Введите username пользователя (или /start для отмены):",
         )
         self._expect(msg, self._step_chart_username)  # pyright: ignore[reportUnknownMemberType]
 
@@ -230,7 +243,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         pending = self._pending_edits.get(chat_id)
         if not pending:
             await self.bot.send_message(
-                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu(),
+                chat_id,
+                "❌ Сессия истекла, начните с /info",
+                reply_markup=self.get_main_menu(),
             )
             return
         handlers = {
@@ -244,12 +259,16 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         if handler is not None:
             await handler(chat_id, pending["username"])
 
-    async def _handle_fingerprint_save(self, data: str, chat_id: int, message: types.Message) -> None:
+    async def _handle_fingerprint_save(
+        self, data: str, chat_id: int, message: types.Message
+    ) -> None:
         del message
         pending = self._pending_edits.get(chat_id)
         if not pending:
             await self.bot.send_message(
-                chat_id, "❌ Сессия истекла, начните с /info", reply_markup=self.get_main_menu(),
+                chat_id,
+                "❌ Сессия истекла, начните с /info",
+                reply_markup=self.get_main_menu(),
             )
             return
         fp = data.split("fp_save_", 1)[1]
@@ -257,7 +276,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             await self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
         except AppError as error:
             await self._send_message(
-                chat_id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ Ошибка: {error.message}",
+                reply_markup=self.get_main_menu(),
             )
         else:
             await self._send_message(
@@ -268,12 +289,16 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             )
         self._pending_edits.pop(chat_id, None)
 
-    async def _handle_leaderboard_type(self, data: str, chat_id: int, message: types.Message) -> None:
+    async def _handle_leaderboard_type(
+        self, data: str, chat_id: int, message: types.Message
+    ) -> None:
         del message
         self._pending_leaderboard[chat_id] = {"type": data.split("lbt_", 1)[1]}
         await self._cb_leaderboard_order(chat_id)
 
-    async def _handle_leaderboard_order(self, data: str, chat_id: int, message: types.Message) -> None:
+    async def _handle_leaderboard_order(
+        self, data: str, chat_id: int, message: types.Message
+    ) -> None:
         del message
         if chat_id in self._pending_leaderboard:
             self._pending_leaderboard[chat_id]["order"] = data.split("lbo_", 1)[1]

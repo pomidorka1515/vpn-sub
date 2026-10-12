@@ -37,18 +37,37 @@ class RecordingAudit:
 
 
 @pytest_asyncio.fixture
-async def config_api(tmp_path: Path, async_database: AsyncDatabase) -> AsyncIterator[tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]]:
+async def config_api(
+    tmp_path: Path, async_database: AsyncDatabase
+) -> AsyncIterator[tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]]:
     path = tmp_path / "config.json"
     data = json.loads((ROOT / "docs/EXAMPLE.config.json").read_text())
     data.update(api_token="secret-token", sub_name="before", funny_strings=["keep-me"])
     path.write_text(json.dumps(data, indent=4) + "\n")
     async for app in api_app():
         sub = await make_subscription(async_database, app=app)
-        cfg = AsyncConfig[AppConfig](lambda: Config[AppConfig](path=path, schema_path=ROOT / "config.schema.json", backup_dir=tmp_path / "backup", indent=4, sync_mode="none", start_backup=False), files=sub.res.offloads.files)
+        cfg = AsyncConfig[AppConfig](
+            lambda: Config[AppConfig](
+                path=path,
+                schema_path=ROOT / "config.schema.json",
+                backup_dir=tmp_path / "backup",
+                indent=4,
+                sync_mode="none",
+                start_backup=False,
+            ),
+            files=sub.res.offloads.files,
+        )
         await cfg.start()
         audit = RecordingAudit()
         sub.audit_svc = AsyncAuditService(cast("AsyncLinesConfig", audit))
-        AsyncApi(app=app, cfg=cfg, audit_cfg=cast("AsyncLinesConfig", audit), sub=sub, bw=make_watch(async_database, sub), limiter=app.extensions["limiter"])
+        AsyncApi(
+            app=app,
+            cfg=cfg,
+            audit_cfg=cast("AsyncLinesConfig", audit),
+            sub=sub,
+            bw=make_watch(async_database, sub),
+            limiter=app.extensions["limiter"],
+        )
         try:
             yield app, cfg, path, audit
         finally:
@@ -60,7 +79,9 @@ def test_required_keys_match_schema() -> None:
 
 
 async def set_config(app: Quart, base: str, values: dict[str, JsonValue]) -> Response:
-    return await app.test_client().post("/sub/privapi/api/config/set", json={"base": base, "values": values}, headers=HEADERS)
+    return await app.test_client().post(
+        "/sub/privapi/api/config/set", json={"base": base, "values": values}, headers=HEADERS
+    )
 
 
 def base_for(path: Path) -> str:
@@ -68,7 +89,9 @@ def base_for(path: Path) -> str:
 
 
 @pytest.mark.asyncio
-async def test_config_get_contract(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]) -> None:
+async def test_config_get_contract(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
     app, _, path, _ = config_api
     client = app.test_client()
     assert (await client.get("/sub/privapi/api/config/get")).status_code == 401
@@ -88,7 +111,9 @@ async def test_config_get_contract(config_api: tuple[Quart, AsyncConfig[AppConfi
 
 
 @pytest.mark.asyncio
-async def test_config_commit_and_conflict(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]) -> None:
+async def test_config_commit_and_conflict(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
     app, cfg, path, audit = config_api
     original = json.loads(path.read_bytes())
     old_base = base_for(path)
@@ -114,7 +139,9 @@ async def test_config_commit_and_conflict(config_api: tuple[Quart, AsyncConfig[A
 
 
 @pytest.mark.asyncio
-async def test_unknown_profile_node_preserves_config(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]) -> None:
+async def test_unknown_profile_node_preserves_config(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
     app, cfg, path, audit = config_api
     before = path.read_bytes()
     profiles = json.loads(before)["profiles"]
@@ -129,8 +156,21 @@ async def test_unknown_profile_node_preserves_config(config_api: tuple[Quart, As
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("values", "message"), [({"nope": 1}, "Unknown key"), ({"panel_alert_cooldown": "soon"}, "Schema validation"), ({"3xui": {}}, "3xui must contain"), ({"$schema": "other.json"}, "$schema"), ({"domain": None}, "required")])
-async def test_rejected_patch_preserves_file(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit], values: dict[str, JsonValue], message: str) -> None:
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        ({"nope": 1}, "Unknown key"),
+        ({"panel_alert_cooldown": "soon"}, "Schema validation"),
+        ({"3xui": {}}, "3xui must contain"),
+        ({"$schema": "other.json"}, "$schema"),
+        ({"domain": None}, "required"),
+    ],
+)
+async def test_rejected_patch_preserves_file(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+    values: dict[str, JsonValue],
+    message: str,
+) -> None:
     app, cfg, path, audit = config_api
     before = path.read_bytes()
     snapshot = cfg.view()
@@ -144,9 +184,15 @@ async def test_rejected_patch_preserves_file(config_api: tuple[Quart, AsyncConfi
 
 
 @pytest.mark.asyncio
-async def test_config_optional_deletion_and_restart(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]) -> None:
+async def test_config_optional_deletion_and_restart(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
     app, _, path, _ = config_api
-    response = await set_config(app, base_for(path), {"funny_strings": None, "domain": "https://other.test", "bot": None, "publicbot": None})
+    response = await set_config(
+        app,
+        base_for(path),
+        {"funny_strings": None, "domain": "https://other.test", "bot": None, "publicbot": None},
+    )
     assert response.status_code == 200
     assert (await response.get_json())["obj"]["restart"] == ["bot", "publicbot"]
     updated = json.loads(path.read_bytes())
@@ -160,7 +206,9 @@ async def test_config_optional_deletion_and_restart(config_api: tuple[Quart, Asy
 
 
 @pytest.mark.asyncio
-async def test_unchanged_patch_does_not_write(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]) -> None:
+async def test_unchanged_patch_does_not_write(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
     app, _, path, audit = config_api
     before = path.read_bytes(), path.stat().st_mtime_ns
     response = await set_config(app, base_for(path), {"sub_name": "before"})
@@ -173,7 +221,10 @@ async def test_unchanged_patch_does_not_write(config_api: tuple[Quart, AsyncConf
 
 
 @pytest.mark.asyncio
-async def test_failed_commit_does_not_publish_or_audit(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit], monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_failed_commit_does_not_publish_or_audit(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     app, cfg, path, audit = config_api
     before = path.read_bytes()
 
@@ -189,11 +240,32 @@ async def test_failed_commit_does_not_publish_or_audit(config_api: tuple[Quart, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("data", "content_type"), [(b"{", "application/json"), (b"[]", "application/json"), (b"{}", "text/plain"), (b'{"values":{}}', "application/json"), (b"x" * (1024 * 1024 + 1), "application/json")])
-async def test_malformed_and_oversized_bodies(config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit], data: bytes, content_type: str) -> None:
+@pytest.mark.parametrize(
+    ("data", "content_type"),
+    [
+        (b"{", "application/json"),
+        (b"[]", "application/json"),
+        (b"{}", "text/plain"),
+        (b'{"values":{}}', "application/json"),
+        (b"x" * (1024 * 1024 + 1), "application/json"),
+    ],
+)
+async def test_malformed_and_oversized_bodies(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+    data: bytes,
+    content_type: str,
+) -> None:
     _, cfg, path, audit = config_api
     before = path.read_bytes()
-    response = await config_api[0].test_client().post("/sub/privapi/api/config/set", data=data, headers={**HEADERS, "Content-Type": content_type})
+    response = (
+        await config_api[0]
+        .test_client()
+        .post(
+            "/sub/privapi/api/config/set",
+            data=data,
+            headers={**HEADERS, "Content-Type": content_type},
+        )
+    )
     assert response.status_code == (413 if len(data) > 1024 * 1024 else 400)
     assert path.read_bytes() == before
     assert cfg.view() == json.loads(before)

@@ -22,7 +22,9 @@ if TYPE_CHECKING:
 
 @pytest_asyncio.fixture
 async def repository(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
-    db = AsyncDatabase(path=tmp_path / "state.sqlite3", backup_dir=tmp_path / "backups", start_backup=False)
+    db = AsyncDatabase(
+        path=tmp_path / "state.sqlite3", backup_dir=tmp_path / "backups", start_backup=False
+    )
     await db.start()
     try:
         yield db
@@ -31,7 +33,15 @@ async def repository(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
 
 
 async def create_user(db: AsyncDatabase, name: str = "alice") -> None:
-    await db.create_user(username=name, uuid=f"uuid-{name}", token=f"token-{name}", fingerprint="chrome", displayname=name, ext_username=f"{name}@test", ext_password_hash="hash")
+    await db.create_user(
+        username=name,
+        uuid=f"uuid-{name}",
+        token=f"token-{name}",
+        fingerprint="chrome",
+        displayname=name,
+        ext_username=f"{name}@test",
+        ext_password_hash="hash",
+    )
 
 
 @pytest.mark.asyncio
@@ -76,7 +86,16 @@ async def test_atomic_registration_race_and_refund(repository: AsyncDatabase) ->
     await db.add_code("once", "register", gb=4, wl_gb=2)
 
     async def register(name: str) -> object:
-        return await db.register_with_code(code="once", username=name, uuid=name, token=name, fingerprint="chrome", displayname=name, ext_username=name, ext_password_hash="hash")
+        return await db.register_with_code(
+            code="once",
+            username=name,
+            uuid=name,
+            token=name,
+            fingerprint="chrome",
+            displayname=name,
+            ext_username=name,
+            ext_password_hash="hash",
+        )
 
     results = await asyncio.gather(register("alice"), register("bob"), return_exceptions=True)
     assert sum(isinstance(result, dict) for result in results) == 1
@@ -96,7 +115,9 @@ async def test_bonus_usage_notifications_and_snapshots(repository: AsyncDatabase
     db = repository
     await create_user(db)
     await db.add_code("bonus", "bonus", gb=3, wl_gb=2, days=1)
-    results = await asyncio.gather(db.adjust_bonus("alice", "bonus"), db.adjust_bonus("alice", "bonus"), return_exceptions=True)
+    results = await asyncio.gather(
+        db.adjust_bonus("alice", "bonus"), db.adjust_bonus("alice", "bonus"), return_exceptions=True
+    )
     assert sum(isinstance(result, dict) for result in results) == 1
     assert sum(isinstance(result, CodeError) for result in results) == 1
     user = await db.get_user("alice")
@@ -137,7 +158,9 @@ async def test_bonus_usage_notifications_and_snapshots(repository: AsyncDatabase
 
 
 @pytest.mark.asyncio
-async def test_cancelled_transaction_rolls_back_before_next_writer(repository: AsyncDatabase) -> None:
+async def test_cancelled_transaction_rolls_back_before_next_writer(
+    repository: AsyncDatabase,
+) -> None:
     entered = asyncio.Event()
 
     async def operation() -> None:
@@ -158,7 +181,9 @@ async def test_cancelled_transaction_rolls_back_before_next_writer(repository: A
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("commit", [False, True])
-async def test_cancellation_during_queued_sql_settles(repository: AsyncDatabase, monkeypatch: MonkeyPatch, commit: bool) -> None:
+async def test_cancellation_during_queued_sql_settles(
+    repository: AsyncDatabase, monkeypatch: MonkeyPatch, commit: bool
+) -> None:
     entered, release = asyncio.Event(), asyncio.Event()
     writer = repository._writer
     assert writer is not None
@@ -175,6 +200,7 @@ async def test_cancellation_during_queued_sql_settles(repository: AsyncDatabase,
     async def operation() -> None:
         async with repository.transaction(immediate=True) as conn:
             await conn.execute("INSERT INTO app_metadata VALUES ('outcome', 'value')")
+
     task = asyncio.create_task(operation())
     await entered.wait()
     task.cancel()
@@ -200,7 +226,9 @@ async def test_pragmas_leases_and_nested_rejection(repository: AsyncDatabase) ->
 
 
 @pytest.mark.asyncio
-async def test_backup_restores_and_close_is_repeatable(repository: AsyncDatabase, tmp_path: Path) -> None:
+async def test_backup_restores_and_close_is_repeatable(
+    repository: AsyncDatabase, tmp_path: Path
+) -> None:
     await create_user(repository)
     await repository.backup_now()
     backup = next((tmp_path / "backups" / "state").glob("*.sqlite3"))
@@ -238,7 +266,9 @@ async def test_existing_schema_and_failed_start_unwind(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rollback_failure_discards_writer(repository: AsyncDatabase, monkeypatch: MonkeyPatch) -> None:
+async def test_rollback_failure_discards_writer(
+    repository: AsyncDatabase, monkeypatch: MonkeyPatch
+) -> None:
     original = AsyncConnection._execute
     old_writer = repository._writer
 
@@ -263,7 +293,9 @@ async def test_rollback_failure_discards_writer(repository: AsyncDatabase, monke
 
 
 @pytest.mark.asyncio
-async def test_readers_do_not_see_uncommitted_writer_and_close_drains(repository: AsyncDatabase) -> None:
+async def test_readers_do_not_see_uncommitted_writer_and_close_drains(
+    repository: AsyncDatabase,
+) -> None:
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def write() -> None:
@@ -290,13 +322,24 @@ async def test_readers_do_not_see_uncommitted_writer_and_close_drains(repository
 
 
 @pytest.mark.asyncio
-async def test_code_duplicates_and_failed_registration_preserve_code(repository: AsyncDatabase) -> None:
+async def test_code_duplicates_and_failed_registration_preserve_code(
+    repository: AsyncDatabase,
+) -> None:
     await create_user(repository)
     await repository.add_code("register", "register")
     with pytest.raises(DuplicateError):
         await repository.add_code("register", "register")
     with pytest.raises(DuplicateError):
-        await repository.register_with_code(code="register", username="alice", uuid="new", token="new", fingerprint="chrome", displayname="Alice", ext_username="new", ext_password_hash="hash")
+        await repository.register_with_code(
+            code="register",
+            username="alice",
+            uuid="new",
+            token="new",
+            fingerprint="chrome",
+            displayname="Alice",
+            ext_username="new",
+            ext_password_hash="hash",
+        )
     code = await repository.get_code("register")
     assert code is not None
     assert code["uses"] == 1

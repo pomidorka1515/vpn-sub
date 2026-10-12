@@ -29,7 +29,9 @@ class AdminTrafficMixin(AdminFeatureMixin):
             await self.sub.user_svc.get_user_state(username)
         except AppError as error:
             await self.bot.send_message(
-                message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
 
@@ -47,7 +49,9 @@ class AdminTrafficMixin(AdminFeatureMixin):
                 raise ValueError
         except ValueError:
             await self.bot.send_message(
-                message.chat.id, "❌ Введите число от 1 до 90.", reply_markup=self.get_main_menu(),
+                message.chat.id,
+                "❌ Введите число от 1 до 90.",
+                reply_markup=self.get_main_menu(),
             )
             return
 
@@ -95,8 +99,11 @@ class AdminTrafficMixin(AdminFeatureMixin):
 
             text = truncate_utf8(text, 1024)
             language = self.lang_cfg.view()
-            chart_img = await self.sub.res.offloads.rendering.run(bandwidth_chart,
-                snapshots, label=info.displayname, lang=language["chart"]["ru"],
+            chart_img = await self.sub.res.offloads.rendering.run(
+                bandwidth_chart,
+                snapshots,
+                label=info.displayname,
+                lang=language["chart"]["ru"],
             )
             if chart_img is not None:
                 await self.bot.send_photo(
@@ -114,7 +121,11 @@ class AdminTrafficMixin(AdminFeatureMixin):
                     reply_markup=self.get_main_menu(),
                 )
         except AppError as error:
-            await self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self._send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
         except Exception:
             self.log.exception("Chart error for username %s", username)
-            await self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
+            await self._send_message(
+                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu()
+            )

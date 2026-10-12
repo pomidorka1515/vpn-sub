@@ -136,7 +136,8 @@ class PublicRoutingMixin(PublicFeatureMixin):
         if handler_name is None:
             return
         handler = cast(
-            Callable[[discord.Interaction], Awaitable[None]], getattr(self, handler_name),
+            Callable[[discord.Interaction], Awaitable[None]],
+            getattr(self, handler_name),
         )
         await handler(interaction)
 
