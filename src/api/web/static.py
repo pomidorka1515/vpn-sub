@@ -28,7 +28,7 @@ def _admin_module_method(name: str) -> Callable[[AsyncWebApiMixin], Awaitable[Re
     async def handler(self: AsyncWebApiMixin) -> ResponseType:
         version = await self.sub.res.offloads.files.run(asset_version)
         source = await self.sub.res.offloads.files.run(
-            lambda: (RES_DIR / "admin" / f"{name}.js").read_text(encoding="utf-8")
+            lambda: (RES_DIR / "admin" / f"{name}.js").read_text(encoding="utf-8"),
         )
         # Version import specifiers only. A quote-suffix replace missed
         # "./charts/spec.js" because nested modules do not end in .js'.
@@ -93,7 +93,7 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         if body is None:
             response = await make_response(
                 await send_file(
-                    RES_DIR / name, mimetype=mimetype, add_etags=True, cache_timeout=31536000
+                    RES_DIR / name, mimetype=mimetype, add_etags=True, cache_timeout=31536000,
                 ),
             )
         else:
@@ -109,7 +109,7 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
 
     async def common_css(self) -> ResponseType:
         source = await self.sub.res.offloads.files.run(
-            lambda: (RES_DIR / "common.css").read_text(encoding="utf-8")
+            lambda: (RES_DIR / "common.css").read_text(encoding="utf-8"),
         )
         body = embed_font_faces(source, self.prefix)
         return await self._static("common.css", "text/css", body.encode("utf-8"))
@@ -157,7 +157,7 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
     async def codemirror_css(self) -> ResponseType:
         name = "vendor/codemirror-5.65.16.min.css"
         return await self._static(
-            name, "text/css", await self.sub.res.offloads.files.run((RES_DIR / name).read_bytes)
+            name, "text/css", await self.sub.res.offloads.files.run((RES_DIR / name).read_bytes),
         )
 
     async def gui_panel(self) -> ResponseType:

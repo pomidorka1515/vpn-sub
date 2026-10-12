@@ -65,7 +65,7 @@ class Application(Runtime[ApplicationDependencies]):
 
 
 async def create_application(
-    paths: AppPaths | None = None, options: AppOptions | None = None, *, app: Quart | None = None
+    paths: AppPaths | None = None, options: AppOptions | None = None, *, app: Quart | None = None,
 ) -> Application:
     """Compose Quart against runtime-owned async dependencies, unwinding failures."""
     paths = paths or AppPaths.from_env()
@@ -115,7 +115,7 @@ async def create_application(
         for name, store in (("config", cfg), ("language", lang), ("audit", audit)):
             await open_resource(OwnedResource(name, store))
         db = AsyncDatabase(
-            path=paths.database, backup_dir=paths.backups, start_backup=options.start_background
+            path=paths.database, backup_dir=paths.backups, start_backup=options.start_background,
         )
         await open_resource(OwnedResource("database", db))
         limiter = options.limiter or AsyncRateLimiter.from_config(cfg)
@@ -138,7 +138,7 @@ async def create_application(
         )
         await open_resource(OwnedResource("subscription", sub))
         app = app or create_api_application(
-            proxy_hops=options.proxy_hops, require_proxy=options.require_proxy
+            proxy_hops=options.proxy_hops, require_proxy=options.require_proxy,
         )
         conf = cfg.view()
         admin_bot = (
@@ -155,7 +155,7 @@ async def create_application(
             await open_resource(OwnedResource("Telegram session", AsyncTelegramSession()))
         notifier = (
             AsyncNotifier(
-                texts=public_bot.TEXTS, send=public_bot.send_notice, language=public_bot.get_lang
+                texts=public_bot.TEXTS, send=public_bot.send_notice, language=public_bot.get_lang,
             )
             if public_bot is not None
             else None

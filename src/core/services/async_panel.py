@@ -57,7 +57,7 @@ class AsyncPanelService(AsyncBaseService):
     """
 
     def __init__(
-        self, res: AsyncCoreResources, *, foreground: int = 4, background: int = 4
+        self, res: AsyncCoreResources, *, foreground: int = 4, background: int = 4,
     ) -> None:
         super().__init__(res)
         if foreground < 1 or background < 1:
@@ -118,7 +118,7 @@ class AsyncPanelService(AsyncBaseService):
             return [result for result in results if result is not None]
 
         return await asyncio.shield(
-            self._fanouts[work].create(collect, name=f"panel:fanout:{work}")
+            self._fanouts[work].create(collect, name=f"panel:fanout:{work}"),
         )
 
     async def map_panels[T](
@@ -136,7 +136,7 @@ class AsyncPanelService(AsyncBaseService):
 
     @staticmethod
     def response_data(
-        panel: AsyncXUiSession, response: PanelResponse, what: str
+        panel: AsyncXUiSession, response: PanelResponse, what: str,
     ) -> dict[str, object]:
         try:
             raw: object = response.json()
@@ -159,16 +159,16 @@ class AsyncPanelService(AsyncBaseService):
             return None
 
     async def statuses(
-        self, panels: Sequence[AsyncXUiSession] | None = None, *, work: WorkClass = "foreground"
+        self, panels: Sequence[AsyncXUiSession] | None = None, *, work: WorkClass = "foreground",
     ) -> list[ServerMetricsResponse | None]:
         return await self.map_panels(
-            self.panels if panels is None else panels, self.getstatus, work=work
+            self.panels if panels is None else panels, self.getstatus, work=work,
         )
 
     async def getinbounds(self, panel: AsyncXUiSession) -> list[Inbound]:
         async def load() -> list[Inbound]:
             data = self.response_data(
-                panel, await panel.get("panel/api/inbounds/list"), "inbound query"
+                panel, await panel.get("panel/api/inbounds/list"), "inbound query",
             )
             if not data.get("success"):
                 raise PanelUnavailableError(f"Panel {panel.name} inbound query failed")
@@ -204,7 +204,7 @@ class AsyncPanelService(AsyncBaseService):
         return await self._clients[panel.name].get(4, load)
 
     async def client_maps(
-        self, panels: Sequence[AsyncXUiSession], *, work: WorkClass = "foreground"
+        self, panels: Sequence[AsyncXUiSession], *, work: WorkClass = "foreground",
     ) -> dict[str, Mapping[str, PanelClient]]:
         snapshots = await self.map_panels(panels, self.clients_snapshot, work=work)
         return {panel.name: snapshot for panel, snapshot in zip(panels, snapshots, strict=True)}
@@ -219,7 +219,7 @@ class AsyncPanelService(AsyncBaseService):
 
     async def get_client(self, panel: AsyncXUiSession, email: str) -> PanelClient | None:
         data = self.response_data(
-            panel, await panel.get(f"panel/api/clients/get/{quote(email, safe='')}"), "client query"
+            panel, await panel.get(f"panel/api/clients/get/{quote(email, safe='')}"), "client query",
         )
         if not data.get("success"):
             if "record not found" in str(data.get("msg", "")).lower():
@@ -254,13 +254,13 @@ class AsyncPanelService(AsyncBaseService):
             raise PanelUnavailableError(f"Panel {panel.name} invalid traffic") from exc
 
     async def _load_onlines(
-        self, epoch: int, work: WorkClass
+        self, epoch: int, work: WorkClass,
     ) -> tuple[dict[str, None], dict[str, Health], float]:
         known = await self.db.usernames()
 
         async def fetch(panel: AsyncXUiSession) -> dict[str, object]:
             return self.response_data(
-                panel, await panel.post("panel/api/clients/onlines"), "online query"
+                panel, await panel.post("panel/api/clients/onlines"), "online query",
             )
 
         results = await self.outcomes(self.panels, fetch, work=work)
@@ -290,7 +290,7 @@ class AsyncPanelService(AsyncBaseService):
         return snapshot
 
     async def get_online_status(
-        self, new: bool = False, *, fresh: bool = False, work: WorkClass = "foreground"
+        self, new: bool = False, *, fresh: bool = False, work: WorkClass = "foreground",
     ) -> OnlineStatus:
         snapshot = self._online
         if fresh or snapshot is None or monotonic() - snapshot[2] >= 4:
@@ -302,7 +302,7 @@ class AsyncPanelService(AsyncBaseService):
                 epoch = self._online_epoch
                 self._online_task_epoch = epoch
                 self._online_task = self._refreshes.create(
-                    lambda: self._load_onlines(epoch, work), name="panel:online-refresh"
+                    lambda: self._load_onlines(epoch, work), name="panel:online-refresh",
                 )
             snapshot = await asyncio.shield(self._online_task)
         users, health, _ = snapshot

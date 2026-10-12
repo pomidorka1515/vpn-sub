@@ -55,7 +55,7 @@ def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> N
 @pytest.mark.asyncio
 @pytest.mark.parametrize("compiled", [False, True])
 async def test_factory_schema_verbose_and_browser_assets(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, compiled: bool
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, compiled: bool,
 ) -> None:
     from async_core_helpers import PanelTransport
     from helpers import FakePanel
@@ -92,7 +92,7 @@ async def test_factory_schema_verbose_and_browser_assets(
             displayname="Alice",
         )
         response = await client.get(
-            f"/sub?token={token}&lang=en", headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"}
+            f"/sub?token={token}&lang=en", headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"},
         )
         assert response.status_code == 403
         assert response.mimetype == "text/html"
@@ -169,7 +169,7 @@ async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
 
     with pytest.raises(OSError, match="Redis unavailable"):
         await create_application(
-            paths, AppOptions(limiter=AsyncRateLimiter("redis://test", client=BrokenRedis()))
+            paths, AppOptions(limiter=AsyncRateLimiter("redis://test", client=BrokenRedis())),
         )
     # Primary lock was released by failed composition.
     from app_runtime.composition import PrimaryLock
@@ -182,7 +182,7 @@ async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("enabled", [False, True])
 async def test_factory_optional_async_bots_and_notice_wiring(
-    paths: AppPaths, enabled: bool
+    paths: AppPaths, enabled: bool,
 ) -> None:
     from unittest.mock import AsyncMock, patch
 
@@ -198,7 +198,7 @@ async def test_factory_optional_async_bots_and_notice_wiring(
         await asyncio.Event().wait()
 
     with patch(
-        "bots.polling.TelegramPollingMixin._poll_forever", new=AsyncMock(side_effect=polling)
+        "bots.polling.TelegramPollingMixin._poll_forever", new=AsyncMock(side_effect=polling),
     ):
         runtime = await create_application(
             paths,
@@ -233,7 +233,7 @@ async def test_factory_optional_async_bots_and_notice_wiring(
     ],
 )
 async def test_proxy_guard_before_forwarding(
-    peer: str, forwarded: str, expected: str, status: int
+    peer: str, forwarded: str, expected: str, status: int,
 ) -> None:
     app = create_api_application(require_proxy=True)
 
@@ -242,7 +242,7 @@ async def test_proxy_guard_before_forwarding(
         return request.remote_addr or ""
 
     response = await app.test_client().get(
-        "/remote", headers={"X-Forwarded-For": forwarded}, scope_base={"client": (peer, 1234)}
+        "/remote", headers={"X-Forwarded-For": forwarded}, scope_base={"client": (peer, 1234)},
     )
     assert response.status_code == status
     if status == 200:
@@ -285,7 +285,7 @@ async def test_access_logging_redacts_tokens(caplog: pytest.LogCaptureFixture) -
 
     with caplog.at_level(5, logger="http.access"):
         await app.test_client().get(
-            "/sub?token=secret&password=hidden", headers={"User-Agent": "token=agentsecret"}
+            "/sub?token=secret&password=hidden", headers={"User-Agent": "token=agentsecret"},
         )
         await app.test_client().get("/api/state/polling")
     assert "secret" not in caplog.text

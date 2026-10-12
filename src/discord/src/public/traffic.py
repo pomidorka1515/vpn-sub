@@ -38,7 +38,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
         ]
         view.add_item(
             discord.ui.Select(
-                custom_id="chart_select", options=options, min_values=1, max_values=1
+                custom_id="chart_select", options=options, min_values=1, max_values=1,
             ),
         )
         return view

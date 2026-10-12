@@ -133,7 +133,7 @@ class BusinessCodeService(BaseService):
                 self.db.delete_metadata(key)
             except Exception:
                 self.log.critical(
-                    "created-user recovery failed for %s; marker retained", username, exc_info=True
+                    "created-user recovery failed for %s; marker retained", username, exc_info=True,
                 )
 
     def get_rollback_failures(self) -> dict[str, dict[str, dict[str, str]]]:

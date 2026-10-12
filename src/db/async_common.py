@@ -72,6 +72,6 @@ class AsyncConnectionMixin:
         raise NotImplementedError
 
     def transaction(
-        self, *, immediate: bool = False
+        self, *, immediate: bool = False,
     ) -> AbstractAsyncContextManager[AsyncConnection]:
         raise NotImplementedError

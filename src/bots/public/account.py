@@ -27,14 +27,14 @@ class PublicAccountMixin(PublicFeatureMixin):
         confirm = t["delete_confirm_input"]
         if text.strip().lower() != confirm.lower():
             await self.bot.send_message(
-                message.chat.id, t["cancelled"], reply_markup=await self.get_menu(uid)
+                message.chat.id, t["cancelled"], reply_markup=await self.get_menu(uid),
             )
             return None
 
         username = await self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str):
             await self.bot.send_message(
-                message.chat.id, "❌ Error", reply_markup=await self.get_menu(uid)
+                message.chat.id, "❌ Error", reply_markup=await self.get_menu(uid),
             )
             return None
         try:
@@ -47,13 +47,13 @@ class PublicAccountMixin(PublicFeatureMixin):
 
         except AppError as error:
             await self._send_message(
-                message.chat.id, error.message, reply_markup=await self.get_menu(uid)
+                message.chat.id, error.message, reply_markup=await self.get_menu(uid),
             )
             return None
         except Exception:
             self.log.exception("Delete error for uid %s", uid)
             await self._send_message(
-                message.chat.id, "⚠️ Error", reply_markup=await self.get_menu(uid)
+                message.chat.id, "⚠️ Error", reply_markup=await self.get_menu(uid),
             )
 
     async def step_reset(self, message: types.Message) -> None:
@@ -79,7 +79,7 @@ class PublicAccountMixin(PublicFeatureMixin):
                 )
             except AppError as error:
                 await self._send_message(
-                    message.chat.id, error.message, reply_markup=await self.get_menu(uid)
+                    message.chat.id, error.message, reply_markup=await self.get_menu(uid),
                 )
             except Exception:
                 self.log.critical("reset_user failed", exc_info=True)
@@ -90,7 +90,7 @@ class PublicAccountMixin(PublicFeatureMixin):
                 )
         else:
             await self.bot.send_message(
-                message.chat.id, t["cancelled"], reply_markup=await self.get_menu(uid)
+                message.chat.id, t["cancelled"], reply_markup=await self.get_menu(uid),
             )
             return None
 
@@ -102,7 +102,7 @@ class PublicAccountMixin(PublicFeatureMixin):
 
         if text.startswith("/"):
             await self.bot.send_message(
-                message.chat.id, t["cancelled"], reply_markup=await self.get_menu(uid)
+                message.chat.id, t["cancelled"], reply_markup=await self.get_menu(uid),
             )
             return
 
@@ -117,10 +117,10 @@ class PublicAccountMixin(PublicFeatureMixin):
             await self.send_info(message.chat.id, uid, lang)
         except AppError:
             await self._send_message(
-                message.chat.id, t["invalid_code"], reply_markup=await self.get_menu(uid)
+                message.chat.id, t["invalid_code"], reply_markup=await self.get_menu(uid),
             )
         except Exception:
             self.log.exception(f"Bonus error for uid {uid}")
             await self._send_message(
-                message.chat.id, t["error_generic"], reply_markup=await self.get_menu(uid)
+                message.chat.id, t["error_generic"], reply_markup=await self.get_menu(uid),
             )

@@ -52,7 +52,7 @@ class AsyncGenerationCache[T]:
             epoch = self._epoch
             if self._flight is None or self._flight[:2] != (epoch, stamp) or self._flight[2].done():
                 task = self._tasks.create(
-                    lambda: self._refresh(epoch, stamp, load), name="panel:cache-refresh"
+                    lambda: self._refresh(epoch, stamp, load), name="panel:cache-refresh",
                 )
                 self._flight = (epoch, stamp, task)
             else:
@@ -60,7 +60,7 @@ class AsyncGenerationCache[T]:
         return copy.deepcopy(await asyncio.shield(task))
 
     async def _refresh(
-        self, epoch: int, stamp: int, load: Callable[[], Coroutine[object, object, T]]
+        self, epoch: int, stamp: int, load: Callable[[], Coroutine[object, object, T]],
     ) -> T:
         value = await load()
         async with self._lock:

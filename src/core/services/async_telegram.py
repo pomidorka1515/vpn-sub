@@ -66,16 +66,16 @@ class AsyncTelegramService(AsyncBaseService):
 
     @overload
     async def get_username_telegram(
-        self, tgid: int | str, reverse: Literal[False] = False
+        self, tgid: int | str, reverse: Literal[False] = False,
     ) -> str | None: ...
 
     @overload
     async def get_username_telegram(
-        self, tgid: int | str, reverse: Literal[True]
+        self, tgid: int | str, reverse: Literal[True],
     ) -> int | None: ...
 
     async def get_username_telegram(
-        self, tgid: int | str, reverse: bool = False
+        self, tgid: int | str, reverse: bool = False,
     ) -> int | str | None:
         if not reverse:
             return await self.db.tgid_to_user(tgid)

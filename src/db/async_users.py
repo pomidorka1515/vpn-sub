@@ -98,7 +98,7 @@ class AsyncUsersMixin(AsyncConnectionMixin):
         except DatabaseError as exc:
             if "UNIQUE" in str(exc) or "PRIMARY KEY" in str(exc):
                 raise DuplicateError(
-                    "username, UUID, token or external username already exists"
+                    "username, UUID, token or external username already exists",
                 ) from exc
             raise
 
@@ -131,13 +131,13 @@ class AsyncUsersMixin(AsyncConnectionMixin):
                 if updates:
                     assignments = ", ".join(f"{key} = ?" for key in updates)
                     await conn.execute(
-                        f"UPDATE users SET {assignments} WHERE username = ?",  # ruff: ignore[hardcoded-sql-expression]
+                        f"UPDATE users SET {assignments} WHERE username = ?",
                         (*updates.values(), username),
                     )
                 if "tgid" in fields:
                     telegram_id = fields["tgid"]
                     await set_telegram_mapping(
-                        conn, username, None if telegram_id is None else str(telegram_id)
+                        conn, username, None if telegram_id is None else str(telegram_id),
                     )
         except DatabaseError as exc:
             if "UNIQUE" in str(exc):
@@ -164,8 +164,8 @@ class AsyncUsersMixin(AsyncConnectionMixin):
             ):
                 if value is not None:
                     await conn.execute(
-                        f"UPDATE users SET {column} = ? WHERE username = ?", (int(value), username)
-                    )  # ruff: ignore[hardcoded-sql-expression]
+                        f"UPDATE users SET {column} = ? WHERE username = ?", (int(value), username),
+                    )
             await conn.execute(
                 "INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?)",
                 (f"user_sync_pending:{username}", "enabled"),
@@ -192,7 +192,7 @@ class AsyncUsersMixin(AsyncConnectionMixin):
             if count != 1:
                 raise DatabaseError("reset UUID has not committed")
             await conn.execute(
-                "DELETE FROM app_metadata WHERE key = ?", (f"user_reset_pending:{username}",)
+                "DELETE FROM app_metadata WHERE key = ?", (f"user_reset_pending:{username}",),
             )
 
     async def delete_user(self, username: str) -> None:
@@ -212,7 +212,7 @@ class AsyncUsersMixin(AsyncConnectionMixin):
     async def set_auth_token(self, username: str, auth_token: str | None) -> None:
         async with self.transaction(immediate=True) as conn:
             count = await conn.execute(
-                "UPDATE users SET auth_token = ? WHERE username = ?", (auth_token, username)
+                "UPDATE users SET auth_token = ? WHERE username = ?", (auth_token, username),
             )
             if count != 1:
                 raise DatabaseError("failed to set auth token")
@@ -220,7 +220,7 @@ class AsyncUsersMixin(AsyncConnectionMixin):
     async def ext_to_user(self, ext_username: str) -> str | None:
         async with self.connection() as conn:
             row = await conn.row(
-                "SELECT username FROM users WHERE ext_username = ?", (ext_username,)
+                "SELECT username FROM users WHERE ext_username = ?", (ext_username,),
             )
             return str(row[0]) if row else None
 
@@ -232,6 +232,6 @@ class AsyncUsersMixin(AsyncConnectionMixin):
     async def ext_password(self, ext_username: str) -> str | None:
         async with self.connection() as conn:
             row = await conn.row(
-                "SELECT ext_password_hash FROM users WHERE ext_username = ?", (ext_username,)
+                "SELECT ext_password_hash FROM users WHERE ext_username = ?", (ext_username,),
             )
             return str(row[0]) if row and row[0] is not None else None

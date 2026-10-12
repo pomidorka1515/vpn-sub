@@ -31,13 +31,13 @@ NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 @pytest.mark.asyncio
 async def test_online_health_cache_rename_and_retry(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     good = FakePanel(
-        name="good", post_payload={"success": True, "msg": "", "obj": ["alice", "foreign"]}
+        name="good", post_payload={"success": True, "msg": "", "obj": ["alice", "foreign"]},
     )
     invalid = FakePanel(
-        name="invalid", post_payload={"success": True, "msg": "", "obj": ["alice", 1]}
+        name="invalid", post_payload={"success": True, "msg": "", "obj": ["alice", 1]},
     )
     dead = FakePanel(name="dead")
     sub = await make_async_subscription(async_db, tmp_path, [good, invalid, dead])
@@ -63,14 +63,14 @@ async def test_online_health_cache_rename_and_retry(
 
 @pytest.mark.asyncio
 async def test_ambiguous_accepted_add_is_compensated(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     panel = FakePanel(inbounds=[make_inbound(1)])
     sub = await make_async_subscription(async_db, tmp_path, [panel])
     original = sub.business_svc._post
 
     async def lost_response(
-        panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str
+        panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str,
     ) -> None:
         sub.business_svc._post = original  # type: ignore[method-assign]
         await original(panel, route, body, what)
@@ -92,7 +92,7 @@ async def test_ambiguous_accepted_add_is_compensated(
         assert await async_db.get_code("invite") is not None
         with pytest.raises(PanelUnavailableError):
             sub.panel_svc.response_data(
-                sub.panels[0], PanelResponse.from_json({"success": False}, 404), "client query"
+                sub.panels[0], PanelResponse.from_json({"success": False}, 404), "client query",
             )
     finally:
         await close_async_subscription(sub)
@@ -122,14 +122,14 @@ async def create_alice(db: AsyncDatabase) -> None:
 
 @pytest.mark.asyncio
 async def test_user_code_credentials_and_telegram_workflow(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         with pytest.raises(NotFoundError):
             await sub.business_svc.get_info("missing")
         created = await sub.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice-login", ext_password="secret", limit=10
+            "alice", "Alice", ext_username="alice-login", ext_password="secret", limit=10,
         )
         with pytest.raises(ConflictError):
             await sub.business_svc.add_new_user("alice", "Alice")
@@ -163,7 +163,7 @@ async def test_user_code_credentials_and_telegram_workflow(
 
 @pytest.mark.asyncio
 async def test_bandwidth_history_leaderboard_and_legacy_password(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     regular = FakePanel(
         name="regular",
@@ -177,7 +177,7 @@ async def test_bandwidth_history_leaderboard_and_legacy_password(
     try:
         await create_alice(async_db)
         await async_db.set_user(
-            "alice", ext_username="alice", ext_password=sub.password_svc.legacy_hash("secret")
+            "alice", ext_username="alice", ext_password=sub.password_svc.legacy_hash("secret"),
         )
         assert await sub.password_svc.validate_credentials("alice", "secret") == "alice"
         stored = await async_db.ext_password("alice")
@@ -194,7 +194,7 @@ async def test_bandwidth_history_leaderboard_and_legacy_password(
         await async_db.increment_usage("alice", regular=100, whitelist=50)
         assert await sub.leaderboard_svc.leaderboard("total") == {"alice": 30}
         assert await sub.leaderboard_svc.leaderboard("monthly", use_displaynames=True) == {
-            "Alice": 100
+            "Alice": 100,
         }
         assert await sub.leaderboard_svc.leaderboard("wl_monthly") == {"alice": 50}
         assert await sub.bandwidth_svc.get_bw_history("alice") == []
@@ -205,7 +205,7 @@ async def test_bandwidth_history_leaderboard_and_legacy_password(
 
 @pytest.mark.asyncio
 async def test_uuid_partial_failure_retains_manual_repair_marker(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     accepted = FakePanel(name="accepted", clients=[make_panel_client("alice", [1])])
     rejected = FakePanel(
@@ -232,7 +232,7 @@ async def test_uuid_partial_failure_retains_manual_repair_marker(
 
 @pytest.mark.asyncio
 async def test_failed_disable_and_delete_are_recovered(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     panel = FakePanel(
         clients=[make_panel_client("alice", [1])],
@@ -269,7 +269,7 @@ async def test_failed_disable_and_delete_are_recovered(
 
 @pytest.mark.asyncio
 async def test_panel_payloads_reconcile_and_whitelist_separation(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     regular = FakePanel(
         name="regular",
@@ -336,7 +336,7 @@ async def test_registration_one_shot_code_race(async_db: AsyncDatabase, tmp_path
 
 @pytest.mark.asyncio
 async def test_registration_partial_writes_cleaned_before_code_refund(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
     rejected = FakePanel(
@@ -367,7 +367,7 @@ async def test_registration_partial_writes_cleaned_before_code_refund(
 
 @pytest.mark.asyncio
 async def test_failed_panel_cleanup_retains_identity_and_recovery_refunds_once(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
     rejected = FakePanel(
@@ -379,7 +379,7 @@ async def test_failed_panel_cleanup_retains_identity_and_recovery_refunds_once(
     original = sub.business_svc.rollback_panel_clients
 
     async def fail_cleanup(
-        username: str, *, expected_uuid: str | None = None, work: str = "foreground"
+        username: str, *, expected_uuid: str | None = None, work: str = "foreground",
     ) -> None:
         raise PanelUnavailableError("cleanup unavailable")
 
@@ -433,7 +433,7 @@ async def test_atomic_created_user_marker_and_rollback_repository(async_db: Asyn
 
 @pytest.mark.asyncio
 async def test_reset_finalization_and_startup_recovery(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     from errors import DatabaseError
 
@@ -461,7 +461,7 @@ async def test_reset_finalization_and_startup_recovery(
 
 @pytest.mark.asyncio
 async def test_pending_creation_panel_cleanup_recovers(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])])
     sub = await make_async_subscription(async_db, tmp_path, [panel])
@@ -484,7 +484,7 @@ async def test_pending_creation_panel_cleanup_recovers(
 
 @pytest.mark.asyncio
 async def test_pending_registration_without_marker_is_recovered(
-    async_db: AsyncDatabase, tmp_path: Path
+    async_db: AsyncDatabase, tmp_path: Path,
 ) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])])
     sub = await make_async_subscription(async_db, tmp_path, [panel])

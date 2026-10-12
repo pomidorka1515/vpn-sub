@@ -132,7 +132,7 @@ class UsersMixin(ConnectionMixin):
                     assignments = ", ".join(f"{key} = ?" for key in updates)
                     # Column names come from the fixed mapping above; values are bound.
                     conn.execute(
-                        f"UPDATE users SET {assignments} WHERE username = ?",  # ruff: ignore[hardcoded-sql-expression]
+                        f"UPDATE users SET {assignments} WHERE username = ?",
                         (*updates.values(), username),
                     )
                 if "tgid" in fields:

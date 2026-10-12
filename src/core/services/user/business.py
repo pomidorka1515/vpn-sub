@@ -638,7 +638,7 @@ class BusinessUserService(BaseService):
                 self.db.delete_user(username)
             except Exception:
                 self.log.exception(
-                    "failed to roll back user %s; retaining recovery marker", username
+                    "failed to roll back user %s; retaining recovery marker", username,
                 )
                 try:
                     self.db.set_metadata(f"user_create_pending:{username}", userid)

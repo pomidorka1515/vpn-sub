@@ -134,7 +134,7 @@ class AsyncJSONLinesLogger(logging.Handler):
             payload: JsonDict = {
                 "ts": record.created,
                 "date": datetime.fromtimestamp(record.created, tz=UTC).strftime(
-                    "%d.%m.%Y %H:%M:%S"
+                    "%d.%m.%Y %H:%M:%S",
                 ),
                 "level": record.levelname,
                 "name": record.name,
@@ -143,7 +143,7 @@ class AsyncJSONLinesLogger(logging.Handler):
                 "text": text,
             }
             self.delivery.submit(
-                payload, important=record.levelno >= logging.ERROR, fallback_text=text
+                payload, important=record.levelno >= logging.ERROR, fallback_text=text,
             )
         except Exception:
             self.handleError(record)

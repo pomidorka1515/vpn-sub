@@ -37,7 +37,7 @@ class TelegramIOMixin:
             await self.bot.answer_callback_query(cast(Any, call_id), text)
 
     async def _send_message(
-        self, chat_id: int, text: str, **kwargs: Unpack[MessageOptions]
+        self, chat_id: int, text: str, **kwargs: Unpack[MessageOptions],
     ) -> None:
         try:
             await self.bot.send_message(chat_id, text, **kwargs)

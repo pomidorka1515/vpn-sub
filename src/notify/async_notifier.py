@@ -29,7 +29,7 @@ class AsyncNotifier(Notifier):
         self._delivery_lock = asyncio.Lock()
 
     async def deliver(
-        self, username: str, telegram_id: int | None, notice: Notice, seen: set[str]
+        self, username: str, telegram_id: int | None, notice: Notice, seen: set[str],
     ) -> bool:
         async with self._delivery_lock:
             key = account_key(username, notice.marker)
@@ -40,7 +40,7 @@ class AsyncNotifier(Notifier):
             try:
                 lang = await self._async_language(telegram_id)
                 template = (self._texts.get(lang) or self._texts.get("en") or {}).get(
-                    notice.kind.text_key
+                    notice.kind.text_key,
                 )
                 if not template:
                     return False

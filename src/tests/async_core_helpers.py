@@ -28,7 +28,7 @@ class PanelTransport:
         self.panel = panel
 
     async def request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs]
+        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
     ) -> PanelResponse:
         route = urlsplit(url).path.lstrip("/")
         response = self.panel.get(route) if method == "GET" else self.panel.post(route, **kwargs)

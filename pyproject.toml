@@ -121,6 +121,7 @@ ignore = [
     "S404",    # Subprocess imports are intentional
     "RUF029",  # Async callbacks may be required by libraries without awaiting
     "RUF201",  # Rule codes are retained in configuration selectors
+    "S608",    # Causes lots of false positives
 ]
 
 # Whitespace-only fixes are safe even inside multiline strings.

@@ -46,13 +46,13 @@ class BoundedOffload:
 class OffloadServices:
     files: BoundedOffload = field(default_factory=lambda: BoundedOffload(capacity=4, name="files"))
     passwords: BoundedOffload = field(
-        default_factory=lambda: BoundedOffload(capacity=2, name="passwords")
+        default_factory=lambda: BoundedOffload(capacity=2, name="passwords"),
     )
     rendering: BoundedOffload = field(
-        default_factory=lambda: BoundedOffload(capacity=2, name="rendering")
+        default_factory=lambda: BoundedOffload(capacity=2, name="rendering"),
     )
     metrics: BoundedOffload = field(
-        default_factory=lambda: BoundedOffload(capacity=2, name="metrics")
+        default_factory=lambda: BoundedOffload(capacity=2, name="metrics"),
     )
 
     def stop_admission(self) -> None:
@@ -69,5 +69,5 @@ class OffloadServices:
                     self.rendering,
                     self.metrics,
                 )
-            )
+            ),
         )

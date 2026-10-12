@@ -123,7 +123,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     async def _handle_main_menu(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
         await self.bot.send_message(
-            message.chat.id, t["welcome_reg"], reply_markup=await self.get_menu(uid)
+            message.chat.id, t["welcome_reg"], reply_markup=await self.get_menu(uid),
         )
 
     async def _handle_reset(self, message: types.Message, uid: int, lang: str) -> None:
@@ -145,7 +145,7 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
         t = self.TEXTS[lang]
         await self.sub.telegram_svc.set_telegram_user(uid, None)
         await self.bot.send_message(
-            message.chat.id, t["logout_success"], reply_markup=await self.get_menu(uid)
+            message.chat.id, t["logout_success"], reply_markup=await self.get_menu(uid),
         )
 
     async def _handle_help(self, message: types.Message, uid: int, lang: str) -> None:

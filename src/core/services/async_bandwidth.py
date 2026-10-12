@@ -38,7 +38,7 @@ class AsyncBandwidthService(AsyncBaseService):
         return [panel for panel in self.panels if panel != self.whitelist_panel]
 
     async def bandwidth(
-        self, username: str, whitelist: bool = False, *, work: WorkClass = "foreground"
+        self, username: str, whitelist: bool = False, *, work: WorkClass = "foreground",
     ) -> BandwidthInfo:
         await self.user_svc.user(username)
         rows = await self.panel_svc.map_panels(
@@ -51,7 +51,7 @@ class AsyncBandwidthService(AsyncBaseService):
         return BandwidthInfo(up, down, up + down)
 
     async def all_traffic(
-        self, whitelist: bool = False, *, work: WorkClass = "foreground"
+        self, whitelist: bool = False, *, work: WorkClass = "foreground",
     ) -> dict[str, BandwidthInfo]:
         panels = self._target_panels(whitelist)
         if not panels:
@@ -80,7 +80,7 @@ class AsyncBandwidthService(AsyncBaseService):
         return [
             BandwidthSnapshot(**row)
             for row in await self.db.get_bandwidth_snapshots(
-                username, int(time.time()) - days * 86400
+                username, int(time.time()) - days * 86400,
             )
         ]
 

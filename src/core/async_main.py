@@ -69,7 +69,7 @@ class AsyncSubscription:
         self.password_svc = AsyncPasswordService(self.res)
         self.user_svc = AsyncCommonUserService(self.res)
         self.bandwidth_svc = AsyncBandwidthService(
-            self.res, panel_svc=self.panel_svc, user_svc=self.user_svc
+            self.res, panel_svc=self.panel_svc, user_svc=self.user_svc,
         )
         self.business_svc = AsyncBusinessUserService(
             self.res,
@@ -87,10 +87,10 @@ class AsyncSubscription:
             user_svc=self.business_svc,
         )
         self.telegram_svc = AsyncTelegramService(
-            self.res, user_svc=self.business_svc, code_svc=self.code_svc
+            self.res, user_svc=self.business_svc, code_svc=self.code_svc,
         )
         self.leaderboard_svc = AsyncLeaderboardService(
-            self.res, user_svc=self.user_svc, bandwidth_svc=self.bandwidth_svc
+            self.res, user_svc=self.user_svc, bandwidth_svc=self.bandwidth_svc,
         )
         self._close_task: asyncio.Task[None] | None = None
 

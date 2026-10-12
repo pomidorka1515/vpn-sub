@@ -55,7 +55,7 @@ class AsyncAdminBot(
             self._initialize_polling()
             self._initialize_conversations()
             self._pending_codes: MutableMapping[str | int, str] = PendingValues[str](
-                self._conversation
+                self._conversation,
             )
             self._pending_edits: MutableMapping[str | int, dict[str, str]] = PendingValues[
                 dict[str, str]

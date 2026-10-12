@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("used", "disabled"), [(10**9, False), (10**9 + 1, True)])
 async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(
-    tmp_path: Path, used: int, disabled: bool
+    tmp_path: Path, used: int, disabled: bool,
 ) -> None:
     db = AsyncDatabase(path=tmp_path / "state.db", start_backup=False)
     await db.start()

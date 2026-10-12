@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 async def set_telegram_mapping(
-    conn: AsyncConnection, username: str, telegram_id: str | None
+    conn: AsyncConnection, username: str, telegram_id: str | None,
 ) -> None:
     if telegram_id is None:
         await conn.execute("DELETE FROM telegram_mappings WHERE username = ?", (username,))
@@ -32,14 +32,14 @@ class AsyncTelegramMixin(AsyncConnectionMixin):
     async def tgid_to_user(self, tgid: str | int) -> str | None:
         async with self.connection() as conn:
             row = await conn.row(
-                "SELECT username FROM telegram_mappings WHERE telegram_id = ?", (str(tgid),)
+                "SELECT username FROM telegram_mappings WHERE telegram_id = ?", (str(tgid),),
             )
             return str(row[0]) if row else None
 
     async def user_to_tgid(self, username: str) -> str | None:
         async with self.connection() as conn:
             row = await conn.row(
-                "SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,)
+                "SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,),
             )
             return str(row[0]) if row else None
 
@@ -62,7 +62,7 @@ class AsyncTelegramMixin(AsyncConnectionMixin):
         async with self.connection() as conn:
             return (
                 await conn.row(
-                    "SELECT 1 FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),)
+                    "SELECT 1 FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),),
                 )
                 is not None
             )

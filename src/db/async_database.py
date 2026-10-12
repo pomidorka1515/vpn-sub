@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class AsyncDatabase(
-    AsyncUsersMixin, AsyncCodesMixin, AsyncTelegramMixin, AsyncStateMixin, AsyncSchemaMixin
+    AsyncUsersMixin, AsyncCodesMixin, AsyncTelegramMixin, AsyncStateMixin, AsyncSchemaMixin,
 ):
     """Single-loop repository with a transaction-owned writer and leased readers."""
 
@@ -127,7 +127,7 @@ class AsyncDatabase(
             raise DatabaseError("database startup is not complete")
         if task in self._owners:
             raise DatabaseError(
-                "nested repository leases are not supported; reuse the leased connection"
+                "nested repository leases are not supported; reuse the leased connection",
             )
         return task
 

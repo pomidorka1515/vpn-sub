@@ -50,7 +50,7 @@ class SnapshotStatus:
 
 
 def build_panels(
-    cfg: Snapshot[AppConfig], paths: AppPaths, options: AppOptions, *, verbose: bool
+    cfg: Snapshot[AppConfig], paths: AppPaths, options: AppOptions, *, verbose: bool,
 ) -> tuple[list[AsyncXUiSession], AsyncXUiSession | None]:
     panels: list[AsyncXUiSession] = []
     whitelist: AsyncXUiSession | None = None

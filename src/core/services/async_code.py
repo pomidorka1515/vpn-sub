@@ -49,7 +49,7 @@ class AsyncCodeService(AsyncBaseService):
             data = await self.db.adjust_bonus(username, code)
         except CodeError as exc:
             raise NotFoundError(
-                "Unknown user" if str(exc) == "unknown user" else "Unknown code"
+                "Unknown user" if str(exc) == "unknown user" else "Unknown code",
             ) from exc
         result = ApplyBonusCodeObject(**data)
         await self.audit_svc.audit(name="user_consume_code", info=asdict(result))
@@ -78,7 +78,7 @@ class AsyncCodeService(AsyncBaseService):
             raise ValidationError("uses must be >= 1")
         try:
             await self.db.add_code(
-                code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses
+                code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses,
             )
         except DuplicateError as exc:
             raise ConflictError(f"code '{code}' already exists") from exc
@@ -131,7 +131,7 @@ class AsyncBusinessCodeService(AsyncBaseService):
 
     @user_mutation
     async def register_with_code(
-        self, *, code: str, username: str, displayname: str, ext_username: str, ext_password: str
+        self, *, code: str, username: str, displayname: str, ext_username: str, ext_password: str,
     ) -> RegisterWithCodeInfo:
         if not isinstance(code, str) or not code:
             raise ValidationError("Invalid code")
@@ -232,7 +232,7 @@ class AsyncBusinessCodeService(AsyncBaseService):
 
     @user_mutation
     async def clear_rollback_failure(
-        self, kind: Literal["uuid", "registration"], username: str
+        self, kind: Literal["uuid", "registration"], username: str,
     ) -> None:
         if kind not in {"uuid", "registration"}:
             raise ValidationError("Invalid rollback marker kind")

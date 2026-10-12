@@ -43,7 +43,7 @@ class ConversationMixin:
             return
         key = (message.chat.id, message.from_user.id)
         task = self._handlers.create(
-            lambda: self._route_message(key, message), name=f"{type(self).__name__}:message"
+            lambda: self._route_message(key, message), name=f"{type(self).__name__}:message",
         )
         await asyncio.shield(task)
 
@@ -72,7 +72,7 @@ class ConversationMixin:
             return
         key = (call.message.chat.id, call.from_user.id)
         task = self._handlers.create(
-            lambda: self._route_callback(key, call), name=f"{type(self).__name__}:callback"
+            lambda: self._route_callback(key, call), name=f"{type(self).__name__}:callback",
         )
         await asyncio.shield(task)
 

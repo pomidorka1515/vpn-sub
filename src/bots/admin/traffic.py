@@ -122,10 +122,10 @@ class AdminTrafficMixin(AdminFeatureMixin):
                 )
         except AppError as error:
             await self._send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
             )
         except Exception:
             self.log.exception("Chart error for username %s", username)
             await self._send_message(
-                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu()
+                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu(),
             )

@@ -28,7 +28,7 @@ class ProxyMiddleware:
         self.require_proxy = require_proxy
 
     async def __call__(
-        self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
+        self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable,
     ) -> None:
         if scope["type"] == "lifespan":
             await self.app(scope, receive, send)
@@ -38,7 +38,7 @@ class ProxyMiddleware:
         if self.require_proxy and not trusted:
             if scope["type"] == "websocket":
                 await send(
-                    {"type": "websocket.close", "code": 1008, "reason": "direct access forbidden"}
+                    {"type": "websocket.close", "code": 1008, "reason": "direct access forbidden"},
                 )
                 return
             body = b'{"success": false, "msg": "direct access forbidden", "obj": null}'
@@ -47,7 +47,7 @@ class ProxyMiddleware:
                     "type": "http.response.start",
                     "status": 400,
                     "headers": [(b"content-type", b"application/json")],
-                }
+                },
             )
             await send({"type": "http.response.body", "body": body, "more_body": False})
             return

@@ -47,7 +47,7 @@ async def endpoint() -> AsyncIterator[str]:
                 "auth": request.headers.get("Authorization"),
                 "header": request.headers.get("X-Test"),
                 "body": await request.json() if request.can_read_body else None,
-            }
+            },
         )
 
     app = web.Application()

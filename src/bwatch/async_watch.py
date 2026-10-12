@@ -92,7 +92,7 @@ class AsyncBWatch:
         for name, interval, jobs in self._INTERVALS:
 
             async def loop(
-                interval: float = interval, jobs: tuple[tuple[str, str], ...] = jobs
+                interval: float = interval, jobs: tuple[tuple[str, str], ...] = jobs,
             ) -> None:
                 await self._loop(interval, jobs)
 
@@ -142,7 +142,7 @@ class AsyncBWatch:
                 failures = self._snapshot_failures.pop(kind, 0)
                 if failures:
                     self.log.info(
-                        "Daily %s snapshot recovered after %d failed attempts", kind, failures
+                        "Daily %s snapshot recovered after %d failed attempts", kind, failures,
                     )
                 delay = 86400.0
             except Exception as exc:
@@ -151,7 +151,7 @@ class AsyncBWatch:
                 self.log.exception("Daily %s snapshot failed", kind)
                 if failures == 1 or failures % 3 == 0:
                     await self._alert_admin(
-                        f"⚠️ Daily {kind} snapshot failed ({failures} consecutive attempt(s)): {exc}"
+                        f"⚠️ Daily {kind} snapshot failed ({failures} consecutive attempt(s)): {exc}",
                     )
                 delay = min(3600.0 * failures, 86400.0)
             self._snapshot_due_at[kind] = time.monotonic() + delay
@@ -170,7 +170,7 @@ class AsyncBWatch:
         mapped = (await self.db.user_tgids()).get(state["username"])
         for notice in notices:
             await self.notifier.deliver(
-                state["username"], int(mapped) if mapped is not None else None, notice, seen
+                state["username"], int(mapped) if mapped is not None else None, notice, seen,
             )
             await self.db.sync_notifications(before, seen)
             before = set(seen)
@@ -203,7 +203,7 @@ class AsyncBWatch:
                     main = True
                 if main is not None or whitelist is not None:
                     await self.sub.business_svc.update_user(
-                        username, enable=main, timee=timing, wl_enable=whitelist, work="background"
+                        username, enable=main, timee=timing, wl_enable=whitelist, work="background",
                     )
                 await self._deliver(
                     state,
@@ -217,15 +217,15 @@ class AsyncBWatch:
                         try:
                             if notice.kind is Kind.EXPIRED:
                                 await self.sub.business_svc.update_user(
-                                    username, enable=False, timee=False, work="background"
+                                    username, enable=False, timee=False, work="background",
                                 )
                             elif notice.kind is Kind.TRAFFIC_EXHAUSTED:
                                 await self.sub.business_svc.update_user(
-                                    username, enable=False, timee=True, work="background"
+                                    username, enable=False, timee=True, work="background",
                                 )
                             elif notice.kind is Kind.WHITELIST_EXHAUSTED:
                                 await self.sub.business_svc.update_user(
-                                    username, wl_enable=False, work="background"
+                                    username, wl_enable=False, work="background",
                                 )
                         except AppError:
                             self.log.exception("background user update failed for %s", username)
@@ -280,13 +280,13 @@ class AsyncBWatch:
                 self.mem, self.wl_mem = next_main, next_wl
 
             await self.sub.res.coordinator.run(
-                [s["username"] for s in states], commit, name="watcher:usage"
+                [s["username"] for s in states], commit, name="watcher:usage",
             )
 
         await self._job("bandwidth", operation)
 
     async def _traffic(
-        self, states: list[UserRecord]
+        self, states: list[UserRecord],
     ) -> tuple[dict[str, BandwidthInfo], dict[str, BandwidthInfo]]:
         main = (
             await self.sub.bandwidth_svc.all_traffic(work="background")
@@ -321,7 +321,7 @@ class AsyncBWatch:
                         f"{self._failure['ts']}:{len(states)}:{len(states)}",
                     )
                     raise PanelUnavailableError(
-                        f"Daily bandwidth snapshot failed for {len(states)}/{len(states)} eligible user(s)"
+                        f"Daily bandwidth snapshot failed for {len(states)}/{len(states)} eligible user(s)",
                     ) from exc
                 raise
 
@@ -357,7 +357,7 @@ class AsyncBWatch:
                 self._failure = None
 
             await self.sub.res.coordinator.run(
-                [s["username"] for s in states], commit, name="watcher:snapshot"
+                [s["username"] for s in states], commit, name="watcher:snapshot",
             )
             await self.prune_old_bw_snapshots()
 
@@ -370,7 +370,7 @@ class AsyncBWatch:
             for panel, status in zip(self.sub.panels, statuses, strict=True):
                 if status is None:
                     raise PanelUnavailableError(
-                        f"state snapshot could not read panel status: {panel.name}"
+                        f"state snapshot could not read panel status: {panel.name}",
                     )
                 panels[panel.name] = asdict(status.obj)
             midnight = int(time.time()) // 86400 * 86400
@@ -401,7 +401,7 @@ class AsyncBWatch:
                     await self.db.reset_monthly(now.strftime("%Y-%m"), now.strftime("%Y-%m-%d"))
 
                 await self.sub.res.coordinator.run(
-                    await self.sub.user_svc.list_users(), reset, name="watcher:monthly reset"
+                    await self.sub.user_svc.list_users(), reset, name="watcher:monthly reset",
                 )
 
         await self._job("monthly", operation)
@@ -411,7 +411,7 @@ class AsyncBWatch:
             failures = await self.sub.business_svc.reconcile()
             if failures:
                 await self._alert_admin(
-                    f"⚠️ Inbound reconcile failed for {len(failures)} user(s): {', '.join(failures[:10])}"
+                    f"⚠️ Inbound reconcile failed for {len(failures)} user(s): {', '.join(failures[:10])}",
                 )
 
         await self._job("reconcile", operation)
@@ -420,7 +420,7 @@ class AsyncBWatch:
         async def operation() -> None:
             live = [p for p in self.sub.panels if not p.dead]
             for panel, status in zip(
-                live, await self.sub.panel_svc.statuses(live, work="background"), strict=True
+                live, await self.sub.panel_svc.statuses(live, work="background"), strict=True,
             ):
                 if status is None:
                     continue
@@ -440,7 +440,7 @@ class AsyncBWatch:
                     self.cfg.view()["panel_alert_cooldown"] or 3600
                 ):
                     await self._alert_admin(
-                        f"⚠️ Panel {panel.name}:\n" + "\n".join(f"- {p}" for p in problems)
+                        f"⚠️ Panel {panel.name}:\n" + "\n".join(f"- {p}" for p in problems),
                     )
                     self._panel_alerts[panel.name] = time.monotonic()
 

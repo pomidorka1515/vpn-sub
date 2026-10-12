@@ -20,7 +20,7 @@ class AsyncAuditService:
         self._store = store
 
     async def audit(
-        self, *, name: AUDIT_VALUES, info: Mapping[str, JsonValue] | None = None
+        self, *, name: AUDIT_VALUES, info: Mapping[str, JsonValue] | None = None,
     ) -> None:
         if self._store is None:
             return
@@ -31,5 +31,5 @@ class AsyncAuditService:
                 "date": now.strftime("%d.%m.%Y %H:%M:%S"),
                 "action": name,
                 "info": copy.deepcopy(dict(info)) if info is not None else None,
-            }
+            },
         )

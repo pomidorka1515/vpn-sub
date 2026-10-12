@@ -45,7 +45,7 @@ log = Logger("rate_limit")
 
 class RateLimitScript(Protocol):
     async def __call__(
-        self, *, keys: tuple[str, ...], args: tuple[float, float, str, int, int]
+        self, *, keys: tuple[str, ...], args: tuple[float, float, str, int, int],
     ) -> int: ...
 
 
@@ -79,7 +79,7 @@ class AsyncRateLimiter:
     def from_config(cls, cfg: Snapshot[AppConfig]) -> AsyncRateLimiter:
         section = cfg.view()["redis"]
         return cls(
-            section["url"], socket_timeout=section.get("socket_timeout", _REDIS_SOCKET_TIMEOUT)
+            section["url"], socket_timeout=section.get("socket_timeout", _REDIS_SOCKET_TIMEOUT),
         )
 
     async def start(self) -> None:
@@ -113,7 +113,7 @@ class AsyncRateLimiter:
                         max_requests,
                         int(_RATE_LIMIT_WINDOW),
                     ),
-                )
+                ),
             )
             == 1
         )
@@ -138,7 +138,7 @@ def rate_limit[API_T: AsyncBaseApi, **P, R](
         async def wrapper(self: API_T, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
             try:
                 allowed = await self.limiter.allow(
-                    scope, request.remote_addr or "<unknown>", max_requests
+                    scope, request.remote_addr or "<unknown>", max_requests,
                 )
             except Exception:
                 log.error("rate limit store failed")  # ruff: ignore[error-instead-of-exception] credentials may occur in exception text
