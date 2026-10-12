@@ -119,6 +119,14 @@ class LinesConfig:
     def size(self) -> int:
         return Path(self.path).stat().st_size
 
+    @property
+    def backup_dir(self) -> str | None:
+        return self._backup_dir
+
+    @property
+    def backup_interval(self) -> int | float:
+        return self._backup_interval
+
     def append(self, record: Mapping[str, JsonValue]) -> None:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
