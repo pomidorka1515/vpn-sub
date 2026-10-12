@@ -25,10 +25,11 @@ class TaskRegistry:
     rather than accumulating an unlimited queue of tasks waiting on a semaphore.
     """
 
-    def __init__(self, *, capacity: int | None = None) -> None:
+    def __init__(self, *, capacity: int | None = None, report_failures: bool = True) -> None:
         if capacity is not None and capacity < 1:
             raise ValueError("capacity must be positive")
         self._capacity = capacity
+        self._report_failures = report_failures
         self._tasks: set[asyncio.Task[object]] = set()
         self._accepting = True
 
@@ -57,7 +58,8 @@ class TaskRegistry:
         self._tasks.discard(task)
         if not task.cancelled() and (error := task.exception()) is not None:
             # Retrieve exceptions even if the original caller has disconnected.
-            log.error("owned task %s failed", task.get_name(), exc_info=error)
+            if self._report_failures:
+                log.error("owned task %s failed", task.get_name(), exc_info=error)
 
     async def drain(self, *, cancel: bool = False) -> None:
         """Stop admission and settle all work, optionally requesting cancellation.
