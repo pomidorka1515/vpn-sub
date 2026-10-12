@@ -29,6 +29,7 @@ dev = [
     "mypy>=1.15",
     "pyright",
     "pytest>=8.0",
+    "pytest-asyncio>=1.4,<2",
     "types-gunicorn",
     "types-psutil",
     "types-qrcode",
@@ -406,6 +407,10 @@ required-environments = [
 [tool.pytest.ini_options]
 pythonpath = ["src", "src/discord/src"]
 testpaths = ["src/tests", "src/discord/src/tests"]
+# Async tests opt in explicitly; loop-bound resources live on their test's loop.
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
 filterwarnings = [
     "ignore::DeprecationWarning:discord.*",
 ]
