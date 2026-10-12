@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -8,35 +7,9 @@ from typing import TYPE_CHECKING
 from .common import _ANSI_ESCAPE, _safe_handle_error
 
 if TYPE_CHECKING:
-    from bots import AdminBot
     from config import LinesConfig
 
-__all__ = ["_JSONLinesLogger", "_TelegramLogger"]
-
-
-class _TelegramLogger(logging.Handler):
-    def __init__(self, bot: AdminBot) -> None:
-        """
-        Logging handler to broadcast messages to a telegram bot (AdminBot).
-        """
-        super().__init__()
-        self.bot = bot
-        self.ansi_escape = _ANSI_ESCAPE
-
-    def emit(self, record: logging.LogRecord, **kwargs: str) -> None:
-        """
-        Args:
-            record: The record to broadcast.
-            **kwargs: Extra keyword arguments to pass into AdminBot.msg.
-
-        """
-        try:
-            msg_text = self.format(record)
-            clean_text = self.ansi_escape.sub("", msg_text)
-            safe_text = html.escape(clean_text)
-            self.bot.msg(f"<code>{safe_text}</code>", **kwargs)
-        except Exception:
-            _safe_handle_error(self, record)
+__all__ = ["_JSONLinesLogger"]
 
 
 class _JSONLinesLogger(logging.Handler):

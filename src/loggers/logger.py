@@ -7,14 +7,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .colors import Colors
 from .common import _ANSI_ESCAPE
-from .handlers import _JSONLinesLogger, _TelegramLogger
+from .handlers import _JSONLinesLogger
 from .level import TRACE, env_level
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
     from types import TracebackType
 
-    from bots import AdminBot
     from config import LinesConfig
 
 __all__ = ["TRACE", "Logger"]
@@ -90,15 +89,6 @@ class Logger(logging.Logger):
             fmt="%(asctime)s %(levelname)s [%(name)s] [%(threadName)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-
-    def set_tg_bot(self, bot: AdminBot, level: int | None = None) -> None:
-        self.handlers = [h for h in self.handlers if not isinstance(h, _TelegramLogger)]
-        tg_handler = _TelegramLogger(bot)
-        if level is None:
-            tg_handler.setLevel(logging.WARNING)
-        simple_fmt = logging.Formatter("%(levelname)s [%(name)s] %(message)s")
-        tg_handler.setFormatter(simple_fmt)
-        self.addHandler(tg_handler)
 
     def set_jsonl_handler(self, lines_config: LinesConfig, level: int | None = None) -> None:
         self.handlers = [h for h in self.handlers if not isinstance(h, _JSONLinesLogger)]

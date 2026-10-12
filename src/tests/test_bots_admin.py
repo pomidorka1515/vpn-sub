@@ -5,9 +5,10 @@ from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from bot_helpers import telegram_mock
 from telebot import types
 
-from bots import AdminBot
+from bots import AsyncAdminBot
 
 
 def _callback(data: str, user_id: int = 42) -> types.CallbackQuery:
@@ -23,18 +24,21 @@ def _callback(data: str, user_id: int = 42) -> types.CallbackQuery:
 
 
 @pytest.fixture
-def admin_bot() -> tuple[AdminBot, MagicMock]:
-    bot = AdminBot.__new__(AdminBot)
-    telegram = MagicMock()
+def admin_bot() -> tuple[AsyncAdminBot, MagicMock]:
+    bot = AsyncAdminBot.__new__(AsyncAdminBot)
+    telegram = telegram_mock()
+    setattr(bot, "_expect", MagicMock())
+    setattr(bot, "_clear_steps", MagicMock())
     bot.bot = telegram
     bot.admin_uids = [42]
     bot.log = MagicMock()
     return bot, telegram
 
 
-@pytest.mark.parametrize(("route", "handler_name", "is_prefix"), AdminBot.ROUTES)
-def test_routes_exact_and_prefix_callbacks_to_first_matching_handler(
-    admin_bot: tuple[AdminBot, MagicMock],
+@pytest.mark.parametrize(("route", "handler_name", "is_prefix"), AsyncAdminBot.ROUTES)
+@pytest.mark.asyncio
+async def test_routes_exact_and_prefix_callbacks_to_first_matching_handler(
+    admin_bot: tuple[AsyncAdminBot, MagicMock],
     route: str,
     handler_name: str,
     is_prefix: bool,
@@ -42,47 +46,50 @@ def test_routes_exact_and_prefix_callbacks_to_first_matching_handler(
     bot, _telegram = admin_bot
     data = f"{route}value" if is_prefix else route
     call = _callback(data)
-    with patch.object(AdminBot, handler_name) as handler:
-        bot.handle_callbacks(call)
+    with patch.object(AsyncAdminBot, handler_name) as handler:
+        await bot.handle_callbacks(call)
     handler.assert_called_once_with(data, 7, call.message)
 
 
-def test_overlapping_routes_keep_specific_callbacks_first(
-    admin_bot: tuple[AdminBot, MagicMock],
+@pytest.mark.asyncio
+async def test_overlapping_routes_keep_specific_callbacks_first(
+    admin_bot: tuple[AsyncAdminBot, MagicMock],
 ) -> None:
     bot, _telegram = admin_bot
     call = _callback("info_code")
     with (
-        patch.object(AdminBot, "_handle_info_code") as info_code,
-        patch.object(AdminBot, "_handle_info_user") as info_user,
+        patch.object(AsyncAdminBot, "_handle_info_code") as info_code,
+        patch.object(AsyncAdminBot, "_handle_info_user") as info_user,
     ):
-        bot.handle_callbacks(call)
+        await bot.handle_callbacks(call)
     info_code.assert_called_once_with("info_code", 7, call.message)
     info_user.assert_not_called()
 
     call = _callback("edit_user_alice")
     with (
-        patch.object(AdminBot, "_handle_edit_user") as edit_user,
-        patch.object(AdminBot, "_handle_edit") as edit_action,
+        patch.object(AsyncAdminBot, "_handle_edit_user") as edit_user,
+        patch.object(AsyncAdminBot, "_handle_edit") as edit_action,
     ):
-        bot.handle_callbacks(call)
+        await bot.handle_callbacks(call)
     edit_user.assert_called_once_with("edit_user_alice", 7, call.message)
     edit_action.assert_not_called()
 
 
-def test_unknown_callback_is_acknowledged_and_ignored(
-    admin_bot: tuple[AdminBot, MagicMock],
+@pytest.mark.asyncio
+async def test_unknown_callback_is_acknowledged_and_ignored(
+    admin_bot: tuple[AsyncAdminBot, MagicMock],
 ) -> None:
     bot, telegram = admin_bot
-    bot.handle_callbacks(_callback("unknown"))
+    await bot.handle_callbacks(_callback("unknown"))
     telegram.answer_callback_query.assert_called_once_with("callback-id")
     telegram.send_message.assert_not_called()
     cast(MagicMock, bot.log).error.assert_not_called()
 
 
-def test_non_admin_callback_is_ignored_without_acknowledgement(
-    admin_bot: tuple[AdminBot, MagicMock],
+@pytest.mark.asyncio
+async def test_non_admin_callback_is_ignored_without_acknowledgement(
+    admin_bot: tuple[AsyncAdminBot, MagicMock],
 ) -> None:
     bot, telegram = admin_bot
-    bot.handle_callbacks(_callback("list_users", user_id=99))
+    await bot.handle_callbacks(_callback("list_users", user_id=99))
     telegram.answer_callback_query.assert_not_called()

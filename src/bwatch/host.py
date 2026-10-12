@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     import threading
     from concurrent.futures import Executor
 
-    from bots import AdminBot, PublicBot
+    from bwatch.legacy_delivery import AdminDelivery, PublicDelivery
     from config import AppConfig, Config, JsonValue
     from core import Subscription
     from custom_types import BandwidthInfo
@@ -24,9 +24,9 @@ class BWatchHost:
     cfg: Config[AppConfig]
     db: Database
     sub: Subscription
-    bot: PublicBot | None
+    bot: PublicDelivery | None
     verbose: bool
-    admin_bot: AdminBot | None
+    admin_bot: AdminDelivery | None
     _stop_event: threading.Event
     _mem_lock: threading.Lock
     mem: dict[str, BandwidthInfo]

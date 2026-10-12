@@ -1,137 +1,124 @@
+"""Owned AsyncTeleBot polling without the library's detached update tasks."""
+
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import re
-import threading
-import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
-import telebot
-from requests.exceptions import RequestException
-from telebot import apihelper
+from telebot import asyncio_helper
+
+from app_runtime.tasks import TaskRegistry
 
 if TYPE_CHECKING:
+    from aiohttp import ClientSession
+    from telebot.async_telebot import AsyncTeleBot
+
     from loggers import Logger
 
-__all__ = ["TelegramPollingMixin", "configure_telegram_api"]
+    from .handler_backend import ConversationRouter
 
-
-_POLLING_CONNECT_TIMEOUT = 20
-_POLLING_LONG_TIMEOUT = 20
-_POLLING_STOP_TIMEOUT = 6
-_POLLING_RETRY_DELAY = 3
-_TRANSIENT_API_CODES = frozenset({429, 500, 502, 503, 504})
 _BOT_TOKEN_IN_URL = re.compile(r"/bot\d+:[A-Za-z0-9_-]+", re.IGNORECASE)
+_POLLING_RETRY_DELAY = 3
 
 
-def configure_telegram_api() -> None:
-    """Tune the process-wide pyTelegramBotAPI client before either bot starts.
+class _AsyncExceptionHandler:
+    def __init__(self, log: Logger, token: str) -> None:
+        self.log, self.token = log, token
 
-    Both bots share one session. Recycling it every 10 minutes, and failing
-    the first dropped long-poll with no retry, is what surfaces as errno 104.
-    """
-    apihelper.RETRY_ON_ERROR = True
-    apihelper.RETRY_TIMEOUT = 1
-    apihelper.MAX_RETRIES = 3
-    apihelper.CONNECT_TIMEOUT = _POLLING_CONNECT_TIMEOUT
-    # pyTelegramBotAPI types this as int; None disables the 10-minute recycle.
-    apihelper.SESSION_TIME_TO_LIVE = cast(int, None)
+    async def handle(self, exception: Exception) -> bool:
+        self.log.warning("telegram handler failed: %s", _sanitize_polling_error(exception, self.token))
+        return True
 
 
 def _sanitize_polling_error(error: BaseException, token: object) -> str:
     text = f"{type(error).__name__}: {error}"
     if isinstance(token, str) and token:
         text = text.replace(token, "{TOKEN}")
-        _id, separator, secret = token.partition(":")
+        _, separator, secret = token.partition(":")
         if separator and secret:
             text = text.replace(secret, "{TOKEN}")
     return _BOT_TOKEN_IN_URL.sub("/bot{TOKEN}", text)
 
 
-def _log_polling_error(log: Logger, error: BaseException, token: object) -> None:
-    log.warning("telegram polling failed: %s", _sanitize_polling_error(error, token))
+class AsyncTelegramSession:
+    """Runtime owner of telebot's loop-wide shared aiohttp session.
+
+    Close after both bot resources have settled; individual bots cannot close
+    the shared client while a sibling is polling or delivering notifications.
+    """
+
+    async def start(self) -> None:
+        # Lazy creation remains with telebot's first request.
+        pass
+
+    async def close(self) -> None:
+        session = cast("ClientSession | None", asyncio_helper.session_manager.session)
+        if session is not None and not session.closed:
+            await session.close()
 
 
 class TelegramPollingMixin:
-    polling_thread: threading.Thread | None = None
-    bot: telebot.TeleBot
+    bot: AsyncTeleBot
     log: Logger
-    _polling_stop: threading.Event | None = None
+    _conversations: ConversationRouter
 
-    def start_polling(self) -> None:
-        if self.polling_thread is not None and self.polling_thread.is_alive():
-            return
+    def _initialize_polling(self) -> None:
+        self.bot.exception_handler = cast(Any, _AsyncExceptionHandler(self.log, self.bot.token))
+        self._polling_task: asyncio.Task[None] | None = None
+        self._handlers = TaskRegistry(capacity=64, report_failures=False)
+        self._stopping = asyncio.Event()
+        self._close_task: asyncio.Task[None] | None = None
 
-        stop = self._ensure_polling_stop()
-        stop.clear()
-        self.polling_thread = threading.Thread(
-            target=self._poll_forever,
-            daemon=True,
-            name=f"{type(self).__name__}",  # 15-char comm limit
-        )
-        self.polling_thread.start()
+    async def start(self) -> None:
+        if self._stopping.is_set():
+            raise RuntimeError("bot is closed")
+        if self._polling_task is None:
+            self._polling_task = asyncio.create_task(self._poll_forever(), name=f"{type(self).__name__}:polling")
 
-    def _ensure_polling_stop(self) -> threading.Event:
-        stop = self._polling_stop
-        if stop is None:
-            stop = threading.Event()
-            self._polling_stop = stop
-        return stop
-
-    def _poll_forever(self) -> None:
-        handler = _PollingExceptionHandler(self.log, getattr(self.bot, "token", None))
-        self.bot.exception_handler = cast(telebot.ExceptionHandler, handler)
-        stop = self._ensure_polling_stop()
-        while not stop.is_set():
+    async def _poll_forever(self) -> None:
+        offset = 0
+        while not self._stopping.is_set():
             try:
-                self.bot.infinity_polling(  # pyright: ignore[reportUnknownMemberType]
-                    timeout=_POLLING_CONNECT_TIMEOUT,
-                    long_polling_timeout=_POLLING_LONG_TIMEOUT,
-                    logger_level=None,
-                )
+                updates = await self.bot.get_updates(offset=offset, timeout=20, request_timeout=30, allowed_updates=["message", "callback_query"])  # pyright: ignore[reportUnknownMemberType]
+                # Small bounded batches keep other chats responsive. Entry
+                # handlers acquire conversation locks in update arrival order.
+                for start in range(0, len(updates), 8):
+                    if self._stopping.is_set():
+                        return
+                    batch = updates[start:start + 8]
+                    await asyncio.gather(*(self.bot.process_new_updates([update]) for update in batch))
+                    offset = batch[-1].update_id + 1
             except Exception as error:
-                if stop.is_set():
-                    return
-                _log_polling_error(self.log, error, getattr(self.bot, "token", None))
-                stop.wait(_POLLING_RETRY_DELAY)
-            else:
-                return
+                self.log.warning("telegram polling failed: %s", _sanitize_polling_error(error, self.bot.token))
+                delay = _POLLING_RETRY_DELAY
+                result: object = getattr(error, "result_json", None)
+                if isinstance(result, dict):
+                    parameters = cast("dict[str, object]", result).get("parameters")
+                    retry = cast("dict[str, object]", parameters).get("retry_after") if isinstance(parameters, dict) else None
+                    if isinstance(retry, int) and retry > 0:
+                        delay = retry
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(self._stopping.wait(), timeout=delay)
 
-    def stop_polling(self) -> None:
-        thread = self.polling_thread
-        self._ensure_polling_stop().set()
-        self.bot.stop_polling()  # type: ignore[no-untyped-call]  # Upstream method has no annotations.
-        if thread is None:
-            return
+    async def stop(self) -> None:
+        await self.close()
 
-        deadline = time.monotonic() + _POLLING_STOP_TIMEOUT
-        while thread.is_alive() and time.monotonic() < deadline:
-            thread.join(timeout=0.1)
-            self.bot.stop_polling()  # type: ignore[no-untyped-call]
+    async def close(self) -> None:
+        if self._close_task is None:
+            self._close_task = asyncio.create_task(self._close(), name=f"{type(self).__name__}:close")
+        await asyncio.shield(self._close_task)
 
-        self.polling_thread = None
-        if thread.is_alive():
-            self.log.error(f"polling thread did not stop within {_POLLING_STOP_TIMEOUT} seconds")
-
-
-def _is_transient_polling_error(error: BaseException) -> bool:
-    """Errors the library must back off itself. Handling them skips that backoff."""
-    if isinstance(error, (RequestException, TimeoutError, ConnectionError, OSError)):
-        return True
-    error_code = getattr(error, "error_code", None)
-    if isinstance(error_code, int) and error_code in _TRANSIENT_API_CODES:
-        return True
-    result = getattr(error, "result", None)
-    status = getattr(result, "status_code", None)
-    return isinstance(status, int) and status in _TRANSIENT_API_CODES
-
-
-class _PollingExceptionHandler:
-    def __init__(self, log: Logger, token: object) -> None:
-        self._log = log
-        self._token = token
-
-    def handle(self, exception: Exception) -> bool:
-        if _is_transient_polling_error(exception):
-            return False
-        _log_polling_error(self._log, exception, self._token)
-        return True
+    async def _close(self) -> None:
+        self._stopping.set()
+        self._handlers.stop_admission()
+        if self._polling_task is not None:
+            self._polling_task.cancel()
+            await asyncio.gather(self._polling_task, return_exceptions=True)
+        try:
+            async with asyncio.timeout(30):
+                await self._handlers.drain()
+        except TimeoutError:
+            await self._handlers.drain(cancel=True)
+        self._conversations.clear_all()

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from flask import Flask
     from typing_contracts import AppOverrides, CreateUserOverrides, ProfileOverrides
 
-    from bots import AdminBot, PublicBot
+    from bwatch.legacy_delivery import AdminDelivery, PublicDelivery
     from config import AppConfig, JsonValue, LangConfig, LinesConfig, ProfileConfig
     from db import Database
     from session import XUiSession
@@ -138,8 +138,8 @@ def make_watch(
         cfg=config_mock(subscription_config()),
         db=database,
         sub=subscription,
-        bot=cast("PublicBot | None", bot),
-        admin_bot=cast("AdminBot | None", admin_bot),
+        bot=cast("PublicDelivery | None", bot),
+        admin_bot=cast("AdminDelivery | None", admin_bot),
     )
 
 

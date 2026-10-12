@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -116,6 +117,38 @@ async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
     lock = PrimaryLock(paths.primary_lock)
     await lock.start()
     await lock.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_factory_optional_async_bots_and_notice_wiring(paths: AppPaths, enabled: bool) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from async_core_helpers import PanelTransport
+    from helpers import FakePanel
+
+    document = json.loads(paths.config.read_text())
+    document["bot"]["token"] = "123:test"
+    document["publicbot"] = {"token": "456:test"}
+    paths.config.write_text(json.dumps(document))
+
+    async def polling() -> None:
+        await asyncio.Event().wait()
+
+    with patch("bots.polling.TelegramPollingMixin._poll_forever", new=AsyncMock(side_effect=polling)):
+        runtime = await create_application(paths, AppOptions(start_background=False, start_bots=enabled, limiter=AsyncRateLimiter("redis://test", client=OpenRedis()), panel_transport_factory=lambda: PanelTransport(FakePanel())))
+        try:
+            dependencies = runtime.dependencies
+            assert (dependencies.admin_bot is not None) is enabled
+            assert (dependencies.public_bot is not None) is enabled
+            assert (dependencies.watcher.notifier is not None) is enabled
+            assert (dependencies.watcher.alert is not None) is enabled
+        finally:
+            await runtime.stop()
+        if dependencies.public_bot is not None:
+            assert dependencies.public_bot._handlers.active_count == 0
+        if dependencies.admin_bot is not None:
+            assert dependencies.admin_bot._handlers.active_count == 0
 
 
 @pytest.mark.asyncio

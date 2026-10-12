@@ -16,27 +16,27 @@ __all__ = ["AdminCodesMixin"]
 class AdminCodesMixin(AdminFeatureMixin):
     """Invitation-code workflows."""
 
-    def _cb_list_codes(self, chat_id: int) -> None:
+    async def _cb_list_codes(self, chat_id: int) -> None:
         try:
-            codes = self.sub.code_svc.list_code()
+            codes = await self.sub.code_svc.list_code()
             if not codes:
-                self._send_message(
+                await self._send_message(
                     chat_id, "Список кодов пуст.", reply_markup=self.get_codes_menu(),
                 )
                 return
             text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{c}</code>" for c in codes])
-            self._send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
+            await self._send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_codes_menu())
         except Exception:
             self.log.exception("Telegram handler failed")
-            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
+            await self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
 
-    def _step_info_code(self, message: types.Message) -> None:
+    async def _step_info_code(self, message: types.Message) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
             return
         code = text.strip()
         try:
-            info = self.sub.code_svc.get_code(code)
+            info = await self.sub.code_svc.get_code(code)
             text = (
                 f"ℹ️ <b>Код: <code>{code}</code></b>\n\n"
                 f"Тип: <code>{info.action}</code>\n"
@@ -46,45 +46,45 @@ class AdminCodesMixin(AdminFeatureMixin):
                 f"Гигабайт: <code>{info.gb}</code>\n"
                 f"ВЛ Гигабайт: <code>{info.wl_gb}</code>\n"
             )
-            self._send_message(
+            await self._send_message(
                 message.chat.id, text, parse_mode="HTML", reply_markup=self.get_codes_menu(),
             )
         except AppError as error:
-            self._send_message(
+            await self._send_message(
                 message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu(),
             )
         except Exception:
             self.log.exception("Telegram handler failed")
-            self._send_message(
+            await self._send_message(
                 message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu(),
             )
 
-    def _step_del_code(self, message: types.Message) -> None:
+    async def _step_del_code(self, message: types.Message) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
             return
         code = text.strip()
         try:
-            self.sub.code_svc.delete_code(code)
+            await self.sub.code_svc.delete_code(code)
         except AppError as error:
-            self._send_message(
+            await self._send_message(
                 message.chat.id, f"❌ {error.message}", reply_markup=self.get_codes_menu(),
             )
             return
         except Exception:
             self.log.exception("Telegram handler failed")
-            self._send_message(
+            await self._send_message(
                 message.chat.id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu(),
             )
             return
-        self._send_message(
+        await self._send_message(
             message.chat.id,
             f"✅ Код <code>{code}</code> удалён.",
             parse_mode="HTML",
             reply_markup=self.get_codes_menu(),
         )
 
-    def _step_add_code_name(self, message: types.Message) -> None:
+    async def _step_add_code_name(self, message: types.Message) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
             return
@@ -96,32 +96,32 @@ class AdminCodesMixin(AdminFeatureMixin):
             types.InlineKeyboardButton("🎁 bonus", callback_data="codetype_bonus"),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="codes_menu"),
         )
-        self.bot.send_message(
+        await self.bot.send_message(
             message.chat.id,
             f"Код: <b>{code_name}</b>\nВыберите тип:",
             parse_mode="HTML",
             reply_markup=markup,
         )
 
-    def _step_add_code_days(self, message: types.Message, code_type: str, code_name: str) -> None:
+    async def _step_add_code_days(self, message: types.Message, code_type: str, code_name: str) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
             return
         try:
             days = int(text.strip())
         except ValueError:
-            self.bot.send_message(
+            await self.bot.send_message(
                 message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu(),
             )
             return
-        msg = self.bot.send_message(
+        msg = await self.bot.send_message(
             message.chat.id, "Введите количество гигабайтов (в гб, или 0 для безлимита):",
         )
-        self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
+        self._expect(  # pyright: ignore[reportUnknownMemberType]
             msg, self._step_add_code_time, code_type, code_name, days,
         )
 
-    def _step_add_code_time(
+    async def _step_add_code_time(
         self, message: types.Message, code_type: str, code_name: str, days: int,
     ) -> None:
         text = cast(str, message.text)
@@ -130,19 +130,19 @@ class AdminCodesMixin(AdminFeatureMixin):
         try:
             gb = int(text.strip())
         except ValueError:
-            self.bot.send_message(
+            await self.bot.send_message(
                 message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu(),
             )
             return
-        msg = self.bot.send_message(
+        msg = await self.bot.send_message(
             message.chat.id,
             "Введите количество гигабайтов для ВЛ локаций (в гб, или 0 для безлимита)",
         )
-        self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
+        self._expect(  # pyright: ignore[reportUnknownMemberType]
             msg, self._step_add_code_wl_time, code_type, code_name, days, gb,
         )
 
-    def _step_add_code_wl_time(
+    async def _step_add_code_wl_time(
         self, message: types.Message, code_type: str, code_name: str, days: int, gb: int,
     ) -> None:
         text = cast(str, message.text)
@@ -151,16 +151,16 @@ class AdminCodesMixin(AdminFeatureMixin):
         try:
             wl_gb = int(text.strip())
         except ValueError:
-            self.bot.send_message(
+            await self.bot.send_message(
                 message.chat.id, "❌ Введите число.", reply_markup=self.get_codes_menu(),
             )
             return
-        msg = self.bot.send_message(message.chat.id, "Перманентный код? Да/Нет:")
-        self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
+        msg = await self.bot.send_message(message.chat.id, "Перманентный код? Да/Нет:")
+        self._expect(  # pyright: ignore[reportUnknownMemberType]
             msg, self._step_add_code_perma, code_type, code_name, days, gb, wl_gb,
         )
 
-    def _step_add_code_perma(
+    async def _step_add_code_perma(
         self, message: types.Message, code_type: str, code_name: str, days: int, gb: int, wl_gb: int,
     ) -> None:
         text = cast(str, message.text)
@@ -173,7 +173,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         elif content == "нет":
             perma = False
         else:
-            self.bot.send_message(
+            await self.bot.send_message(
                 message.chat.id,
                 "❌ Неизвестное значение (только да/нет)",
                 reply_markup=self.get_codes_menu(),
@@ -181,12 +181,12 @@ class AdminCodesMixin(AdminFeatureMixin):
             return
 
         if not perma:
-            msg = self.bot.send_message(message.chat.id, "Кол-во использований? (>= 1)")
-            self.bot.register_next_step_handler(  # pyright: ignore[reportUnknownMemberType]
+            msg = await self.bot.send_message(message.chat.id, "Кол-во использований? (>= 1)")
+            self._expect(  # pyright: ignore[reportUnknownMemberType]
                 msg, self._step_add_code_uses, code_type, code_name, days, gb, wl_gb, perma,
             )
         else:
-            self._step_add_code_uses(
+            await self._step_add_code_uses(
                 message=message.chat.id,
                 code_type=code_type,
                 code_name=code_name,
@@ -196,7 +196,7 @@ class AdminCodesMixin(AdminFeatureMixin):
                 perma=perma,
             )
 
-    def _step_add_code_uses(
+    async def _step_add_code_uses(
         self,
         message: types.Message | int,
         code_type: str,
@@ -220,7 +220,7 @@ class AdminCodesMixin(AdminFeatureMixin):
                 if uses < 1:
                     raise ValueError("aeruioycxvvbseyporfdlhgnvcxhskl;dlkfdlaeeyroufhgkjhgfkgkfjhl")
             except ValueError:
-                self.bot.send_message(
+                await self.bot.send_message(
                     message.chat.id, "❌ Ошибка: кол-во должно быть числом больше 0.",
                 )
                 return
@@ -230,7 +230,7 @@ class AdminCodesMixin(AdminFeatureMixin):
             chat_id = message
 
         try:
-            self.sub.code_svc.add_code(
+            await self.sub.code_svc.add_code(
                 code=code_name,
                 action=code_type,
                 permanent=perma,
@@ -239,7 +239,7 @@ class AdminCodesMixin(AdminFeatureMixin):
                 wl_gb=wl_gb,
                 uses=uses,
             )
-            self._send_message(
+            await self._send_message(
                 chat_id,
                 f"""✅ Код создан!
 
@@ -254,7 +254,7 @@ class AdminCodesMixin(AdminFeatureMixin):
                 reply_markup=self.get_codes_menu(),
             )
         except AppError as error:
-            self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
+            await self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_codes_menu())
         except Exception:
             self.log.exception("Telegram handler failed")
-            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())
+            await self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu())

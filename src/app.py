@@ -14,6 +14,9 @@ from app_runtime.lifecycle import Runtime
 from app_runtime.offload import OffloadServices
 from app_runtime.settings import AppOptions, AppPaths, PanelTransportFactory, verbose_overrides
 from app_runtime.tasks import MutationRegistry
+from bots import AsyncAdminBot, AsyncPublicBot
+from bots.logging import AsyncBotLogging
+from bots.polling import AsyncTelegramSession
 from bwatch.async_watch import AsyncBWatch
 from config import AppConfig, Config, LangConfig, LinesConfig
 from config.async_store import AsyncConfig, AsyncLinesConfig
@@ -21,6 +24,7 @@ from core import AsyncSubscription
 from core.coordination import MutationCoordinator
 from core.services.async_audit import AsyncAuditService
 from db import AsyncDatabase
+from notify.async_notifier import AsyncNotifier
 from paths import bundled_root, compiled
 
 if TYPE_CHECKING:
@@ -43,6 +47,8 @@ class ApplicationDependencies:
     subscription: AsyncSubscription
     limiter: AsyncRateLimiter
     watcher: AsyncBWatch
+    admin_bot: AsyncAdminBot | None = None
+    public_bot: AsyncPublicBot | None = None
 
 
 class Application(Runtime[ApplicationDependencies]):
@@ -81,12 +87,23 @@ async def create_application(paths: AppPaths | None = None, options: AppOptions 
         sub = AsyncSubscription(cfg=cfg, lang_cfg=lang, db=db, panels=panels, whitelist_panel=whitelist, offloads=offloads, coordinator=MutationCoordinator(mutations), audit_svc=AsyncAuditService(audit), verbose="core" in overrides)
         await open_resource(OwnedResource("subscription", sub))
         app = app or create_api_application(proxy_hops=options.proxy_hops, require_proxy=options.require_proxy)
-        status = AsyncBWatch(cfg, db, sub, scheduled=options.start_background, verbose="bwatch" in overrides)
+        conf = cfg.view()
+        admin_bot = AsyncAdminBot(sub, lang, cfg) if options.start_bots and conf.get("bot", {}).get("token") else None
+        public_bot = AsyncPublicBot(sub, cfg, lang) if options.start_bots and conf.get("publicbot", {}).get("token") else None
+        if admin_bot is not None or public_bot is not None:
+            await open_resource(OwnedResource("Telegram session", AsyncTelegramSession()))
+        notifier = AsyncNotifier(texts=public_bot.TEXTS, send=public_bot.send_notice, language=public_bot.get_lang) if public_bot is not None else None
+        status = AsyncBWatch(cfg, db, sub, notifier=notifier, alert=admin_bot.msg if admin_bot is not None else None, scheduled=options.start_background, verbose="bwatch" in overrides)
+        if admin_bot is not None:
+            await open_resource(OwnedResource("Telegram log delivery", AsyncBotLogging(admin_bot)))
         await open_resource(OwnedResource("watcher", status))
+        for name, bot in (("admin bot", admin_bot), ("public bot", public_bot)):
+            if bot is not None:
+                await open_resource(OwnedResource(name, bot))
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
         register_subscription_route(app, sub)
-        runtime = Application(ApplicationDependencies(app, cfg, lang, audit, db, panels, whitelist, sub, limiter, status), resources=tuple(opened), offloads=offloads, mutations=mutations)
+        runtime = Application(ApplicationDependencies(app, cfg, lang, audit, db, panels, whitelist, sub, limiter, status, admin_bot, public_bot), resources=tuple(opened), offloads=offloads, mutations=mutations)
         await runtime.start()
         app.extensions["runtime"] = runtime
         return runtime

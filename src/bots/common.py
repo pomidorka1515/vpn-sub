@@ -6,14 +6,14 @@ import logging
 from typing import TYPE_CHECKING, Any, TypedDict, Unpack, cast
 
 if TYPE_CHECKING:
-    import threading
-    from concurrent.futures import ThreadPoolExecutor
+    from collections.abc import MutableMapping
 
-    import telebot
     from telebot import types
+    from telebot.async_telebot import AsyncTeleBot
 
-    from config import AppConfig, Config, LangConfig
-    from core import Subscription
+    from config import AppConfig, LangConfig
+    from core import AsyncSubscription
+    from core.async_common import Snapshot
     from loggers import Logger
 
 __all__ = ["AdminStateMixin", "BotStateMixin", "PublicStateMixin", "TelegramIOMixin"]
@@ -25,26 +25,26 @@ class MessageOptions(TypedDict, total=False):
 
 
 class TelegramIOMixin:
-    bot: telebot.TeleBot
+    bot: AsyncTeleBot
     log: Logger
 
-    def _answer_callback(self, call_id: str, text: str | None = None) -> None:
+    async def _answer_callback(self, call_id: str, text: str | None = None) -> None:
         # pyTelegramBotAPI annotates callback_query_id as int, but Telegram
         # callback ids are strings (CallbackQuery.id: str).
         if text is None:
-            self.bot.answer_callback_query(cast(Any, call_id))
+            await self.bot.answer_callback_query(cast(Any, call_id))
         else:
-            self.bot.answer_callback_query(cast(Any, call_id), text)
+            await self.bot.answer_callback_query(cast(Any, call_id), text)
 
-    def _send_message(self, chat_id: int, text: str, **kwargs: Unpack[MessageOptions]) -> None:
+    async def _send_message(self, chat_id: int, text: str, **kwargs: Unpack[MessageOptions]) -> None:
         try:
-            self.bot.send_message(chat_id, text, **kwargs)
+            await self.bot.send_message(chat_id, text, **kwargs)
         except Exception:
             self.log.exception("failed to send message to chat %s", chat_id)
 
-    def _delete_message(self, chat_id: int, message_id: int, *, secret: bool = False) -> None:
+    async def _delete_message(self, chat_id: int, message_id: int, *, secret: bool = False) -> None:
         try:
-            self.bot.delete_message(chat_id, message_id)
+            await self.bot.delete_message(chat_id, message_id)
         except Exception as error:
             level = logging.CRITICAL if secret else logging.ERROR
             prefix = "secret" if secret else "message"
@@ -54,26 +54,24 @@ class TelegramIOMixin:
                 exc_info=True,
             )
             if secret:
-                self._send_message(chat_id, "⚠️ Не удалось удалить ваше сообщение с секретом.")
+                await self._send_message(chat_id, "⚠️ Не удалось удалить ваше сообщение с секретом.")
 
 
 class BotStateMixin:
     """Typing contract for state initialized by concrete bot composition roots."""
 
-    cfg: Config[AppConfig]
-    lang_cfg: Config[LangConfig]
-    sub: Subscription
-    polling_thread: threading.Thread | None
+    cfg: Snapshot[AppConfig]
+    lang_cfg: Snapshot[LangConfig]
+    sub: AsyncSubscription
 
 
 class AdminStateMixin(BotStateMixin):
     admin_uids: list[int]
-    _pending_codes: dict[str | int, str]
-    _pending_edits: dict[int, dict[str, str]]
-    _pagination_state: dict[int, dict[str, int]]
-    _pending_leaderboard: dict[int, dict[str, str | int]]
+    _pending_codes: MutableMapping[str | int, str]
+    _pending_edits: MutableMapping[str | int, dict[str, str]]
+    _pagination_state: MutableMapping[str | int, dict[str, int]]
+    _pending_leaderboard: MutableMapping[str | int, dict[str, str | int]]
 
 
 class PublicStateMixin(BotStateMixin):
     TEXTS: dict[str, dict[str, str]]
-    _executor: ThreadPoolExecutor

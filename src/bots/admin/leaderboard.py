@@ -18,7 +18,7 @@ __all__ = ["AdminLeaderboardMixin"]
 class AdminLeaderboardMixin(AdminFeatureMixin):
     """Leaderboard selection and rendering workflows."""
 
-    def _cb_leaderboard_type(self, chat_id: int) -> None:
+    async def _cb_leaderboard_type(self, chat_id: int) -> None:
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("📊 Общий (total)", callback_data="lbt_total"),
@@ -27,38 +27,38 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
                 "🛡 Белый список (wl_monthly)", callback_data="lbt_wl_monthly",
             ),
         )
-        self.bot.send_message(
+        await self.bot.send_message(
             chat_id,
             "🏆 <b>Таблица лидеров</b>\n\nВыберите тип трафика:",
             parse_mode="HTML",
             reply_markup=markup,
         )
 
-    def _cb_leaderboard_order(self, chat_id: int) -> None:
+    async def _cb_leaderboard_order(self, chat_id: int) -> None:
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("🔽 По убыванию (1st = most)", callback_data="lbo_desc"),
             types.InlineKeyboardButton("🔼 По возрастанию (1st = least)", callback_data="lbo_asc"),
         )
-        self.bot.send_message(
+        await self.bot.send_message(
             chat_id,
             "📋 <b>Сортировка</b>\n\nВыберите порядок:",
             parse_mode="HTML",
             reply_markup=markup,
         )
 
-    def _cb_leaderboard_window(self, chat_id: int) -> None:
-        msg = self.bot.send_message(
+    async def _cb_leaderboard_window(self, chat_id: int) -> None:
+        msg = await self.bot.send_message(
             chat_id,
             "🔢 <b>Количество записей</b>\n\nВведите число (0 = все пользователи, >= 0):",
             parse_mode="HTML",
         )
-        self.bot.register_next_step_handler(msg, self._step_leaderboard_window)  # pyright: ignore[reportUnknownMemberType]
+        self._expect(msg, self._step_leaderboard_window)  # pyright: ignore[reportUnknownMemberType]
 
-    def _step_leaderboard_window(self, message: types.Message) -> None:
+    async def _step_leaderboard_window(self, message: types.Message) -> None:
         chat_id = message.chat.id
         if message.text is None:
-            self.bot.send_message(chat_id, "❌ Введите число.", reply_markup=self.get_main_menu())
+            await self.bot.send_message(chat_id, "❌ Введите число.", reply_markup=self.get_main_menu())
             return
 
         try:
@@ -66,7 +66,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             if window < 0:
                 raise ValueError
         except ValueError:
-            self.bot.send_message(
+            await self.bot.send_message(
                 chat_id,
                 "❌ Введите неотрицательное целое число.",
                 reply_markup=self.get_main_menu(),
@@ -77,28 +77,28 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         if pending:
             bw_type = cast(Literal["total", "monthly", "wl_monthly"], pending.get("type", "total"))
             order = cast(Literal["asc", "desc"], pending.get("order", "desc"))
-            self._handle_leaderboard_result(chat_id, bw_type, order, window)
+            await self._handle_leaderboard_result(chat_id, bw_type, order, window)
         else:
-            self.bot.send_message(
+            await self.bot.send_message(
                 chat_id, "❌ Сессия истекла, начните заново.", reply_markup=self.get_main_menu(),
             )
 
-    def _handle_leaderboard_result(
+    async def _handle_leaderboard_result(
         self,
         chat_id: int,
         bw_type: Literal["total", "monthly", "wl_monthly"],
         order: Literal["asc", "desc"],
         window: int,
     ) -> None:
-        lb_data = self.sub.leaderboard_svc.leaderboard(
+        lb_data = await self.sub.leaderboard_svc.leaderboard(
             category=bw_type, top_n=window, use_displaynames=True, flip=order == "asc",
         )
 
         language = self.lang_cfg.view()
-        chart = leaderboard_chart(lb_data, bandwidth_type=bw_type, lang=language["chart"]["ru"])
+        chart = await self.sub.res.offloads.rendering.run(leaderboard_chart, lb_data, bandwidth_type=bw_type, lang=language["chart"]["ru"])
 
         if chart is None:
-            self.bot.send_message(chat_id, "Нет данных!")
+            await self.bot.send_message(chat_id, "Нет данных!")
             return
 
         sorted_items = sorted(lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc"))
@@ -117,4 +117,4 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
                 b = b[:-1]
             text = b.decode("utf-8", errors="ignore") + "..."
 
-        self.bot.send_photo(chat_id, chart, text, parse_mode="HTML")
+        await self.bot.send_photo(chat_id, chart, text, parse_mode="HTML")

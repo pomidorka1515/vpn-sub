@@ -16,11 +16,11 @@ __all__ = ["PublicSubscriptionMixin"]
 
 
 class PublicSubscriptionMixin(PublicFeatureMixin):
-    """Subscription-link and account-information workflows."""
+    """AsyncSubscription-link and account-information workflows."""
 
-    def send_info(self, chat_id: int, uid: int, lang: str) -> None:
+    async def send_info(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
-        info = self.sub.telegram_svc.get_info_telegram(uid)
+        info = await self.sub.telegram_svc.get_info_telegram(uid)
         if not info:
             return
         daystext = t["days_word"]
@@ -58,11 +58,11 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             days=time_str,
             fingerprint=info.fingerprint,
         )
-        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.get_menu(uid))
+        await self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=await self.get_menu(uid))
 
-    def send_link(self, chat_id: int, uid: int, lang: str) -> None:
+    async def send_link(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]
-        info = self.sub.telegram_svc.get_info_telegram(uid)
+        info = await self.sub.telegram_svc.get_info_telegram(uid)
         if not info:
             return
 
@@ -72,7 +72,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
 
         link = f"{domain}/{sub_uri}?token={info.token}&lang={lang}"
 
-        qr = make_qr(link)
+        qr = await self.sub.res.offloads.rendering.run(make_qr, link)
 
         text = t["get_sub_text"].format(link=link)
 
@@ -85,4 +85,4 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
                 url=f"{domain}/{sub_uri}/redirect?url={urllib.parse.quote(link)}&prefix={urllib.parse.quote('happ://add/')}",
             ),
         )
-        self.bot.send_photo(chat_id, qr, text, parse_mode="Markdown", reply_markup=markup)
+        await self.bot.send_photo(chat_id, qr, text, parse_mode="Markdown", reply_markup=markup)

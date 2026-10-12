@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 from typing import TYPE_CHECKING, cast
 
 from chart import bandwidth_chart
@@ -20,24 +19,24 @@ __all__ = ["AdminTrafficMixin"]
 class AdminTrafficMixin(AdminFeatureMixin):
     """Per-user traffic chart workflows."""
 
-    def _step_chart_username(self, message: types.Message) -> None:
+    async def _step_chart_username(self, message: types.Message) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
             return
         username = text.strip()
 
         try:
-            self.sub.user_svc.get_user_state(username)
+            await self.sub.user_svc.get_user_state(username)
         except AppError as error:
-            self.bot.send_message(
+            await self.bot.send_message(
                 message.chat.id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
             )
             return
 
-        msg = self.bot.send_message(message.chat.id, "Введите количество дней (1-90):")
-        self.bot.register_next_step_handler(msg, self._step_chart_days, username)  # pyright: ignore[reportUnknownMemberType]
+        msg = await self.bot.send_message(message.chat.id, "Введите количество дней (1-90):")
+        self._expect(msg, self._step_chart_days, username)  # pyright: ignore[reportUnknownMemberType]
 
-    def _step_chart_days(self, message: types.Message, username: str) -> None:
+    async def _step_chart_days(self, message: types.Message, username: str) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
             return
@@ -47,25 +46,19 @@ class AdminTrafficMixin(AdminFeatureMixin):
             if not 1 <= days <= 90:
                 raise ValueError
         except ValueError:
-            self.bot.send_message(
+            await self.bot.send_message(
                 message.chat.id, "❌ Введите число от 1 до 90.", reply_markup=self.get_main_menu(),
             )
             return
 
-        self.bot.send_message(message.chat.id, "⏳ Генерация графика...")
+        await self.bot.send_message(message.chat.id, "⏳ Генерация графика...")
 
-        thread = threading.Thread(
-            target=self._render_chart,
-            kwargs={"username": username, "days": days, "chat_id": message.chat.id},
-            daemon=True,
-            name=f"admin-chart-{username}",
-        )
-        thread.start()
+        await self._render_chart(username=username, days=days, chat_id=message.chat.id)
 
-    def _render_chart(self, *, username: str, days: int, chat_id: int) -> None:
+    async def _render_chart(self, *, username: str, days: int, chat_id: int) -> None:
         try:
-            snapshots = self.sub.bandwidth_svc.get_bw_history(username, days=days)
-            info = self.sub.business_svc.get_info(username, pretty=False)
+            snapshots = await self.sub.bandwidth_svc.get_bw_history(username, days=days)
+            info = await self.sub.business_svc.get_info(username, pretty=False)
 
             bandwidths = info.bandwidth
 
@@ -102,11 +95,11 @@ class AdminTrafficMixin(AdminFeatureMixin):
 
             text = truncate_utf8(text, 1024)
             language = self.lang_cfg.view()
-            chart_img = bandwidth_chart(
+            chart_img = await self.sub.res.offloads.rendering.run(bandwidth_chart,
                 snapshots, label=info.displayname, lang=language["chart"]["ru"],
             )
             if chart_img is not None:
-                self.bot.send_photo(
+                await self.bot.send_photo(
                     chat_id,
                     chart_img,
                     caption=text,
@@ -114,14 +107,14 @@ class AdminTrafficMixin(AdminFeatureMixin):
                     reply_markup=self.get_main_menu(),
                 )
             else:
-                self.bot.send_message(
+                await self.bot.send_message(
                     chat_id,
                     text + "\n\n❌ Нет данных для графика",
                     parse_mode="HTML",
                     reply_markup=self.get_main_menu(),
                 )
         except AppError as error:
-            self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
+            await self._send_message(chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu())
         except Exception:
             self.log.exception("Chart error for username %s", username)
-            self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())
+            await self._send_message(chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu())

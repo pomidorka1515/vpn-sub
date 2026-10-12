@@ -18,15 +18,15 @@ __all__ = ["PublicTrafficMixin"]
 class PublicTrafficMixin(PublicFeatureMixin):
     """Chart selection and background rendering workflows."""
 
-    def chart_callback(self, call: types.CallbackQuery) -> None:
+    async def chart_callback(self, call: types.CallbackQuery) -> None:
         data = cast(str, call.data)
         message = cast(types.Message, call.message)
         uid = call.from_user.id
 
-        if not self.sub.telegram_svc.is_registered(uid):
+        if not await self.sub.telegram_svc.is_registered(uid):
             return
 
-        lang = self.get_lang(uid)
+        lang = await self.get_lang(uid)
         t = self.TEXTS[lang]
 
         try:
@@ -34,18 +34,17 @@ class PublicTrafficMixin(PublicFeatureMixin):
             if not 1 <= days <= 90:
                 raise ValueError
         except ValueError, IndexError:
-            self._answer_callback(call.id, t["chart_invalid_period"])
+            await self._answer_callback(call.id, t["chart_invalid_period"])
             return
 
-        username = self.sub.telegram_svc.get_username_telegram(uid)
+        username = await self.sub.telegram_svc.get_username_telegram(uid)
         if not isinstance(username, str):
             return
 
-        self._answer_callback(call.id, t["chart_generating"])
+        await self._answer_callback(call.id, t["chart_generating"])
 
         try:
-            self._executor.submit(
-                self._render_chart,
+            await self._render_chart(
                 uid=uid,
                 username=username,
                 days=days,
@@ -54,13 +53,13 @@ class PublicTrafficMixin(PublicFeatureMixin):
             )
         except Exception:
             self.log.exception("chart submission failed")
-            self._send_message(message.chat.id, t["error_generic"])
+            await self._send_message(message.chat.id, t["error_generic"])
 
-    def _render_chart(self, *, uid: int, username: str, days: int, lang: str, chat_id: int) -> None:
+    async def _render_chart(self, *, uid: int, username: str, days: int, lang: str, chat_id: int) -> None:
         t = self.TEXTS[lang]
         try:
-            snapshots = self.sub.bandwidth_svc.get_bw_history(username, days=days)
-            info = self.sub.business_svc.get_info(username, pretty=False)
+            snapshots = await self.sub.bandwidth_svc.get_bw_history(username, days=days)
+            info = await self.sub.business_svc.get_info(username, pretty=False)
 
             bandwidths = info.bandwidth
 
@@ -98,26 +97,26 @@ class PublicTrafficMixin(PublicFeatureMixin):
             text = truncate_utf8(text, 1024)
 
             language = self.lang_cfg.view()
-            chart_img = bandwidth_chart(
+            chart_img = await self.sub.res.offloads.rendering.run(bandwidth_chart,
                 snapshots, label=info.displayname, lang=language["chart"][lang],
             )
             if chart_img is not None:
-                self.bot.send_photo(
+                await self.bot.send_photo(
                     chat_id,
                     chart_img,
                     caption=text,
                     parse_mode="HTML",
-                    reply_markup=self.get_menu(uid),
+                    reply_markup=await self.get_menu(uid),
                 )
             else:
-                self.bot.send_message(
+                await self.bot.send_message(
                     chat_id,
                     text + "\n\n" + t["no_data"],
                     parse_mode="HTML",
-                    reply_markup=self.get_menu(uid),
+                    reply_markup=await self.get_menu(uid),
                 )
         except AppError as error:
-            self._send_message(chat_id, error.message, reply_markup=self.get_menu(uid))
+            await self._send_message(chat_id, error.message, reply_markup=await self.get_menu(uid))
         except Exception:
             self.log.exception(f"Chart error for uid {uid}")
-            self._send_message(chat_id, t["error_generic"], reply_markup=self.get_menu(uid))
+            await self._send_message(chat_id, t["error_generic"], reply_markup=await self.get_menu(uid))

@@ -8,6 +8,7 @@ from telebot import types
 
 from ..common import AdminStateMixin, TelegramIOMixin
 from ..composition import AdminFeatureMixin
+from ..conversations import ConversationMixin
 from ..polling import TelegramPollingMixin
 from .callback_routing import AdminCallbackRoutingMixin
 
@@ -19,6 +20,7 @@ class AdminCommonMixin(
     TelegramIOMixin,
     AdminStateMixin,
     AdminCallbackRoutingMixin,
+    ConversationMixin,
     AdminFeatureMixin,
 ):
     USERS_PER_PAGE = 10
@@ -28,10 +30,10 @@ class AdminCommonMixin(
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_uids
 
-    def msg(self, text: str, parse_mode: str = "HTML") -> None:
+    async def msg(self, text: str, parse_mode: str = "HTML") -> None:
         for uid in self.admin_uids:
             try:
-                self.bot.send_message(uid, text, parse_mode=parse_mode)
+                await self.bot.send_message(uid, text, parse_mode=parse_mode)
             except Exception:
                 self.log.exception("failed to send message to admin ID %s", uid)
 
@@ -59,9 +61,9 @@ class AdminCommonMixin(
             types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"),
         )
 
-    def get_users_menu(self, prefix: str, page: int = 0) -> types.InlineKeyboardMarkup:
+    async def get_users_menu(self, prefix: str, page: int = 0) -> types.InlineKeyboardMarkup:
         """Get paginated user list with navigation buttons."""
-        all_users = self.sub.user_svc.list_users()
+        all_users = await self.sub.user_svc.list_users()
         total_users = len(all_users)
         total_pages = max(1, (total_users - 1) // self.USERS_PER_PAGE + 1)
 
@@ -96,17 +98,24 @@ class AdminCommonMixin(
         markup.add(types.InlineKeyboardButton("🔙 Отмена / В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         return markup
 
-    def cmd_start(self, message: types.Message) -> None:
+    async def cmd_start(self, message: types.Message) -> None:
         if not self.is_admin(cast(types.User, message.from_user).id):
             return
-        self.bot.send_message(
+        await self.bot.send_message(
             message.chat.id,
             "👋 Привет! Панель управления VPN запущена.",
             reply_markup=self.get_main_menu(),
         )
 
-    def start(self) -> None:
-        self.start_polling()
+    def _authorized(self, uid: int) -> bool:
+        return self.is_admin(uid)
 
-    def stop(self) -> None:
-        self.stop_polling()
+    def _clear_pending(self, chat_id: int) -> None:
+        self._pending_codes.pop(chat_id, None)
+        self._pending_edits.pop(chat_id, None)
+        self._pending_leaderboard.pop(chat_id, None)
+
+    async def close(self) -> None:
+        await super().close()
+        for values in (self._pending_codes, self._pending_edits, self._pending_leaderboard, self._pagination_state):
+            values.clear()

@@ -18,7 +18,7 @@ from .snapshots import SnapshotsMixin
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from bots import AdminBot, PublicBot
+    from bwatch.legacy_delivery import AdminDelivery, PublicDelivery
     from config import AppConfig, Config
     from core import Subscription
     from db import Database
@@ -34,8 +34,8 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
         cfg: Config[AppConfig],
         db: Database,
         sub: Subscription,
-        bot: PublicBot | None = None,
-        admin_bot: AdminBot | None = None,
+        bot: PublicDelivery | None = None,
+        admin_bot: AdminDelivery | None = None,
         verbose: bool = False,
     ) -> None:
         self.log = Logger(type(self).__name__)
@@ -45,8 +45,8 @@ class BWatch(QuotaMixin, PanelsMixin, SnapshotsMixin, CalendarMixin, SchedulerMi
             self._stop_event = threading.Event()
             self._mem_lock = threading.Lock()  # single lock for all mem/wl_mem access
             self.sub: Subscription = sub
-            self.bot: PublicBot | None = bot
-            self.admin_bot: AdminBot | None = admin_bot
+            self.bot: PublicDelivery | None = bot
+            self.admin_bot: AdminDelivery | None = admin_bot
             self.verbose: bool = verbose
             self.mem: dict[str, BandwidthInfo] = {}
             self.wl_mem: dict[str, BandwidthInfo] = {}

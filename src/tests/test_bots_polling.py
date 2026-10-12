@@ -1,214 +1,70 @@
 from __future__ import annotations
 
-import threading
-import time
-from collections.abc import Callable
+import asyncio
 from typing import cast
+from unittest.mock import MagicMock
 
 import pytest
-from requests import Response
-from telebot import TeleBot, apihelper
+from bot_helpers import telegram_mock
+from telebot.async_telebot import AsyncTeleBot
 
-from bots import polling as polling_module
-from bots.polling import (
-    TelegramPollingMixin,
-    _PollingExceptionHandler,  # pyright: ignore[reportPrivateUsage]
-    configure_telegram_api,
-)
-from loggers import Logger
-
-_STOP_WAIT_SECONDS = 30
+from bots.handler_backend import ConversationRouter
+from bots.polling import TelegramPollingMixin, _sanitize_polling_error
 
 
-class _NullLogger:
+class PollingBot(TelegramPollingMixin):
     def __init__(self) -> None:
-        self.errors: list[str] = []
-        self.warnings: list[str] = []
-
-    def error(self, message: str) -> None:
-        self.errors.append(message)
-
-    def warning(self, message: str, *args: object) -> None:
-        if args:
-            message %= args
-        self.warnings.append(message)
+        self.bot = cast(AsyncTeleBot, telegram_mock())
+        self.log = MagicMock()
+        self._conversations = ConversationRouter()
+        self._initialize_polling()
 
 
-class _Poller:
-    def __init__(self, stop_event: threading.Event) -> None:
-        self.stop_polling_calls = 0
-        self.polling_started = threading.Event()
-        self.token: str | None = None
-        self._stop_event = stop_event
+@pytest.mark.asyncio
+async def test_polling_stop_settles_handlers_before_session_owner_closes() -> None:
+    bot = PollingBot()
+    polling = asyncio.Event()
+    release = asyncio.Event()
 
-    def infinity_polling(
-        self, *, timeout: int, long_polling_timeout: int, logger_level: int | None,
-    ) -> None:
-        self.polling_started.set()
-        self._stop_event.wait(_STOP_WAIT_SECONDS)
+    async def updates(**kwargs: object) -> list[object]:
+        polling.set()
+        await asyncio.Event().wait()
+        return []
 
-    def stop_polling(self) -> None:
-        self.stop_polling_calls += 1
-
-
-class _TestBot(TelegramPollingMixin):
-    def __init__(self, stop_event: threading.Event) -> None:
-        self.poller = _Poller(stop_event)
-        self.logger = _NullLogger()
-        self.bot = cast(TeleBot, self.poller)
-        self.log = cast(Logger, self.logger)
-
-
-@pytest.fixture
-def stop_event() -> threading.Event:
-    return threading.Event()
+    cast(MagicMock, getattr(bot.bot, "get_updates")).side_effect = updates
+    bot._handlers.create(release.wait, name="active handler")
+    await bot.start()
+    task = bot._polling_task
+    await bot.start()
+    assert bot._polling_task is task
+    await polling.wait()
+    close = asyncio.create_task(bot.close())
+    await asyncio.sleep(0)
+    assert not close.done()
+    release.set()
+    await close
+    await bot.close()
+    assert bot._handlers.active_count == 0
+    cast(MagicMock, bot.bot.close_session).assert_not_called()
 
 
-@pytest.fixture
-def polling_bot(stop_event: threading.Event) -> _TestBot:
-    return _TestBot(stop_event)
+@pytest.mark.asyncio
+async def test_polling_errors_are_sanitized_and_retry_is_interruptible() -> None:
+    bot = PollingBot()
+    token = "123:secret"
+    cast(MagicMock, bot.bot).token = token
+    called = asyncio.Event()
 
+    async def updates(**kwargs: object) -> list[object]:
+        called.set()
+        raise OSError(f"https://api.telegram.org/bot{token}/getUpdates")
 
-def test_start_polling_reuses_running_thread(
-    polling_bot: _TestBot,
-    stop_event: threading.Event,
-) -> None:
-    polling_bot.start_polling()
-    assert polling_bot.polling_thread is not None
-    thread = polling_bot.polling_thread
-    assert polling_bot.poller.polling_started.wait(1)
-
-    polling_bot.start_polling()
-    assert polling_bot.polling_thread is thread
-
-    stop_event.set()
-    polling_bot.stop_polling()
-    assert not thread.is_alive()
-    assert polling_bot.logger.errors == []
-
-
-def test_stop_polling_is_idempotent_and_does_not_join_without_thread(
-    polling_bot: _TestBot,
-    stop_event: threading.Event,
-) -> None:
-    started = time.monotonic()
-    polling_bot.stop_polling()
-    assert time.monotonic() - started < 0.1
-    assert polling_bot.poller.stop_polling_calls == 1
-
-    polling_bot.start_polling()
-    assert polling_bot.poller.polling_started.wait(1)
-    stop_event.set()
-    polling_bot.stop_polling()
-    polling_bot.stop_polling()
-    assert polling_bot.poller.stop_polling_calls >= 3
-
-
-def test_stop_polling_logs_timeout(
-    polling_bot: _TestBot,
-    stop_event: threading.Event,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(polling_module, "_POLLING_STOP_TIMEOUT", 0.2)
-    polling_bot.start_polling()
-    assert polling_bot.polling_thread is not None
-    thread = polling_bot.polling_thread
-    assert polling_bot.poller.polling_started.wait(1)
-
-    polling_bot.stop_polling()
-    assert thread.is_alive()
-    assert len(polling_bot.logger.errors) == 1
-
-    stop_event.set()
-    thread.join(_STOP_WAIT_SECONDS)
-    assert not thread.is_alive()
-
-
-def test_polling_errors_are_logged_without_token_or_traceback(
-    polling_bot: _TestBot,
-    stop_event: threading.Event,
-) -> None:
-    token = "123456:secret-token-value"
-    polling_bot.poller.token = token
-    raised = threading.Event()
-
-    def infinity_polling(
-        *, timeout: int, long_polling_timeout: int, logger_level: int | None,
-    ) -> None:
-        if not raised.is_set():
-            raised.set()
-            raise ConnectionError(
-                f"HTTPSConnectionPool(host='api.telegram.org', port=443): "
-                f"Max retries exceeded with url: /bot{token}/getUpdates "
-                f"(Caused by ProtocolError('Connection aborted.', "
-                f"ConnectionResetError(104, 'Connection reset by peer')))",
-            )
-        stop_event.wait(_STOP_WAIT_SECONDS)
-
-    polling_bot.poller.infinity_polling = infinity_polling  # type: ignore[method-assign]
-    polling_bot.start_polling()
-    assert raised.wait(1)
-    deadline = time.monotonic() + 1
-    while not polling_bot.logger.warnings and time.monotonic() < deadline:
-        time.sleep(0.01)
-
-    assert len(polling_bot.logger.warnings) == 1
-    warning = polling_bot.logger.warnings[0]
-    assert "telegram polling failed:" in warning
-    assert "ConnectionError" in warning
+    cast(MagicMock, getattr(bot.bot, "get_updates")).side_effect = updates
+    await bot.start()
+    await called.wait()
+    await bot.close()
+    warning = str(cast(MagicMock, bot.log).warning.call_args)
     assert token not in warning
-    assert "secret-token-value" not in warning
-    assert "Traceback" not in warning
-    assert polling_bot.logger.errors == []
-
-    stop_event.set()
-    polling_bot.stop_polling()
-
-
-def test_transient_polling_errors_are_left_to_library_backoff() -> None:
-    logger = _NullLogger()
-    handler = _PollingExceptionHandler(cast(Logger, logger), None)
-    reset = ConnectionError(
-        "('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
-    )
-    exception = cast(
-        Callable[[str, Response, dict[str, object]], apihelper.ApiTelegramException],
-        apihelper.ApiTelegramException,
-    )
-    gateway = exception(
-        "getUpdates",
-        Response(),
-        {"error_code": 502, "description": "Bad Gateway"},
-    )
-    limited = exception(
-        "getUpdates",
-        Response(),
-        {"error_code": 429, "description": "Too Many Requests"},
-    )
-
-    assert handler.handle(reset) is False
-    assert handler.handle(gateway) is False
-    assert handler.handle(limited) is False
-    assert logger.warnings == []
-
-
-def test_handler_errors_stay_inside_polling() -> None:
-    logger = _NullLogger()
-    handler = _PollingExceptionHandler(cast(Logger, logger), "123456:secret-token-value")
-
-    assert handler.handle(RuntimeError("handler exploded 123456:secret-token-value")) is True
-    assert len(logger.warnings) == 1
-    assert "secret-token-value" not in logger.warnings[0]
-    assert logger.errors == []
-
-
-def test_configure_telegram_api_disables_session_recycle(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(apihelper, "RETRY_ON_ERROR", False)
-    monkeypatch.setattr(apihelper, "SESSION_TIME_TO_LIVE", 600)
-    monkeypatch.setattr(apihelper, "CONNECT_TIMEOUT", 15)
-
-    configure_telegram_api()
-
-    assert apihelper.RETRY_ON_ERROR is True
-    assert cast(int | None, apihelper.SESSION_TIME_TO_LIVE) is None
-    assert apihelper.CONNECT_TIMEOUT == 20
+    assert "secret" not in warning
+    assert "{TOKEN}" in warning
+    assert "secret" not in _sanitize_polling_error(RuntimeError("secret"), token)

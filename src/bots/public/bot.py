@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
-import telebot
+from telebot.async_telebot import AsyncTeleBot
 
-from bots.handler_backend import LockedHandlerBackend
-from bots.polling import configure_telegram_api
 from loggers import Logger
 
 from .account import PublicAccountMixin
@@ -19,18 +16,14 @@ from .subscription import PublicSubscriptionMixin
 from .traffic import PublicTrafficMixin
 
 if TYPE_CHECKING:
-    import threading
-    from collections.abc import Callable
+    from config import AppConfig, LangConfig
+    from core import AsyncSubscription
+    from core.async_common import Snapshot
 
-    from telebot import types
-
-    from config import AppConfig, Config, LangConfig
-    from core import Subscription
-
-__all__ = ["PublicBot"]
+__all__ = ["AsyncPublicBot"]
 
 
-class PublicBot(
+class AsyncPublicBot(
     PublicCommonMixin,
     PublicLoginMixin,
     PublicSettingsMixin,
@@ -41,11 +34,10 @@ class PublicBot(
     """Public bot assembled from the public feature workflows."""
 
     def __init__(
-        self, sub: Subscription, cfg: Config[AppConfig], lang_cfg: Config[LangConfig],
+        self, sub: AsyncSubscription, cfg: Snapshot[AppConfig], lang_cfg: Snapshot[LangConfig],
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
-            configure_telegram_api()
             self.cfg = cfg
             self.lang_cfg = lang_cfg
             self.sub = sub
@@ -55,30 +47,10 @@ class PublicBot(
             token = conf["publicbot"]["token"]
             if not token:
                 raise RuntimeError("publicbot.token must not be empty")
-            step_backend = LockedHandlerBackend()
-            self.bot = telebot.TeleBot(
-                token,
-                threaded=True,
-                num_threads=3,
-                next_step_backend=step_backend,
-                reply_backend=step_backend,
-            )
+            self.bot = AsyncTeleBot(token)
+            self._initialize_polling()
+            self._initialize_conversations()
             language = lang_cfg.view()
             self.TEXTS: dict[str, dict[str, str]] = language["publicbot"]
-            self.bot.message_handler(commands=["start", "menu"])(self.cmd_start)  # pyright: ignore[reportUnknownMemberType]
-            callbacks: tuple[tuple[str, Callable[[types.CallbackQuery], None]], ...] = (
-                ("lang_", self.set_lang_callback),
-                ("set_", self.settings_callback),
-                ("fp_", self.fp_callback),
-                ("login_", self.login_callback),
-                ("chart_", self.chart_callback),
-            )
-            for prefix, handler in callbacks:
-                self.bot.callback_query_handler(  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownMemberType]
-                    func=lambda call, p=prefix: call.data.startswith(p),  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-                )(handler)  # pyright: ignore[reportUnknownLambdaType]
-            self.bot.message_handler(func=lambda g: True)(self.handle_text)  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-            self._executor = ThreadPoolExecutor(
-                max_workers=15, thread_name_prefix=f"{type(self).__name__}-chart",
-            )
-            self.polling_thread: threading.Thread | None = None
+            self.bot.message_handler(func=lambda message: True)(self._message_entry)  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownMemberType]
+            self.bot.callback_query_handler(func=lambda call: True)(self._callback_entry)  # type: ignore[no-untyped-call] # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]

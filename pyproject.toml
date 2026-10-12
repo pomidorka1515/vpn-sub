@@ -9,7 +9,7 @@ requires-python = ">=3.14" # 3.13 is supported, 3.14 for development
 dependencies = [
     "jsonschema>=4.20.0",
     "requests>=2.31.0",
-    "pyTelegramBotAPI>=4.15.0",
+    "pyTelegramBotAPI>=4.37,<5",
     "Flask>=3.0.0",
     "Quart>=0.20,<1",
     "hypercorn>=0.17.3,<1",

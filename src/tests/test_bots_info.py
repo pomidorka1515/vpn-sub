@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Unpack
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from bot_helpers import subscription_mock, telegram_mock
 
 from bots.public.subscription import PublicSubscriptionMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
@@ -62,12 +63,14 @@ INFO_TEXTS = {
 @pytest.fixture
 def info_mixin() -> tuple[PublicSubscriptionMixin, MagicMock, MagicMock]:
     mixin = PublicSubscriptionMixin.__new__(PublicSubscriptionMixin)
-    telegram = MagicMock()
-    subscription = MagicMock()
+    telegram = telegram_mock()
+    subscription = subscription_mock()
+    setattr(mixin, "_expect", MagicMock())
+    setattr(mixin, "_clear_steps", MagicMock())
     mixin.bot = telegram
     mixin.sub = subscription
     mixin.TEXTS = INFO_TEXTS
-    mixin.get_menu = MagicMock(return_value="menu")  # type: ignore[method-assign]
+    mixin.get_menu = AsyncMock(return_value="menu")  # type: ignore[method-assign]
     return mixin, telegram, subscription
 
 
@@ -113,12 +116,13 @@ def _info(**overrides: Unpack[UserInfoOverrides]) -> UserInfo:
     )
 
 
-def test_english_info_uses_auto_units_and_html(
+@pytest.mark.asyncio
+async def test_english_info_uses_auto_units_and_html(
     info_mixin: tuple[PublicSubscriptionMixin, MagicMock, MagicMock],
 ) -> None:
     mixin, telegram, subscription = info_mixin
     subscription.telegram_svc.get_info_telegram.return_value = _info()
-    mixin.send_info(7, 42, "en")
+    await mixin.send_info(7, 42, "en")
     telegram.send_message.assert_called_once()
     args, kwargs = telegram.send_message.call_args
     text = args[1]
@@ -135,12 +139,13 @@ def test_english_info_uses_auto_units_and_html(
     assert "Unlimited MB" not in text
 
 
-def test_russian_info_matches_english_layout(
+@pytest.mark.asyncio
+async def test_russian_info_matches_english_layout(
     info_mixin: tuple[PublicSubscriptionMixin, MagicMock, MagicMock],
 ) -> None:
     mixin, telegram, subscription = info_mixin
     subscription.telegram_svc.get_info_telegram.return_value = _info()
-    mixin.send_info(7, 42, "ru")
+    await mixin.send_info(7, 42, "ru")
     text = telegram.send_message.call_args.args[1]
     assert "Скачано за всё время: 127.76 GB" in text
     assert "В этом месяце: <i>Безлимит</i>" in text

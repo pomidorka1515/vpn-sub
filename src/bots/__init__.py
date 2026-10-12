@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .admin import AdminBot
-from .public import PublicBot
+from .admin import AsyncAdminBot
+from .public import AsyncPublicBot
 
-__all__ = ["AdminBot", "PublicBot"]
+__all__ = ["AsyncAdminBot", "AsyncPublicBot"]
