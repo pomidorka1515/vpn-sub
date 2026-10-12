@@ -19,5 +19,6 @@ build/
 !API.md
 !API_ADMIN.md
 !AUDIT.md
+!docs/ASYNC_*
 !src/discord/README.md
 *.egg-info

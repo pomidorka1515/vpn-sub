@@ -1,0 +1,13 @@
+# Async panel client (Step 3)  
+  
+`AsyncXUiSession`, `AiohttpPanelTransport`, `AsyncXUiPanelTransport`, `PanelResponse`, and `FakeAsyncPanelTransport` are exported by `session`. They are staged alongside the synchronous client for later core integration. Constructors open no connections and start no health work; call `await start()` and `await close()`. Instances are single-use after closing.  
+  
+The default transport creates a long-lived aiohttp session on startup. Injected sessions and transports remain injector-owned; injected transports must already be ready. Responses are fully buffered and released, with transport-independent JSON decoding and detached case-insensitive headers. Default total/connect/read deadlines are five seconds; per-request total timeouts are supported. Redirects are disabled to keep credentials on the configured endpoint. Absolute client URLs must remain within its configured base URL.  
+  
+Injected headers are defaults, caller headers override them case-insensitively, and the client always sets its bearer token last. Basic authentication is supported by the transport alone. Basic authentication combined with bearer authorization raises `XUiSessionError`: aiohttp cannot transmit both HTTP Authorization schemes, so credentials are never silently overwritten. Injected session default authentication is checked too.  
+  
+Client and transport admission each default to eight active requests and reject saturation before submission. Work-class fanout and cache integration belong to Step 6. Timeouts and aiohttp errors yield the existing 503 panel-down envelope without including exception strings. Cancellation propagates and does not mark a panel dead; an interrupted write can still have been accepted upstream. HTTP 401/403 is returned intact and permanently marks this client token-rejected. Health checks recover transient failures, reject malformed/unsuccessful responses, and do not retry rejected tokens.  
+  
+The client owns its named health task and all admitted request tasks. Closing stops admission, cancels/settles health work, drains admitted requests, and closes the owned transport/session. A cancelled close waiter leaves retained cleanup running; repeated close calls await the same outcome. Raw awaited request exceptions are observed without task traceback logging because HTTP exceptions may contain secrets. Health/request logs omit URL prefixes, query strings, response messages and exception text.  
+  
+Verification: Ruff, mypy and pyright pass. The full suite passed 583 tests; after adding explicit periodic-health and injected-client-session ownership checks, all 30 panel/lifecycle tests passed. The installed aiohttp emits deprecation warnings for its supported BasicAuth API.  

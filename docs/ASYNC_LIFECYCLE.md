@@ -1,0 +1,13 @@
+# Async lifecycle infrastructure (Step 2)  
+  
+`src/app_runtime/` provides injectable infrastructure without importing `app`, opening connections, or starting production work. The package name avoids the separate Discord process's existing `runtime` module.  
+  
+- `AsyncStartable`, `AsyncCloseable`, and `AsyncResource` define explicit lifecycle contracts. `OwnedResource` registrations are ordered by dependency; `close()` must support a partially failed `start()`. Register the primary lock first to release it last.  
+- `Runtime[DependenciesT]` retains the concrete injected dependency bundle's field types. Later migration steps supply their config/repository/Redis/panel/core/bot implementations and composition dataclass. `require_ready()` guards entry to application work. Instances are single-use, with readiness, stopping state, serialized startup/shutdown, and a retained shutdown task.  
+- `TaskRegistry` owns named background tasks, observes/logs failures, stops admission, and cancels/settles background work. Recurring tasks must propagate cancellation and await their own cleanup.  
+- `MutationRegistry` admits up to 32 critical operations by default. Caller cancellation before admission starts no work; after admission it propagates to the caller while the shielded, owned operation continues. Saturation raises `CapacityExceededError` before invoking the operation factory. Per-user coordination and business compensation are Step 6 responsibilities.  
+- `OffloadServices` separates files (4), passwords (2), rendering (2), and metrics (2) admission. `BoundedOffload` rejects excess submissions before dispatch to the loop's executor. Caller cancellation retains capacity until the synchronous work actually completes. Complete operations, including file locks/transactions, belong inside the submitted callable.  
+  
+Shutdown stops task/mutation admission, cancels and settles background tasks, drains critical mutations, drains offloads, and closes resources in reverse order. Offloads remain available during mutation settlement for compensation. Cancellation of a `stop()` waiter does not cancel owned shutdown; repeated callers await the same outcome. All resource close failures are collected and raised, including on repeated stop. No internal drain timeout pretends work has completed: the eventual server integration owns deadlines and must report unresolved work before closing its dependencies.  
+  
+Verification: Ruff, mypy and pyright pass. Nine deterministic lifecycle/concurrency tests pass. The full suite (before adding the ninth test) recorded 561 passes and two failures: the Step 1 backup mock incompatibility and the existing 50-ms panel-overlap timing assertion; the six-test panel-fanout suite passed on isolated rerun.  
