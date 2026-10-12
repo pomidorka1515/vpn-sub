@@ -8,12 +8,13 @@ from api import AsyncApi, AsyncWebApi
 from api.application import create_api_application
 from api.decorators.rate_limit import AsyncRateLimiter
 from api.subscription import register_subscription_route
-from app_runtime.composition import PrimaryLock, SnapshotStatus, build_panels
+from app_runtime.composition import PrimaryLock, build_panels
 from app_runtime.interfaces import OwnedResource
 from app_runtime.lifecycle import Runtime
 from app_runtime.offload import OffloadServices
 from app_runtime.settings import AppOptions, AppPaths, PanelTransportFactory, verbose_overrides
 from app_runtime.tasks import MutationRegistry
+from bwatch.async_watch import AsyncBWatch
 from config import AppConfig, Config, LangConfig, LinesConfig
 from config.async_store import AsyncConfig, AsyncLinesConfig
 from core import AsyncSubscription
@@ -41,6 +42,7 @@ class ApplicationDependencies:
     whitelist_panel: AsyncXUiSession | None
     subscription: AsyncSubscription
     limiter: AsyncRateLimiter
+    watcher: AsyncBWatch
 
 
 class Application(Runtime[ApplicationDependencies]):
@@ -79,11 +81,12 @@ async def create_application(paths: AppPaths | None = None, options: AppOptions 
         sub = AsyncSubscription(cfg=cfg, lang_cfg=lang, db=db, panels=panels, whitelist_panel=whitelist, offloads=offloads, coordinator=MutationCoordinator(mutations), audit_svc=AsyncAuditService(audit), verbose="core" in overrides)
         await open_resource(OwnedResource("subscription", sub))
         app = app or create_api_application(proxy_hops=options.proxy_hops, require_proxy=options.require_proxy)
-        status = SnapshotStatus()
+        status = AsyncBWatch(cfg, db, sub, scheduled=options.start_background, verbose="bwatch" in overrides)
+        await open_resource(OwnedResource("watcher", status))
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
         register_subscription_route(app, sub)
-        runtime = Application(ApplicationDependencies(app, cfg, lang, audit, db, panels, whitelist, sub, limiter), resources=tuple(opened), offloads=offloads, mutations=mutations)
+        runtime = Application(ApplicationDependencies(app, cfg, lang, audit, db, panels, whitelist, sub, limiter, status), resources=tuple(opened), offloads=offloads, mutations=mutations)
         await runtime.start()
         app.extensions["runtime"] = runtime
         return runtime
