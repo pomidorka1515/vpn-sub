@@ -4,9 +4,7 @@ import platform
 from typing import TYPE_CHECKING
 
 from argon2 import PasswordHasher
-from flask import request
 
-from builders import get_subscription
 from errors import UnsupportedPlatformError
 from loggers import Logger
 
@@ -25,8 +23,6 @@ from .services import (
 )
 
 if TYPE_CHECKING:
-    from flask import Flask, Response
-
     from config import AppConfig, Config, LangConfig, LinesConfig
     from db import Database
     from session import XUiSession
@@ -43,7 +39,6 @@ class Subscription:
         cfg: Config[AppConfig],
         lang_cfg: Config[LangConfig],  # ro
         db: Database,
-        app: Flask,
         panels: list[XUiSession],
         whitelist_panel: XUiSession | None,
         audit_cfg: LinesConfig | None = None,
@@ -59,7 +54,6 @@ class Subscription:
                 cfg=cfg,
                 lang_cfg=lang_cfg,
                 db=db,
-                app=app,
                 log=log,
                 panels=panels,
                 whitelist_panel=whitelist_panel,
@@ -98,20 +92,4 @@ class Subscription:
             )
             self.leaderboard_svc: LeaderboardService = LeaderboardService(
                 self.res, user_svc=self.user_svc, bandwidth_svc=self.bandwidth_svc,
-            )
-            self.register_routes()
-
-    def register_routes(self) -> None:
-        conf = self.res.cfg.view()
-        uri = conf["uri"].strip("/")
-
-        @self.res.app.route(f"/{uri}", strict_slashes=False)
-        def _sub() -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction]
-            return get_subscription(
-                self,
-                token=request.args.get("token", ""),
-                lang=request.args.get("lang", ""),
-                ua=request.headers.get("User-Agent", ""),
-                ip=request.headers.get("X-Real-IP", ""),
-                force_json=request.args.get("force_json", "0"),
             )

@@ -47,6 +47,7 @@ class AsyncUsersMixin(AsyncConnectionMixin):
         wl_limit_gb: int = 0, ext_username: str | None = None,
         ext_password_hash: str | None = None, enabled: bool = True,
         enabled_time: bool = True, enabled_wl: bool = True,
+        pending_sync: bool = False,
     ) -> None:
         try:
             async with self.transaction(immediate=True) as conn:
@@ -60,6 +61,8 @@ class AsyncUsersMixin(AsyncConnectionMixin):
                      int(enabled_time), int(enabled_wl), expires_at, bw_limit_gb,
                      wl_limit_gb, ext_username, ext_password_hash, int(time.time())),
                 )
+                if pending_sync:
+                    await conn.execute("INSERT INTO app_metadata(key, value) VALUES (?, ?)", (f"user_create_pending:{username}", uuid))
         except DatabaseError as exc:
             if "UNIQUE" in str(exc) or "PRIMARY KEY" in str(exc):
                 raise DuplicateError("username, UUID, token or external username already exists") from exc
@@ -94,6 +97,30 @@ class AsyncUsersMixin(AsyncConnectionMixin):
 
     async def update_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         await self.set_user(username, **fields)
+
+    async def set_enabled_pending(self, username: str, *, enabled: bool | None, enabled_time: bool | None, enabled_wl: bool | None) -> None:
+        """Publish desired flags and retry identity in one short transaction."""
+        async with self.transaction(immediate=True) as conn:
+            for column, value in (("enabled", enabled), ("enabled_time", enabled_time if enabled is not None else None), ("enabled_wl", enabled_wl)):
+                if value is not None:
+                    await conn.execute(f"UPDATE users SET {column} = ? WHERE username = ?", (int(value), username))  # ruff: ignore[hardcoded-sql-expression]
+            await conn.execute("INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?)", (f"user_sync_pending:{username}", "enabled"))
+
+    async def rollback_created_user(self, username: str, expected_uuid: str) -> None:
+        async with self.transaction(immediate=True) as conn:
+            row = await conn.row("SELECT uuid FROM users WHERE username = ?", (username,))
+            if row is not None and row[0] != expected_uuid:
+                raise DatabaseError("created-user recovery identity changed")
+            await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            await conn.executemany("DELETE FROM app_metadata WHERE key = ?", [(f"user_create_pending:{username}",), (f"user_sync_pending:{username}",)])
+
+    async def finalize_reset(self, username: str, expected_uuid: str, token: str) -> None:
+        """Publish reset credentials and remove intent atomically after UUID sync."""
+        async with self.transaction(immediate=True) as conn:
+            count = await conn.execute("UPDATE users SET token = ?, auth_token = NULL WHERE username = ? AND uuid = ?", (token, username, expected_uuid))
+            if count != 1:
+                raise DatabaseError("reset UUID has not committed")
+            await conn.execute("DELETE FROM app_metadata WHERE key = ?", (f"user_reset_pending:{username}",))
 
     async def delete_user(self, username: str) -> None:
         async with self.transaction(immediate=True) as conn:

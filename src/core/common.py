@@ -7,7 +7,6 @@ from tracer import trace
 
 if TYPE_CHECKING:
     from argon2 import PasswordHasher
-    from flask import Flask
 
     from config import AppConfig, Config, JsonValue, LangConfig, LinesConfig
     from db import Database
@@ -25,7 +24,6 @@ class SharedCoreResources:
     lang_cfg: Config[LangConfig]
     audit_cfg: LinesConfig | None
     db: Database
-    app: Flask
     legacy_salt: str
     panels: list[XUiSession]
     whitelist_panel: XUiSession | None
@@ -64,10 +62,6 @@ class BaseService:
     @property
     def db(self) -> Database:
         return self.res.db
-
-    @property
-    def app(self) -> Flask:
-        return self.res.app
 
     @property
     def legacy_salt(self) -> str:

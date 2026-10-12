@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass
 from threading import Condition
 from time import monotonic
@@ -132,6 +133,10 @@ class PanelService(BaseService):
                     raise
                 outcomes.append(f"{panel.name}:ok")
         except BaseException as exc:
+            # Compensation must never race a sibling write still in flight.
+            for future in futures:
+                with suppress(Exception):
+                    future.result()
             self.trace(
                 Op.panel.map_panels,
                 "failed",

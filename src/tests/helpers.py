@@ -12,6 +12,7 @@ from urllib.parse import unquote
 from flask import Flask
 from requests import Response
 
+from api.subscription import register_subscription_route
 from bots import AdminBot, PublicBot
 from bwatch import BWatch
 from config import Config
@@ -91,15 +92,16 @@ def make_subscription(
     lang_cfg: Config[LangConfig] | None = None,
     **config_overrides: Unpack[AppOverrides],
 ) -> Subscription:
-    return Subscription(
+    subscription = Subscription(
         cfg=config_mock(subscription_config(**config_overrides)),
         lang_cfg=config_mock(language_config()) if lang_cfg is None else lang_cfg,
         db=database,
-        app=app or Flask(__name__),
         panels=cast(list[XUiSession], panels or []),
         whitelist_panel=cast(XUiSession | None, whitelist_panel),
         audit_cfg=audit_cfg,
     )
+    register_subscription_route(app or Flask(__name__), subscription)
+    return subscription
 
 
 def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]) -> None:

@@ -18,6 +18,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from api import Api, WebApi
 from api.common import RES_DIR
 from api.decorators.rate_limit import close_rate_limit, configure_rate_limit_from_config
+from api.subscription import register_subscription_route
 from bots import AdminBot, PublicBot
 from bwatch import BWatch
 from config import AppConfig, Config, LangConfig, LinesConfig
@@ -491,12 +492,12 @@ def create_application(
             db=db,
             lang_cfg=lang_cfg,
             audit_cfg=audit_cfg,
-            app=flask_app,
             panels=panels,
             whitelist_panel=whitelist,
             verbose="core" in overrides,
         )
         conf = cfg.view()
+        register_subscription_route(flask_app, subscription)
         admin_bot = (
             AdminBot(sub=subscription, cfg=cfg, lang_cfg=lang_cfg)
             if _nonempty_token(conf.get("bot"))

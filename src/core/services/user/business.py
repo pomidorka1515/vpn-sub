@@ -408,6 +408,19 @@ class BusinessUserService(BaseService):
         self.audit_svc.audit(name="user_delete", info={"username": username, "perma": perma})
         self._drop_cache()
 
+    def rollback_panel_clients(self, username: str, expected_uuid: str) -> None:
+        """Remove partial registration writes before dropping their DB identity."""
+        def delete(panel: XUiSession) -> None:
+            current = self.panel_svc.get_client(panel, username)
+            if current is None:
+                return
+            if current.uuid != expected_uuid:
+                raise PanelRejectedError(f"Panel {panel.name} rollback refused a foreign UUID")
+            _panel_post_json(panel, f"panel/api/clients/del/{quote(username, safe='')}", {}, "registration rollback")
+            self._invalidate_clients(panel)
+
+        self.panel_svc.map_panels(self.panels, delete)
+
     def _set_enabled(
         self,
         panel: XUiSession,
@@ -613,11 +626,12 @@ class BusinessUserService(BaseService):
             )
         except Exception:
             try:
+                self.rollback_panel_clients(username, userid)
                 self.db.delete_user(username)
             except Exception:
-                self.log.exception("failed to roll back user %s", username)
+                self.log.exception("failed to roll back user %s; retaining recovery marker", username)
                 try:
-                    self.delete_user(username=username, perma=True)
+                    self.db.set_metadata(f"user_create_pending:{username}", userid)
                 except Exception:
                     self.log.critical(
                         "user %s may be inconsistent after failed DB rollback",

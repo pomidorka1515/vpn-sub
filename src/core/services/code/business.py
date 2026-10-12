@@ -56,7 +56,12 @@ class BusinessCodeService(BaseService):
         # never inside a SQLite transaction. The pending record makes removal
         # plus a finite-code refund one short local transaction.
         try:
+            self.db.set_metadata(f"registration_rollback_failed:{username}", str(int(time.time())))
+            user = self.db.get_user(username)
+            if user is not None:
+                self.user_svc.rollback_panel_clients(username, user["uuid"])
             self.db.rollback_registration_sync(username)
+            self.db.delete_metadata(f"registration_rollback_failed:{username}")
             self.trace(Op.register.rollback_registered_user, "rolled_back", username=username)
         except Exception:
             self.trace(Op.register.rollback_registered_user, "failed", username=username)
@@ -96,8 +101,10 @@ class BusinessCodeService(BaseService):
         for key in keys:
             username = key.removeprefix(prefix)
             try:
-                self.db.rollback_registration_sync(username)
-                self.db.delete_metadata(key)
+                self._rollback_registered_user(username=username)
+                if self.db.get_metadata(key) is not None:
+                    retained += 1
+                    continue
                 recovered += 1
                 self.log.warning("recovered registration rollback marker for user %s", username)
             except Exception:
@@ -114,6 +121,17 @@ class BusinessCodeService(BaseService):
             recovered=recovered,
             retained=retained,
         )
+        for key, expected_uuid in self.db.list_metadata("user_create_pending:").items():
+            username = key.removeprefix("user_create_pending:")
+            try:
+                self.user_svc.rollback_panel_clients(username, expected_uuid)
+                user = self.db.get_user(username)
+                if user is not None and user["uuid"] != expected_uuid:
+                    raise ConflictError("Created-user recovery identity changed")
+                self.db.delete_user(username)
+                self.db.delete_metadata(key)
+            except Exception:
+                self.log.critical("created-user recovery failed for %s; marker retained", username, exc_info=True)
 
     def get_rollback_failures(self) -> dict[str, dict[str, dict[str, str]]]:
         """Return persisted rollback markers for admin reconciliation."""

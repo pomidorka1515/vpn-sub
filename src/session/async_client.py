@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Unpack
+from typing import TYPE_CHECKING, Literal, Unpack
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -39,6 +39,9 @@ class AsyncXUiSession:
         transport: AsyncXUiPanelTransport | None = None,
         session: aiohttp.ClientSession | None = None,
         request_limit: int = 8, request_timeout: float = 5.0,
+        inbounds_list: tuple[int, ...] = (),
+        mode: Literal["whitelist", "blacklist"] = "blacklist",
+        stamp_dir: str | None = None,
     ) -> None:
         if not api_token:
             raise ValueError("api_token must be a non-empty API token")
@@ -49,6 +52,9 @@ class AsyncXUiSession:
         if transport is not None and session is not None:
             raise ValueError("pass either transport or session, not both")
         self.name = name
+        self.inbounds_list = inbounds_list
+        self.mode = mode
+        self.stamp_dir = stamp_dir
         self.address = address
         self.port = str(port)
         self.local = address in {"localhost", "::1", "127.0.0.1", "0.0.0.0"}  # ruff: ignore[hardcoded-bind-all-interfaces]

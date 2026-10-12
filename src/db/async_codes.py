@@ -13,6 +13,14 @@ if TYPE_CHECKING:
 
 
 class AsyncCodesMixin(AsyncConnectionMixin):
+    async def pending_registrations(self) -> list[str]:
+        async with self.connection() as conn:
+            return [str(row[0]) for row in await conn.rows("SELECT username FROM pending_registration_sync ORDER BY username")]
+
+    async def registration_pending(self, username: str) -> bool:
+        async with self.connection() as conn:
+            return await conn.row("SELECT 1 FROM pending_registration_sync WHERE username = ?", (username,)) is not None
+
     async def add_code(self, code: str, action: str, *, permanent: bool = False, uses: int = 1, days: int = 0, gb: int = 0, wl_gb: int = 0) -> None:
         try:
             async with self.transaction(immediate=True) as conn:
@@ -115,3 +123,4 @@ class AsyncCodesMixin(AsyncConnectionMixin):
             if row is not None and not bool(row["permanent"]):
                 await conn.execute("UPDATE codes SET uses = uses + 1 WHERE code = ? AND action = 'register' AND permanent = 0", (str(row["code"]),))
             await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            await conn.executemany("DELETE FROM app_metadata WHERE key = ?", [(f"registration_rollback_failed:{username}",), (f"user_sync_pending:{username}",)])
