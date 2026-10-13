@@ -94,7 +94,7 @@ database, Redis, panels and `AsyncSubscription` recovery. Watcher/bot compositio
 - `src/asgi.py` — ASGI entrypoint (`asgi:app`); lifespan hooks start and stop the runtime  
 - `src/main.py` — process entry for a checkout (`python -m main`) and for the
   Nuitka binary. Runs Hypercorn in-process on one event loop  
-- `src/serve.py` and `src/gunicorn.conf.py` — retired server settings awaiting final cleanup  
+- `src/serve.py` — shared Hypercorn settings for checkout and binary serving  
 - `src/core/` — `Subscription` and the user, code, panel, bandwidth, and audit
   services
 - `src/bwatch/` — `BWatch`: quota, expiry, panel health, snapshots
@@ -218,7 +218,7 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
 | `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
 | `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
-| `APP_BIND`      | `127.0.0.1:5550`         | Hypercorn listener for `main`/the binary. Overrides temporary `GUNICORN_BIND` fallback. |
+| `APP_BIND`      | `127.0.0.1:5550`         | Shared Hypercorn listener. Overrides temporary `GUNICORN_BIND` fallback. |
 | `LOGLEVEL`      | `DEBUG`                  | Threshold for application `Logger()` instances. |
 | `VERBOSE_LOGGING_OVERRIDES` | *(unset)*   | Comma-separated components to start with verbose traces.                |
 
@@ -227,7 +227,7 @@ are case-insensitive: `TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`, `ERROR`,
 `CRITICAL` / `FATAL`. An integer is rounded down to the nearest level (`15`
 is `DEBUG`, `0` is `TRACE`, `99` is `CRITICAL`). Unset, blank, or unrecognized
 values use the default. ASGI access records use the `http.access` Python logger;  
-`LOGLEVEL_GUNICORN` belongs to the retired logger and does not configure it. Hypercorn's default access log is disabled by `main`.  
+`LOGLEVEL_HTTP` configures the redacted access logger (default `INFO`); it overrides the temporary `LOGLEVEL_GUNICORN` fallback. Hypercorn's default access log is disabled in shared settings. Both Gunicorn environment aliases expire at migration step 12 cutover.  
 
 `VERBOSE_LOGGING_OVERRIDES` turns on the existing `verbose` flag for named
 components: `bwatch`, `core` (`Subscription`), and `panels` (`XUiSession`,
@@ -265,14 +265,14 @@ WorkingDirectory=/opt/vpn-sub
 # Environment="PATH_LOG=/var/log/vpn-sub/log.jsonl"
 # Environment="PATH_AUDIT=/var/log/vpn-sub/audit.jsonl"
 # Environment="PATH_LANG=/path/to/vpn-sub/lang.jsonc"
-# Environment="GUNICORN_BIND=127.0.0.1:5550"
+# Environment="APP_BIND=127.0.0.1:5550"
 # Environment="LOGLEVEL=INFO"  # recommended for prod
-# Environment="LOGLEVEL_GUNICORN=INFO"
+# Environment="LOGLEVEL_HTTP=INFO"
 # Environment="VERBOSE_LOGGING_OVERRIDES=bwatch,core,panels"
 
 ExecStart=/opt/vpn-sub/vpn-sub
 
-TimeoutStopSec=35
+TimeoutStopSec=90
 KillMode=mixed
 KillSignal=SIGTERM
 
@@ -392,7 +392,7 @@ venv/bin/pytest
 venv/bin/mypy && venv/bin/pyright
 PYTHONPATH=src venv/bin/python -m main  # same entrypoint as the main binary
 # Alternative checkout server (keep one worker):
-PYTHONPATH=src venv/bin/hypercorn --bind 127.0.0.1:5550 --workers 1 asgi:app
+PYTHONPATH=src venv/bin/hypercorn --config python:serve asgi:app
 ```
 
 Ruff targets Python 3.14 and checks code style, modernization, common bugs, and  

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING
 
-from loggers.level import TRACE
+from loggers.level import TRACE, env_level
 
 if TYPE_CHECKING:
     from hypercorn.typing import (
@@ -26,6 +27,10 @@ class ProxyMiddleware:
         self.app = app
         self.hops = hops
         self.require_proxy = require_proxy
+        log.setLevel(env_level(
+            "LOGLEVEL_HTTP" if "LOGLEVEL_HTTP" in os.environ else "LOGLEVEL_GUNICORN",
+            logging.INFO,
+        ))
 
     async def __call__(
         self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable,

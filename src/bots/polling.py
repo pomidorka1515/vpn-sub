@@ -85,12 +85,12 @@ class TelegramPollingMixin:
         offset = 0
         while not self._stopping.is_set():
             try:
-                updates = await self.bot.get_updates(
+                updates = await self.bot.get_updates(  # pyright: ignore[reportUnknownMemberType]  # Upstream allowed_updates is untyped.
                     offset=offset,
                     timeout=20,
                     request_timeout=30,
                     allowed_updates=["message", "callback_query"],
-                )  # pyright: ignore[reportUnknownMemberType]
+                )
                 # Small bounded batches keep other chats responsive. Entry
                 # handlers acquire conversation locks in update arrival order.
                 for start in range(0, len(updates), 8):

@@ -88,13 +88,13 @@ class AsyncRateLimiter:
 
             self._client = cast(
                 "RateLimitClient",
-                Redis.from_url(
+                Redis.from_url(  # pyright: ignore[reportUnknownMemberType]  # Upstream kwargs are untyped.
                     self.url,
                     socket_connect_timeout=self.socket_timeout,
                     socket_timeout=self.socket_timeout,
                     decode_responses=True,
                 ),
-            )  # pyright: ignore[reportUnknownMemberType]  # Upstream kwargs are untyped.
+            )
         await self._client.ping()
         self._script = self._client.register_script(_RATE_LIMIT_SCRIPT)
 

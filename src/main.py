@@ -8,7 +8,6 @@ and as a Nuitka binary. Both paths run Hypercorn in-process on one event loop.
 from __future__ import annotations
 
 import asyncio
-import os
 
 from paths import compiled
 
@@ -22,15 +21,12 @@ def main() -> None:
 
 async def serve_application() -> None:
     from hypercorn.asyncio import serve  # pyright: ignore[reportUnknownVariableType]  # Upstream WSGI signature is untyped.
-    from hypercorn.config import Config
 
     from asgi import app
+    from serve import server_config
 
-    config = Config()
-    config.bind = [os.getenv("APP_BIND", os.getenv("GUNICORN_BIND", "127.0.0.1:5550"))]
-    config.workers = 1
-    config.accesslog = None  # API middleware owns the redacted access log.
-    await serve(app, config)
+    # Hypercorn owns SIGTERM/SIGINT and its shutdown trigger in both entrypoints.
+    await serve(app, server_config())
 
 
 def probe() -> None:

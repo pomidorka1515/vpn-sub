@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 class AsyncCloseable(Protocol):
@@ -24,3 +27,4 @@ class AsyncResource(AsyncStartable, AsyncCloseable, Protocol):
 class OwnedResource:
     name: str
     resource: AsyncResource
+    quiesce: Callable[[], Awaitable[None]] | None = None

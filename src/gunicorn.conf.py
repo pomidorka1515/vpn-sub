@@ -6,7 +6,7 @@ instead; see ``serve.options``.
 
 from __future__ import annotations
 
-from serve import NamedThreadWorker, options
+from legacy_serve import NamedThreadWorker, options
 
 _options = options()
 

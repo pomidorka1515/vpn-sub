@@ -99,9 +99,18 @@ class Runtime[DependenciesT]:
             await self._shutdown()
 
     async def _shutdown(self) -> None:
+        errors: list[Exception] = []
+        # Stop producers/settle their handlers before draining mutations, while
+        # transports, audit writers and offload services are still available.
+        for resource in reversed(self._opened):
+            if resource.quiesce is not None:
+                try:
+                    await resource.quiesce()
+                except Exception as error:
+                    error.add_note(f"quiescing runtime resource: {resource.name}")
+                    errors.append(error)
         await self.tasks.drain(cancel=True)
         await self.mutations.drain()
-        errors: list[Exception] = []
         while self._opened:
             resource = self._opened.pop()
             try:

@@ -118,6 +118,36 @@ async def test_cancelled_mutation_caller_detaches_and_stop_waits_before_close() 
 
 
 @pytest.mark.asyncio
+async def test_producers_quiesce_before_mutations_and_connections_close() -> None:
+    events: list[str] = []
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def quiesce() -> None:
+        events.append("quiesce")
+        finish.set()
+
+    runtime = Runtime(None, resources=(
+        OwnedResource("db", FakeResource("db", events)),
+        OwnedResource("producer", FakeResource("producer", events), quiesce=quiesce),
+    ))
+    await runtime.start()
+
+    async def mutation() -> None:
+        started.set()
+        await finish.wait()
+        events.append("mutation:done")
+
+    caller = asyncio.create_task(runtime.mutations.run(mutation, name="active"))
+    await started.wait()
+    await runtime.stop()
+    await caller
+    assert events == [
+        "start:db", "start:producer", "quiesce", "mutation:done", "close:producer", "close:db",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_mutation_admission_is_bounded_and_pre_cancel_does_not_run() -> None:
     mutations = MutationRegistry(capacity=1)
     started = asyncio.Event()

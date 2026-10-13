@@ -171,10 +171,10 @@ async def create_application(
         )
         if admin_bot is not None:
             await open_resource(OwnedResource("Telegram log delivery", AsyncBotLogging(admin_bot)))
-        await open_resource(OwnedResource("watcher", status))
+        await open_resource(OwnedResource("watcher", status, quiesce=status.close))
         for name, bot in (("admin bot", admin_bot), ("public bot", public_bot)):
             if bot is not None:
-                await open_resource(OwnedResource(name, bot))
+                await open_resource(OwnedResource(name, bot, quiesce=bot.close))
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
         register_subscription_route(app, sub)

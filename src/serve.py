@@ -1,52 +1,41 @@
-"""Gunicorn settings shared by the CLI config and the frozen entrypoint.
+"""Shared Hypercorn configuration for checkout and compiled serving.
 
-``src/gunicorn.conf.py`` is what ``venv/bin/gunicorn --config`` imports.
-``src/main.py`` applies the same values in-process, because a Nuitka binary
-has no ``venv/bin/gunicorn`` and cannot load that config file as source.
-Keep the two callers on this module so the settings cannot drift.
+Checkout: ``hypercorn --config python:serve asgi:app``.
+Gunicorn environment aliases expire at migration step 12 cutover.
 """
 
 from __future__ import annotations
 
 import os
-from concurrent import futures
 
-from gunicorn.workers.gthread import ThreadWorker
+from hypercorn.config import Config
 
-from loggers.access import GunicornLogger
-
-__all__ = ["NamedThreadWorker", "options"]
-
-
-class NamedThreadWorker(ThreadWorker):
-    def get_thread_pool(self) -> futures.ThreadPoolExecutor:
-        return futures.ThreadPoolExecutor(
-            max_workers=self.cfg.threads,
-            thread_name_prefix="gunicorn",  # 'ThreadPoolWorker-N_N' is ugly
-        )
+HTTP_DRAIN_TIMEOUT = 10
+RUNTIME_SHUTDOWN_TIMEOUT = 60
+STARTUP_TIMEOUT = 120
 
 
-def options() -> dict[str, object]:
-    """Settings gunicorn accepts as config keys.
+def server_config() -> Config:
+    config = Config()
+    config.bind = [os.getenv("APP_BIND", os.getenv("GUNICORN_BIND", "127.0.0.1:5550"))]
+    config.workers = 1
+    config.worker_class = "asyncio"
+    config.accesslog = None  # Privacy-preserving API middleware owns access logs.
+    config.errorlog = "-"
+    config.graceful_timeout = HTTP_DRAIN_TIMEOUT
+    config.startup_timeout = STARTUP_TIMEOUT
+    config.shutdown_timeout = RUNTIME_SHUTDOWN_TIMEOUT + 5
+    return config
 
-    ``worker_class`` is an import path, not the class. The config validator
-    accepts a class, and ``gunicorn.conf`` passes ``NamedThreadWorker``
-    directly because gunicorn loads that file itself. ``main`` sets the key
-    through ``cfg.set`` and must pass a string: a class object is not a
-    stable value to round-trip through gunicorn's config, and the import
-    path stays loadable under plain Python and inside a binary that
-    compiled this module.
-    """
-    return {
-        "worker_class": "serve.NamedThreadWorker",
-        "threads": 3,
-        "workers": 1,
-        "limit_request_line": 0,
-        "capture_output": True,
-        "accesslog": "-",
-        "errorlog": "-",
-        "logger_class": GunicornLogger,
-        "wsgi_app": "wsgi:app",
-        "graceful_timeout": 10,
-        "bind": os.getenv("GUNICORN_BIND", "127.0.0.1:5550"),
-    }
+
+# Hypercorn's python: loader reads these attributes; programmatic serving uses
+# the same factory. Importing configuration opens no service resources.
+_config = server_config()
+bind = _config.bind
+workers = _config.workers
+worker_class = _config.worker_class
+accesslog = _config.accesslog
+errorlog = _config.errorlog
+graceful_timeout = _config.graceful_timeout
+startup_timeout = _config.startup_timeout
+shutdown_timeout = _config.shutdown_timeout
