@@ -14,6 +14,7 @@ from .users import AdminUsersMixin
 
 if TYPE_CHECKING:
     import discord
+    from app_runtime.offload import BoundedOffload
     from config import DiscordConfig, DiscordLangConfig
     from core.common import Snapshot
     from discord import app_commands
@@ -39,12 +40,14 @@ class AdminBot(
         *,
         client: discord.Client,
         tree: app_commands.CommandTree,
+        rendering: BoundedOffload,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
             self.lang_cfg = lang_cfg
             self.http = http
+            self.rendering = rendering
             self.bot = client
             self.tree = tree
             conf = cfg.view()

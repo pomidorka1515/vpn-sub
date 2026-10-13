@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     import asyncio
 
     import discord
+    from app_runtime.offload import BoundedOffload
     from config import DiscordConfig, DiscordLangConfig
     from core.common import Snapshot
     from discord import app_commands
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
         cfg: Snapshot[DiscordConfig]
         lang_cfg: Snapshot[DiscordLangConfig]
         http: WebApiClient
+        rendering: BoundedOffload
         sessions: SessionStore
         TEXTS: dict[str, dict[str, str]]
         _chart_locks: dict[int, asyncio.Lock]
@@ -117,6 +119,7 @@ if TYPE_CHECKING:
         cfg: Snapshot[DiscordConfig]
         lang_cfg: Snapshot[DiscordLangConfig]
         http: AdminApiClient
+        rendering: BoundedOffload
         admin_uids: list[int]
         USERS_PER_PAGE: int
         _pending_codes: dict[int, dict[str, str | int | bool]]

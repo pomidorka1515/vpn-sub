@@ -192,7 +192,7 @@ async def create_application(
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
         register_subscription_route(app, sub)
         discord_bot = (
-            DiscordApplication(app, cfg, paths.data, db, files=offloads.files)
+            DiscordApplication(app, cfg, paths.data, db, files=offloads.files, rendering=offloads.rendering)
             if options.start_bots and conf.get("discord", {}).get("token")
             else None
         )

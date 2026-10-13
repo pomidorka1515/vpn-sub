@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Self
 from unittest.mock import MagicMock
 
 import discord
+from app_runtime.offload import BoundedOffload
 from config import Config, DiscordLangConfig
 from discord_bot.admin.bot import AdminBot
 from discord_bot.adminapi import AdminApiClient
@@ -233,6 +234,7 @@ def make_public_bot(
     handler: Handler,
     *,
     user_id: int = 7,
+    rendering: BoundedOffload | None = None,
 ) -> tuple[PublicBot, SessionStore, FakeSession]:
     store = SessionStore(tmp_path / "discord-sessions.json")
     store.set_lang(user_id, "en")
@@ -251,6 +253,7 @@ def make_public_bot(
         store,
         client=host,
         tree=host.tree,
+        rendering=rendering if rendering is not None else BoundedOffload(capacity=2, name="test-rendering"),
     )
     return bot, store, session
 
@@ -259,6 +262,7 @@ def make_admin_bot(
     handler: Handler,
     *,
     whitelist: list[int] | None = None,
+    rendering: BoundedOffload | None = None,
 ) -> tuple[AdminBot, FakeSession]:
     session = FakeSession(handler)
     host = SharedDiscordClient(intents=discord.Intents.none())
@@ -281,5 +285,6 @@ def make_admin_bot(
         ),
         client=host,
         tree=host.tree,
+        rendering=rendering if rendering is not None else BoundedOffload(capacity=2, name="test-rendering"),
     )
     return bot, session

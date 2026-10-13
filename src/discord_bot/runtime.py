@@ -41,12 +41,13 @@ class DiscordSettings:
 
 
 class DiscordApplication:
-    def __init__(self, app: Quart, cfg: Snapshot[AppConfig], data: Path, db: Database, *, files: BoundedOffload) -> None:
+    def __init__(self, app: Quart, cfg: Snapshot[AppConfig], data: Path, db: Database, *, files: BoundedOffload, rendering: BoundedOffload) -> None:
         self.cfg = cfg
         self.data = data
         self.app = app
         self.db = db
         self.files = files
+        self.rendering = rendering
         self.client = SharedDiscordClient(intents=discord.Intents.default())
         self.runner: asyncio.Task[None] | None = None
         self.lang: AsyncConfig[DiscordLangConfig] | None = None
@@ -76,8 +77,8 @@ class DiscordApplication:
         await self.sessions.start(self.data / "discord-sessions.json")
         conf = self.cfg.view()
         transport = LocalTransport(self.app)
-        public = PublicBot(DiscordSettings(self.cfg), self.lang, WebApiClient("http://local", conf["uri"], transport=transport), self.sessions, client=self.client, tree=self.client.tree)
-        admin = AdminBot(DiscordSettings(self.cfg), self.lang, AdminApiClient("http://local", conf["uri"], conf.get("api_uri", ""), conf["api_token"], transport=transport), client=self.client, tree=self.client.tree)
+        public = PublicBot(DiscordSettings(self.cfg), self.lang, WebApiClient("http://local", conf["uri"], transport=transport), self.sessions, client=self.client, tree=self.client.tree, rendering=self.rendering)
+        admin = AdminBot(DiscordSettings(self.cfg), self.lang, AdminApiClient("http://local", conf["uri"], conf.get("api_uri", ""), conf["api_token"], transport=transport), client=self.client, tree=self.client.tree, rendering=self.rendering)
         self.client.attach(public, admin)
         section = conf.get("discord")
         if section is None:

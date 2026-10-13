@@ -11,7 +11,9 @@ import pytest_asyncio
 from quart import jsonify, request
 
 from api.application import create_api_application
-from app_runtime.offload import BoundedOffload
+from app_runtime.lifecycle import Runtime
+from app_runtime.offload import BoundedOffload, OffloadServices
+from app_runtime.tasks import AdmissionClosedError
 from config import Config
 from db import Database
 from discord_bot.host import SharedDiscordClient, discord_user
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
 
     from config import AppConfig, DiscordLangConfig
     from core.common import Snapshot
+    from discord_bot.tests.discord_helpers import FakeResponse
 
 
 @pytest_asyncio.fixture
@@ -135,9 +138,11 @@ async def test_discord_language_reads_use_off_loop_snapshots(
         "discord": {"token": "test", "whitelist": []},
     }
     files = BoundedOffload(capacity=2, name="test-files")
+    rendering = BoundedOffload(capacity=2, name="test-rendering")
     runtime = DiscordApplication(
         create_api_application(), cast("Snapshot[AppConfig]", cfg), tmp_path, database,
         files=files,
+        rendering=rendering,
     )
     try:
         await runtime.start()
@@ -148,6 +153,8 @@ async def test_discord_language_reads_use_off_loop_snapshots(
         assert admin is not None
         assert public.lang_cfg is runtime.lang
         assert admin.lang_cfg is runtime.lang
+        assert public.rendering is rendering
+        assert admin.rendering is rendering
         snapshot = runtime.lang.view()
         chart = public._chart_lang("en")
         language.write_text("broken")
@@ -160,5 +167,95 @@ async def test_discord_language_reads_use_off_loop_snapshots(
     finally:
         await runtime.close()
         await files.close()
+        await rendering.close()
     assert runtime.lang is not None
     assert runtime.lang._schedules.tasks.active_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("feature", ["public", "admin", "leaderboard"])
+async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
+    feature: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from discord_bot.tests.discord_helpers import (
+        FakeInteraction,
+        json_ok,
+        make_admin_bot,
+        make_public_bot,
+        modal_data,
+        stats_obj,
+    )
+
+    rendering = BoundedOffload(capacity=1, name="test-rendering")
+    runtime = Runtime(None, offloads=OffloadServices(rendering=rendering))
+    await runtime.start()
+    entered = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    release = threading.Event()
+    competing = threading.Event()
+
+    def render(*args: object, **kwargs: object) -> None:
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(timeout=5)
+
+    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
+        if url.endswith("/history"):
+            return json_ok([{"ts": 1, "up": 10, "down": 20, "wl_up": 1, "wl_down": 2}])
+        if url.endswith("/leaderboard"):
+            return json_ok([{"username": "alice", "amount": 10}])
+        return json_ok(stats_obj())
+
+    if feature == "public":
+        public, store, _ = make_public_bot(tmp_path, handler, rendering=rendering)
+        monkeypatch.setattr("discord_bot.public.traffic.bandwidth_chart", render)
+        operation = public.render_chart(FakeInteraction(), 14)  # type: ignore[arg-type]
+    else:
+        admin, _ = make_admin_bot(handler, rendering=rendering)
+        if feature == "admin":
+            monkeypatch.setattr("discord_bot.admin.traffic.bandwidth_chart", render)
+            interaction = FakeInteraction(data=modal_data("admin:modal:chart", {"username": "alice", "days": "14"}))
+            operation = admin.handle_chart_modal(interaction)  # type: ignore[arg-type]
+        else:
+            monkeypatch.setattr("discord_bot.admin.leaderboard.leaderboard_chart", render)
+            admin._pending_leaderboard[7] = {"type": "total", "order": "desc"}
+            interaction = FakeInteraction(data=modal_data("admin:modal:lb_window", {"window": "0"}))
+            operation = admin.handle_leaderboard_window_modal(interaction)  # type: ignore[arg-type]
+
+    task = asyncio.create_task(operation)
+    queued: asyncio.Task[None] | None = None
+    stop: asyncio.Task[None] | None = None
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert rendering.active_count == 1
+        if feature == "public":
+            assert not public._chart_busy
+        queued = asyncio.create_task(rendering.run(competing.set))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert not competing.is_set()
+        assert not queued.done()
+        stop = asyncio.create_task(runtime.stop())
+        with pytest.raises(AdmissionClosedError):
+            await asyncio.wait_for(queued, timeout=2)
+        assert not stop.done()
+        assert rendering.active_count == 1
+        release.set()
+        await asyncio.wait_for(stop, timeout=2)
+        assert rendering.active_count == 0
+        assert not competing.is_set()
+    finally:
+        release.set()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        if queued is not None:
+            await asyncio.gather(queued, return_exceptions=True)
+        await runtime.stop()
+        if stop is not None:
+            await stop
+        if feature == "public":
+            store.close()
