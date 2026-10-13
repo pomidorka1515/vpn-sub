@@ -1,8 +1,8 @@
 """Replace the Nuitka onefile binaries from a GitHub release.
 
 Runs only inside a compiled binary. A checkout has no onefile stub to swap,
-and ``python -m`` is not an install. ``vpn-sub --update`` and
-``vpn-sub-discord --update`` both call :func:`update`. Boot calls
+and ``python -m`` is not an install. ``vpn-sub --update`` calls
+:func:`update`. Boot calls
 :func:`notice`, which only asks whether a newer release exists.
 """
 
@@ -33,8 +33,8 @@ __all__ = ["notice", "update"]
 
 REPO = "pomidorka1515/vpn-sub"
 RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
-BINARIES = ("vpn-sub", "vpn-sub-discord")
-UNITS = ("vpn-sub.service", "vpn-sub-discord.service")
+BINARIES = ("vpn-sub",)
+UNITS = ("vpn-sub.service",)
 NOTICE_TIMEOUT = 3.0
 UPDATE_TIMEOUT = 30.0
 _DOWNLOAD_CHUNK = 1024 * 1024

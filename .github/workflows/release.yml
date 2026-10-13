@@ -33,20 +33,10 @@ jobs:
               --include-data-dir=res=res
               --include-data-files=lang.jsonc=lang.jsonc
               --include-data-files=config.schema.json=config.schema.json
-          - name: vpn-sub-discord
-            pythonpath: src/discord/src:src
-            entry: src/discord/src/runtime.py
-            extra: >-
-              --nofollow-import-to=quart
-              --nofollow-import-to=hypercorn
-              --nofollow-import-to=aiosqlite
-              --nofollow-import-to=redis
-              --nofollow-import-to=telebot
-              --include-module=paths
-              --include-module=version
-              --include-package=cli
-              --include-data-files=src/discord/lang.jsonc=lang.jsonc
-              --include-data-files=src/discord/config.schema.json=config.schema.json
+              --include-package=discord
+              --include-package=discord_bot
+              --nofollow-import-to=discord_bot.tests
+              --include-data-files=src/discord/lang.jsonc=discord.lang.jsonc
     steps:
       - uses: actions/checkout@v4
 
@@ -266,25 +256,6 @@ jobs:
               \) -printf '%s %p\n' | sort || true
             echo
           done
-          if [ "${{ matrix.name }}" = "vpn-sub-discord" ]; then
-            bin="build/dist/vpn-sub-discord"
-            echo
-            echo "=== $bin ==="
-            ls -l "$bin"
-            file "$bin" || true
-            echo
-            echo "=== discord binary: source-like strings ==="
-            # Nuitka keeps module names and some constants in the binary.
-            # Surface paths and tokens that should not have been packed.
-            strings -a -n 8 "$bin" | grep -E -i \
-              '(^|/)(src/|\.git/|tests/|venv/|data/|config\.json|discord\.json|\.env|id_rsa|\.pem|token|secret|password|api_key)' \
-              | sort -u | head -n 400 || true
-            echo
-            echo "=== discord binary: packed data filenames ==="
-            strings -a -n 6 "$bin" | grep -E \
-              '\.(py|pyi|json|jsonc|html|js|md|yml|yaml|pem|key|env)([^A-Za-z0-9_]|$)' \
-              | sort -u | head -n 400 || true
-          fi
 
       - name: smoke test
         if: matrix.name == 'vpn-sub'
@@ -298,15 +269,6 @@ jobs:
           # Run away from the checkout with a temporary DB/config, private Redis,
           # and loopback panel fake; exercise resources, DB, Lua limiter and lifespan.
           python scripts/smoke_async_release.py --binary build/dist/vpn-sub --report build/dist/vpn-sub-report.xml
-
-      - name: smoke test
-        if: matrix.name == 'vpn-sub-discord'
-        run: |
-          set -euo pipefail
-          # Same resource contract as the main probe, including the packed schema.
-          # A missing discord.json or a Discord login is not this test. Exit 0
-          # is the only pass; a crash is not.
-          build/dist/vpn-sub-discord --probe
 
       - uses: actions/upload-artifact@v4
         with:
@@ -334,9 +296,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          chmod +x build/dist/vpn-sub build/dist/vpn-sub-discord
+          chmod +x build/dist/vpn-sub
           test -x build/dist/vpn-sub
-          test -x build/dist/vpn-sub-discord
           # --notes-from-tag reads a local annotated tag and refuses --repo.
           # Fetch the tag object itself; a checkout of the tagged commit is
           # not an annotated tag, so its message would be lost.
@@ -355,7 +316,6 @@ jobs:
           esac
           gh release create "${GITHUB_REF_NAME}" \
             build/dist/vpn-sub \
-            build/dist/vpn-sub-discord \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --notes-file notes.md \

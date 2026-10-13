@@ -106,6 +106,11 @@ class ProfileConfig(TypedDict):
     shortProfileDescription: list[str]
 
 
+class DiscordSection(TypedDict):
+    token: str
+    whitelist: list[int]
+
+
 AppConfig = TypedDict(
     "AppConfig",
     {
@@ -127,6 +132,7 @@ AppConfig = TypedDict(
         "redis": RedisConfig,
         "bot": NotRequired[BotConfig],
         "publicbot": NotRequired[PublicBotConfig],
+        "discord": NotRequired[DiscordSection],
         "api_uri": NotRequired[str],
         "fallback_domain": NotRequired[str],
         "$schema": NotRequired[str],
@@ -141,7 +147,6 @@ class DiscordBotConfig(TypedDict):
 
 class DiscordPrivateConfig(TypedDict):
     whitelist: list[int]
-    api_token: str
 
 
 DiscordConfig = TypedDict(

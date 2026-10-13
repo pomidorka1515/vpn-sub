@@ -46,6 +46,19 @@
             "description": "List of nodes. Must be raw domains or IPs."
         },
 
+        "discord": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["token", "whitelist"],
+            "properties": {
+                "token": {"type": "string"},
+                "whitelist": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {"type": "integer", "minimum": 1}
+                }
+            }
+        },
         "bot": {
             "type": "object",
             "required": ["token", "whitelist"],

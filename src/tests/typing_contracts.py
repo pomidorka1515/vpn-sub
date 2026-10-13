@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Literal, TypedDict
 from config import ProfileConfig
 from config.documents import (
     BotConfig,
+    DiscordSection,
     PanelConfig,
     ProfileTemplate,
     PublicBotConfig,
@@ -105,6 +106,7 @@ AppOverrides = TypedDict(
         "redis": RedisConfig,
         "bot": BotConfig,
         "publicbot": PublicBotConfig,
+        "discord": DiscordSection,
         "api_uri": str,
         "fallback_domain": str,
         "$schema": str,

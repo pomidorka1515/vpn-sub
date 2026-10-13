@@ -24,6 +24,7 @@ RESTART_KEYS: tuple[str, ...] = (
     "redis",
     "bot",
     "publicbot",
+    "discord",
     "panel_alert_cooldown",
     "salt",
 )
@@ -55,6 +56,7 @@ SCHEMA_PROPERTIES: frozenset[str] = frozenset(
         *REQUIRED_KEYS,
         "bot",
         "publicbot",
+        "discord",
         "api_uri",
         "fallback_domain",
         "funny_strings",

@@ -2,7 +2,7 @@
 
 VPN subscription management service. Quart + Telegram bots + a Discord bot +
 3x-ui panel glue.  
-HTTP, core services, panel I/O and SQLite use asyncio. Discord is a separate asyncio process.  
+HTTP, core services, panel I/O, SQLite and optional Discord run on one asyncio event loop.  
 The runtime includes async BWatch and optional AsyncTeleBot bots. Packaging acceptance and final cleanup/cutover are tracked in [ASYNC_MIGRATION_PLAN.md](ASYNC_MIGRATION_PLAN.md); see [docs/ASYNC_PACKAGING.md](docs/ASYNC_PACKAGING.md).  
 SQLite holds users, codes, and quotas. `config.json` is deployment and
 presentation only.  
@@ -17,7 +17,7 @@ Designed to run on a single small VPS.
 - Tracks bandwidth and auto-disables users who exceed quota or expire, including
   a separate whitelist quota
 - Telegram admin bot and public user bot, plus one Discord bot (public commands
-   and `/admin`) that talks to the HTTP API over loopback
+   and `/admin`) bundled into the application
 - SQLite is the source of truth for users, codes, quotas, and bandwidth
 
 ## Key features
@@ -49,7 +49,7 @@ Designed to run on a single small VPS.
   codes, panels, traffic, leaderboard. Public bot: link account, traffic, charts,
   subscription, bonus, settings, reset, delete. Quota notices and admin log
   alerts are skipped when the matching bot is off.
-- **Discord.** Separate process, one token. Public slash commands plus `/admin`
+- **Discord.** Optional `discord` config section, one token. Public slash commands plus `/admin`
   for a Discord-ID whitelist.
   See [src/discord/README.md](src/discord/README.md).
 - **Bandwidth watcher (`BWatch`).** Polls traffic about every 15s, checks quota
@@ -75,8 +75,6 @@ Designed to run on a single small VPS.
   dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`).
   2.x needs the one-time reconcile below. No other panel software.
-- Discord does not share the process. It only talks to Quart over loopback.
-  Start the HTTP service first. Killing one does not stop the other.
 - Personal project. Untagged `main` is rolling development. Tests are for this
   repo, not a supported public suite.
 - Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure
@@ -107,8 +105,7 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
   async HTTP caller  
 - `src/bots/` — Telegram `AsyncAdminBot` (management), `AsyncPublicBot` (user
   self-service)
-- `src/discord/` — Discord bots as a **separate process**. Not started by
-  Hypercorn or `create_application()`. One token serves public commands and
+- `src/discord_bot/` — optional Discord client owned by `create_application()`. One token serves public commands and
   `/admin`. See [src/discord/README.md](src/discord/README.md).
 - `res/` — admin and user HTML. `docs/` — [public API](docs/API.md),
   [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
@@ -119,10 +116,8 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 getconf GNU_LIBC_VERSION # ensure its >= 2.35
 mkdir -p /opt/vpn-sub && cd /opt/vpn-sub
 curl -fsSL -o vpn-sub https://github.com/pomidorka1515/vpn-sub/releases/latest/download/vpn-sub && chmod +x vpn-sub
-curl -fsSL -o vpn-sub-discord https://github.com/pomidorka1515/vpn-sub/releases/latest/download/vpn-sub-discord && chmod +x vpn-sub-discord
 mkdir -p data
 curl -fsSL -o data/config.json https://raw.githubusercontent.com/pomidorka1515/vpn-sub/main/docs/EXAMPLE.config.json
-curl -fsSL -o data/discord.json https://raw.githubusercontent.com/pomidorka1515/vpn-sub/main/src/discord/docs/EXAMPLE.config.json
 apt install redis-server && systemctl enable --now redis-server
 # fill in panel credentials, bot tokens, etc, then start the systemd units below
 ```
@@ -130,8 +125,7 @@ apt install redis-server && systemctl enable --now redis-server
 Prefer the release binaries. No venv, no checkout, no `requirements.txt`.  
 The host needs glibc at least as new as Ubuntu 22.04 (`>=2.35`).  
 `data/` next to the binaries is runtime state. Fill `data/config.json` before
-the first start. `data/discord.json` is only needed if you run the Discord
-process.  
+the first start. Add the optional `discord` section to enable Discord.  
 A compiled binary ignores `$schema` and validates against the packed schema, so
 the example's relative `$schema` is fine here.  
 A git checkout is for development. See [Development](#development).
@@ -160,7 +154,7 @@ Redis dies later, rate-limited routes return 429.
 
 ### Scripts
 To load scripts for migration (3x-ui, config, etc), run `./vpn-sub --load-scripts`.
-Works from either binary. Pure migration scripts use stdlib; `reconcile_clients.py` requires the checkout's project venv and dependencies.  
+Pure migration scripts use stdlib; `reconcile_clients.py` requires the checkout's project venv and dependencies.  
 
 ### 3x-ui panel auth
 
@@ -329,11 +323,9 @@ proxies.
 - Systemd unit recommended for persistence
 - Start Redis before the application; final migration validation and cutover follow packaging acceptance.  
 - Route every user mutation through `Subscription`. The admin API, WebAPI, and
-  Telegram bots already do. Discord mutates users only by calling those HTTP
-  APIs.
-- A tag `v*` builds two onefile binaries on `ubuntu-22.04` with CPython 3.14
-  (GIL build, empty `sys.abiflags`) and attaches them to the GitHub release.
-  `vpn-sub` is this service. `vpn-sub-discord` is the Discord process.
+  Telegram bots already do. Discord dispatches the same API handlers in-process.  
+- A tag `v*` builds one `vpn-sub` binary including Discord on `ubuntu-22.04` with CPython 3.14
+  (GIL build, empty `sys.abiflags`) and attaches it to the GitHub release.  
   See [Binaries](#binaries).
 
 ### Binaries
@@ -343,16 +335,16 @@ glibc at least as new as Ubuntu 22.04 (`>=2.35`). Do not build them with a
 free-threading interpreter (`python3.14t`, `sys.abiflags == "t"`). The workflow
 refuses that ABI.
 
-`vpn-sub --probe` also imports the async HTTP/runtime stack. Both probes check that the packed  
-`lang.jsonc` and `config.schema.json` (and, for the main binary, `res/`) can be
+`vpn-sub --probe` imports the HTTP and Discord runtime stack and checks the packed  
+`lang.jsonc`, `discord.lang.jsonc`, `config.schema.json` and `res/` can be
 opened. They do not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.
 Release CI also verifies the Nuitka module report and runs the main binary from an unrelated working directory against disposable loopback Redis/panel dependencies, renders bundled templates, checks SQLite integrity, sends SIGTERM and restarts against the same state. No production credentials are required. See [packaging checks](docs/ASYNC_PACKAGING.md).  
 
-`vpn-sub --help` and `vpn-sub-discord --help` print usage and exit. They do not  
+`vpn-sub --help` prints usage and exits. It does not  
 boot the service. `-h` is the same flag. A checkout accepts it too.
 
-`vpn-sub --update` and `vpn-sub-discord --update` replace the installed binaries
+`vpn-sub --update` replaces the installed binary
 from the latest GitHub release of `pomidorka1515/vpn-sub`. They only run from a
 compiled binary, and only in a terminal. The command asks before it downloads.
 If either service is running, it asks you to stop both and continues only after
@@ -360,12 +352,11 @@ they are gone. It does not stop or start them. A checkout (`python -m main`)
 refuses. At boot a compiled binary logs one line when a newer release exists. It
 does not download anything and it does not prompt.
 
-`vpn-sub --load-scripts` and `vpn-sub-discord --load-scripts` write the packed
+`vpn-sub --load-scripts` writes the packed
 `config.schema.json` beside the binary and download `scripts/` from the tag
 this binary was built from. They only run from a compiled binary. A checkout
 already has both and refuses. An existing file is replaced. The schema is the
-one packed into that binary, so the main binary and the Discord binary each
-write their own. The scripts are not packed; they are fetched and checked
+one packed into that binary. The scripts are fetched and checked
 against the tag's blob sha before they are written.
 
 A compiled binary ignores `$schema` and validates `config.json` against the
@@ -382,8 +373,7 @@ process still had those `.so` files mapped.
 directory during the 5s default grace window; systemd's `TimeoutStopSec` is what
 bounds a stuck stop.
 
-The Discord unit is the same shape as the main one, with `ExecStart=/opt/vpn-sub/vpn-sub-discord` and
-`SUB_HTTP_URL`, `SUB_URI`, and `SUB_API_URI` set to the HTTP service. Start that service first.  
+Discord starts and stops with the main systemd unit.  
 
 ## Development
 

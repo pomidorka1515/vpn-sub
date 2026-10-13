@@ -234,7 +234,7 @@ def test_digest_mismatch_does_not_replace(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert not (tmp_path / "vpn-sub.bak").exists()
 
 
-def test_second_replace_restores_the_first(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_failed_replace_preserves_installed_binary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _compiled(monkeypatch)
     first = tmp_path / "vpn-sub"
     second = tmp_path / "vpn-sub-discord"
@@ -243,8 +243,8 @@ def test_second_replace_restores_the_first(monkeypatch: pytest.MonkeyPatch, tmp_
     real_replace = Path.replace
 
     def _replace(self: Path, target: Path) -> Path:
-        if self.name == "vpn-sub-discord.new":
-            raise OSError("second rename failed")
+        if self.name == "vpn-sub.new":
+            raise OSError("rename failed")
         return real_replace(self, target)
 
     monkeypatch.setattr(Path, "replace", _replace)

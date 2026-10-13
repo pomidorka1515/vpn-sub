@@ -53,7 +53,7 @@ package-dir = {"" = "src"}
 [tool.ruff]
 line-length = 100
 target-version = "py314" # Match the development Python version
-src = ["src", "src/discord/src"] # First-party import roots
+src = ["src"] # First-party import roots
 
 [tool.ruff.lint]
 # ALL normally excludes preview rules, including newer modernization checks.
@@ -287,10 +287,6 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 [tool.mypy]
 python_version = "3.14"
 cache_dir = "$MYPY_CONFIG_FILE_DIR/.mypy_cache"
-# IMPORTANT: discord launcher collides with `src/app.py`,
-# the actual implementation is in `src/discord/src/runtime.py`,
-# this file doesn't need type checking.
-exclude = ['src/discord/src/app.py']
 
 files = ["src/", "scripts/"]
 
@@ -386,14 +382,14 @@ root = "src/tests"
 reportPrivateUsage = false
 
 [[tool.pyright.executionEnvironments]]
-extraPaths = ["src", "src/discord/src", "src/discord/src/tests"]
-root = "src/discord/src/tests"
+extraPaths = ["src", "src/discord_bot/tests"]
+root = "src/discord_bot/tests"
 reportPrivateUsage = false
 reportUnusedFunction = false
 
 [[tool.pyright.executionEnvironments]]
-extraPaths = ["src/discord/src", "src"]
-root = "src/discord/src"
+extraPaths = ["src"]
+root = "src/discord_bot"
 reportPrivateUsage = false
 reportUnusedFunction = false
 
@@ -407,8 +403,8 @@ required-environments = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "src/discord/src"]
-testpaths = ["src/tests", "src/discord/src/tests"]
+pythonpath = ["src", "src/discord_bot/tests"]
+testpaths = ["src/tests", "src/discord_bot/tests"]
 # Async tests opt in explicitly; loop-bound resources live on their test's loop.
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"

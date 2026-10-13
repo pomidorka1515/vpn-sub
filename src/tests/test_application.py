@@ -12,6 +12,7 @@ from api.application import create_api_application
 from api.decorators.rate_limit import AsyncRateLimiter
 from app import AppOptions, AppPaths, create_application, verbose_overrides
 from app_runtime.lifecycle import RuntimeState
+from discord_bot.host import SharedDiscordClient
 
 
 def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -128,6 +129,49 @@ def paths(tmp_path: Path) -> AppPaths:
         audit=data / "audit.jsonl",
         primary_lock=data / ".primary.lock",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_optional_discord_shares_runtime(
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, enabled: bool,
+) -> None:
+    from async_core_helpers import PanelTransport
+    from helpers import FakePanel
+
+    document = json.loads(paths.config.read_text())
+    document["discord"] = {"token": "token" if enabled else "", "whitelist": [7]}
+    paths.config.write_text(json.dumps(document))
+    logged_in: list[str] = []
+
+    async def login(self: SharedDiscordClient, token: str) -> None:
+        del self
+        logged_in.append(token)
+
+    async def connect(self: SharedDiscordClient, *, reconnect: bool = True) -> None:
+        del self, reconnect
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(SharedDiscordClient, "login", login)
+    monkeypatch.setattr(SharedDiscordClient, "connect", connect)
+    runtime = await create_application(paths, AppOptions(
+        start_background=False,
+        limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+        panel_transport_factory=lambda: PanelTransport(FakePanel()),
+    ))
+    bot = runtime.dependencies.discord_bot
+    try:
+        assert (bot is not None) == enabled
+        assert logged_in == (["token"] if enabled else [])
+        if bot is not None:
+            assert bot.db is runtime.dependencies.db
+            assert bot.app is runtime.app
+            assert bot.runner is not None
+    finally:
+        await runtime.stop()
+    if bot is not None:
+        assert bot.runner is None
+        assert bot.client.is_closed()
 
 
 @pytest.mark.asyncio

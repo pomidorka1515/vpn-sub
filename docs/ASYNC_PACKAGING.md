@@ -8,9 +8,9 @@ The explicit Flask, Gunicorn and types-gunicorn requirements have been removed d
   
 ## Release contract  
   
-The main Nuitka onefile build explicitly includes ASGI, Quart, Hypercorn, aiohttp, aiosqlite, redis.asyncio and telebot async modules. It bundles `res/`, `lang.jsonc`, `config.schema.json` and certifi data. No WSGI/Gunicorn entrypoint is explicitly included. Nuitka 4.x is the supported build major; the existing Python 3.14 compression workaround fails visibly if its target changes.  
+The single `vpn-sub` Nuitka onefile build explicitly includes ASGI, Quart, Hypercorn, aiohttp, aiosqlite, redis.asyncio, telebot async modules, discord.py and `discord_bot`. It bundles `res/`, `lang.jsonc`, `discord.lang.jsonc`, `config.schema.json` and certifi data. No WSGI/Gunicorn entrypoint is explicitly included. Nuitka 4.x is the supported build major; the existing Python 3.14 compression workaround fails visibly if its target changes.  
   
-Discord excludes Quart/Hypercorn, Flask, telebot, aiosqlite and Redis and retains aiohttp for its HTTP client. Its own language/schema files are bundled. Both binaries run import/resource probes, and XML compilation reports are retained as separate CI artifacts. The main probe imports the entire async dependency stack without starting runtime I/O.  
+Discord is optional at runtime and shares the application's event loop and lifecycle. There is no separate binary or schema. The probe imports both application and Discord dependencies and checks their packed resources without starting runtime I/O. The XML compilation report is retained as a CI artifact.  
   
 `scripts/smoke_async_release.py --binary <path> --report <report.xml>` checks module inclusion and runs the actual compiled entrypoint from a temporary working directory. It creates an isolated configuration and database, starts private loopback Redis and an authenticated panel fake, disables optional bots by omitting their config, and exercises:  
   
@@ -20,7 +20,7 @@ Discord excludes Quart/Hypercorn, Flask, telebot, aiosqlite and Redis and retain
 - SIGTERM, zero exit status and database integrity.  
 - Restart with the same state and primary lock, followed by another clean SIGTERM.  
   
-The harness never reads production state or contacts production panel/Telegram endpoints. The normal compiled updater may perform its bounded public release-version lookup at boot. Temporary state is deleted after the processes close. The main release job requires this smoke check before uploading the binary; the Discord job requires its independent resource probe.  
+The harness never reads production state or contacts production panel/Telegram/Discord endpoints. The normal compiled updater may perform its bounded public release-version lookup at boot. Temporary state is deleted after the processes close. The release job requires this smoke check and the combined resource probe before uploading the binary.  
   
 ## Checkout verification  
   

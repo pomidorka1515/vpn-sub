@@ -25,6 +25,7 @@ from core import Subscription
 from core.coordination import MutationCoordinator
 from core.services.audit import AuditService
 from db import Database
+from discord_bot.runtime import DiscordApplication
 from notify.notifier import Notifier
 from paths import bundled_root, compiled
 
@@ -58,6 +59,7 @@ class ApplicationDependencies:
     watcher: BWatch
     admin_bot: AsyncAdminBot | None = None
     public_bot: AsyncPublicBot | None = None
+    discord_bot: DiscordApplication | None = None
 
 
 class Application(Runtime[ApplicationDependencies]):
@@ -189,6 +191,13 @@ async def create_application(
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
         register_subscription_route(app, sub)
+        discord_bot = (
+            DiscordApplication(app, cfg, paths.data, db)
+            if options.start_bots and conf.get("discord", {}).get("token")
+            else None
+        )
+        if discord_bot is not None:
+            await open_resource(OwnedResource("Discord bot", discord_bot, quiesce=discord_bot.close))
         runtime = Application(
             ApplicationDependencies(
                 app,
@@ -203,6 +212,7 @@ async def create_application(
                 status,
                 admin_bot,
                 public_bot,
+                discord_bot,
             ),
             resources=tuple(opened),
             offloads=offloads,

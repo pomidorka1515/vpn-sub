@@ -51,6 +51,7 @@ def probe() -> None:
         "session.transport",
         "db.database",
         "bots.polling",
+        "discord_bot.runtime",
     ):
         import_module(module)
 
@@ -62,6 +63,8 @@ def probe() -> None:
     if not fonts.is_dir():
         raise SystemExit(f"res directory not found: {fonts}")
     if compiled():
+        if not (root / "discord.lang.jsonc").is_file():
+            raise SystemExit("discord language file not found")
         schema = root / "config.schema.json"
         if not schema.is_file():
             raise SystemExit(f"schema file not found: {schema}")

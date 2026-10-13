@@ -26,6 +26,10 @@
         "token": "",
         "whitelist": []
     },
+    "discord": {
+        "token": "",
+        "whitelist": []
+    },
     "json_template": {
         "dns": {
             "servers": [
