@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import pytest
@@ -197,11 +198,15 @@ async def test_offload_retains_capacity_and_drains_cancelled_callers() -> None:
         caller.cancel()
         with pytest.raises(asyncio.CancelledError):
             await caller
-        with pytest.raises(CapacityExceededError):
-            await offload.run(lambda: 0)
+        waiting = asyncio.create_task(offload.run(lambda: 0))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert not waiting.done()
         closing = asyncio.create_task(offload.close())
         await asyncio.sleep(0)
         assert not closing.done()
+        with pytest.raises(AdmissionClosedError):
+            await waiting
         assert not completed.is_set()
         finish.set()
         await closing
@@ -211,6 +216,82 @@ async def test_offload_retains_capacity_and_drains_cancelled_callers() -> None:
             await offload.run(lambda: 0)
     finally:
         finish.set()
+        await offload.close()
+
+
+@pytest.mark.asyncio
+async def test_offload_burst_waits_and_respects_file_limit() -> None:
+    from app_runtime.offload import OffloadServices
+
+    offload = OffloadServices().files
+    loop = asyncio.get_running_loop()
+    # A single-CPU host's default executor may have fewer than six workers.
+    loop.set_default_executor(ThreadPoolExecutor(max_workers=6))
+    saturated = asyncio.Event()
+    release = threading.Event()
+    lock = threading.Lock()
+    running = 0
+    peak = 0
+
+    def blocking(value: int) -> int:
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+            if running == 6:
+                loop.call_soon_threadsafe(saturated.set)
+        try:
+            if not release.wait(timeout=5):
+                raise TimeoutError("test did not release workers")
+            return value
+        finally:
+            with lock:
+                running -= 1
+
+    callers = [asyncio.create_task(offload.run(blocking, value)) for value in range(18)]
+    try:
+        await asyncio.wait_for(saturated.wait(), timeout=5)
+        assert offload.active_count == 6
+        assert all(not caller.done() for caller in callers)
+        release.set()
+        assert await asyncio.gather(*callers) == list(range(18))
+        assert peak == 6
+    finally:
+        release.set()
+        await asyncio.gather(*callers, return_exceptions=True)
+        await offload.close()
+
+
+@pytest.mark.asyncio
+async def test_offload_cancelled_waiter_does_not_submit_or_lose_capacity() -> None:
+    offload = BoundedOffload(capacity=1, name="disk")
+    loop = asyncio.get_running_loop()
+    started = asyncio.Event()
+    release = threading.Event()
+    submitted = threading.Event()
+
+    def blocking() -> None:
+        loop.call_soon_threadsafe(started.set)
+        if not release.wait(timeout=5):
+            raise TimeoutError("test did not release worker")
+
+    caller = asyncio.create_task(offload.run(blocking))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        waiting = asyncio.create_task(offload.run(submitted.set))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        waiting.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiting
+        successor = asyncio.create_task(offload.run(lambda: 42))
+        release.set()
+        await caller
+        assert await successor == 42
+        assert not submitted.is_set()
+    finally:
+        release.set()
+        await caller
         await offload.close()
 
 
