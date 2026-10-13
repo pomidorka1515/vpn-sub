@@ -97,8 +97,10 @@ def _response(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> StubR
 
 
 def _get_stub(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> GetStub:
+    releases: list[object] = [payload]
+
     def _get(*_args: object, **_kwargs: object) -> StubResponse:
-        return _response([payload] if isinstance(payload, dict) else payload, chunks)
+        return _response(releases if isinstance(payload, dict) else payload, chunks)
 
     return _get
 

@@ -3,7 +3,7 @@
 VPN subscription management service. Quart + Telegram bots + a Discord bot +
 3x-ui panel glue.  
 HTTP, core services, panel I/O, SQLite and optional Discord run on one asyncio event loop.  
-The runtime includes async BWatch and optional AsyncTeleBot bots. Packaging acceptance and final cleanup/cutover are tracked in [ASYNC_MIGRATION_PLAN.md](ASYNC_MIGRATION_PLAN.md); see [docs/ASYNC_PACKAGING.md](docs/ASYNC_PACKAGING.md).  
+The runtime includes async BWatch and optional AsyncTeleBot bots. See [docs/ASYNC_PACKAGING.md](docs/ASYNC_PACKAGING.md) for packaging details.  
 SQLite holds users, codes, and quotas. `config.json` is deployment and
 presentation only.  
 Designed to run on a single small VPS.

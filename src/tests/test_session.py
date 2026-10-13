@@ -297,7 +297,7 @@ async def test_real_basic_auth_and_bearer_conflict(endpoint: str) -> None:
         response = await transport.request("GET", endpoint)
         payload = response.json()
         assert isinstance(payload, dict)
-        assert str(payload["auth"]).startswith("Basic ")
+        assert payload["auth"] == "Basic dXNlcjpwYXNzd29yZA=="
         with pytest.raises(XUiSessionError, match="basic auth alongside"):
             await transport.request("GET", endpoint, headers={"authorization": "Bearer token"})
     finally:
@@ -308,15 +308,30 @@ async def test_real_basic_auth_and_bearer_conflict(endpoint: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_injected_session_default_auth_conflict(endpoint: str) -> None:
-    async with aiohttp.ClientSession(auth=aiohttp.BasicAuth("user", "password")) as session:
-        transport = AiohttpPanelTransport(session)
+async def test_injected_session_authorization_conflict(endpoint: str) -> None:
+    async with aiohttp.ClientSession(headers={"Authorization": "Bearer token"}) as session:
+        transport = AiohttpPanelTransport(session, auth=("user", "password"))
         await transport.start()
         try:
             with pytest.raises(XUiSessionError, match="basic auth alongside"):
-                await transport.request("GET", endpoint, headers={"Authorization": "Bearer token"})
+                await transport.request("GET", endpoint)
         finally:
             await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_request_auth_overrides_and_preserves_headers(endpoint: str) -> None:
+    transport = AiohttpPanelTransport(auth=("user", "password"))
+    headers = {"X-Test": "header"}
+    await transport.start()
+    try:
+        response = await transport.request("GET", endpoint, auth=("é", "à"), headers=headers)
+        assert response.json() == {"auth": "Basic 6Trg", "header": "header", "body": None}
+        assert headers == {"X-Test": "header"}
+        response = await transport.request("GET", endpoint, auth=None)
+        assert response.json() == {"auth": None, "header": None, "body": None}
+    finally:
+        await transport.close()
 
 
 @pytest.mark.asyncio

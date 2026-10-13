@@ -42,13 +42,6 @@ class PrimaryLock:
             self._handle = None
 
 
-class SnapshotStatus:
-    """HTTP-facing snapshot status until the async watcher is composed in step 8."""
-
-    def get_daily_snapshot_failure(self) -> dict[str, str | int] | None:
-        return None
-
-
 def build_panels(
     cfg: Snapshot[AppConfig],
     paths: AppPaths,

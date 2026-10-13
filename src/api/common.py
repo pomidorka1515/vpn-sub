@@ -143,7 +143,7 @@ def web_lang_tables(
 
 
 class Route(NamedTuple):
-    """A Flask route, used in BaseApi."""
+    """A Quart route, used in AsyncBaseApi."""
 
     method: HTTPMethod
     path: str
@@ -199,7 +199,7 @@ class AsyncBaseApi(ABC):
             self.reg_handles()
 
     def __init_subclass__(cls, **kwargs: object) -> None:
-        """Called when a class inherits from BaseApi. Validates at import time."""
+        """Called when a class inherits from AsyncBaseApi. Validates at import time."""
         super().__init_subclass__(**kwargs)
 
         if not hasattr(cls, "ROUTES"):

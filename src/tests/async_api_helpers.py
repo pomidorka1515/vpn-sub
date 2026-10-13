@@ -8,7 +8,6 @@ from helpers import config_mock, subscription_config
 
 from api.application import create_api_application
 from api.decorators.rate_limit import AsyncRateLimiter
-from app_runtime.composition import SnapshotStatus
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -22,6 +21,13 @@ if TYPE_CHECKING:
     from config.store import AsyncConfig
     from core import Subscription
     from db import Database
+
+
+class SnapshotStatus:
+    """Snapshot status stub for API tests."""
+
+    def get_daily_snapshot_failure(self) -> dict[str, str | int] | None:
+        return None
 
 
 class OpenRedis:

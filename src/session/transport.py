@@ -126,7 +126,7 @@ class AiohttpPanelTransport:
         if session is None:
             raise RuntimeError("transport has not started")
         auth = kwargs.get("auth", self._auth)
-        headers = kwargs.get("headers", {})
+        headers = CIMultiDict(kwargs.get("headers", {}))
         has_authorization = any(key.lower() == "authorization" for key in headers)
         session_has_authorization = "Authorization" in session.headers
         # aiohttp also rejects this combination; check it here for a stable,
@@ -137,6 +137,8 @@ class AiohttpPanelTransport:
             raise XUiSessionError(
                 "refusing to send basic auth alongside an Authorization header",
             )
+        if auth is not None:
+            headers["Authorization"] = aiohttp.encode_basic_auth(*auth, encoding="latin1")
         total = kwargs.get("timeout", self._timeout)
         if total <= 0:
             raise ValueError("timeout must be positive")
@@ -153,7 +155,6 @@ class AiohttpPanelTransport:
             json=kwargs.get("json"),
             data=kwargs.get("data"),
             timeout=deadline,
-            auth=aiohttp.BasicAuth(*auth) if auth is not None else None,
             allow_redirects=False,
         ) as response:
             return PanelResponse(response.status, await response.read(), response.headers)

@@ -14,7 +14,7 @@ from api.application import create_api_application
 from app_runtime.lifecycle import Runtime
 from app_runtime.offload import BoundedOffload, OffloadServices
 from app_runtime.tasks import AdmissionClosedError
-from config import Config
+from config import Config, DiscordLangConfig
 from db import Database
 from discord_bot.host import SharedDiscordClient, discord_user
 from discord_bot.runtime import DiscordApplication
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from quart import Response
 
-    from config import AppConfig, DiscordLangConfig
+    from config import AppConfig
     from core.common import Snapshot
     from discord_bot.tests.discord_helpers import FakeResponse
 
@@ -122,7 +122,7 @@ async def test_discord_language_reads_use_off_loop_snapshots(
     language.write_bytes(LANG_PATH.read_bytes())
     monkeypatch.setenv("PATH_DISCORD_LANG", str(language))
     loop_thread = threading.get_ident()
-    original_view = Config.view
+    original_view = Config[DiscordLangConfig].view
 
     def off_loop_view(self: Config[DiscordLangConfig]) -> DiscordLangConfig:
         assert threading.get_ident() != loop_thread
@@ -207,6 +207,8 @@ async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
             return json_ok([{"username": "alice", "amount": 10}])
         return json_ok(stats_obj())
 
+    public = None
+    store = None
     if feature == "public":
         public, store, _ = make_public_bot(tmp_path, handler, rendering=rendering)
         monkeypatch.setattr("discord_bot.public.traffic.bandwidth_chart", render)
@@ -232,7 +234,7 @@ async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
         with pytest.raises(asyncio.CancelledError):
             await task
         assert rendering.active_count == 1
-        if feature == "public":
+        if public is not None:
             assert not public._chart_busy
         queued = asyncio.create_task(rendering.run(competing.set))
         await asyncio.sleep(0)
@@ -257,5 +259,5 @@ async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
         await runtime.stop()
         if stop is not None:
             await stop
-        if feature == "public":
+        if store is not None:
             store.close()
