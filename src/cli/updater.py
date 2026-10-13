@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,21 +33,44 @@ from version import VERSION
 __all__ = ["notice", "update"]
 
 REPO = "pomidorka1515/vpn-sub"
-RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases"
 BINARIES = ("vpn-sub",)
 UNITS = ("vpn-sub.service",)
 NOTICE_TIMEOUT = 3.0
 UPDATE_TIMEOUT = 30.0
 _DOWNLOAD_CHUNK = 1024 * 1024
+PRERELEASE_WARNING = """\
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! WARNING !! THIS IS A PRERELEASE — IT IS NOT STABLE.
+RC, beta, alpha and other prereleases may contain bugs.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"""
+
+
+@dataclass(frozen=True, slots=True)
+class Version:
+    text: str
+    core: tuple[int, ...]
+    prerelease: tuple[str, ...]
+
+    def key(self) -> tuple[tuple[int, ...], bool, tuple[tuple[bool, int, str], ...]]:
+        core = self.core
+        while len(core) > 1 and core[-1] == 0:
+            core = core[:-1]
+        identifiers = tuple(
+            (False, int(part), "") if part.isdigit() else (True, 0, part)
+            for part in self.prerelease
+        )
+        return core, not self.prerelease, identifiers
 
 
 @dataclass(frozen=True, slots=True)
 class Release:
     tag: str
-    version: tuple[int, ...]
+    version: Version
     notes: str
     page: str
     assets: dict[str, Asset]
+    prerelease: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +104,8 @@ def notice() -> None:
     if current is None or not _newer(release.version, current):
         return
     print(f"update available: {VERSION} -> {release.tag} (vpn-sub --update)")
+    if release.prerelease:
+        print(PRERELEASE_WARNING)
 
 
 def update() -> int:
@@ -109,6 +135,8 @@ def update() -> int:
         print(f"already at {VERSION}; latest release is {release.tag}")
         return 0
     print(f"update available: {VERSION} -> {release.tag}")
+    if release.prerelease:
+        print(PRERELEASE_WARNING)
     print(release.page)
     if release.notes:
         print(release.notes)
@@ -173,32 +201,58 @@ def _confirm(question: str) -> bool:
     return answer in {"y", "yes"}
 
 
-def _parse(value: str) -> tuple[int, ...] | None:
+def _parse(value: str) -> Version | None:
     text = value.removeprefix("v")
-    text = text.split("-", 1)[0].split("+", 1)[0]
-    parts = text.split(".")
-    if not parts or any(not part.isdigit() for part in parts):
+    match = re.fullmatch(
+        r"([0-9]+(?:\.[0-9]+)*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+        r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?",
+        text,
+    )
+    if match is None:
         return None
-    return tuple(int(part) for part in parts)
+    suffix = match[2]
+    return Version(text, tuple(int(part) for part in match[1].split(".")), tuple(suffix.split(".")) if suffix else ())
 
 
-def _newer(release: tuple[int, ...], current: tuple[int, ...]) -> bool:
-    width = max(len(release), len(current))
-    return release + (0,) * (width - len(release)) > current + (0,) * (width - len(current))
+def _newer(release: Version, current: Version) -> bool:
+    return release.key() > current.key()
 
 
 def _latest(timeout: float) -> Release:
-    response = _get(RELEASES_URL, timeout)
-    response.raise_for_status()
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise ValueError("release response is not an object")
-    body = _object(cast(dict[object, object], payload))
+    latest: dict[str, object] | None = None
+    latest_version: Version | None = None
+    page = 1
+    while True:
+        response = _get(f"{RELEASES_URL}?per_page=100&page={page}", timeout)
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("releases response is not a listing")
+        listed = cast(list[object], payload)
+        for raw in listed:
+            if not isinstance(raw, dict):
+                continue
+            body = _object(cast(dict[object, object], raw))
+            if body.get("draft") is True:
+                continue
+            tag = body.get("tag_name")
+            version = _parse(tag) if isinstance(tag, str) else None
+            if version is not None and (latest_version is None or _newer(version, latest_version)):
+                latest, latest_version = body, version
+        if len(listed) < 100:
+            break
+        page += 1
+    if latest is None:
+        raise ValueError("no published versioned releases")
+    return _release(latest)
+
+
+def _release(body: dict[str, object]) -> Release:
     tag = body.get("tag_name")
     version = _parse(tag) if isinstance(tag, str) else None
     if not isinstance(tag, str) or version is None:
         raise ValueError(f"release tag is not a version: {tag!r}")
-    if body.get("draft") is True or body.get("prerelease") is True:
+    if body.get("draft") is True:
         raise ValueError(f"{tag} is not a published release")
     raw_assets = body.get("assets")
     if not isinstance(raw_assets, list):
@@ -217,8 +271,9 @@ def _latest(timeout: float) -> Release:
         tag=tag,
         version=version,
         notes=notes if isinstance(notes, str) else "",
-        page=page if isinstance(page, str) else f"https://github.com/{REPO}/releases/latest",
+        page=page if isinstance(page, str) else f"https://github.com/{REPO}/releases/tag/{tag}",
         assets=assets,
+        prerelease=body.get("prerelease") is True or bool(version.prerelease),
     )
 
 

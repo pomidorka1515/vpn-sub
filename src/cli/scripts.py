@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import os
 from typing import TYPE_CHECKING, cast
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,7 +84,7 @@ def _listing() -> tuple[tuple[str, str], ...]:
     sha is the git blob id the file response must match, so a later response
     cannot substitute a different object.
     """
-    response = _get(f"{_API}/contents/scripts?ref=v{VERSION}", TIMEOUT)
+    response = _get(f"{_API}/contents/scripts?ref={quote(f'v{VERSION}', safe='')}", TIMEOUT)
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, list):
@@ -118,7 +119,7 @@ def _script(name: str, digest: str) -> bytes:
     """
     if not _safe_name(name):
         raise ValueError(f"refusing script name {name!r}")
-    response = _get(f"{_API}/contents/scripts/{name}?ref=v{VERSION}", TIMEOUT)
+    response = _get(f"{_API}/contents/scripts/{name}?ref={quote(f'v{VERSION}', safe='')}", TIMEOUT)
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):

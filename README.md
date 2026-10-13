@@ -345,12 +345,22 @@ Release CI also verifies the Nuitka module report and runs the main binary from 
 boot the service. `-h` is the same flag. A checkout accepts it too.
 
 `vpn-sub --update` replaces the installed binary
-from the latest GitHub release of `pomidorka1515/vpn-sub`. They only run from a
+from the newest published version on GitHub, including prereleases, of `pomidorka1515/vpn-sub`. They only run from a
 compiled binary, and only in a terminal. The command asks before it downloads.
 If either service is running, it asks you to stop both and continues only after
 they are gone. It does not stop or start them. A checkout (`python -m main`)
-refuses. At boot a compiled binary logs one line when a newer release exists. It
+refuses. At boot a compiled binary logs an update notice when a newer release exists. It
 does not download anything and it does not prompt.
+
+> # !! WARNING !! PRERELEASES ARE NOT STABLE  
+> `--update` includes GitHub RC, beta, alpha and other prereleases. The updater  
+> displays a prominent warning before confirmation; boot notices warn too.  
+
+Release versions retain their full suffix (for example `6.0.0-rc.2+build.1`)  
+in help output, script tag references and unpack directories. RC numbers compare  
+numerically, and a stable version sorts after its prereleases. Build metadata  
+does not affect update ordering. Tags with any `-suffix` are published as  
+GitHub prereleases. Release notes use the tag annotation as-is.  
 
 `vpn-sub --load-scripts` writes the packed
 `config.schema.json` beside the binary and download `scripts/` from the tag

@@ -166,3 +166,19 @@ def test_digest_mismatch_does_not_write_the_script(
     assert (install / "config.schema.json").read_bytes() == b"{}\n"
     assert not (install / "scripts" / "migrate_profiles.py").exists()
     assert "download failed" in capsys.readouterr().out
+
+
+def test_scripts_use_full_prerelease_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(scripts_load, "VERSION", "6.0.0-rc.2+build.1")
+    urls: list[str] = []
+    stub = _get_stub({"migrate.py": b"script\n"})
+
+    def _get(url: str, *args: object, **kwargs: object) -> StubResponse:
+        urls.append(url)
+        return stub(url, *args, **kwargs)
+
+    monkeypatch.setattr(scripts_load, "_get", _get)
+    name, digest = scripts_load._listing()[0]
+    assert scripts_load._script(name, digest) == b"script\n"
+    assert len(urls) == 2
+    assert all(url.endswith("?ref=v6.0.0-rc.2%2Bbuild.1") for url in urls)

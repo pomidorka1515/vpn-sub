@@ -2,7 +2,8 @@
 
 ``__compiled__`` carries Nuitka's own version, not ``--product-version``.
 The release workflow rewrites ``VERSION`` from the tag before compiling, the
-same way it passes ``--product-version``. A checkout keeps ``0.0.0``.
+complete suffix included. Nuitka's numeric ``--product-version`` is separate.
+A checkout keeps ``0.0.0``.
 """
 
 from __future__ import annotations

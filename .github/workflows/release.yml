@@ -114,14 +114,17 @@ jobs:
           # oversubscribes them once --lto=yes is linking.
           jobs="$(nproc)"
           version="${GITHUB_REF_NAME#v}"
-          version="${version%%-*}"
-          version="${version%%+*}"
-          python - <<PY
+          # Nuitka product metadata accepts only numbers; runtime/tag identity
+          # and the unpack cache retain the complete prerelease/build suffix.
+          product_version="${version%%+*}"
+          product_version="${product_version%%-*}"
+          python - <<'PY'
+          import os
           from pathlib import Path
           path = Path("src/version.py")
           source = path.read_text()
           old = 'VERSION = "0.0.0"'
-          new = 'VERSION = "${version}"'
+          new = f'VERSION = {os.environ["GITHUB_REF_NAME"].removeprefix("v")!r}'
           if old not in source:
               raise SystemExit("src/version.py has no VERSION = \\"0.0.0\\" placeholder")
           path.write_text(source.replace(old, new, 1))
@@ -134,9 +137,9 @@ jobs:
           # (template predicates). Charts/QR codes need PNG; retain JPEG/TIFF too.
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile \
-            --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}/{PID}_{TIME_US}_{RANDOM}' \
+            --onefile-tempdir-spec="{CACHE_DIR}/${{ matrix.name }}/${version}/{PID}_{TIME_US}_{RANDOM}" \
             --onefile-child-grace-time=infinity \
-            --product-version="${version}" \
+            --product-version="${product_version}" \
             --deployment \
             --lto=yes \
             --jobs="${jobs}" \
@@ -311,8 +314,10 @@ jobs:
           fi
           printf '%s\n' "${notes}" > notes.md
           release_flags=()
-          case "${GITHUB_REF_NAME,,}" in
-            *rc*|*beta*|*alpha*) release_flags+=(--prerelease) ;;
+          case "${GITHUB_REF_NAME%%+*}" in
+            *-*)
+              release_flags+=(--prerelease --latest=false)
+              ;;
           esac
           gh release create "${GITHUB_REF_NAME}" \
             build/dist/vpn-sub \

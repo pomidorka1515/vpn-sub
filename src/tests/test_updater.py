@@ -98,7 +98,7 @@ def _response(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> StubR
 
 def _get_stub(payload: object, chunks: tuple[bytes, ...] = (b"new\n",)) -> GetStub:
     def _get(*_args: object, **_kwargs: object) -> StubResponse:
-        return _response(payload, chunks)
+        return _response([payload] if isinstance(payload, dict) else payload, chunks)
 
     return _get
 
@@ -308,10 +308,88 @@ def test_asset_requires_sha256() -> None:
         )
 
 
-def test_parse_strips_release_suffix() -> None:
-    assert updater._parse("v5.0.0-rc.3") == (5, 0, 0)
-    assert updater._newer((5, 1), (5, 0, 0))
-    assert not updater._newer((5, 0), (5, 0, 0))
+@pytest.mark.parametrize(
+    ("release", "current", "newer"),
+    [
+        ("v5.0.0-rc.3", "5.0.0-rc.2", True),
+        ("5.0.0-rc.10", "5.0.0-rc.9", True),
+        ("5.0.0", "5.0.0-rc.3", True),
+        ("5.0.0-rc.3", "5.0.0", False),
+        ("5.0.0-beta", "5.0.0-alpha", True),
+        ("5.0.0-rc.1", "5.0.0-beta.9", True),
+        ("5.0.0-preview.2", "5.0.0-preview.1", True),
+        ("5.0.0-rc.1+build.2", "5.0.0-rc.1+build.1", False),
+        ("5.1", "5.0.0", True),
+        ("5.0", "5.0.0", False),
+    ],
+)
+def test_parse_preserves_suffix_and_compares_versions(release: str, current: str, newer: bool) -> None:
+    parsed = updater._parse(release)
+    installed = updater._parse(current)
+    assert parsed is not None
+    assert installed is not None
+    assert parsed.text == release.removeprefix("v")
+    assert updater._newer(parsed, installed) is newer
+
+
+def test_latest_includes_prereleases_and_skips_drafts(monkeypatch: pytest.MonkeyPatch) -> None:
+    rc = _release("v5.0.0-rc.10")
+    rc["prerelease"] = True
+    draft = _release("v6.0.0")
+    draft["draft"] = True
+    monkeypatch.setattr(updater, "_get", _get_stub([_release("v5.0.0-rc.9"), draft, rc, _release("v4.0.0")]))
+    latest = updater._latest(3)
+    assert latest.tag == "v5.0.0-rc.10"
+    assert latest.prerelease
+
+
+def test_latest_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
+    urls: list[str] = []
+
+    def _get(url: str, *_args: object, **_kwargs: object) -> StubResponse:
+        urls.append(url)
+        return _response([_release("v1.0.0")] * 100 if url.endswith("&page=1") else [_release("v2.0.0-rc.1")])
+
+    monkeypatch.setattr(updater, "_get", _get)
+    assert updater._latest(3).tag == "v2.0.0-rc.1"
+    assert len(urls) == 2
+
+
+def test_rc_update_warns_before_confirmation_and_replaces_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _compiled(monkeypatch)
+    binary = tmp_path / "vpn-sub"
+    binary.write_bytes(b"old\n")
+    payload = _release("v5.0.0-rc.2", assets=("vpn-sub",))
+    payload["prerelease"] = True
+    monkeypatch.setattr(updater, "VERSION", "5.0.0-rc.1")
+    monkeypatch.setattr(updater, "_interactive", lambda: True)
+    monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
+    monkeypatch.setattr(updater, "_running", _empty_stub())
+    monkeypatch.setattr(updater, "_get", _get_stub(payload))
+
+    def _confirm(_question: str) -> bool:
+        output = capsys.readouterr().out
+        assert "!! WARNING !!" in output
+        assert "NOT STABLE" in output
+        return True
+
+    monkeypatch.setattr(updater, "_confirm", _confirm)
+    assert update() == 0
+    assert binary.read_bytes() == b"new\n"
+
+
+def test_prerelease_notice_warns(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    _compiled(monkeypatch)
+    monkeypatch.setattr(updater, "VERSION", "5.0.0-beta")
+    monkeypatch.setattr(updater, "_get", _get_stub(_release("v5.0.0-rc.1")))
+    notice()
+    output = capsys.readouterr().out
+    assert "5.0.0-beta -> v5.0.0-rc.1" in output
+    assert "!! WARNING !!" in output
 
 
 def test_swap_refuses_symlink(

@@ -19,11 +19,14 @@ VPN subscription service ({version}). With no flag, start the process.
 
   --help          show this usage and exit
   --probe         check that shipped files open, then exit
-  --update        replace the installed binaries from the latest release
+  --update        replace the installed binaries from the newest published release
   --load-scripts  write the packed schema and download scripts/ beside the binary
 
 --update and --load-scripts only run from a compiled binary. A checkout
 already has those files and refuses. --probe does not start the service.
+
+!! WARNING !! --update includes RC, beta and other GitHub prereleases.
+PRERELEASES ARE NOT STABLE. A warning is shown before confirmation.
 """
 
 
