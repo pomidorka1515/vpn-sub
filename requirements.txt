@@ -1,11 +1,13 @@
 jsonschema>=4.20.0
 requests>=2.31.0
 pyTelegramBotAPI>=4.37,<5
+# Legacy core/tests; remove the direct requirement in step 12 (Quart depends on Flask).
 Flask>=3.0.0
 Quart>=0.20,<1
 hypercorn>=0.17.3,<1
 qrcode>=7.4
 Pillow>=10.0.0
+# Legacy server/logging; remove in migration step 12.
 gunicorn>=21.0.0
 dacite
 psutil

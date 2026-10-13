@@ -3,7 +3,7 @@
 VPN subscription management service. Quart + Telegram bots + a Discord bot +
 3x-ui panel glue.  
 HTTP, core services, panel I/O and SQLite use asyncio. Discord is a separate asyncio process.  
-The async migration is staged: the current application does not yet start BWatch or Telegram bots. Their conversion and production cutover are pending; see [docs/ASYNC_API.md](docs/ASYNC_API.md).  
+The runtime includes async BWatch and optional AsyncTeleBot bots. Packaging acceptance and final cleanup/cutover are tracked in [ASYNC_MIGRATION_PLAN.md](ASYNC_MIGRATION_PLAN.md); see [docs/ASYNC_PACKAGING.md](docs/ASYNC_PACKAGING.md).  
 SQLite holds users, codes, and quotas. `config.json` is deployment and
 presentation only.  
 Designed to run on a single small VPS.
@@ -56,7 +56,7 @@ Designed to run on a single small VPS.
   and expiry about every 2 minutes, panel health about every 5 minutes. Daily
   bandwidth and state snapshots, with retry and admin alerts. Monthly reset
   check and inbound reconcile about every 2 hours. Panel polls fan out on a
-  background thread pool.
+  bounded async workers, with separate foreground/background capacity.  
 - **Auth, audit, backups.** Argon2id passwords (legacy salted hashes still
   verify). JSONL audit trail. `config.json` validated against
   `config.schema.json` on load and commit; remote schemas are rejected.
@@ -81,13 +81,13 @@ Designed to run on a single small VPS.
   repo, not a supported public suite.
 - Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure
   belong on the reverse proxy. Application rate limits live in Redis.
-- Python 3.12+ to start. Built for 3.13+.
+- Python 3.14 for development and release builds; release binaries require the normal GIL ABI.  
 
 
 ## Architecture
 
-Startup is handled by `await create_application()`: primary lock, config stores,  
-database, Redis, panels and `AsyncSubscription` recovery. Watcher/bot composition is pending.  
+ASGI lifespan calls `await create_application()`: primary lock, validated config snapshots,  
+SQLite, Redis, panel clients, `AsyncSubscription` recovery, watcher baseline/snapshots and optional Telegram bots. Startup failures unwind resources; readiness is published only after composition succeeds. Shutdown quiesces producers, settles mutations and closes resources, releasing the primary lock last.  
 
 - `src/app.py` — `create_application()` factory: builds the `Application`
   runtime (paths, config snapshots, async DB, Redis, panels, subscription and Quart app)  
@@ -95,17 +95,17 @@ database, Redis, panels and `AsyncSubscription` recovery. Watcher/bot compositio
 - `src/main.py` — process entry for a checkout (`python -m main`) and for the
   Nuitka binary. Runs Hypercorn in-process on one event loop  
 - `src/serve.py` — shared Hypercorn settings for checkout and binary serving  
-- `src/core/` — `Subscription` and the user, code, panel, bandwidth, and audit
+- `src/core/` — `AsyncSubscription` and the user, code, panel, bandwidth, and audit
   services
-- `src/bwatch/` — `BWatch`: quota, expiry, panel health, snapshots
-- `src/session/` — `XUiSession` panel HTTP client
+- `src/bwatch/` — `AsyncBWatch`: owned quota, expiry, panel health and snapshot tasks  
+- `src/session/` — `AsyncXUiSession`, buffered aiohttp transport and generation-safe caches  
 - `src/config/` — atomic JSON config with thread + cross-process locking
-- `src/db/` — SQLite. Users, codes, quotas, and bandwidth live here.
+- `src/db/` — aiosqlite repository with write transaction ownership and leased reads. Users, codes, quotas, and bandwidth live here.  
   `config.json` is deployment and presentation only
 - `src/api/` — Quart routes (`AsyncApi` for admin, `AsyncWebApi` for end users)  
 - `src/api/decorators/rate_limit.py` — Redis sliding-window limiter, shared by
-  every worker
-- `src/bots/` — Telegram `AdminBot` (management), `PublicBot` (user
+  async HTTP caller  
+- `src/bots/` — Telegram `AsyncAdminBot` (management), `AsyncPublicBot` (user
   self-service)
 - `src/discord/` — Discord bots as a **separate process**. Not started by
   Hypercorn or `create_application()`. One token serves public commands and
@@ -160,8 +160,7 @@ Redis dies later, rate-limited routes return 429.
 
 ### Scripts
 To load scripts for migration (3x-ui, config, etc), run `./vpn-sub --load-scripts`.
-Works from either binary. The scripts themselves do not depend on anything,
-only stdlib — use system python to run them.
+Works from either binary. Pure migration scripts use stdlib; `reconcile_clients.py` requires the checkout's project venv and dependencies.  
 
 ### 3x-ui panel auth
 
@@ -182,8 +181,8 @@ one client per user with `email == username`). Upgrading the panel from 2.x?
 After the panel upgrade, run the one-time reconciliation (service stopped):
 
 ```bash
-python scripts/reconcile_clients.py          # dry-run report
-python scripts/reconcile_clients.py --apply  # merge legacy clients
+venv/bin/python scripts/reconcile_clients.py          # dry-run report
+venv/bin/python scripts/reconcile_clients.py --apply  # merge legacy clients
 ```
 
 ### Upgrading config to v6
@@ -230,7 +229,7 @@ values use the default. ASGI access records use the `http.access` Python logger;
 `LOGLEVEL_HTTP` configures the redacted access logger (default `INFO`); it overrides the temporary `LOGLEVEL_GUNICORN` fallback. Hypercorn's default access log is disabled in shared settings. Both Gunicorn environment aliases expire at migration step 12 cutover.  
 
 `VERBOSE_LOGGING_OVERRIDES` turns on the existing `verbose` flag for named
-components: `bwatch`, `core` (`Subscription`), and `panels` (`XUiSession`,
+components: `bwatch`, `core` (`AsyncSubscription`), and `panels` (`AsyncXUiSession`,
 including the whitelist panel). Names are case-insensitive and split on
 commas; empty tokens are ignored, so `bwatch,`, `bwatch`, and `,` all parse.
 Unknown names are ignored. Unset or empty leaves every component quiet.
@@ -324,7 +323,7 @@ proxies.
 - The async HTTP entrypoint runs under Hypercorn behind nginx (TLS).  
   Application rate limits use local Redis.
 - Systemd unit recommended for persistence
-- Start Redis before the application; production cutover waits for watcher/bot lifecycle integration.  
+- Start Redis before the application; final migration validation and cutover follow packaging acceptance.  
 - Route every user mutation through `Subscription`. The admin API, WebAPI, and
   Telegram bots already do. Discord mutates users only by calling those HTTP
   APIs.
@@ -344,6 +343,7 @@ refuses that ABI.
 `lang.jsonc` and `config.schema.json` (and, for the main binary, `res/`) can be
 opened. They do not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.
+Release CI also verifies the Nuitka module report and runs the main binary from an unrelated working directory against disposable loopback Redis/panel dependencies, renders bundled templates, checks SQLite integrity, sends SIGTERM and restarts against the same state. No production credentials are required. See [packaging checks](docs/ASYNC_PACKAGING.md).  
 
 `vpn-sub --help` and `vpn-sub-discord --help` print usage and exit. They do not  
 boot the service. `-h` is the same flag. A checkout accepts it too.

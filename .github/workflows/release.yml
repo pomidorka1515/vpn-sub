@@ -21,6 +21,12 @@ jobs:
             extra: >-
               --include-module=asgi
               --include-package=hypercorn
+              --include-package=quart
+              --include-module=telebot.async_telebot
+              --include-module=telebot.asyncio_helper
+              --include-module=aiohttp
+              --include-package=aiosqlite
+              --include-module=redis.asyncio
               --include-module=paths
               --include-module=version
               --include-package=cli
@@ -49,6 +55,8 @@ jobs:
               --nofollow-import-to=flask
               --nofollow-import-to=quart
               --nofollow-import-to=hypercorn
+              --nofollow-import-to=aiosqlite
+              --nofollow-import-to=redis
               --nofollow-import-to=telebot
               --include-module=paths
               --include-module=version
@@ -73,7 +81,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential ccache patchelf
+            build-essential ccache patchelf redis-server
 
       - name: restore ccache
         uses: actions/cache@v4
@@ -86,7 +94,7 @@ jobs:
       - name: install runtime dependencies
         run: |
           python -m pip install -U pip
-          python -m pip install nuitka ordered-set zstandard
+          python -m pip install 'nuitka>=4,<5' ordered-set zstandard
           python -m pip install -r requirements.txt
 
       - name: patch nuitka onefile compression
@@ -105,6 +113,8 @@ jobs:
           source = path.read_text()
           old = "effective_threads = 0 if low_memory or is32BitPython() else job_limit"
           new = "effective_threads = 0  # CPython 3.14 stdlib zstd: nb_workers must be 0"
+          if new in source:
+              raise SystemExit(0)
           if old not in source:
               raise SystemExit(f"nuitka compressor patch missed its target in {path}")
           path.write_text(source.replace(old, new, 1))
@@ -170,6 +180,7 @@ jobs:
             --nofollow-import-to=lib2to3 \
             --output-filename=${{ matrix.name }} \
             --output-dir=build/dist \
+            --report=build/dist/${{ matrix.name }}-report.xml \
             --nofollow-import-to=tests \
             --nofollow-import-to=pytest \
             --nofollow-import-to=unittest \
@@ -243,6 +254,9 @@ jobs:
           # missing config or Redis must not look like a bad binary, and a
           # crash must not look like success. Exit 0 is the only pass.
           build/dist/vpn-sub --probe
+          # Run away from the checkout with a temporary DB/config, private Redis,
+          # and loopback panel fake; exercise resources, DB, Lua limiter and lifespan.
+          python scripts/smoke_async_release.py --binary build/dist/vpn-sub --report build/dist/vpn-sub-report.xml
 
       - name: smoke test
         if: matrix.name == 'vpn-sub-discord'
@@ -252,6 +266,12 @@ jobs:
           # A missing discord.json or a Discord login is not this test. Exit 0
           # is the only pass; a crash is not.
           build/dist/vpn-sub-discord --probe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-report-${{ matrix.name }}
+          path: build/dist/${{ matrix.name }}-report.xml
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
@@ -267,6 +287,7 @@ jobs:
         with:
           path: build/dist
           merge-multiple: true
+          pattern: vpn-sub*
 
       - name: publish
         env:

@@ -39,7 +39,11 @@ def probe() -> None:
 
     from paths import bundled_root
 
-    for module in ("asgi", "hypercorn.asyncio", "session.async_transport", "db.async_database"):
+    for module in (
+        "asgi", "quart", "hypercorn.asyncio", "aiohttp", "aiosqlite",
+        "redis.asyncio", "telebot.async_telebot", "telebot.asyncio_helper",
+        "session.async_transport", "db.async_database", "bots.polling",
+    ):
         import_module(module)
 
     root = bundled_root()
