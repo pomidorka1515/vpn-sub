@@ -307,10 +307,15 @@ jobs:
             exit 1
           fi
           printf '%s\n' "${notes}" > notes.md
+          release_flags=()
+          case "${GITHUB_REF_NAME,,}" in
+            *rc*|*beta*|*alpha*) release_flags+=(--prerelease) ;;
+          esac
           gh release create "${GITHUB_REF_NAME}" \
             build/dist/vpn-sub \
             build/dist/vpn-sub-discord \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --notes-file notes.md \
+            "${release_flags[@]}" \
             --verify-tag
