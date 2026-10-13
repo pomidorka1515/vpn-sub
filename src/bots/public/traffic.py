@@ -56,7 +56,13 @@ class PublicTrafficMixin(PublicFeatureMixin):
             await self._send_message(message.chat.id, t["error_generic"])
 
     async def _render_chart(
-        self, *, uid: int, username: str, days: int, lang: str, chat_id: int,
+        self,
+        *,
+        uid: int,
+        username: str,
+        days: int,
+        lang: str,
+        chat_id: int,
     ) -> None:
         t = self.TEXTS[lang]
         try:
@@ -127,5 +133,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
         except Exception:
             self.log.exception(f"Chart error for uid {uid}")
             await self._send_message(
-                chat_id, t["error_generic"], reply_markup=await self.get_menu(uid),
+                chat_id,
+                t["error_generic"],
+                reply_markup=await self.get_menu(uid),
             )

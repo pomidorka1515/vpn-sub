@@ -14,15 +14,17 @@ if TYPE_CHECKING:
 
 
 async def create_user(db: Database, username: str = "alice", *, token: str | None = None) -> None:
-    (await db.create_user(
-        username=username,
-        uuid=str(uuid.uuid4()),
-        token=token or f"{username}-{'x' * 32}",
-        fingerprint="chrome",
-        displayname=username.title(),
-        ext_username=f"{username}@example.test",
-        ext_password_hash="hash",
-    ))
+    (
+        await db.create_user(
+            username=username,
+            uuid=str(uuid.uuid4()),
+            token=token or f"{username}-{'x' * 32}",
+            fingerprint="chrome",
+            displayname=username.title(),
+            ext_username=f"{username}@example.test",
+            ext_password_hash="hash",
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -112,7 +114,7 @@ async def test_migration_repairs_negative_bandwidth_snapshot_values(
     db = Database(path=db_path)
     await db.start()
     try:
-        rows = (await db.get_bandwidth_snapshots("alice", 0))
+        rows = await db.get_bandwidth_snapshots("alice", 0)
         assert [row["up"] for row in rows] == [5, 0]
         assert [row["down"] for row in rows] == [0, 2]
         assert [row["wl_up"] for row in rows] == [7, 0]
@@ -158,7 +160,7 @@ async def test_auth_token_migration_and_lookup(database: Database, db_path: Path
     await db.start()
     try:
         (await create_user(db))
-        record = (await db.get_user("alice"))
+        record = await db.get_user("alice")
         assert record is not None
         assert record["auth_token"] is None
         (await db.set_auth_token("alice", "a" * 100))
@@ -234,20 +236,22 @@ async def test_metadata_prefix_listing_and_deletion(database: Database) -> None:
 @pytest.mark.asyncio
 async def test_registration_sync_rollback_refunds_finite_code(database: Database) -> None:
     (await database.add_code("invite", "register", uses=1))
-    (await database.register_with_code(
-        code="invite",
-        username="alice",
-        uuid=str(uuid.uuid4()),
-        token="a" * 40,
-        fingerprint="chrome",
-        displayname="Alice",
-        ext_username="alice@example.test",
-        ext_password_hash="hash",
-    ))
+    (
+        await database.register_with_code(
+            code="invite",
+            username="alice",
+            uuid=str(uuid.uuid4()),
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            ext_username="alice@example.test",
+            ext_password_hash="hash",
+        )
+    )
     assert (await database.get_code("invite")) is None
     (await database.rollback_registration_sync("alice"))
     assert not (await database.user_exists("alice"))
-    restored = (await database.get_code("invite"))
+    restored = await database.get_code("invite")
     assert restored is not None
     assert restored["uses"] == 1
 
@@ -255,22 +259,24 @@ async def test_registration_sync_rollback_refunds_finite_code(database: Database
 @pytest.mark.asyncio
 async def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
     (await create_user(database))
-    assert (await database.mark_notification("regular", 123))
+    assert await database.mark_notification("regular", 123)
     assert not (await database.mark_notification("regular", 123))
     (await database.mark_notification("alice:traffic_exhausted:1", "123"))
     (await database.mark_notification("alice:traffic_exhausted:1", ""))
-    (await database.sync_notifications(
-        {"alice:traffic_exhausted:1"},
-        {"alice:restored"},
-    ))
+    (
+        await database.sync_notifications(
+            {"alice:traffic_exhausted:1"},
+            {"alice:restored"},
+        )
+    )
     assert (await database.notification_markers()) == {"alice:restored"}
     # a legacy row sharing the kind string must survive a marker delete
-    assert (await database.notification_seen("alice:traffic_exhausted:1", 123))
+    assert await database.notification_seen("alice:traffic_exhausted:1", 123)
     assert not (await database.notification_seen("alice:traffic_exhausted:1", ""))
     (await database.increment_usage("alice", regular=1234, whitelist=2345))
-    assert (await database.reset_monthly("2026-09", "2026-09-01"))
+    assert await database.reset_monthly("2026-09", "2026-09-01")
     assert not (await database.reset_monthly("2026-09", "2026-09-01"))
-    user = (await database.get_user("alice"))
+    user = await database.get_user("alice")
     assert user is not None
     assert (user["bw_used"], user["wl_used"]) == (0, 0)
     assert not (await database.notification_seen("regular", 123))
@@ -279,7 +285,7 @@ async def test_notifications_monthly_reset_and_snapshots(database: Database) -> 
     (await database.add_bandwidth_snapshot("alice", 10, 1, 2, 3, 4))
     (await database.add_bandwidth_snapshot("alice", 10, 5, 6, 7, 8))
     (await database.add_bandwidth_snapshot("alice", 20, 9, 10, 11, 12))
-    bandwidth_rows = (await database.get_bandwidth_snapshots("alice", 0))
+    bandwidth_rows = await database.get_bandwidth_snapshots("alice", 0)
     assert [row["ts"] for row in bandwidth_rows] == [20, 10]
     assert bandwidth_rows[1]["up"] == 6
     assert (await database.prune_bandwidth_snapshots(20)) == 1
@@ -291,13 +297,15 @@ async def test_notifications_monthly_reset_and_snapshots(database: Database) -> 
 
 @pytest.mark.asyncio
 async def test_bandwidth_snapshot_preserves_named_integer_fields(database: Database) -> None:
-    (await database.create_user(
-        username="snapshot",
-        uuid="uuid-snapshot",
-        token="token-snapshot",
-        fingerprint="chrome",
-        displayname="Snapshot",
-    ))
+    (
+        await database.create_user(
+            username="snapshot",
+            uuid="uuid-snapshot",
+            token="token-snapshot",
+            fingerprint="chrome",
+            displayname="Snapshot",
+        )
+    )
     (await database.add_bandwidth_snapshot("snapshot", 100, 1, 2, 3, 4))
     assert (await database.get_bandwidth_snapshots("snapshot", 100)) == [
         {"ts": 100, "up": 1, "down": 2, "wl_up": 3, "wl_down": 4},

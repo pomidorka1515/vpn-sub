@@ -38,7 +38,8 @@ class RecordingAudit:
 
 @pytest_asyncio.fixture
 async def config_api(
-    tmp_path: Path, database: Database,
+    tmp_path: Path,
+    database: Database,
 ) -> AsyncIterator[tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]]:
     path = tmp_path / "config.json"
     data = json.loads((ROOT / "docs/EXAMPLE.config.json").read_text())
@@ -80,7 +81,9 @@ def test_required_keys_match_schema() -> None:
 
 async def set_config(app: Quart, base: str, values: dict[str, JsonValue]) -> Response:
     return await app.test_client().post(
-        "/sub/privapi/api/config/set", json={"base": base, "values": values}, headers=HEADERS,
+        "/sub/privapi/api/config/set",
+        json={"base": base, "values": values},
+        headers=HEADERS,
     )
 
 

@@ -60,7 +60,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         chat_id = message.chat.id
         if message.text is None:
             await self.bot.send_message(
-                chat_id, "❌ Введите число.", reply_markup=self.get_main_menu(),
+                chat_id,
+                "❌ Введите число.",
+                reply_markup=self.get_main_menu(),
             )
             return
 
@@ -104,7 +106,10 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
 
         language = self.lang_cfg.view()
         chart = await self.sub.res.offloads.rendering.run(
-            leaderboard_chart, lb_data, bandwidth_type=bw_type, lang=language["chart"]["ru"],
+            leaderboard_chart,
+            lb_data,
+            bandwidth_type=bw_type,
+            lang=language["chart"]["ru"],
         )
 
         if chart is None:
@@ -112,7 +117,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             return
 
         sorted_items = sorted(
-            lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc"),
+            lb_data.items(),
+            key=operator.itemgetter(1),
+            reverse=(order == "desc"),
         )
 
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}

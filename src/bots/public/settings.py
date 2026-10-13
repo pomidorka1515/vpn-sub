@@ -48,7 +48,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
                 label = f"✅ {fp}" if fp == current_fp else fp
                 markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_{fp}"))  # pyright: ignore[reportUnknownMemberType]
             await self.bot.send_message(
-                message.chat.id, t["settings_fp_prompt"], reply_markup=markup,
+                message.chat.id,
+                t["settings_fp_prompt"],
+                reply_markup=markup,
             )
         elif action == "set_login":
             msg = await self.bot.send_message(
@@ -178,7 +180,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
             return None
         if not await self.sub.user_svc.get_external_username(username):
             await self.bot.send_message(
-                message.chat.id, t["no_account"], reply_markup=await self.get_menu(uid),
+                message.chat.id,
+                t["no_account"],
+                reply_markup=await self.get_menu(uid),
             )
             return None
         new_pass = text.strip()

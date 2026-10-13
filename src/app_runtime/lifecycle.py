@@ -75,7 +75,8 @@ class Runtime[DependenciesT]:
                 # Retain cleanup ownership even if startup is cancelled again.
                 if self._stop_task is None:
                     self._stop_task = asyncio.create_task(
-                        self._shutdown(), name="runtime:startup-unwind",
+                        self._shutdown(),
+                        name="runtime:startup-unwind",
                     )
                     await asyncio.shield(self._stop_task)
                 raise

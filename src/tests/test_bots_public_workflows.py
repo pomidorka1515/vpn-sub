@@ -131,7 +131,8 @@ def _wire[M: (PublicSettingsMixin, PublicAccountMixin, PublicLoginMixin, PublicT
             domain="https://example.test/",
             profiles={
                 "fast": profile_config(
-                    name=["Fast", "Быстрый"], description=["fast en", "fast ru"],
+                    name=["Fast", "Быстрый"],
+                    description=["fast en", "fast ru"],
                 ),
             },
         ),

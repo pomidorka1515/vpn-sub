@@ -26,7 +26,8 @@ class CodesMixin(ConnectionMixin):
         async with self.connection() as conn:
             return (
                 await conn.row(
-                    "SELECT 1 FROM pending_registration_sync WHERE username = ?", (username,),
+                    "SELECT 1 FROM pending_registration_sync WHERE username = ?",
+                    (username,),
                 )
                 is not None
             )
@@ -65,7 +66,8 @@ class CodesMixin(ConnectionMixin):
     async def get_code(self, code: str) -> CodeRecord | None:
         async with self.connection() as conn:
             row = await conn.row(
-                "SELECT * FROM codes WHERE code = ? AND (permanent = 1 OR uses > 0)", (code,),
+                "SELECT * FROM codes WHERE code = ? AND (permanent = 1 OR uses > 0)",
+                (code,),
             )
             if row is None:
                 return None
@@ -123,7 +125,8 @@ class CodesMixin(ConnectionMixin):
         try:
             async with self.transaction(immediate=True) as conn:
                 row = await conn.row(
-                    "SELECT * FROM codes WHERE code = ? AND action = 'register'", (code,),
+                    "SELECT * FROM codes WHERE code = ? AND action = 'register'",
+                    (code,),
                 )
                 if row is None or (not row["permanent"] and int(row["uses"]) < 1):
                     raise CodeError("invalid code")
@@ -205,10 +208,12 @@ class CodesMixin(ConnectionMixin):
     async def confirm_registration_sync(self, username: str) -> None:
         async with self.transaction(immediate=True) as conn:
             row = await conn.row(
-                "SELECT code FROM pending_registration_sync WHERE username = ?", (username,),
+                "SELECT code FROM pending_registration_sync WHERE username = ?",
+                (username,),
             )
             await conn.execute(
-                "DELETE FROM pending_registration_sync WHERE username = ?", (username,),
+                "DELETE FROM pending_registration_sync WHERE username = ?",
+                (username,),
             )
             if row is not None:
                 await conn.execute(

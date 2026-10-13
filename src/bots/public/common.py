@@ -80,7 +80,9 @@ class PublicCommonMixin(
                 else t["welcome_new"]
             )
             await self.bot.send_message(
-                message.chat.id, msg_text, reply_markup=await self.get_menu(uid),
+                message.chat.id,
+                msg_text,
+                reply_markup=await self.get_menu(uid),
             )
 
     async def set_lang_callback(self, call: types.CallbackQuery) -> None:
@@ -93,7 +95,9 @@ class PublicCommonMixin(
         await self._answer_callback(call.id)
         t = self.TEXTS[new_lang]
         await self.bot.send_message(
-            message.chat.id, t["lang_set"], reply_markup=await self.get_menu(uid),
+            message.chat.id,
+            t["lang_set"],
+            reply_markup=await self.get_menu(uid),
         )
 
         await self._delete_message(message.chat.id, message.message_id)

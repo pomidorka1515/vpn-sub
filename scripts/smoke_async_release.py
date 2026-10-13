@@ -62,17 +62,30 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
             raise web.HTTPUnauthorized
         panel_requests.append(request.path)
         if request.path == "/panel/api/server/status":
-            return web.json_response({"success": True, "msg": "", "obj": {
-                "cpu": 0, "cpuCores": 1, "logicalPro": 1, "cpuSpeedMhz": 1000,
-                "mem": {"current": 0, "total": 1024},
-                "swap": {"current": 0, "total": 1024},
-                "disk": {"current": 0, "total": 1024},
-                "xray": {"state": "running", "errorMsg": "", "version": "smoke"},
-                "uptime": 1, "loads": [0.0], "tcpCount": 0, "udpCount": 0,
-                "netIO": {"up": 0, "down": 0}, "netTraffic": {"sent": 0, "recv": 0},
-                "publicIP": {"ipv4": "127.0.0.1", "ipv6": "::1"},
-                "appStats": {"threads": 1, "mem": 0, "uptime": 1},
-            }})
+            return web.json_response(
+                {
+                    "success": True,
+                    "msg": "",
+                    "obj": {
+                        "cpu": 0,
+                        "cpuCores": 1,
+                        "logicalPro": 1,
+                        "cpuSpeedMhz": 1000,
+                        "mem": {"current": 0, "total": 1024},
+                        "swap": {"current": 0, "total": 1024},
+                        "disk": {"current": 0, "total": 1024},
+                        "xray": {"state": "running", "errorMsg": "", "version": "smoke"},
+                        "uptime": 1,
+                        "loads": [0.0],
+                        "tcpCount": 0,
+                        "udpCount": 0,
+                        "netIO": {"up": 0, "down": 0},
+                        "netTraffic": {"sent": 0, "recv": 0},
+                        "publicIP": {"ipv4": "127.0.0.1", "ipv6": "::1"},
+                        "appStats": {"threads": 1, "mem": 0, "uptime": 1},
+                    },
+                }
+            )
         if request.path not in {"/panel/api/clients/list", "/panel/api/inbounds/list"}:
             raise web.HTTPNotFound
         return web.json_response({"success": True, "msg": "", "obj": []})
@@ -87,9 +100,19 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
     service: asyncio.subprocess.Process | None = None
     try:
         redis = await asyncio.create_subprocess_exec(
-            "redis-server", "--bind", "127.0.0.1", "--port", str(redis_port),
-            "--save", "", "--appendonly", "no", "--dir", str(directory),
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            "redis-server",
+            "--bind",
+            "127.0.0.1",
+            "--port",
+            str(redis_port),
+            "--save",
+            "",
+            "--appendonly",
+            "no",
+            "--dir",
+            str(directory),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
         )
         async with asyncio.timeout(10):
             while True:
@@ -108,18 +131,27 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
         config.pop("bot", None)
         config.pop("publicbot", None)
         config["redis"] = {"url": f"redis://127.0.0.1:{redis_port}/0"}
-        config["3xui"] = {"smoke": {
-            "name": "smoke", "address": "127.0.0.1", "port": str(panel_port),
-            "uri": "", "token": TOKEN, "https": False, "whitelist": False,
-            "inbounds_list": [], "mode": "blacklist",
-        }}
+        config["3xui"] = {
+            "smoke": {
+                "name": "smoke",
+                "address": "127.0.0.1",
+                "port": str(panel_port),
+                "uri": "",
+                "token": TOKEN,
+                "https": False,
+                "whitelist": False,
+                "inbounds_list": [],
+                "mode": "blacklist",
+            }
+        }
         data = directory / "state"
         data.mkdir()
         (data / "config.json").write_text(json.dumps(config))
         # Clear inherited path/serving overrides; compiled language/templates/schema
         # must be located inside the payload, even with an unrelated working dir.
         env = {
-            key: value for key, value in os.environ.items()
+            key: value
+            for key, value in os.environ.items()
             if not key.startswith(("PATH_", "DIR_", "GUNICORN_", "LOGLEVEL", "PYTHON"))
             and key not in {"APP_BIND", "REQUIRE_PROXY", "VERBOSE_LOGGING_OVERRIDES"}
         }
@@ -129,7 +161,11 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
         log_path = directory / "service.log"
         with log_path.open("wb") as output:
             service = await asyncio.create_subprocess_exec(
-                *command, cwd=directory, env=env, stdout=output, stderr=output,
+                *command,
+                cwd=directory,
+                env=env,
+                stdout=output,
+                stderr=output,
             )
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as client:
@@ -139,9 +175,13 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                             if service.returncode is not None:
                                 raise RuntimeError("service exited before readiness")
                             try:
-                                async with client.post(url, json={
-                                    "username": "username", "password": "password",
-                                }) as response:
+                                async with client.post(
+                                    url,
+                                    json={
+                                        "username": "username",
+                                        "password": "password",
+                                    },
+                                ) as response:
                                     if response.status == 200:
                                         payload = await response.json()
                                         if not payload.get("success"):
@@ -153,7 +193,8 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                             await asyncio.sleep(0.1)
                     async with client.get(
                         f"http://127.0.0.1:{http_port}/sub/admin",
-                        cookies={"admin_ui": cookie}, allow_redirects=False,
+                        cookies={"admin_ui": cookie},
+                        allow_redirects=False,
                     ) as response:
                         if response.status != 200 or "<html" not in (await response.text()).lower():
                             raise RuntimeError("bundled admin template did not render")
@@ -167,14 +208,20 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                 # Restart against the same state: verifies lock release, recovery,
                 # resource reopening and an additional orderly shutdown.
                 service = await asyncio.create_subprocess_exec(
-                    *command, cwd=directory, env=env, stdout=output, stderr=output,
+                    *command,
+                    cwd=directory,
+                    env=env,
+                    stdout=output,
+                    stderr=output,
                 )
                 async with aiohttp.ClientSession() as client, asyncio.timeout(120):
                     while True:
                         if service.returncode is not None:
                             raise RuntimeError("service could not restart")
                         try:
-                            async with client.get(f"http://127.0.0.1:{http_port}/sub/admin/login") as response:
+                            async with client.get(
+                                f"http://127.0.0.1:{http_port}/sub/admin/login"
+                            ) as response:
                                 if response.status == 200:
                                     break
                         except aiohttp.ClientConnectionError:
@@ -204,8 +251,14 @@ def main() -> None:
         report = ET.parse(args.report)  # ruff: ignore[suspicious-xml-element-tree-usage] - local compiler output
         modules = {module.attrib["name"] for module in report.iter("module")}
         required = {
-            "asgi", "quart", "hypercorn.asyncio", "aiohttp", "aiosqlite",
-            "redis.asyncio", "telebot.async_telebot", "telebot.asyncio_helper",
+            "asgi",
+            "quart",
+            "hypercorn.asyncio",
+            "aiohttp",
+            "aiosqlite",
+            "redis.asyncio",
+            "telebot.async_telebot",
+            "telebot.asyncio_helper",
         }
         if missing := required - modules:
             raise RuntimeError(f"Nuitka report missing async modules: {sorted(missing)}")

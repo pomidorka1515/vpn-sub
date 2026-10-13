@@ -73,7 +73,10 @@ class AdminUsersMixin(AdminFeatureMixin):
             [f"- <code>{u}</code>{', логин: ' + v if v else ''}" for u, v in online_users.items()],
         )
         await self._send_message(
-            chat_id, text, parse_mode="HTML", reply_markup=self.get_main_menu(),
+            chat_id,
+            text,
+            parse_mode="HTML",
+            reply_markup=self.get_main_menu(),
         )
 
     async def _cb_refresh(self, chat_id: int) -> None:
@@ -158,12 +161,16 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         except AppError as error:
             await self._send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
         except Exception:
             self.log.exception("Telegram handler failed")
             await self._send_message(
-                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu(),
+                chat_id,
+                "❌ Внутренняя ошибка",
+                reply_markup=self.get_main_menu(),
             )
 
     async def _cb_del_user(self, chat_id: int, username: str) -> None:
@@ -171,13 +178,17 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self.sub.business_svc.delete_user(username=username, perma=True)
         except AppError as error:
             await self._send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         except Exception:
             self.log.exception("Telegram handler failed")
             await self._send_message(
-                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_main_menu(),
+                chat_id,
+                "❌ Внутренняя ошибка",
+                reply_markup=self.get_main_menu(),
             )
             return
         await self._send_message(
@@ -210,7 +221,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             await self.bot.send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         current = info.fingerprint
@@ -232,7 +245,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             await self.bot.send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         current = info.bandwidth.limit
@@ -278,7 +293,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             await self.bot.send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         current = info.bandwidth.wl_limit
@@ -324,7 +341,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             await self.bot.send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         current_time = info.time
@@ -384,7 +403,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
             await self.bot.send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_main_menu(),
             )
             return
         current = info.displayname
@@ -476,7 +497,10 @@ class AdminUsersMixin(AdminFeatureMixin):
         self._expect(msg, self._step_add_user_limit, username, displayname)  # pyright: ignore[reportUnknownMemberType]
 
     async def _step_add_user_limit(
-        self, message: types.Message, username: str, displayname: str,
+        self,
+        message: types.Message,
+        username: str,
+        displayname: str,
     ) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):

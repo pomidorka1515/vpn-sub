@@ -19,13 +19,16 @@ type RuntimeFactory = Callable[..., Awaitable[Application]]
 
 
 def create_asgi_application(
-    options: AppOptions | None = None, *, factory: RuntimeFactory = create_application,
+    options: AppOptions | None = None,
+    *,
+    factory: RuntimeFactory = create_application,
 ) -> Quart:
     options = options or AppOptions(
         require_proxy=os.getenv("REQUIRE_PROXY", "1").lower() not in {"0", "false", "no"},
     )
     application = create_api_application(
-        proxy_hops=options.proxy_hops, require_proxy=options.require_proxy,
+        proxy_hops=options.proxy_hops,
+        require_proxy=options.require_proxy,
     )
     application.config["BACKGROUND_TASK_SHUTDOWN_TIMEOUT"] = RUNTIME_SHUTDOWN_TIMEOUT
 
@@ -49,6 +52,7 @@ def create_asgi_application(
             # successful shutdown or close connections beneath unsettled work.
             async with asyncio.timeout(RUNTIME_SHUTDOWN_TIMEOUT):
                 await runtime.stop()
+
     return application
 
 

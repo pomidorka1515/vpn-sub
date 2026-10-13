@@ -20,7 +20,10 @@ def message(text: str, *, uid: int = 42) -> types.Message:
     return cast(
         types.Message,
         SimpleNamespace(
-            text=text, from_user=SimpleNamespace(id=uid), chat=SimpleNamespace(id=7), message_id=1,
+            text=text,
+            from_user=SimpleNamespace(id=uid),
+            chat=SimpleNamespace(id=7),
+            message_id=1,
         ),
     )
 

@@ -48,7 +48,7 @@ async def test_getstatus_returns_metrics(subscription: Subscription) -> None:
         name="panel",
         status_payload={"success": True, "msg": "", "obj": _status_obj()},
     )
-    status = (await subscription.panel_svc.getstatus(await panel_client(subscription, panel)))
+    status = await subscription.panel_svc.getstatus(await panel_client(subscription, panel))
     assert status is not None
     assert status.obj.cpuCores == 2
     assert "server/status" in panel.gets[-1]
@@ -67,7 +67,9 @@ async def test_get_client_parses_panel_client(
 ) -> None:
     (await create_alice(database))
     panel = FakePanel(clients=[make_panel_client("alice", [1, 2], up=3, down=4)])
-    client = (await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "alice"))
+    client = await subscription.panel_svc.get_client(
+        (await panel_client(subscription, panel)), "alice"
+    )
     assert client is not None
     assert client.email == "alice"
     assert client.uuid == USER_UUID
@@ -83,7 +85,9 @@ async def test_get_client_returns_none_when_not_found(
 ) -> None:
     (await create_alice(database))
     panel = FakePanel(clients=[])
-    assert (await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "alice")) is None
+    assert (
+        await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "alice")
+    ) is None
     assert panel.gets[-1] == "panel/api/clients/get/alice"
 
 
@@ -96,7 +100,11 @@ async def test_get_client_raises_unavailable_on_404(
         get_status=404,
     )
     with pytest.raises(PanelUnavailableError):
-        (await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "alice"))
+        (
+            await subscription.panel_svc.get_client(
+                (await panel_client(subscription, panel)), "alice"
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -108,7 +116,11 @@ async def test_client_traffic_raises_unavailable_on_404(
         get_status=404,
     )
     with pytest.raises(PanelUnavailableError):
-        (await subscription.panel_svc.client_traffic((await panel_client(subscription, panel)), "alice"))
+        (
+            await subscription.panel_svc.client_traffic(
+                (await panel_client(subscription, panel)), "alice"
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -120,7 +132,11 @@ async def test_get_client_raises_unavailable_when_panel_is_down(
         get_status=503,
     )
     with pytest.raises(PanelUnavailableError, match="HTTP 503"):
-        (await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "alice"))
+        (
+            await subscription.panel_svc.get_client(
+                (await panel_client(subscription, panel)), "alice"
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -132,7 +148,11 @@ async def test_client_traffic_raises_unavailable_when_panel_is_down(
         get_status=503,
     )
     with pytest.raises(PanelUnavailableError, match="HTTP 503"):
-        (await subscription.panel_svc.client_traffic((await panel_client(subscription, panel)), "alice"))
+        (
+            await subscription.panel_svc.client_traffic(
+                (await panel_client(subscription, panel)), "alice"
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -140,7 +160,9 @@ async def test_get_client_quotes_email_in_path(
     subscription: Subscription,
 ) -> None:
     panel = FakePanel(clients=[])
-    client = (await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "al/ice?x"))
+    client = await subscription.panel_svc.get_client(
+        (await panel_client(subscription, panel)), "al/ice?x"
+    )
     assert client is None
     assert panel.gets[-1] == "panel/api/clients/get/al%2Fice%3Fx"
 
@@ -150,7 +172,9 @@ async def test_client_traffic_quotes_email_in_path(
     subscription: Subscription,
 ) -> None:
     panel = FakePanel(clients=[])
-    traffic = (await subscription.panel_svc.client_traffic((await panel_client(subscription, panel)), "al/ice?x"))
+    traffic = await subscription.panel_svc.client_traffic(
+        (await panel_client(subscription, panel)), "al/ice?x"
+    )
     assert traffic is None
     assert panel.gets[-1] == "panel/api/clients/traffic/al%2Fice%3Fx"
 
@@ -163,7 +187,11 @@ async def test_get_client_raises_with_panel_msg_on_rejection(
         get_payload={"success": False, "msg": "database is locked", "obj": None},
     )
     with pytest.raises(PanelRejectedError, match="database is locked"):
-        (await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "alice"))
+        (
+            await subscription.panel_svc.get_client(
+                (await panel_client(subscription, panel)), "alice"
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -173,7 +201,9 @@ async def test_client_traffic_returns_single_shared_row(
 ) -> None:
     (await create_alice(database))
     panel = FakePanel(clients=[make_panel_client("alice", [1, 2], up=5, down=6)])
-    traffic = (await subscription.panel_svc.client_traffic((await panel_client(subscription, panel)), "alice"))
+    traffic = await subscription.panel_svc.client_traffic(
+        (await panel_client(subscription, panel)), "alice"
+    )
     assert traffic is not None
     assert (traffic.up, traffic.down) == (5, 6)
     assert panel.gets[-1] == "panel/api/clients/traffic/alice"
@@ -186,7 +216,9 @@ async def test_client_traffic_returns_none_when_not_found(
 ) -> None:
     (await create_alice(database))
     panel = FakePanel(clients=[])
-    traffic = (await subscription.panel_svc.client_traffic((await panel_client(subscription, panel)), "alice"))
+    traffic = await subscription.panel_svc.client_traffic(
+        (await panel_client(subscription, panel)), "alice"
+    )
     assert traffic is None
     assert panel.gets[-1] == "panel/api/clients/traffic/alice"
 
@@ -203,7 +235,7 @@ async def test_list_clients_parses_attachments(
             make_panel_client("bob", [2], up=3, down=4),
         ],
     )
-    clients = (await subscription.panel_svc.list_clients(await panel_client(subscription, panel)))
+    clients = await subscription.panel_svc.list_clients(await panel_client(subscription, panel))
     assert [c.email for c in clients] == ["alice", "bob"]
     assert clients[0].inboundIds == [1, 2]
     assert clients[1].traffic is not None
@@ -219,8 +251,8 @@ async def test_clients_snapshot_lists_once_within_ttl(subscription: Subscription
             make_panel_client("bob", [2]),
         ],
     )
-    first = (await subscription.panel_svc.clients_snapshot(await panel_client(subscription, panel)))
-    second = (await subscription.panel_svc.clients_snapshot(await panel_client(subscription, panel)))
+    first = await subscription.panel_svc.clients_snapshot(await panel_client(subscription, panel))
+    second = await subscription.panel_svc.clients_snapshot(await panel_client(subscription, panel))
     assert first["alice"].inboundIds == [1]
     assert second["bob"].email == "bob"
     assert panel.gets.count("panel/api/clients/list") == 1
@@ -252,7 +284,7 @@ async def test_list_clients_parses_numeric_tg_id(
     client = asdict(make_panel_client("alice", [1], up=1, down=2))
     client["tgId"] = 123
     panel = FakePanel(get_payload={"success": True, "msg": "", "obj": [client]})
-    clients = (await subscription.panel_svc.list_clients(await panel_client(subscription, panel)))
+    clients = await subscription.panel_svc.list_clients(await panel_client(subscription, panel))
     assert clients[0].tgId == 123
 
 
@@ -264,7 +296,7 @@ async def test_list_clients_treats_null_inbound_ids_as_unattached(
     unattached = asdict(make_panel_client("bob", [], up=3, down=4))
     unattached["inboundIds"] = None
     panel = FakePanel(get_payload={"success": True, "msg": "", "obj": [attached, unattached]})
-    clients = (await subscription.panel_svc.list_clients(await panel_client(subscription, panel)))
+    clients = await subscription.panel_svc.list_clients(await panel_client(subscription, panel))
     assert [c.email for c in clients] == ["alice", "bob"]
     assert clients[0].inboundIds == [1]
     assert clients[1].inboundIds == []
@@ -279,7 +311,9 @@ async def test_get_client_parses_numeric_tg_id(
     client = asdict(make_panel_client("alice", [1], up=1, down=2))
     client["tgId"] = 123
     panel = FakePanel(get_payload={"success": True, "msg": "", "obj": client})
-    found = (await subscription.panel_svc.get_client((await panel_client(subscription, panel)), "alice"))
+    found = await subscription.panel_svc.get_client(
+        (await panel_client(subscription, panel)), "alice"
+    )
     assert found is not None
     assert found.tgId == 123
 
@@ -293,8 +327,8 @@ async def test_is_online_requires_healthy_panel(
         name="panel",
         post_payload={"success": True, "obj": ["alice"]},
     )
-    subscription = (await make_subscription(database, panels=[panel]))
-    assert (await subscription.panel_svc.is_online("alice"))
+    subscription = await make_subscription(database, panels=[panel])
+    assert await subscription.panel_svc.is_online("alice")
     assert (await subscription.panel_svc.get_online_users()) == ["alice"]
     assert (await subscription.panel_svc.get_online_users(new=True)) == {"alice": None}
     assert panel.posts[0][0] == "panel/api/clients/onlines"

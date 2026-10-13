@@ -18,7 +18,10 @@ class AuditService:
         self._store = store
 
     async def audit(
-        self, *, name: AUDIT_VALUES, info: Mapping[str, JsonValue] | None = None,
+        self,
+        *,
+        name: AUDIT_VALUES,
+        info: Mapping[str, JsonValue] | None = None,
     ) -> None:
         if self._store is None:
             return
@@ -34,7 +37,16 @@ class AuditService:
 
 
 type AUDIT_VALUES = Literal[
-    "sub_hit", "user_refresh", "user_delete", "user_reset", "user_update",
-    "user_update_params", "user_add", "user_update_uuid", "user_consume_code",
-    "code_add", "code_delete", "config_update",
+    "sub_hit",
+    "user_refresh",
+    "user_delete",
+    "user_reset",
+    "user_update",
+    "user_update_params",
+    "user_add",
+    "user_update_uuid",
+    "user_consume_code",
+    "code_add",
+    "code_delete",
+    "config_update",
 ]

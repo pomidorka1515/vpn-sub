@@ -129,5 +129,6 @@ class SchemaMixin(ConnectionMixin):
                     "INSERT INTO app_metadata(key, value) VALUES ('admin_ui_session', '') ON CONFLICT(key) DO NOTHING",
                 )
             await conn.execute(
-                "UPDATE schema_version SET version = ? WHERE id = 1", (self.SCHEMA_VERSION,),
+                "UPDATE schema_version SET version = ? WHERE id = 1",
+                (self.SCHEMA_VERSION,),
             )

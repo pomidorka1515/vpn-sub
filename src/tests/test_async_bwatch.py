@@ -37,7 +37,9 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
         watch.mem["alice"] = BandwidthInfo(10, 20, 30)
 
         async def traffic(
-            whitelist: bool = False, *, work: str = "foreground",
+            whitelist: bool = False,
+            *,
+            work: str = "foreground",
         ) -> dict[str, BandwidthInfo]:
             return {"alice": BandwidthInfo(20, 40, 60)}
 
@@ -137,7 +139,9 @@ async def test_notice_failure_and_concurrent_delivery(tmp_path: Path) -> None:
             return "en"
 
         notifier = Notifier(
-            texts={"en": {notice.kind.text_key: "warning"}}, send=send, language=language,
+            texts={"en": {notice.kind.text_key: "warning"}},
+            send=send,
+            language=language,
         )
         seen: set[str] = set()
         assert not await notifier.deliver("alice", 1, notice, seen)

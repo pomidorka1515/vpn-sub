@@ -91,16 +91,26 @@ async def smoke():
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
     env = dict(
-        os.environ, PYTHONPATH=f"{tmp_path}:{Path.cwd() / 'src'}",
-        APP_BIND=f"127.0.0.1:{port}", LOGLEVEL_HTTP="DEBUG", LOGLEVEL="INFO",
+        os.environ,
+        PYTHONPATH=f"{tmp_path}:{Path.cwd() / 'src'}",
+        APP_BIND=f"127.0.0.1:{port}",
+        LOGLEVEL_HTTP="DEBUG",
+        LOGLEVEL="INFO",
     )
     command = (
         [sys.executable, "-m", "hypercorn", "--config", "python:serve", "smoke:app"]
         if entrypoint == "checkout"
-        else [sys.executable, "-c", "import asyncio, asgi, smoke, main; asgi.app = smoke.app; asyncio.run(main.serve_application())"]
+        else [
+            sys.executable,
+            "-c",
+            "import asyncio, asgi, smoke, main; asgi.app = smoke.app; asyncio.run(main.serve_application())",
+        ]
     )
     process = await asyncio.create_subprocess_exec(
-        *command, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        *command,
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     try:
         async with asyncio.timeout(15):

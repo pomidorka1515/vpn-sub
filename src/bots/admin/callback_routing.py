@@ -93,7 +93,10 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         await self._cb_list_users(chat_id)
 
     async def _handle_list_users_page(
-        self, data: str, chat_id: int, message: types.Message,
+        self,
+        data: str,
+        chat_id: int,
+        message: types.Message,
     ) -> None:
         del message
         await self._cb_list_users(chat_id, int(data.rsplit("_", 1)[1]))
@@ -195,7 +198,8 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
     async def _handle_delete_code(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
         msg = await self.bot.send_message(
-            chat_id, "Введите код для удаления (или /start для отмены):",
+            chat_id,
+            "Введите код для удаления (или /start для отмены):",
         )
         self._expect(msg, self._step_del_code)  # pyright: ignore[reportUnknownMemberType]
 
@@ -260,7 +264,10 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             await handler(chat_id, pending["username"])
 
     async def _handle_fingerprint_save(
-        self, data: str, chat_id: int, message: types.Message,
+        self,
+        data: str,
+        chat_id: int,
+        message: types.Message,
     ) -> None:
         del message
         pending = self._pending_edits.get(chat_id)
@@ -290,14 +297,20 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         self._pending_edits.pop(chat_id, None)
 
     async def _handle_leaderboard_type(
-        self, data: str, chat_id: int, message: types.Message,
+        self,
+        data: str,
+        chat_id: int,
+        message: types.Message,
     ) -> None:
         del message
         self._pending_leaderboard[chat_id] = {"type": data.split("lbt_", 1)[1]}
         await self._cb_leaderboard_order(chat_id)
 
     async def _handle_leaderboard_order(
-        self, data: str, chat_id: int, message: types.Message,
+        self,
+        data: str,
+        chat_id: int,
+        message: types.Message,
     ) -> None:
         del message
         if chat_id in self._pending_leaderboard:

@@ -71,6 +71,8 @@ class PublicLoginMixin(PublicFeatureMixin):
             return None
 
         await self.bot.send_message(
-            message.chat.id, t["login_fail"], reply_markup=await self.get_menu(uid),
+            message.chat.id,
+            t["login_fail"],
+            reply_markup=await self.get_menu(uid),
         )
         return None

@@ -30,13 +30,18 @@ class ProxyMiddleware:
         self.app = app
         self.hops = hops
         self.require_proxy = require_proxy
-        log.setLevel(env_level(
-            "LOGLEVEL_HTTP",
-            logging.INFO,
-        ))
+        log.setLevel(
+            env_level(
+                "LOGLEVEL_HTTP",
+                logging.INFO,
+            )
+        )
 
     async def __call__(
-        self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable,
+        self,
+        scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ) -> None:
         if scope["type"] == "lifespan":
             await self.app(scope, receive, send)
@@ -105,10 +110,16 @@ class ProxyMiddleware:
                 if any(key == "token" for key, _ in parse_qsl(query, keep_blank_values=True)):
                     target += "?token=..."
                 user_agent = dict(scope["headers"]).get(b"user-agent", b"-").decode("latin1")
-                user_agent = re.sub(
-                    r"(?i)\b(token|password|secret|authorization)=([^\s&;]+)",
-                    r"\1=...", user_agent,
-                ).replace('"', '\\"').replace("\r", "").replace("\n", "")
+                user_agent = (
+                    re.sub(
+                        r"(?i)\b(token|password|secret|authorization)=([^\s&;]+)",
+                        r"\1=...",
+                        user_agent,
+                    )
+                    .replace('"', '\\"')
+                    .replace("\r", "")
+                    .replace("\n", "")
+                )
                 log.log(
                     level,
                     '%s > "%s %s HTTP/%s" %s %db "%s"',

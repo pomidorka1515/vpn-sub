@@ -22,7 +22,7 @@ class RecordingAudit:
 async def test_audit_is_silent_without_config(
     database: Database,
 ) -> None:
-    subscription = (await make_subscription(database))
+    subscription = await make_subscription(database)
     (await create_alice(database))
     (await subscription.audit_svc.audit(name="user_add", info={"username": "alice"}))
     (await subscription.business_svc.update_params("alice", displayname="Alice 2"))
@@ -31,10 +31,10 @@ async def test_audit_is_silent_without_config(
 @pytest.mark.asyncio
 async def test_audit_appends_when_configured(database: Database) -> None:
     audit = RecordingAudit()
-    subscription = (await make_subscription(
+    subscription = await make_subscription(
         database,
         audit_cfg=audit,
-    ))
+    )
     (await create_alice(database))
     (await subscription.business_svc.update_params("alice", displayname="Alice 2"))
     assert audit.records

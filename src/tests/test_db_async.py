@@ -23,7 +23,9 @@ if TYPE_CHECKING:
 @pytest_asyncio.fixture
 async def repository(tmp_path: Path) -> AsyncGenerator[Database]:
     db = Database(
-        path=tmp_path / "state.sqlite3", backup_dir=tmp_path / "backups", start_backup=False,
+        path=tmp_path / "state.sqlite3",
+        backup_dir=tmp_path / "backups",
+        start_backup=False,
     )
     await db.start()
     try:
@@ -116,7 +118,9 @@ async def test_bonus_usage_notifications_and_snapshots(repository: Database) -> 
     await create_user(db)
     await db.add_code("bonus", "bonus", gb=3, wl_gb=2, days=1)
     results = await asyncio.gather(
-        db.adjust_bonus("alice", "bonus"), db.adjust_bonus("alice", "bonus"), return_exceptions=True,
+        db.adjust_bonus("alice", "bonus"),
+        db.adjust_bonus("alice", "bonus"),
+        return_exceptions=True,
     )
     assert sum(isinstance(result, dict) for result in results) == 1
     assert sum(isinstance(result, CodeError) for result in results) == 1
@@ -182,7 +186,9 @@ async def test_cancelled_transaction_rolls_back_before_next_writer(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("commit", [False, True])
 async def test_cancellation_during_queued_sql_settles(
-    repository: Database, monkeypatch: MonkeyPatch, commit: bool,
+    repository: Database,
+    monkeypatch: MonkeyPatch,
+    commit: bool,
 ) -> None:
     entered, release = asyncio.Event(), asyncio.Event()
     writer = repository._writer
@@ -227,7 +233,8 @@ async def test_pragmas_leases_and_nested_rejection(repository: Database) -> None
 
 @pytest.mark.asyncio
 async def test_backup_restores_and_close_is_repeatable(
-    repository: Database, tmp_path: Path,
+    repository: Database,
+    tmp_path: Path,
 ) -> None:
     await create_user(repository)
     await repository.backup_now()
@@ -268,7 +275,8 @@ async def test_existing_schema_and_failed_start_unwind(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_rollback_failure_discards_writer(
-    repository: Database, monkeypatch: MonkeyPatch,
+    repository: Database,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     original = Connection._execute
     old_writer = repository._writer

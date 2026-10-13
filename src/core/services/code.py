@@ -78,7 +78,13 @@ class CodeService(BaseService):
             raise ValidationError("uses must be >= 1")
         try:
             await self.db.add_code(
-                code, action, permanent=permanent, days=days, gb=gb, wl_gb=wl_gb, uses=uses,
+                code,
+                action,
+                permanent=permanent,
+                days=days,
+                gb=gb,
+                wl_gb=wl_gb,
+                uses=uses,
             )
         except DuplicateError as exc:
             raise ConflictError(f"code '{code}' already exists") from exc
@@ -131,7 +137,13 @@ class BusinessCodeService(BaseService):
 
     @user_mutation
     async def register_with_code(
-        self, *, code: str, username: str, displayname: str, ext_username: str, ext_password: str,
+        self,
+        *,
+        code: str,
+        username: str,
+        displayname: str,
+        ext_username: str,
+        ext_password: str,
     ) -> RegisterWithCodeInfo:
         if not isinstance(code, str) or not code:
             raise ValidationError("Invalid code")
@@ -232,7 +244,9 @@ class BusinessCodeService(BaseService):
 
     @user_mutation
     async def clear_rollback_failure(
-        self, kind: Literal["uuid", "registration"], username: str,
+        self,
+        kind: Literal["uuid", "registration"],
+        username: str,
     ) -> None:
         if kind not in {"uuid", "registration"}:
             raise ValidationError("Invalid rollback marker kind")

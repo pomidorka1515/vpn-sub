@@ -45,7 +45,7 @@ async def test_delete_user_raises_panel_rejected_error(
     with pytest.raises(PanelRejectedError):
         (await subscription.business_svc.delete_user("alice"))
     # perma DB delete must not run when the panel rejected
-    assert (await database.user_exists("alice"))
+    assert await database.user_exists("alice")
 
 
 @pytest.mark.asyncio
@@ -64,7 +64,9 @@ async def test_update_uuid_raises_panel_rejected_error(
 
     panel.clients.append(make_panel_client("alice", [1]))
     with pytest.raises(PanelRejectedError):
-        (await subscription.business_svc.update_uuid(
-            "alice",
-            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        ))
+        (
+            await subscription.business_svc.update_uuid(
+                "alice",
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            )
+        )

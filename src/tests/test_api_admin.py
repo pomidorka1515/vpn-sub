@@ -45,7 +45,9 @@ async def admin_api(
             app=app,
             cfg=config_snapshot(
                 subscription_config(
-                    api_uri="api", api_token="secret", api_admin_ui_auth=["admin", "panel-secret"],
+                    api_uri="api",
+                    api_token="secret",
+                    api_admin_ui_auth=["admin", "panel-secret"],
                 ),
             ),
             audit_cfg=cast(AsyncLinesConfig, Audit()),
@@ -59,7 +61,8 @@ async def admin_api(
 
 async def sign_in(client: TestClientProtocol) -> None:
     response = await client.post(
-        "/sub/admin/session", json={"username": "admin", "password": "panel-secret"},
+        "/sub/admin/session",
+        json={"username": "admin", "password": "panel-secret"},
     )
     assert response.status_code == 200
     for part in ("admin_ui=", "Path=/sub/admin", "HttpOnly", "Secure", "SameSite=Lax"):
@@ -96,7 +99,8 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
     ],
 )
 async def test_admin_session_rejects_invalid_login(
-    admin_api: tuple[Quart, Subscription], body: dict[str, str],
+    admin_api: tuple[Quart, Subscription],
+    body: dict[str, str],
 ) -> None:
     assert (
         await admin_api[0].test_client().post("/sub/admin/session", json=body)
@@ -108,7 +112,9 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
     client = app.test_client()
     assert (
         await client.post(
-            "/sub/admin/session", data="username=admin", headers={"Content-Type": "text/plain"},
+            "/sub/admin/session",
+            data="username=admin",
+            headers={"Content-Type": "text/plain"},
         )
     ).status_code == 400
     await sign_in(client)
@@ -161,18 +167,26 @@ async def test_user_refresh_aborts_on_non_panel_error(
     app, sub = admin_api
     for name in ("alice", "bob"):
         await sub.res.db.create_user(
-            username=name, uuid=name, token=name, fingerprint="chrome", displayname=name,
+            username=name,
+            uuid=name,
+            token=name,
+            fingerprint="chrome",
+            displayname=name,
         )
 
     async def add_users(
-        username: str, _called_internally: bool = False, *, work: str = "foreground",
+        username: str,
+        _called_internally: bool = False,
+        *,
+        work: str = "foreground",
     ) -> None:
         if username == "bob":
             raise AppError("panel rejected")
 
     sub.business_svc.add_users = add_users  # type: ignore[method-assign]
     response = await app.test_client().get(
-        "/sub/api/api/user/refresh", headers={"Authorization": "secret"},
+        "/sub/api/api/user/refresh",
+        headers={"Authorization": "secret"},
     )
     assert response.status_code == 500
     payload = await response.get_json()
@@ -200,7 +214,8 @@ async def test_health_reports_db_and_process_status(
 
 
 async def test_health_returns_503_when_database_ping_fails(
-    admin_api: tuple[Quart, Subscription], monkeypatch: pytest.MonkeyPatch,
+    admin_api: tuple[Quart, Subscription],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail() -> object:
         raise DatabaseError("down")
@@ -208,7 +223,8 @@ async def test_health_returns_503_when_database_ping_fails(
     app, sub = admin_api
     monkeypatch.setattr(sub.res.db, "connection", fail)
     response = await app.test_client().get(
-        "/sub/api/api/health", headers={"Authorization": "secret"},
+        "/sub/api/api/health",
+        headers={"Authorization": "secret"},
     )
     assert response.status_code == 503
     payload = await response.get_json()
@@ -219,7 +235,10 @@ async def test_health_returns_503_when_database_ping_fails(
 
 @pytest.mark.parametrize(("uri", "api_uri", "root"), [("", "api", "/api"), ("sub", "", "/sub")])
 async def test_admin_empty_uri_contract(
-    database: Database, uri: str, api_uri: str, root: str,
+    database: Database,
+    uri: str,
+    api_uri: str,
+    root: str,
 ) -> None:
     async for app in api_app():
         sub = await make_subscription(database, app=app, uri=uri)
@@ -241,7 +260,8 @@ async def test_admin_empty_uri_contract(
         client = app.test_client()
         panel = f"/{uri}/admin" if uri else "/admin"
         response = await client.post(
-            f"{panel}/session", json={"username": "admin", "password": "panel-secret"},
+            f"{panel}/session",
+            json={"username": "admin", "password": "panel-secret"},
         )
         assert response.status_code == 200
         assert f"Path={panel}" in response.headers["Set-Cookie"]
@@ -257,7 +277,8 @@ async def test_admin_empty_uri_contract(
 
 
 async def test_polling_status_contract(
-    database: Database, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from custom_types import NetTrafficStats
     from sysutil import (
@@ -277,7 +298,8 @@ async def test_polling_status_contract(
         loadavg=LoadAverage(load_1m=0.1, load_5m=0.2, load_15m=0.3),
         network=NetTrafficStats(sent=1, recv=2),
         memory=SystemMemory(
-            ram=RamInfo(total=3, available=2, used=1), swap=SwapInfo(total=0, free=0, used=0),
+            ram=RamInfo(total=3, available=2, used=1),
+            swap=SwapInfo(total=0, free=0, used=0),
         ),
         connections=ConnCount(tcp=5, udp=6),
         app_memory=AppMemory(ram=7, swap=0),
@@ -328,7 +350,8 @@ async def test_polling_status_contract(
         client = app.test_client()
         assert (await client.get("/sub/api/api/state/polling")).status_code == 401
         response = await client.get(
-            "/sub/api/api/state/polling", headers={"Authorization": "secret"},
+            "/sub/api/api/state/polling",
+            headers={"Authorization": "secret"},
         )
         assert response.status_code == 200
         payload = await response.get_json()

@@ -37,7 +37,7 @@ async def test_add_users_creates_client_once_per_panel(database: Database) -> No
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2), make_inbound(3, protocol="trojan")],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     (await subscription.business_svc.add_users("alice"))
@@ -61,7 +61,7 @@ async def test_add_users_attaches_missing_inbounds(database: Database) -> None:
         inbounds=[make_inbound(1), make_inbound(2)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     (await subscription.business_svc.add_users("alice"))
@@ -79,7 +79,7 @@ async def test_add_users_is_noop_when_fully_attached(database: Database) -> None
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     (await subscription.business_svc.add_users("alice"))
@@ -97,15 +97,17 @@ async def test_add_users_uses_one_client_list_not_per_user_gets(database: Databa
             make_panel_client("bob", [1], uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
         ],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
-    (await database.create_user(
-        username="bob",
-        uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        token="b" * 40,
-        fingerprint="chrome",
-        displayname="Bob",
-    ))
+    (
+        await database.create_user(
+            username="bob",
+            uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            token="b" * 40,
+            fingerprint="chrome",
+            displayname="Bob",
+        )
+    )
 
     (await subscription.business_svc.add_users("alice"))
     (await subscription.business_svc.add_users("bob"))
@@ -126,7 +128,7 @@ async def test_add_users_duplicate_add_attaches_from_a_live_get(database: Databa
         ],
     )
     # list said absent; the live row is missing inbound 2
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     await subscription.panel_svc.clients_snapshot(subscription.panels[0])
     subscription.panel_svc._clients["panel"]._value = {}
     (await create_alice(database))
@@ -140,7 +142,7 @@ async def test_add_users_duplicate_add_attaches_from_a_live_get(database: Databa
 @pytest.mark.asyncio
 async def test_add_users_skips_panel_without_vless_inbounds(database: Database) -> None:
     panel = FakePanel(name="panel", inbounds=[make_inbound(1, protocol="trojan")])
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     (await subscription.business_svc.add_users("alice"))
@@ -155,7 +157,7 @@ async def test_add_users_rejects_foreign_client_with_same_email(database: Databa
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1], uuid="ffffffff-ffff-ffff-ffff-ffffffffffff")],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     with pytest.raises(PanelRejectedError, match="different UUID"):
@@ -169,14 +171,14 @@ async def test_delete_user_calls_clients_del_once_per_panel(database: Database) 
         inbounds=[make_inbound(1), make_inbound(2)],
         clients=[make_panel_client("alice", [1, 2])],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     (await subscription.business_svc.delete_user("alice"))
 
     assert [url for url, _ in panel.posts] == ["panel/api/clients/del/alice"]
     assert panel.clients == []
-    assert (await database.user_exists("alice"))
+    assert await database.user_exists("alice")
 
 
 @pytest.mark.asyncio
@@ -194,16 +196,16 @@ async def test_update_user_disables_regular_panel_only(
         clients=[make_panel_client("alice", [2])],
         local=False,
     )
-    subscription = (await make_subscription(
+    subscription = await make_subscription(
         database,
         panels=[regular],
         whitelist_panel=whitelist,
-    ))
+    )
     (await create_alice(database))
 
     (await subscription.business_svc.update_user("alice", enable=False, timee=True))
 
-    record = (await database.get_user("alice"))
+    record = await database.get_user("alice")
     assert record is not None
     assert (record["enabled"], record["enabled_time"]) == (0, 1)
     assert [url for url, _ in regular.posts] == ["panel/api/clients/bulkDisable"]
@@ -220,7 +222,7 @@ async def test_update_user_enable_uses_bulk_enable(database: Database) -> None:
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     (await subscription.business_svc.update_user("alice", enable=True))
@@ -237,7 +239,7 @@ async def test_update_user_rejection_carries_panel_msg(database: Database) -> No
         clients=[make_panel_client("alice", [1])],
         post_payload={"success": False, "msg": "client not found: alice", "obj": None},
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     with pytest.raises(PanelRejectedError, match="client not found"):
@@ -254,10 +256,10 @@ async def test_update_user_skips_panels_without_the_client(database: Database) -
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = (await make_subscription(
+    subscription = await make_subscription(
         database,
         panels=[cast(XUiSession, absent), cast(XUiSession, present)],
-    ))
+    )
     (await create_alice(database))
 
     (await subscription.business_svc.update_user("alice", enable=False))
@@ -273,7 +275,7 @@ async def test_whitelist_status_persists_without_whitelist_panel(
 ) -> None:
     (await create_alice(database))
     (await subscription.business_svc.update_user("alice", wl_enable=False))
-    record = (await database.get_user("alice"))
+    record = await database.get_user("alice")
     assert record is not None
     assert record["enabled_wl"] == 0
 
@@ -286,7 +288,7 @@ async def test_update_uuid_rejects_invalid_value(
     (await create_alice(database))
     with pytest.raises(ValidationError):
         (await subscription.business_svc.update_uuid("alice", "not-a-uuid"))
-    record = (await database.get_user("alice"))
+    record = await database.get_user("alice")
     assert record is not None
     assert str(record["uuid"]) == USER_UUID
 
@@ -300,7 +302,7 @@ async def test_update_uuid_sends_full_row_with_new_id(database: Database) -> Non
         tgId="777",
     )
     panel = FakePanel(name="panel", inbounds=[make_inbound(1)], clients=[existing])
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     (await subscription.business_svc.update_uuid("alice", NEW_UUID))
@@ -313,7 +315,7 @@ async def test_update_uuid_sends_full_row_with_new_id(database: Database) -> Non
     assert updates[0]["comment"] == "keep me"
     assert updates[0]["tgId"] == "777"
     assert panel.clients[0].uuid == NEW_UUID
-    record = (await database.get_user("alice"))
+    record = await database.get_user("alice")
     assert record is not None
     assert str(record["uuid"]) == NEW_UUID
 
@@ -326,10 +328,10 @@ async def test_update_uuid_skips_panels_without_client(database: Database) -> No
         clients=[make_panel_client("alice", [1])],
     )
     unsynced = FakePanel(name="unsynced", inbounds=[make_inbound(2)])
-    subscription = (await make_subscription(
+    subscription = await make_subscription(
         database,
         panels=[cast(XUiSession, synced), cast(XUiSession, unsynced)],
-    ))
+    )
     (await create_alice(database))
 
     (await subscription.business_svc.update_uuid("alice", NEW_UUID))
@@ -350,18 +352,18 @@ async def test_rejected_uuid_update_marks_failure_without_compensation(
             {"success": False, "msg": "rejected", "obj": None, "status_code": 201},
         ],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
 
     with pytest.raises(PanelRejectedError):
         (await subscription.business_svc.update_uuid("alice", NEW_UUID))
 
-    record = (await database.get_user("alice"))
+    record = await database.get_user("alice")
     assert record is not None
     assert str(record["uuid"]) == USER_UUID
     # one atomic attempt per panel, no multi-inbound compensation loop
     assert len(panel.posts) == 1
-    failures = (await subscription.business_code_svc.get_rollback_failures())
+    failures = await subscription.business_code_svc.get_rollback_failures()
     assert "panel" in failures["uuid"]["alice"]["reason"]
 
 
@@ -372,15 +374,17 @@ async def test_uuid_db_conflict_marks_failure(database: Database) -> None:
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     (await create_alice(database))
-    (await database.create_user(
-        username="bob",
-        uuid=NEW_UUID,
-        token="b" * 40,
-        fingerprint="chrome",
-        displayname="Bob",
-    ))
+    (
+        await database.create_user(
+            username="bob",
+            uuid=NEW_UUID,
+            token="b" * 40,
+            fingerprint="chrome",
+            displayname="Bob",
+        )
+    )
 
     from errors import ConflictError, DuplicateError
 
@@ -388,7 +392,7 @@ async def test_uuid_db_conflict_marks_failure(database: Database) -> None:
         (await subscription.business_svc.update_uuid("alice", NEW_UUID))
 
     assert isinstance(conflict.value.__cause__, DuplicateError)
-    failures = (await subscription.business_code_svc.get_rollback_failures())
+    failures = await subscription.business_code_svc.get_rollback_failures()
     assert failures["uuid"]["alice"]["reason"] == "db duplicate uuid"
 
 
@@ -401,16 +405,18 @@ async def test_add_new_user_rolls_back_db_row_when_panel_rejects(
         post_payload={"success": False, "msg": "rejected", "obj": None},
         post_status=201,
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
     with pytest.raises(PanelRejectedError):
-        (await subscription.business_svc.add_new_user(
-            "alice",
-            "Alice",
-            ext_username="alice-login",
-            ext_password="secret",
-            limit=10,
-            wl_limit=5,
-        ))
+        (
+            await subscription.business_svc.add_new_user(
+                "alice",
+                "Alice",
+                ext_username="alice-login",
+                ext_password="secret",
+                limit=10,
+                wl_limit=5,
+            )
+        )
     assert not (await database.user_exists("alice"))
 
 
@@ -421,14 +427,16 @@ async def test_add_users_quotes_username_in_attach_path(database: Database) -> N
         inbounds=[make_inbound(1), make_inbound(2)],
         clients=[make_panel_client("quoted_user", [1])],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
-    (await database.create_user(
-        username="quoted_user",
-        uuid=USER_UUID,
-        token="q" * 40,
-        fingerprint="chrome",
-        displayname="Quoted",
-    ))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
+    (
+        await database.create_user(
+            username="quoted_user",
+            uuid=USER_UUID,
+            token="q" * 40,
+            fingerprint="chrome",
+            displayname="Quoted",
+        )
+    )
 
     (await subscription.business_svc.add_users("quoted_user"))
 
@@ -442,14 +450,16 @@ async def test_delete_user_quotes_username_in_path(database: Database) -> None:
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("quoted_user", [1])],
     )
-    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
-    (await database.create_user(
-        username="quoted_user",
-        uuid=USER_UUID,
-        token="q" * 40,
-        fingerprint="chrome",
-        displayname="Quoted",
-    ))
+    subscription = await make_subscription(database, panels=[cast(XUiSession, panel)])
+    (
+        await database.create_user(
+            username="quoted_user",
+            uuid=USER_UUID,
+            token="q" * 40,
+            fingerprint="chrome",
+            displayname="Quoted",
+        )
+    )
 
     (await subscription.business_svc.delete_user("quoted_user"))
 
@@ -466,10 +476,10 @@ async def test_delete_user_skips_panels_without_the_client(database: Database) -
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = (await make_subscription(
+    subscription = await make_subscription(
         database,
         panels=[cast(XUiSession, absent), cast(XUiSession, present)],
-    ))
+    )
     (await create_alice(database))
 
     (await subscription.business_svc.delete_user("alice"))
@@ -481,7 +491,7 @@ async def test_delete_user_skips_panels_without_the_client(database: Database) -
 
 @pytest.mark.asyncio
 async def test_add_new_user_rejects_panel_unsafe_username(database: Database) -> None:
-    subscription = (await make_subscription(database))
+    subscription = await make_subscription(database)
     with pytest.raises(ValidationError):
         (await subscription.business_svc.add_new_user("bad name", "Bad"))
     with pytest.raises(ValidationError):

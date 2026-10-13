@@ -26,7 +26,8 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_snapshots_reload_failure_and_atomic_commit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = tmp_path / "config.json"
     path.write_text('{"nested": {"value": 1}}')
@@ -71,7 +72,8 @@ async def test_snapshots_reload_failure_and_atomic_commit(
 async def test_cancelled_commit_finishes_and_close_drains(tmp_path: Path) -> None:
     files = BoundedOffload(capacity=2, name="test-files")
     store = AsyncConfig(
-        lambda: Config(path=tmp_path / "config.json", start_backup=False), files=files,
+        lambda: Config(path=tmp_path / "config.json", start_backup=False),
+        files=files,
     )
     await store.start()
     entered = threading.Event()
@@ -97,7 +99,8 @@ async def test_cancelled_commit_finishes_and_close_drains(tmp_path: Path) -> Non
 
 
 async def test_audit_acknowledges_fsync_and_reports_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     files = BoundedOffload(capacity=2, name="test-files")
     path = tmp_path / "audit.jsonl"

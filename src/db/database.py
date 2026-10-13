@@ -26,7 +26,11 @@ if TYPE_CHECKING:
 
 
 class Database(
-    UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin,
+    UsersMixin,
+    CodesMixin,
+    TelegramMixin,
+    StateMixin,
+    SchemaMixin,
 ):
     """Single-loop repository with a transaction-owned writer and leased readers."""
 

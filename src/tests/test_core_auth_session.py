@@ -18,11 +18,11 @@ async def test_reset_user_invalidates_auth_session(
     (await create_alice(database))
     (await database.set_auth_token("alice", "b" * 100))
 
-    result = (await subscription.business_svc.reset_user("alice"))
+    result = await subscription.business_svc.reset_user("alice")
 
     assert result.token != TOKEN_A
     assert (await subscription.user_svc.get_token("alice")) == result.token
-    record = (await database.get_user("alice"))
+    record = await database.get_user("alice")
     assert record is not None
     assert record["auth_token"] is None
     assert (await subscription.user_svc.auth_token_to_user("b" * 100)) is None

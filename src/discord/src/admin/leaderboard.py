@@ -130,7 +130,9 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
             lang=self._chart_lang(),
         )
         sorted_items = sorted(
-            lb_data.items(), key=operator.itemgetter(1), reverse=(order == "desc"),
+            lb_data.items(),
+            key=operator.itemgetter(1),
+            reverse=(order == "desc"),
         )
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         lines: list[str] = []

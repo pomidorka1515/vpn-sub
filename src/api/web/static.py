@@ -93,7 +93,10 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         if body is None:
             response = await make_response(
                 await send_file(
-                    RES_DIR / name, mimetype=mimetype, add_etags=True, cache_timeout=31536000,
+                    RES_DIR / name,
+                    mimetype=mimetype,
+                    add_etags=True,
+                    cache_timeout=31536000,
                 ),
             )
         else:
@@ -157,7 +160,9 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
     async def codemirror_css(self) -> ResponseType:
         name = "vendor/codemirror-5.65.16.min.css"
         return await self._static(
-            name, "text/css", await self.sub.res.offloads.files.run((RES_DIR / name).read_bytes),
+            name,
+            "text/css",
+            await self.sub.res.offloads.files.run((RES_DIR / name).read_bytes),
         )
 
     async def gui_panel(self) -> ResponseType:

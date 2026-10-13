@@ -132,12 +132,19 @@ class StateMixin(ConnectionMixin):
         await self.set_metadata("admin_ui_session", token or "")
 
     async def add_bandwidth_snapshot(
-        self, username: str, ts: int, up: int, down: int, wl_up: int, wl_down: int,
+        self,
+        username: str,
+        ts: int,
+        up: int,
+        down: int,
+        wl_up: int,
+        wl_down: int,
     ) -> None:
         await self.add_bandwidth_snapshots([(username, ts, up, down, wl_up, wl_down)])
 
     async def add_bandwidth_snapshots(
-        self, rows: list[tuple[str, int, int, int, int, int]],
+        self,
+        rows: list[tuple[str, int, int, int, int, int]],
     ) -> None:
         if rows:
             async with self.transaction(immediate=True) as conn:
@@ -150,7 +157,9 @@ class StateMixin(ConnectionMixin):
                 )
 
     async def get_bandwidth_snapshots(
-        self, username: str, cutoff: int,
+        self,
+        username: str,
+        cutoff: int,
     ) -> list[BandwidthSnapshotPayload]:
         async with self.connection() as conn:
             return [
@@ -181,7 +190,8 @@ class StateMixin(ConnectionMixin):
     async def get_state_snapshots(self, cutoff: int) -> list[StateSnapshot]:
         async with self.connection() as conn:
             rows = await conn.rows(
-                "SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC", (cutoff,),
+                "SELECT payload FROM state_snapshots WHERE ts >= ? ORDER BY ts DESC",
+                (cutoff,),
             )
         return [cast(StateSnapshot, json.loads(str(row[0]))) for row in rows]
 

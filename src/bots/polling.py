@@ -29,7 +29,8 @@ class _AsyncExceptionHandler:
 
     async def handle(self, exception: Exception) -> bool:
         self.log.warning(
-            "telegram handler failed: %s", _sanitize_polling_error(exception, self.token),
+            "telegram handler failed: %s",
+            _sanitize_polling_error(exception, self.token),
         )
         return True
 
@@ -78,7 +79,8 @@ class TelegramPollingMixin:
             raise RuntimeError("bot is closed")
         if self._polling_task is None:
             self._polling_task = asyncio.create_task(
-                self._poll_forever(), name=f"{type(self).__name__}:polling",
+                self._poll_forever(),
+                name=f"{type(self).__name__}:polling",
             )
 
     async def _poll_forever(self) -> None:
@@ -103,7 +105,8 @@ class TelegramPollingMixin:
                     offset = batch[-1].update_id + 1
             except Exception as error:
                 self.log.warning(
-                    "telegram polling failed: %s", _sanitize_polling_error(error, self.bot.token),
+                    "telegram polling failed: %s",
+                    _sanitize_polling_error(error, self.bot.token),
                 )
                 delay = _POLLING_RETRY_DELAY
                 result: object = getattr(error, "result_json", None)
@@ -125,7 +128,8 @@ class TelegramPollingMixin:
     async def close(self) -> None:
         if self._close_task is None:
             self._close_task = asyncio.create_task(
-                self._close(), name=f"{type(self).__name__}:close",
+                self._close(),
+                name=f"{type(self).__name__}:close",
             )
         await asyncio.shield(self._close_task)
 

@@ -52,7 +52,9 @@ class BoundedOffload:
             operation_name = getattr(function, "__qualname__", type(function).__name__)
 
         async def operation() -> T:
-            return await named_to_thread(f"{self._name}:{operation_name}", function, *args, **kwargs)
+            return await named_to_thread(
+                f"{self._name}:{operation_name}", function, *args, **kwargs
+            )
 
         task = self._tasks.create(operation, name=f"offload:{self._name}")
         # The registry removes the completed task before waking waiting callers.

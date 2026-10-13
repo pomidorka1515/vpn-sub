@@ -95,13 +95,25 @@ async def make_subscription(
     from core.services.audit import AuditService
 
     sub = await make_async_subscription(
-        database, Path(tempfile.mkdtemp(dir=Path(database.path).parent)),
-        cast("list[FakePanel]", panels or []), cast("FakePanel | None", whitelist_panel),
+        database,
+        Path(tempfile.mkdtemp(dir=Path(database.path).parent)),
+        cast("list[FakePanel]", panels or []),
+        cast("FakePanel | None", whitelist_panel),
     )
     sub.res = replace(sub.res, cfg=config_mock(subscription_config(**config_overrides)))
     if lang_cfg is not None:
         sub.res = replace(sub.res, lang_cfg=lang_cfg)
-    for service in (sub.panel_svc, sub.password_svc, sub.user_svc, sub.bandwidth_svc, sub.business_svc, sub.code_svc, sub.business_code_svc, sub.telegram_svc, sub.leaderboard_svc):
+    for service in (
+        sub.panel_svc,
+        sub.password_svc,
+        sub.user_svc,
+        sub.bandwidth_svc,
+        sub.business_svc,
+        sub.code_svc,
+        sub.business_code_svc,
+        sub.telegram_svc,
+        sub.leaderboard_svc,
+    ):
         service.res = sub.res
     SUBSCRIPTIONS.append(sub)
     if audit_cfg is not None:
@@ -139,7 +151,9 @@ async def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]
 
 
 def make_watch(database: Database, subscription: Subscription) -> BWatch:
-    return BWatch(cfg=config_mock(subscription_config()), db=database, sub=subscription, scheduled=False)
+    return BWatch(
+        cfg=config_mock(subscription_config()), db=database, sub=subscription, scheduled=False
+    )
 
 
 def json_http(data: JsonValue, status_code: int = 200) -> Response:
@@ -514,7 +528,15 @@ async def panel_client(subscription: Subscription, panel: FakePanel) -> XUiSessi
     for client in subscription.panels:
         if isinstance(client._transport, PanelTransport) and client._transport.panel is panel:
             return client
-    client = XUiSession(name=panel.name, address="127.0.0.1", port=8080, uri="", api_token="test", transport=PanelTransport(panel), stamp_dir=tempfile.mkdtemp(dir=Path(subscription.res.db.path).parent))
+    client = XUiSession(
+        name=panel.name,
+        address="127.0.0.1",
+        port=8080,
+        uri="",
+        api_token="test",
+        transport=PanelTransport(panel),
+        stamp_dir=tempfile.mkdtemp(dir=Path(subscription.res.db.path).parent),
+    )
     await client.start()
     subscription.panels.append(client)
     from session.cache import GenerationCache
@@ -523,10 +545,12 @@ async def panel_client(subscription: Subscription, panel: FakePanel) -> XUiSessi
     service = subscription.panel_svc
     service._inbounds[client.name] = GenerationCache(
         stamp_path("inbounds", client.name, client.base_url, directory=client.stamp_dir),
-        files=subscription.res.offloads.files, tasks=service._refreshes,
+        files=subscription.res.offloads.files,
+        tasks=service._refreshes,
     )
     service._clients[client.name] = GenerationCache(
         stamp_path("clients", client.name, client.base_url, directory=client.stamp_dir),
-        files=subscription.res.offloads.files, tasks=service._refreshes,
+        files=subscription.res.offloads.files,
+        tasks=service._refreshes,
     )
     return client

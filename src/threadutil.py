@@ -9,9 +9,13 @@ if TYPE_CHECKING:
 
 
 async def named_to_thread[**P, T](
-    name: str, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs,
+    name: str,
+    function: Callable[P, T],
+    *args: P.args,
+    **kwargs: P.kwargs,
 ) -> T:
     """Label a shared executor worker for this operation, restoring it on exit."""
+
     def worker() -> T:
         thread = threading.current_thread()
         original_name = thread.name

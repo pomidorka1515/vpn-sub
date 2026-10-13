@@ -128,10 +128,13 @@ async def test_producers_quiesce_before_mutations_and_connections_close() -> Non
         events.append("quiesce")
         finish.set()
 
-    runtime = Runtime(None, resources=(
-        OwnedResource("db", FakeResource("db", events)),
-        OwnedResource("producer", FakeResource("producer", events), quiesce=quiesce),
-    ))
+    runtime = Runtime(
+        None,
+        resources=(
+            OwnedResource("db", FakeResource("db", events)),
+            OwnedResource("producer", FakeResource("producer", events), quiesce=quiesce),
+        ),
+    )
     await runtime.start()
 
     async def mutation() -> None:
@@ -144,7 +147,12 @@ async def test_producers_quiesce_before_mutations_and_connections_close() -> Non
     await runtime.stop()
     await caller
     assert events == [
-        "start:db", "start:producer", "quiesce", "mutation:done", "close:producer", "close:db",
+        "start:db",
+        "start:producer",
+        "quiesce",
+        "mutation:done",
+        "close:producer",
+        "close:db",
     ]
 
 

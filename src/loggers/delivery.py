@@ -143,7 +143,9 @@ class AsyncJSONLinesLogger(logging.Handler):
                 "text": text,
             }
             self.delivery.submit(
-                payload, important=record.levelno >= logging.ERROR, fallback_text=text,
+                payload,
+                important=record.levelno >= logging.ERROR,
+                fallback_text=text,
             )
         except Exception:
             self.handleError(record)

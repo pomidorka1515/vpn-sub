@@ -107,7 +107,9 @@ def user_mutation[**P, T](
         if not isinstance(service, BaseService) or not isinstance(username, str):
             raise TypeError("user mutation requires a service and username")
         return await service.res.coordinator.run(
-            [username], lambda: function(*args, **kwargs), name=f"core:{function.__name__}",
+            [username],
+            lambda: function(*args, **kwargs),
+            name=f"core:{function.__name__}",
         )
 
     return wrapped

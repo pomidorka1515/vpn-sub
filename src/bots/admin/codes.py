@@ -28,12 +28,17 @@ class AdminCodesMixin(AdminFeatureMixin):
                 return
             text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{c}</code>" for c in codes])
             await self._send_message(
-                chat_id, text, parse_mode="HTML", reply_markup=self.get_codes_menu(),
+                chat_id,
+                text,
+                parse_mode="HTML",
+                reply_markup=self.get_codes_menu(),
             )
         except Exception:
             self.log.exception("Telegram handler failed")
             await self._send_message(
-                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu(),
+                chat_id,
+                "❌ Внутренняя ошибка",
+                reply_markup=self.get_codes_menu(),
             )
 
     async def _step_info_code(self, message: types.Message) -> None:
@@ -121,7 +126,10 @@ class AdminCodesMixin(AdminFeatureMixin):
         )
 
     async def _step_add_code_days(
-        self, message: types.Message, code_type: str, code_name: str,
+        self,
+        message: types.Message,
+        code_type: str,
+        code_name: str,
     ) -> None:
         text = cast(str, message.text)
         if text.startswith("/"):
@@ -319,10 +327,14 @@ class AdminCodesMixin(AdminFeatureMixin):
             )
         except AppError as error:
             await self._send_message(
-                chat_id, f"❌ {error.message}", reply_markup=self.get_codes_menu(),
+                chat_id,
+                f"❌ {error.message}",
+                reply_markup=self.get_codes_menu(),
             )
         except Exception:
             self.log.exception("Telegram handler failed")
             await self._send_message(
-                chat_id, "❌ Внутренняя ошибка", reply_markup=self.get_codes_menu(),
+                chat_id,
+                "❌ Внутренняя ошибка",
+                reply_markup=self.get_codes_menu(),
             )

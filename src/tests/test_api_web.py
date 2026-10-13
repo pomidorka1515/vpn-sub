@@ -95,7 +95,10 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None
     ],
 )
 async def test_prefixed_static_assets(
-    web_api: tuple[Quart, Database], path: str, mimetype: str, fragment: bytes,
+    web_api: tuple[Quart, Database],
+    path: str,
+    mimetype: str,
+    fragment: bytes,
 ) -> None:
     response = await web_api[0].test_client().get(f"/custom/{path}")
     assert response.status_code == 200
@@ -120,7 +123,8 @@ async def test_prefixed_static_assets(
 
 
 @pytest.mark.parametrize(
-    "module", ["state", "json", "controls", "main", "cards", "validation", "dialog"],
+    "module",
+    ["state", "json", "controls", "main", "cards", "validation", "dialog"],
 )
 async def test_nested_config_modules(web_api: tuple[Quart, Database], module: str) -> None:
     response = await web_api[0].test_client().get(f"/custom/admin/config/config-{module}.js")
@@ -135,7 +139,8 @@ async def test_nested_config_modules(web_api: tuple[Quart, Database], module: st
 
 
 @pytest.mark.parametrize(
-    "path", ["fonts/DejaVuSans.ttf", "fonts/../common.css", "admin/not-a-module.js"],
+    "path",
+    ["fonts/DejaVuSans.ttf", "fonts/../common.css", "admin/not-a-module.js"],
 )
 async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> None:
     assert (await web_api[0].test_client().get(f"/custom/{path}")).status_code == 404
@@ -160,7 +165,8 @@ async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, Database])
 
 async def login(client: TestClientProtocol) -> str:
     response = await client.post(
-        "/custom/webapi/login", json={"username": "alice-login", "password": "secret"},
+        "/custom/webapi/login",
+        json={"username": "alice-login", "password": "secret"},
     )
     assert response.status_code == 200
     cookies = response.headers.getlist("Set-Cookie")

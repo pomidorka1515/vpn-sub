@@ -33,7 +33,11 @@ class Notifier:
         self._delivery_lock = asyncio.Lock()
 
     async def deliver(
-        self, username: str, telegram_id: int | None, notice: Notice, seen: set[str],
+        self,
+        username: str,
+        telegram_id: int | None,
+        notice: Notice,
+        seen: set[str],
     ) -> bool:
         async with self._delivery_lock:
             key = account_key(username, notice.marker)

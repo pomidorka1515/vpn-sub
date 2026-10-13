@@ -37,7 +37,8 @@ async def db(tmp_path: Path) -> AsyncGenerator[Database]:
 
 @pytest.mark.asyncio
 async def test_cancelled_registration_settles_siblings_then_compensates(
-    db: Database, tmp_path: Path,
+    db: Database,
+    tmp_path: Path,
 ) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
     rejected = FakePanel(name="rejected", inbounds=[make_inbound(1)])
@@ -46,7 +47,10 @@ async def test_cancelled_registration_settles_siblings_then_compensates(
     original = sub.business_svc._post
 
     async def post(
-        panel: XUiSession, route: str, body: Mapping[str, JsonValue], what: str,
+        panel: XUiSession,
+        route: str,
+        body: Mapping[str, JsonValue],
+        what: str,
     ) -> None:
         if route.endswith("clients/add") and panel is sub.panels[0]:
             await original(panel, route, body, what)
@@ -97,18 +101,26 @@ async def test_cancelled_registration_settles_siblings_then_compensates(
 
 @pytest.mark.asyncio
 async def test_reset_delete_race_does_not_resurrect_client(
-    db: Database, tmp_path: Path,
+    db: Database,
+    tmp_path: Path,
 ) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])], inbounds=[make_inbound(1)])
     sub = await make_async_subscription(db, tmp_path, [panel])
     await db.create_user(
-        username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome", displayname="Alice",
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
     )
     started, release = asyncio.Event(), asyncio.Event()
     original = sub.business_svc._post
 
     async def update(
-        panel: XUiSession, route: str, body: Mapping[str, JsonValue], what: str,
+        panel: XUiSession,
+        route: str,
+        body: Mapping[str, JsonValue],
+        what: str,
     ) -> None:
         started.set()
         await release.wait()
@@ -139,10 +151,13 @@ async def test_reset_delete_race_does_not_resurrect_client(
 
 @pytest.mark.asyncio
 async def test_fanout_waits_for_later_write_before_raising(
-    db: Database, tmp_path: Path,
+    db: Database,
+    tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(
-        db, tmp_path, [FakePanel(name="first"), FakePanel(name="later")],
+        db,
+        tmp_path,
+        [FakePanel(name="first"), FakePanel(name="later")],
     )
     started, release = asyncio.Event(), asyncio.Event()
     finished: list[str] = []
@@ -172,10 +187,13 @@ async def test_fanout_waits_for_later_write_before_raising(
 
 @pytest.mark.asyncio
 async def test_background_capacity_does_not_block_foreground(
-    db: Database, tmp_path: Path,
+    db: Database,
+    tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(
-        db, tmp_path, [FakePanel(name=str(index)) for index in range(12)],
+        db,
+        tmp_path,
+        [FakePanel(name=str(index)) for index in range(12)],
     )
     started, release = asyncio.Event(), asyncio.Event()
     active = peak = 0
@@ -211,7 +229,9 @@ async def test_cache_invalidation_and_cancelled_single_flight_waiter(tmp_path: P
     files = BoundedOffload(capacity=1, name="test-files")
     tasks = TaskRegistry()
     cache = GenerationCache[list[str]](
-        str(tmp_path / "clients.stamp"), files=files, tasks=tasks,
+        str(tmp_path / "clients.stamp"),
+        files=files,
+        tasks=tasks,
     )
     started, release = asyncio.Event(), asyncio.Event()
     calls = 0
@@ -255,7 +275,8 @@ async def test_cache_invalidation_and_cancelled_single_flight_waiter(tmp_path: P
 @pytest.mark.asyncio
 @pytest.mark.parametrize("external", [False, True])
 async def test_refresh_cannot_publish_after_generation_changes(
-    tmp_path: Path, external: bool,
+    tmp_path: Path,
+    external: bool,
 ) -> None:
     files = BoundedOffload(capacity=1, name="test-files")
     tasks = TaskRegistry()
@@ -329,14 +350,18 @@ async def test_ordered_multi_user_locks_bounded_admission_and_forced_cancel() ->
     finally:
         release.set()
         await asyncio.gather(
-            one, *([two] if two else []), *([drain] if drain else []), return_exceptions=True,
+            one,
+            *([two] if two else []),
+            *([drain] if drain else []),
+            return_exceptions=True,
         )
         await registry.drain()
 
 
 @pytest.mark.asyncio
 async def test_quota_rechecks_limit_after_waiting_for_admin_mutation(
-    db: Database, tmp_path: Path,
+    db: Database,
+    tmp_path: Path,
 ) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])])
     sub = await make_async_subscription(db, tmp_path, [panel])

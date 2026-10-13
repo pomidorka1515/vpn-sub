@@ -17,7 +17,7 @@ async def test_telegram_language_round_trip(subscription: Subscription) -> None:
     assert (await subscription.telegram_svc.get_telegram_language(123)) == "ru"
     assert not (await subscription.telegram_svc.has_telegram_language(123))
     (await subscription.telegram_svc.set_telegram_language(123, "en"))
-    assert (await subscription.telegram_svc.has_telegram_language(123))
+    assert await subscription.telegram_svc.has_telegram_language(123)
     assert (await subscription.telegram_svc.get_telegram_language(123)) == "en"
 
 
@@ -28,10 +28,10 @@ async def test_telegram_bind_unbind_and_reverse_lookup(
 ) -> None:
     (await create_alice(database))
     (await subscription.telegram_svc.set_telegram_user(123, "alice"))
-    assert (await subscription.telegram_svc.is_registered(123))
+    assert await subscription.telegram_svc.is_registered(123)
     assert (await subscription.telegram_svc.get_username_telegram(123)) == "alice"
     assert (await subscription.telegram_svc.get_username_telegram("alice", reverse=True)) == 123
-    info = (await subscription.telegram_svc.get_info_telegram(123))
+    info = await subscription.telegram_svc.get_info_telegram(123)
     assert info.displayname == "Alice"
     (await subscription.telegram_svc.set_telegram_user(123, None))
     assert not (await subscription.telegram_svc.is_registered(123))
@@ -48,7 +48,7 @@ async def test_telegram_bonus_requires_bound_user(
     with pytest.raises(NotFoundError):
         (await subscription.telegram_svc.bonus_code(123, "bonus1"))
     (await subscription.telegram_svc.set_telegram_user(123, "alice"))
-    result = (await subscription.telegram_svc.bonus_code(123, "bonus1"))
+    result = await subscription.telegram_svc.bonus_code(123, "bonus1")
     assert result.gb == 2
     assert result.wl_gb == 3
 
