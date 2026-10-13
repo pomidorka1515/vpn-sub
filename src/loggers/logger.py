@@ -8,14 +8,11 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .colors import Colors
 from .common import _ANSI_ESCAPE
-from .handlers import _JSONLinesLogger
 from .level import TRACE, env_level
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
     from types import TracebackType
-
-    from config import LinesConfig
 
 __all__ = ["TRACE", "Logger"]
 
@@ -92,13 +89,6 @@ class Logger(logging.Logger):
             fmt="%(asctime)s %(levelname)s [%(name)s] [%(threadName)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-
-    def set_jsonl_handler(self, lines_config: LinesConfig, level: int | None = None) -> None:
-        self.handlers = [h for h in self.handlers if not isinstance(h, _JSONLinesLogger)]
-        jsonl_handler = _JSONLinesLogger(lines_config)
-        if level is None:
-            jsonl_handler.setLevel(logging.INFO)
-        self.addHandler(jsonl_handler)
 
     @contextmanager
     def loading(self) -> Generator[None]:

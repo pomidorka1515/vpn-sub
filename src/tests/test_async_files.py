@@ -13,14 +13,14 @@ from config import Config, LinesConfig
 from config.store import AsyncConfig, AsyncLinesConfig, FileSchedules
 from core.services.audit import AuditService
 from errors import FileCorruptionError
-from loggers.delivery import AsyncJSONLinesLogger, AsyncTelegramLogger, LogDelivery
+from loggers.delivery import AsyncTelegramLogger, LogDelivery
 from threadutil import named_to_thread
 
 if TYPE_CHECKING:
     from collections.abc import MutableMapping
     from pathlib import Path
 
-    from config import JsonDict, JsonValue
+    from config import JsonValue
 
 pytestmark = pytest.mark.asyncio
 
@@ -128,19 +128,19 @@ async def test_audit_acknowledges_fsync_and_reports_failure(
 
 
 async def test_thread_logging_bounded_delivery_and_drain() -> None:
-    received: list[JsonDict] = []
+    received: list[str] = []
     fallback: list[str] = []
     entered = asyncio.Event()
     release = asyncio.Event()
 
-    async def deliver(record: JsonDict) -> None:
+    async def deliver(record: str) -> None:
         entered.set()
         await release.wait()
         received.append(record)
 
     delivery = LogDelivery(deliver, name="test-logs", capacity=1, fallback=fallback.append)
     await delivery.start()
-    handler = AsyncJSONLinesLogger(delivery)
+    handler = AsyncTelegramLogger(delivery)
 
     def emit(message: str) -> None:
         handler.handle(logging.LogRecord("test", logging.ERROR, __file__, 1, message, (), None))
@@ -156,8 +156,7 @@ async def test_thread_logging_bounded_delivery_and_drain() -> None:
     assert not close.done()
     release.set()
     await close
-    assert [record["text"] for record in received] == ["first", "second"]
-    assert all(record["threadname"] != "MainThread" for record in received)
+    assert received == ["<code>first</code>", "<code>second</code>"]
 
 
 async def test_log_delivery_failure_no_recursion_and_timeout() -> None:

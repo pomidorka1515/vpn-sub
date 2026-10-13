@@ -207,7 +207,6 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | `DIR_BACKUPS`   | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored                     |
 | `PATH_CONFIG`   | `<DIR_DATA>/config.json` | Path to the main application configuration                              |
 | `PATH_DB`       | `<DIR_DATA>/state.sqlite3` | Path to the SQLite database                                           |
-| `PATH_LOG`      | `<DIR_DATA>/log.jsonl`   | Path to application event logs (JSONL)                                  |
 | `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
 | `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
 | `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
@@ -255,7 +254,6 @@ WorkingDirectory=/opt/vpn-sub
 # Environment="DIR_BACKUPS=/var/backups/vpn-sub"
 # Environment="PATH_CONFIG=/etc/vpn-sub/config.json"
 # Environment="PATH_DB=/var/lib/vpn-sub/state.sqlite3"
-# Environment="PATH_LOG=/var/log/vpn-sub/log.jsonl"
 # Environment="PATH_AUDIT=/var/log/vpn-sub/audit.jsonl"
 # Environment="PATH_LANG=/path/to/vpn-sub/lang.jsonc"
 # Environment="APP_BIND=127.0.0.1:5550"

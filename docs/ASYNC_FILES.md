@@ -1,6 +1,6 @@
 # Async config and durable file boundaries (Step 5)  
   
-`config.store.AsyncConfig[Doc]` and `AsyncLinesConfig` are injectable runtime resources. Constructors only assemble dependencies; `start()` invokes the supplied synchronous store factory through the runtime's bounded file offload service. Factories must pass `start_backup=False`. The synchronous config APIs remain available to existing callers and the separate Discord process. Production composition uses these resources. The synchronous config stores and JSONL logger remain supported for the separate Discord process.  
+`config.store.AsyncConfig[Doc]` and `AsyncLinesConfig` are injectable runtime resources. Constructors only assemble dependencies; `start()` invokes the supplied synchronous store factory through the runtime's bounded file offload service. Factories must pass `start_backup=False`. The synchronous config APIs remain available to existing callers and the separate Discord process. Production composition uses these resources.  
   
 ## Config snapshots and operations  
   
@@ -17,7 +17,7 @@
   
 ## Log delivery  
   
-`loggers.delivery` supplies JSONL and Telegram handlers plus `LogDelivery[T]`. Runtime composition owns each delivery resource and supplies an awaitable destination (for Telegram, the later async bot). Handlers format/enqueue synchronously; one named consumer performs serial awaited delivery. JSONL retains existing fields and adds task names. Telegram preserves ANSI removal and HTML escaping.  
+`loggers.delivery` supplies the Telegram handler and `LogDelivery[T]`. Runtime composition owns each delivery resource and supplies an awaitable bot destination. The handler formats/enqueues synchronously; one named consumer performs serial awaited delivery. Telegram preserves ANSI removal and HTML escaping. Application logs go to stderr for collection by journald; JSONL persistence is reserved for the audit trail.  
   
 - Capacity defaults to 256 queued records, plus one active delivery. A bounded `queue.Queue` and thread-safe empty-to-nonempty loop wakeup support records emitted by offload threads without an unbounded callback per record.  
 - Overflow drops the newest record and increments `dropped`. ERROR+ records fall back directly to stderr. No blocking file or Telegram call runs in `emit()`.  

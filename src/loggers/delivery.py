@@ -7,16 +7,12 @@ import queue
 import sys
 import threading
 from contextvars import ContextVar
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from .common import _ANSI_ESCAPE
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-
-    from config import JsonDict
-    from config.store import AsyncLinesConfig
 
 _IN_LOG_DELIVERY: ContextVar[bool] = ContextVar("in_log_delivery", default=False)
 
@@ -121,36 +117,6 @@ class LogDelivery[T]:
             await asyncio.wait_for(asyncio.shield(self._task), timeout=self._drain_timeout)
 
 
-class AsyncJSONLinesLogger(logging.Handler):
-    def __init__(self, delivery: LogDelivery[JsonDict]) -> None:
-        super().__init__()
-        self.delivery = delivery
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if _IN_LOG_DELIVERY.get():
-            return
-        try:
-            text = _ANSI_ESCAPE.sub("", self.format(record))
-            payload: JsonDict = {
-                "ts": record.created,
-                "date": datetime.fromtimestamp(record.created, tz=UTC).strftime(
-                    "%d.%m.%Y %H:%M:%S",
-                ),
-                "level": record.levelname,
-                "name": record.name,
-                "threadname": record.threadName,
-                "taskname": record.taskName,
-                "text": text,
-            }
-            self.delivery.submit(
-                payload,
-                important=record.levelno >= logging.ERROR,
-                fallback_text=text,
-            )
-        except Exception:
-            self.handleError(record)
-
-
 class AsyncTelegramLogger(logging.Handler):
     def __init__(self, delivery: LogDelivery[str]) -> None:
         super().__init__()
@@ -168,7 +134,3 @@ class AsyncTelegramLogger(logging.Handler):
             )
         except Exception:
             self.handleError(record)
-
-
-def json_lines_delivery(store: AsyncLinesConfig, *, capacity: int = 256) -> LogDelivery[JsonDict]:
-    return LogDelivery(store.append, name="logs:jsonl", capacity=capacity)

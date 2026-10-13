@@ -29,7 +29,6 @@ class AppPaths:
     config: Path
     language: Path
     database: Path
-    log: Path
     audit: Path
     primary_lock: Path
 
@@ -42,7 +41,6 @@ class AppPaths:
             config=Path(os.getenv("PATH_CONFIG", data / "config.json")),
             language=Path(os.getenv("PATH_LANG", bundled_root() / "lang.jsonc")),
             database=Path(os.getenv("PATH_DB", data / "state.sqlite3")),
-            log=Path(os.getenv("PATH_LOG", data / "log.jsonl")),
             audit=Path(os.getenv("PATH_AUDIT", data / "audit.jsonl")),
             primary_lock=runtime_dir(data) / ".primary.lock",
         )

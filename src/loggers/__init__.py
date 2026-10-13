@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from .colors import Colors, color_status
 from .common import _ANSI_ESCAPE, _safe_handle_error
-from .handlers import _JSONLinesLogger
 from .level import LEVELS, TRACE, env_level, parse_level
 from .logger import Logger
 
@@ -20,7 +19,6 @@ __all__ = [
     "_ANSI_ESCAPE",
     "Colors",
     "Logger",
-    "_JSONLinesLogger",
     "_safe_handle_error",
     "color_status",
     "env_level",

@@ -35,7 +35,6 @@ def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> N
         "PATH_CONFIG",
         "PATH_LANG",
         "PATH_DB",
-        "PATH_LOG",
         "PATH_AUDIT",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -47,7 +46,6 @@ def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> N
         config=data / "config.json",
         language=root / "lang.jsonc",
         database=data / "state.sqlite3",
-        log=data / "log.jsonl",
         audit=data / "audit.jsonl",
         primary_lock=runtime_dir(data) / ".primary.lock",
     )
@@ -125,7 +123,6 @@ def paths(tmp_path: Path) -> AppPaths:
         config=config,
         language=root / "lang.jsonc",
         database=data / "state.sqlite3",
-        log=data / "log.jsonl",
         audit=data / "audit.jsonl",
         primary_lock=data / ".primary.lock",
     )

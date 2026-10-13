@@ -1,17 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from config import LinesConfig
 from loggers import TRACE, Colors, Logger
-from loggers.handlers import _JSONLinesLogger
 from loggers.level import env_level, parse_level
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 
 def test_colors_are_ansi_strings() -> None:
@@ -112,23 +106,3 @@ def test_logger_uses_loglevel_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LOGLEVEL", "12")
     floored = Logger("env-level-int")
     assert floored.level == logging.DEBUG
-
-
-def test_jsonl_strips_message_colors() -> None:
-    stored: list[Mapping[str, object]] = []
-
-    class _Lines:
-        def append(self, record: Mapping[str, object]) -> None:
-            stored.append(record)
-
-    handler = _JSONLinesLogger(cast(LinesConfig, _Lines()))
-    logger = Logger("colors")
-    logger.handlers.clear()
-    logger.addHandler(handler)
-    logger.propagate = False
-
-    logger.info(
-        f"{Colors.BOLD}{Colors.ITALIC}{Colors.RED}Hello {Colors.GREEN}World!{Colors.RESET} regular",
-    )
-
-    assert stored[0]["text"] == "Hello World! regular"
