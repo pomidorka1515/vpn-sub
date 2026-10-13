@@ -4,6 +4,7 @@ import fcntl
 from typing import TYPE_CHECKING, BinaryIO, cast
 
 from session.client import XUiSession
+from threadutil import named_to_thread
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,7 +23,6 @@ class PrimaryLock:
     async def start(self) -> None:
         if self._handle is not None:
             return
-        import asyncio
 
         def acquire() -> BinaryIO:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -34,7 +34,7 @@ class PrimaryLock:
                 raise RuntimeError("another application instance holds the primary lock") from None
             return handle
 
-        self._handle = await asyncio.to_thread(acquire)
+        self._handle = await named_to_thread("files:primary-lock:acquire", acquire)
 
     async def close(self) -> None:
         if self._handle is not None:

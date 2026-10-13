@@ -9,6 +9,8 @@ import os
 
 from hypercorn.config import Config
 
+from loggers.server import ServerLogger
+
 HTTP_DRAIN_TIMEOUT = 10
 RUNTIME_SHUTDOWN_TIMEOUT = 60
 STARTUP_TIMEOUT = 120
@@ -21,6 +23,7 @@ def server_config() -> Config:
     config.worker_class = "asyncio"
     config.accesslog = None  # Privacy-preserving API middleware owns access logs.
     config.errorlog = "-"
+    config.logger_class = ServerLogger
     config.graceful_timeout = HTTP_DRAIN_TIMEOUT
     config.startup_timeout = STARTUP_TIMEOUT
     config.shutdown_timeout = RUNTIME_SHUTDOWN_TIMEOUT + 5
@@ -35,6 +38,7 @@ workers = _config.workers
 worker_class = _config.worker_class
 accesslog = _config.accesslog
 errorlog = _config.errorlog
+logger_class = _config.logger_class
 graceful_timeout = _config.graceful_timeout
 startup_timeout = _config.startup_timeout
 shutdown_timeout = _config.shutdown_timeout

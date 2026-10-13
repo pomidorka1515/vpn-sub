@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import operator
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -8,6 +7,7 @@ import discord
 from chart import leaderboard_chart
 from composition import AdminFeatureMixin
 from payloads import number, object_rows
+from threadutil import named_to_thread
 from util import fmt_bytes, truncate_utf8
 
 from .common import result_obj
@@ -122,7 +122,8 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         if not lb_data:
             await self._respond(interaction, "Нет данных!", view=self.main_menu_view())
             return
-        image = await asyncio.to_thread(
+        image = await named_to_thread(
+            "rendering:discord:admin:leaderboard",
             leaderboard_chart,
             lb_data,
             bandwidth_type=bw_type,

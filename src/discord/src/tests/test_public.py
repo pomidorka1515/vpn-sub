@@ -214,14 +214,16 @@ def test_chart_uses_history_and_stats(public_bot_factory: PublicBotFactory) -> N
     interaction = FakeInteraction()
 
     async def fake_to_thread[**P](
+        name: str,
         func: Callable[P, object],
         /,
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> None:
+        assert name == "rendering:discord:public:bandwidth"
         del func, args, kwargs
 
-    with patch("public.traffic.asyncio.to_thread", fake_to_thread):
+    with patch("public.traffic.named_to_thread", fake_to_thread):
         run(bot.render_chart(interaction, 14))  # type: ignore[arg-type]
     paths = [str(call["url"]) for call in session.calls]
     assert paths[0].endswith("/history")
@@ -528,11 +530,13 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
     second = FakeInteraction()
 
     async def fake_to_thread[**P](
+        name: str,
         func: Callable[P, object],
         /,
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> None:
+        assert name == "rendering:discord:public:bandwidth"
         del func, args, kwargs
         entered.set()
         await release.wait()
@@ -544,7 +548,7 @@ def test_render_chart_holds_lock_and_busy_second_call(public_bot_factory: Public
         release.set()
         await asyncio.wait_for(task, timeout=1)
 
-    with patch("public.traffic.asyncio.to_thread", fake_to_thread):
+    with patch("public.traffic.named_to_thread", fake_to_thread):
         run(scenario())
 
     assert len(session.calls) == 2

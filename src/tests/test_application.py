@@ -283,13 +283,14 @@ async def test_access_logging_redacts_tokens(caplog: pytest.LogCaptureFixture) -
     async def polling() -> str:
         return "ok"
 
-    with caplog.at_level(5, logger="http.access"):
+    with caplog.at_level(5, logger="HTTP"):
         await app.test_client().get(
             "/sub?token=secret&password=hidden", headers={"User-Agent": "token=agentsecret"},
         )
         await app.test_client().get("/api/state/polling")
     assert "secret" not in caplog.text
     assert "hidden" not in caplog.text
-    records = [record for record in caplog.records if record.name == "http.access"]
+    records = [record for record in caplog.records if record.name == "HTTP"]
     assert records[0].levelno == logging.DEBUG
+    assert '/sub?token=... HTTP/1.1" \x1b[32m200\x1b[0m 2b "token=..."' in records[0].getMessage()
     assert records[1].levelno == 5

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qsl
 
+from loggers import Logger, color_status
 from loggers.level import TRACE, env_level
 
 if TYPE_CHECKING:
@@ -14,7 +17,8 @@ if TYPE_CHECKING:
         Scope,
     )
 
-log = logging.getLogger("http.access")
+log = Logger("HTTP", level=env_level("LOGLEVEL_HTTP", logging.INFO))
+log.parent = logging.getLogger()
 
 
 class ProxyMiddleware:
@@ -72,12 +76,15 @@ class ProxyMiddleware:
                     (key, value) for key, value in scope["headers"] if key != b"host"
                 ] + [(b"host", host)]
         status = 500
+        sent = 0
 
         async def logged_send(message: ASGISendEvent) -> None:
-            nonlocal status
+            nonlocal status, sent
             # ASGI messages have a tagged union type; narrow it before access.
             if message["type"] == "http.response.start":
                 status = message["status"]
+            elif message["type"] == "http.response.body":
+                sent += len(message.get("body", b""))
             await send(message)
 
         try:
@@ -93,12 +100,23 @@ class ProxyMiddleware:
                     else logging.INFO
                 )
                 client = scope.get("client")  # pyright: ignore[reportUnknownMemberType]  # Upstream extensions contain unparameterized dicts.
+                target = path
+                query = scope.get("query_string", b"").decode("latin1")
+                if any(key == "token" for key, _ in parse_qsl(query, keep_blank_values=True)):
+                    target += "?token=..."
+                user_agent = dict(scope["headers"]).get(b"user-agent", b"-").decode("latin1")
+                user_agent = re.sub(
+                    r"(?i)\b(token|password|secret|authorization)=([^\s&;]+)",
+                    r"\1=...", user_agent,
+                ).replace('"', '\\"').replace("\r", "").replace("\n", "")
                 log.log(
                     level,
-                    '%s > "%s %s HTTP/%s" %d',
+                    '%s > "%s %s HTTP/%s" %s %db "%s"',
                     (client or ("-", 0))[0],
                     scope["method"],
-                    path,
+                    target,
                     scope["http_version"],
-                    status,
+                    color_status(str(status)),
+                    sent,
+                    user_agent,
                 )

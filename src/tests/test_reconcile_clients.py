@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 import json
 import sys
@@ -15,6 +14,7 @@ from helpers import TOKEN_A, USER_UUID, FakePanel, create_alice, make_inbound, m
 
 from db import Database
 from session import XUiSession
+from threadutil import named_to_thread
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -216,7 +216,7 @@ async def test_main_is_dry_run_by_default(
     monkeypatch.setattr(rc, "_build_panel", fake_build_panel)
     await create_alice(database)
 
-    code = await asyncio.to_thread(rc.main,
+    code = await named_to_thread("test:reconcile:cli", rc.main,
         [
             "--config",
             str(_write_config(tmp_path)),

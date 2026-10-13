@@ -4,6 +4,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from threadutil import named_to_thread
+
 from .tasks import TaskRegistry
 
 if TYPE_CHECKING:
@@ -31,9 +33,13 @@ class BoundedOffload:
 
     async def run[**P, T](self, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
         await asyncio.sleep(0)
+        caller = asyncio.current_task()
+        operation_name = caller.get_name() if caller is not None else ""
+        if not operation_name or operation_name.startswith("Task-"):
+            operation_name = getattr(function, "__qualname__", type(function).__name__)
 
         async def operation() -> T:
-            return await asyncio.to_thread(function, *args, **kwargs)
+            return await named_to_thread(f"{self._name}:{operation_name}", function, *args, **kwargs)
 
         task = self._tasks.create(operation, name=f"offload:{self._name}")
         return await asyncio.shield(task)

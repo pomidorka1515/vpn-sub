@@ -184,13 +184,14 @@ async def test_offload_retains_capacity_and_drains_cancelled_callers() -> None:
     completed = threading.Event()
 
     def blocking() -> int:
+        assert threading.current_thread().name == "disk:disk-check"
         loop.call_soon_threadsafe(started.set)
         if not finish.wait(timeout=5):
             raise TimeoutError("test did not release worker")
         completed.set()
         return 42
 
-    caller = asyncio.create_task(offload.run(blocking))
+    caller = asyncio.create_task(offload.run(blocking), name="disk-check")
     try:
         await started.wait()
         caller.cancel()

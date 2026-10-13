@@ -8,6 +8,7 @@ from chart import bandwidth_chart
 from composition import PublicFeatureMixin
 from custom_types import BandwidthSnapshot
 from payloads import number
+from threadutil import named_to_thread
 from util import fmt_bytes, format_usage, truncate_utf8
 
 if TYPE_CHECKING:
@@ -124,7 +125,8 @@ class PublicTrafficMixin(PublicFeatureMixin):
                     for item in raw_history
                 ]
                 chart_lang = self._chart_lang(lang)
-                image = await asyncio.to_thread(
+                image = await named_to_thread(
+                    "rendering:discord:public:bandwidth",
                     bandwidth_chart,
                     snapshots,
                     label=str(obj.get("displayname") or ""),

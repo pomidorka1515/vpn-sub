@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, ClassVar
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
     from config import LinesConfig
 
 __all__ = ["TRACE", "Logger"]
+
+threading.main_thread().name = "main"
 
 
 class Logger(logging.Logger):

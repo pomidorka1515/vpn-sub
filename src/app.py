@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -30,6 +31,7 @@ from paths import bundled_root, compiled
 if TYPE_CHECKING:
     from quart import Quart
 
+    from loggers import Logger
     from session.client import XUiSession
 
 __all__ = [
@@ -73,9 +75,10 @@ async def create_application(
     offloads = OffloadServices()
     opened: list[OwnedResource] = []
 
-    async def open_resource(resource: OwnedResource) -> None:
+    async def open_resource(resource: OwnedResource, log: Logger | None = None) -> None:
         opened.append(resource)
-        await resource.resource.start()
+        with log.loading() if log is not None else nullcontext():
+            await resource.resource.start()
 
     try:
         await open_resource(OwnedResource("primary lock", PrimaryLock(paths.primary_lock)))
@@ -117,13 +120,13 @@ async def create_application(
         db = Database(
             path=paths.database, backup_dir=paths.backups, start_backup=options.start_background,
         )
-        await open_resource(OwnedResource("database", db))
+        await open_resource(OwnedResource("database", db), db.log)
         limiter = options.limiter or AsyncRateLimiter.from_config(cfg)
         await open_resource(OwnedResource("Redis", limiter))
         overrides = verbose_overrides()
         panels, whitelist = build_panels(cfg, paths, options, verbose="panels" in overrides)
         for panel in [*panels, *([whitelist] if whitelist else [])]:
-            await open_resource(OwnedResource(f"panel:{panel.name}", panel))
+            await open_resource(OwnedResource(f"panel:{panel.name}", panel), panel.log)
         mutations = MutationRegistry()
         sub = Subscription(
             cfg=cfg,
@@ -136,7 +139,7 @@ async def create_application(
             audit_svc=AuditService(audit),
             verbose="core" in overrides,
         )
-        await open_resource(OwnedResource("subscription", sub))
+        await open_resource(OwnedResource("subscription", sub), sub.res.log)
         app = app or create_api_application(
             proxy_hops=options.proxy_hops, require_proxy=options.require_proxy,
         )
@@ -171,7 +174,7 @@ async def create_application(
         )
         if admin_bot is not None:
             await open_resource(OwnedResource("Telegram log delivery", AsyncBotLogging(admin_bot)))
-        await open_resource(OwnedResource("watcher", status, quiesce=status.close))
+        await open_resource(OwnedResource("watcher", status, quiesce=status.close), status.log)
         for name, bot in (("admin bot", admin_bot), ("public bot", public_bot)):
             if bot is not None:
                 await open_resource(OwnedResource(name, bot, quiesce=bot.close))

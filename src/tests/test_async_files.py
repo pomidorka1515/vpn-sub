@@ -14,6 +14,7 @@ from config.store import AsyncConfig, AsyncLinesConfig, FileSchedules
 from core.services.audit import AuditService
 from errors import FileCorruptionError
 from loggers.delivery import AsyncJSONLinesLogger, AsyncTelegramLogger, LogDelivery
+from threadutil import named_to_thread
 
 if TYPE_CHECKING:
     from collections.abc import MutableMapping
@@ -82,7 +83,7 @@ async def test_cancelled_commit_finishes_and_close_drains(tmp_path: Path) -> Non
         tx["committed"] = True
 
     task = asyncio.create_task(store.mutate(edit))
-    await asyncio.to_thread(entered.wait)
+    await named_to_thread("test:files:wait", entered.wait)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -141,10 +142,10 @@ async def test_thread_logging_bounded_delivery_and_drain() -> None:
     def emit(message: str) -> None:
         handler.handle(logging.LogRecord("test", logging.ERROR, __file__, 1, message, (), None))
 
-    await asyncio.to_thread(emit, "first")
+    await named_to_thread("test:logs:emit", emit, "first")
     await entered.wait()
-    await asyncio.to_thread(emit, "second")
-    await asyncio.to_thread(emit, "overflow")
+    await named_to_thread("test:logs:emit", emit, "second")
+    await named_to_thread("test:logs:emit", emit, "overflow")
     assert delivery.dropped == 1
     assert fallback == ["overflow"]
     close = asyncio.create_task(delivery.close())

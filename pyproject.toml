@@ -165,6 +165,7 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
+"asyncio.to_thread".msg = "Use threadutil.named_to_thread so worker logs identify the operation."
 # Require PEP 695 generics/type aliases and stdlib typing.
 "typing.TypeVar".msg = "Use 3.12 syntax: `class MyClass[T]:` or `def func[T]():`"
 "typing.ParamSpec".msg = "Use 3.12 syntax."

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, cast
 
 import discord
@@ -8,6 +7,7 @@ from chart import bandwidth_chart
 from composition import AdminFeatureMixin
 from custom_types import BandwidthSnapshot
 from payloads import number, object_rows
+from threadutil import named_to_thread
 from util import fmt_bytes, format_usage, truncate_utf8
 
 from .common import obj_map, result_obj
@@ -107,7 +107,8 @@ class AdminTrafficMixin(AdminFeatureMixin):
             )
             for item in items
         ]
-        image = await asyncio.to_thread(
+        image = await named_to_thread(
+            "rendering:discord:admin:bandwidth",
             bandwidth_chart,
             snapshots,
             label=str(obj.get("displayname") or ""),

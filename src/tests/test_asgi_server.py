@@ -27,10 +27,10 @@ def test_server_settings_and_environment_precedence(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("LOGLEVEL_HTTP", raising=False)
     monkeypatch.setenv("LOGLEVEL_HTTP", "TRACE")
     create_api_application()
-    assert logging.getLogger("http.access").level == TRACE
+    assert logging.getLogger("HTTP").level == TRACE
     monkeypatch.setenv("LOGLEVEL_HTTP", "WARNING")
     create_api_application()
-    assert logging.getLogger("http.access").level == logging.WARNING
+    assert logging.getLogger("HTTP").level == logging.WARNING
 
 
 @pytest.mark.asyncio
@@ -90,7 +90,10 @@ async def smoke():
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
-    env = dict(os.environ, PYTHONPATH=f"{tmp_path}:{Path.cwd() / 'src'}", APP_BIND=f"127.0.0.1:{port}")
+    env = dict(
+        os.environ, PYTHONPATH=f"{tmp_path}:{Path.cwd() / 'src'}",
+        APP_BIND=f"127.0.0.1:{port}", LOGLEVEL_HTTP="DEBUG", LOGLEVEL="INFO",
+    )
     command = (
         [sys.executable, "-m", "hypercorn", "--config", "python:serve", "smoke:app"]
         if entrypoint == "checkout"
@@ -120,6 +123,10 @@ async def smoke():
             process.send_signal(signal.SIGTERM)
             output, _ = await process.communicate()
         assert process.returncode == 0, output.decode()
+        logs = output.decode()
+        assert "[hypercorn.error] [main] Running on" in logs
+        assert '[HTTP] [main] 127.0.0.1 > "GET /smoke HTTP/1.1" \x1b[32m200\x1b[0m 5b "-"' in logs
+        assert "\x1b[" in logs
         assert (tmp_path / "smoke.closed").read_text() == "closed"
     finally:
         if process.returncode is None:
