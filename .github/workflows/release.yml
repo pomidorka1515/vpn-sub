@@ -33,21 +33,6 @@ jobs:
               --include-data-dir=res=res
               --include-data-files=lang.jsonc=lang.jsonc
               --include-data-files=config.schema.json=config.schema.json
-              --nofollow-import-to=PIL.ImageQt
-              --nofollow-import-to=PIL.ImageTk
-              --nofollow-import-to=PIL.ImageShow
-              --nofollow-import-to=PIL.ImageGrab
-              --nofollow-import-to=PIL.ImageWin
-              --nofollow-import-to=PIL.SpiderImagePlugin
-              --nofollow-import-to=PIL.DdsImagePlugin
-              --nofollow-import-to=PIL.BlpImagePlugin
-              --nofollow-import-to=PIL.BmpImagePlugin
-              --nofollow-import-to=PIL.PpmImagePlugin
-              --nofollow-import-to=PIL.ImImagePlugin
-              --nofollow-import-to=PIL.PsdImagePlugin
-              --nofollow-import-to=PIL.AvifImagePlugin
-              --nofollow-import-to=PIL.WebPImagePlugin
-              --nofollow-import-to=PIL.GifImagePlugin
           - name: vpn-sub-discord
             pythonpath: src/discord/src:src
             entry: src/discord/src/runtime.py
@@ -153,6 +138,10 @@ jobs:
           PY
           export CCFLAGS="${CCFLAGS:--O3 -fno-plt -fdata-sections -ffunction-sections}"
           export LDFLAGS="${LDFLAGS:--Wl,--gc-sections -Wl,-O1 -Wl,--as-needed}"
+          # Audit reports exposed bundled aiosqlite tests and unused Pillow formats.
+          # Keep quart.testing (imported by quart.app), click.testing (used by
+          # quart.testing), werkzeug.test (exported by werkzeug), and jinja2.tests
+          # (template predicates). Charts/QR codes need PNG; retain JPEG/TIFF too.
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile \
             --onefile-tempdir-spec='{CACHE_DIR}/${{ matrix.name }}/{VERSION}/{PID}_{TIME_US}_{RANDOM}' \
@@ -185,6 +174,59 @@ jobs:
             --nofollow-import-to=unittest \
             --nofollow-import-to=_pytest \
             --nofollow-import-to=py \
+            --nofollow-import-to='aiosqlite.tests*' \
+            --nofollow-import-to=flask.testing \
+            --nofollow-import-to=__hello__ \
+            --nofollow-import-to='__phello__*' \
+            --nofollow-import-to=PIL.ImageQt \
+            --nofollow-import-to=PIL.ImageTk \
+            --nofollow-import-to=PIL.ImageShow \
+            --nofollow-import-to=PIL.ImageGrab \
+            --nofollow-import-to=PIL.ImageWin \
+            --nofollow-import-to=PIL.SpiderImagePlugin \
+            --nofollow-import-to=PIL.DdsImagePlugin \
+            --nofollow-import-to=PIL.BlpImagePlugin \
+            --nofollow-import-to=PIL.BmpImagePlugin \
+            --nofollow-import-to=PIL.PpmImagePlugin \
+            --nofollow-import-to=PIL.ImImagePlugin \
+            --nofollow-import-to=PIL.PsdImagePlugin \
+            --nofollow-import-to=PIL.AvifImagePlugin \
+            --nofollow-import-to=PIL.WebPImagePlugin \
+            --nofollow-import-to=PIL.GifImagePlugin \
+            --nofollow-import-to=PIL.BufrStubImagePlugin \
+            --nofollow-import-to=PIL.CurImagePlugin \
+            --nofollow-import-to=PIL.DcxImagePlugin \
+            --nofollow-import-to=PIL.EpsImagePlugin \
+            --nofollow-import-to=PIL.FitsImagePlugin \
+            --nofollow-import-to=PIL.FliImagePlugin \
+            --nofollow-import-to=PIL.FpxImagePlugin \
+            --nofollow-import-to=PIL.FtexImagePlugin \
+            --nofollow-import-to=PIL.GbrImagePlugin \
+            --nofollow-import-to=PIL.GribStubImagePlugin \
+            --nofollow-import-to=PIL.Hdf5StubImagePlugin \
+            --nofollow-import-to=PIL.IcnsImagePlugin \
+            --nofollow-import-to=PIL.IcoImagePlugin \
+            --nofollow-import-to=PIL.ImtImagePlugin \
+            --nofollow-import-to=PIL.IptcImagePlugin \
+            --nofollow-import-to=PIL.Jpeg2KImagePlugin \
+            --nofollow-import-to=PIL.McIdasImagePlugin \
+            --nofollow-import-to=PIL.MicImagePlugin \
+            --nofollow-import-to=PIL.MpegImagePlugin \
+            --nofollow-import-to=PIL.MpoImagePlugin \
+            --nofollow-import-to=PIL.MspImagePlugin \
+            --nofollow-import-to=PIL.PalmImagePlugin \
+            --nofollow-import-to=PIL.PcdImagePlugin \
+            --nofollow-import-to=PIL.PcxImagePlugin \
+            --nofollow-import-to=PIL.PdfImagePlugin \
+            --nofollow-import-to=PIL.PixarImagePlugin \
+            --nofollow-import-to=PIL.QoiImagePlugin \
+            --nofollow-import-to=PIL.SgiImagePlugin \
+            --nofollow-import-to=PIL.SunImagePlugin \
+            --nofollow-import-to=PIL.TgaImagePlugin \
+            --nofollow-import-to=PIL.WmfImagePlugin \
+            --nofollow-import-to=PIL.XVThumbImagePlugin \
+            --nofollow-import-to=PIL.XbmImagePlugin \
+            --nofollow-import-to=PIL.XpmImagePlugin \
             --nofollow-import-to=matplotlib \
             --nofollow-import-to=numpy \
             --nofollow-import-to=pandas \
