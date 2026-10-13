@@ -2,7 +2,7 @@
 
 Works under plain Python (``python -m main`` with ``src`` on ``PYTHONPATH``)
 and as a Nuitka binary. Both paths run Hypercorn in-process on one event loop.
-``APP_BIND`` selects the listener, with ``GUNICORN_BIND`` as a temporary fallback.
+``APP_BIND`` selects the listener.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def probe() -> None:
     for module in (
         "asgi", "quart", "hypercorn.asyncio", "aiohttp", "aiosqlite",
         "redis.asyncio", "telebot.async_telebot", "telebot.asyncio_helper",
-        "session.async_transport", "db.async_database", "bots.polling",
+        "session.transport", "db.database", "bots.polling",
     ):
         import_module(module)
 

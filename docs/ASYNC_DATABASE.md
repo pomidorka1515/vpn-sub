@@ -1,6 +1,6 @@
 # Async database repository (Step 4)  
   
-`AsyncDatabase` is exported by `db`, alongside the synchronous `Database` used by callers awaiting later migration steps. Constructors perform no I/O or scheduling. Call `await start()` and `await close()` on the same event loop. No synchronous repository adapter is needed: every repository operation has a native async implementation. The existing synchronous implementation remains the staging interface for current core, API, bot, script and watcher callers.  
+`Database` is exported by `db`. Constructors perform no I/O or scheduling. Call `await start()` and `await close()` on the same event loop. Every repository operation has a native async implementation; the superseded synchronous repository has been removed.  
   
 The async repository owns one aiosqlite writer, a complete-transaction write lock, and two independently leased readers by default. Connections enable foreign keys, WAL, the configured busy timeout and NORMAL synchronous durability. Readers additionally enforce query-only access. The schema and migrations remain version 4. Registration/code consumption, bonus redemption, registration confirmation/refund, monthly reset and batch accounting retain complete-operation transaction boundaries and existing error translation. SQL cursors are buffered and closed inside helpers.  
   

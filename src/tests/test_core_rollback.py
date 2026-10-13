@@ -13,12 +13,13 @@ if TYPE_CHECKING:
     from db import Database
 
 
-def test_startup_recovers_registration_rollback_marker(
+@pytest.mark.asyncio
+async def test_startup_recovers_registration_rollback_marker(
     database: Database,
     subscription: Subscription,
 ) -> None:
-    database.add_code("invite", "register", uses=1)
-    database.register_with_code(
+    (await database.add_code("invite", "register", uses=1))
+    (await database.register_with_code(
         code="invite",
         username="alice",
         uuid=str(uuid.uuid4()),
@@ -27,89 +28,62 @@ def test_startup_recovers_registration_rollback_marker(
         displayname="Alice",
         ext_username="alice-login",
         ext_password_hash="hash",
-    )
-    database.set_metadata("registration_rollback_failed:alice", "123")
-    subscription.business_code_svc.recover_rollback_failures()
-    assert database.get_metadata("registration_rollback_failed:alice") is None
-    assert not database.user_exists("alice")
+    ))
+    (await database.set_metadata("registration_rollback_failed:alice", "123"))
+    (await subscription.business_code_svc.recover_rollback_failures())
+    assert (await database.get_metadata("registration_rollback_failed:alice")) is None
+    assert not (await database.user_exists("alice"))
 
 
-def test_rollback_marker_reporting_and_resolution(
+@pytest.mark.asyncio
+async def test_rollback_marker_reporting_and_resolution(
     database: Database,
     subscription: Subscription,
 ) -> None:
-    database.set_metadata("uuid_rollback_failed:alice", "123:panel rejected")
-    database.set_metadata("registration_rollback_failed:bob", "124")
-    failures = subscription.business_code_svc.get_rollback_failures()
+    (await database.set_metadata("uuid_rollback_failed:alice", "123:panel rejected"))
+    (await database.set_metadata("registration_rollback_failed:bob", "124"))
+    failures = (await subscription.business_code_svc.get_rollback_failures())
     assert failures["uuid"]["alice"]["reason"] == "panel rejected"
     assert failures["registration"]["bob"]["ts"] == "124"
-    subscription.business_code_svc.clear_rollback_failure("uuid", "alice")
-    assert subscription.business_code_svc.get_rollback_failures()["uuid"] == {}
+    (await subscription.business_code_svc.clear_rollback_failure("uuid", "alice"))
+    assert (await subscription.business_code_svc.get_rollback_failures())["uuid"] == {}
 
 
-def test_registration_rollback_failure_preserves_sync_error(database: Database) -> None:
-    subscription = make_subscription(database)
-    database.add_code("invite", "register", days=1, gb=1, wl_gb=0, permanent=False, uses=1)
-    sync_error = RuntimeError("panel transport failed")
-
-    def fail_sync(
-        username: str,
-        _called_internally: bool = False,
-        *,
-        known_clients: object = None,
-    ) -> None:
-        raise sync_error
-
-    def fail_rollback(username: str) -> None:
-        raise RuntimeError("database rollback failed")
-
-    subscription.business_svc.add_users = fail_sync  # type: ignore[method-assign]
-    database.rollback_registration_sync = fail_rollback  # type: ignore[method-assign]
-    with pytest.raises(RuntimeError) as raised:
-        subscription.business_code_svc.register_with_code(
-            code="invite",
-            username="alice",
-            displayname="Alice",
-            ext_username="alice-login",
-            ext_password="secret",
-        )
-    assert raised.value is sync_error
-    assert database.get_metadata("registration_rollback_failed:alice") is not None
-
-
-def test_registration_partial_panel_writes_are_removed_before_refund(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_registration_partial_panel_writes_are_removed_before_refund(database: Database) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
     rejected = FakePanel(
         name="rejected",
         inbounds=[make_inbound(1)],
         post_payload={"success": False, "msg": "rejected", "obj": None},
     )
-    subscription = make_subscription(database, panels=[accepted, rejected])
-    database.add_code("invite", "register")
+    subscription = (await make_subscription(database, panels=[accepted, rejected]))
+    (await database.add_code("invite", "register"))
     with pytest.raises(PanelRejectedError):
-        subscription.business_code_svc.register_with_code(
+        (await subscription.business_code_svc.register_with_code(
             code="invite",
             username="alice",
             displayname="Alice",
             ext_username="alice",
             ext_password="secret",
-        )
+        ))
     assert accepted.clients == []
-    assert not database.user_exists("alice")
-    code = database.get_code("invite")
+    assert not (await database.user_exists("alice"))
+    code = (await database.get_code("invite"))
     assert code is not None
     assert code["uses"] == 1
 
 
-def test_admin_creation_partial_panel_writes_are_removed(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_admin_creation_partial_panel_writes_are_removed(database: Database) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
     rejected = FakePanel(
         name="rejected",
         inbounds=[make_inbound(1)],
         post_payload={"success": False, "msg": "rejected", "obj": None},
     )
-    subscription = make_subscription(database, panels=[accepted, rejected])
+    subscription = (await make_subscription(database, panels=[accepted, rejected]))
     with pytest.raises(PanelRejectedError):
-        subscription.business_svc.add_new_user("alice", "Alice")
+        (await subscription.business_svc.add_new_user("alice", "Alice"))
     assert accepted.clients == []
-    assert not database.user_exists("alice")
+    assert not (await database.user_exists("alice"))

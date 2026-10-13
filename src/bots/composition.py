@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from telebot.async_telebot import AsyncTeleBot
 
     from config import AppConfig, LangConfig
-    from core import AsyncSubscription
-    from core.async_common import Snapshot
+    from core import Subscription
+    from core.common import Snapshot
     from loggers import Logger
 
     from .common import MessageOptions
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
         log: Logger
         cfg: Snapshot[AppConfig]
         lang_cfg: Snapshot[LangConfig]
-        sub: AsyncSubscription
+        sub: Subscription
         USERS_PER_PAGE: int
         admin_uids: list[int]
         _pending_codes: MutableMapping[str | int, str]
@@ -91,7 +91,7 @@ if TYPE_CHECKING:
         log: Logger
         cfg: Snapshot[AppConfig]
         lang_cfg: Snapshot[LangConfig]
-        sub: AsyncSubscription
+        sub: Subscription
         TEXTS: dict[str, dict[str, str]]
 
         def _expect(self, message: types.Message, step: Step, *arguments: object) -> None: ...

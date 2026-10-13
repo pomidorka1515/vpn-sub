@@ -1,221 +1,272 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
-import threading
-from contextlib import contextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import aiosqlite
+
+from app_runtime.offload import BoundedOffload
 from errors import DatabaseError
 from loggers import Logger
 
-from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
+from .backup import do_backup, instance_backup_dir, prune_backups
 from .codes import CodesMixin
-from .common import row_dict
+from .common import Connection, settle
 from .schema import SchemaMixin
 from .state import StateMixin
 from .telegram import TelegramMixin
 from .users import UsersMixin
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import AsyncGenerator
 
 
-class Database(UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin):
-    """Thread-safe SQLite repository for dynamic application state."""
+class Database(
+    UsersMixin, CodesMixin, TelegramMixin, StateMixin, SchemaMixin,
+):
+    """Single-loop repository with a transaction-owned writer and leased readers."""
 
     def __init__(
         self,
         *,
         path: str | Path,
         timeout: float = 5.0,
+        read_connections: int = 2,
         backup_dir: str | Path | None = None,
         backup_interval: float = 7200,
         backup_retention: int = 3,
         start_backup: bool = True,
     ) -> None:
-        """
-        Args:
-            path: Path to the SQLite database.
-            timeout: Connection timeout in seconds.
-            backup_dir: Backup directory. Backups are disabled if set to None.
-            backup_interval: Interval in seconds for the backups.
-            backup_retention: Amount of concurrent backups kept on disk.
-            start_backup: Start the scheduled backup thread. False keeps
-                backup_dir configured so backup_now() still works.
-
-        """
+        if read_connections < 1 or backup_interval <= 0 or backup_retention < 1:
+            raise ValueError("connection count, backup interval and retention must be positive")
+        self.path = os.path.normpath(Path(path).absolute())
+        self.timeout = timeout
         self.log = Logger(type(self).__name__)
-        with self.log.loading():
-            self.path = os.path.normpath(Path(path).absolute())
-            self.timeout = timeout
-            self._connections: dict[int, sqlite3.Connection] = {}
-            self._connections_lock = threading.Lock()
-            self._local = threading.local()
-            self._backup_dir: str | None = str(backup_dir) if backup_dir else None
-            self._backup_interval: int | float = backup_interval
-            self._backup_retention: int = backup_retention
-            self._backup_stop = threading.Event()
-            self._backup_t: threading.Thread | None = None
-            parent = Path(self.path).parent
-            try:
-                parent.mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                raise DatabaseError(f"unable to create database directory {parent}: {exc}") from exc
-            self.initialize()
-            if self._backup_dir and start_backup:
-                self._backup_t = make_backup_thread(
-                    path=self.path,
-                    timeout=self.timeout,
-                    backup_dir=self._backup_dir,
-                    backup_interval=self._backup_interval,
-                    backup_retention=self._backup_retention,
-                    stop_event=self._backup_stop,
-                )
-                self._backup_t.start()
+        self.backup_dir = str(backup_dir) if backup_dir else None
+        self.backup_interval = backup_interval
+        self.backup_retention = backup_retention
+        self._start_backup = start_backup
+        self._read_count = read_connections
+        self._writer: aiosqlite.Connection | None = None
+        self._readers: list[aiosqlite.Connection] = []
+        self._write_lock = asyncio.Lock()
+        self._read_locks = [asyncio.Lock() for _ in range(read_connections)]
+        self._read_slots: asyncio.Queue[int] = asyncio.Queue()
+        self._owners: set[asyncio.Task[object]] = set()
+        self._files = BoundedOffload(capacity=1, name="database-files")
+        self._backup_lock = asyncio.Lock()
+        self._backup_task: asyncio.Task[None] | None = None
+        self._start_task: asyncio.Task[None] | None = None
+        self._close_task: asyncio.Task[None] | None = None
+        self._closing = False
+        self._ready = False
 
-    def _thread_id(self) -> int:
-        return threading.get_ident()
+    async def start(self) -> None:
+        if self._closing:
+            raise DatabaseError("database is closed")
+        if self._start_task is None:
+            self._start_task = asyncio.create_task(self._start(), name="database:start")
+        await settle(self._wait_start())
 
-    def _cached(self) -> sqlite3.Connection | None:
-        conn: sqlite3.Connection | None = getattr(self._local, "conn", None)
-        opener = getattr(self._local, "opener", None)
-        if conn is None:
-            return None
-        # Tests replace ``_connect`` with a plain function. A bound method is
-        # a new object on every access, so compare the underlying function.
-        if opener is not self._opener():
-            self._discard(conn)
-            return None
-        return conn
+    async def _wait_start(self) -> None:
+        if self._start_task is not None:
+            await asyncio.shield(self._start_task)
 
-    def _opener(self) -> object:
-        connect = self._connect
-        return getattr(connect, "__func__", connect)
-
-    def _discard(self, conn: sqlite3.Connection) -> None:
-        if getattr(self._local, "conn", None) is conn:
-            self._local.conn = None
-            self._local.opener = None
-        with self._connections_lock:
-            current = self._connections.get(self._thread_id())
-            if current is conn:
-                del self._connections[self._thread_id()]
-        with suppress(sqlite3.Error):
-            conn.close()
-
-    def _connect(self) -> sqlite3.Connection:
-        conn: sqlite3.Connection | None = None
+    async def _open(self, *, reader: bool = False) -> aiosqlite.Connection:
+        conn = await aiosqlite.connect(self.path, timeout=self.timeout, isolation_level=None)
         try:
-            conn = sqlite3.connect(
-                self.path,
-                timeout=self.timeout,
-                isolation_level=None,
-            )
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.execute(f"PRAGMA busy_timeout = {max(1, int(self.timeout * 1000))}")
-            conn.execute("PRAGMA journal_mode = WAL")
-            conn.execute("PRAGMA synchronous = NORMAL")
-            with self._connections_lock:
-                previous = self._connections.get(self._thread_id())
-                self._connections[self._thread_id()] = conn
-            if previous is not None and previous is not conn:
-                with suppress(sqlite3.Error):
-                    previous.close()
+            wrapped = Connection(conn)
+            for statement in (
+                "PRAGMA foreign_keys = ON",
+                f"PRAGMA busy_timeout = {max(1, int(self.timeout * 1000))}",
+                "PRAGMA journal_mode = WAL",
+                "PRAGMA synchronous = NORMAL",
+            ):
+                await wrapped.execute(statement)
+            if reader:
+                await wrapped.execute("PRAGMA query_only = ON")
             return conn
-        except sqlite3.Error as exc:
-            if conn is not None:
-                conn.close()
-            raise DatabaseError(f"unable to open database {self.path}: {exc}") from exc
+        except BaseException:
+            await settle(conn.close())
+            raise
 
-    def _connection(self) -> sqlite3.Connection:
-        cached = self._cached()
-        if cached is not None:
-            return cached
-        conn = self._connect()
-        self._local.conn = conn
-        self._local.opener = self._opener()
-        return conn
-
-    @contextmanager
-    def connection(self) -> Generator[sqlite3.Connection]:
-        conn = self._connection()
+    async def _start(self) -> None:
         try:
-            yield conn
-        except sqlite3.Error as exc:
-            if conn.in_transaction or self._dead(exc):
-                self._discard(conn)
-            raise DatabaseError(str(exc)) from exc
-
-    @contextmanager
-    def transaction(self, *, immediate: bool = False) -> Generator[sqlite3.Connection]:
-        with self.connection() as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
-                yield conn
-                conn.execute("COMMIT")
-            except sqlite3.Error as exc:
-                with suppress(sqlite3.Error):
-                    conn.execute("ROLLBACK")
-                if conn.in_transaction or self._dead(exc):
-                    self._discard(conn)
+            await self._files.run(Path(self.path).parent.mkdir, parents=True, exist_ok=True)
+            self._writer = await self._open()
+            # Initialization owns the writer before admission is published.
+            self._ready = True
+            await self.initialize()
+            for index in range(self._read_count):
+                self._readers.append(await self._open(reader=True))
+                self._read_slots.put_nowait(index)
+            if self.backup_dir and self._start_backup and not self._closing:
+                self._backup_task = asyncio.create_task(self._backup_loop(), name="database:backup")
+        except BaseException as exc:
+            self._ready = False
+            await self._close_connections()
+            await self._files.close()
+            if isinstance(exc, (sqlite3.Error, OSError)):
                 raise DatabaseError(str(exc)) from exc
+            raise
+
+    def _check(self) -> asyncio.Task[object]:
+        task = asyncio.current_task()
+        if not self._ready or self._closing or task is None:
+            raise DatabaseError("database is not accepting operations")
+        if (
+            self._start_task is not None
+            and not self._start_task.done()
+            and task is not self._start_task
+        ):
+            raise DatabaseError("database startup is not complete")
+        if task in self._owners:
+            raise DatabaseError(
+                "nested repository leases are not supported; reuse the leased connection",
+            )
+        return task
+
+    @asynccontextmanager
+    async def connection(self) -> AsyncGenerator[Connection]:
+        task = self._check()
+        index = await self._read_slots.get()
+        try:
+            async with self._read_locks[index]:
+                self._check()
+                self._owners.add(task)
+                conn = self._readers[index]
+                try:
+                    yield Connection(conn)
+                except sqlite3.Error as exc:
+                    await settle(self._replace_reader(index))
+                    raise DatabaseError(str(exc)) from exc
+                finally:
+                    self._owners.discard(task)
+        finally:
+            self._read_slots.put_nowait(index)
+
+    async def _replace_reader(self, index: int) -> None:
+        await settle(self._readers[index].close())
+        try:
+            self._readers[index] = await settle(self._open(reader=True))
+        except Exception:
+            self._ready = False
+            raise
+
+    @asynccontextmanager
+    async def transaction(self, *, immediate: bool = False) -> AsyncGenerator[Connection]:
+        task = self._check()
+        async with self._write_lock:
+            self._check()
+            self._owners.add(task)
+            try:
+                if self._writer is None:
+                    await settle(self._open_writer())
+                conn = self._writer
+                if conn is None:
+                    raise DatabaseError("database writer is unavailable")
+                wrapped = Connection(conn)
+                try:
+                    await wrapped.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+                    yield wrapped
+                    # Cancellation waits for COMMIT's actual outcome. A committed
+                    # operation is never retried automatically by this repository.
+                    await wrapped.execute("COMMIT")
+                except BaseException as exc:
+                    await settle(self._recover_writer(conn, discard=isinstance(exc, sqlite3.Error)))
+                    if isinstance(exc, sqlite3.Error):
+                        raise DatabaseError(str(exc)) from exc
+                    raise
+            finally:
+                self._owners.discard(task)
+
+    async def _open_writer(self) -> None:
+        # Publish ownership inside the settled task, even if its waiter cancels.
+        self._writer = await self._open()
+
+    async def _recover_writer(self, conn: aiosqlite.Connection, *, discard: bool = False) -> None:
+        try:
+            if conn.in_transaction:
+                await Connection(conn).execute("ROLLBACK")
+            if conn.in_transaction:
+                raise DatabaseError("rollback left an active transaction")
+            if discard:
+                self._writer = None
+                await conn.close()
+        except Exception:
+            self._writer = None
+            await conn.close()
+
+    async def backup_now(self) -> None:
+        self._check()
+        async with self._backup_lock:
+            self._check()
+            if self.backup_dir is None:
+                raise DatabaseError("backup_now() requires a backup_dir to be configured.")
+            await self._files.run(self._backup)
+
+    def _backup(self) -> None:
+        if self.backup_dir is None:
+            raise DatabaseError("backup directory is not configured")
+        directory = instance_backup_dir(self.path, self.backup_dir)
+        do_backup(self.path, self.timeout, directory, self.log)
+        prune_backups(directory, self.backup_retention, self.log)
+
+    async def _backup_loop(self) -> None:
+        failures = 0
+        delay = self.backup_interval
+        while True:
+            await asyncio.sleep(delay)
+            try:
+                await self.backup_now()
+                failures = 0
+                delay = self.backup_interval
             except Exception:
-                with suppress(sqlite3.Error):
-                    conn.execute("ROLLBACK")
-                if conn.in_transaction:
-                    self._discard(conn)
-                raise
+                failures += 1
+                delay = min(self.backup_interval, 60 * failures)
+                if failures == 1 or failures % 3 == 0:
+                    self.log.exception("database backup failed (%s attempts)", failures)
 
-    @staticmethod
-    def _dead(exc: sqlite3.Error) -> bool:
-        if isinstance(exc, sqlite3.ProgrammingError):
-            return True
-        message = str(exc).lower()
-        return "closed" in message or "disk i/o" in message
+    async def close(self) -> None:
+        if asyncio.current_task() in self._owners:
+            raise DatabaseError("cannot close database from an active lease")
+        if self._close_task is None:
+            self._closing = True
+            self._close_task = asyncio.create_task(self._close(), name="database:close")
+        await settle(self._wait_close())
 
-    @staticmethod
-    def _row(row: sqlite3.Row | None) -> dict[str, object] | None:
-        return row_dict(row)
+    async def _wait_close(self) -> None:
+        if self._close_task is not None:
+            await asyncio.shield(self._close_task)
 
-    @property
-    def backup_dir(self) -> str | None:
-        return self._backup_dir
+    async def _close(self) -> None:
+        if self._start_task is not None:
+            await asyncio.gather(self._start_task, return_exceptions=True)
+        if self._backup_task is not None:
+            self._backup_task.cancel()
+            await asyncio.gather(self._backup_task, return_exceptions=True)
+        async with self._backup_lock:
+            await self._files.close()
+        async with self._write_lock:
+            for lock in self._read_locks:
+                await lock.acquire()
+            try:
+                await self._close_connections()
+                self._ready = False
+            finally:
+                for lock in self._read_locks:
+                    lock.release()
 
-    @property
-    def backup_interval(self) -> int | float:
-        return self._backup_interval
-
-    @property
-    def backup_retention(self) -> int:
-        return self._backup_retention
-
-    def backup_now(self) -> None:
-        """Trigger an immediate backup snapshot, regardless of the schedule.
-
-        Obeys the same retention limit as the scheduled backup thread.
-
-        Raises:
-            DatabaseError: If no backup_dir was configured on this instance.
-
-        """
-        if self._backup_dir is None:
-            raise DatabaseError("backup_now() requires a backup_dir to be configured.")
-        instance_dir = instance_backup_dir(self.path, self._backup_dir)
-        do_backup(self.path, self.timeout, instance_dir, self.log)
-        prune_backups(instance_dir, self._backup_retention, self.log)
-
-    def close(self) -> None:
-        self._backup_stop.set()
-        if self._backup_t is not None:
-            self._backup_t.join(timeout=5)
-        with self._connections_lock:
-            connections = tuple(self._connections.values())
-            self._connections.clear()
-        self._local.conn = None
-        self._local.opener = None
+    async def _close_connections(self) -> None:
+        connections = [*self._readers]
+        if self._writer is not None:
+            connections.append(self._writer)
+        self._readers.clear()
+        self._writer = None
         for conn in connections:
-            with suppress(sqlite3.Error):
-                conn.close()
+            await conn.close()

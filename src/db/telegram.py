@@ -5,79 +5,71 @@ from typing import TYPE_CHECKING
 from .common import ConnectionMixin
 
 if TYPE_CHECKING:
-    import sqlite3
+    from .common import Connection
 
 
-def set_telegram_mapping(
-    conn: sqlite3.Connection,
-    username: str,
-    telegram_id: str | None,
+async def set_telegram_mapping(
+    conn: Connection, username: str, telegram_id: str | None,
 ) -> None:
     if telegram_id is None:
-        conn.execute("DELETE FROM telegram_mappings WHERE username = ?", (username,))
+        await conn.execute("DELETE FROM telegram_mappings WHERE username = ?", (username,))
         return
-    # a login reassigns both sides of the one-to-one mapping
-    # matching the old table's last-login-wins behavior without stale reverse rows
-    conn.execute(
+    await conn.execute(
         "DELETE FROM telegram_mappings WHERE telegram_id = ? OR username = ?",
         (telegram_id, username),
     )
-    conn.execute(
+    await conn.execute(
         "INSERT INTO telegram_mappings(telegram_id, username) VALUES (?, ?)",
         (telegram_id, username),
     )
 
 
 class TelegramMixin(ConnectionMixin):
-    def set_telegram(self, username: str, telegram_id: str | None) -> None:
-        with self.transaction(immediate=True) as conn:
-            set_telegram_mapping(conn, username, telegram_id)
+    async def set_telegram(self, username: str, telegram_id: str | None) -> None:
+        async with self.transaction(immediate=True) as conn:
+            await set_telegram_mapping(conn, username, telegram_id)
 
-    def tgid_to_user(self, tgid: str | int) -> str | None:
-        with self.connection() as conn:
-            row = conn.execute(
-                "SELECT username FROM telegram_mappings WHERE telegram_id = ?",
-                (str(tgid),),
-            ).fetchone()
+    async def tgid_to_user(self, tgid: str | int) -> str | None:
+        async with self.connection() as conn:
+            row = await conn.row(
+                "SELECT username FROM telegram_mappings WHERE telegram_id = ?", (str(tgid),),
+            )
             return str(row[0]) if row else None
 
-    def user_to_tgid(self, username: str) -> str | None:
-        with self.connection() as conn:
-            row = conn.execute(
-                "SELECT telegram_id FROM telegram_mappings WHERE username = ?",
-                (username,),
-            ).fetchone()
+    async def user_to_tgid(self, username: str) -> str | None:
+        async with self.connection() as conn:
+            row = await conn.row(
+                "SELECT telegram_id FROM telegram_mappings WHERE username = ?", (username,),
+            )
             return str(row[0]) if row else None
 
-    def user_tgids(self) -> dict[str, str]:
-        """Username -> telegram_id, loaded once for batch lookups."""
-        with self.connection() as conn:
+    async def user_tgids(self) -> dict[str, str]:
+        async with self.connection() as conn:
             return {
                 str(row[0]): str(row[1])
-                for row in conn.execute("SELECT username, telegram_id FROM telegram_mappings")
+                for row in await conn.rows("SELECT username, telegram_id FROM telegram_mappings")
             }
 
-    def get_telegram_language(self, telegram_id: str | int, default: str = "ru") -> str:
-        with self.connection() as conn:
-            row = conn.execute(
+    async def get_telegram_language(self, telegram_id: str | int, default: str = "ru") -> str:
+        async with self.connection() as conn:
+            row = await conn.row(
                 "SELECT language FROM telegram_preferences WHERE telegram_id = ?",
                 (str(telegram_id),),
-            ).fetchone()
+            )
             return str(row[0]) if row else default
 
-    def has_telegram_language(self, telegram_id: str | int) -> bool:
-        with self.connection() as conn:
+    async def has_telegram_language(self, telegram_id: str | int) -> bool:
+        async with self.connection() as conn:
             return (
-                conn.execute(
-                    "SELECT 1 FROM telegram_preferences WHERE telegram_id = ?",
-                    (str(telegram_id),),
-                ).fetchone()
+                await conn.row(
+                    "SELECT 1 FROM telegram_preferences WHERE telegram_id = ?", (str(telegram_id),),
+                )
                 is not None
             )
 
-    def set_telegram_language(self, telegram_id: str | int, language: str) -> None:
-        with self.transaction(immediate=True) as conn:
-            conn.execute(
+    async def set_telegram_language(self, telegram_id: str | int, language: str) -> None:
+        async with self.transaction(immediate=True) as conn:
+            await conn.execute(
                 "INSERT INTO telegram_preferences(telegram_id, language) VALUES (?, ?) ON CONFLICT(telegram_id) DO UPDATE SET language=excluded.language",
                 (str(telegram_id), language),
             )

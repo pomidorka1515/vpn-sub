@@ -1,89 +1,80 @@
-"""One locked generation cache. Inbounds and clients each hold their own.
-
-A failed stamp bump leaves the local value in place, so this worker cannot
-hide a generation other workers still trust. A fill that observed an older
-stamp does not revive a value a clear already dropped.
-"""
-
 from __future__ import annotations
 
-import threading
+import asyncio
+import copy
+from time import monotonic
 from typing import TYPE_CHECKING
 
 from .stamp import bump_stamp, read_stamp
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Coroutine
 
-__all__ = ["GenerationCache"]
+    from app_runtime.offload import BoundedOffload
+    from app_runtime.tasks import TaskRegistry
 
 
 class GenerationCache[T]:
-    """In-memory value whose generation is a stamp file's mtime."""
+    """Single-flight detached values with pre-fetch generation publication."""
 
-    def __init__(self, path: str, clock: Callable[[], float]) -> None:
+    def __init__(
+        self,
+        path: str,
+        *,
+        files: BoundedOffload,
+        tasks: TaskRegistry,
+        disk_lock: asyncio.Lock | None = None,
+    ) -> None:
         self.path = path
-        self._clock = clock
-        self._lock = threading.Lock()
+        self._files = files
+        self._tasks = tasks
+        self._lock = asyncio.Lock()
+        self._disk_lock = disk_lock or asyncio.Lock()
+        self._epoch = 0
         self._value: T | None = None
-        self.time: float = 0
-        self.stamp: int | None = None
+        self._stamp: int | None = None
+        self._stored_at = 0.0
+        self._flight: tuple[int, int, asyncio.Task[T]] | None = None
 
-    def get(self) -> T | None:
-        with self._lock:
-            return self._value
+    async def _read_stamp(self) -> int:
+        async with self._disk_lock:
+            return await self._files.run(read_stamp, self.path)
 
-    def set(self, value: T) -> None:
-        # read before the lock so a clear that bumps during the panel query
-        # is visible here instead of being overwritten by this fill
-        stamp = read_stamp(self.path)
-        with self._lock:
-            if self.stamp is not None and stamp != self.stamp:
-                return
-            self._value = value
-            self.time = self._clock()
-            self.stamp = stamp
+    async def get(self, ttl: float, load: Callable[[], Coroutine[object, object, T]]) -> T:
+        async with self._lock:
+            stamp = await self._read_stamp()
+            if (
+                stamp == self._stamp
+                and self._value is not None
+                and monotonic() - self._stored_at < ttl
+            ):
+                return copy.deepcopy(self._value)
+            epoch = self._epoch
+            if self._flight is None or self._flight[:2] != (epoch, stamp) or self._flight[2].done():
+                task = self._tasks.create(
+                    lambda: self._refresh(epoch, stamp, load), name="panel:cache-refresh",
+                )
+                self._flight = (epoch, stamp, task)
+            else:
+                task = self._flight[2]
+        return copy.deepcopy(await asyncio.shield(task))
 
-    def age(self) -> float:
-        """Seconds since the value was last populated (own clock domain)."""
-        with self._lock:
-            return self._clock() - self.time
+    async def _refresh(
+        self, epoch: int, stamp: int, load: Callable[[], Coroutine[object, object, T]],
+    ) -> T:
+        value = await load()
+        async with self._lock:
+            current = await self._read_stamp()
+            if epoch == self._epoch and stamp == current:
+                self._value = copy.deepcopy(value)
+                self._stamp = stamp
+                self._stored_at = monotonic()
+        return value
 
-    def current(self) -> bool:
-        """True when this process's value still matches the shared stamp."""
-        with self._lock:
-            if self._value is None or self.stamp is None:
-                return False
-            try:
-                return read_stamp(self.path) == self.stamp
-            except OSError:
-                return False
-
-    def fresh(self, ttl: float) -> T | None:
-        """Return the value only when age and stamp still agree.
-
-        The three checks share one lock so a clear cannot land between them
-        and hand back a value that was just dropped.
-        """
-        with self._lock:
-            cached = self._value
-            seen = self.stamp
-            if cached is None or seen is None or self._clock() - self.time >= ttl:
-                return None
-            try:
-                current = read_stamp(self.path) == seen
-            except OSError:
-                return None
-            return cached if current else None
-
-    def clear(self) -> None:
-        """Bump the shared stamp first, then drop the local value.
-
-        If the bump fails the local value stays. Dropping it first would hide
-        the failure from this worker while every other worker kept serving it.
-        """
-        bump_stamp(self.path)
-        with self._lock:
+    async def clear(self) -> None:
+        async with self._lock:
+            self._epoch += 1
             self._value = None
-            self.time = 0
-            self.stamp = None
+            self._stamp = None
+            async with self._disk_lock:
+                await self._files.run(bump_stamp, self.path)

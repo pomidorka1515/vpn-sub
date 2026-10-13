@@ -7,12 +7,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypedDict
 # Dacite does not resolve PEP 695 recursive aliases when checking fields.
 # Keep JSON checking for callers while its runtime check accepts raw objects.
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, MutableMapping
-
-    from requests import Response
-    from requests.auth import AuthBase
-    from requests.cookies import RequestsCookieJar
-    from requests.models import PreparedRequest
+    from collections.abc import Iterable
 
     from config.constants import JsonValue
 
@@ -48,7 +43,6 @@ __all__ = [
     "PublicIPStats",
     "RegisterCodeResult",
     "RegisterWithCodeInfo",
-    "RequestKwargs",
     "ResetUserObject",
     "ServerMetricsObj",
     "ServerMetricsResponse",
@@ -118,72 +112,6 @@ class OnlineStatus(NamedTuple):
 class SupportsKeysAndGetItem[KT, VT](Protocol):
     def keys(self) -> Iterable[KT]: ...
     def __getitem__(self, k: KT, /) -> VT: ...
-
-
-class SupportsRead[T_C](Protocol):
-    def read(self, length: int = ..., /) -> T_C: ...
-
-
-class SupportsItems[K, V](Protocol):
-    def items(self) -> Iterable[tuple[K, V]]: ...
-
-
-# requests-stubs/session.pyi ###
-_FileSpec = (
-    SupportsRead[str | bytes]
-    | str
-    | bytes
-    | tuple[str | None, SupportsRead[str | bytes] | str | bytes]
-    | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str]
-    | tuple[str | None, SupportsRead[str | bytes] | str | bytes, str, Mapping[str, str]]
-)
-
-
-class RequestKwargs(TypedDict, total=False):
-    # method: str | bytes
-    # url: str | bytes
-    params: (
-        Mapping[
-            str | bytes | int | float,
-            str | bytes | int | float | Iterable[str | bytes | int | float] | None,
-        ]
-        | tuple[
-            str | bytes | int | float,
-            str | bytes | int | float | Iterable[str | bytes | int | float] | None,
-        ]
-        | Iterable[
-            tuple[
-                str | bytes | int | float,
-                str | bytes | int | float | Iterable[str | bytes | int | float] | None,
-            ]
-        ]
-        | str
-        | bytes
-    ) | None
-    data: (
-        Iterable[bytes]
-        | str
-        | bytes
-        | SupportsRead[str | bytes]
-        | list[tuple[str, str | bytes | int | float | bool | None]]
-        | tuple[tuple[str, str | bytes | int | float | bool | None], ...]
-        | Mapping[str, str | bytes | int | float | bool | None]
-        | None
-    )
-    headers: Mapping[str, str | bytes | None] | None
-    cookies: RequestsCookieJar | MutableMapping[str, str] | None
-    files: Mapping[str, _FileSpec] | Iterable[tuple[str, _FileSpec]] | None
-    auth: tuple[str, str] | AuthBase | Callable[[PreparedRequest], PreparedRequest] | None
-    timeout: float | tuple[float | None, float | None] | None
-    allow_redirects: bool
-    proxies: MutableMapping[str, str] | None
-    hooks: (
-        Mapping[str, Iterable[Callable[[Response], object]] | Callable[[Response], object]] | None
-    )
-    stream: bool | None
-    verify: bool | str | None
-    cert: str | tuple[str, str] | None
-    json: JsonValue
 
 
 # db.py ###

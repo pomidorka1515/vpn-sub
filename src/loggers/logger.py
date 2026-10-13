@@ -35,7 +35,7 @@ class Logger(logging.Logger):
         """Open a process logger.
 
         ``level`` overrides the threshold for this logger only. When it is
-        omitted, ``LOGLEVEL`` applies (default DEBUG). Gunicorn access logs
+        omitted, ``LOGLEVEL`` applies (default DEBUG). HTTP access logs
         are not ``Logger`` instances and do not read that variable.
         """
         if level is None:

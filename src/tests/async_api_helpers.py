@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 
     from api.decorators.rate_limit import RateLimitScript
     from config import AppConfig, Config, LangConfig
-    from config.async_store import AsyncConfig
-    from core import AsyncSubscription
-    from db import AsyncDatabase
+    from config.store import AsyncConfig
+    from core import Subscription
+    from db import Database
 
 
 class OpenRedis:
@@ -43,13 +43,13 @@ def config_snapshot(document: AppConfig) -> AsyncConfig[AppConfig]:
 
 
 async def make_subscription(
-    database: AsyncDatabase,
+    database: Database,
     *,
     app: Quart,
     lang_cfg: Config[LangConfig] | None = None,
     panels: list[FakePanel] | None = None,
     **overrides: Unpack[AppOverrides],
-) -> AsyncSubscription:
+) -> Subscription:
     sub = await make_async_subscription(database, Path(database.path).parent, panels=panels)
     sub.res.cfg.view.side_effect = lambda: subscription_config(**overrides)  # type: ignore[attr-defined]
     if lang_cfg is not None:
@@ -59,7 +59,7 @@ async def make_subscription(
     return sub
 
 
-def make_watch(database: AsyncDatabase, sub: AsyncSubscription) -> SnapshotStatus:
+def make_watch(database: Database, sub: Subscription) -> SnapshotStatus:
     return SnapshotStatus()
 
 

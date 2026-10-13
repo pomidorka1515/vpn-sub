@@ -8,19 +8,19 @@ from helpers import config_mock, language_config, subscription_config
 
 from app_runtime.offload import OffloadServices
 from app_runtime.tasks import MutationRegistry
-from core import AsyncSubscription
+from core import Subscription
 from core.coordination import MutationCoordinator
-from core.services.async_audit import AsyncAuditService
-from session.async_client import AsyncXUiSession
-from session.async_transport import PanelResponse
+from core.services.audit import AuditService
+from session.client import XUiSession
+from session.transport import PanelResponse
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from helpers import FakePanel
 
-    from db.async_database import AsyncDatabase
-    from session.async_transport import AsyncRequestKwargs
+    from db.database import Database
+    from session.transport import RequestKwargs
 
 
 class PanelTransport:
@@ -28,7 +28,7 @@ class PanelTransport:
         self.panel = panel
 
     async def request(
-        self, method: str, url: str, **kwargs: Unpack[AsyncRequestKwargs],
+        self, method: str, url: str, **kwargs: Unpack[RequestKwargs],
     ) -> PanelResponse:
         route = urlsplit(url).path.lstrip("/")
         response = self.panel.get(route) if method == "GET" else self.panel.post(route, **kwargs)
@@ -36,13 +36,13 @@ class PanelTransport:
 
 
 async def make_async_subscription(
-    db: AsyncDatabase,
+    db: Database,
     directory: Path,
     panels: list[FakePanel] | None = None,
     whitelist: FakePanel | None = None,
-) -> AsyncSubscription:
+) -> Subscription:
     clients = [
-        AsyncXUiSession(
+        XUiSession(
             name=panel.name,
             address="127.0.0.1",
             port=8080,
@@ -56,7 +56,7 @@ async def make_async_subscription(
         for panel in panels or []
     ]
     wl = (
-        AsyncXUiSession(
+        XUiSession(
             name=whitelist.name,
             address="127.0.0.1",
             port=8080,
@@ -70,7 +70,7 @@ async def make_async_subscription(
     )
     for client in [*clients, *([wl] if wl else [])]:
         await client.start()
-    return AsyncSubscription(
+    return Subscription(
         cfg=config_mock(subscription_config(fingerprints=["chrome", "firefox"])),
         lang_cfg=config_mock(language_config()),
         db=db,
@@ -78,12 +78,12 @@ async def make_async_subscription(
         whitelist_panel=wl,
         offloads=OffloadServices(),
         coordinator=MutationCoordinator(MutationRegistry()),
-        audit_svc=AsyncAuditService(None),
+        audit_svc=AuditService(None),
         password_hasher=PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1),
     )
 
 
-async def close_async_subscription(sub: AsyncSubscription) -> None:
+async def close_async_subscription(sub: Subscription) -> None:
     await sub.close()
     for panel in sub.panels:
         await panel.close()

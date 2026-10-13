@@ -7,8 +7,8 @@ if TYPE_CHECKING:
 
     from api.common import SnapshotStatus
     from config import AppConfig
-    from config.async_store import AsyncConfig, AsyncLinesConfig
-    from core import AsyncSubscription
+    from config.store import AsyncConfig, AsyncLinesConfig
+    from core import Subscription
     from loggers import Logger
 
 
@@ -17,7 +17,7 @@ class AsyncAdminApiMixin:
 
     app: Quart
     cfg: AsyncConfig[AppConfig]
-    sub: AsyncSubscription
+    sub: Subscription
     bw: SnapshotStatus
     uri: str
     log: Logger

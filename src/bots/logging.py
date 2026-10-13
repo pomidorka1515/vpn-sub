@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from loggers.async_delivery import AsyncTelegramLogger, LogDelivery
+from loggers.delivery import AsyncTelegramLogger, LogDelivery
 
 if TYPE_CHECKING:
     from .admin import AsyncAdminBot

@@ -10,10 +10,10 @@ import pytest
 
 from app_runtime.offload import BoundedOffload
 from config import Config, LinesConfig
-from config.async_store import AsyncConfig, AsyncLinesConfig, FileSchedules
-from core.services.async_audit import AsyncAuditService
+from config.store import AsyncConfig, AsyncLinesConfig, FileSchedules
+from core.services.audit import AuditService
 from errors import FileCorruptionError
-from loggers.async_delivery import AsyncJSONLinesLogger, AsyncTelegramLogger, LogDelivery
+from loggers.delivery import AsyncJSONLinesLogger, AsyncTelegramLogger, LogDelivery
 
 if TYPE_CHECKING:
     from collections.abc import MutableMapping
@@ -102,7 +102,7 @@ async def test_audit_acknowledges_fsync_and_reports_failure(
     path = tmp_path / "audit.jsonl"
     store = AsyncLinesConfig(lambda: LinesConfig(path, start_backup=False), files=files)
     await store.start()
-    audit = AsyncAuditService(store)
+    audit = AuditService(store)
     synced = threading.Event()
 
     def fsync(fd: int) -> None:

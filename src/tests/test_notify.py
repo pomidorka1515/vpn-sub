@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Unpack
 
+import pytest
+
 from notify import Kind, Notifier, account_key, classify, restored, split_key
 from notify.events import Notice
 
@@ -55,11 +57,13 @@ def _kinds(state: UserRecord, now: int = 1_000_000) -> tuple[Kind, ...]:
     return tuple(notice.kind for notice in classify(state, now))
 
 
-def test_unlimited_never_warns() -> None:
+@pytest.mark.asyncio
+async def test_unlimited_never_warns() -> None:
     assert classify(_state(), 1_000_000) == ()
 
 
-def test_expiry_buckets_are_separate() -> None:
+@pytest.mark.asyncio
+async def test_expiry_buckets_are_separate() -> None:
     now = 1_000_000
     three = classify(_state(expires_at=now + 3 * 86400 + 10), now)
     two = classify(_state(expires_at=now + 2 * 86400 + 10), now)
@@ -69,18 +73,21 @@ def test_expiry_buckets_are_separate() -> None:
     assert three[0].marker != two[0].marker
 
 
-def test_expiry_does_not_warn_four_days_out() -> None:
+@pytest.mark.asyncio
+async def test_expiry_does_not_warn_four_days_out() -> None:
     now = 1_000_000
     assert classify(_state(expires_at=now + 4 * 86400), now) == ()
 
 
-def test_expired_only_while_still_enabled() -> None:
+@pytest.mark.asyncio
+async def test_expired_only_while_still_enabled() -> None:
     now = 1_000_000
     assert _kinds(_state(expires_at=now - 1)) == (Kind.EXPIRED,)
     assert classify(_state(expires_at=now - 1, enabled_time=0), now) == ()
 
 
-def test_traffic_80_then_95_then_exhausted() -> None:
+@pytest.mark.asyncio
+async def test_traffic_80_then_95_then_exhausted() -> None:
     limit = 10
     now = 1_000_000
     soon = classify(_state(bw_limit_gb=limit, bw_used=int(limit * 10**9 * 0.81)), now)
@@ -95,7 +102,8 @@ def test_traffic_80_then_95_then_exhausted() -> None:
     assert later[0].fields["used_gb"] == 9
 
 
-def test_whitelist_is_independent_of_main() -> None:
+@pytest.mark.asyncio
+async def test_whitelist_is_independent_of_main() -> None:
     state = _state(
         bw_limit_gb=10,
         bw_used=1,
@@ -105,7 +113,8 @@ def test_whitelist_is_independent_of_main() -> None:
     assert _kinds(state) == (Kind.WHITELIST_EXHAUSTED,)
 
 
-def test_disabled_main_does_not_repeat_near_limit() -> None:
+@pytest.mark.asyncio
+async def test_disabled_main_does_not_repeat_near_limit() -> None:
     state = _state(enabled=0, bw_limit_gb=10, bw_used=int(9.6 * 10**9))
     assert classify(state, 1_000_000) == ()
 
@@ -115,109 +124,121 @@ class _Sink:
         self.fail = fail
         self.sent: list[tuple[int, str]] = []
 
-    def __call__(self, tgid: int, text: str) -> None:
+    async def __call__(self, tgid: int, text: str) -> None:
         if self.fail:
             raise RuntimeError("blocked")
         self.sent.append((tgid, text))
 
 
+async def _language(lang: str) -> str:
+    return lang
+
+
 def _notifier(sink: _Sink, lang: str = "en") -> Notifier:
-    return Notifier(texts=TEXTS, send=sink, language=lambda _tgid: lang)
+    return Notifier(texts=TEXTS, send=sink, language=lambda _tgid: _language(lang))
 
 
-def test_send_failure_does_not_mark(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_send_failure_does_not_mark(database: Database) -> None:
     sink = _Sink(fail=True)
     notifier = _notifier(sink)
     seen: set[str] = set()
     now = int(time.time())
     notice = classify(_state(expires_at=now - 1), now)[0]
-    assert notifier.notify("alice", 7, notice, seen) is False
+    assert (await notifier.deliver("alice", 7, notice, seen)) is False
     assert seen == set()
-    assert not database.notification_seen(account_key("alice", notice.marker), "")
+    assert not (await database.notification_seen(account_key("alice", notice.marker), ""))
 
 
-def test_second_call_is_a_no_op() -> None:
+@pytest.mark.asyncio
+async def test_second_call_is_a_no_op() -> None:
     sink = _Sink()
     notifier = _notifier(sink)
     notice = Notice(Kind.EXPIRED, "1", {})
     seen = {account_key("alice", notice.marker)}
-    assert notifier.notify("alice", 7, notice, seen) is False
+    assert (await notifier.deliver("alice", 7, notice, seen)) is False
     assert sink.sent == []
 
 
-def test_missing_key_and_bad_format_are_not_sent() -> None:
+@pytest.mark.asyncio
+async def test_missing_key_and_bad_format_are_not_sent() -> None:
     sink = _Sink()
     missing = Notice(Kind.RESTORED, "1", {}, clears=("expired",))
     seen = {"alice:expired:1"}
-    empty = Notifier(texts={"en": {}}, send=sink, language=lambda _tgid: "en")
-    assert empty.notify("alice", 7, missing, seen) is False
+    empty = Notifier(texts={"en": {}}, send=sink, language=lambda _tgid: _language("en"))
+    assert (await empty.deliver("alice", 7, missing, seen)) is False
     broken = Notifier(
         texts={"en": {"warning_restored": "back {missing} extra"}},  # ruff: ignore[missing-f-string-syntax]
         send=sink,
-        language=lambda _tgid: "en",
+        language=lambda _tgid: _language("en"),
     )
     again = {"alice:expired:1"}
-    assert broken.notify("alice", 7, missing, again) is False
+    assert (await broken.deliver("alice", 7, missing, again)) is False
     assert sink.sent == []
     assert seen == {"alice:expired:1"}
     assert again == {"alice:expired:1"}
 
 
-def test_recovery_requires_a_prior_episode() -> None:
+@pytest.mark.asyncio
+async def test_recovery_requires_a_prior_episode() -> None:
     sink = _Sink()
     notifier = _notifier(sink)
     notice = restored(main=True)[0]
     seen: set[str] = set()
-    assert notifier.notify("alice", 7, notice, seen) is False
+    assert (await notifier.deliver("alice", 7, notice, seen)) is False
     seen.add(account_key("alice", "traffic_exhausted:1"))
-    assert notifier.notify("alice", 7, notice, seen) is True
+    assert (await notifier.deliver("alice", 7, notice, seen)) is True
     assert sink.sent == [(7, "back")]
     assert account_key("alice", "traffic_exhausted:1") not in seen
     assert account_key("alice", notice.marker) in seen
 
 
-def test_second_outage_can_announce_recovery_again() -> None:
+@pytest.mark.asyncio
+async def test_second_outage_can_announce_recovery_again() -> None:
     sink = _Sink()
     notifier = _notifier(sink)
     outage = Notice(Kind.TRAFFIC_EXHAUSTED, "1", {"limit_gb": 1}, clears=("traffic_soon",))
     recovery = restored(main=True)[0]
     seen: set[str] = set()
 
-    assert notifier.notify("alice", 7, outage, seen) is True
-    assert notifier.notify("alice", 7, recovery, seen) is True
-    assert notifier.notify("alice", 7, outage, seen) is True
-    assert notifier.notify("alice", 7, recovery, seen) is True
+    assert (await notifier.deliver("alice", 7, outage, seen)) is True
+    assert (await notifier.deliver("alice", 7, recovery, seen)) is True
+    assert (await notifier.deliver("alice", 7, outage, seen)) is True
+    assert (await notifier.deliver("alice", 7, recovery, seen)) is True
     assert [text for _tgid, text in sink.sent] == ["off 1", "back", "off 1", "back"]
 
 
-def test_prefix_username_does_not_inherit_markers() -> None:
+@pytest.mark.asyncio
+async def test_prefix_username_does_not_inherit_markers() -> None:
     sink = _Sink()
     notifier = _notifier(sink)
     notice = Notice(Kind.EXPIRED, "1", {})
     seen = {account_key("alice", notice.marker)}
     assert split_key(account_key("alice", notice.marker)) == ("alice", notice.marker)
     assert split_key("legacy") is None
-    assert notifier.notify("alic", 7, notice, seen) is True
-    assert notifier.notify("alice", 7, notice, seen) is False
+    assert (await notifier.deliver("alic", 7, notice, seen)) is True
+    assert (await notifier.deliver("alice", 7, notice, seen)) is False
     assert sink.sent == [(7, "expired")]
 
 
-def test_kind_clear_does_not_match_a_longer_kind() -> None:
+@pytest.mark.asyncio
+async def test_kind_clear_does_not_match_a_longer_kind() -> None:
     sink = _Sink()
     notifier = _notifier(sink)
     notice = Notice(Kind.TRAFFIC_EXHAUSTED, "1", {"limit_gb": 1}, clears=("traffic",))
     seen = {account_key("alice", "traffic_soon:80"), account_key("alice", "traffic:1")}
-    assert notifier.notify("alice", 7, notice, seen) is True
+    assert (await notifier.deliver("alice", 7, notice, seen)) is True
     assert account_key("alice", "traffic_soon:80") in seen
     assert account_key("alice", "traffic:1") not in seen
 
 
-def test_accounts_do_not_share_a_marker() -> None:
+@pytest.mark.asyncio
+async def test_accounts_do_not_share_a_marker() -> None:
     sink = _Sink()
     notifier = _notifier(sink)
     notice = Notice(Kind.EXPIRED, "1", {})
     alice: set[str] = set()
     bob: set[str] = set()
-    assert notifier.notify("alice", 7, notice, alice) is True
-    assert notifier.notify("bob", 7, notice, bob) is True
+    assert (await notifier.deliver("alice", 7, notice, alice)) is True
+    assert (await notifier.deliver("bob", 7, notice, bob)) is True
     assert len(sink.sent) == 2

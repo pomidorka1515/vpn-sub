@@ -10,20 +10,20 @@ from custom_types import ApplyBonusCodeObject, CodeObject, RegisterWithCodeInfo
 from errors import CodeError, ConflictError, DuplicateError, NotFoundError, ValidationError
 from util import generate_token, isusername, sanitize
 
-from ..async_common import AsyncBaseService
+from ..common import BaseService
 from ..coordination import user_mutation
 
 # pyright: reportUnnecessaryIsInstance=false
 
 if TYPE_CHECKING:
-    from ..async_common import AsyncCoreResources
-    from .async_audit import AsyncAuditService
-    from .async_password import AsyncPasswordService
-    from .async_user import AsyncBusinessUserService
+    from ..common import SharedCoreResources
+    from .audit import AuditService
+    from .password import PasswordService
+    from .user import BusinessUserService
 
 
-class AsyncCodeService(AsyncBaseService):
-    def __init__(self, res: AsyncCoreResources, *, audit_svc: AsyncAuditService) -> None:
+class CodeService(BaseService):
+    def __init__(self, res: SharedCoreResources, *, audit_svc: AuditService) -> None:
         super().__init__(res)
         self.audit_svc = audit_svc
 
@@ -104,14 +104,14 @@ class AsyncCodeService(AsyncBaseService):
         return [row["code"] for row in await self.db.all_codes()]
 
 
-class AsyncBusinessCodeService(AsyncBaseService):
+class BusinessCodeService(BaseService):
     def __init__(
         self,
-        res: AsyncCoreResources,
+        res: SharedCoreResources,
         *,
-        audit_svc: AsyncAuditService,
-        password_svc: AsyncPasswordService,
-        user_svc: AsyncBusinessUserService,
+        audit_svc: AuditService,
+        password_svc: PasswordService,
+        user_svc: BusinessUserService,
     ) -> None:
         super().__init__(res)
         self.audit_svc = audit_svc

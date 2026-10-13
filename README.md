@@ -87,7 +87,7 @@ Designed to run on a single small VPS.
 ## Architecture
 
 ASGI lifespan calls `await create_application()`: primary lock, validated config snapshots,  
-SQLite, Redis, panel clients, `AsyncSubscription` recovery, watcher baseline/snapshots and optional Telegram bots. Startup failures unwind resources; readiness is published only after composition succeeds. Shutdown quiesces producers, settles mutations and closes resources, releasing the primary lock last.  
+SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshots and optional Telegram bots. Startup failures unwind resources; readiness is published only after composition succeeds. Shutdown quiesces producers, settles mutations and closes resources, releasing the primary lock last.  
 
 - `src/app.py` — `create_application()` factory: builds the `Application`
   runtime (paths, config snapshots, async DB, Redis, panels, subscription and Quart app)  
@@ -95,10 +95,10 @@ SQLite, Redis, panel clients, `AsyncSubscription` recovery, watcher baseline/sna
 - `src/main.py` — process entry for a checkout (`python -m main`) and for the
   Nuitka binary. Runs Hypercorn in-process on one event loop  
 - `src/serve.py` — shared Hypercorn settings for checkout and binary serving  
-- `src/core/` — `AsyncSubscription` and the user, code, panel, bandwidth, and audit
+- `src/core/` — `Subscription` and the user, code, panel, bandwidth, and audit
   services
-- `src/bwatch/` — `AsyncBWatch`: owned quota, expiry, panel health and snapshot tasks  
-- `src/session/` — `AsyncXUiSession`, buffered aiohttp transport and generation-safe caches  
+- `src/bwatch/` — `BWatch`: owned quota, expiry, panel health and snapshot tasks  
+- `src/session/` — `XUiSession`, buffered aiohttp transport and generation-safe caches  
 - `src/config/` — atomic JSON config with thread + cross-process locking
 - `src/db/` — aiosqlite repository with write transaction ownership and leased reads. Users, codes, quotas, and bandwidth live here.  
   `config.json` is deployment and presentation only
@@ -217,7 +217,7 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
 | `PATH_LANG`     | `./lang.jsonc`           | Path to the static UI language strings                                  |
 | `REQUIRE_PROXY` | `1`                      | Whether to block requests which bypass a reverse proxy (recommended)    |
-| `APP_BIND`      | `127.0.0.1:5550`         | Shared Hypercorn listener. Overrides temporary `GUNICORN_BIND` fallback. |
+| `APP_BIND`      | `127.0.0.1:5550`         | Shared Hypercorn listener. |
 | `LOGLEVEL`      | `DEBUG`                  | Threshold for application `Logger()` instances. |
 | `VERBOSE_LOGGING_OVERRIDES` | *(unset)*   | Comma-separated components to start with verbose traces.                |
 
@@ -226,10 +226,10 @@ are case-insensitive: `TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`, `ERROR`,
 `CRITICAL` / `FATAL`. An integer is rounded down to the nearest level (`15`
 is `DEBUG`, `0` is `TRACE`, `99` is `CRITICAL`). Unset, blank, or unrecognized
 values use the default. ASGI access records use the `http.access` Python logger;  
-`LOGLEVEL_HTTP` configures the redacted access logger (default `INFO`); it overrides the temporary `LOGLEVEL_GUNICORN` fallback. Hypercorn's default access log is disabled in shared settings. Both Gunicorn environment aliases expire at migration step 12 cutover.  
+`LOGLEVEL_HTTP` configures the redacted access logger (default `INFO`). Hypercorn's default access log is disabled in shared settings.  
 
 `VERBOSE_LOGGING_OVERRIDES` turns on the existing `verbose` flag for named
-components: `bwatch`, `core` (`AsyncSubscription`), and `panels` (`AsyncXUiSession`,
+components: `bwatch`, `core` (`Subscription`), and `panels` (`XUiSession`,
 including the whitelist panel). Names are case-insensitive and split on
 commas; empty tokens are ignored, so `bwatch,`, `bwatch`, and `,` all parse.
 Unknown names are ignored. Unset or empty leaves every component quiet.

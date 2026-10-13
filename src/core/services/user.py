@@ -27,7 +27,7 @@ from errors import (
 )
 from util import generate_token, isusername, isuuid, sanitize
 
-from ..async_common import AsyncBaseService
+from ..common import BaseService
 from ..coordination import user_mutation
 from .client_payload import already_exists, client_payload_from
 
@@ -35,16 +35,16 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from custom_types import PanelClient, UserFields, UserRecord
-    from session.async_client import AsyncXUiSession
+    from session.client import XUiSession
 
-    from ..async_common import AsyncCoreResources
-    from .async_audit import AsyncAuditService
-    from .async_bandwidth import AsyncBandwidthService
-    from .async_panel import AsyncPanelService, WorkClass
-    from .async_password import AsyncPasswordService
+    from ..common import SharedCoreResources
+    from .audit import AuditService
+    from .bandwidth import BandwidthService
+    from .panel import PanelService, WorkClass
+    from .password import PasswordService
 
 
-class AsyncCommonUserService(AsyncBaseService):
+class CommonUserService(BaseService):
     async def user(self, username: str) -> UserRecord:
         user = await self.db.get_user(username)
         if user is None:
@@ -87,16 +87,16 @@ class AsyncCommonUserService(AsyncBaseService):
         return await self.db.ext_to_user(ext_username) is not None
 
 
-class AsyncBusinessUserService(AsyncBaseService):
+class BusinessUserService(BaseService):
     def __init__(
         self,
-        res: AsyncCoreResources,
+        res: SharedCoreResources,
         *,
-        user_svc: AsyncCommonUserService,
-        panel_svc: AsyncPanelService,
-        password_svc: AsyncPasswordService,
-        audit_svc: AsyncAuditService,
-        bandwidth_svc: AsyncBandwidthService,
+        user_svc: CommonUserService,
+        panel_svc: PanelService,
+        password_svc: PasswordService,
+        audit_svc: AuditService,
+        bandwidth_svc: BandwidthService,
     ) -> None:
         super().__init__(res)
         self.user_svc = user_svc
@@ -123,7 +123,7 @@ class AsyncBusinessUserService(AsyncBaseService):
             raise ConflictError("User requires reset recovery")
 
     async def _post(
-        self, panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str,
+        self, panel: XUiSession, route: str, body: Mapping[str, JsonValue], what: str,
     ) -> None:
         # Even an unavailable response may follow an accepted external write.
         # Invalidate on every attempted write, and preserve the original error.
@@ -192,7 +192,7 @@ class AsyncBusinessUserService(AsyncBaseService):
         if await self.db.get_metadata(f"user_sync_pending:{username}") is None:
             await self.db.set_metadata(f"user_sync_pending:{username}", "reconcile")
 
-        async def sync(panel: AsyncXUiSession) -> None:
+        async def sync(panel: XUiSession) -> None:
             inbound_ids = [
                 row.id for row in await self.panel_svc.getinbounds(panel) if row.protocol == "vless"
             ]
@@ -253,7 +253,7 @@ class AsyncBusinessUserService(AsyncBaseService):
     async def rollback_panel_clients(
         self, username: str, *, expected_uuid: str | None = None, work: WorkClass = "foreground",
     ) -> None:
-        async def delete(panel: AsyncXUiSession) -> None:
+        async def delete(panel: XUiSession) -> None:
             # Live reads make repeated compensation safe; unavailable is never
             # confused with absent, and foreign shared-panel clients survive.
             client = await self.panel_svc.get_client(panel, username)
@@ -292,7 +292,7 @@ class AsyncBusinessUserService(AsyncBaseService):
 
     async def _set_enabled(
         self,
-        panel: AsyncXUiSession,
+        panel: XUiSession,
         username: str,
         enabled: bool,
         clients: Mapping[str, PanelClient],
@@ -349,7 +349,7 @@ class AsyncBusinessUserService(AsyncBaseService):
         ]
         known = await self.panel_svc.client_maps(panels, work=work)
 
-        async def write(panel: AsyncXUiSession) -> None:
+        async def write(panel: XUiSession) -> None:
             enabled = bool(user["enabled_wl"] if panel == self.whitelist_panel else user["enabled"])
             await self._set_enabled(panel, username, enabled, known[panel.name])
 
@@ -517,7 +517,7 @@ class AsyncBusinessUserService(AsyncBaseService):
         # the same manual-repair marker used by the existing service.
         await self.db.set_metadata(key, f"{int(time.time())}:UUID update in progress")
 
-        async def write(panel: AsyncXUiSession) -> None:
+        async def write(panel: XUiSession) -> None:
             current = await self.panel_svc.get_client(panel, username)
             if current is not None:
                 payload = client_payload_from(current)

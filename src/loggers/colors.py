@@ -27,7 +27,7 @@ class Colors:
 
 
 def color_status(status: str) -> str:
-    """Color an HTTP status by class, matching the gunicorn access logger.
+    """Color an HTTP status by class.
 
     1xx is grey, 2xx green, 3xx cyan, 4xx yellow, and 5xx red. A non-numeric
     or empty status is returned unchanged.

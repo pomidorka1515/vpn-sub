@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-import time
+import tempfile
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Unpack, cast
 from unittest.mock import MagicMock
 from urllib.parse import unquote
@@ -13,20 +14,19 @@ from requests import Response
 
 from bwatch import BWatch
 from config import Config
-from core import Subscription
 from custom_types import ClientTraffic, Inbound, PanelClient
 
 if TYPE_CHECKING:
-    from flask import Flask
     from typing_contracts import AppOverrides, CreateUserOverrides, ProfileOverrides
 
-    from bwatch.legacy_delivery import AdminDelivery, PublicDelivery
-    from config import AppConfig, JsonValue, LangConfig, LinesConfig, ProfileConfig
+    from config import AppConfig, JsonValue, LangConfig, ProfileConfig
+    from core import Subscription
     from db import Database
     from session import XUiSession
 
 USER_UUID = "01234567-89ab-cdef-0123-456789abcdef"
 TOKEN_A = "a" * 40
+SUBSCRIPTIONS: list[Subscription] = []
 
 type _PostHandler = Callable[[FakePanel, str, dict[str, object]], Response]
 
@@ -81,27 +81,38 @@ def profile_config(**overrides: Unpack[ProfileOverrides]) -> ProfileConfig:
     return document
 
 
-def make_subscription(
+async def make_subscription(
     database: Database,
     *,
     panels: list[object] | None = None,
     whitelist_panel: object | None = None,
-    app: Flask | None = None,
-    audit_cfg: LinesConfig | None = None,
+    audit_cfg: object | None = None,
     lang_cfg: Config[LangConfig] | None = None,
     **config_overrides: Unpack[AppOverrides],
 ) -> Subscription:
-    return Subscription(
-        cfg=config_mock(subscription_config(**config_overrides)),
-        lang_cfg=config_mock(language_config()) if lang_cfg is None else lang_cfg,
-        db=database,
-        panels=cast("list[XUiSession]", panels or []),
-        whitelist_panel=cast("XUiSession | None", whitelist_panel),
-        audit_cfg=audit_cfg,
+    from async_core_helpers import make_async_subscription
+
+    from core.services.audit import AuditService
+
+    sub = await make_async_subscription(
+        database, Path(tempfile.mkdtemp(dir=Path(database.path).parent)),
+        cast("list[FakePanel]", panels or []), cast("FakePanel | None", whitelist_panel),
     )
+    sub.res = replace(sub.res, cfg=config_mock(subscription_config(**config_overrides)))
+    if lang_cfg is not None:
+        sub.res = replace(sub.res, lang_cfg=lang_cfg)
+    for service in (sub.panel_svc, sub.password_svc, sub.user_svc, sub.bandwidth_svc, sub.business_svc, sub.code_svc, sub.business_code_svc, sub.telegram_svc, sub.leaderboard_svc):
+        service.res = sub.res
+    SUBSCRIPTIONS.append(sub)
+    if audit_cfg is not None:
+        from config.store import AsyncLinesConfig
+
+        sub.audit_svc = AuditService(cast(AsyncLinesConfig, audit_cfg))
+        sub.business_svc.audit_svc = sub.audit_svc
+    return sub
 
 
-def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]) -> None:
+async def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]) -> None:
     payload: CreateUserOverrides = {
         "username": "alice",
         "uuid": USER_UUID,
@@ -110,7 +121,7 @@ def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]) -> N
         "displayname": "Alice",
     }
     payload.update(kwargs)
-    database.create_user(
+    await database.create_user(
         username=payload["username"],
         uuid=payload["uuid"],
         token=payload["token"],
@@ -127,20 +138,8 @@ def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]) -> N
     )
 
 
-def make_watch(
-    database: Database,
-    subscription: Subscription,
-    *,
-    bot: object | None = None,
-    admin_bot: object | None = None,
-) -> BWatch:
-    return BWatch(
-        cfg=config_mock(subscription_config()),
-        db=database,
-        sub=subscription,
-        bot=cast("PublicDelivery | None", bot),
-        admin_bot=cast("AdminDelivery | None", admin_bot),
-    )
+def make_watch(database: Database, subscription: Subscription) -> BWatch:
+    return BWatch(cfg=config_mock(subscription_config()), db=database, sub=subscription, scheduled=False)
 
 
 def json_http(data: JsonValue, status_code: int = 200) -> Response:
@@ -256,15 +255,6 @@ class FakePanel:
         self.dead = dead
         self.inbounds_list = inbounds_list
         self.mode = mode
-        self._cache: list[Inbound] | None = None
-        self._cache_set_at: float = 0.0
-        self.cache_time: float = 0
-        self._cache_generation: int = 0
-        self._seen_generation: int = 0
-        self._clients_cache: dict[str, PanelClient] | None = None
-        self._clients_set_at: float = 0.0
-        self._clients_generation: int = 0
-        self._clients_seen: int = 0
         self.name = name
         self._inbounds = inbounds or []
         self.clients: list[PanelClient] = clients or []
@@ -280,62 +270,6 @@ class FakePanel:
         self._status_error = status_error
         self.gets: list[str] = []
         self.posts: list[tuple[str, dict[str, object]]] = []
-
-    @property
-    def cache(self) -> list[Inbound] | None:
-        return self._cache
-
-    @cache.setter
-    def cache(self, value: list[Inbound] | None) -> None:
-        self._cache = value
-        self._cache_set_at = time.monotonic() if value is not None else 0.0
-        self.cache_time = self._cache_set_at
-        if value is not None:
-            self._seen_generation = self._cache_generation
-
-    @property
-    def cache_current(self) -> bool:
-        return self._cache is not None and self._seen_generation == self._cache_generation
-
-    @property
-    def cache_age(self) -> float:
-        if self._cache is None:
-            return float("inf")
-        return time.monotonic() - self._cache_set_at
-
-    def fresh_cache(self, ttl: float) -> list[Inbound] | None:
-        if not self.cache_current or self.cache_age >= ttl:
-            return None
-        return self._cache
-
-    def clear_cache(self) -> None:
-        self._cache_generation += 1
-        self.cache = None
-
-    @property
-    def clients_cache(self) -> dict[str, PanelClient] | None:
-        return self._clients_cache
-
-    @clients_cache.setter
-    def clients_cache(self, value: dict[str, PanelClient] | None) -> None:
-        self._clients_cache = value
-        self._clients_set_at = time.monotonic() if value is not None else 0.0
-        if value is not None:
-            self._clients_seen = self._clients_generation
-
-    def fresh_clients(self, ttl: float) -> dict[str, PanelClient] | None:
-        if self._clients_cache is None or self._clients_seen != self._clients_generation:
-            return None
-        if time.monotonic() - self._clients_set_at >= ttl:
-            return None
-        return self._clients_cache
-
-    def clear_clients(self) -> None:
-        self._clients_generation += 1
-        self.clients_cache = None
-
-    def close(self) -> None:
-        pass
 
     def get(self, url: str) -> Response:
         self.gets.append(url)
@@ -570,3 +504,29 @@ _POST_ROUTES: tuple[tuple[str, _PostHandler], ...] = (
     ("/attach", FakePanel._post_attach),
     ("/detach", FakePanel._post_attach),
 )
+
+
+async def panel_client(subscription: Subscription, panel: FakePanel) -> XUiSession:
+    from async_core_helpers import PanelTransport
+
+    from session import XUiSession
+
+    for client in subscription.panels:
+        if isinstance(client._transport, PanelTransport) and client._transport.panel is panel:
+            return client
+    client = XUiSession(name=panel.name, address="127.0.0.1", port=8080, uri="", api_token="test", transport=PanelTransport(panel), stamp_dir=tempfile.mkdtemp(dir=Path(subscription.res.db.path).parent))
+    await client.start()
+    subscription.panels.append(client)
+    from session.cache import GenerationCache
+    from session.stamp import stamp_path
+
+    service = subscription.panel_svc
+    service._inbounds[client.name] = GenerationCache(
+        stamp_path("inbounds", client.name, client.base_url, directory=client.stamp_dir),
+        files=subscription.res.offloads.files, tasks=service._refreshes,
+    )
+    service._clients[client.name] = GenerationCache(
+        stamp_path("clients", client.name, client.base_url, directory=client.stamp_dir),
+        files=subscription.res.offloads.files, tasks=service._refreshes,
+    )
+    return client

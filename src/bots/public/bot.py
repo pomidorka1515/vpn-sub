@@ -17,8 +17,8 @@ from .traffic import PublicTrafficMixin
 
 if TYPE_CHECKING:
     from config import AppConfig, LangConfig
-    from core import AsyncSubscription
-    from core.async_common import Snapshot
+    from core import Subscription
+    from core.common import Snapshot
 
 __all__ = ["AsyncPublicBot"]
 
@@ -35,7 +35,7 @@ class AsyncPublicBot(
 
     def __init__(
         self,
-        sub: AsyncSubscription,
+        sub: Subscription,
         cfg: Snapshot[AppConfig],
         lang_cfg: Snapshot[LangConfig],
     ) -> None:

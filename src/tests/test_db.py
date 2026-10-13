@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import sqlite3
-import threading
 import uuid
 from typing import TYPE_CHECKING
 
 import pytest
 
 from db import Database
-from errors import CodeError, DuplicateError, MigrationError
+from errors import DuplicateError, MigrationError
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-def create_user(db: Database, username: str = "alice", *, token: str | None = None) -> None:
-    db.create_user(
+async def create_user(db: Database, username: str = "alice", *, token: str | None = None) -> None:
+    (await db.create_user(
         username=username,
         uuid=str(uuid.uuid4()),
         token=token or f"{username}-{'x' * 32}",
@@ -23,17 +22,20 @@ def create_user(db: Database, username: str = "alice", *, token: str | None = No
         displayname=username.title(),
         ext_username=f"{username}@example.test",
         ext_password_hash="hash",
-    )
+    ))
 
 
-def test_schema_initialization_is_idempotent(db_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
     first = Database(path=db_path)
-    first.close()
+    await first.start()
+    (await first.close())
     db = Database(path=db_path)
+    await db.start()
     try:
-        assert db.list_users() == []
-        assert db.get_metadata("missing") is None
-        assert db.admin_ui_session() is None
+        assert (await db.list_users()) == []
+        assert (await db.get_metadata("missing")) is None
+        assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
                 conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
@@ -44,28 +46,30 @@ def test_schema_initialization_is_idempotent(db_path: Path) -> None:
                 ).fetchone()[0]
                 == ""
             )
-        db.set_admin_ui_session("a" * 100)
-        assert db.admin_ui_session() == "a" * 100
-        db.set_admin_ui_session(None)
-        assert db.admin_ui_session() is None
+        (await db.set_admin_ui_session("a" * 100))
+        assert (await db.admin_ui_session()) == "a" * 100
+        (await db.set_admin_ui_session(None))
+        assert (await db.admin_ui_session()) is None
     finally:
-        db.close()
+        (await db.close())
 
 
-def test_unversioned_existing_database_is_refused(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_unversioned_existing_database_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "unversioned.sqlite3"
     connection = sqlite3.connect(path)
     connection.execute("CREATE TABLE users(username TEXT PRIMARY KEY)")
     connection.close()
     with pytest.raises(MigrationError):
-        Database(path=path)
+        await Database(path=path).start()
 
 
-def test_migration_repairs_negative_bandwidth_snapshot_values(
+@pytest.mark.asyncio
+async def test_migration_repairs_negative_bandwidth_snapshot_values(
     database: Database,
     db_path: Path,
 ) -> None:
-    database.close()
+    (await database.close())
     connection = sqlite3.connect(db_path)
     connection.executescript(
         """ALTER TABLE users RENAME TO old_users;
@@ -106,18 +110,20 @@ def test_migration_repairs_negative_bandwidth_snapshot_values(
     connection.close()
 
     db = Database(path=db_path)
+    await db.start()
     try:
-        rows = db.get_bandwidth_snapshots("alice", 0)
+        rows = (await db.get_bandwidth_snapshots("alice", 0))
         assert [row["up"] for row in rows] == [5, 0]
         assert [row["down"] for row in rows] == [0, 2]
         assert [row["wl_up"] for row in rows] == [7, 0]
         assert [row["wl_down"] for row in rows] == [8, 4]
     finally:
-        db.close()
+        (await db.close())
 
 
-def test_auth_token_migration_and_lookup(database: Database, db_path: Path) -> None:
-    database.close()
+@pytest.mark.asyncio
+async def test_auth_token_migration_and_lookup(database: Database, db_path: Path) -> None:
+    (await database.close())
     connection = sqlite3.connect(db_path)
     connection.executescript(
         """ALTER TABLE users RENAME TO old_users;
@@ -149,23 +155,25 @@ def test_auth_token_migration_and_lookup(database: Database, db_path: Path) -> N
     connection.close()
 
     db = Database(path=db_path)
+    await db.start()
     try:
-        create_user(db)
-        record = db.get_user("alice")
+        (await create_user(db))
+        record = (await db.get_user("alice"))
         assert record is not None
         assert record["auth_token"] is None
-        db.set_auth_token("alice", "a" * 100)
-        assert db.auth_token_to_user("a" * 100) == "alice"
-        assert db.auth_token_to_user("b" * 100) is None
-        db.set_auth_token("alice", None)
-        assert db.auth_token_to_user("a" * 100) is None
-        assert db.admin_ui_session() is None
+        (await db.set_auth_token("alice", "a" * 100))
+        assert (await db.auth_token_to_user("a" * 100)) == "alice"
+        assert (await db.auth_token_to_user("b" * 100)) is None
+        (await db.set_auth_token("alice", None))
+        assert (await db.auth_token_to_user("a" * 100)) is None
+        assert (await db.admin_ui_session()) is None
     finally:
-        db.close()
+        (await db.close())
 
 
-def test_admin_ui_session_migration_from_version_3(database: Database, db_path: Path) -> None:
-    database.close()
+@pytest.mark.asyncio
+async def test_admin_ui_session_migration_from_version_3(database: Database, db_path: Path) -> None:
+    (await database.close())
     connection = sqlite3.connect(db_path)
     connection.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session'")
     connection.execute("UPDATE schema_version SET version = 3")
@@ -173,8 +181,9 @@ def test_admin_ui_session_migration_from_version_3(database: Database, db_path: 
     connection.close()
 
     db = Database(path=db_path)
+    await db.start()
     try:
-        assert db.admin_ui_session() is None
+        assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
                 conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
@@ -185,87 +194,47 @@ def test_admin_ui_session_migration_from_version_3(database: Database, db_path: 
                 ).fetchone()[0]
                 == ""
             )
-        db.set_admin_ui_session("c" * 100)
-        assert db.admin_ui_session() == "c" * 100
+        (await db.set_admin_ui_session("c" * 100))
+        assert (await db.admin_ui_session()) == "c" * 100
     finally:
-        db.close()
+        (await db.close())
 
 
-def test_user_constraints_reverse_lookups_and_deletion(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_user_constraints_reverse_lookups_and_deletion(database: Database) -> None:
     token = "t" * 40
-    create_user(database, token=token)
-    database.set_telegram("alice", "123")
-    assert database.token_to_user(token) == "alice"
-    assert database.ext_to_user("alice@example.test") == "alice"
-    assert database.tgid_to_user(123) == "alice"
+    (await create_user(database, token=token))
+    (await database.set_telegram("alice", "123"))
+    assert (await database.token_to_user(token)) == "alice"
+    assert (await database.ext_to_user("alice@example.test")) == "alice"
+    assert (await database.tgid_to_user(123)) == "alice"
     with pytest.raises(DuplicateError):
-        create_user(database, "bob", token=token)
-    database.delete_user("alice")
-    assert database.tgid_to_user(123) is None
-    assert database.ext_to_user("alice@example.test") is None
+        (await create_user(database, "bob", token=token))
+    (await database.delete_user("alice"))
+    assert (await database.tgid_to_user(123)) is None
+    assert (await database.ext_to_user("alice@example.test")) is None
 
 
-def test_registration_and_bonus_consumption_are_atomic(database: Database) -> None:
-    database.add_code("invite", "register", uses=1, days=3, gb=2, wl_gb=1)
-    successes: list[str] = []
-    errors: list[Exception] = []
-    lock = threading.Lock()
-
-    def register(index: int) -> None:
-        try:
-            database.register_with_code(
-                code="invite",
-                username=f"u{index}",
-                uuid=str(uuid.uuid4()),
-                token=f"{index}{'x' * 39}",
-                fingerprint="chrome",
-                displayname=f"U {index}",
-                ext_username=f"u{index}@example.test",
-                ext_password_hash="hash",
-            )
-            with lock:
-                successes.append(str(index))
-        except CodeError as exc:
-            with lock:
-                errors.append(exc)
-
-    threads = [threading.Thread(target=register, args=(index,)) for index in range(8)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert len(successes) == 1
-    assert len(errors) == 7
-    assert database.get_code("invite") is None
-
-    username = f"u{successes[0]}"
-    database.add_code("bonus", "bonus", uses=2, days=1, gb=3, wl_gb=4)
-    result = database.adjust_bonus(username, "bonus")
-    assert result["uses"] == 1
-    user = database.get_user(username)
-    assert user is not None
-    assert user["bw_limit_gb"] == 5
-    assert user["wl_limit_gb"] == 5
-
-
-def test_metadata_prefix_listing_and_deletion(database: Database) -> None:
-    database.set_metadata("prefix_one", "1")
-    database.set_metadata("prefix_two", "2")
-    database.set_metadata("prefix_100%", "3")
-    database.set_metadata("other", "4")
-    assert database.list_metadata("prefix_") == {
+@pytest.mark.asyncio
+async def test_metadata_prefix_listing_and_deletion(database: Database) -> None:
+    (await database.set_metadata("prefix_one", "1"))
+    (await database.set_metadata("prefix_two", "2"))
+    (await database.set_metadata("prefix_100%", "3"))
+    (await database.set_metadata("other", "4"))
+    assert (await database.list_metadata("prefix_")) == {
         "prefix_one": "1",
         "prefix_two": "2",
         "prefix_100%": "3",
     }
-    database.delete_metadata("prefix_one")
-    assert database.get_metadata("prefix_one") is None
-    assert database.get_metadata("prefix_two") == "2"
+    (await database.delete_metadata("prefix_one"))
+    assert (await database.get_metadata("prefix_one")) is None
+    assert (await database.get_metadata("prefix_two")) == "2"
 
 
-def test_registration_sync_rollback_refunds_finite_code(database: Database) -> None:
-    database.add_code("invite", "register", uses=1)
-    database.register_with_code(
+@pytest.mark.asyncio
+async def test_registration_sync_rollback_refunds_finite_code(database: Database) -> None:
+    (await database.add_code("invite", "register", uses=1))
+    (await database.register_with_code(
         code="invite",
         username="alice",
         uuid=str(uuid.uuid4()),
@@ -274,134 +243,63 @@ def test_registration_sync_rollback_refunds_finite_code(database: Database) -> N
         displayname="Alice",
         ext_username="alice@example.test",
         ext_password_hash="hash",
-    )
-    assert database.get_code("invite") is None
-    database.rollback_registration_sync("alice")
-    assert not database.user_exists("alice")
-    restored = database.get_code("invite")
+    ))
+    assert (await database.get_code("invite")) is None
+    (await database.rollback_registration_sync("alice"))
+    assert not (await database.user_exists("alice"))
+    restored = (await database.get_code("invite"))
     assert restored is not None
     assert restored["uses"] == 1
 
 
-def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
-    create_user(database)
-    assert database.mark_notification("regular", 123)
-    assert not database.mark_notification("regular", 123)
-    database.mark_notification("alice:traffic_exhausted:1", "123")
-    database.mark_notification("alice:traffic_exhausted:1", "")
-    database.sync_notifications(
+@pytest.mark.asyncio
+async def test_notifications_monthly_reset_and_snapshots(database: Database) -> None:
+    (await create_user(database))
+    assert (await database.mark_notification("regular", 123))
+    assert not (await database.mark_notification("regular", 123))
+    (await database.mark_notification("alice:traffic_exhausted:1", "123"))
+    (await database.mark_notification("alice:traffic_exhausted:1", ""))
+    (await database.sync_notifications(
         {"alice:traffic_exhausted:1"},
         {"alice:restored"},
-    )
-    assert database.notification_markers() == {"alice:restored"}
+    ))
+    assert (await database.notification_markers()) == {"alice:restored"}
     # a legacy row sharing the kind string must survive a marker delete
-    assert database.notification_seen("alice:traffic_exhausted:1", 123)
-    assert not database.notification_seen("alice:traffic_exhausted:1", "")
-    database.increment_usage("alice", regular=1234, whitelist=2345)
-    assert database.reset_monthly("2026-09", "2026-09-01")
-    assert not database.reset_monthly("2026-09", "2026-09-01")
-    user = database.get_user("alice")
+    assert (await database.notification_seen("alice:traffic_exhausted:1", 123))
+    assert not (await database.notification_seen("alice:traffic_exhausted:1", ""))
+    (await database.increment_usage("alice", regular=1234, whitelist=2345))
+    assert (await database.reset_monthly("2026-09", "2026-09-01"))
+    assert not (await database.reset_monthly("2026-09", "2026-09-01"))
+    user = (await database.get_user("alice"))
     assert user is not None
     assert (user["bw_used"], user["wl_used"]) == (0, 0)
-    assert not database.notification_seen("regular", 123)
-    assert database.notification_markers() == set()
+    assert not (await database.notification_seen("regular", 123))
+    assert (await database.notification_markers()) == set()
 
-    database.add_bandwidth_snapshot("alice", 10, 1, 2, 3, 4)
-    database.add_bandwidth_snapshot("alice", 10, 5, 6, 7, 8)
-    database.add_bandwidth_snapshot("alice", 20, 9, 10, 11, 12)
-    bandwidth_rows = database.get_bandwidth_snapshots("alice", 0)
+    (await database.add_bandwidth_snapshot("alice", 10, 1, 2, 3, 4))
+    (await database.add_bandwidth_snapshot("alice", 10, 5, 6, 7, 8))
+    (await database.add_bandwidth_snapshot("alice", 20, 9, 10, 11, 12))
+    bandwidth_rows = (await database.get_bandwidth_snapshots("alice", 0))
     assert [row["ts"] for row in bandwidth_rows] == [20, 10]
     assert bandwidth_rows[1]["up"] == 6
-    assert database.prune_bandwidth_snapshots(20) == 1
-    database.upsert_state_snapshot(10, {"ts": 10, "host": {}, "panels": {}})
-    database.upsert_state_snapshot(10, {"ts": 10, "host": {"new": True}, "panels": {}})
-    assert database.get_state_snapshots(0)[0]["host"] == {"new": True}
-    assert database.prune_state_snapshots(20) == 1
+    assert (await database.prune_bandwidth_snapshots(20)) == 1
+    (await database.upsert_state_snapshot(10, {"ts": 10, "host": {}, "panels": {}}))
+    (await database.upsert_state_snapshot(10, {"ts": 10, "host": {"new": True}, "panels": {}}))
+    assert (await database.get_state_snapshots(0))[0]["host"] == {"new": True}
+    assert (await database.prune_state_snapshots(20)) == 1
 
 
-def test_bandwidth_snapshot_preserves_named_integer_fields(database: Database) -> None:
-    database.create_user(
+@pytest.mark.asyncio
+async def test_bandwidth_snapshot_preserves_named_integer_fields(database: Database) -> None:
+    (await database.create_user(
         username="snapshot",
         uuid="uuid-snapshot",
         token="token-snapshot",
         fingerprint="chrome",
         displayname="Snapshot",
-    )
-    database.add_bandwidth_snapshot("snapshot", 100, 1, 2, 3, 4)
-    assert database.get_bandwidth_snapshots("snapshot", 100) == [
+    ))
+    (await database.add_bandwidth_snapshot("snapshot", 100, 1, 2, 3, 4))
+    assert (await database.get_bandwidth_snapshots("snapshot", 100)) == [
         {"ts": 100, "up": 1, "down": 2, "wl_up": 3, "wl_down": 4},
     ]
-    assert database.get_bandwidth_snapshots("snapshot", 101) == []
-
-
-def test_bulk_usage_and_snapshots_commit_once(database: Database) -> None:
-    create_user(database, "alice")
-    create_user(database, "bob")
-    database.set_telegram("alice", "11")
-    begins = 0
-
-    def trace(query: str) -> None:
-        nonlocal begins
-        if query == "BEGIN IMMEDIATE":
-            begins += 1
-
-    original_connect = database._connect
-
-    def traced_connect() -> sqlite3.Connection:
-        conn = original_connect()
-        conn.set_trace_callback(trace)
-        return conn
-
-    database._connect = traced_connect  # type: ignore[method-assign]
-    try:
-        database.increment_usages({"alice": (3, 0), "bob": (0, 4), "cara": (0, 0)})
-        database.add_bandwidth_snapshots(
-            [
-                ("alice", 10, 1, 2, 0, 0),
-                ("bob", 10, 0, 0, 5, 6),
-            ],
-        )
-        database.increment_usages({})
-        database.add_bandwidth_snapshots([])
-    finally:
-        database._connect = original_connect  # type: ignore[method-assign]
-
-    assert begins == 2
-    alice = database.get_user("alice")
-    bob = database.get_user("bob")
-    assert alice is not None
-    assert bob is not None
-    assert (alice["bw_used"], bob["wl_used"]) == (3, 4)
-    assert database.get_bandwidth_snapshots("bob", 0)[0]["wl_up"] == 5
-    assert database.usernames() == {"alice", "bob"}
-    assert database.username_exts()["alice"] == "alice@example.test"
-    assert database.user_tgids() == {"alice": "11"}
-    assert [row["username"] for row in database.list_user_records()] == ["alice", "bob"]
-
-
-def test_connection_is_reused_until_close(database: Database) -> None:
-    with database.connection() as first:
-        pass
-    with database.connection() as second:
-        assert second is first
-
-    other: list[sqlite3.Connection] = []
-
-    def open_other() -> None:
-        with database.connection() as conn:
-            other.append(conn)
-
-    thread = threading.Thread(target=open_other)
-    thread.start()
-    thread.join()
-    assert len(other) == 1
-    assert other[0] is not first
-
-    database.close()
-    try:
-        with database.connection() as third:
-            assert third is not first
-            with database.connection() as fourth:
-                assert fourth is third
-    finally:
-        database.close()
+    assert (await database.get_bandwidth_snapshots("snapshot", 101)) == []

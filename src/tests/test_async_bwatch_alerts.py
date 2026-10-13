@@ -6,9 +6,9 @@ import pytest
 from async_core_helpers import close_async_subscription, make_async_subscription
 from helpers import USER_UUID
 
-from bwatch.async_watch import AsyncBWatch
-from db import AsyncDatabase
-from notify.async_notifier import AsyncNotifier
+from bwatch.watch import BWatch
+from db import Database
+from notify.notifier import Notifier
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(
     tmp_path: Path, used: int, disabled: bool,
 ) -> None:
-    db = AsyncDatabase(path=tmp_path / "state.db", start_backup=False)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_async_subscription(db, tmp_path)
     sent: list[str] = []
@@ -30,12 +30,12 @@ async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(
     async def language(_id: int) -> str:
         return "en"
 
-    notifier = AsyncNotifier(
+    notifier = Notifier(
         texts={"en": {"traffic_exhausted": "exhausted", "traffic_soon": "soon"}},
         send=send,
         language=language,
     )
-    watch = AsyncBWatch(sub.res.cfg, db, sub, notifier=notifier, scheduled=False)
+    watch = BWatch(sub.res.cfg, db, sub, notifier=notifier, scheduled=False)
     try:
         await db.create_user(
             username="alice",

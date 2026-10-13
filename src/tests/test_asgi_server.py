@@ -17,8 +17,7 @@ from serve import server_config
 
 def test_server_settings_and_environment_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("APP_BIND", raising=False)
-    monkeypatch.setenv("GUNICORN_BIND", "127.0.0.1:1234")
-    assert server_config().bind == ["127.0.0.1:1234"]
+    assert server_config().bind == ["127.0.0.1:5550"]
     monkeypatch.setenv("APP_BIND", "127.0.0.1:4321")
     config = server_config()
     assert config.bind == ["127.0.0.1:4321"]
@@ -26,7 +25,7 @@ def test_server_settings_and_environment_precedence(monkeypatch: pytest.MonkeyPa
     assert config.accesslog is None
     assert config.graceful_timeout + config.shutdown_timeout < 90
     monkeypatch.delenv("LOGLEVEL_HTTP", raising=False)
-    monkeypatch.setenv("LOGLEVEL_GUNICORN", "TRACE")
+    monkeypatch.setenv("LOGLEVEL_HTTP", "TRACE")
     create_api_application()
     assert logging.getLogger("http.access").level == TRACE
     monkeypatch.setenv("LOGLEVEL_HTTP", "WARNING")

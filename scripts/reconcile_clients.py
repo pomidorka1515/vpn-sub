@@ -50,24 +50,24 @@ _SRC = _ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from config import AppConfig, JsonValue  # ruff: ignore[module-import-not-at-top-of-file]
+from config import AppConfig  # ruff: ignore[module-import-not-at-top-of-file]
 from custom_types import (  # ruff: ignore[module-import-not-at-top-of-file]
     ClientListResponse,
     ClientPayload,
     InboundListResponse,
 )
-from db import AsyncDatabase  # ruff: ignore[module-import-not-at-top-of-file]
+from db import Database  # ruff: ignore[module-import-not-at-top-of-file]
 from paths import runtime_dir  # ruff: ignore[module-import-not-at-top-of-file]
-from session import AsyncXUiSession  # ruff: ignore[module-import-not-at-top-of-file]
+from session import XUiSession  # ruff: ignore[module-import-not-at-top-of-file]
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from config import PanelConfig
+    from config import JsonValue, PanelConfig
     from custom_types import (
         PanelClient,
     )
-    from session.async_transport import PanelResponse
+    from session.transport import PanelResponse
 
 
 class ReconcileError(RuntimeError):
@@ -98,7 +98,7 @@ class NullSeedLedger:
 class DbSeedLedger:
     """DB-metadata-backed ledger; keys ``reconcile_seed:{panel}:{username}``."""
 
-    def __init__(self, database: AsyncDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._db = database
 
     @staticmethod
@@ -136,7 +136,7 @@ class PanelReport:
     errors: list[str] = field(default_factory=list[str])
 
 
-async def _load_uuid_map(database: AsyncDatabase) -> dict[str, str]:
+async def _load_uuid_map(database: Database) -> dict[str, str]:
     """Map every known user's panel uuid to the service username."""
     mapping: dict[str, str] = {}
     for username in await database.list_users():
@@ -146,14 +146,14 @@ async def _load_uuid_map(database: AsyncDatabase) -> dict[str, str]:
     return mapping
 
 
-def _build_panel(name: str, panel_cfg: PanelConfig, *, stamp_dir: str) -> AsyncXUiSession:
+def _build_panel(name: str, panel_cfg: PanelConfig, *, stamp_dir: str) -> XUiSession:
     nginx_auth: tuple[str, str] | None = None
     nginx_raw: object = panel_cfg.get("nginx_auth")
     if isinstance(nginx_raw, (list, tuple)):
         sequence = cast("Sequence[object]", nginx_raw)
         if len(sequence) == 2:
             nginx_auth = (str(sequence[0]), str(sequence[1]))
-    return AsyncXUiSession(
+    return XUiSession(
         name=str(panel_cfg["name"]),
         address=str(panel_cfg["address"]),
         port=panel_cfg["port"],
@@ -176,12 +176,12 @@ def _headers(value: Mapping[str, JsonValue] | None) -> dict[str, str]:
     return {key: str(item) for key, item in value.items()}
 
 
-def _envelope(panel: AsyncXUiSession, response: PanelResponse, what: str) -> dict[str, JsonValue]:
+def _envelope(panel: XUiSession, response: PanelResponse, what: str) -> dict[str, JsonValue]:
     try:
         payload = response.json()
         if not isinstance(payload, dict):
             raise ValueError("expected a JSON object")
-        data = cast(dict[str, JsonValue], payload)
+        data = payload
     except Exception as exc:
         raise ReconcileError(f"panel {panel.name}: {what} returned invalid JSON") from exc
     if response.status_code != 200 or not data.get("success"):
@@ -191,7 +191,7 @@ def _envelope(panel: AsyncXUiSession, response: PanelResponse, what: str) -> dic
     return data
 
 
-async def _managed_vless_ids(panel: AsyncXUiSession) -> list[int]:
+async def _managed_vless_ids(panel: XUiSession) -> list[int]:
     """VLESS inbound IDs this service manages on the panel (mode filter applied).
 
     Reconciled attachments are intersected with this set so the canonical
@@ -207,16 +207,16 @@ async def _managed_vless_ids(panel: AsyncXUiSession) -> list[int]:
     return sorted(i.id for i in inbounds if i.protocol == "vless")
 
 
-async def _list_clients(panel: AsyncXUiSession) -> list[PanelClient]:
+async def _list_clients(panel: XUiSession) -> list[PanelClient]:
     data = _envelope(panel, await panel.get("panel/api/clients/list"), "client list query")
     return from_dict(ClientListResponse, data).obj
 
 
-async def _post(panel: AsyncXUiSession, url: str, body: dict[str, JsonValue], what: str) -> None:
+async def _post(panel: XUiSession, url: str, body: dict[str, JsonValue], what: str) -> None:
     response = await panel.post(url, json=body, headers={"Accept": "application/json"})
     try:
         payload = response.json()
-        content = cast(dict[str, JsonValue], payload) if isinstance(payload, dict) else {}
+        content = payload if isinstance(payload, dict) else {}
     except Exception:
         content = {}
     if response.status_code not in {200, 201} or not content.get("success"):
@@ -226,7 +226,7 @@ async def _post(panel: AsyncXUiSession, url: str, body: dict[str, JsonValue], wh
 
 
 async def reconcile_panel(
-    panel: AsyncXUiSession,
+    panel: XUiSession,
     uuid_map: dict[str, str],
     *,
     apply: bool,
@@ -268,7 +268,7 @@ async def reconcile_panel(
 
 
 async def _reconcile_user(
-    panel: AsyncXUiSession,
+    panel: XUiSession,
     report: PanelReport,
     username: str,
     uuid_value: str,
@@ -434,7 +434,7 @@ async def _run(
     apply: bool,
 ) -> int:
     """Own all panel/repository resources on the CLI's single event loop."""
-    database = AsyncDatabase(path=database_path, start_backup=False)
+    database = Database(path=database_path, start_backup=False)
     stamp_dir = str(runtime_dir())
     ledger: SeedLedger = DbSeedLedger(database)
     exit_code = 0

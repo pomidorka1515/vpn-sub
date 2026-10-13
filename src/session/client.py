@@ -1,68 +1,33 @@
-"""3x-ui panel client: Bearer auth, health checks, and two generation caches."""
+"""Async panel client with explicit runtime-owned lifecycle."""
 
 from __future__ import annotations
 
-import os
-import threading
-import time
-from pathlib import Path
+import asyncio
+import json
 from typing import TYPE_CHECKING, Literal, Unpack
+from urllib.parse import urlsplit
 
-from requests import ConnectionError, RequestException, Timeout  # ruff: ignore[builtin-import-shadowing]
+import aiohttp
+from multidict import CIMultiDict
 
+from app_runtime.tasks import TaskRegistry
 from loggers import Logger, color_status
 
-from .cache import GenerationCache
-from .stamp import client_stamp_path as default_client_stamp_path
-from .stamp import inbound_stamp_path as default_inbound_stamp_path
-from .transport import (
-    FakeResponse,
-    RequestsPanelTransport,
-    new_session,
-)
+from .transport import AiohttpPanelTransport, PanelResponse
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Mapping
 
-    from requests import Response, Session
-
-    from custom_types import Inbound, PanelClient, RequestKwargs
-
-    from .transport import (
-        XUiPanelTransport,
-    )
-
-__all__ = ["XUiSession"]
-
-_HEALTH_CHECK_TIMEOUT = 5.0
-_DEFAULT_REQUEST_TIMEOUT = 5.0
+    from .transport import RequestKwargs, XUiPanelTransport
 
 
 class XUiSession:
-    """
-    3x-ui panel client with Bearer-token auth, health checks, and two caches.
+    """Single-loop client with explicit startup and owned health/request tasks.
 
-    Authentication is a static admin-scoped API token sent as
-    ``Authorization: Bearer <token>`` on every request. There is no login and no
-    session refresh. A 401/403 from the panel marks it dead with a distinct
-    "token rejected" reason -- the token is bad or revoked and must be reissued
-    in config; no automatic recovery is attempted.
-
-    Thread-safety and lifecycle:
-      - ``dead`` is protected by an internal lock.
-      - Cache reads return the stored list unchanged; callers must not mutate it.
-      - A stamp file in the runtime dir is the cross-process generation.
-        ``clear_cache`` bumps its mtime before dropping the local list, so a
-        failed bump cannot leave other workers serving a stale list. The list
-        itself stays in memory. A missing stamp is not generation 0.
-      - The client map has its own stamp, lock, and clock. Dropping inbounds
-        must not drop clients, and the reverse. Client rows are never written
-        to the stamp file.
-      - ``close`` stops the client-managed health-check thread and closes the
-        default session. If a transport or session is injected, its lifecycle
-        remains the injector's responsibility. Do not issue requests while or
-        after ``close`` is running.
-      - Transport implementations must be safe for concurrent request submissions.
+    Injected transports are already started and remain injector-owned. The
+    default transport owns its session unless a session was injected. Rejected
+    tokens are permanent for this client; transient failures can recover via
+    health checks. Cancellation propagates without marking a panel unavailable.
     """
 
     def __init__(
@@ -75,365 +40,200 @@ class XUiSession:
         api_token: str,
         https: bool = False,
         nginx_auth: tuple[str, str] | None = None,
-        inbounds_list: tuple[int, ...] = (),
-        mode: Literal["whitelist", "blacklist"] = "blacklist",
-        inject_headers: Mapping[str, str | bytes] | None = None,
-        health_check_interval: int = 20,
+        inject_headers: Mapping[str, str] | None = None,
+        health_check_interval: float = 20.0,
         verbose: bool = False,
         transport: XUiPanelTransport | None = None,
-        session: Session | None = None,
-        clock: Callable[[], float] = time.monotonic,
-        stamp_path: str | None = None,
+        session: aiohttp.ClientSession | None = None,
+        request_limit: int = 8,
+        request_timeout: float = 5.0,
+        inbounds_list: tuple[int, ...] = (),
+        mode: Literal["whitelist", "blacklist"] = "blacklist",
         stamp_dir: str | None = None,
-        client_stamp_path: str | None = None,
     ) -> None:
-        """
-        Initialize the panel client.
-
-        Args:
-            name: The display name for a panel.
-            address: Hostname or IP of the panel.
-            port: Port of the panel.
-            uri: The secret random path (e.g. your-panel.com/randompath/panel/api/...).
-            api_token: Admin-scoped 3x-ui API token (Settings -> Security -> API Token).
-            https: Set False for HTTP.
-            nginx_auth: External authentication (A.K.A. Basic Auth.), format ('username', 'password').
-            inbounds_list: Inbound IDs used by ``mode``.
-            mode: ``whitelist`` keeps only IDs in ``inbounds_list``;
-                ``blacklist`` drops those IDs. An empty list keeps no inbounds
-                in whitelist mode and all inbounds in blacklist mode.
-            inject_headers: Extra headers merged into every request.
-                Caller-supplied headers take precedence (except Authorization).
-            health_check_interval: Interval in seconds between panel health checks.
-            verbose: When True, log every completed panel HTTP request at DEBUG.
-                The line matches the gunicorn access format, including status
-                color. Dead-panel short-circuits and transport failures are not
-                requests and are not logged this way. The secret URI prefix and
-                query string are omitted.
-            transport: Replacement HTTP transport. If omitted, a transport is built around session.
-            session: Session used by the default transport. Defaults to a new ``requests.Session``.
-            clock: Monotonic clock used for cache timing.
-            stamp_path: Generation file shared by every worker for this panel.
-                Defaults to a file under ``stamp_dir``. Tests pass a temp path.
-            stamp_dir: Directory for the default generation file. Defaults to
-                the service runtime dir (``DIR_RUNTIME``, else ``<DIR_DATA>/run``).
-                Ignored when ``stamp_path`` / ``client_stamp_path`` is set for
-                that cache. Must be local: ``flock`` is
-                not reliable on NFS, and the stamp is only a cross-process mtime.
-            client_stamp_path: Generation file for the client map. Defaults to
-                a sibling of the inbound stamp. Tests pass a temp path. Must
-                not be the inbound stamp: the two caches invalidate apart.
-
-        """
+        if not api_token:
+            raise ValueError("api_token must be a non-empty API token")
+        if health_check_interval < 1:
+            raise ValueError("health_check_interval must be at least 1")
+        if request_timeout <= 0:
+            raise ValueError("request_timeout must be positive")
+        if transport is not None and session is not None:
+            raise ValueError("pass either transport or session, not both")
+        self.name = name
+        self.inbounds_list = inbounds_list
+        self.mode = mode
+        self.stamp_dir = stamp_dir
+        self.address = address
+        self.port = str(port)
+        self.local = address in {"localhost", "::1", "127.0.0.1", "0.0.0.0"}  # ruff: ignore[hardcoded-bind-all-interfaces]
+        host = f"[{address}]" if ":" in address and not address.startswith("[") else address
+        prefix = uri.strip("/").removesuffix("/panel")
+        if prefix == "panel":
+            prefix = ""
+        self.base_url = f"{'https' if https else 'http'}://{host}:{port}/"
+        if prefix:
+            self.base_url += f"{prefix}/"
+        self._api_token = api_token
+        self._headers = dict(inject_headers or {})
+        self._interval = health_check_interval
+        self._timeout = request_timeout
+        self.verbose = verbose
         self.log = Logger(type(self).__name__)
-        with self.log.loading():
-            if not api_token:
-                raise ValueError("api_token must be a non-empty API token")
-            self._api_token = api_token
-            if mode not in {"whitelist", "blacklist"}:
-                raise ValueError("mode must be 'whitelist' or 'blacklist'")
-            self.inbounds_list = inbounds_list or ()
-            self.mode: Literal["whitelist", "blacklist"] = mode
-            protocol = "https" if https else "http"
-            clean_uri = f"/{uri.strip('/')}/" if uri.strip("/") else "/"
-            self.port = str(port)
-            self.address = address
-            self.name = name
-            self.local = self.address in {"localhost", "::1", "127.0.0.1", "0.0.0.0"}  # ruff: ignore[hardcoded-bind-all-interfaces]
-            self.base_url = f"{protocol}://{address}:{self.port}{clean_uri}"
-
-            resolved_stamp = (
-                stamp_path
-                if stamp_path is not None
-                else default_inbound_stamp_path(
-                    name,
-                    self.base_url,
-                    directory=stamp_dir,
-                )
-            )
-            resolved_client_stamp = client_stamp_path
-            if resolved_client_stamp is None:
-                resolved_client_stamp = default_client_stamp_path(
-                    name,
-                    self.base_url,
-                    directory=stamp_dir,
-                )
-            inbound_path = os.path.normpath(Path(resolved_stamp).absolute())
-            client_path = os.path.normpath(Path(resolved_client_stamp).absolute())
-            if client_path == inbound_path:
-                raise ValueError("client stamp must not be the inbound stamp")
-            self._inbounds: GenerationCache[list[Inbound]] = GenerationCache(resolved_stamp, clock)
-            self._clients: GenerationCache[dict[str, PanelClient]] = GenerationCache(
-                resolved_client_stamp,
-                clock,
-            )
-            self._inject_headers: Mapping[str, str | bytes] = inject_headers or {}
-            self.verbose = verbose
-
-            self._session: Session | None = None
-            self._owns_session = session is None and transport is None
-            if transport is None:
-                self._session = session if session is not None else new_session()
-                transport = RequestsPanelTransport(self._session, nginx_auth)
-            elif session is not None:
-                raise ValueError("pass either transport or session, not both")
-            self._transport = transport
-
-            if health_check_interval < 1:
-                raise ValueError("health_check_interval must be more than 1")
-            if health_check_interval < 5:
-                self.log.warning("a low health_check_interval may cause lag. proceed with caution.")
-
-            self._health_check_interval = health_check_interval
-            self._dead = False
-            self._health_check_lock = threading.Lock()
-            self._health_check_thread = threading.Thread(
-                target=self._health_check,
-                name="XUi healthcheck",  # NOTE: intended, <= 15 chars
-                daemon=True,
-            )
-            self._health_check_event = threading.Event()
-
-            self._health_check_thread.start()
-
-    @staticmethod
-    def _new_session() -> Session:
-        """Session whose pool can hold one connection per panel worker."""
-        return new_session()
-
-    @property
-    def dead(self) -> bool:
-        with self._health_check_lock:
-            return self._dead
-
-    @dead.setter
-    def dead(self, value: bool, /) -> None:
-        with self._health_check_lock:
-            self._dead = value
-
-    def _format_url(self, url: str, /) -> str:
-        base = self.base_url.rstrip("/")
-        panel_prefix = "/panel"
-        base = base.removesuffix(panel_prefix)
-        if not url.startswith(base):
-            return f"{base}/{url.lstrip('/')}"
-        return url
-
-    def _request_target(self, url: str, /) -> str:
-        """Panel route only. The secret URI prefix and query string stay out."""
-        path = url.split("?", 1)[0]
-        base = self.base_url.rstrip("/")
-        panel_prefix = "/panel"
-        base = base.removesuffix(panel_prefix)
-        path = path.removeprefix(base)
-        if not path.startswith("/"):
-            path = f"/{path}"
-        return path or "/"
-
-    def _log_request(self, method: str, url: str, response: Response) -> None:
-        if not self.verbose:
-            return
-        status = str(response.status_code)
-        size = len(response.content)
-        raw = getattr(response, "raw", None)
-        version = getattr(raw, "version", None)
-        # urllib3 reports 10 for HTTP/1.0 and 11 for HTTP/1.1.
-        protocol = "HTTP/1.1"
-        if version == 10:
-            protocol = "HTTP/1.0"
-        target = self._request_target(url)
-        self.log.debug(f'"{method} {target} {protocol}" {color_status(status)} {size}b')
-
-    def _mark_dead(self, reason: str) -> None:
-        with self._health_check_lock:
-            was_alive = not self._dead
-            self._dead = True
-
-        if was_alive:
-            self.log.warning(f"panel {self.name}: marked down: {reason}")
-        else:
-            self.log.debug(f"panel {self.name}: still down: {reason}")
-
-    def _mark_alive(self) -> None:
-        with self._health_check_lock:
-            was_dead = self._dead
-            self._dead = False
-
-        if was_dead:
-            self.log.info(f"panel {self.name}: recovered")
-
-    def _auth_header(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._api_token}"}
-
-    def _health_request(self) -> Response:
-        return self._transport.request(
-            "GET",
-            self._format_url("panel/api/inbounds/list"),
-            headers={**dict(self._inject_headers), **self._auth_header()},
-            timeout=_HEALTH_CHECK_TIMEOUT,
+        self.dead = False
+        self._token_rejected = False
+        self._owned_transport = (
+            AiohttpPanelTransport(session, nginx_auth, limit=request_limit, timeout=request_timeout)
+            if transport is None
+            else None
         )
+        self._transport: XUiPanelTransport
+        if self._owned_transport is not None:
+            self._transport = self._owned_transport
+        elif transport is not None:
+            self._transport = transport
+        else:
+            raise RuntimeError("panel transport is missing")
+        self._requests = TaskRegistry(capacity=request_limit, report_failures=False)
+        self._health = TaskRegistry(capacity=1)
+        self._started = False
+        self._close_task: asyncio.Task[None] | None = None
 
-    def _perform_health_check(self) -> None:
-        try:
-            response = self._health_request()
-        except Timeout:
-            self._mark_dead(f"timeout of {_HEALTH_CHECK_TIMEOUT:.0f} seconds exceeded")
+    async def start(self) -> None:
+        if self._close_task is not None:
+            raise RuntimeError("panel client is closed")
+        if self._started:
             return
-        except ConnectionError as error:
-            self._mark_dead(f"connection error: {error}")
-            return
-        except RequestException as error:
-            self._mark_dead(f"request error: {error}")
-            return
+        if self._owned_transport is not None:
+            await self._owned_transport.start()
+        self._health.create(self._health_loop, name="panel-health")
+        self._started = True
 
-        self._log_request("GET", "panel/api/inbounds/list", response)
-        if response.status_code in {401, 403}:
-            self._mark_dead(f"token rejected (HTTP {response.status_code})")
-            return
+    def _format_url(self, url: str) -> str:
+        if urlsplit(url).scheme or url.startswith("//"):
+            if not url.startswith(self.base_url):
+                raise ValueError("panel request URL must use the configured base URL")
+            return url
+        return self.base_url + url.lstrip("/")
 
-        if response.status_code != 200:
-            self._mark_dead(f"HTTP {response.status_code}")
-            return
+    def _request_target(self, url: str) -> str:
+        route = url.removeprefix(self.base_url).split("?", 1)[0]
+        # Never log arbitrary absolute URLs, credentials or the secret prefix.
+        return f"/{route}" if route.startswith("panel/api/") else "/<redacted>"
 
-        content = response.json()
-        if not content.get("success"):
-            self._mark_dead(f"panel returned message: {content.get('msg')}")
-            return
-
-        self._mark_alive()
-
-    def _health_check(self) -> None:
-        while not self._health_check_event.wait(self._health_check_interval):
-            self._perform_health_check()
-
-    def _down_response(self, reason: str) -> Response:
-        return FakeResponse(
+    def _down_response(self, reason: str) -> PanelResponse:
+        return PanelResponse.from_json(
             {"success": False, "msg": f"Panel {self.name} is down: {reason}", "obj": None},
             503,
         )
 
-    def request(
+    def _mark_dead(self, reason: str) -> None:
+        was_alive = not self.dead
+        self.dead = True
+        if was_alive:
+            self.log.warning(f"panel {self.name}: marked down: {reason}")
+
+    async def request(
         self,
         method: str,
         url: str,
         **kwargs: Unpack[RequestKwargs],
-    ) -> Response:
-        if self.dead:
+    ) -> PanelResponse:
+        if not self._started or self._close_task is not None:
+            raise RuntimeError("panel client is not running")
+        task = self._requests.create(
+            lambda: self._request(method, url, health=False, **kwargs),
+            name="panel-request",
+        )
+        return await task
+
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        health: bool,
+        **kwargs: Unpack[RequestKwargs],
+    ) -> PanelResponse:
+        if self._token_rejected or (self.dead and not health):
             return self._down_response("unavailable")
-
-        request_url = self._format_url(url)
-        kwargs["headers"] = {
-            **(kwargs.get("headers") or {}),
-            **self._inject_headers,
-            # set last: the panel Authorization must not be overridable by accident
-            **self._auth_header(),
-        }
-        kwargs.setdefault("timeout", _DEFAULT_REQUEST_TIMEOUT)
-
+        target = self._format_url(url)
+        headers = CIMultiDict(self._headers)
+        headers.update(kwargs.get("headers", {}))
+        headers["Authorization"] = f"Bearer {self._api_token}"
+        kwargs["headers"] = headers
+        kwargs.setdefault("timeout", self._timeout)
         try:
-            response = self._transport.request(method, request_url, **kwargs)
-        except Timeout:
-            reason = f"timeout of {_DEFAULT_REQUEST_TIMEOUT:.0f} seconds exceeded"
-            self._mark_dead(reason)
-            return self._down_response(reason)
-        except ConnectionError as error:
-            reason = f"connection error: {error}"
-            self._mark_dead(reason)
-            return self._down_response(reason)
-        except RequestException as error:
-            reason = f"request error: {error}"
-            self._mark_dead(reason)
-            return self._down_response(reason)
-        self._log_request(method, request_url, response)
-        return response
+            response = await self._transport.request(method, target, **kwargs)
+        except TimeoutError:
+            reason = "request timeout"
+        except aiohttp.ClientConnectionError:
+            reason = "connection error"
+        except aiohttp.ClientError:
+            reason = "request error"
+        else:
+            if self.verbose:
+                self.log.debug(
+                    f'"{method} {self._request_target(target)} HTTP/1.1" '
+                    f"{color_status(str(response.status_code))} {len(response.content)}b",
+                )
+            if response.status_code in {401, 403}:
+                self._token_rejected = True
+                self._mark_dead(f"token rejected (HTTP {response.status_code})")
+            return response
+        self._mark_dead(reason)
+        return self._down_response(reason)
 
-    def get(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
-        return self.request("GET", url, **kwargs)
+    async def get(self, url: str, **kwargs: Unpack[RequestKwargs]) -> PanelResponse:
+        return await self.request("GET", url, **kwargs)
 
-    def post(self, url: str, **kwargs: Unpack[RequestKwargs]) -> Response:
-        return self.request("POST", url, **kwargs)
+    async def post(self, url: str, **kwargs: Unpack[RequestKwargs]) -> PanelResponse:
+        return await self.request("POST", url, **kwargs)
 
-    @property
-    def _stamp_path(self) -> str:
-        return self._inbounds.path
+    async def check_health(self) -> None:
+        if not self._started or self._close_task is not None:
+            raise RuntimeError("panel client is not running")
+        task = self._requests.create(
+            lambda: self._request("GET", "panel/api/inbounds/list", health=True),
+            name="panel-health-request",
+        )
+        response = await task
+        if self._token_rejected:
+            return
+        if response.status_code != 200:
+            self._mark_dead(f"HTTP {response.status_code}")
+            return
+        try:
+            payload = response.json()
+        except json.JSONDecodeError, UnicodeDecodeError:
+            self._mark_dead("invalid health response")
+            return
+        if not isinstance(payload, dict) or not payload.get("success"):
+            self._mark_dead("unsuccessful health response")
+            return
+        was_dead = self.dead
+        self.dead = False
+        if was_dead:
+            self.log.info(f"panel {self.name}: recovered")
 
-    @_stamp_path.setter
-    def _stamp_path(self, value: str) -> None:
-        self._inbounds.path = value
+    async def _health_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._interval)
+            if self._token_rejected:
+                return
+            try:
+                await self.check_health()
+            except Exception:
+                # Exceptions can contain URLs/credentials; don't stringify them.
+                self.log.warning(f"panel {self.name}: health check failed")
 
-    @property
-    def _cache_stamp(self) -> int | None:
-        return self._inbounds.stamp
+    async def close(self) -> None:
+        if self._close_task is None:
+            self._requests.stop_admission()
+            self._close_task = asyncio.create_task(self._close(), name="panel-client-close")
+        await asyncio.shield(self._close_task)
 
-    @_cache_stamp.setter
-    def _cache_stamp(self, value: int | None) -> None:
-        self._inbounds.stamp = value
-
-    @property
-    def _client_stamp_path(self) -> str:
-        return self._clients.path
-
-    @_client_stamp_path.setter
-    def _client_stamp_path(self, value: str) -> None:
-        self._clients.path = value
-
-    @property
-    def _clients_stamp(self) -> int | None:
-        return self._clients.stamp
-
-    @_clients_stamp.setter
-    def _clients_stamp(self, value: int | None) -> None:
-        self._clients.stamp = value
-
-    @property
-    def cache(self) -> list[Inbound] | None:
-        return self._inbounds.get()
-
-    @cache.setter
-    def cache(self, value: list[Inbound], /) -> None:
-        self._inbounds.set(value)
-
-    @property
-    def cache_time(self) -> float:
-        return self._inbounds.time
-
-    @cache_time.setter
-    def cache_time(self, value: float, /) -> None:
-        self._inbounds.time = value
-
-    @property
-    def cache_age(self) -> float:
-        return self._inbounds.age()
-
-    @property
-    def cache_current(self) -> bool:
-        return self._inbounds.current()
-
-    def fresh_cache(self, ttl: float) -> list[Inbound] | None:
-        return self._inbounds.fresh(ttl)
-
-    def clear_cache(self) -> None:
-        self._inbounds.clear()
-
-    @property
-    def clients_cache(self) -> dict[str, PanelClient] | None:
-        return self._clients.get()
-
-    @clients_cache.setter
-    def clients_cache(self, value: dict[str, PanelClient], /) -> None:
-        self._clients.set(value)
-
-    def fresh_clients(self, ttl: float) -> dict[str, PanelClient] | None:
-        """Client map when its own stamp still agrees. An inbound clear does not expire it."""
-        return self._clients.fresh(ttl)
-
-    def clear_clients(self) -> None:
-        """Drop the client map only. Does not touch the inbound cache."""
-        self._clients.clear()
-
-    def close(self) -> None:
-        self._health_check_event.set()
-        if self._health_check_thread is not threading.current_thread():
-            self._health_check_thread.join(timeout=2)
-        if self._owns_session and self._session is not None:
-            self._session.close()
+    async def _close(self) -> None:
+        await self._health.drain(cancel=True)
+        await self._requests.drain()
+        if self._owned_transport is not None:
+            await self._owned_transport.close()

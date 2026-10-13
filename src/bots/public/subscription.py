@@ -16,7 +16,7 @@ __all__ = ["PublicSubscriptionMixin"]
 
 
 class PublicSubscriptionMixin(PublicFeatureMixin):
-    """AsyncSubscription-link and account-information workflows."""
+    """Subscription-link and account-information workflows."""
 
     async def send_info(self, chat_id: int, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]

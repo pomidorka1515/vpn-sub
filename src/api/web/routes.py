@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from api.common import Route, SnapshotStatus
     from api.decorators.rate_limit import AsyncRateLimiter
     from config import AppConfig
-    from config.async_store import AsyncConfig
-    from core import AsyncSubscription
+    from config.store import AsyncConfig
+    from core import Subscription
 
 __all__ = ["AsyncWebApi"]
 
@@ -39,7 +39,7 @@ class AsyncWebApi(
         self,
         app: Quart,
         cfg: AsyncConfig[AppConfig],
-        sub: AsyncSubscription,
+        sub: Subscription,
         bw: SnapshotStatus,
         limiter: AsyncRateLimiter,
     ) -> None:

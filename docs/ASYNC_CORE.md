@@ -1,6 +1,6 @@
 # Async core services (Step 6)  
   
-`core.AsyncSubscription` composes framework-free async services over the native async repository, panel clients, snapshot readers, acknowledged audit service, injected `OffloadServices`, and a shared `MutationCoordinator`. Constructors open no resources and start no tasks. `start()` performs recovery; callers must complete it before admitting HTTP/bot/watcher work. `close()` stops mutation admission, drains critical operations and panel/cache tasks. Injected clients, stores, DB and offloads remain runtime-owned and close afterwards.  
+`core.Subscription` composes framework-free async services over the native async repository, panel clients, snapshot readers, acknowledged audit service, injected `OffloadServices`, and a shared `MutationCoordinator`. Constructors open no resources and start no tasks. `start()` performs recovery; callers must complete it before admitting HTTP/bot/watcher work. `close()` stops mutation admission, drains critical operations and panel/cache tasks. Injected clients, stores, DB and offloads remain runtime-owned and close afterwards.  
   
 ## Coordination and cancellation  
   
@@ -32,12 +32,6 @@ No schema migration or operation-journal table is introduced; existing `app_meta
   
 Panel mutations invalidate client caches on every attempt, including unknown outcomes. Recovery refuses a foreign UUID. Pending identities are reserved against competing workflows until recovery completes. UUID repair remains manual. A process kill can still land between a committed mutation and audit acknowledgement; metadata intent is recovery state, not an exactly-once audit/outbox journal. Subscription requests and later API/bot/watch callers must not expose pending registration identities as completed accounts.  
   
-## Staging and synchronous bug fix  
+## Cleanup  
   
-Steps 7–10 switch production consumers to these services; the existing synchronous service stack remains until those callers migrate. The subscription route has already moved to `api/subscription.py`, and neither core resource bundle contains Flask/request state. The new async services import no HTTP framework and use no executors.  
-  
-The synchronous registration/admin-creation paths also receive the partial-write bug fix: fanout settles siblings before reporting failure; compensation deletes matching panel clients before deleting DB identity/refunding codes, retains identity on cleanup failure and recovers persisted failure markers.  
-  
-Verification includes user/credential/code/Telegram workflows, whitelist/accounting/leaderboard compatibility, one-shot registration races, reset/delete ordering, stale quota decisions, caller and forced-registry cancellation, bounded foreground/background admission, lost-response compensation, failed cleanup/refund recovery, UUID markers, creation/reset intent, cache generation races and cancelled single-flight waiters.  
-  
-Final checks: `venv/bin/ruff check .`, `venv/bin/mypy`, `venv/bin/pyright`, and `venv/bin/pytest -q`: **629 passed**, with four existing aiohttp BasicAuth deprecation warnings.  
+The superseded synchronous core and thread pools have been removed. `core/main.py`, `core/common.py` and `core/services/*.py` now contain the canonical async implementations; exports and callers use `Subscription` and the unprefixed service names. Partial-write settlement, compensation and persisted recovery markers remain covered by async behavior and cancellation tests.  

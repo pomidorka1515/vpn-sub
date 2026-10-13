@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import sys
@@ -12,8 +13,8 @@ from aiohttp import web
 from async_core_helpers import PanelTransport
 from helpers import TOKEN_A, USER_UUID, FakePanel, create_alice, make_inbound, make_panel_client
 
-from db import AsyncDatabase
-from session import AsyncXUiSession
+from db import Database
+from session import XUiSession
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
     from reconcile_clients import PanelReport
 
     from config import PanelConfig
-    from db import Database
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "reconcile_clients.py"
 _SPEC = importlib.util.spec_from_file_location("reconcile_clients", _SCRIPT_PATH)
@@ -33,11 +33,11 @@ _SPEC.loader.exec_module(rc)
 
 
 @pytest_asyncio.fixture
-async def panel_client() -> AsyncIterator[Callable[[FakePanel], AsyncXUiSession]]:
-    clients: list[AsyncXUiSession] = []
+async def panel_client() -> AsyncIterator[Callable[[FakePanel], XUiSession]]:
+    clients: list[XUiSession] = []
 
-    def build(panel: FakePanel) -> AsyncXUiSession:
-        client = AsyncXUiSession(
+    def build(panel: FakePanel) -> XUiSession:
+        client = XUiSession(
             name=panel.name, address="127.0.0.1", port=8080, uri="", api_token="test",
             transport=PanelTransport(panel),
         )
@@ -51,7 +51,7 @@ async def panel_client() -> AsyncIterator[Callable[[FakePanel], AsyncXUiSession]
             await client.close()
 
 
-async def _reconcile(panel: AsyncXUiSession, **kwargs: object) -> PanelReport:
+async def _reconcile(panel: XUiSession, **kwargs: object) -> PanelReport:
     await panel.start()
     return cast("PanelReport", await rc.reconcile_panel(panel, {USER_UUID: "alice"}, **kwargs))
 
@@ -73,7 +73,7 @@ def _post_urls(panel: FakePanel) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_reconcile_dry_run_reports_without_mutating(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_reconcile_dry_run_reports_without_mutating(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     panel = _legacy_panel()
     report = await _reconcile(panel_client(panel), apply=False)
 
@@ -85,7 +85,7 @@ async def test_reconcile_dry_run_reports_without_mutating(panel_client: Callable
 
 
 @pytest.mark.asyncio
-async def test_reconcile_apply_merges_legacy_rows(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_reconcile_apply_merges_legacy_rows(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     panel = _legacy_panel()
     report = await _reconcile(panel_client(panel), apply=True)
 
@@ -113,7 +113,7 @@ async def test_reconcile_apply_merges_legacy_rows(panel_client: Callable[[FakePa
 
 
 @pytest.mark.asyncio
-async def test_reconcile_is_idempotent(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_reconcile_is_idempotent(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2)],
@@ -129,7 +129,7 @@ async def test_reconcile_is_idempotent(panel_client: Callable[[FakePanel], Async
 
 
 @pytest.mark.asyncio
-async def test_reconcile_attaches_missing_inbounds_and_seeds_drift(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_reconcile_attaches_missing_inbounds_and_seeds_drift(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2)],
@@ -151,7 +151,7 @@ async def test_reconcile_attaches_missing_inbounds_and_seeds_drift(panel_client:
 
 
 @pytest.mark.asyncio
-async def test_reconcile_reports_unknown_uuids_without_touching_them(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_reconcile_reports_unknown_uuids_without_touching_them(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     stranger_uuid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
     panel = FakePanel(
         name="panel",
@@ -166,7 +166,7 @@ async def test_reconcile_reports_unknown_uuids_without_touching_them(panel_clien
 
 
 @pytest.mark.asyncio
-async def test_reconcile_skips_user_without_managed_vless_inbounds(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_reconcile_skips_user_without_managed_vless_inbounds(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1, protocol="trojan")],
@@ -180,7 +180,7 @@ async def test_reconcile_skips_user_without_managed_vless_inbounds(panel_client:
 
 
 @pytest.mark.asyncio
-async def test_reconcile_surfaces_panel_rejection(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_reconcile_surfaces_panel_rejection(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
@@ -201,7 +201,8 @@ def _write_config(tmp_path: Path) -> Path:
     return config_path
 
 
-def test_main_is_dry_run_by_default(
+@pytest.mark.asyncio
+async def test_main_is_dry_run_by_default(
     tmp_path: Path,
     database: Database,
     db_path: Path,
@@ -209,13 +210,13 @@ def test_main_is_dry_run_by_default(
 ) -> None:
     panel = _legacy_panel()
 
-    def fake_build_panel(name: str, cfg: PanelConfig, *, stamp_dir: str) -> AsyncXUiSession:
-        return AsyncXUiSession(name=panel.name, address="127.0.0.1", port=8080, uri="", api_token="test", transport=PanelTransport(panel))
+    def fake_build_panel(name: str, cfg: PanelConfig, *, stamp_dir: str) -> XUiSession:
+        return XUiSession(name=panel.name, address="127.0.0.1", port=8080, uri="", api_token="test", transport=PanelTransport(panel))
 
     monkeypatch.setattr(rc, "_build_panel", fake_build_panel)
-    create_alice(database)
+    await create_alice(database)
 
-    code = rc.main(
+    code = await asyncio.to_thread(rc.main,
         [
             "--config",
             str(_write_config(tmp_path)),
@@ -236,7 +237,6 @@ def test_main_rejects_unknown_panel_key(
     db_path: Path,
     monkeypatch: object,
 ) -> None:
-    create_alice(database)
     code = rc.main(
         [
             "--config",
@@ -269,7 +269,7 @@ class RecordingLedger:
 
 
 @pytest.mark.asyncio
-async def test_rerun_after_failed_delete_folds_only_new_traffic(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_rerun_after_failed_delete_folds_only_new_traffic(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     """Partial failure (legacy delete rejected) must not re-fold old traffic.
 
     First run seeded the canonical client with the group total; the legacy
@@ -311,7 +311,7 @@ async def test_rerun_after_failed_delete_folds_only_new_traffic(panel_client: Ca
 
 
 @pytest.mark.asyncio
-async def test_ledger_cleared_when_no_legacy_rows_remain(panel_client: Callable[[FakePanel], AsyncXUiSession]) -> None:
+async def test_ledger_cleared_when_no_legacy_rows_remain(panel_client: Callable[[FakePanel], XUiSession]) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
@@ -332,8 +332,8 @@ async def test_ledger_cleared_when_no_legacy_rows_remain(panel_client: Callable[
 
 
 @pytest.mark.asyncio
-async def test_db_seed_ledger_round_trip(async_database: AsyncDatabase) -> None:
-    ledger = rc.DbSeedLedger(async_database)
+async def test_db_seed_ledger_round_trip(database: Database) -> None:
+    ledger = rc.DbSeedLedger(database)
 
     assert await ledger.get("panel", "alice") is None
     await ledger.set("panel", "alice", 101, 202)
@@ -350,7 +350,7 @@ async def test_cli_run_against_panel_endpoint_preserves_usage_and_reruns(
 ) -> None:
     panel = _legacy_panel()
     database_path = tmp_path / "test.sqlite3"
-    database = AsyncDatabase(path=database_path, start_backup=False)
+    database = Database(path=database_path, start_backup=False)
     await database.start()
     try:
         await database.create_user(
@@ -395,7 +395,7 @@ async def test_cli_run_against_panel_endpoint_preserves_usage_and_reruns(
     finally:
         await runner.cleanup()
 
-    reopened = AsyncDatabase(path=database_path, start_backup=False)
+    reopened = Database(path=database_path, start_backup=False)
     await reopened.start()
     try:
         assert await reopened.get_user("alice") == before

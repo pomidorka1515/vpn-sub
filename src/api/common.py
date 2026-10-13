@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 
     from api.decorators.rate_limit import AsyncRateLimiter
     from config import AppConfig, LangConfig
-    from config.async_store import AsyncConfig
-    from core import AsyncSubscription
-    from core.async_common import Snapshot
+    from config.store import AsyncConfig
+    from core import Subscription
+    from core.common import Snapshot
     from custom_types import HTTPMethod, JsonifyValue
 
 type ResponseType = tuple[Response, int] | Response | WerkzeugResponse
@@ -182,7 +182,7 @@ class AsyncBaseApi(ABC):
         self,
         app: Quart,
         cfg: AsyncConfig[AppConfig],
-        sub: AsyncSubscription,
+        sub: Subscription,
         bw: SnapshotStatus,
         uri: str,
         limiter: AsyncRateLimiter,

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 def requires_fields[**P, R](
     *fields: str,
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[WrappedReturn[R]]]]:
-    """Validate request JSON object, store it on flask.g.json_obj, and require named fields."""
+    """Validate request JSON object, store it on quart.g.json_obj, and require named fields."""
 
     def decorator(f: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[WrappedReturn[R]]]:
         @wraps(f)
@@ -46,7 +46,7 @@ def requires_fields[**P, R](
 def requires_fields_strict[**P, R](
     *fields: tuple[str, type[JsonifyValue]],
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[WrappedReturn[R]]]]:
-    """Validate request JSON object, store it on flask.g.json_obj, and require named fields with strict type checking."""
+    """Validate request JSON object, store it on quart.g.json_obj, and require named fields with strict type checking."""
 
     def decorator(f: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[WrappedReturn[R]]]:
         @wraps(f)

@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from collections.abc import MutableMapping
 
     from config import AppConfig, LangConfig
-    from core import AsyncSubscription
-    from core.async_common import Snapshot
+    from core import Subscription
+    from core.common import Snapshot
 
 __all__ = ["AsyncAdminBot"]
 
@@ -38,7 +38,7 @@ class AsyncAdminBot(
 
     def __init__(
         self,
-        sub: AsyncSubscription,
+        sub: Subscription,
         lang_cfg: Snapshot[LangConfig],
         cfg: Snapshot[AppConfig],
     ) -> None:

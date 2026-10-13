@@ -3,15 +3,12 @@ from __future__ import annotations
 import operator
 from typing import TYPE_CHECKING, Literal
 
-from tracer import Op
-
 from ..common import BaseService
-from .panel import BG_POOL
 
 if TYPE_CHECKING:
     from ..common import SharedCoreResources
     from .bandwidth import BandwidthService
-    from .user.common import CommonUserService
+    from .user import CommonUserService
 
 
 class LeaderboardService(BaseService):
@@ -23,10 +20,10 @@ class LeaderboardService(BaseService):
         bandwidth_svc: BandwidthService,
     ) -> None:
         super().__init__(res)
-        self.user_svc: CommonUserService = user_svc
-        self.bandwidth_svc: BandwidthService = bandwidth_svc
+        self.user_svc = user_svc
+        self.bandwidth_svc = bandwidth_svc
 
-    def leaderboard(
+    async def leaderboard(
         self,
         category: Literal["total", "monthly", "wl_monthly"],
         *,
@@ -34,78 +31,19 @@ class LeaderboardService(BaseService):
         use_displaynames: bool = False,
         flip: bool = False,
     ) -> dict[str, int]:
-        """
-        Dict of top-n users by specified bandwidth type, in order.
-        WARNING: polls all users info. this is blocking!
-
-        Args:
-            category: type of bandwidth to use.
-            top_n: clamp the leaderboard to top-n users.
-                If <= 0, returns a leaderboard with all users.
-            use_displaynames: if True, uses display names instead of internal usernames.
-                Useful when passing data into chart.leaderboard_chart().
-            flip: if True, sorted in ascending order, otherwise descending.
-
-        Returns:
-            A dict: {"username": 1293720471, "second_place": 12493630},
-            where key is the username and value is bandwidth in bytes.
-
-        """  # ruff: ignore[missing-trailing-period]
+        records = await self.user_svc.list_user_states()
+        totals = (
+            await self.bandwidth_svc.all_traffic(work="background") if category == "total" else {}
+        )
         raw: dict[str, int] = {}
-        self.trace(
-            Op.leaderboard.leaderboard,
-            "start",
-            category=category,
-            top_n=top_n,
-            use_displaynames=use_displaynames,
-            flip=flip,
-        )
-        records = self.user_svc.list_user_states()
-        users = [record["username"] for record in records]
-        if use_displaynames:
-            display_users = [str(record["displayname"]) for record in records]
-        else:
-            display_users = users
-        # display_users is what we use in dict keys
-        # populate the raw data
-        match category:
-            case "total":
-                # One batched read instead of a per-user panel poll.
-                # Admin bot and the HTTP admin route share the background
-                # pool with BWatch. A whitelist-only read is one panel and
-                # stays inline; this path is the multi-panel total.
-                totals = self.bandwidth_svc.all_traffic(pool=BG_POOL)
-                for user, display in zip(users, display_users, strict=True):
-                    info = totals.get(user)
-                    raw[display] = int(info.total) if info is not None else 0
-            case "monthly" | "wl_monthly":
-                for record, display in zip(records, display_users, strict=True):
-                    if category == "monthly":
-                        limit = record["bw_limit_gb"]
-                        used = record["bw_used"]
-                    else:
-                        limit = record["wl_limit_gb"]
-                        used = record["wl_used"]
-                    if limit == 0:
-                        continue  # skip users who dont have bandwidth
-                    raw[display] = used
-
-        sorted_items: list[tuple[str, int]] = sorted(
-            raw.items(),
-            key=operator.itemgetter(1),
-            reverse=not flip,
-        )
-        if top_n > 0:
-            sorted_items = sorted_items[:top_n]
-        result = dict(sorted_items)
-        self.trace(
-            Op.leaderboard.leaderboard,
-            "ok",
-            category=category,
-            top_n=top_n,
-            use_displaynames=use_displaynames,
-            flip=flip,
-            users=len(users),
-            returned=len(result),
-        )
-        return result
+        for record in records:
+            name = record["displayname"] if use_displaynames else record["username"]
+            if category == "total":
+                info = totals.get(record["username"])
+                raw[name] = int(info.total) if info is not None else 0
+            elif category == "monthly" and record["bw_limit_gb"] != 0:
+                raw[name] = record["bw_used"]
+            elif category == "wl_monthly" and record["wl_limit_gb"] != 0:
+                raw[name] = record["wl_used"]
+        ranked = sorted(raw.items(), key=operator.itemgetter(1), reverse=not flip)
+        return dict(ranked[:top_n] if top_n > 0 else ranked)

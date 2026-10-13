@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
+import pytest
 from helpers import create_alice, make_subscription
 
 if TYPE_CHECKING:
@@ -51,13 +52,14 @@ def _state_payload(ts: int) -> StateSnapshot:
     }
 
 
-def test_get_bw_history_clamps_to_window(database: Database) -> None:
-    subscription = make_subscription(database)
-    create_alice(database)
+@pytest.mark.asyncio
+async def test_get_bw_history_clamps_to_window(database: Database) -> None:
+    subscription = (await make_subscription(database))
+    (await create_alice(database))
     now = int(time.time())
-    database.add_bandwidth_snapshot("alice", now - 40 * 86400, 1, 2, 3, 4)
-    database.add_bandwidth_snapshot("alice", now - 2 * 86400, 5, 6, 7, 8)
-    history = subscription.bandwidth_svc.get_bw_history("alice", days=30)
+    (await database.add_bandwidth_snapshot("alice", now - 40 * 86400, 1, 2, 3, 4))
+    (await database.add_bandwidth_snapshot("alice", now - 2 * 86400, 5, 6, 7, 8))
+    history = (await subscription.bandwidth_svc.get_bw_history("alice", days=30))
     assert len(history) == 1
     assert (history[0].up, history[0].down, history[0].wl_up, history[0].wl_down) == (
         5,
@@ -67,12 +69,13 @@ def test_get_bw_history_clamps_to_window(database: Database) -> None:
     )
 
 
-def test_get_snapshots_hydrates_state_rows(database: Database) -> None:
-    subscription = make_subscription(database)
+@pytest.mark.asyncio
+async def test_get_snapshots_hydrates_state_rows(database: Database) -> None:
+    subscription = (await make_subscription(database))
     now = int(time.time())
-    database.upsert_state_snapshot(now - 2 * 86400, _state_payload(now - 2 * 86400))
-    database.upsert_state_snapshot(now - 40 * 86400, _state_payload(now - 40 * 86400))
-    snapshots = subscription.bandwidth_svc.get_snapshots(days=30)
+    (await database.upsert_state_snapshot(now - 2 * 86400, _state_payload(now - 2 * 86400)))
+    (await database.upsert_state_snapshot(now - 40 * 86400, _state_payload(now - 40 * 86400)))
+    snapshots = (await subscription.bandwidth_svc.get_snapshots(days=30))
     assert len(snapshots) == 1
     assert snapshots[0].host.process_count == 2
     assert snapshots[0].panels == {}

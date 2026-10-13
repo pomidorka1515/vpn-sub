@@ -7,8 +7,7 @@ from .leaderboard import LeaderboardService
 from .panel import PanelService
 from .password import PasswordService
 from .telegram import TelegramService
-from .user.business import BusinessUserService
-from .user.common import CommonUserService
+from .user import BusinessUserService, CommonUserService
 
 __all__ = [
     "AuditService",

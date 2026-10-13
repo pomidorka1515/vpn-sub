@@ -7,23 +7,17 @@ from dacite import Config as DConfig
 from dacite import from_dict
 
 from custom_types import BandwidthInfo, BandwidthSnapshot
-from errors import AppError, PanelUnavailableError
+from errors import PanelUnavailableError
 from sysutil import StateSnapshot
-from tracer import Op
 
 from ..common import BaseService
 
 if TYPE_CHECKING:
-    from concurrent.futures import Executor
-
-    from custom_types import PanelClient
-    from session import XUiSession
+    from session.client import XUiSession
 
     from ..common import SharedCoreResources
-    from .panel import PanelService
-    from .user.common import CommonUserService
-
-__all__ = ["BandwidthService"]
+    from .panel import PanelService, WorkClass
+    from .user import CommonUserService
 
 
 class BandwidthService(BaseService):
@@ -35,161 +29,63 @@ class BandwidthService(BaseService):
         user_svc: CommonUserService,
     ) -> None:
         super().__init__(res)
-        self.panel_svc: PanelService = panel_svc
-        self.user_svc: CommonUserService = user_svc
+        self.panel_svc = panel_svc
+        self.user_svc = user_svc
 
     def _target_panels(self, whitelist: bool) -> list[XUiSession]:
-        """Panels a bandwidth read applies to: the whitelist slot or the rest."""
         if whitelist:
-            # No whitelist panel configured -> there is nothing to report.
-            # NOTE: don't return a bare `[None]` list here, panel helpers
-            # dereference attributes on the panel immediately.
-            if not self.whitelist_panel:
-                return []
-            return [self.whitelist_panel]
-        return [p for p in self.panels if p != self.whitelist_panel]
+            return [self.whitelist_panel] if self.whitelist_panel else []
+        return [panel for panel in self.panels if panel != self.whitelist_panel]
 
-    def bandwidth(
-        self,
-        username: str,
-        whitelist: bool = False,
-        *,
-        pool: Executor | None = None,
+    async def bandwidth(
+        self, username: str, whitelist: bool = False, *, work: WorkClass = "foreground",
     ) -> BandwidthInfo:
-        """Get bandwidth info about a user. Returns BandwidthInfo(upload, download, total). In bytes.
-
-        The clients-first API keeps ONE shared ``client_traffics`` row per
-        panel client — reading it per panel is the whole answer. Never sum
-        it across inbounds; that double-counts. Cross-PANEL summation stays
-        (a user is one client per panel).
-        """
-        self.user_svc.user(username)  # keeps the NotFoundError contract
-        self.trace(
-            Op.bandwidth.bandwidth,
-            "start",
-            username=username,
-            whitelist=whitelist,
-            pool=type(pool).__name__ if pool is not None else None,
-        )
-
-        up_total = 0
-        down_total = 0
-        panels = self._target_panels(whitelist)
-        # First failing panel in list order still raises. Sibling requests
-        # may finish in the background; they are not cancelled.
-        rows = self.panel_svc.map_panels(
-            panels,
+        await self.user_svc.user(username)
+        rows = await self.panel_svc.map_panels(
+            self._target_panels(whitelist),
             lambda panel: self.panel_svc.client_traffic(panel, username),
-            pool,
+            work=work,
         )
-        found = 0
-        for traffic in rows:
-            if traffic is not None:
-                found += 1
-                up_total += traffic.up
-                down_total += traffic.down
+        up = sum(row.up for row in rows if row is not None)
+        down = sum(row.down for row in rows if row is not None)
+        return BandwidthInfo(up, down, up + down)
 
-        self.trace(
-            Op.bandwidth.bandwidth,
-            "ok",
-            username=username,
-            whitelist=whitelist,
-            panels=[panel.name for panel in panels],
-            found=found,
-            absent=len(rows) - found,
-            upload=up_total,
-            download=down_total,
-            total=up_total + down_total,
-        )
-        return BandwidthInfo(up_total, down_total, up_total + down_total)
-
-    def all_traffic(
-        self,
-        whitelist: bool = False,
-        *,
-        pool: Executor | None = None,
+    async def all_traffic(
+        self, whitelist: bool = False, *, work: WorkClass = "foreground",
     ) -> dict[str, BandwidthInfo]:
-        """Batch path for pollers: one ``clients/list`` per target panel.
-
-        Reduces every panel client into ``email -> BandwidthInfo`` summed
-        across panels (never across a client's inbounds). Emails that are
-        not known usernames are skipped. Raises ``PanelUnavailableError``
-        when no target panel could be queried — the same rule
-        ``get_online_status`` uses.
-        """
         panels = self._target_panels(whitelist)
-        self.trace(
-            Op.bandwidth.all_traffic,
-            "start",
-            whitelist=whitelist,
-            panels=[panel.name for panel in panels],
-            pool=type(pool).__name__ if pool is not None else None,
-        )
         if not panels:
-            self.trace(Op.bandwidth.all_traffic, "empty", whitelist=whitelist, users=0)
             return {}
+        known = await self.db.usernames()
+        outcomes = await self.panel_svc.outcomes(panels, self.panel_svc.list_clients, work=work)
         totals: dict[str, list[int]] = {}
         queried = 0
-        known = self.db.usernames()
-
-        def fetch(panel: XUiSession) -> list[PanelClient] | AppError:
-            try:
-                return self.panel_svc.list_clients(panel)
-            except AppError as exc:
-                return exc
-
-        # A raising map would skip a live later panel when the first fails.
-        for panel, outcome in zip(
-            panels,
-            self.panel_svc.map_panels(panels, fetch, pool),
-            strict=True,
-        ):
-            if isinstance(outcome, AppError):
-                self.log.error(
-                    "client traffic listing failed for panel %s",
-                    panel.name,
-                    exc_info=outcome,
-                )
+        for outcome in outcomes:
+            if outcome.error is not None:
+                self.log.error("client traffic listing failed for panel %s", outcome.panel)
                 continue
-            clients = outcome
             queried += 1
-            for client in clients:
+            for client in outcome.value or []:
                 traffic = client.traffic
                 if traffic is None or client.email not in known:
                     continue
                 acc = totals.setdefault(client.email, [0, 0])
                 acc[0] += traffic.up
                 acc[1] += traffic.down
-        if queried == 0:
-            self.trace(
-                Op.bandwidth.all_traffic,
-                "unavailable",
-                whitelist=whitelist,
-                panels=len(panels),
-            )
+        if not queried:
             raise PanelUnavailableError("No panel could be queried for client traffic")
-        result = {email: BandwidthInfo(up, down, up + down) for email, (up, down) in totals.items()}
-        self.trace(
-            Op.bandwidth.all_traffic,
-            "ok",
-            whitelist=whitelist,
-            queried=queried,
-            panels=len(panels),
-            users=len(result),
-        )
-        return result
+        return {email: BandwidthInfo(up, down, up + down) for email, (up, down) in totals.items()}
 
-    def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
-        """Return snapshots for a user, clamped to retention window."""
-        cutoff = int(time.time()) - days * 86400
+    async def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
         return [
-            BandwidthSnapshot(**row) for row in self.db.get_bandwidth_snapshots(username, cutoff)
+            BandwidthSnapshot(**row)
+            for row in await self.db.get_bandwidth_snapshots(
+                username, int(time.time()) - days * 86400,
+            )
         ]
 
-    def get_snapshots(self, days: int = 30) -> list[StateSnapshot]:
-        """Return state snapshots, clamped to a retention window."""
-        cutoff = int(time.time()) - days * 86400
+    async def get_snapshots(self, days: int = 30) -> list[StateSnapshot]:
         return [
             from_dict(StateSnapshot, row, config=DConfig(cast=[tuple]))
-            for row in self.db.get_state_snapshots(cutoff)
+            for row in await self.db.get_state_snapshots(int(time.time()) - days * 86400)
         ]

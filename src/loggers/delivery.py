@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from config import JsonDict
-    from config.async_store import AsyncLinesConfig
+    from config.store import AsyncLinesConfig
 
 _IN_LOG_DELIVERY: ContextVar[bool] = ContextVar("in_log_delivery", default=False)
 

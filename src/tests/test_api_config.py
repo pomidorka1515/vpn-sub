@@ -11,8 +11,8 @@ from async_api_helpers import api_app, make_subscription, make_watch
 from api import AsyncApi
 from api.config_patch import REQUIRED_KEYS, config_etag
 from config import AppConfig, Config
-from config.async_store import AsyncConfig
-from core.services.async_audit import AsyncAuditService
+from config.store import AsyncConfig
+from core.services.audit import AuditService
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     from quart.wrappers import Response
 
     from config import JsonValue
-    from config.async_store import AsyncLinesConfig
-    from db import AsyncDatabase
+    from config.store import AsyncLinesConfig
+    from db import Database
 
 ROOT = Path(__file__).resolve().parents[2]
 HEADERS = {"Authorization": "secret-token"}
@@ -38,14 +38,14 @@ class RecordingAudit:
 
 @pytest_asyncio.fixture
 async def config_api(
-    tmp_path: Path, async_database: AsyncDatabase,
+    tmp_path: Path, database: Database,
 ) -> AsyncIterator[tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]]:
     path = tmp_path / "config.json"
     data = json.loads((ROOT / "docs/EXAMPLE.config.json").read_text())
     data.update(api_token="secret-token", sub_name="before", funny_strings=["keep-me"])
     path.write_text(json.dumps(data, indent=4) + "\n")
     async for app in api_app():
-        sub = await make_subscription(async_database, app=app)
+        sub = await make_subscription(database, app=app)
         cfg = AsyncConfig[AppConfig](
             lambda: Config[AppConfig](
                 path=path,
@@ -59,13 +59,13 @@ async def config_api(
         )
         await cfg.start()
         audit = RecordingAudit()
-        sub.audit_svc = AsyncAuditService(cast("AsyncLinesConfig", audit))
+        sub.audit_svc = AuditService(cast("AsyncLinesConfig", audit))
         AsyncApi(
             app=app,
             cfg=cfg,
             audit_cfg=cast("AsyncLinesConfig", audit),
             sub=sub,
-            bw=make_watch(async_database, sub),
+            bw=make_watch(database, sub),
             limiter=app.extensions["limiter"],
         )
         try:

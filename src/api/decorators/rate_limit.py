@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from api.common import AsyncBaseApi
     from config import AppConfig
-    from core.async_common import Snapshot
+    from core.common import Snapshot
 
     from ._common import Decorated, DecoratedReturn, WrappedReturn
 

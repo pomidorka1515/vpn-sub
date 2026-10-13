@@ -4,89 +4,47 @@ import hashlib
 
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
-from tracer import Op
 from util import compare
 
 from ..common import BaseService
 
-__all__ = ["PasswordService"]
-
 
 class PasswordService(BaseService):
-    def hash(self, s: str) -> str:
-        return self.password_hasher.hash(s)
+    async def hash(self, value: str) -> str:
+        return await self.res.offloads.passwords.run(self.res.password_hasher.hash, value)
 
-    def legacy_hash(self, s: str) -> str:
-        return hashlib.sha256((self.legacy_salt + s).encode()).hexdigest()
+    def legacy_hash(self, value: str) -> str:
+        return hashlib.sha256((self.res.legacy_salt + value).encode()).hexdigest()
 
-    def validate_credentials(self, ext_username: str, password: str) -> str | None:
-        stored = self.db.ext_password(ext_username)
-        username = self.db.ext_to_user(ext_username)
-        self.trace(
-            Op.password.validate_credentials,
-            "start",
-            ext_username=ext_username,
-            found=stored is not None and username is not None,
-        )
-        if stored is None or username is None:
-            self.trace(
-                Op.password.validate_credentials,
-                "absent",
-                ext_username=ext_username,
-                username=username,
-            )
+    async def validate_credentials(self, ext_username: str, password: str) -> str | None:
+        username = await self.db.ext_to_user(ext_username)
+        if username is None:
             return None
-        if stored.startswith("$argon2id$"):
-            try:
-                self.password_hasher.verify(stored, password)
-            except VerifyMismatchError:
-                self.trace(
-                    Op.password.validate_credentials,
-                    "mismatch",
-                    ext_username=ext_username,
-                    username=username,
-                    scheme="argon2id",
-                )
+
+        async def verify() -> str | None:
+            # Re-read the row while coordinated with password/login changes.
+            user = await self.db.get_user(username)
+            if user is None or user["ext_username"] != ext_username:
                 return None
-            except InvalidHashError, VerificationError:
-                self.log.exception(
-                    "Corrupt or tampered argon2 password hash for %s",
-                    ext_username,
-                )
-                self.trace(
-                    Op.password.validate_credentials,
-                    "corrupt",
-                    ext_username=ext_username,
-                    username=username,
-                    scheme="argon2id",
-                )
+            stored = user["ext_password_hash"]
+            if stored is None:
                 return None
-            self.trace(
-                Op.password.validate_credentials,
-                "ok",
-                ext_username=ext_username,
-                username=username,
-                scheme="argon2id",
-                migrated=False,
-            )
-        else:
-            if compare(stored, self.legacy_hash(password)):
-                self.db.set_user(username, ext_password=self.hash(password))
-                self.trace(
-                    Op.password.validate_credentials,
-                    "migrated",
-                    ext_username=ext_username,
-                    username=username,
-                    scheme="legacy",
-                    migrated=True,
-                )
-                return username
-            self.trace(
-                Op.password.validate_credentials,
-                "mismatch",
-                ext_username=ext_username,
-                username=username,
-                scheme="legacy",
-            )
-            return None
-        return username
+            if stored.startswith("$argon2id$"):
+                try:
+                    await self.res.offloads.passwords.run(
+                        self.res.password_hasher.verify, stored, password,
+                    )
+                except VerifyMismatchError:
+                    return None
+                except InvalidHashError, VerificationError:
+                    self.log.exception(
+                        "Corrupt or tampered argon2 password hash for %s", ext_username,
+                    )
+                    return None
+            else:
+                if not compare(stored, self.legacy_hash(password)):
+                    return None
+                await self.db.set_user(username, ext_password=await self.hash(password))
+            return username
+
+        return await self.res.coordinator.run([username], verify, name="core:verify-password")

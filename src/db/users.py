@@ -14,46 +14,40 @@ if TYPE_CHECKING:
 
 
 class UsersMixin(ConnectionMixin):
-    def get_user(self, username: str) -> UserRecord | None:
-        with self.connection() as conn:
-            row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    async def get_user(self, username: str) -> UserRecord | None:
+        async with self.connection() as conn:
+            row = await conn.row("SELECT * FROM users WHERE username = ?", (username,))
             return cast(UserRecord, dict(row)) if row is not None else None
 
-    def list_users(self) -> list[str]:
-        return [user["username"] for user in self.list_user_records()]
+    async def list_users(self) -> list[str]:
+        return [user["username"] for user in await self.list_user_records()]
 
-    def list_user_records(self) -> list[UserRecord]:
-        """One SELECT of every user, in username order."""
-        with self.connection() as conn:
+    async def list_user_records(self) -> list[UserRecord]:
+        async with self.connection() as conn:
             return [
                 cast(UserRecord, dict(row))
-                for row in conn.execute("SELECT * FROM users ORDER BY username")
+                for row in await conn.rows("SELECT * FROM users ORDER BY username")
             ]
 
-    def all_users(self) -> list[str]:
-        return self.list_users()
+    async def all_users(self) -> list[str]:
+        return await self.list_users()
 
-    def user_exists(self, username: str) -> bool:
-        with self.connection() as conn:
-            return (
-                conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
-                is not None
-            )
+    async def user_exists(self, username: str) -> bool:
+        async with self.connection() as conn:
+            return await conn.row("SELECT 1 FROM users WHERE username = ?", (username,)) is not None
 
-    def usernames(self) -> set[str]:
-        """Known usernames, loaded once for batch membership checks."""
-        with self.connection() as conn:
-            return {str(row[0]) for row in conn.execute("SELECT username FROM users")}
+    async def usernames(self) -> set[str]:
+        async with self.connection() as conn:
+            return {str(row[0]) for row in await conn.rows("SELECT username FROM users")}
 
-    def username_exts(self) -> dict[str, str | None]:
-        """Username -> ext_username, loaded once for batch lookups."""
-        with self.connection() as conn:
+    async def username_exts(self) -> dict[str, str | None]:
+        async with self.connection() as conn:
             return {
                 str(row[0]): None if row[1] is None else str(row[1])
-                for row in conn.execute("SELECT username, ext_username FROM users")
+                for row in await conn.rows("SELECT username, ext_username FROM users")
             }
 
-    def create_user(
+    async def create_user(
         self,
         *,
         username: str,
@@ -69,10 +63,11 @@ class UsersMixin(ConnectionMixin):
         enabled: bool = True,
         enabled_time: bool = True,
         enabled_wl: bool = True,
+        pending_sync: bool = False,
     ) -> None:
         try:
-            with self.transaction(immediate=True) as conn:
-                conn.execute(
+            async with self.transaction(immediate=True) as conn:
+                await conn.execute(
                     """INSERT INTO users
                     (username, uuid, token, fingerprint, displayname, enabled,
                      enabled_time, enabled_wl, expires_at, bw_limit_gb, wl_limit_gb,
@@ -95,6 +90,11 @@ class UsersMixin(ConnectionMixin):
                         int(time.time()),
                     ),
                 )
+                if pending_sync:
+                    await conn.execute(
+                        "INSERT INTO app_metadata(key, value) VALUES (?, ?)",
+                        (f"user_create_pending:{username}", uuid),
+                    )
         except DatabaseError as exc:
             if "UNIQUE" in str(exc) or "PRIMARY KEY" in str(exc):
                 raise DuplicateError(
@@ -102,7 +102,7 @@ class UsersMixin(ConnectionMixin):
                 ) from exc
             raise
 
-    def set_user(self, username: str, **fields: Unpack[UserFields]) -> None:
+    async def set_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         mapping = {
             "userid": "uuid",
             "uuid": "uuid",
@@ -127,75 +127,111 @@ class UsersMixin(ConnectionMixin):
             for k, v in updates.items()
         }
         try:
-            with self.transaction(immediate=True) as conn:
+            async with self.transaction(immediate=True) as conn:
                 if updates:
                     assignments = ", ".join(f"{key} = ?" for key in updates)
-                    # Column names come from the fixed mapping above; values are bound.
-                    conn.execute(
+                    await conn.execute(
                         f"UPDATE users SET {assignments} WHERE username = ?",
                         (*updates.values(), username),
                     )
                 if "tgid" in fields:
                     telegram_id = fields["tgid"]
-                    set_telegram_mapping(
-                        conn,
-                        username,
-                        None if telegram_id is None else str(telegram_id),
+                    await set_telegram_mapping(
+                        conn, username, None if telegram_id is None else str(telegram_id),
                     )
         except DatabaseError as exc:
             if "UNIQUE" in str(exc):
                 raise DuplicateError("unique user field already exists") from exc
             raise
 
-    def update_user(self, username: str, **fields: Unpack[UserFields]) -> None:
-        self.set_user(username, **fields)
+    async def update_user(self, username: str, **fields: Unpack[UserFields]) -> None:
+        await self.set_user(username, **fields)
 
-    def delete_user(self, username: str) -> None:
-        with self.transaction(immediate=True) as conn:
-            conn.execute("DELETE FROM users WHERE username = ?", (username,))
-
-    def token_to_user(self, token: str) -> str | None:
-        with self.connection() as conn:
-            row = conn.execute("SELECT username FROM users WHERE token = ?", (token,)).fetchone()
-            return str(row[0]) if row else None
-
-    def auth_token_to_user(self, auth_token: str) -> str | None:
-        with self.connection() as conn:
-            row = conn.execute(
-                "SELECT username FROM users WHERE auth_token = ?",
-                (auth_token,),
-            ).fetchone()
-            return str(row[0]) if row else None
-
-    def set_auth_token(self, username: str, auth_token: str | None) -> None:
-        with self.transaction(immediate=True) as conn:
-            cursor = conn.execute(
-                "UPDATE users SET auth_token = ? WHERE username = ?",
-                (auth_token, username),
+    async def set_enabled_pending(
+        self,
+        username: str,
+        *,
+        enabled: bool | None,
+        enabled_time: bool | None,
+        enabled_wl: bool | None,
+    ) -> None:
+        """Publish desired flags and retry identity in one short transaction."""
+        async with self.transaction(immediate=True) as conn:
+            for column, value in (
+                ("enabled", enabled),
+                ("enabled_time", enabled_time if enabled is not None else None),
+                ("enabled_wl", enabled_wl),
+            ):
+                if value is not None:
+                    await conn.execute(
+                        f"UPDATE users SET {column} = ? WHERE username = ?", (int(value), username),
+                    )
+            await conn.execute(
+                "INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?)",
+                (f"user_sync_pending:{username}", "enabled"),
             )
-            if cursor.rowcount != 1:
+
+    async def rollback_created_user(self, username: str, expected_uuid: str) -> None:
+        async with self.transaction(immediate=True) as conn:
+            row = await conn.row("SELECT uuid FROM users WHERE username = ?", (username,))
+            if row is not None and row[0] != expected_uuid:
+                raise DatabaseError("created-user recovery identity changed")
+            await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            await conn.executemany(
+                "DELETE FROM app_metadata WHERE key = ?",
+                [(f"user_create_pending:{username}",), (f"user_sync_pending:{username}",)],
+            )
+
+    async def finalize_reset(self, username: str, expected_uuid: str, token: str) -> None:
+        """Publish reset credentials and remove intent atomically after UUID sync."""
+        async with self.transaction(immediate=True) as conn:
+            count = await conn.execute(
+                "UPDATE users SET token = ?, auth_token = NULL WHERE username = ? AND uuid = ?",
+                (token, username, expected_uuid),
+            )
+            if count != 1:
+                raise DatabaseError("reset UUID has not committed")
+            await conn.execute(
+                "DELETE FROM app_metadata WHERE key = ?", (f"user_reset_pending:{username}",),
+            )
+
+    async def delete_user(self, username: str) -> None:
+        async with self.transaction(immediate=True) as conn:
+            await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+
+    async def token_to_user(self, token: str) -> str | None:
+        async with self.connection() as conn:
+            row = await conn.row("SELECT username FROM users WHERE token = ?", (token,))
+            return str(row[0]) if row else None
+
+    async def auth_token_to_user(self, auth_token: str) -> str | None:
+        async with self.connection() as conn:
+            row = await conn.row("SELECT username FROM users WHERE auth_token = ?", (auth_token,))
+            return str(row[0]) if row else None
+
+    async def set_auth_token(self, username: str, auth_token: str | None) -> None:
+        async with self.transaction(immediate=True) as conn:
+            count = await conn.execute(
+                "UPDATE users SET auth_token = ? WHERE username = ?", (auth_token, username),
+            )
+            if count != 1:
                 raise DatabaseError("failed to set auth token")
 
-    def ext_to_user(self, ext_username: str) -> str | None:
-        with self.connection() as conn:
-            row = conn.execute(
-                "SELECT username FROM users WHERE ext_username = ?",
-                (ext_username,),
-            ).fetchone()
+    async def ext_to_user(self, ext_username: str) -> str | None:
+        async with self.connection() as conn:
+            row = await conn.row(
+                "SELECT username FROM users WHERE ext_username = ?", (ext_username,),
+            )
             return str(row[0]) if row else None
 
-    def user_to_ext(self, username: str) -> str | None:
-        with self.connection() as conn:
-            row = conn.execute(
-                "SELECT ext_username FROM users WHERE username = ?",
-                (username,),
-            ).fetchone()
+    async def user_to_ext(self, username: str) -> str | None:
+        async with self.connection() as conn:
+            row = await conn.row("SELECT ext_username FROM users WHERE username = ?", (username,))
             return str(row[0]) if row and row[0] is not None else None
 
-    def ext_password(self, ext_username: str) -> str | None:
-        with self.connection() as conn:
-            row = conn.execute(
-                "SELECT ext_password_hash FROM users WHERE ext_username = ?",
-                (ext_username,),
-            ).fetchone()
+    async def ext_password(self, ext_username: str) -> str | None:
+        async with self.connection() as conn:
+            row = await conn.row(
+                "SELECT ext_password_hash FROM users WHERE ext_username = ?", (ext_username,),
+            )
             return str(row[0]) if row and row[0] is not None else None

@@ -19,18 +19,18 @@ if TYPE_CHECKING:
     from quart import Quart
     from quart.typing import TestClientProtocol
 
-    from db import AsyncDatabase
+    from db import Database
 
 pytestmark = pytest.mark.asyncio
 LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
 
 
 @pytest_asyncio.fixture
-async def web_api(async_database: AsyncDatabase) -> AsyncIterator[tuple[Quart, AsyncDatabase]]:
+async def web_api(database: Database) -> AsyncIterator[tuple[Quart, Database]]:
     async for app in api_app():
         language = Config[LangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
-        sub = await make_subscription(async_database, app=app, lang_cfg=language, uri="custom")
-        await async_database.create_user(
+        sub = await make_subscription(database, app=app, lang_cfg=language, uri="custom")
+        await database.create_user(
             username="alice",
             uuid=str(uuid.uuid4()),
             token="a" * 40,
@@ -45,14 +45,14 @@ async def web_api(async_database: AsyncDatabase) -> AsyncIterator[tuple[Quart, A
             app=app,
             cfg=config_snapshot(subscription_config(uri="custom")),
             sub=sub,
-            bw=make_watch(async_database, sub),
+            bw=make_watch(database, sub),
             limiter=app.extensions["limiter"],
         )
-        yield app, async_database
+        yield app, database
         language.close()
 
 
-async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, AsyncDatabase]) -> None:
+async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None:
     app, db = web_api
     client = app.test_client()
     denied = await client.get("/custom/panel")
@@ -95,7 +95,7 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, AsyncDatabase]) ->
     ],
 )
 async def test_prefixed_static_assets(
-    web_api: tuple[Quart, AsyncDatabase], path: str, mimetype: str, fragment: bytes,
+    web_api: tuple[Quart, Database], path: str, mimetype: str, fragment: bytes,
 ) -> None:
     response = await web_api[0].test_client().get(f"/custom/{path}")
     assert response.status_code == 200
@@ -122,7 +122,7 @@ async def test_prefixed_static_assets(
 @pytest.mark.parametrize(
     "module", ["state", "json", "controls", "main", "cards", "validation", "dialog"],
 )
-async def test_nested_config_modules(web_api: tuple[Quart, AsyncDatabase], module: str) -> None:
+async def test_nested_config_modules(web_api: tuple[Quart, Database], module: str) -> None:
     response = await web_api[0].test_client().get(f"/custom/admin/config/config-{module}.js")
     assert response.status_code == 200
     assert response.mimetype == "text/javascript"
@@ -137,11 +137,11 @@ async def test_nested_config_modules(web_api: tuple[Quart, AsyncDatabase], modul
 @pytest.mark.parametrize(
     "path", ["fonts/DejaVuSans.ttf", "fonts/../common.css", "admin/not-a-module.js"],
 )
-async def test_unknown_assets(web_api: tuple[Quart, AsyncDatabase], path: str) -> None:
+async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> None:
     assert (await web_api[0].test_client().get(f"/custom/{path}")).status_code == 404
 
 
-async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, AsyncDatabase]) -> None:
+async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, Database]) -> None:
     client = web_api[0].test_client()
     russian = await client.get("/custom/auth?lang=ru")
     assert russian.status_code == 200
@@ -175,7 +175,7 @@ async def login(client: TestClientProtocol) -> str:
     return token
 
 
-async def test_login_uses_isolated_auth_token(web_api: tuple[Quart, AsyncDatabase]) -> None:
+async def test_login_uses_isolated_auth_token(web_api: tuple[Quart, Database]) -> None:
     client = web_api[0].test_client()
     response = await client.get("/custom/webapi/stats", headers={"Cookie": "token=" + "a" * 40})
     assert response.status_code == 401
@@ -185,7 +185,7 @@ async def test_login_uses_isolated_auth_token(web_api: tuple[Quart, AsyncDatabas
     assert (await response.get_json())["obj"]["token"] == "a" * 40
 
 
-async def test_logout_invalidates_auth_token(web_api: tuple[Quart, AsyncDatabase]) -> None:
+async def test_logout_invalidates_auth_token(web_api: tuple[Quart, Database]) -> None:
     app, db = web_api
     client = app.test_client()
     await login(client)

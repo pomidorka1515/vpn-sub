@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    from core import AsyncSubscription
+    from core import Subscription
 
 
 def _string_map(value: object) -> dict[str, str]:
@@ -26,7 +26,7 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
     return {}
 
 
-def _browser_strings(obj: AsyncSubscription, lang: str) -> dict[str, str]:
+def _browser_strings(obj: Subscription, lang: str) -> dict[str, str]:
     language = obj.res.lang_cfg.view()
     raw = cast(object, language.get("web"))
     web: Mapping[str, object] = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}

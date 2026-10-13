@@ -13,7 +13,7 @@ PYTHONPATH=src venv/bin/hypercorn --config python:serve asgi:app
   
 The binary uses `main.serve_application()` with one `asyncio.run()` and Hypercorn's in-process API. The checkout CLI config selects one asyncio worker; do not override its worker count or enable reload in deployment. Hypercorn alone owns SIGINT/SIGTERM, stops listener admission, and drains HTTP requests before invoking Quart shutdown. No competing signal handlers are installed.  
   
-`APP_BIND` overrides `GUNICORN_BIND`, defaulting to `127.0.0.1:5550`. `LOGLEVEL_HTTP` overrides `LOGLEVEL_GUNICORN`, defaulting to INFO. The newer variable wins whenever present; invalid log levels use INFO. Both legacy aliases are transitional and retire at step 12 cutover. Middleware owns redacted HTTP access logging; Hypercorn access logging is disabled in both paths.  
+`APP_BIND` defaults to `127.0.0.1:5550`. `LOGLEVEL_HTTP` defaults to INFO; invalid log levels use INFO. The temporary Gunicorn environment aliases were retired during step 12 cleanup. Middleware owns redacted HTTP access logging; Hypercorn access logging is disabled in both paths.  
   
 ## Shutdown budgets and ordering  
   
@@ -30,4 +30,4 @@ Runtime stop closes task/mutation admission and marks readiness false. Explicit 
   
 Verification: Ruff, mypy and pyright pass; full pytest suite passes with 642 tests. Actual Nuitka compilation/resource/start-stop acceptance belongs to step 11.  
   
-Retirement inventory: `src/gunicorn.conf.py` now imports `src/legacy_serve.py`, preserving the superseded worker/settings together until step 12. No supported entrypoint imports them. `src/wsgi.py` was already absent before this step. Remaining Gunicorn logging tests, direct dependencies/stubs, and legacy modules are final-cleanup items; release packaging already targets ASGI/Hypercorn and gets its complete acceptance in step 11.  
+Cleanup: Gunicorn worker/settings, logging, dependencies/stubs and temporary environment aliases have been removed. The only supported service entrypoint is ASGI/Hypercorn. Compiled acceptance remains subject to the step 11 normal-ABI build requirement.  

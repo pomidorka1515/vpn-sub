@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import TYPE_CHECKING
 
 from loggers.level import TRACE, env_level
@@ -28,7 +27,7 @@ class ProxyMiddleware:
         self.hops = hops
         self.require_proxy = require_proxy
         log.setLevel(env_level(
-            "LOGLEVEL_HTTP" if "LOGLEVEL_HTTP" in os.environ else "LOGLEVEL_GUNICORN",
+            "LOGLEVEL_HTTP",
             logging.INFO,
         ))
 

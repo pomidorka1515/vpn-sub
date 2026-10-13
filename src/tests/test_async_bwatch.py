@@ -7,11 +7,11 @@ import pytest
 from async_core_helpers import close_async_subscription, make_async_subscription
 from helpers import USER_UUID
 
-from bwatch.async_watch import AsyncBWatch
+from bwatch.watch import BWatch
 from custom_types import BandwidthInfo
-from db import AsyncDatabase
+from db import Database
 from notify import classify
-from notify.async_notifier import AsyncNotifier
+from notify.notifier import Notifier
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,10 +19,10 @@ if TYPE_CHECKING:
 
 @pytest.mark.asyncio
 async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) -> None:
-    db = AsyncDatabase(path=tmp_path / "state.db", start_backup=False)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_async_subscription(db, tmp_path)
-    watch = AsyncBWatch(sub.res.cfg, db, sub, scheduled=False)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     try:
         await db.create_user(
             username="alice",
@@ -68,10 +68,10 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
 
 @pytest.mark.asyncio
 async def test_job_serialization_and_failure_retry(tmp_path: Path) -> None:
-    db = AsyncDatabase(path=tmp_path / "state.db", start_backup=False)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_async_subscription(db, tmp_path)
-    watch = AsyncBWatch(sub.res.cfg, db, sub, scheduled=False)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     entered, release = asyncio.Event(), asyncio.Event()
     calls = 0
 
@@ -108,7 +108,7 @@ async def test_job_serialization_and_failure_retry(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_notice_failure_and_concurrent_delivery(tmp_path: Path) -> None:
-    db = AsyncDatabase(path=tmp_path / "state.db", start_backup=False)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     try:
         await db.create_user(
@@ -136,7 +136,7 @@ async def test_notice_failure_and_concurrent_delivery(tmp_path: Path) -> None:
         async def language(_id: int) -> str:
             return "en"
 
-        notifier = AsyncNotifier(
+        notifier = Notifier(
             texts={"en": {notice.kind.text_key: "warning"}}, send=send, language=language,
         )
         seen: set[str] = set()
@@ -157,10 +157,10 @@ async def test_notice_failure_and_concurrent_delivery(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_quota_rereads_limits_after_waiting_for_admin(tmp_path: Path) -> None:
-    db = AsyncDatabase(path=tmp_path / "state.db", start_backup=False)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_async_subscription(db, tmp_path)
-    watch = AsyncBWatch(sub.res.cfg, db, sub, scheduled=False)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     entered, release = asyncio.Event(), asyncio.Event()
     try:
         await db.create_user(

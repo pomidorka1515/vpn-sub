@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, overload
 
 from errors import NotFoundError
-from tracer import Op
 
 from ..common import BaseService
 
@@ -12,9 +11,7 @@ if TYPE_CHECKING:
 
     from ..common import SharedCoreResources
     from .code import CodeService
-    from .user.business import BusinessUserService
-
-__all__ = ["TelegramService"]
+    from .user import BusinessUserService
 
 
 class TelegramService(BaseService):
@@ -26,90 +23,61 @@ class TelegramService(BaseService):
         code_svc: CodeService,
     ) -> None:
         super().__init__(res)
-        self.user_svc: BusinessUserService = user_svc
-        self.code_svc: CodeService = code_svc
+        self.user_svc = user_svc
+        self.code_svc = code_svc
 
-    def get_telegram_language(self, tgid: int | str) -> str:
-        return self.db.get_telegram_language(tgid)
+    async def get_telegram_language(self, tgid: int | str) -> str:
+        return await self.db.get_telegram_language(tgid)
 
-    def has_telegram_language(self, tgid: int | str) -> bool:
-        return self.db.has_telegram_language(tgid)
+    async def has_telegram_language(self, tgid: int | str) -> bool:
+        return await self.db.has_telegram_language(tgid)
 
-    def set_telegram_language(self, tgid: int | str, language: str) -> None:
-        self.trace(
-            Op.telegram.set_telegram_language,
-            "start",
-            tgid=str(tgid),
-            language=language,
-        )
-        self.db.set_telegram_language(tgid, language)
-        self.trace(
-            Op.telegram.set_telegram_language,
-            "set",
-            tgid=str(tgid),
-            language=language,
-        )
+    async def set_telegram_language(self, tgid: int | str, language: str) -> None:
+        await self.db.set_telegram_language(tgid, language)
 
-    def get_info_telegram(self, tgid: int) -> UserInfo:
-        """Returns all user info by telegram ID. Raises NotFoundError if absent."""
-        username = self.db.tgid_to_user(tgid)
+    async def get_info_telegram(self, tgid: int) -> UserInfo:
+        username = await self.db.tgid_to_user(tgid)
         if username is None:
             raise NotFoundError("Unknown Telegram user")
-        return self.user_svc.get_info(username, pretty=False)
+        return await self.user_svc.get_info(username)
 
-    def is_registered(self, tgid: int) -> bool:
-        """Check if a telegram user is already registered."""
-        return self.db.tgid_to_user(tgid) is not None
+    async def is_registered(self, tgid: int) -> bool:
+        return await self.db.tgid_to_user(tgid) is not None
 
-    def set_telegram_user(self, tgid: int | str, username: str | None) -> None:
-        self.trace(
-            Op.telegram.set_telegram_user,
-            "start",
-            tgid=str(tgid),
-            username=username,
-            cleared=username is None,
-        )
+    async def set_telegram_user(self, tgid: int | str, username: str | None) -> None:
+        # SQL mapping updates are atomic. Serialize the Telegram identity too,
+        # so clearing a mapping cannot erase a concurrent relink.
+        async def update() -> None:
+            if username is None:
+                existing = await self.db.tgid_to_user(tgid)
+                if existing is not None:
+                    await self.db.set_telegram(existing, None)
+            else:
+                await self.db.set_telegram(username, str(tgid))
+
+        keys = [f"telegram:{tgid}"] + ([username] if username is not None else [])
+        await self.res.coordinator.run(keys, update, name="core:telegram-link")
+
+    async def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
+        username = await self.get_username_telegram(value)
         if username is None:
-            existing = self.db.tgid_to_user(tgid)
-            if existing is not None:
-                self.db.set_telegram(existing, None)
-            self.trace(
-                Op.telegram.set_telegram_user,
-                "cleared",
-                tgid=str(tgid),
-                username=existing,
-            )
-            return
-        self.db.set_telegram(username, str(tgid))
-        self.trace(
-            Op.telegram.set_telegram_user,
-            "set",
-            tgid=str(tgid),
-            username=username,
-        )
-
-    def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
-        """Apply a bonus code for a Telegram user."""
-        username = self.get_username_telegram(value)
-        if not isinstance(username, str) or not username:
             raise NotFoundError("Unknown Telegram user")
-        return self.code_svc.apply_bonus_code(username=username, code=code)
+        return await self.code_svc.apply_bonus_code(username=username, code=code)
 
     @overload
-    def get_username_telegram(
-        self,
-        tgid: int | str,
-        reverse: Literal[False] = False,
+    async def get_username_telegram(
+        self, tgid: int | str, reverse: Literal[False] = False,
     ) -> str | None: ...
 
     @overload
-    def get_username_telegram(self, tgid: int | str, reverse: Literal[True]) -> int | None: ...
+    async def get_username_telegram(
+        self, tgid: int | str, reverse: Literal[True],
+    ) -> int | None: ...
 
-    def get_username_telegram(self, tgid: int | str, reverse: bool = False) -> int | str | None:
-        """Get the internal username for a tgid.
-        Parameter reverse: if True, get tg id from username. Otherwise default behaviour."""
-
+    async def get_username_telegram(
+        self, tgid: int | str, reverse: bool = False,
+    ) -> int | str | None:
         if not reverse:
-            return self.db.tgid_to_user(tgid)
-        mapped = self.db.user_to_tgid(str(tgid))
+            return await self.db.tgid_to_user(tgid)
+        mapped = await self.db.user_to_tgid(str(tgid))
         return int(mapped) if mapped is not None else None

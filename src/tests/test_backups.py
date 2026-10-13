@@ -18,7 +18,7 @@ from config.backup import (
 from config.backup import (
     prune_backups as config_prune_backups,
 )
-from db.backup import do_backup, make_backup_thread, prune_backups
+from db.backup import do_backup, prune_backups
 from loggers import Logger
 
 
@@ -219,33 +219,3 @@ def test_database_backup_closes_connections_on_failure(tmp_path: Path) -> None:
     with pytest.raises(sqlite3.OperationalError):
         do_backup(str(source), 0.1, str(instance), _log())
     assert list(instance.glob(".tmp-*")) == []
-
-
-def test_database_backup_thread_retries(tmp_path: Path) -> None:
-    calls = {"count": 0}
-
-    def fail_once(*args: object, **kwargs: object) -> None:
-        del args, kwargs
-        calls["count"] += 1
-        if calls["count"] < 3:
-            raise sqlite3.OperationalError("locked")
-
-    with (
-        patch("db.backup.do_backup", side_effect=fail_once),
-        patch("db.backup.prune_backups"),
-        patch.object(threading.Event, "wait", side_effect=[False, False, False, True]),
-        patch.object(Logger, "error") as error,
-        patch.object(Logger, "critical") as critical,
-    ):
-        make_backup_thread(
-            path=str(tmp_path / "state.sqlite3"),
-            timeout=1,
-            backup_dir=str(tmp_path),
-            backup_interval=1,
-            backup_retention=1,
-            stop_event=threading.Event(),
-        ).run()
-    assert calls["count"] == 3
-    error.assert_called()
-    critical.assert_not_called()
-    assert tmp_path.name

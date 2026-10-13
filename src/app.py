@@ -17,20 +17,20 @@ from app_runtime.tasks import MutationRegistry
 from bots import AsyncAdminBot, AsyncPublicBot
 from bots.logging import AsyncBotLogging
 from bots.polling import AsyncTelegramSession
-from bwatch.async_watch import AsyncBWatch
+from bwatch.watch import BWatch
 from config import AppConfig, Config, LangConfig, LinesConfig
-from config.async_store import AsyncConfig, AsyncLinesConfig
-from core import AsyncSubscription
+from config.store import AsyncConfig, AsyncLinesConfig
+from core import Subscription
 from core.coordination import MutationCoordinator
-from core.services.async_audit import AsyncAuditService
-from db import AsyncDatabase
-from notify.async_notifier import AsyncNotifier
+from core.services.audit import AuditService
+from db import Database
+from notify.notifier import Notifier
 from paths import bundled_root, compiled
 
 if TYPE_CHECKING:
     from quart import Quart
 
-    from session.async_client import AsyncXUiSession
+    from session.client import XUiSession
 
 __all__ = [
     "AppOptions",
@@ -48,12 +48,12 @@ class ApplicationDependencies:
     cfg: AsyncConfig[AppConfig]
     lang_cfg: AsyncConfig[LangConfig]
     audit_cfg: AsyncLinesConfig
-    db: AsyncDatabase
-    panels: list[AsyncXUiSession]
-    whitelist_panel: AsyncXUiSession | None
-    subscription: AsyncSubscription
+    db: Database
+    panels: list[XUiSession]
+    whitelist_panel: XUiSession | None
+    subscription: Subscription
     limiter: AsyncRateLimiter
-    watcher: AsyncBWatch
+    watcher: BWatch
     admin_bot: AsyncAdminBot | None = None
     public_bot: AsyncPublicBot | None = None
 
@@ -114,7 +114,7 @@ async def create_application(
         )
         for name, store in (("config", cfg), ("language", lang), ("audit", audit)):
             await open_resource(OwnedResource(name, store))
-        db = AsyncDatabase(
+        db = Database(
             path=paths.database, backup_dir=paths.backups, start_backup=options.start_background,
         )
         await open_resource(OwnedResource("database", db))
@@ -125,7 +125,7 @@ async def create_application(
         for panel in [*panels, *([whitelist] if whitelist else [])]:
             await open_resource(OwnedResource(f"panel:{panel.name}", panel))
         mutations = MutationRegistry()
-        sub = AsyncSubscription(
+        sub = Subscription(
             cfg=cfg,
             lang_cfg=lang,
             db=db,
@@ -133,7 +133,7 @@ async def create_application(
             whitelist_panel=whitelist,
             offloads=offloads,
             coordinator=MutationCoordinator(mutations),
-            audit_svc=AsyncAuditService(audit),
+            audit_svc=AuditService(audit),
             verbose="core" in overrides,
         )
         await open_resource(OwnedResource("subscription", sub))
@@ -154,13 +154,13 @@ async def create_application(
         if admin_bot is not None or public_bot is not None:
             await open_resource(OwnedResource("Telegram session", AsyncTelegramSession()))
         notifier = (
-            AsyncNotifier(
+            Notifier(
                 texts=public_bot.TEXTS, send=public_bot.send_notice, language=public_bot.get_lang,
             )
             if public_bot is not None
             else None
         )
-        status = AsyncBWatch(
+        status = BWatch(
             cfg,
             db,
             sub,

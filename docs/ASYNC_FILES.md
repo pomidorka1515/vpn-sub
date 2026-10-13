@@ -1,6 +1,6 @@
 # Async config and durable file boundaries (Step 5)  
   
-`config.async_store.AsyncConfig[Doc]` and `AsyncLinesConfig` are injectable staged runtime resources. Constructors only assemble dependencies; `start()` invokes the supplied synchronous store factory through the runtime's bounded file offload service. Factories must pass `start_backup=False`. The synchronous config APIs remain available to existing callers and the separate Discord process. Production composition switches to these resources with the later core/ASGI steps, matching the async panel/database staging approach.  
+`config.store.AsyncConfig[Doc]` and `AsyncLinesConfig` are injectable runtime resources. Constructors only assemble dependencies; `start()` invokes the supplied synchronous store factory through the runtime's bounded file offload service. Factories must pass `start_backup=False`. The synchronous config APIs remain available to existing callers and the separate Discord process. Production composition uses these resources. The synchronous config stores and JSONL logger remain supported for the separate Discord process.  
   
 ## Config snapshots and operations  
   
@@ -13,11 +13,11 @@
   
 ## Audit acknowledgement  
   
-`AsyncAuditService.audit()` preserves the existing action/date/timestamp/info envelope and optional disabled store behavior. Its `AsyncLinesConfig.append()` boundary copies inputs, runs the complete locked JSONL append and configured fsync off-loop, and acknowledges only after completion. Errors propagate rather than being dropped or converted to best-effort logs. Cancellation after admission leaves an owned append that shutdown drains; it does not retract an already accepted audit record. Audit is called at the same business-operation points when core callers migrate in Step 6; it does not make mutation and audit persistence one atomic transaction.  
+`AuditService.audit()` preserves the existing action/date/timestamp/info envelope and optional disabled store behavior. Its `AsyncLinesConfig.append()` boundary copies inputs, runs the complete locked JSONL append and configured fsync off-loop, and acknowledges only after completion. Errors propagate rather than being dropped or converted to best-effort logs. Cancellation after admission leaves an owned append that shutdown drains; it does not retract an already accepted audit record. Audit is called at the same business-operation points when core callers migrate in Step 6; it does not make mutation and audit persistence one atomic transaction.  
   
 ## Log delivery  
   
-`loggers.async_delivery` supplies JSONL and Telegram handlers plus `LogDelivery[T]`. Runtime composition owns each delivery resource and supplies an awaitable destination (for Telegram, the later async bot). Handlers format/enqueue synchronously; one named consumer performs serial awaited delivery. JSONL retains existing fields and adds task names. Telegram preserves ANSI removal and HTML escaping.  
+`loggers.delivery` supplies JSONL and Telegram handlers plus `LogDelivery[T]`. Runtime composition owns each delivery resource and supplies an awaitable destination (for Telegram, the later async bot). Handlers format/enqueue synchronously; one named consumer performs serial awaited delivery. JSONL retains existing fields and adds task names. Telegram preserves ANSI removal and HTML escaping.  
   
 - Capacity defaults to 256 queued records, plus one active delivery. A bounded `queue.Queue` and thread-safe empty-to-nonempty loop wakeup support records emitted by offload threads without an unbounded callback per record.  
 - Overflow drops the newest record and increments `dropped`. ERROR+ records fall back directly to stderr. No blocking file or Telegram call runs in `emit()`.  

@@ -1,10 +1,10 @@
 # Discord bot service
 
-This is a **separate process**. It is not started by gunicorn or
-`create_application()`. Killing Flask does not kill this unit, and vice versa.
+This is a **separate process**. It is not started by Hypercorn or
+`create_application()`. Killing Quart does not kill this unit, and vice versa.
 
 Independent Discord bots for the VPN subscription service.
-Same venv, project root cwd, `PYTHONPATH=src/discord/src:src`. Talks to Flask
+Same venv, project root cwd, `PYTHONPATH=src/discord/src:src`. Talks to Quart
 over loopback HTTP.
 
 One Discord application / one bot token. Public slash commands stay as they are;
@@ -31,7 +31,7 @@ The example already has `$schema` set for `data/discord.json`.
 
 - `public.token` — Discord bot token (one client).
 - `private.whitelist` — Discord user IDs allowed to use `/admin`.
-- `private.api_token` — same value as Flask `cfg["api_token"]`. Sent as the
+- `private.api_token` — same value as Quart `cfg["api_token"]`. Sent as the
   `Authorization` header to the admin API.
 
 HTTP contract: see root [docs/API.md](../../docs/API.md)
@@ -44,19 +44,19 @@ All path variables are **optional**.
 | Variable | Default | Description |
 | :--- | :--- | :--- |
 | `DIR_DATA` | `./data/` | Runtime directory |
-| `PATH_LOG` | `<DIR_DATA>/log.jsonl` | Shared JSONL with Flask |
+| `PATH_LOG` | `<DIR_DATA>/log.jsonl` | Shared JSONL with Quart |
 | `PATH_DISCORD_CONFIG` | `<DIR_DATA>/discord.json` | This service's config |
 | `PATH_DISCORD_LANG` | checkout: `<root>/src/discord/lang.jsonc`; binary: packed `lang.jsonc` | Strings. A checkout walks up to the repository root. A Nuitka payload includes that file next to the compiled entry. |
 | `PATH_DISCORD_SESSIONS` | `<DIR_DATA>/discord-sessions.json` | Auth cookies per Discord user |
-| `SUB_HTTP_URL` | `http://127.0.0.1:5550` | Flask bind (loopback) |
+| `SUB_HTTP_URL` | `http://127.0.0.1:5550` | Quart bind (loopback) |
 | `SUB_URI` | `sub` | Same as main `cfg["uri"]` |
 | `SUB_API_URI` | `privapi` | Same as main `cfg["api_uri"]` |
-| `LOGLEVEL` | `DEBUG` | Threshold for `Logger()`. Same variable as Flask. |
+| `LOGLEVEL` | `DEBUG` | Threshold for `Logger()`. Same variable as Quart. |
 
 `LOGLEVEL` is case-insensitive (`TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`,
 `ERROR`, `CRITICAL` / `FATAL`) or an integer rounded down to the nearest
 level. Unset, blank, or unrecognized values stay `DEBUG`. This process has no
-gunicorn access log, so `LOGLEVEL_GUNICORN` does nothing here.
+HTTP access log, so `LOGLEVEL_HTTP` does nothing here.
 
 WebAPI prefix: `{SUB_HTTP_URL}/{SUB_URI}/webapi`.  
 Admin API prefix: `{SUB_HTTP_URL}/{SUB_URI}/{SUB_API_URI}`.  
@@ -94,7 +94,7 @@ WantedBy=multi-user.target
 
 *(replace `X` with your values)*
 
-The Flask unit should already be up so WebAPI / admin API exist at boot.
+The Quart unit should already be up so WebAPI / admin API exist at boot.
 
 A release binary is `vpn-sub-discord` from the same tag as `vpn-sub`. It does
 not need `PYTHONPATH`. `DIR_DATA` defaults to `data/` next to the executable,

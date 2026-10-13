@@ -11,9 +11,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from api.decorators.rate_limit import AsyncRateLimiter
-    from session.async_transport import AsyncXUiPanelTransport
+    from session.transport import XUiPanelTransport
 
-type PanelTransportFactory = Callable[[], AsyncXUiPanelTransport]
+type PanelTransportFactory = Callable[[], XUiPanelTransport]
 
 
 def verbose_overrides(raw: str | None = None) -> frozenset[str]:

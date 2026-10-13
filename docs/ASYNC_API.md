@@ -12,7 +12,7 @@ Routes await request parsing, rendering, file responses, repository and core cal
   
 ## Runtime and serving boundary  
   
-`await app.create_application()` composes config/language/audit stores, native async SQLite, Redis, async panels and `AsyncSubscription`, performs recovery and attaches the runtime to `app.extensions`. A primary lock rejects a second instance. Failed startup closes resources in reverse order; runtime shutdown is idempotent.  
+`await app.create_application()` composes config/language/audit stores, native async SQLite, Redis, async panels and `Subscription`, performs recovery and attaches the runtime to `app.extensions`. A primary lock rejects a second instance. Failed startup closes resources in reverse order; runtime shutdown is idempotent.  
   
 `src/asgi.py` registers Quart startup/shutdown hooks without opening runtime connections at import. `src/main.py` serves it through Hypercorn on one event loop, defaulting to `127.0.0.1:5550`. `APP_BIND` overrides the temporary `GUNICORN_BIND` fallback. The release workflow includes ASGI and Hypercorn rather than the removed WSGI entrypoint. The main binary probe imports this async stack and checks resources without needing runtime config, Redis or a panel.  
   

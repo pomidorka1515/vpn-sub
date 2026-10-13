@@ -52,7 +52,6 @@ jobs:
             pythonpath: src/discord/src:src
             entry: src/discord/src/runtime.py
             extra: >-
-              --nofollow-import-to=flask
               --nofollow-import-to=quart
               --nofollow-import-to=hypercorn
               --nofollow-import-to=aiosqlite

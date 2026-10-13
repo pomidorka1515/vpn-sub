@@ -1,7 +1,6 @@
 """Shared Hypercorn configuration for checkout and compiled serving.
 
 Checkout: ``hypercorn --config python:serve asgi:app``.
-Gunicorn environment aliases expire at migration step 12 cutover.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ STARTUP_TIMEOUT = 120
 
 def server_config() -> Config:
     config = Config()
-    config.bind = [os.getenv("APP_BIND", os.getenv("GUNICORN_BIND", "127.0.0.1:5550"))]
+    config.bind = [os.getenv("APP_BIND", "127.0.0.1:5550")]
     config.workers = 1
     config.worker_class = "asyncio"
     config.accesslog = None  # Privacy-preserving API middleware owns access logs.

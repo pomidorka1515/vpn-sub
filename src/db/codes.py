@@ -6,14 +6,32 @@ from typing import TYPE_CHECKING, cast
 from custom_types import CodeRecord
 from errors import CodeError, DatabaseError, DuplicateError
 
-from .common import ConnectionMixin, row_dict
+from .common import ConnectionMixin
 
 if TYPE_CHECKING:
     from custom_types import BonusResult, RegisterCodeResult
 
 
 class CodesMixin(ConnectionMixin):
-    def add_code(
+    async def pending_registrations(self) -> list[str]:
+        async with self.connection() as conn:
+            return [
+                str(row[0])
+                for row in await conn.rows(
+                    "SELECT username FROM pending_registration_sync ORDER BY username",
+                )
+            ]
+
+    async def registration_pending(self, username: str) -> bool:
+        async with self.connection() as conn:
+            return (
+                await conn.row(
+                    "SELECT 1 FROM pending_registration_sync WHERE username = ?", (username,),
+                )
+                is not None
+            )
+
+    async def add_code(
         self,
         code: str,
         action: str,
@@ -24,35 +42,42 @@ class CodesMixin(ConnectionMixin):
         gb: int = 0,
         wl_gb: int = 0,
     ) -> None:
-        stored_uses = -1 if permanent else uses
         try:
-            with self.transaction(immediate=True) as conn:
-                conn.execute(
+            async with self.transaction(immediate=True) as conn:
+                await conn.execute(
                     "INSERT INTO codes(code, action, permanent, uses, days, gb, wl_gb, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (code, action, int(permanent), stored_uses, days, gb, wl_gb, int(time.time())),
+                    (
+                        code,
+                        action,
+                        int(permanent),
+                        -1 if permanent else uses,
+                        days,
+                        gb,
+                        wl_gb,
+                        int(time.time()),
+                    ),
                 )
         except DatabaseError as exc:
             if "UNIQUE" in str(exc):
                 raise DuplicateError(f"code '{code}' already exists") from exc
             raise
 
-    def get_code(self, code: str) -> CodeRecord | None:
-        with self.connection() as conn:
-            row = row_dict(
-                conn.execute(
-                    "SELECT * FROM codes WHERE code = ? AND (permanent = 1 OR uses > 0)",
-                    (code,),
-                ).fetchone(),
+    async def get_code(self, code: str) -> CodeRecord | None:
+        async with self.connection() as conn:
+            row = await conn.row(
+                "SELECT * FROM codes WHERE code = ? AND (permanent = 1 OR uses > 0)", (code,),
             )
-            if row is not None:
-                row["perma"] = bool(row.pop("permanent"))
-            return cast(CodeRecord, row)
+            if row is None:
+                return None
+            result = dict(row)
+            result["perma"] = bool(result.pop("permanent"))
+            return cast(CodeRecord, result)
 
-    def all_codes(self) -> list[CodeRecord]:
-        with self.connection() as conn:
+    async def all_codes(self) -> list[CodeRecord]:
+        async with self.connection() as conn:
             rows = [
                 dict(row)
-                for row in conn.execute(
+                for row in await conn.rows(
                     "SELECT * FROM codes WHERE permanent = 1 OR uses > 0 ORDER BY code",
                 )
             ]
@@ -60,30 +85,30 @@ class CodesMixin(ConnectionMixin):
             row["perma"] = bool(row.pop("permanent"))
         return cast(list[CodeRecord], rows)
 
-    def delete_code(self, code: str) -> bool:
-        with self.transaction(immediate=True) as conn:
-            cur = conn.execute("DELETE FROM codes WHERE code = ?", (code,))
-            return cur.rowcount == 1
+    async def delete_code(self, code: str) -> bool:
+        async with self.transaction(immediate=True) as conn:
+            return await conn.execute("DELETE FROM codes WHERE code = ?", (code,)) == 1
 
-    def consume_code(self, code: str, action: str) -> CodeRecord:
-        """Atomically validate and consume one finite-use code."""
-        with self.transaction(immediate=True) as conn:
-            row = conn.execute("SELECT * FROM codes WHERE code = ?", (code,)).fetchone()
-            if row is None or row["action"] != action:
-                raise CodeError("invalid code")
-            if not row["permanent"] and int(row["uses"]) < 1:
+    async def consume_code(self, code: str, action: str) -> CodeRecord:
+        async with self.transaction(immediate=True) as conn:
+            row = await conn.row("SELECT * FROM codes WHERE code = ?", (code,))
+            if (
+                row is None
+                or row["action"] != action
+                or (not row["permanent"] and int(row["uses"]) < 1)
+            ):
                 raise CodeError("invalid code")
             remaining = -1 if row["permanent"] else int(row["uses"]) - 1
             if remaining == 0:
-                conn.execute("DELETE FROM codes WHERE code = ?", (code,))
+                await conn.execute("DELETE FROM codes WHERE code = ?", (code,))
             else:
-                conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
+                await conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
             result = dict(row)
             result["perma"] = bool(result.pop("permanent"))
             result["uses"] = remaining
             return cast(CodeRecord, result)
 
-    def register_with_code(
+    async def register_with_code(
         self,
         *,
         code: str,
@@ -95,19 +120,17 @@ class CodesMixin(ConnectionMixin):
         ext_username: str,
         ext_password_hash: str,
     ) -> RegisterCodeResult:
-        """Consume a registration code and insert the user in one transaction."""
         try:
-            with self.transaction(immediate=True) as conn:
-                row = conn.execute(
-                    "SELECT * FROM codes WHERE code = ? AND action = 'register'",
-                    (code,),
-                ).fetchone()
+            async with self.transaction(immediate=True) as conn:
+                row = await conn.row(
+                    "SELECT * FROM codes WHERE code = ? AND action = 'register'", (code,),
+                )
                 if row is None or (not row["permanent"] and int(row["uses"]) < 1):
                     raise CodeError("invalid code")
                 remaining = -1 if row["permanent"] else int(row["uses"]) - 1
-                conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
+                await conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
                 expires_at = int(time.time() + int(row["days"]) * 86400) if int(row["days"]) else 0
-                conn.execute(
+                await conn.execute(
                     """INSERT INTO users
                     (username, uuid, token, fingerprint, displayname, expires_at,
                      bw_limit_gb, wl_limit_gb, ext_username, ext_password_hash, created_at)
@@ -126,7 +149,7 @@ class CodesMixin(ConnectionMixin):
                         int(time.time()),
                     ),
                 )
-                conn.execute(
+                await conn.execute(
                     "INSERT INTO pending_registration_sync(username, code, permanent) VALUES (?, ?, ?)",
                     (username, code, int(row["permanent"])),
                 )
@@ -145,79 +168,67 @@ class CodesMixin(ConnectionMixin):
                 ) from exc
             raise
 
-    def adjust_bonus(self, username: str, code: str) -> BonusResult:
-        """Consume a bonus code and update quota/time in one transaction."""
-        with self.transaction(immediate=True) as conn:
-            user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    async def adjust_bonus(self, username: str, code: str) -> BonusResult:
+        async with self.transaction(immediate=True) as conn:
+            user = await conn.row("SELECT * FROM users WHERE username = ?", (username,))
             if user is None:
                 raise CodeError("unknown user")
-            code_row = conn.execute(
-                "SELECT * FROM codes WHERE code = ? AND action = 'bonus'",
-                (code,),
-            ).fetchone()
-            if code_row is None or (not code_row["permanent"] and int(code_row["uses"]) < 1):
+            row = await conn.row("SELECT * FROM codes WHERE code = ? AND action = 'bonus'", (code,))
+            if row is None or (not row["permanent"] and int(row["uses"]) < 1):
                 raise CodeError("unknown code")
-            remaining = -1 if code_row["permanent"] else int(code_row["uses"]) - 1
+            remaining = -1 if row["permanent"] else int(row["uses"]) - 1
             if remaining == 0:
-                conn.execute("DELETE FROM codes WHERE code = ?", (code,))
+                await conn.execute("DELETE FROM codes WHERE code = ?", (code,))
             else:
-                conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
+                await conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
             now = int(time.time())
-            added_days = int(code_row["days"])
-            added_gb = int(code_row["gb"])
-            added_wl_gb = int(code_row["wl_gb"])
-            current_time = int(user["expires_at"])
-            # 0 means unlimited and stays unlimited. A lapsed finite expiry
-            # restarts from now so the grant is usable, not stacked on a
-            # date that already passed.
-            if current_time == 0 or added_days == 0:
-                new_time = current_time
-            elif current_time < now:
-                new_time = now + added_days * 86400
-            else:
-                new_time = current_time + added_days * 86400
-            # A 0 quota is "no allowance", not a sticky unlimited flag.
-            # Adding GB must raise it or a disabled account never comes back.
-            new_limit = int(user["bw_limit_gb"]) + added_gb
-            new_wl_limit = int(user["wl_limit_gb"]) + added_wl_gb
-            conn.execute(
+            days = int(row["days"])
+            current = int(user["expires_at"])
+            new_time = current if current == 0 or days == 0 else max(current, now) + days * 86400
+            limit = int(user["bw_limit_gb"]) + int(row["gb"])
+            wl_limit = int(user["wl_limit_gb"]) + int(row["wl_gb"])
+            await conn.execute(
                 "UPDATE users SET expires_at = ?, bw_limit_gb = ?, wl_limit_gb = ? WHERE username = ?",
-                (new_time, new_limit, new_wl_limit, username),
+                (new_time, limit, wl_limit, username),
             )
             return {
-                "days": int(code_row["days"]),
-                "gb": int(code_row["gb"]),
-                "wl_gb": int(code_row["wl_gb"]),
-                "perma": bool(code_row["permanent"]),
+                "days": days,
+                "gb": int(row["gb"]),
+                "wl_gb": int(row["wl_gb"]),
+                "perma": bool(row["permanent"]),
                 "uses": remaining,
                 "time": new_time,
-                "limit": new_limit,
-                "wl_limit": new_wl_limit,
+                "limit": limit,
+                "wl_limit": wl_limit,
             }
 
-    def confirm_registration_sync(self, username: str) -> None:
-        with self.transaction(immediate=True) as conn:
-            row = conn.execute(
-                "SELECT code FROM pending_registration_sync WHERE username = ?",
-                (username,),
-            ).fetchone()
-            conn.execute("DELETE FROM pending_registration_sync WHERE username = ?", (username,))
+    async def confirm_registration_sync(self, username: str) -> None:
+        async with self.transaction(immediate=True) as conn:
+            row = await conn.row(
+                "SELECT code FROM pending_registration_sync WHERE username = ?", (username,),
+            )
+            await conn.execute(
+                "DELETE FROM pending_registration_sync WHERE username = ?", (username,),
+            )
             if row is not None:
-                conn.execute(
+                await conn.execute(
                     "DELETE FROM codes WHERE code = ? AND permanent = 0 AND uses = 0",
                     (str(row["code"]),),
                 )
 
-    def rollback_registration_sync(self, username: str) -> None:
-        """Remove a locally-created user and refund its finite register code."""
-        with self.transaction(immediate=True) as conn:
-            pending = conn.execute(
+    async def rollback_registration_sync(self, username: str) -> None:
+        async with self.transaction(immediate=True) as conn:
+            row = await conn.row(
                 "SELECT code, permanent FROM pending_registration_sync WHERE username = ?",
                 (username,),
-            ).fetchone()
-            if pending is not None and not bool(pending["permanent"]):
-                conn.execute(
+            )
+            if row is not None and not bool(row["permanent"]):
+                await conn.execute(
                     "UPDATE codes SET uses = uses + 1 WHERE code = ? AND action = 'register' AND permanent = 0",
-                    (str(pending["code"]),),
+                    (str(row["code"]),),
                 )
-            conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            await conn.executemany(
+                "DELETE FROM app_metadata WHERE key = ?",
+                [(f"registration_rollback_failed:{username}",), (f"user_sync_pending:{username}",)],
+            )

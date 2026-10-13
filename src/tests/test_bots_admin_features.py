@@ -27,7 +27,7 @@ from custom_types import (
     XrayStats,
 )
 from errors import AppError, NotFoundError
-from session.async_client import AsyncXUiSession
+from session.client import XUiSession
 
 
 def _message(text: str | None, chat_id: int = 7) -> types.Message:
@@ -276,18 +276,18 @@ async def test_panel_status_renders_running_and_unknown(
     mixin, telegram, subscription = panels
     panel = SimpleNamespace(name="edge")
     subscription.panel_svc.getstatus.return_value = None
-    await mixin._cb_panel_info(7, cast(AsyncXUiSession, panel), True)
+    await mixin._cb_panel_info(7, cast(XUiSession, panel), True)
     assert "неизвестен" in cast(MagicMock, mixin._send_message).call_args.args[1]
 
     subscription.panel_svc.getstatus.return_value = _metrics(ipv6="::1")
-    await mixin._cb_panel_info(7, cast(AsyncXUiSession, panel), True)
+    await mixin._cb_panel_info(7, cast(XUiSession, panel), True)
     text = telegram.send_message.call_args.args[1]
     assert "🟢 Работает" in text
     assert "::1" in text
     assert telegram.send_message.call_args.kwargs["reply_markup"] == "menu"
 
     subscription.panel_svc.getstatus.return_value = _metrics(running=False)
-    await mixin._cb_panel_info(7, cast(AsyncXUiSession, panel), False)
+    await mixin._cb_panel_info(7, cast(XUiSession, panel), False)
     text = telegram.send_message.call_args.args[1]
     assert "🔴 crashed" in text
     assert "Отключен" in text
@@ -305,7 +305,7 @@ async def test_all_panels_status_continues_after_failure(
 
     def status(chat_id: int, panel: object, last: bool) -> None:
         del chat_id, last
-        if cast(AsyncXUiSession, panel).name == "one":
+        if cast(XUiSession, panel).name == "one":
             raise RuntimeError("down")
 
     subscription.panel_svc.statuses.return_value = [None, None]

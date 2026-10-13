@@ -10,9 +10,9 @@ from helpers import USER_UUID, FakePanel, make_inbound, make_panel_client
 from app_runtime.offload import BoundedOffload
 from app_runtime.tasks import CapacityExceededError, MutationRegistry, TaskRegistry
 from core.coordination import MutationCoordinator
-from db.async_database import AsyncDatabase
+from db.database import Database
 from errors import PanelRejectedError
-from session.async_cache import AsyncGenerationCache
+from session.cache import GenerationCache
 from session.stamp import bump_stamp
 
 if TYPE_CHECKING:
@@ -20,14 +20,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from config import JsonValue
-    from session.async_client import AsyncXUiSession
+    from session.client import XUiSession
 
 import pytest_asyncio
 
 
 @pytest_asyncio.fixture
-async def db(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
-    database = AsyncDatabase(path=tmp_path / "state.sqlite3", start_backup=False)
+async def db(tmp_path: Path) -> AsyncGenerator[Database]:
+    database = Database(path=tmp_path / "state.sqlite3", start_backup=False)
     await database.start()
     try:
         yield database
@@ -37,7 +37,7 @@ async def db(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
 
 @pytest.mark.asyncio
 async def test_cancelled_registration_settles_siblings_then_compensates(
-    db: AsyncDatabase, tmp_path: Path,
+    db: Database, tmp_path: Path,
 ) -> None:
     accepted = FakePanel(name="accepted", inbounds=[make_inbound(1)])
     rejected = FakePanel(name="rejected", inbounds=[make_inbound(1)])
@@ -46,7 +46,7 @@ async def test_cancelled_registration_settles_siblings_then_compensates(
     original = sub.business_svc._post
 
     async def post(
-        panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str,
+        panel: XUiSession, route: str, body: Mapping[str, JsonValue], what: str,
     ) -> None:
         if route.endswith("clients/add") and panel is sub.panels[0]:
             await original(panel, route, body, what)
@@ -97,7 +97,7 @@ async def test_cancelled_registration_settles_siblings_then_compensates(
 
 @pytest.mark.asyncio
 async def test_reset_delete_race_does_not_resurrect_client(
-    db: AsyncDatabase, tmp_path: Path,
+    db: Database, tmp_path: Path,
 ) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])], inbounds=[make_inbound(1)])
     sub = await make_async_subscription(db, tmp_path, [panel])
@@ -108,7 +108,7 @@ async def test_reset_delete_race_does_not_resurrect_client(
     original = sub.business_svc._post
 
     async def update(
-        panel: AsyncXUiSession, route: str, body: Mapping[str, JsonValue], what: str,
+        panel: XUiSession, route: str, body: Mapping[str, JsonValue], what: str,
     ) -> None:
         started.set()
         await release.wait()
@@ -139,7 +139,7 @@ async def test_reset_delete_race_does_not_resurrect_client(
 
 @pytest.mark.asyncio
 async def test_fanout_waits_for_later_write_before_raising(
-    db: AsyncDatabase, tmp_path: Path,
+    db: Database, tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(
         db, tmp_path, [FakePanel(name="first"), FakePanel(name="later")],
@@ -172,7 +172,7 @@ async def test_fanout_waits_for_later_write_before_raising(
 
 @pytest.mark.asyncio
 async def test_background_capacity_does_not_block_foreground(
-    db: AsyncDatabase, tmp_path: Path,
+    db: Database, tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(
         db, tmp_path, [FakePanel(name=str(index)) for index in range(12)],
@@ -210,7 +210,7 @@ async def test_background_capacity_does_not_block_foreground(
 async def test_cache_invalidation_and_cancelled_single_flight_waiter(tmp_path: Path) -> None:
     files = BoundedOffload(capacity=1, name="test-files")
     tasks = TaskRegistry()
-    cache = AsyncGenerationCache[list[str]](
+    cache = GenerationCache[list[str]](
         str(tmp_path / "clients.stamp"), files=files, tasks=tasks,
     )
     started, release = asyncio.Event(), asyncio.Event()
@@ -260,7 +260,7 @@ async def test_refresh_cannot_publish_after_generation_changes(
     files = BoundedOffload(capacity=1, name="test-files")
     tasks = TaskRegistry()
     path = str(tmp_path / "clients.stamp")
-    cache = AsyncGenerationCache[str](path, files=files, tasks=tasks)
+    cache = GenerationCache[str](path, files=files, tasks=tasks)
     started, release = asyncio.Event(), asyncio.Event()
     calls = 0
 
@@ -336,7 +336,7 @@ async def test_ordered_multi_user_locks_bounded_admission_and_forced_cancel() ->
 
 @pytest.mark.asyncio
 async def test_quota_rechecks_limit_after_waiting_for_admin_mutation(
-    db: AsyncDatabase, tmp_path: Path,
+    db: Database, tmp_path: Path,
 ) -> None:
     panel = FakePanel(clients=[make_panel_client("alice", [1])])
     sub = await make_async_subscription(db, tmp_path, [panel])
@@ -381,7 +381,7 @@ async def test_quota_rechecks_limit_after_waiting_for_admin_mutation(
 async def test_failed_shared_refresh_is_retryable(tmp_path: Path) -> None:
     files = BoundedOffload(capacity=1, name="cache-files")
     tasks = TaskRegistry()
-    cache = AsyncGenerationCache[str](str(tmp_path / "stamp"), files=files, tasks=tasks)
+    cache = GenerationCache[str](str(tmp_path / "stamp"), files=files, tasks=tasks)
     calls = 0
 
     async def load() -> str:

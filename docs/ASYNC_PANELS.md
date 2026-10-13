@@ -1,6 +1,6 @@
 # Async panel client (Step 3)  
   
-`AsyncXUiSession`, `AiohttpPanelTransport`, `AsyncXUiPanelTransport`, `PanelResponse`, and `FakeAsyncPanelTransport` are exported by `session`. They are staged alongside the synchronous client for later core integration. Constructors open no connections and start no health work; call `await start()` and `await close()`. Instances are single-use after closing.  
+`XUiSession`, `AiohttpPanelTransport`, `XUiPanelTransport`, `PanelResponse`, and `FakePanelTransport` are exported by `session`. These are the canonical async interfaces; the synchronous client and Requests panel transport have been removed. Constructors open no connections and start no health work; call `await start()` and `await close()`. Instances are single-use after closing.  
   
 The default transport creates a long-lived aiohttp session on startup. Injected sessions and transports remain injector-owned; injected transports must already be ready. Responses are fully buffered and released, with transport-independent JSON decoding and detached case-insensitive headers. Default total/connect/read deadlines are five seconds; per-request total timeouts are supported. Redirects are disabled to keep credentials on the configured endpoint. Absolute client URLs must remain within its configured base URL.  
   

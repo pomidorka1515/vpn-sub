@@ -13,11 +13,11 @@ from util import err
 from .browser import _browser_strings
 
 if TYPE_CHECKING:
-    from core import AsyncSubscription
+    from core import Subscription
 
 
 async def get_subscription(
-    obj: AsyncSubscription,
+    obj: Subscription,
     /,
     *,
     token: str,

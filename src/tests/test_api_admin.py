@@ -10,7 +10,7 @@ from helpers import FakePanel, subscription_config
 
 from api import AsyncApi
 from config import Config, LangConfig
-from config.async_store import AsyncLinesConfig
+from config.store import AsyncLinesConfig
 from errors import AppError, DatabaseError
 
 if TYPE_CHECKING:
@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from quart import Quart
     from quart.typing import TestClientProtocol
 
-    from core import AsyncSubscription
-    from db import AsyncDatabase
+    from core import Subscription
+    from db import Database
 
 pytestmark = pytest.mark.asyncio
 LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
@@ -36,11 +36,11 @@ class Audit:
 
 @pytest_asyncio.fixture
 async def admin_api(
-    async_database: AsyncDatabase,
-) -> AsyncIterator[tuple[Quart, AsyncSubscription]]:
+    database: Database,
+) -> AsyncIterator[tuple[Quart, Subscription]]:
     async for app in api_app():
         language = Config[LangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
-        sub = await make_subscription(async_database, app=app, lang_cfg=language)
+        sub = await make_subscription(database, app=app, lang_cfg=language)
         AsyncApi(
             app=app,
             cfg=config_snapshot(
@@ -50,7 +50,7 @@ async def admin_api(
             ),
             audit_cfg=cast(AsyncLinesConfig, Audit()),
             sub=sub,
-            bw=make_watch(async_database, sub),
+            bw=make_watch(database, sub),
             limiter=app.extensions["limiter"],
         )
         yield app, sub
@@ -66,7 +66,7 @@ async def sign_in(client: TestClientProtocol) -> None:
         assert part in response.headers["Set-Cookie"]
 
 
-async def test_admin_ui_requires_session(admin_api: tuple[Quart, AsyncSubscription]) -> None:
+async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) -> None:
     client = admin_api[0].test_client()
     response = await client.get("/sub/admin")
     assert response.status_code == 302
@@ -96,14 +96,14 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, AsyncSubscripti
     ],
 )
 async def test_admin_session_rejects_invalid_login(
-    admin_api: tuple[Quart, AsyncSubscription], body: dict[str, str],
+    admin_api: tuple[Quart, Subscription], body: dict[str, str],
 ) -> None:
     assert (
         await admin_api[0].test_client().post("/sub/admin/session", json=body)
     ).status_code == 401
 
 
-async def test_admin_session_and_local_page(admin_api: tuple[Quart, AsyncSubscription]) -> None:
+async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription]) -> None:
     app, sub = admin_api
     client = app.test_client()
     assert (
@@ -136,7 +136,7 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, AsyncSubscri
     assert (await response.get_json())["obj"] == {"token": "secret", "api_root": "/sub/api"}
 
 
-async def test_admin_relogin_and_logout(admin_api: tuple[Quart, AsyncSubscription]) -> None:
+async def test_admin_relogin_and_logout(admin_api: tuple[Quart, Subscription]) -> None:
     app, sub = admin_api
     client = app.test_client()
     await sign_in(client)
@@ -156,7 +156,7 @@ async def test_admin_relogin_and_logout(admin_api: tuple[Quart, AsyncSubscriptio
 
 
 async def test_user_refresh_aborts_on_non_panel_error(
-    admin_api: tuple[Quart, AsyncSubscription],
+    admin_api: tuple[Quart, Subscription],
 ) -> None:
     app, sub = admin_api
     for name in ("alice", "bob"):
@@ -181,7 +181,7 @@ async def test_user_refresh_aborts_on_non_panel_error(
 
 
 async def test_health_reports_db_and_process_status(
-    admin_api: tuple[Quart, AsyncSubscription],
+    admin_api: tuple[Quart, Subscription],
 ) -> None:
     client = admin_api[0].test_client()
     assert (await client.get("/sub/api/api/health")).status_code == 401
@@ -200,7 +200,7 @@ async def test_health_reports_db_and_process_status(
 
 
 async def test_health_returns_503_when_database_ping_fails(
-    admin_api: tuple[Quart, AsyncSubscription], monkeypatch: pytest.MonkeyPatch,
+    admin_api: tuple[Quart, Subscription], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail() -> object:
         raise DatabaseError("down")
@@ -219,10 +219,10 @@ async def test_health_returns_503_when_database_ping_fails(
 
 @pytest.mark.parametrize(("uri", "api_uri", "root"), [("", "api", "/api"), ("sub", "", "/sub")])
 async def test_admin_empty_uri_contract(
-    async_database: AsyncDatabase, uri: str, api_uri: str, root: str,
+    database: Database, uri: str, api_uri: str, root: str,
 ) -> None:
     async for app in api_app():
-        sub = await make_subscription(async_database, app=app, uri=uri)
+        sub = await make_subscription(database, app=app, uri=uri)
         AsyncApi(
             app=app,
             cfg=config_snapshot(
@@ -235,7 +235,7 @@ async def test_admin_empty_uri_contract(
             ),
             audit_cfg=cast(AsyncLinesConfig, Audit()),
             sub=sub,
-            bw=make_watch(async_database, sub),
+            bw=make_watch(database, sub),
             limiter=app.extensions["limiter"],
         )
         client = app.test_client()
@@ -257,7 +257,7 @@ async def test_admin_empty_uri_contract(
 
 
 async def test_polling_status_contract(
-    async_database: AsyncDatabase, monkeypatch: pytest.MonkeyPatch,
+    database: Database, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from custom_types import NetTrafficStats
     from sysutil import (
@@ -313,7 +313,7 @@ async def test_polling_status_contract(
     )
     async for app in api_app():
         sub = await make_subscription(
-            async_database,
+            database,
             app=app,
             panels=[panel, FakePanel(name="down", status_error=RuntimeError("down"))],
         )
@@ -322,7 +322,7 @@ async def test_polling_status_contract(
             cfg=config_snapshot(subscription_config(api_uri="api", api_token="secret")),
             audit_cfg=cast(AsyncLinesConfig, Audit()),
             sub=sub,
-            bw=make_watch(async_database, sub),
+            bw=make_watch(database, sub),
             limiter=app.extensions["limiter"],
         )
         client = app.test_client()

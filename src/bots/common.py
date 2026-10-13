@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from telebot.async_telebot import AsyncTeleBot
 
     from config import AppConfig, LangConfig
-    from core import AsyncSubscription
-    from core.async_common import Snapshot
+    from core import Subscription
+    from core.common import Snapshot
     from loggers import Logger
 
 __all__ = ["AdminStateMixin", "BotStateMixin", "PublicStateMixin", "TelegramIOMixin"]
@@ -64,7 +64,7 @@ class BotStateMixin:
 
     cfg: Snapshot[AppConfig]
     lang_cfg: Snapshot[LangConfig]
-    sub: AsyncSubscription
+    sub: Subscription
 
 
 class AdminStateMixin(BotStateMixin):

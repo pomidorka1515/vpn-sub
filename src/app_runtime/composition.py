@@ -3,13 +3,13 @@ from __future__ import annotations
 import fcntl
 from typing import TYPE_CHECKING, BinaryIO, cast
 
-from session.async_client import AsyncXUiSession
+from session.client import XUiSession
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from config import AppConfig
-    from core.async_common import Snapshot
+    from core.common import Snapshot
 
     from .settings import AppOptions, AppPaths
 
@@ -51,11 +51,11 @@ class SnapshotStatus:
 
 def build_panels(
     cfg: Snapshot[AppConfig], paths: AppPaths, options: AppOptions, *, verbose: bool,
-) -> tuple[list[AsyncXUiSession], AsyncXUiSession | None]:
-    panels: list[AsyncXUiSession] = []
-    whitelist: AsyncXUiSession | None = None
+) -> tuple[list[XUiSession], XUiSession | None]:
+    panels: list[XUiSession] = []
+    whitelist: XUiSession | None = None
     for section in cfg.view()["3xui"].values():
-        panel = AsyncXUiSession(
+        panel = XUiSession(
             name=section["name"],
             address=section["address"],
             port=section["port"],

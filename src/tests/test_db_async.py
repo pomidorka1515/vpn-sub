@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 import pytest
 import pytest_asyncio
 
-from db import AsyncDatabase, Database
-from db.async_common import AsyncConnection
+from db import Database
+from db.common import Connection
 from errors import CodeError, DatabaseError, DuplicateError, MigrationError
 
 if TYPE_CHECKING:
@@ -17,12 +17,12 @@ if TYPE_CHECKING:
 
     from _pytest.monkeypatch import MonkeyPatch
 
-    from db.async_common import Parameters
+    from db.common import Parameters
 
 
 @pytest_asyncio.fixture
-async def repository(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
-    db = AsyncDatabase(
+async def repository(tmp_path: Path) -> AsyncGenerator[Database]:
+    db = Database(
         path=tmp_path / "state.sqlite3", backup_dir=tmp_path / "backups", start_backup=False,
     )
     await db.start()
@@ -32,7 +32,7 @@ async def repository(tmp_path: Path) -> AsyncGenerator[AsyncDatabase]:
         await db.close()
 
 
-async def create_user(db: AsyncDatabase, name: str = "alice") -> None:
+async def create_user(db: Database, name: str = "alice") -> None:
     await db.create_user(
         username=name,
         uuid=f"uuid-{name}",
@@ -45,7 +45,7 @@ async def create_user(db: AsyncDatabase, name: str = "alice") -> None:
 
 
 @pytest.mark.asyncio
-async def test_users_auth_mapping_and_errors(repository: AsyncDatabase) -> None:
+async def test_users_auth_mapping_and_errors(repository: Database) -> None:
     db = repository
     await create_user(db)
     await create_user(db, "bob")
@@ -81,7 +81,7 @@ async def test_users_auth_mapping_and_errors(repository: AsyncDatabase) -> None:
 
 
 @pytest.mark.asyncio
-async def test_atomic_registration_race_and_refund(repository: AsyncDatabase) -> None:
+async def test_atomic_registration_race_and_refund(repository: Database) -> None:
     db = repository
     await db.add_code("once", "register", gb=4, wl_gb=2)
 
@@ -111,7 +111,7 @@ async def test_atomic_registration_race_and_refund(repository: AsyncDatabase) ->
 
 
 @pytest.mark.asyncio
-async def test_bonus_usage_notifications_and_snapshots(repository: AsyncDatabase) -> None:
+async def test_bonus_usage_notifications_and_snapshots(repository: Database) -> None:
     db = repository
     await create_user(db)
     await db.add_code("bonus", "bonus", gb=3, wl_gb=2, days=1)
@@ -159,7 +159,7 @@ async def test_bonus_usage_notifications_and_snapshots(repository: AsyncDatabase
 
 @pytest.mark.asyncio
 async def test_cancelled_transaction_rolls_back_before_next_writer(
-    repository: AsyncDatabase,
+    repository: Database,
 ) -> None:
     entered = asyncio.Event()
 
@@ -182,20 +182,20 @@ async def test_cancelled_transaction_rolls_back_before_next_writer(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("commit", [False, True])
 async def test_cancellation_during_queued_sql_settles(
-    repository: AsyncDatabase, monkeypatch: MonkeyPatch, commit: bool,
+    repository: Database, monkeypatch: MonkeyPatch, commit: bool,
 ) -> None:
     entered, release = asyncio.Event(), asyncio.Event()
     writer = repository._writer
     assert writer is not None
-    execute = AsyncConnection._execute
+    execute = Connection._execute
 
-    async def gated(self: AsyncConnection, sql: str, parameters: Parameters) -> int:
+    async def gated(self: Connection, sql: str, parameters: Parameters) -> int:
         if sql == ("COMMIT" if commit else "INSERT INTO app_metadata VALUES ('outcome', 'value')"):
             entered.set()
             await release.wait()
         return await execute(self, sql, parameters)
 
-    monkeypatch.setattr(AsyncConnection, "_execute", gated)
+    monkeypatch.setattr(Connection, "_execute", gated)
 
     async def operation() -> None:
         async with repository.transaction(immediate=True) as conn:
@@ -213,7 +213,7 @@ async def test_cancellation_during_queued_sql_settles(
 
 
 @pytest.mark.asyncio
-async def test_pragmas_leases_and_nested_rejection(repository: AsyncDatabase) -> None:
+async def test_pragmas_leases_and_nested_rejection(repository: Database) -> None:
     async with repository.connection() as conn:
         assert (await conn.row("PRAGMA foreign_keys"))[0] == 1  # type: ignore[index]
         assert (await conn.row("PRAGMA journal_mode"))[0] == "wal"  # type: ignore[index]
@@ -227,12 +227,12 @@ async def test_pragmas_leases_and_nested_rejection(repository: AsyncDatabase) ->
 
 @pytest.mark.asyncio
 async def test_backup_restores_and_close_is_repeatable(
-    repository: AsyncDatabase, tmp_path: Path,
+    repository: Database, tmp_path: Path,
 ) -> None:
     await create_user(repository)
     await repository.backup_now()
     backup = next((tmp_path / "backups" / "state").glob("*.sqlite3"))
-    restored = AsyncDatabase(path=backup, start_backup=False)
+    restored = Database(path=backup, start_backup=False)
     await restored.start()
     try:
         assert await restored.list_users() == ["alice"]
@@ -248,16 +248,17 @@ async def test_backup_restores_and_close_is_repeatable(
 async def test_existing_schema_and_failed_start_unwind(tmp_path: Path) -> None:
     path = tmp_path / "existing.sqlite3"
     sync = Database(path=path, start_backup=False)
-    sync.set_metadata("existing", "preserved")
-    sync.close()
-    db = AsyncDatabase(path=path)
+    await sync.start()
+    await sync.set_metadata("existing", "preserved")
+    await sync.close()
+    db = Database(path=path)
     await db.start()
     assert await db.get_metadata("existing") == "preserved"
     await db.close()
     bad_path = tmp_path / "bad.sqlite3"
     with sqlite3.connect(bad_path) as conn:
         conn.execute("CREATE TABLE unknown (id INTEGER)")
-    bad = AsyncDatabase(path=bad_path)
+    bad = Database(path=bad_path)
     with pytest.raises(MigrationError):
         await bad.start()
     assert bad._writer is None
@@ -267,17 +268,17 @@ async def test_existing_schema_and_failed_start_unwind(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_rollback_failure_discards_writer(
-    repository: AsyncDatabase, monkeypatch: MonkeyPatch,
+    repository: Database, monkeypatch: MonkeyPatch,
 ) -> None:
-    original = AsyncConnection._execute
+    original = Connection._execute
     old_writer = repository._writer
 
-    async def broken(self: AsyncConnection, sql: str, parameters: Parameters) -> int:
+    async def broken(self: Connection, sql: str, parameters: Parameters) -> int:
         if sql == "ROLLBACK":
             raise sqlite3.OperationalError("injected rollback failure")
         return await original(self, sql, parameters)
 
-    monkeypatch.setattr(AsyncConnection, "_execute", broken)
+    monkeypatch.setattr(Connection, "_execute", broken)
 
     async def operation() -> None:
         async with repository.transaction(immediate=True) as conn:
@@ -294,7 +295,7 @@ async def test_rollback_failure_discards_writer(
 
 @pytest.mark.asyncio
 async def test_readers_do_not_see_uncommitted_writer_and_close_drains(
-    repository: AsyncDatabase,
+    repository: Database,
 ) -> None:
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -313,7 +314,7 @@ async def test_readers_do_not_see_uncommitted_writer_and_close_drains(
     release.set()
     await task
     await closing
-    restored = AsyncDatabase(path=repository.path)
+    restored = Database(path=repository.path)
     await restored.start()
     try:
         assert await restored.get_metadata("pending") == "value"
@@ -323,7 +324,7 @@ async def test_readers_do_not_see_uncommitted_writer_and_close_drains(
 
 @pytest.mark.asyncio
 async def test_code_duplicates_and_failed_registration_preserve_code(
-    repository: AsyncDatabase,
+    repository: Database,
 ) -> None:
     await create_user(repository)
     await repository.add_code("register", "register")

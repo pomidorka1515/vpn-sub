@@ -9,10 +9,10 @@ from builders import get_subscription
 if TYPE_CHECKING:
     from quart import Quart, Response
 
-    from core import AsyncSubscription
+    from core import Subscription
 
 
-def register_subscription_route(app: Quart, sub: AsyncSubscription) -> None:
+def register_subscription_route(app: Quart, sub: Subscription) -> None:
     uri = sub.res.cfg.view()["uri"].strip("/")
 
     @app.route(f"/{uri}", strict_slashes=False)

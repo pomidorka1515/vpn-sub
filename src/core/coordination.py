@@ -99,12 +99,12 @@ def user_mutation[**P, T](
 
     @wraps(function)
     async def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
-        from .async_common import AsyncBaseService
+        from .common import BaseService
 
         bound = sig.bind(*args, **kwargs)
         service = bound.arguments["self"]
         username = bound.arguments["username"]
-        if not isinstance(service, AsyncBaseService) or not isinstance(username, str):
+        if not isinstance(service, BaseService) or not isinstance(username, str):
             raise TypeError("user mutation requires a service and username")
         return await service.res.coordinator.run(
             [username], lambda: function(*args, **kwargs), name=f"core:{function.__name__}",

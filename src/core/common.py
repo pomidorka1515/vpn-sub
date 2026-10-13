@@ -1,33 +1,39 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from tracer import trace
 
 if TYPE_CHECKING:
     from argon2 import PasswordHasher
 
-    from config import AppConfig, Config, JsonValue, LangConfig, LinesConfig
-    from db import Database
+    from app_runtime.offload import OffloadServices
+    from config import AppConfig, JsonValue, LangConfig
+    from db.database import Database
     from loggers import Logger
-    from session import XUiSession
+    from session.client import XUiSession
     from tracer import TraceOp
 
-__all__ = ["BaseService", "SharedCoreResources"]
+    from .coordination import MutationCoordinator
+
+
+class Snapshot[Doc](Protocol):
+    def view(self) -> Doc: ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SharedCoreResources:
     log: Logger
-    cfg: Config[AppConfig]
-    lang_cfg: Config[LangConfig]
-    audit_cfg: LinesConfig | None
+    cfg: Snapshot[AppConfig]
+    lang_cfg: Snapshot[LangConfig]
     db: Database
-    legacy_salt: str
     panels: list[XUiSession]
     whitelist_panel: XUiSession | None
     password_hasher: PasswordHasher
+    legacy_salt: str
+    offloads: OffloadServices
+    coordinator: MutationCoordinator
     verbose: bool = False
 
 
@@ -36,36 +42,20 @@ class BaseService:
         self.res = res
 
     def trace(self, operation: TraceOp, event: str, **fields: JsonValue) -> None:
-        """
-        Trace a detailed operation if ``self.res.verbose`` is True.
-        """
-        if not self.res.verbose:
-            return
-        trace(self.log, operation, event, **fields)
+        if self.res.verbose:
+            trace(self.res.log, operation, event, **fields)
 
     @property
     def log(self) -> Logger:
         return self.res.log
 
     @property
-    def cfg(self) -> Config[AppConfig]:
+    def cfg(self) -> Snapshot[AppConfig]:
         return self.res.cfg
-
-    @property
-    def lang_cfg(self) -> Config[LangConfig]:
-        return self.res.lang_cfg
-
-    @property
-    def audit_cfg(self) -> LinesConfig | None:
-        return self.res.audit_cfg
 
     @property
     def db(self) -> Database:
         return self.res.db
-
-    @property
-    def legacy_salt(self) -> str:
-        return self.res.legacy_salt
 
     @property
     def panels(self) -> list[XUiSession]:
@@ -74,7 +64,3 @@ class BaseService:
     @property
     def whitelist_panel(self) -> XUiSession | None:
         return self.res.whitelist_panel
-
-    @property
-    def password_hasher(self) -> PasswordHasher:
-        return self.res.password_hasher

@@ -4,11 +4,12 @@ import contextlib
 import os
 import sqlite3
 import tempfile
-import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from loggers import Logger
+if TYPE_CHECKING:
+    from loggers import Logger
 
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:
@@ -57,52 +58,3 @@ def prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
             log.debug(f"pruned old backup: {path}")
         except OSError:
             log.exception("prune failed for %s", path)
-
-
-def make_backup_thread(
-    *,
-    path: str,
-    timeout: float,
-    backup_dir: str,
-    backup_interval: float,
-    backup_retention: int,
-    stop_event: threading.Event,
-) -> threading.Thread:
-    def log_failure(log: Logger, failures: int, exc: Exception) -> None:
-        if failures == 1:
-            log.error(f"backup failed for {path}", exc_info=exc)
-        elif failures % 3 == 0:
-            log.critical(
-                f"backup still failing for {path} after {failures} consecutive attempts",
-                exc_info=exc,
-            )
-
-    def loop() -> None:
-        log = Logger("Backup")
-        instance_dir = instance_backup_dir(path, backup_dir)
-        failures = 0
-        while not stop_event.wait(backup_interval):
-            try:
-                do_backup(path, timeout, instance_dir, log)
-                prune_backups(instance_dir, backup_retention, log)
-                log.info("backup successful")
-                failures = 0
-                continue
-            except Exception as exc:
-                failures += 1
-                log_failure(log, failures, exc)
-
-            retry_interval = min(backup_interval, 60 * failures)
-            if stop_event.wait(retry_interval):
-                break
-            try:
-                do_backup(path, timeout, instance_dir, log)
-                prune_backups(instance_dir, backup_retention, log)
-                log.info("backup retry successful")
-                failures = 0
-                continue
-            except Exception as retry_exc:
-                failures += 1
-                log_failure(log, failures, retry_exc)
-
-    return threading.Thread(target=loop, daemon=True, name="Backup")

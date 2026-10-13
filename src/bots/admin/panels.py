@@ -13,7 +13,7 @@ __all__ = ["AdminPanelsMixin"]
 
 
 if TYPE_CHECKING:
-    from session.async_client import AsyncXUiSession
+    from session.client import XUiSession
 
 
 class _UNFETCHED_SENTINEL:  # ruff: ignore[invalid-class-name]
@@ -30,7 +30,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
     async def _cb_panel_info(
         self,
         chat_id: int,
-        panel: AsyncXUiSession,
+        panel: XUiSession,
         last: bool,
         info: ServerMetricsResponse | _UNFETCHED_SENTINEL | None = _UNFETCHED,
     ) -> None:

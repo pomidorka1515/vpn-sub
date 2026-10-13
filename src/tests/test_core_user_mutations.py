@@ -31,15 +31,16 @@ def _post_bodies(panel: FakePanel, fragment: str) -> list[dict[str, object]]:
     ]
 
 
-def test_add_users_creates_client_once_per_panel(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_creates_client_once_per_panel(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2), make_inbound(3, protocol="trojan")],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    subscription.business_svc.add_users("alice")
+    (await subscription.business_svc.add_users("alice"))
 
     adds = _post_bodies(panel, "clients/add")
     assert len(adds) == 1
@@ -53,16 +54,17 @@ def test_add_users_creates_client_once_per_panel(database: Database) -> None:
     assert panel.clients[0].inboundIds == [1, 2]
 
 
-def test_add_users_attaches_missing_inbounds(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_attaches_missing_inbounds(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    subscription.business_svc.add_users("alice")
+    (await subscription.business_svc.add_users("alice"))
 
     assert _post_bodies(panel, "clients/add") == []
     attaches = _post_bodies(panel, "/attach")
@@ -70,21 +72,23 @@ def test_add_users_attaches_missing_inbounds(database: Database) -> None:
     assert panel.clients[0].inboundIds == [1, 2]
 
 
-def test_add_users_is_noop_when_fully_attached(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_is_noop_when_fully_attached(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    subscription.business_svc.add_users("alice")
+    (await subscription.business_svc.add_users("alice"))
 
     assert panel.posts == []
 
 
-def test_add_users_uses_one_client_list_not_per_user_gets(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_uses_one_client_list_not_per_user_gets(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
@@ -93,26 +97,26 @@ def test_add_users_uses_one_client_list_not_per_user_gets(database: Database) ->
             make_panel_client("bob", [1], uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
         ],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
-    database.create_user(
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
+    (await database.create_user(
         username="bob",
         uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         token="b" * 40,
         fingerprint="chrome",
         displayname="Bob",
-    )
+    ))
 
-    known = subscription.panel_svc.client_maps([cast(XUiSession, panel)])
-    subscription.business_svc.add_users("alice", known_clients=known)
-    subscription.business_svc.add_users("bob", known_clients=known)
+    (await subscription.business_svc.add_users("alice"))
+    (await subscription.business_svc.add_users("bob"))
 
     assert panel.gets.count("panel/api/clients/list") == 1
     assert not any("clients/get/" in url for url in panel.gets)
     assert panel.posts == []
 
 
-def test_add_users_duplicate_add_attaches_from_a_live_get(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_duplicate_add_attaches_from_a_live_get(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2)],
@@ -122,56 +126,61 @@ def test_add_users_duplicate_add_attaches_from_a_live_get(database: Database) ->
         ],
     )
     # list said absent; the live row is missing inbound 2
-    panel.clients_cache = {}
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    await subscription.panel_svc.clients_snapshot(subscription.panels[0])
+    subscription.panel_svc._clients["panel"]._value = {}
+    (await create_alice(database))
 
-    subscription.business_svc.add_users("alice")
+    (await subscription.business_svc.add_users("alice"))
 
     assert any("clients/get/" in url for url in panel.gets)
     assert _post_bodies(panel, "/attach") == [{"inboundIds": [2]}]
 
 
-def test_add_users_skips_panel_without_vless_inbounds(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_skips_panel_without_vless_inbounds(database: Database) -> None:
     panel = FakePanel(name="panel", inbounds=[make_inbound(1, protocol="trojan")])
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    subscription.business_svc.add_users("alice")
+    (await subscription.business_svc.add_users("alice"))
 
     assert panel.posts == []
 
 
-def test_add_users_rejects_foreign_client_with_same_email(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_rejects_foreign_client_with_same_email(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1], uuid="ffffffff-ffff-ffff-ffff-ffffffffffff")],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    with pytest.raises(PanelRejectedError, match="different client"):
-        subscription.business_svc.add_users("alice")
+    with pytest.raises(PanelRejectedError, match="different UUID"):
+        (await subscription.business_svc.add_users("alice"))
 
 
-def test_delete_user_calls_clients_del_once_per_panel(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_delete_user_calls_clients_del_once_per_panel(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2)],
         clients=[make_panel_client("alice", [1, 2])],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    subscription.business_svc.delete_user("alice")
+    (await subscription.business_svc.delete_user("alice"))
 
     assert [url for url, _ in panel.posts] == ["panel/api/clients/del/alice"]
     assert panel.clients == []
-    assert database.user_exists("alice")
+    assert (await database.user_exists("alice"))
 
 
-def test_update_user_disables_regular_panel_only(
+@pytest.mark.asyncio
+async def test_update_user_disables_regular_panel_only(
     database: Database,
 ) -> None:
     regular = FakePanel(
@@ -185,16 +194,16 @@ def test_update_user_disables_regular_panel_only(
         clients=[make_panel_client("alice", [2])],
         local=False,
     )
-    subscription = make_subscription(
+    subscription = (await make_subscription(
         database,
         panels=[regular],
         whitelist_panel=whitelist,
-    )
-    create_alice(database)
+    ))
+    (await create_alice(database))
 
-    subscription.business_svc.update_user("alice", enable=False, timee=True)
+    (await subscription.business_svc.update_user("alice", enable=False, timee=True))
 
-    record = database.get_user("alice")
+    record = (await database.get_user("alice"))
     assert record is not None
     assert (record["enabled"], record["enabled_time"]) == (0, 1)
     assert [url for url, _ in regular.posts] == ["panel/api/clients/bulkDisable"]
@@ -204,36 +213,39 @@ def test_update_user_disables_regular_panel_only(
     assert whitelist.clients[0].enable is True
 
 
-def test_update_user_enable_uses_bulk_enable(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_update_user_enable_uses_bulk_enable(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    subscription.business_svc.update_user("alice", enable=True)
+    (await subscription.business_svc.update_user("alice", enable=True))
 
     assert [url for url, _ in panel.posts] == ["panel/api/clients/bulkEnable"]
     assert panel.clients[0].enable is True
 
 
-def test_update_user_rejection_carries_panel_msg(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_update_user_rejection_carries_panel_msg(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
         post_payload={"success": False, "msg": "client not found: alice", "obj": None},
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
     with pytest.raises(PanelRejectedError, match="client not found"):
-        subscription.business_svc.update_user("alice", enable=False)
+        (await subscription.business_svc.update_user("alice", enable=False))
 
 
-def test_update_user_skips_panels_without_the_client(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_update_user_skips_panels_without_the_client(database: Database) -> None:
     # add_users never creates a client on a panel with no managed VLESS
     # inbounds; enable/disable must not fail on such panels
     absent = FakePanel(name="absent", inbounds=[make_inbound(1)], clients=[])
@@ -242,42 +254,45 @@ def test_update_user_skips_panels_without_the_client(database: Database) -> None
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = make_subscription(
+    subscription = (await make_subscription(
         database,
         panels=[cast(XUiSession, absent), cast(XUiSession, present)],
-    )
-    create_alice(database)
+    ))
+    (await create_alice(database))
 
-    subscription.business_svc.update_user("alice", enable=False)
+    (await subscription.business_svc.update_user("alice", enable=False))
 
     assert absent.posts == []
     assert [url for url, _ in present.posts] == ["panel/api/clients/bulkDisable"]
 
 
-def test_whitelist_status_persists_without_whitelist_panel(
+@pytest.mark.asyncio
+async def test_whitelist_status_persists_without_whitelist_panel(
     database: Database,
     subscription: Subscription,
 ) -> None:
-    create_alice(database)
-    subscription.business_svc.update_user("alice", wl_enable=False)
-    record = database.get_user("alice")
+    (await create_alice(database))
+    (await subscription.business_svc.update_user("alice", wl_enable=False))
+    record = (await database.get_user("alice"))
     assert record is not None
     assert record["enabled_wl"] == 0
 
 
-def test_update_uuid_rejects_invalid_value(
+@pytest.mark.asyncio
+async def test_update_uuid_rejects_invalid_value(
     database: Database,
     subscription: Subscription,
 ) -> None:
-    create_alice(database)
+    (await create_alice(database))
     with pytest.raises(ValidationError):
-        subscription.business_svc.update_uuid("alice", "not-a-uuid")
-    record = database.get_user("alice")
+        (await subscription.business_svc.update_uuid("alice", "not-a-uuid"))
+    record = (await database.get_user("alice"))
     assert record is not None
     assert str(record["uuid"]) == USER_UUID
 
 
-def test_update_uuid_sends_full_row_with_new_id(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_update_uuid_sends_full_row_with_new_id(database: Database) -> None:
     existing = replace(
         make_panel_client("alice", [1, 2]),
         subId="sub-123",
@@ -285,10 +300,10 @@ def test_update_uuid_sends_full_row_with_new_id(database: Database) -> None:
         tgId="777",
     )
     panel = FakePanel(name="panel", inbounds=[make_inbound(1)], clients=[existing])
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
-    subscription.business_svc.update_uuid("alice", NEW_UUID)
+    (await subscription.business_svc.update_uuid("alice", NEW_UUID))
 
     updates = _post_bodies(panel, "clients/update/")
     assert len(updates) == 1
@@ -298,31 +313,33 @@ def test_update_uuid_sends_full_row_with_new_id(database: Database) -> None:
     assert updates[0]["comment"] == "keep me"
     assert updates[0]["tgId"] == "777"
     assert panel.clients[0].uuid == NEW_UUID
-    record = database.get_user("alice")
+    record = (await database.get_user("alice"))
     assert record is not None
     assert str(record["uuid"]) == NEW_UUID
 
 
-def test_update_uuid_skips_panels_without_client(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_update_uuid_skips_panels_without_client(database: Database) -> None:
     synced = FakePanel(
         name="synced",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
     unsynced = FakePanel(name="unsynced", inbounds=[make_inbound(2)])
-    subscription = make_subscription(
+    subscription = (await make_subscription(
         database,
         panels=[cast(XUiSession, synced), cast(XUiSession, unsynced)],
-    )
-    create_alice(database)
+    ))
+    (await create_alice(database))
 
-    subscription.business_svc.update_uuid("alice", NEW_UUID)
+    (await subscription.business_svc.update_uuid("alice", NEW_UUID))
 
     assert [url for url, _ in synced.posts] == ["panel/api/clients/update/alice"]
     assert unsynced.posts == []
 
 
-def test_rejected_uuid_update_marks_failure_without_compensation(
+@pytest.mark.asyncio
+async def test_rejected_uuid_update_marks_failure_without_compensation(
     database: Database,
 ) -> None:
     panel = FakePanel(
@@ -333,48 +350,50 @@ def test_rejected_uuid_update_marks_failure_without_compensation(
             {"success": False, "msg": "rejected", "obj": None, "status_code": 201},
         ],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
 
     with pytest.raises(PanelRejectedError):
-        subscription.business_svc.update_uuid("alice", NEW_UUID)
+        (await subscription.business_svc.update_uuid("alice", NEW_UUID))
 
-    record = database.get_user("alice")
+    record = (await database.get_user("alice"))
     assert record is not None
     assert str(record["uuid"]) == USER_UUID
     # one atomic attempt per panel, no multi-inbound compensation loop
     assert len(panel.posts) == 1
-    failures = subscription.business_code_svc.get_rollback_failures()
+    failures = (await subscription.business_code_svc.get_rollback_failures())
     assert "panel" in failures["uuid"]["alice"]["reason"]
 
 
-def test_uuid_db_conflict_marks_failure(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_uuid_db_conflict_marks_failure(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    create_alice(database)
-    database.create_user(
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await create_alice(database))
+    (await database.create_user(
         username="bob",
         uuid=NEW_UUID,
         token="b" * 40,
         fingerprint="chrome",
         displayname="Bob",
-    )
+    ))
 
     from errors import ConflictError, DuplicateError
 
     with pytest.raises(ConflictError) as conflict:
-        subscription.business_svc.update_uuid("alice", NEW_UUID)
+        (await subscription.business_svc.update_uuid("alice", NEW_UUID))
 
     assert isinstance(conflict.value.__cause__, DuplicateError)
-    failures = subscription.business_code_svc.get_rollback_failures()
+    failures = (await subscription.business_code_svc.get_rollback_failures())
     assert failures["uuid"]["alice"]["reason"] == "db duplicate uuid"
 
 
-def test_add_new_user_rolls_back_db_row_when_panel_rejects(
+@pytest.mark.asyncio
+async def test_add_new_user_rolls_back_db_row_when_panel_rejects(
     database: Database,
 ) -> None:
     panel = FakePanel(
@@ -382,60 +401,63 @@ def test_add_new_user_rolls_back_db_row_when_panel_rejects(
         post_payload={"success": False, "msg": "rejected", "obj": None},
         post_status=201,
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
     with pytest.raises(PanelRejectedError):
-        subscription.business_svc.add_new_user(
+        (await subscription.business_svc.add_new_user(
             "alice",
             "Alice",
             ext_username="alice-login",
             ext_password="secret",
             limit=10,
             wl_limit=5,
-        )
-    assert not database.user_exists("alice")
+        ))
+    assert not (await database.user_exists("alice"))
 
 
-def test_add_users_quotes_username_in_attach_path(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_add_users_quotes_username_in_attach_path(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1), make_inbound(2)],
         clients=[make_panel_client("quoted_user", [1])],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    database.create_user(
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await database.create_user(
         username="quoted_user",
         uuid=USER_UUID,
         token="q" * 40,
         fingerprint="chrome",
         displayname="Quoted",
-    )
+    ))
 
-    subscription.business_svc.add_users("quoted_user")
+    (await subscription.business_svc.add_users("quoted_user"))
 
     assert panel.posts[0][0] == "panel/api/clients/quoted_user/attach"
 
 
-def test_delete_user_quotes_username_in_path(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_delete_user_quotes_username_in_path(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("quoted_user", [1])],
     )
-    subscription = make_subscription(database, panels=[cast(XUiSession, panel)])
-    database.create_user(
+    subscription = (await make_subscription(database, panels=[cast(XUiSession, panel)]))
+    (await database.create_user(
         username="quoted_user",
         uuid=USER_UUID,
         token="q" * 40,
         fingerprint="chrome",
         displayname="Quoted",
-    )
+    ))
 
-    subscription.business_svc.delete_user("quoted_user")
+    (await subscription.business_svc.delete_user("quoted_user"))
 
     assert panel.posts[0][0] == "panel/api/clients/del/quoted_user"
 
 
-def test_delete_user_skips_panels_without_the_client(database: Database) -> None:
+@pytest.mark.asyncio
+async def test_delete_user_skips_panels_without_the_client(database: Database) -> None:
     # add_users never creates a client on a panel with no VLESS inbounds
     # (or before a resync); delete must not fail on such panels
     absent = FakePanel(name="absent", inbounds=[make_inbound(1)], clients=[])
@@ -444,23 +466,24 @@ def test_delete_user_skips_panels_without_the_client(database: Database) -> None
         inbounds=[make_inbound(1)],
         clients=[make_panel_client("alice", [1])],
     )
-    subscription = make_subscription(
+    subscription = (await make_subscription(
         database,
         panels=[cast(XUiSession, absent), cast(XUiSession, present)],
-    )
-    create_alice(database)
+    ))
+    (await create_alice(database))
 
-    subscription.business_svc.delete_user("alice")
+    (await subscription.business_svc.delete_user("alice"))
 
     assert absent.posts == []
     assert [url for url, _ in present.posts] == ["panel/api/clients/del/alice"]
     assert present.clients == []
 
 
-def test_add_new_user_rejects_panel_unsafe_username(database: Database) -> None:
-    subscription = make_subscription(database)
+@pytest.mark.asyncio
+async def test_add_new_user_rejects_panel_unsafe_username(database: Database) -> None:
+    subscription = (await make_subscription(database))
     with pytest.raises(ValidationError):
-        subscription.business_svc.add_new_user("bad name", "Bad")
+        (await subscription.business_svc.add_new_user("bad name", "Bad"))
     with pytest.raises(ValidationError):
-        subscription.business_svc.add_new_user("sl/ash", "Slash")
-    assert not database.user_exists("bad name")
+        (await subscription.business_svc.add_new_user("sl/ash", "Slash"))
+    assert not (await database.user_exists("bad name"))

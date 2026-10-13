@@ -117,8 +117,8 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
     async def font_file(self, name: str) -> ResponseType:
         if name not in FONT_FILES:
             return err("Not found", 404)
-        # send_file goes through gunicorn sendfile(), which seeks the payload
-        # file back. Nuitka onefile then drops it, and the body is empty.
+        # Buffer bundled fonts before serving so onefile payload lifetime
+        # cannot invalidate a deferred file response.
         body = await self.sub.res.offloads.files.run((RES_DIR / "fonts" / name).read_bytes)
         return await self._static(f"fonts/{name}", "font/woff2", body)
 

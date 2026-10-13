@@ -1,160 +1,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
-from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
 import pytest
-from gunicorn.config import Config as GunicornConfig
-from gunicorn.http.message import Request
-from gunicorn.http.wsgi import Response
 
 from config import LinesConfig
 from loggers import TRACE, Colors, Logger
-from loggers.access import GunicornLogger, _color_status
 from loggers.handlers import _JSONLinesLogger
 from loggers.level import env_level, parse_level
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-
-class _Cfg:
-    accesslog = "-"
-    logconfig = None
-    logconfig_dict = None
-    logconfig_json = None
-    syslog = False
-    disable_redirect_access_to_syslog = False
-
-
-def _environ(path: str) -> dict[str, object]:
-    return {
-        "REQUEST_METHOD": "GET",
-        "RAW_URI": path,
-        "PATH_INFO": path,
-        "SERVER_PROTOCOL": "HTTP/1.1",
-        "REMOTE_ADDR": "203.0.113.10",
-        "HTTP_USER_AGENT": "dashboard",
-    }
-
-
-class _AccessLog:
-    def __init__(self, logged: list[tuple[int, str]]) -> None:
-        self._logged = logged
-
-    def log(self, level: object, message: object, *_args: object, **_kwargs: object) -> None:
-        if isinstance(level, bool) or not isinstance(level, int):
-            raise AssertionError(f"unexpected log level {level!r}")
-        self._logged.append((level, str(message)))
-
-
-def test_access_log_levels_by_status_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    logged: list[tuple[int, str]] = []
-    logger = GunicornLogger.__new__(GunicornLogger)
-    logger.cfg = cast(GunicornConfig, _Cfg())
-    logger.access_log = cast(logging.Logger, _AccessLog(logged))
-    atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 12}
-
-    def atoms_for(*args: object) -> dict[str, object]:
-        del args
-        return atoms
-
-    monkeypatch.setattr(logger, "atoms", atoms_for)
-    req = cast(Request, SimpleNamespace())
-
-    logger.access(
-        cast(Response, SimpleNamespace(status="200 OK", sent=12)),
-        req,
-        _environ("/sub/api/api/state/polling"),
-        timedelta(milliseconds=4),
-    )
-    assert len(logged) == 1
-    assert logged[0][0] == 5
-    assert "/api/state/polling" in logged[0][1]
-
-    atoms.update(s="401", B=18)
-    logger.access(
-        cast(Response, SimpleNamespace(status="401 UNAUTHORIZED", sent=18)),
-        req,
-        _environ("/sub/api/api/state/polling"),
-        timedelta(milliseconds=4),
-    )
-    assert len(logged) == 2
-    assert logged[1][0] == logging.INFO
-    assert "401" in logged[1][1]
-    assert "/api/state/polling" in logged[1][1]
-
-    logged.clear()
-    atoms.update(s="200", B=8)
-    logger.access(
-        cast(Response, SimpleNamespace(status="200 OK", sent=8)),
-        req,
-        _environ("/sub/api/api/health"),
-        timedelta(milliseconds=4),
-    )
-    assert len(logged) == 1
-    assert logged[0][0] == logging.DEBUG
-    assert "200" in logged[0][1]
-
-    logged.clear()
-    atoms.update(s="201", B=8)
-    logger.access(
-        cast(Response, SimpleNamespace(status="201 CREATED", sent=8)),
-        req,
-        _environ("/sub/api/api/state/polling"),
-        timedelta(milliseconds=4),
-    )
-    assert logged[0][0] == 5
-
-    logged.clear()
-    atoms.update(s="500", B=8)
-    logger.access(
-        cast(Response, SimpleNamespace(status="500 ERROR", sent=8)),
-        req,
-        _environ("/sub/api/api/health"),
-        timedelta(milliseconds=4),
-    )
-    assert logged[0][0] == logging.INFO
-
-
-def test_access_log_colors_status_by_class(monkeypatch: pytest.MonkeyPatch) -> None:
-    logged: list[tuple[int, str]] = []
-    logger = GunicornLogger.__new__(GunicornLogger)
-    logger.cfg = cast(GunicornConfig, _Cfg())
-    logger.access_log = cast(logging.Logger, _AccessLog(logged))
-    atoms: dict[str, object] = {"m": "GET", "H": "HTTP/1.1", "s": "200", "B": 4}
-
-    def atoms_for(*args: object) -> dict[str, object]:
-        del args
-        return atoms
-
-    monkeypatch.setattr(logger, "atoms", atoms_for)
-    req = cast(Request, SimpleNamespace())
-
-    expected = {
-        "100": Colors.GREY,
-        "204": Colors.GREEN,
-        "302": Colors.CYAN,
-        "404": Colors.YELLOW,
-        "503": Colors.RED,
-    }
-    for status, color in expected.items():
-        logged.clear()
-        atoms["s"] = status
-        logger.access(
-            cast(Response, SimpleNamespace(status=status, sent=4)),
-            req,
-            _environ("/health"),
-            timedelta(milliseconds=1),
-        )
-        assert [message for _, message in logged] == [
-            f'203.0.113.10 > "GET /health HTTP/1.1" {color}{status}{Colors.RESET} 4b "dashboard"',
-        ]
-
-    assert _color_status("-") == "-"
-    assert _color_status("999") == "999"
 
 
 def test_colors_are_ansi_strings() -> None:
@@ -255,56 +112,6 @@ def test_logger_uses_loglevel_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LOGLEVEL", "12")
     floored = Logger("env-level-int")
     assert floored.level == logging.DEBUG
-
-
-def test_gunicorn_access_level_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """LOGLEVEL_GUNICORN replaces gunicorn's hardcoded INFO access threshold.
-
-    Error logs stay on gunicorn's own loglevel. A missing or bad value falls
-    back to DEBUG so 2xx lines (and TRACE polls) are not silently dropped.
-    """
-    from gunicorn.config import Config
-
-    error_log = logging.getLogger("gunicorn.error")
-    access_log = logging.getLogger("gunicorn.access")
-    previous = (
-        error_log.level,
-        access_log.level,
-        list(error_log.handlers),
-        list(access_log.handlers),
-    )
-
-    def restore() -> None:
-        error_log.setLevel(previous[0])
-        access_log.setLevel(previous[1])
-        error_log.handlers[:] = previous[2]
-        access_log.handlers[:] = previous[3]
-
-    cfg = Config()
-    cfg.set("loglevel", "info")
-    cfg.set("accesslog", None)
-    cfg.set("errorlog", "-")
-
-    try:
-        monkeypatch.delenv("LOGLEVEL_GUNICORN", raising=False)
-        logger = GunicornLogger(cfg)
-        assert logger.access_log.level == logging.DEBUG
-        assert logger.error_log.level == logging.INFO
-
-        monkeypatch.setenv("LOGLEVEL_GUNICORN", "warning")
-        logger.setup(cfg)
-        assert logger.access_log.level == logging.WARNING
-        assert logger.error_log.level == logging.INFO
-
-        monkeypatch.setenv("LOGLEVEL_GUNICORN", "7")
-        logger.setup(cfg)
-        assert logger.access_log.level == TRACE
-
-        monkeypatch.setenv("LOGLEVEL_GUNICORN", "nope")
-        logger.setup(cfg)
-        assert logger.access_log.level == logging.DEBUG
-    finally:
-        restore()
 
 
 def test_jsonl_strips_message_colors() -> None:
