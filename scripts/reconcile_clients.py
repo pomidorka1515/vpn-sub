@@ -34,6 +34,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -55,19 +56,18 @@ from custom_types import (  # ruff: ignore[module-import-not-at-top-of-file]
     ClientPayload,
     InboundListResponse,
 )
-from db import Database  # ruff: ignore[module-import-not-at-top-of-file]
+from db import AsyncDatabase  # ruff: ignore[module-import-not-at-top-of-file]
 from paths import runtime_dir  # ruff: ignore[module-import-not-at-top-of-file]
-from session import XUiSession  # ruff: ignore[module-import-not-at-top-of-file]
+from session import AsyncXUiSession  # ruff: ignore[module-import-not-at-top-of-file]
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-
-    from requests import Response
 
     from config import PanelConfig
     from custom_types import (
         PanelClient,
     )
+    from session.async_transport import PanelResponse
 
 
 class ReconcileError(RuntimeError):
@@ -77,36 +77,36 @@ class ReconcileError(RuntimeError):
 class SeedLedger(Protocol):
     """Remembers how much legacy traffic was already folded per user/panel."""
 
-    def get(self, panel: str, username: str) -> tuple[int, int] | None: ...
-    def set(self, panel: str, username: str, up: int, down: int) -> None: ...
-    def clear(self, panel: str, username: str) -> None: ...
+    async def get(self, panel: str, username: str) -> tuple[int, int] | None: ...
+    async def set(self, panel: str, username: str, up: int, down: int) -> None: ...
+    async def clear(self, panel: str, username: str) -> None: ...
 
 
 class NullSeedLedger:
     """No-op ledger: fold on every run (tests / no database available)."""
 
-    def get(self, panel: str, username: str) -> tuple[int, int] | None:
+    async def get(self, panel: str, username: str) -> tuple[int, int] | None:
         return None
 
-    def set(self, panel: str, username: str, up: int, down: int) -> None:
+    async def set(self, panel: str, username: str, up: int, down: int) -> None:
         pass
 
-    def clear(self, panel: str, username: str) -> None:
+    async def clear(self, panel: str, username: str) -> None:
         pass
 
 
 class DbSeedLedger:
     """DB-metadata-backed ledger; keys ``reconcile_seed:{panel}:{username}``."""
 
-    def __init__(self, database: Database) -> None:
+    def __init__(self, database: AsyncDatabase) -> None:
         self._db = database
 
     @staticmethod
     def _key(panel: str, username: str) -> str:
         return f"reconcile_seed:{panel}:{username}"
 
-    def get(self, panel: str, username: str) -> tuple[int, int] | None:
-        raw = self._db.get_metadata(self._key(panel, username))
+    async def get(self, panel: str, username: str) -> tuple[int, int] | None:
+        raw = await self._db.get_metadata(self._key(panel, username))
         if raw is None:
             return None
         up_text, separator, down_text = raw.partition(",")
@@ -117,11 +117,11 @@ class DbSeedLedger:
         except ValueError:
             return None
 
-    def set(self, panel: str, username: str, up: int, down: int) -> None:
-        self._db.set_metadata(self._key(panel, username), f"{up},{down}")
+    async def set(self, panel: str, username: str, up: int, down: int) -> None:
+        await self._db.set_metadata(self._key(panel, username), f"{up},{down}")
 
-    def clear(self, panel: str, username: str) -> None:
-        self._db.delete_metadata(self._key(panel, username))
+    async def clear(self, panel: str, username: str) -> None:
+        await self._db.delete_metadata(self._key(panel, username))
 
 
 @dataclass
@@ -136,24 +136,24 @@ class PanelReport:
     errors: list[str] = field(default_factory=list[str])
 
 
-def _load_uuid_map(database: Database) -> dict[str, str]:
+async def _load_uuid_map(database: AsyncDatabase) -> dict[str, str]:
     """Map every known user's panel uuid to the service username."""
     mapping: dict[str, str] = {}
-    for username in database.list_users():
-        record = database.get_user(username)
+    for username in await database.list_users():
+        record = await database.get_user(username)
         if record is not None:
             mapping[str(record["uuid"])] = username
     return mapping
 
 
-def _build_panel(name: str, panel_cfg: PanelConfig, *, stamp_dir: str) -> XUiSession:
+def _build_panel(name: str, panel_cfg: PanelConfig, *, stamp_dir: str) -> AsyncXUiSession:
     nginx_auth: tuple[str, str] | None = None
     nginx_raw: object = panel_cfg.get("nginx_auth")
     if isinstance(nginx_raw, (list, tuple)):
         sequence = cast("Sequence[object]", nginx_raw)
         if len(sequence) == 2:
             nginx_auth = (str(sequence[0]), str(sequence[1]))
-    return XUiSession(
+    return AsyncXUiSession(
         name=str(panel_cfg["name"]),
         address=str(panel_cfg["address"]),
         port=panel_cfg["port"],
@@ -176,9 +176,12 @@ def _headers(value: Mapping[str, JsonValue] | None) -> dict[str, str]:
     return {key: str(item) for key, item in value.items()}
 
 
-def _envelope(panel: XUiSession, response: Response, what: str) -> dict[str, JsonValue]:
+def _envelope(panel: AsyncXUiSession, response: PanelResponse, what: str) -> dict[str, JsonValue]:
     try:
-        data = cast(dict[str, JsonValue], dict(response.json()))
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError("expected a JSON object")
+        data = cast(dict[str, JsonValue], payload)
     except Exception as exc:
         raise ReconcileError(f"panel {panel.name}: {what} returned invalid JSON") from exc
     if response.status_code != 200 or not data.get("success"):
@@ -188,13 +191,13 @@ def _envelope(panel: XUiSession, response: Response, what: str) -> dict[str, Jso
     return data
 
 
-def _managed_vless_ids(panel: XUiSession) -> list[int]:
+async def _managed_vless_ids(panel: AsyncXUiSession) -> list[int]:
     """VLESS inbound IDs this service manages on the panel (mode filter applied).
 
     Reconciled attachments are intersected with this set so the canonical
     client ends up exactly where ``add_users`` would have put it.
     """
-    data = _envelope(panel, panel.get("panel/api/inbounds/list"), "inbound list query")
+    data = _envelope(panel, await panel.get("panel/api/inbounds/list"), "inbound list query")
     inbounds = from_dict(InboundListResponse, data).obj
     listed = set(panel.inbounds_list)
     if panel.mode == "whitelist":
@@ -204,15 +207,16 @@ def _managed_vless_ids(panel: XUiSession) -> list[int]:
     return sorted(i.id for i in inbounds if i.protocol == "vless")
 
 
-def _list_clients(panel: XUiSession) -> list[PanelClient]:
-    data = _envelope(panel, panel.get("panel/api/clients/list"), "client list query")
+async def _list_clients(panel: AsyncXUiSession) -> list[PanelClient]:
+    data = _envelope(panel, await panel.get("panel/api/clients/list"), "client list query")
     return from_dict(ClientListResponse, data).obj
 
 
-def _post(panel: XUiSession, url: str, body: dict[str, JsonValue], what: str) -> None:
-    response = panel.post(url, json=body, headers={"Accept": "application/json"})
+async def _post(panel: AsyncXUiSession, url: str, body: dict[str, JsonValue], what: str) -> None:
+    response = await panel.post(url, json=body, headers={"Accept": "application/json"})
     try:
-        content = cast(dict[str, JsonValue], dict(response.json()))
+        payload = response.json()
+        content = cast(dict[str, JsonValue], payload) if isinstance(payload, dict) else {}
     except Exception:
         content = {}
     if response.status_code not in {200, 201} or not content.get("success"):
@@ -221,8 +225,8 @@ def _post(panel: XUiSession, url: str, body: dict[str, JsonValue], what: str) ->
         )
 
 
-def reconcile_panel(
-    panel: XUiSession,
+async def reconcile_panel(
+    panel: AsyncXUiSession,
     uuid_map: dict[str, str],
     *,
     apply: bool,
@@ -235,8 +239,8 @@ def reconcile_panel(
     """
     report = PanelReport(panel=panel.name)
     seed_ledger = ledger if ledger is not None else NullSeedLedger()
-    vless_ids = _managed_vless_ids(panel)
-    clients = _list_clients(panel)
+    vless_ids = await _managed_vless_ids(panel)
+    clients = await _list_clients(panel)
 
     groups: dict[str, list[PanelClient]] = {}
     for client in clients:
@@ -248,7 +252,7 @@ def reconcile_panel(
             report.unknown[uuid_value] = sorted(r.email for r in rows)
             continue
         try:
-            _reconcile_user(
+            await _reconcile_user(
                 panel,
                 report,
                 username,
@@ -263,8 +267,8 @@ def reconcile_panel(
     return report
 
 
-def _reconcile_user(
-    panel: XUiSession,
+async def _reconcile_user(
+    panel: AsyncXUiSession,
     report: PanelReport,
     username: str,
     uuid_value: str,
@@ -302,7 +306,7 @@ def _reconcile_user(
         )
         report.created.append(username)
         if apply:
-            _post(
+            await _post(
                 panel,
                 "panel/api/clients/add",
                 {"client": asdict(payload), "inboundIds": target_ids},
@@ -313,7 +317,7 @@ def _reconcile_user(
         if missing:
             report.attached[username] = missing
             if apply:
-                _post(
+                await _post(
                     panel,
                     f"panel/api/clients/{email_path}/attach",
                     {"inboundIds": missing},
@@ -323,7 +327,7 @@ def _reconcile_user(
     if not legacy:
         # nothing left to fold; the seed marker has served its purpose
         if apply:
-            ledger.clear(panel.name, username)
+            await ledger.clear(panel.name, username)
         return
 
     current: tuple[int, int] = (
@@ -331,7 +335,7 @@ def _reconcile_user(
         if canonical is not None and canonical.traffic is not None
         else (0, 0)
     )
-    folded = ledger.get(panel.name, username)
+    folded = await ledger.get(panel.name, username)
     if folded is None:
         delta = (legacy_up, legacy_down)
     else:
@@ -345,18 +349,18 @@ def _reconcile_user(
         seed_value = (current[0] + delta[0], current[1] + delta[1])
         report.seeded[username] = seed_value
         if apply:
-            _post(
+            await _post(
                 panel,
                 f"panel/api/clients/updateTraffic/{email_path}",
                 {"upload": seed_value[0], "download": seed_value[1]},
                 f"traffic seed for {username}",
             )
-            ledger.set(panel.name, username, legacy_up, legacy_down)
+            await ledger.set(panel.name, username, legacy_up, legacy_down)
 
     for email in legacy:
         report.deleted.append(email)
         if apply:
-            _post(
+            await _post(
                 panel,
                 f"panel/api/clients/del/{quote(email, safe='')}",
                 {},
@@ -419,19 +423,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"unknown panel key(s): {', '.join(unknown_keys)}", file=sys.stderr)
         return 2
 
-    database = Database(path=Path(args.database))
+    return asyncio.run(_run(panels_cfg, selected_keys, Path(args.database), apply=args.apply))
+
+
+async def _run(
+    panels_cfg: Mapping[str, PanelConfig],
+    selected_keys: list[str],
+    database_path: Path,
+    *,
+    apply: bool,
+) -> int:
+    """Own all panel/repository resources on the CLI's single event loop."""
+    database = AsyncDatabase(path=database_path, start_backup=False)
     stamp_dir = str(runtime_dir())
     ledger: SeedLedger = DbSeedLedger(database)
     exit_code = 0
     try:
-        uuid_map = _load_uuid_map(database)
+        await database.start()
+        uuid_map = await _load_uuid_map(database)
         for key in selected_keys:
             panel = _build_panel(key, panels_cfg[key], stamp_dir=stamp_dir)
             try:
-                report = reconcile_panel(
+                await panel.start()
+                report = await reconcile_panel(
                     panel,
                     uuid_map,
-                    apply=args.apply,
+                    apply=apply,
                     ledger=ledger,
                 )
             except ReconcileError as exc:
@@ -439,14 +456,14 @@ def main(argv: list[str] | None = None) -> int:
                 exit_code = 1
                 continue
             finally:
-                panel.close()
-            _print_report(key, report, apply=args.apply)
+                await panel.close()
+            _print_report(key, report, apply=apply)
             if report.errors:
                 exit_code = 1
     finally:
-        database.close()
+        await database.close()
 
-    if not args.apply:
+    if not apply:
         print("dry run — no changes applied (pass --apply to execute)")
     return exit_code
 
