@@ -84,7 +84,7 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                         "publicIP": {"ipv4": "127.0.0.1", "ipv6": "::1"},
                         "appStats": {"threads": 1, "mem": 0, "uptime": 1},
                     },
-                }
+                },
             )
         if request.path not in {"/panel/api/clients/list", "/panel/api/inbounds/list"}:
             raise web.HTTPNotFound
@@ -142,7 +142,7 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                 "whitelist": False,
                 "inbounds_list": [],
                 "mode": "blacklist",
-            }
+            },
         }
         data = directory / "state"
         data.mkdir()
@@ -220,7 +220,7 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                             raise RuntimeError("service could not restart")
                         try:
                             async with client.get(
-                                f"http://127.0.0.1:{http_port}/sub/admin/login"
+                                f"http://127.0.0.1:{http_port}/sub/admin/login",
                             ) as response:
                                 if response.status == 200:
                                     break

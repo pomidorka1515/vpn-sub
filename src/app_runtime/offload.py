@@ -53,7 +53,7 @@ class BoundedOffload:
 
         async def operation() -> T:
             return await named_to_thread(
-                f"{self._name}:{operation_name}", function, *args, **kwargs
+                f"{self._name}:{operation_name}", function, *args, **kwargs,
             )
 
         task = self._tasks.create(operation, name=f"offload:{self._name}")

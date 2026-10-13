@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -17,6 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from quart import Quart
+    from quart.testing.connections import TestHTTPConnection
     from quart.typing import TestClientProtocol
 
     from core import Subscription
@@ -349,12 +352,22 @@ async def test_polling_status_contract(
         )
         client = app.test_client()
         assert (await client.get("/sub/api/api/state/polling")).status_code == 401
-        response = await client.get(
+        async with client.request(  # pyright: ignore[reportUnknownMemberType]  # Quart's request signature includes unparameterized dicts.
             "/sub/api/api/state/polling",
+            method="GET",
             headers={"Authorization": "secret"},
-        )
-        assert response.status_code == 200
-        payload = await response.get_json()
+        ) as connection:
+            connection = cast("TestHTTPConnection", connection)
+            async with asyncio.timeout(5):
+                body = b""
+                while b"data: " not in body or not body.endswith(b"\n\n"):
+                    body += await connection.receive()
+            assert connection.status_code == 200
+            assert connection.headers is not None
+            assert connection.headers["Content-Type"] == "text/event-stream"
+            assert connection.headers["X-Accel-Buffering"] == "no"
+            payload = json.loads(body.split(b"data: ", 1)[1])
+            await connection.disconnect()
         assert payload["success"] is True
         obj = payload["obj"]
         assert set(obj) == {"host", "panels"}

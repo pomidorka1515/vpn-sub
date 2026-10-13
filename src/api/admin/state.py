@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from quart import g
+from quart import Response, g
 
 from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
@@ -16,9 +16,13 @@ if TYPE_CHECKING:
     from api.common import ResponseType
     from custom_types import JsonifyValue
 
+    from .live import LiveState
+
 
 class AsyncStateRoutes(AsyncAdminApiMixin):
     """Admin host, panel, snapshot, and leaderboard routes."""
+
+    live_state: LiveState
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
         Route("POST", "/api/leaderboard", "leaderboard"),
@@ -34,12 +38,16 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
 
     @requires_admin_auth
     async def polling_status(self) -> ResponseType:
-        """Limited dynamic host and panel state for frequent GET polling.
+        """Stream shared dynamic state; unavailable panels are null."""
+        response = Response(
+            self.live_state.stream(),
+            content_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+        response.timeout = None
+        return response
 
-        Not a stream. Unknown panel status is `null` so one down panel
-        does not fail the poll. CPU does not sleep; it is since the last
-        sample.
-        """
+    async def _polling_sample(self) -> JsonifyValue:
         panels_data: dict[str, dict[str, JsonifyValue] | None] = {}
         for panel, res in zip(self.sub.panels, await self.sub.panel_svc.statuses(), strict=True):
             if res is None:
@@ -61,12 +69,10 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
                     uptime=obj.uptime,
                 ),
             )
-        return ok(
-            obj={
-                "host": asdict(await self.sub.res.offloads.metrics.run(SysUtil.polling_info)),
-                "panels": panels_data,
-            },
-        )
+        return {
+            "host": asdict(await self.sub.res.offloads.metrics.run(SysUtil.polling_info)),
+            "panels": panels_data,
+        }
 
     @requires_admin_auth
     async def full_info(self) -> ResponseType:

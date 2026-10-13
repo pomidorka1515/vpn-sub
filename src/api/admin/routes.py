@@ -7,6 +7,7 @@ from loggers import Logger
 
 from .code import AsyncCodeRoutes
 from .config import AsyncConfigRoutes
+from .live import LiveState
 from .logs import AsyncLogsRoutes
 from .operations import AsyncOperationsRoutes
 from .panel import AsyncPanelRoutes
@@ -66,3 +67,5 @@ class AsyncApi(
         self.token = conf["api_token"]
         self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri, limiter)
+        self.live_state = LiveState(self._polling_sample)
+        app.after_serving(self.live_state.close)

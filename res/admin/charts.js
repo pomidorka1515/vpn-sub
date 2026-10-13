@@ -14,6 +14,8 @@ const state = {
   panels: [],
   opened: false,
   timer: null,
+  stream: null,
+  lastLive: 0,
   inflight: false,
   errorStreak: 0,
   charts: new Map(),
@@ -57,7 +59,7 @@ function chartLibMissing() {
 
 function failChartLib() {
   state.chartJsFailed = true;
-  stopTimer();
+  stopLive();
   setStatus('chart_load_err', 'err');
   toast(t('chart_load_err'), 'error');
 }
@@ -81,6 +83,13 @@ function stopTimer() {
     clearTimeout(state.timer);
     state.timer = null;
   }
+}
+
+function stopLive() {
+  stopTimer();
+  const controller = state.stream;
+  state.stream = null;
+  controller?.abort();
 }
 
 function delayMs() {
@@ -254,45 +263,84 @@ async function fetchSnapshots() {
 async function pollLive() {
   if (state.mode !== 'live') return;
   if (state.chartJsFailed) return;
-  if (state.inflight) {
-    scheduleLive();
-    return;
-  }
+  if (state.stream) return;
   if (!tabActive()) return;
   if (chartLibMissing()) return;
-  state.inflight = true;
+  const config = window.apiConfig;
+  if (config.guard()) return;
+  const controller = new AbortController();
+  state.stream = controller;
   const gen = state.gen;
-  let res = null;
-  let failed = false;
   try {
-    res = await api('GET', '/api/state/polling');
+    const response = await fetch(config.baseUrl() + '/api/state/polling', {
+      headers: { ...config.headers(), Accept: 'text/event-stream' },
+      credentials: 'same-origin',
+      signal: controller.signal,
+    });
+    if (response.status === 401) {
+      stopLive();
+      config.on401();
+      return;
+    }
+    if (!response.ok || !response.body ||
+        !response.headers.get('Content-Type')?.includes('text/event-stream')) {
+      throw new Error('Live stream unavailable');
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) throw new Error('Live stream closed');
+        if (controller !== state.stream || gen !== state.gen) return;
+        buffer += decoder.decode(value, { stream: true });
+        let end;
+        while ((end = buffer.indexOf('\n\n')) !== -1) {
+          const frame = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const data = frame.split('\n').filter(line => line.startsWith('data:'))
+            .map(line => line.slice(5).trimStart()).join('\n');
+          if (data) receiveLive(JSON.parse(data));
+        }
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
   } catch (e) {
-    failed = true;
+    if (!controller.signal.aborted && gen === state.gen) {
+      state.errorStreak += 1;
+      if (state.errorStreak === 1) toast(t('network_err'), 'error');
+      setStatus('network_err', 'err');
+    }
+  } finally {
+    controller.abort();
+    if (state.stream === controller) {
+      state.stream = null;
+      scheduleLive();
+    }
   }
-  state.inflight = false;
-  if (gen !== state.gen || state.mode !== 'live') return;
-  // Keep the chain alive after leaving the tab. chartsOnTab only resumes
-  // when no request is in flight, so dropping this response without a
-  // timeout stops live mode until the next mode switch.
-  if (!tabActive()) {
-    scheduleLive();
-    return;
-  }
+}
+
+function receiveLive(res) {
+  if (state.mode !== 'live' || !tabActive()) return;
   if (chartLibMissing()) {
     failChartLib();
     return;
   }
-  if (failed || !res || !res.success || !res.obj) {
-    // api() already toasts a thrown fetch. Toast only a response that came back bad.
+  if (!res || !res.success || !res.obj) {
     state.errorStreak += 1;
-    if (!failed && state.errorStreak === 1) toast(t('network_err'), 'error');
-    if (!state.rows.length) setStatus('network_err', 'err');
-    scheduleLive();
+    if (state.errorStreak === 1) toast(t('network_err'), 'error');
+    setStatus('network_err', 'err');
     return;
   }
   state.errorStreak = 0;
+  const now = Date.now();
+  if (now - state.lastLive < delayMs()) return;
+  state.lastLive = now;
   const point = {
-    ts: Date.now() / 1000,
+    ts: now / 1000,
     host: res.obj.host,
     panels: res.obj.panels || {},
   };
@@ -305,11 +353,11 @@ async function pollLive() {
     renderScope();
   }
   showCharts();
-  scheduleLive();
 }
 
 async function startLive() {
-  stopTimer();
+  stopLive();
+  state.lastLive = 0;
   state.rows = [];
   state.panels = [];
   state.errorStreak = 0;
@@ -335,7 +383,7 @@ async function startLive() {
 function setMode(mode) {
   if (mode !== 'snapshot' && mode !== 'live') return;
   if (mode === state.mode && state.opened) return;
-  stopTimer();
+  stopLive();
   state.gen += 1;
   state.mode = mode;
   state.rows = [];
@@ -383,7 +431,6 @@ function onDelay() {
   state.delay = Math.min(10, Math.max(1, raw));
   const readout = $('chartsDelayValue');
   if (readout) readout.textContent = state.delay.toFixed(1);
-  if (state.mode === 'live' && tabActive() && !state.chartJsFailed) scheduleLive();
 }
 
 function commitDelay() {
@@ -415,7 +462,7 @@ function bind() {
   });
   $('chartsDelay')?.addEventListener('input', onDelay);
   $('chartsDelay')?.addEventListener('change', commitDelay);
-  window.addEventListener('pagehide', stopTimer);
+  window.addEventListener('pagehide', stopLive);
   window.addEventListener('pageshow', event => {
     if (!event.persisted || !tabActive() || state.mode !== 'live' || state.chartJsFailed) return;
     if (state.inflight) return;
@@ -424,14 +471,14 @@ function bind() {
 }
 
 export function chartsStop() {
-  stopTimer();
+  stopLive();
   state.gen += 1;
   state.inflight = false;
 }
 
 export function chartsOnTab(name) {
   if (name !== 'charts') {
-    stopTimer();
+    stopLive();
     return;
   }
   if (!state.opened) {
@@ -446,12 +493,8 @@ export function chartsOnTab(name) {
     return;
   }
   if (state.mode === 'live') {
-    if (state.inflight) return;
-    if (!state.rows.length) pollLive();
-    else {
-      showCharts();
-      scheduleLive();
-    }
+    if (state.rows.length) showCharts();
+    pollLive();
   } else if (typeof Chart !== 'undefined') showCharts();
 }
 

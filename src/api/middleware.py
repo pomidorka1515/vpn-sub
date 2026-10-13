@@ -34,7 +34,7 @@ class ProxyMiddleware:
             env_level(
                 "LOGLEVEL_HTTP",
                 logging.INFO,
-            )
+            ),
         )
 
     async def __call__(
@@ -106,7 +106,7 @@ class ProxyMiddleware:
                 )
                 client = scope.get("client")  # pyright: ignore[reportUnknownMemberType]  # Upstream extensions contain unparameterized dicts.
                 target = path
-                query = scope.get("query_string", b"").decode("latin1")
+                query = scope["query_string"].decode("latin1")
                 if any(key == "token" for key, _ in parse_qsl(query, keep_blank_values=True)):
                     target += "?token=..."
                 user_agent = dict(scope["headers"]).get(b"user-agent", b"-").decode("latin1")

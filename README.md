@@ -296,6 +296,10 @@ location /sub {
 
     proxy_hide_header Server;
     proxy_hide_header X-Powered-By;
+    
+	proxy_buffering    off; # this app uses SSE
+	proxy_cache        off;
+	proxy_read_timeout 86400s;
 
     proxy_http_version 1.1;
     proxy_set_header Connection        ""; # needed for keepalive upstream

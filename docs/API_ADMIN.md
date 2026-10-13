@@ -815,13 +815,15 @@ Response (success):
 ---  
   
 ### GET /api/state/polling  
-Description: Limited dynamic host and panel state for frequent GET polling. Not a stream. Use `/api/state/system` or `/api/state/all` for static identity (`cpu_info`, `ip`, GC, `cpuCores`, `xray`, `publicIP`).  
+Description: SSE stream of limited dynamic host and panel state (`Content-Type: text/event-stream`). Use `/api/state/system` or `/api/state/all` for static identity (`cpu_info`, `ip`, GC, `cpuCores`, `xray`, `publicIP`).  
 Authentication: header  
 Body: none  
+All viewers share one sampler, with a one-second pause between samples. Sampling runs only while viewers are connected. Slow viewers receive the latest sample rather than an accumulated backlog. Each event is `data: <JSON>\n\n`, with the payload shown below; the connection begins with `retry: 2000\n\n` and sends comment heartbeats during sampling delays. Sampling failures emit `success: false` and recover on the next sample.  
+Use streaming `fetch()` to send the `Authorization` header; native `EventSource` cannot set it. Reconnect after disconnection and abort the request when leaving live mode. The response disables Quart's timeout and sends `Cache-Control: no-cache` and `X-Accel-Buffering: no`. Reverse proxies must honor disabled buffering and allow an idle timeout longer than the 15-second heartbeat interval.  
 CPU does not sleep. Host `cpu` is the percentage since the previous sample on this process; the first call has no baseline and returns `0.0`. Panel `cpu` is that panel host's percentage, not this process.  
 Host `uptime` / `app_uptime` and panel `uptime` / `app_stats.uptime` are included because they change every poll. Host network is bytes since boot (`sent` out, `recv` in). Panel `netIO` is the instantaneous rate (bytes/s); panel `netTraffic` is totals (`sent` out, `recv` in).  
 A panel that does not answer is `null`. One down panel does not fail the poll.  
-Response (success):  
+Event payload (success):  
 ```jsonc  
 // HTTP 200  
 {  
