@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import discord
 from app_runtime.tasks import TaskRegistry
 from config import Config, DiscordLangConfig
+from config.store import AsyncConfig
 from discord_bot.admin import AdminBot
 from discord_bot.adminapi import AdminApiClient
 from discord_bot.host import SharedDiscordClient
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
     from quart import Quart
 
+    from app_runtime.offload import BoundedOffload
     from config import AppConfig, DiscordConfig
     from core.common import Snapshot
     from db import Database
@@ -39,14 +41,15 @@ class DiscordSettings:
 
 
 class DiscordApplication:
-    def __init__(self, app: Quart, cfg: Snapshot[AppConfig], data: Path, db: Database) -> None:
+    def __init__(self, app: Quart, cfg: Snapshot[AppConfig], data: Path, db: Database, *, files: BoundedOffload) -> None:
         self.cfg = cfg
         self.data = data
         self.app = app
         self.db = db
+        self.files = files
         self.client = SharedDiscordClient(intents=discord.Intents.default())
         self.runner: asyncio.Task[None] | None = None
-        self.lang: Config[DiscordLangConfig] | None = None
+        self.lang: AsyncConfig[DiscordLangConfig] | None = None
         self.sessions: DatabaseSessionStore | None = None
         self._started = False
         self.tasks = TaskRegistry()
@@ -59,10 +62,16 @@ class DiscordApplication:
         language = root / "discord.lang.jsonc"
         if not await named_to_thread("files:discord-language-exists", language.is_file):
             language = root / "src/discord/lang.jsonc"
-        self.lang = await named_to_thread(
-            "files:discord-language", Config[DiscordLangConfig],
-            path=os.getenv("PATH_DISCORD_LANG", str(language)), read_only=True, read_only_jsonc=True,
+        self.lang = AsyncConfig[DiscordLangConfig](
+            lambda: Config[DiscordLangConfig](
+                path=os.getenv("PATH_DISCORD_LANG", str(language)),
+                read_only=True,
+                read_only_jsonc=True,
+                start_backup=False,
+            ),
+            files=self.files,
         )
+        await self.lang.start()
         self.sessions = DatabaseSessionStore(self.db)
         await self.sessions.start(self.data / "discord-sessions.json")
         conf = self.cfg.view()
@@ -83,4 +92,4 @@ class DiscordApplication:
         if self.sessions is not None:
             await self.sessions.settle()
         if self.lang is not None:
-            await named_to_thread("files:discord-language-close", self.lang.close)
+            await self.lang.close()
