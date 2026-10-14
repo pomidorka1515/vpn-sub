@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -48,8 +49,12 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
         return response
 
     async def _polling_sample(self) -> JsonifyValue:
+        statuses, host = await asyncio.gather(
+            self.sub.panel_svc.statuses(),
+            self.sub.res.offloads.metrics.run(SysUtil.polling_info),
+        )
         panels_data: dict[str, dict[str, JsonifyValue] | None] = {}
-        for panel, res in zip(self.sub.panels, await self.sub.panel_svc.statuses(), strict=True):
+        for panel, res in zip(self.sub.panels, statuses, strict=True):
             if res is None:
                 panels_data[panel.name] = None
                 continue
@@ -70,21 +75,25 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
                 ),
             )
         return {
-            "host": asdict(await self.sub.res.offloads.metrics.run(SysUtil.polling_info)),
+            "host": asdict(host),
             "panels": panels_data,
         }
 
     @requires_admin_auth
     async def full_info(self) -> ResponseType:
+        statuses, host = await asyncio.gather(
+            self.sub.panel_svc.statuses(),
+            self.sub.res.offloads.metrics.run(SysUtil.full_info),
+        )
         panels_data: dict[str, JsonifyValue] = {}
-        for panel, res in zip(self.sub.panels, await self.sub.panel_svc.statuses(), strict=True):
+        for panel, res in zip(self.sub.panels, statuses, strict=True):
             if res is None:
                 panels_data[panel.name] = {"status": "unknown"}
             else:
                 panels_data[panel.name] = asdict(res)
 
         obj: dict[str, JsonifyValue] = {
-            "host": asdict(await self.sub.res.offloads.metrics.run(SysUtil.full_info)),
+            "host": asdict(host),
             "panels": panels_data,
         }
         return ok(obj=obj)

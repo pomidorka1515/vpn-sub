@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -277,6 +278,48 @@ async def test_admin_empty_uri_contract(
         assert response.status_code == 200
         assert f"Path={panel}" in response.headers["Set-Cookie"]
         assert "Max-Age=0" in response.headers["Set-Cookie"]
+
+
+@pytest.mark.parametrize("polling", [True, False])
+async def test_state_collects_panels_and_host_concurrently(
+    admin_api: tuple[Quart, Subscription],
+    monkeypatch: pytest.MonkeyPatch,
+    polling: bool,
+) -> None:
+    from api.admin.state import AsyncStateRoutes
+
+    @dataclass
+    class Host:
+        cpu: float = 1.5
+
+    app, sub = admin_api
+    panels_started = asyncio.Event()
+    host_started = asyncio.Event()
+
+    async def statuses() -> list[None]:
+        panels_started.set()
+        await host_started.wait()
+        return []
+
+    async def metrics_run(*args: object, **kwargs: object) -> Host:
+        host_started.set()
+        await panels_started.wait()
+        return Host()
+
+    monkeypatch.setattr(sub.panel_svc, "statuses", statuses)
+    monkeypatch.setattr(sub.res.offloads.metrics, "run", metrics_run)
+    async with asyncio.timeout(5):
+        if polling:
+            routes = AsyncStateRoutes()
+            routes.sub = sub
+            payload = await routes._polling_sample()
+        else:
+            response = await app.test_client().get(
+                "/sub/api/api/state/all", headers={"Authorization": "secret"},
+            )
+            assert response.status_code == 200
+            payload = (await response.get_json())["obj"]
+    assert payload == {"host": {"cpu": 1.5}, "panels": {}}
 
 
 async def test_polling_status_contract(
