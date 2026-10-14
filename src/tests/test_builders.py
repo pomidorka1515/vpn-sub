@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -10,6 +11,7 @@ import pytest
 from helpers import config_mock, language_config, subscription_config
 from quart import Quart
 
+from app_runtime.offload import OffloadServices
 from builders import build_description, build_json, build_link_array, get_subscription
 from config.documents import ProfileOutbound, ProfileTemplate
 from core import Subscription
@@ -336,6 +338,7 @@ def _subscription(
         res=SimpleNamespace(
             cfg=MagicMock(),
             lang_cfg=MagicMock(),
+            offloads=OffloadServices(),
         ),
     )
     subscription.user_svc.usertotoken.return_value = username
@@ -395,7 +398,10 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
         async def render(name: str, **kwargs: object) -> str:
             return f"{name}:{kwargs['forbidden_title']}"
 
+        event_loop_thread = threading.get_ident()
+
         def embed(html: str, prefix: str) -> str:
+            assert threading.get_ident() != event_loop_thread
             return f"{prefix}|{html}"
 
         monkeypatch.setattr("builders.isbrowser", is_browser)

@@ -52,7 +52,7 @@ async def get_subscription(
         html = await builders.render_template("browser.html", **_browser_strings(obj, lang))
         cfg = obj.res.cfg.view()
         prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
-        html = builders.embed_font_faces(html, prefix)
+        html = await obj.res.offloads.files.run(builders.embed_font_faces, html, prefix)
         return Response(html, mimetype="text/html"), 403
 
     bandwidths = await obj.bandwidth_svc.bandwidth(username)
