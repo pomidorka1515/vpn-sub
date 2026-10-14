@@ -44,7 +44,9 @@ async def test_leaderboard_total_and_monthly_ranking(database: Database) -> None
     totals = {"alice": 100, "bob": 50, "cara": 300}
 
     async def all_traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, BandwidthInfo]:
         assert whitelist is False
         assert work == "background"

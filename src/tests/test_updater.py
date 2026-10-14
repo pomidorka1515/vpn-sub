@@ -236,7 +236,9 @@ def test_digest_mismatch_does_not_replace(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert not (tmp_path / "vpn-sub.bak").exists()
 
 
-def test_failed_replace_preserves_installed_binary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_failed_replace_preserves_installed_binary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _compiled(monkeypatch)
     first = tmp_path / "vpn-sub"
     second = tmp_path / "vpn-sub-discord"
@@ -325,7 +327,9 @@ def test_asset_requires_sha256() -> None:
         ("5.0", "5.0.0", False),
     ],
 )
-def test_parse_preserves_suffix_and_compares_versions(release: str, current: str, newer: bool) -> None:
+def test_parse_preserves_suffix_and_compares_versions(
+    release: str, current: str, newer: bool
+) -> None:
     parsed = updater._parse(release)
     installed = updater._parse(current)
     assert parsed is not None
@@ -339,7 +343,9 @@ def test_latest_includes_prereleases_and_skips_drafts(monkeypatch: pytest.Monkey
     rc["prerelease"] = True
     draft = _release("v6.0.0")
     draft["draft"] = True
-    monkeypatch.setattr(updater, "_get", _get_stub([_release("v5.0.0-rc.9"), draft, rc, _release("v4.0.0")]))
+    monkeypatch.setattr(
+        updater, "_get", _get_stub([_release("v5.0.0-rc.9"), draft, rc, _release("v4.0.0")])
+    )
     latest = updater._latest(3)
     assert latest.tag == "v5.0.0-rc.10"
     assert latest.prerelease
@@ -350,7 +356,9 @@ def test_latest_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def _get(url: str, *_args: object, **_kwargs: object) -> StubResponse:
         urls.append(url)
-        return _response([_release("v1.0.0")] * 100 if url.endswith("&page=1") else [_release("v2.0.0-rc.1")])
+        return _response(
+            [_release("v1.0.0")] * 100 if url.endswith("&page=1") else [_release("v2.0.0-rc.1")]
+        )
 
     monkeypatch.setattr(updater, "_get", _get)
     assert updater._latest(3).tag == "v2.0.0-rc.1"
@@ -384,7 +392,9 @@ def test_rc_update_warns_before_confirmation_and_replaces_binary(
     assert binary.read_bytes() == b"new\n"
 
 
-def test_prerelease_notice_warns(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_prerelease_notice_warns(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "VERSION", "5.0.0-beta")
     monkeypatch.setattr(updater, "_get", _get_stub(_release("v5.0.0-rc.1")))

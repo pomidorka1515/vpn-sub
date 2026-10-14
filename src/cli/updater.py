@@ -211,7 +211,11 @@ def _parse(value: str) -> Version | None:
     if match is None:
         return None
     suffix = match[2]
-    return Version(text, tuple(int(part) for part in match[1].split(".")), tuple(suffix.split(".")) if suffix else ())
+    return Version(
+        text,
+        tuple(int(part) for part in match[1].split(".")),
+        tuple(suffix.split(".")) if suffix else (),
+    )
 
 
 def _newer(release: Version, current: Version) -> bool:

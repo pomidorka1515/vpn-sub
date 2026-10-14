@@ -209,12 +209,22 @@ async def create_application(
             if bot is not None:
                 await open_resource(OwnedResource(name, bot, quiesce=bot.close))
         discord_bot = (
-            DiscordApplication(sub, cfg, paths.data, db, files=offloads.files, rendering=offloads.rendering, limiter=limiter)
+            DiscordApplication(
+                sub,
+                cfg,
+                paths.data,
+                db,
+                files=offloads.files,
+                rendering=offloads.rendering,
+                limiter=limiter,
+            )
             if options.start_bots and conf.get("discord", {}).get("token")
             else None
         )
         if discord_bot is not None:
-            await open_resource(OwnedResource("Discord bot", discord_bot, quiesce=discord_bot.close))
+            await open_resource(
+                OwnedResource("Discord bot", discord_bot, quiesce=discord_bot.close)
+            )
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
         register_subscription_route(app, sub)

@@ -131,7 +131,9 @@ def paths(tmp_path: Path) -> AppPaths:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("enabled", [False, True])
 async def test_optional_discord_shares_runtime(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, enabled: bool,
+    paths: AppPaths,
+    monkeypatch: pytest.MonkeyPatch,
+    enabled: bool,
 ) -> None:
     from async_core_helpers import PanelTransport
     from helpers import FakePanel
@@ -151,11 +153,14 @@ async def test_optional_discord_shares_runtime(
 
     monkeypatch.setattr(SharedDiscordClient, "login", login)
     monkeypatch.setattr(SharedDiscordClient, "connect", connect)
-    runtime = await create_application(paths, AppOptions(
-        start_background=False,
-        limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
-        panel_transport_factory=lambda: PanelTransport(FakePanel()),
-    ))
+    runtime = await create_application(
+        paths,
+        AppOptions(
+            start_background=False,
+            limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+            panel_transport_factory=lambda: PanelTransport(FakePanel()),
+        ),
+    )
     bot = runtime.dependencies.discord_bot
     try:
         assert (bot is not None) == enabled
@@ -227,7 +232,9 @@ async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_close", [False, True])
 async def test_factory_cleanup_continues_after_close_failures(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, cancel_close: bool,
+    paths: AppPaths,
+    monkeypatch: pytest.MonkeyPatch,
+    cancel_close: bool,
 ) -> None:
     from app_runtime.composition import PrimaryLock
     from app_runtime.offload import OffloadServices
@@ -275,7 +282,9 @@ async def test_factory_cleanup_continues_after_close_failures(
 
 @pytest.mark.asyncio
 async def test_factory_retains_cleanup_after_repeated_cancellation(
-    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+    paths: AppPaths,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     import app as application
     from app_runtime.composition import PrimaryLock
@@ -305,13 +314,15 @@ async def test_factory_retains_cleanup_after_repeated_cancellation(
     monkeypatch.setattr(OffloadServices, "close", record_offloads_close)
     limiter = AsyncRateLimiter("redis://test", client=BlockingRedis())
     limiter._owned = True
-    caller = asyncio.create_task(create_application(
-        paths,
-        AppOptions(
-            start_background=False,
-            limiter=limiter,
-        ),
-    ))
+    caller = asyncio.create_task(
+        create_application(
+            paths,
+            AppOptions(
+                start_background=False,
+                limiter=limiter,
+            ),
+        )
+    )
     try:
         await asyncio.wait_for(starting.wait(), timeout=5)
         caller.cancel()
@@ -324,7 +335,8 @@ async def test_factory_retains_cleanup_after_repeated_cancellation(
         cleanup = tuple(application._startup_cleanup_tasks._tasks)
         release.set()
         results = await asyncio.wait_for(
-            asyncio.gather(*cleanup, return_exceptions=True), timeout=5,
+            asyncio.gather(*cleanup, return_exceptions=True),
+            timeout=5,
         )
         assert isinstance(results[0], ExceptionGroup)
         assert offloads_closed.is_set()
@@ -339,7 +351,8 @@ async def test_factory_retains_cleanup_after_repeated_cancellation(
             caller.cancel()
         await asyncio.gather(caller, return_exceptions=True)
         await asyncio.gather(
-            *application._startup_cleanup_tasks._tasks, return_exceptions=True,
+            *application._startup_cleanup_tasks._tasks,
+            return_exceptions=True,
         )
 
 

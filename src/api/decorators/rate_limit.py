@@ -30,7 +30,9 @@ def rate_limit[API_T: AsyncBaseApi, **P, R](
         @wraps(f)
         async def wrapper(self: API_T, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
             try:
-                allowed = await self.limiter.allow(scope, request.remote_addr or "<unknown>", max_requests)
+                allowed = await self.limiter.allow(
+                    scope, request.remote_addr or "<unknown>", max_requests
+                )
             except Exception:
                 log.error("rate limit store failed")  # ruff: ignore[error-instead-of-exception] credentials may occur in exception text
                 return err("Too many requests.", 429)

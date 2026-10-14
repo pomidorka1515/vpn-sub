@@ -94,9 +94,12 @@ class PublicBot(
                 from discord_bot.host import SharedDiscordClient
 
                 async def invoke() -> None:
-                    if self.command_requires_auth(command_name) and not await self.require_login(interaction):
+                    if self.command_requires_auth(command_name) and not await self.require_login(
+                        interaction
+                    ):
                         return
                     await command_handler(interaction)
+
                 if isinstance(self.bot, SharedDiscordClient):
                     await self.bot.interact(interaction, invoke, operation=command_name)
 

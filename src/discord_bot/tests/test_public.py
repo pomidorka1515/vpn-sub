@@ -41,9 +41,17 @@ async def test_subscription_uses_shared_qr_rendering() -> None:
 async def test_registration_then_shared_login_persists_auth_token() -> None:
     bot, _, store, sub = make_bots()
     store.clear_token(7)
-    fake = FakeInteraction(data=modal_data("register_modal", {
-        "username": "alice", "password": "secret", "code": "INVITE", "name": "Ada",
-    }))
+    fake = FakeInteraction(
+        data=modal_data(
+            "register_modal",
+            {
+                "username": "alice",
+                "password": "secret",
+                "code": "INVITE",
+                "name": "Ada",
+            },
+        )
+    )
     await bot.handle_register_modal(cast(discord.Interaction, fake))
     fields = sub.business_code_svc.register_with_code.await_args.kwargs
     assert fields["username"].startswith("web_")
@@ -59,9 +67,17 @@ async def test_registration_then_shared_login_persists_auth_token() -> None:
 async def test_registration_rejects_invalid_username(username: str) -> None:
     bot, _, store, sub = make_bots()
     store.clear_token(7)
-    fake = FakeInteraction(data=modal_data("register_modal", {
-        "username": username, "password": "secret", "code": "INVITE", "name": "Ada",
-    }))
+    fake = FakeInteraction(
+        data=modal_data(
+            "register_modal",
+            {
+                "username": username,
+                "password": "secret",
+                "code": "INVITE",
+                "name": "Ada",
+            },
+        )
+    )
     await bot.handle_register_modal(cast(discord.Interaction, fake))
     sub.business_code_svc.register_with_code.assert_not_awaited()
 
@@ -71,7 +87,9 @@ async def test_login_invalid_credentials_does_not_persist_session() -> None:
     bot, _, store, sub = make_bots()
     store.clear_token(7)
     sub.account_svc.login.side_effect = AppError("Invalid credentials.", status=401)
-    fake = FakeInteraction(data=modal_data("login_modal", {"username": "alice", "password": "wrong"}))
+    fake = FakeInteraction(
+        data=modal_data("login_modal", {"username": "alice", "password": "wrong"})
+    )
     await bot.handle_login_modal(cast(discord.Interaction, fake))
     assert not store.logged_in(7)
     assert fake.response.messages
@@ -99,9 +117,15 @@ async def test_account_operations_clear_discord_session(operation: str) -> None:
 @pytest.mark.asyncio
 async def test_settings_pass_password_confirmation_to_shared_workflow() -> None:
     bot, _, _, sub = make_bots()
-    fake = FakeInteraction(data=modal_data("settings_login_modal", {"username": "newname", "current_password": "secret"}))
+    fake = FakeInteraction(
+        data=modal_data(
+            "settings_login_modal", {"username": "newname", "current_password": "secret"}
+        )
+    )
     await bot.handle_login_change_modal(cast(discord.Interaction, fake))
-    sub.account_svc.settings.assert_awaited_once_with("alice", ext_username="newname", current_password="secret")
+    sub.account_svc.settings.assert_awaited_once_with(
+        "alice", ext_username="newname", current_password="secret"
+    )
 
 
 @pytest.mark.asyncio
@@ -138,7 +162,9 @@ async def test_chart_busy_gate_prevents_duplicate_render() -> None:
         await release.wait()
 
     with patch.object(bot.rendering, "run", new=AsyncMock(side_effect=render)):
-        task = asyncio.create_task(bot.render_chart(cast(discord.Interaction, FakeInteraction()), 14))
+        task = asyncio.create_task(
+            bot.render_chart(cast(discord.Interaction, FakeInteraction()), 14)
+        )
         await asyncio.wait_for(entered.wait(), 1)
         second = FakeInteraction()
         await bot.render_chart(cast(discord.Interaction, second), 14)

@@ -167,7 +167,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        await self.sub.account_svc.settings(await self.username(interaction), fingerprint=fingerprint)
+        await self.sub.account_svc.settings(
+            await self.username(interaction), fingerprint=fingerprint
+        )
         await self._reply_key(interaction, "settings_fp_success")
 
     async def handle_name_modal(self, interaction: discord.Interaction) -> None:

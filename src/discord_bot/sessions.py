@@ -58,8 +58,12 @@ class DatabaseSessionStore:
         from threadutil import named_to_thread
 
         payload = await self.db.get_metadata("discord_sessions")
-        if payload is None and await named_to_thread("files:discord-session-exists", legacy.is_file):
-            payload = await named_to_thread("files:discord-session-import", legacy.read_text, encoding="utf-8")
+        if payload is None and await named_to_thread(
+            "files:discord-session-exists", legacy.is_file
+        ):
+            payload = await named_to_thread(
+                "files:discord-session-import", legacy.read_text, encoding="utf-8"
+            )
         raw: object = json.loads(payload or "{}")
         if not isinstance(raw, dict):
             raise ValueError("Discord sessions must be an object")
@@ -67,12 +71,21 @@ class DatabaseSessionStore:
             if isinstance(value, dict):
                 value = cast("dict[str, object]", value)
                 token, lang = value.get("token"), value.get("lang")
-                self.records[str(key)] = SessionRecord(str(key), token if isinstance(token, str) else "", lang if isinstance(lang, str) and lang in {"ru", "en"} else None)
+                self.records[str(key)] = SessionRecord(
+                    str(key),
+                    token if isinstance(token, str) else "",
+                    lang if isinstance(lang, str) and lang in {"ru", "en"} else None,
+                )
         # Only mark import complete after the entire payload was read successfully.
         await self.db.set_metadata("discord_sessions", self._payload())
 
     def _payload(self) -> str:
-        return json.dumps({key: {"token": record.token, "lang": record.lang} for key, record in self.records.items()})
+        return json.dumps(
+            {
+                key: {"token": record.token, "lang": record.lang}
+                for key, record in self.records.items()
+            }
+        )
 
     def get(self, user_id: int | str) -> SessionRecord:
         key = str(user_id)

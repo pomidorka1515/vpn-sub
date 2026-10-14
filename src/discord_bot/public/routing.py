@@ -107,7 +107,10 @@ class PublicRoutingMixin(PublicFeatureMixin):
         lang = self.get_lang(interaction.user.id)
         await self.username(interaction)
         index = 0 if lang == "en" else 1
-        obj = {profile["name"][index]: profile["description"][index] for profile in self.cfg.view()["profiles"].values()}
+        obj = {
+            profile["name"][index]: profile["description"][index]
+            for profile in self.cfg.view()["profiles"].values()
+        }
         lines: list[str] = []
         for name, desc in obj.items():
             lines.append(f"`{name}` — {desc}")

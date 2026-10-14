@@ -41,9 +41,14 @@ class AccountService:
         await self.sub.business_svc.delete_user(username=username, perma=True)
 
     async def settings(
-        self, username: str, *, displayname: str | None = None,
-        fingerprint: str | None = None, ext_username: str | None = None,
-        ext_password: str | None = None, current_password: str | None = None,
+        self,
+        username: str,
+        *,
+        displayname: str | None = None,
+        fingerprint: str | None = None,
+        ext_username: str | None = None,
+        ext_password: str | None = None,
+        current_password: str | None = None,
     ) -> None:
         if fingerprint and fingerprint not in self.sub.res.cfg.view()["fingerprints"]:
             raise ValidationError("Unknown fingerprint")
@@ -54,6 +59,9 @@ class AccountService:
         if ext_username or ext_password:
             await self.confirm_password(username, current_password)
         await self.sub.business_svc.update_params(
-            username=username, displayname=displayname, fingerprint=fingerprint,
-            ext_username=ext_username, ext_password=ext_password,
+            username=username,
+            displayname=displayname,
+            fingerprint=fingerprint,
+            ext_username=ext_username,
+            ext_password=ext_password,
         )

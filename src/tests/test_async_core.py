@@ -342,7 +342,8 @@ async def test_reconcile_uses_bounded_workers_and_user_ownership(
                 await saturated.wait()
             assert len(started) == min(4, user_count)
             workers = [
-                task for task in asyncio.all_tasks()
+                task
+                for task in asyncio.all_tasks()
                 if task.get_name().startswith("core:reconcile-worker:")
             ]
             assert len(workers) == min(4, user_count)

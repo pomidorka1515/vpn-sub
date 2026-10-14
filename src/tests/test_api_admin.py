@@ -229,16 +229,20 @@ async def test_user_refresh_uses_bounded_workers(
 
     monkeypatch.setattr(sub.user_svc, "list_users", list_users)
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
-    refresh = asyncio.create_task(app.test_client().get(
-        "/sub/api/api/user/refresh", headers={"Authorization": "secret"},
-    ))
+    refresh = asyncio.create_task(
+        app.test_client().get(
+            "/sub/api/api/user/refresh",
+            headers={"Authorization": "secret"},
+        )
+    )
     try:
         if users:
             async with asyncio.timeout(5):
                 await saturated.wait()
             assert started == users[:4]
             workers = [
-                task for task in asyncio.all_tasks()
+                task
+                for task in asyncio.all_tasks()
                 if task.get_name().startswith("core:user-refresh-worker:")
             ]
             assert len(workers) == min(4, user_count)
@@ -278,7 +282,8 @@ async def test_user_refresh_reports_panel_failures_in_user_order(
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
     async with asyncio.timeout(5):
         response = await app.test_client().get(
-            "/sub/api/api/user/refresh", headers={"Authorization": "secret"},
+            "/sub/api/api/user/refresh",
+            headers={"Authorization": "secret"},
         )
     assert response.status_code == (502 if all_failed else 200)
     payload = await response.get_json()
@@ -322,9 +327,12 @@ async def test_user_refresh_abort_drains_in_flight_and_stops_new_users(
 
     monkeypatch.setattr(sub.user_svc, "list_users", list_users)
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
-    refresh = asyncio.create_task(app.test_client().get(
-        "/sub/api/api/user/refresh", headers={"Authorization": "secret"},
-    ))
+    refresh = asyncio.create_task(
+        app.test_client().get(
+            "/sub/api/api/user/refresh",
+            headers={"Authorization": "secret"},
+        )
+    )
     try:
         async with asyncio.timeout(5):
             await aborted.wait()
@@ -337,7 +345,10 @@ async def test_user_refresh_abort_drains_in_flight_and_stops_new_users(
         payload = await response.get_json()
         assert payload["msg"] == "Refresh aborted"
         assert payload["obj"] == {
-            "aborted": "bob", "failed": ["alice"], "succeeded": 1, "total": 6,
+            "aborted": "bob",
+            "failed": ["alice"],
+            "succeeded": 1,
+            "total": 6,
         }
         assert started == users[:4]
         assert sorted(finished) == users[:4]
@@ -463,7 +474,8 @@ async def test_state_collects_panels_and_host_concurrently(
             payload = await routes._polling_sample()
         else:
             response = await app.test_client().get(
-                "/sub/api/api/state/all", headers={"Authorization": "secret"},
+                "/sub/api/api/state/all",
+                headers={"Authorization": "secret"},
             )
             assert response.status_code == 200
             payload = (await response.get_json())["obj"]

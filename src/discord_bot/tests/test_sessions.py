@@ -32,7 +32,9 @@ async def session_store(tmp_path: Path) -> AsyncIterator[DatabaseSessionStore]:
 
 
 @pytest.mark.asyncio
-async def test_session_access_and_clear_preserves_language(session_store: DatabaseSessionStore) -> None:
+async def test_session_access_and_clear_preserves_language(
+    session_store: DatabaseSessionStore,
+) -> None:
     sessions: SessionStore = session_store
     assert sessions.get(123) == SessionRecord("123", "", None)
     assert not sessions.logged_in(123)

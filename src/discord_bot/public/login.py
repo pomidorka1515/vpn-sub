@@ -150,12 +150,19 @@ class PublicLoginMixin(PublicFeatureMixin):
         if await self.sub.user_svc.external_username_exists(username):
             await self._reply_key(interaction, "username_taken")
             return
-        for field, value, maximum in (("name", name, 16), ("password", password, 128), ("code", code, 64)):
+        for field, value, maximum in (
+            ("name", name, 16),
+            ("password", password, 128),
+            ("code", code, 64),
+        ):
             if not 1 <= len(value) <= maximum:
                 raise ValidationError(f"'{field}' must be 1-{maximum} characters")
         await self.sub.business_code_svc.register_with_code(
-            code=code, username=f"web_{uuid4().hex[:16]}", displayname=name,
-            ext_username=username, ext_password=password,
+            code=code,
+            username=f"web_{uuid4().hex[:16]}",
+            displayname=name,
+            ext_username=username,
+            ext_password=password,
         )
         token = await self.sub.account_svc.login(username, password)
         self.sessions.set_token(uid, token)

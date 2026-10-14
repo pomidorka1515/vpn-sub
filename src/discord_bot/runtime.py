@@ -27,7 +27,17 @@ if TYPE_CHECKING:
 
 
 class DiscordApplication:
-    def __init__(self, sub: Subscription, cfg: Snapshot[AppConfig], data: Path, db: Database, *, files: BoundedOffload, rendering: BoundedOffload, limiter: AsyncRateLimiter) -> None:
+    def __init__(
+        self,
+        sub: Subscription,
+        cfg: Snapshot[AppConfig],
+        data: Path,
+        db: Database,
+        *,
+        files: BoundedOffload,
+        rendering: BoundedOffload,
+        limiter: AsyncRateLimiter,
+    ) -> None:
         self.cfg = cfg
         self.data = data
         self.sub = sub
@@ -63,8 +73,25 @@ class DiscordApplication:
         self.sessions = DatabaseSessionStore(self.db)
         await self.sessions.start(self.data / "discord-sessions.json")
         conf = self.cfg.view()
-        public = PublicBot(self.cfg, self.lang, self.sub, self.sessions, client=self.client, tree=self.client.tree, rendering=self.rendering, limiter=self.limiter)
-        admin = AdminBot(self.cfg, self.lang, self.sub, client=self.client, tree=self.client.tree, rendering=self.rendering, limiter=self.limiter)
+        public = PublicBot(
+            self.cfg,
+            self.lang,
+            self.sub,
+            self.sessions,
+            client=self.client,
+            tree=self.client.tree,
+            rendering=self.rendering,
+            limiter=self.limiter,
+        )
+        admin = AdminBot(
+            self.cfg,
+            self.lang,
+            self.sub,
+            client=self.client,
+            tree=self.client.tree,
+            rendering=self.rendering,
+            limiter=self.limiter,
+        )
         self.client.attach(public, admin)
         section = conf.get("discord")
         if section is None:

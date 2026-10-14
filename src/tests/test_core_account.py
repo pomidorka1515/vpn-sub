@@ -28,10 +28,14 @@ async def async_db(tmp_path: Path) -> AsyncIterator[Database]:
 
 
 @pytest.mark.asyncio
-async def test_shared_login_logout_credentials_and_reset(async_db: Database, tmp_path: Path) -> None:
+async def test_shared_login_logout_credentials_and_reset(
+    async_db: Database, tmp_path: Path
+) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:
-        await sub.business_svc.add_new_user("alice", "Alice", ext_username="alice", ext_password="secret")
+        await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice", ext_password="secret"
+        )
         with pytest.raises(AppError, match="Invalid credentials"):
             await sub.account_svc.login("alice", "wrong")
         token = await sub.account_svc.login("alice", "secret")
@@ -43,7 +47,9 @@ async def test_shared_login_logout_credentials_and_reset(async_db: Database, tmp
         with pytest.raises(ValidationError, match="current_password required"):
             await sub.account_svc.settings("alice", ext_password="newsecret")
         with pytest.raises(AppError, match="Invalid current password"):
-            await sub.account_svc.settings("alice", ext_password="newsecret", current_password="wrong")
+            await sub.account_svc.settings(
+                "alice", ext_password="newsecret", current_password="wrong"
+            )
         assert await sub.user_svc.auth_token_to_user(replacement) == "alice"
         await sub.account_svc.settings("alice", ext_password="newsecret", current_password="secret")
         assert await sub.user_svc.auth_token_to_user(replacement) == "alice"
@@ -62,7 +68,9 @@ async def test_shared_login_logout_credentials_and_reset(async_db: Database, tmp
 async def test_shared_account_delete_requires_password(async_db: Database, tmp_path: Path) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:
-        await sub.business_svc.add_new_user("alice", "Alice", ext_username="alice", ext_password="secret")
+        await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice", ext_password="secret"
+        )
         token = await sub.account_svc.login("alice", "secret")
         with pytest.raises(AppError, match="Invalid current password"):
             await sub.account_svc.delete("alice", "wrong")
@@ -75,11 +83,18 @@ async def test_shared_account_delete_requires_password(async_db: Database, tmp_p
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fields", [
-    {"displayname": "a" * 17}, {"ext_username": "a" * 33}, {"fingerprint": "unknown"},
-])
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"displayname": "a" * 17},
+        {"ext_username": "a" * 33},
+        {"fingerprint": "unknown"},
+    ],
+)
 async def test_account_settings_preserve_route_validation(
-    async_db: Database, tmp_path: Path, fields: dict[str, str],
+    async_db: Database,
+    tmp_path: Path,
+    fields: dict[str, str],
 ) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:
@@ -92,7 +107,9 @@ async def test_account_settings_preserve_route_validation(
 
 
 @pytest.mark.asyncio
-async def test_bulk_refresh_bounds_concurrency_and_preserves_failure_order(async_db: Database, tmp_path: Path) -> None:
+async def test_bulk_refresh_bounds_concurrency_and_preserves_failure_order(
+    async_db: Database, tmp_path: Path
+) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     active = peak = 0
     names = [f"user{index}" for index in range(9)]
@@ -109,7 +126,10 @@ async def test_bulk_refresh_bounds_concurrency_and_preserves_failure_order(async
             active -= 1
 
     try:
-        with patch.object(sub.user_svc, "list_users", return_value=names), patch.object(sub.business_svc, "add_users", side_effect=refresh):
+        with (
+            patch.object(sub.user_svc, "list_users", return_value=names),
+            patch.object(sub.business_svc, "add_users", side_effect=refresh),
+        ):
             assert await sub.refresh_svc.refresh() == RefreshResult(["user1", "user5"], None, 7, 9)
         assert peak == 4
         assert active == 0
@@ -118,7 +138,9 @@ async def test_bulk_refresh_bounds_concurrency_and_preserves_failure_order(async
 
 
 @pytest.mark.asyncio
-async def test_bulk_refresh_aborts_new_claims_and_drains_inflight(async_db: Database, tmp_path: Path) -> None:
+async def test_bulk_refresh_aborts_new_claims_and_drains_inflight(
+    async_db: Database, tmp_path: Path
+) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -135,7 +157,10 @@ async def test_bulk_refresh_aborts_new_claims_and_drains_inflight(async_db: Data
         await release.wait()
 
     try:
-        with patch.object(sub.user_svc, "list_users", return_value=[f"user{i}" for i in range(8)]), patch.object(sub.business_svc, "add_users", side_effect=refresh):
+        with (
+            patch.object(sub.user_svc, "list_users", return_value=[f"user{i}" for i in range(8)]),
+            patch.object(sub.business_svc, "add_users", side_effect=refresh),
+        ):
             result = await sub.refresh_svc.refresh()
         assert result == RefreshResult([], "user0", 3, 8)
         assert claimed == ["user0", "user1", "user2", "user3"]

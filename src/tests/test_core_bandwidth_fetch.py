@@ -52,7 +52,9 @@ async def test_whitelist_total_is_zero_without_whitelist_panel(database: Databas
 
     assert (await subscription.bandwidth_svc.bandwidth("alice")) == BandwidthInfo(100, 200, 300)
     assert (await subscription.bandwidth_svc.bandwidth("alice", whitelist=True)) == BandwidthInfo(
-        0, 0, 0,
+        0,
+        0,
+        0,
     )
 
 

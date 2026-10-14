@@ -74,7 +74,9 @@ async def test_user_workflow_without_live_panels(database: Database) -> None:
     assert (await subscription.telegram_svc.get_username_telegram(123)) == "alice"
     (
         await subscription.business_svc.update_params(
-            "alice", displayname="Alice 2", fingerprint="firefox",
+            "alice",
+            displayname="Alice 2",
+            fingerprint="firefox",
         )
     )
     info = await subscription.business_svc.get_info("alice")

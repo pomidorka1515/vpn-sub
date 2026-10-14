@@ -152,7 +152,10 @@ async def create_alice(database: Database, **kwargs: Unpack[CreateUserOverrides]
 
 def make_watch(database: Database, subscription: Subscription) -> BWatch:
     return BWatch(
-        cfg=config_mock(subscription_config()), db=database, sub=subscription, scheduled=False,
+        cfg=config_mock(subscription_config()),
+        db=database,
+        sub=subscription,
+        scheduled=False,
     )
 
 

@@ -47,32 +47,45 @@ class SharedDiscordClient(discord.Client):
 
         async def run() -> None:
             await callback()
+
         try:
             await self.handlers.create(run, name="discord:interaction")
         except AdmissionClosedError:
             return
 
     async def interact(
-        self, interaction: discord.Interaction, callback: Callable[[], Awaitable[None]],
-        *, operation: str, admin: bool = False,
+        self,
+        interaction: discord.Interaction,
+        callback: Callable[[], Awaitable[None]],
+        *,
+        operation: str,
+        admin: bool = False,
     ) -> None:
         async def invoke() -> None:
             feature = self._admin if admin else self._public
             if feature is None:
                 return
-            if admin and self._admin is not None and not await self._admin.require_admin(interaction):
+            if (
+                admin
+                and self._admin is not None
+                and not await self._admin.require_admin(interaction)
+            ):
                 return
             # Normalize IDs containing user names, pages or selected values so
             # changing a component's arguments cannot create a fresh bucket.
             scope, limit = interaction_limit(operation)
             try:
-                allowed = await feature.limiter.allow(f"discord:{scope}", str(interaction.user.id), limit)
+                allowed = await feature.limiter.allow(
+                    f"discord:{scope}", str(interaction.user.id), limit
+                )
             except Exception:
                 log.error("Discord rate limit store failed")  # ruff: ignore[error-instead-of-exception] avoid logging Redis credentials
                 allowed = False
             if not allowed:
                 if admin:
-                    await feature._respond(interaction, "⏳ Слишком много запросов. Подождите минуту.")
+                    await feature._respond(
+                        interaction, "⏳ Слишком много запросов. Подождите минуту."
+                    )
                 elif self._public is not None:
                     await self._public._reply_key(interaction, "rate_limited")
                 return
@@ -82,12 +95,21 @@ class SharedDiscordClient(discord.Client):
                 if self._public is not None:
                     await self._public._reply_key(interaction, "session_expired")
             except PanelUnavailableError:
-                await feature._respond(interaction, "⚠ Сервис временно недоступен." if admin else "Service temporarily unavailable.")
+                await feature._respond(
+                    interaction,
+                    "⚠ Сервис временно недоступен."
+                    if admin
+                    else "Service temporarily unavailable.",
+                )
             except AppError as error:
                 await feature._respond(interaction, error.message)
             except Exception:
                 log.exception("Discord interaction failed")
-                await feature._respond(interaction, "❌ Внутренняя ошибка" if admin else "Service temporarily unavailable.")
+                await feature._respond(
+                    interaction,
+                    "❌ Внутренняя ошибка" if admin else "Service temporarily unavailable.",
+                )
+
         await self.process(str(interaction.user.id), invoke)
 
     async def close(self) -> None:
@@ -102,7 +124,10 @@ class SharedDiscordClient(discord.Client):
 
         @self.event
         async def on_interaction(interaction: discord.Interaction) -> None:
-            if interaction.type not in {discord.InteractionType.component, discord.InteractionType.modal_submit}:
+            if interaction.type not in {
+                discord.InteractionType.component,
+                discord.InteractionType.modal_submit,
+            }:
                 return
             custom_id = _custom_id(interaction)
             public = self._public
@@ -112,10 +137,17 @@ class SharedDiscordClient(discord.Client):
 
             async def dispatch() -> None:
                 if interaction.type is discord.InteractionType.component:
-                    await _dispatch(custom_id, admin.dispatch_component, public.dispatch_component, interaction)
+                    await _dispatch(
+                        custom_id, admin.dispatch_component, public.dispatch_component, interaction
+                    )
                 elif interaction.type is discord.InteractionType.modal_submit:
-                    await _dispatch(custom_id, admin.dispatch_modal, public.dispatch_modal, interaction)
-            await self.interact(interaction, dispatch, operation=custom_id, admin=custom_id.startswith("admin"))
+                    await _dispatch(
+                        custom_id, admin.dispatch_modal, public.dispatch_modal, interaction
+                    )
+
+            await self.interact(
+                interaction, dispatch, operation=custom_id, admin=custom_id.startswith("admin")
+            )
 
     async def setup_hook(self) -> None:
         try:
@@ -149,15 +181,35 @@ def interaction_limit(operation: str) -> tuple[str, int]:
         parts = operation.split(":")
         return ":".join(parts[:3] if parts[1] in {"modal", "edit"} else parts[:2]), 20
     aliases = {
-        "login_modal": "login", "register_modal": "register", "confirm_logout": "logout",
-        "confirm_reset": "reset", "delete_modal": "delete", "menu_info": "stats",
-        "info": "stats", "menu_get_sub": "subscription", "sub": "subscription",
-        "bonus_modal": "bonus", "chart_select": "history", "settings_name_modal": "settings",
-        "settings_login_modal": "settings", "settings_pass_modal": "settings",
-        "fp_select": "settings", "menu_help": "profiles", "help": "profiles",
+        "login_modal": "login",
+        "register_modal": "register",
+        "confirm_logout": "logout",
+        "confirm_reset": "reset",
+        "delete_modal": "delete",
+        "menu_info": "stats",
+        "info": "stats",
+        "menu_get_sub": "subscription",
+        "sub": "subscription",
+        "bonus_modal": "bonus",
+        "chart_select": "history",
+        "settings_name_modal": "settings",
+        "settings_login_modal": "settings",
+        "settings_pass_modal": "settings",
+        "fp_select": "settings",
+        "menu_help": "profiles",
+        "help": "profiles",
         "set_fp": "fingerprints",
     }
     scope = aliases.get(operation, operation)
-    limits = {"login": 10, "register": 5, "logout": 20, "reset": 3, "delete": 3,
-              "bonus": 15, "settings": 15, "history": 30, "profiles": 60}
+    limits = {
+        "login": 10,
+        "register": 5,
+        "logout": 20,
+        "reset": 3,
+        "delete": 3,
+        "bonus": 15,
+        "settings": 15,
+        "history": 30,
+        "profiles": 60,
+    }
     return scope, limits.get(scope, 20)

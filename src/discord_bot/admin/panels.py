@@ -22,7 +22,7 @@ class AdminPanelsMixin(AdminFeatureMixin):
 
 🖥 **Система**
 CPU: `{round(obj.cpu)}%` (`{obj.cpuCores}`/`{obj.logicalPro}` ядер, `{round(obj.cpuSpeedMhz)} MHz`)
-Load: {' | '.join(str(load) for load in obj.loads)}
+Load: {" | ".join(str(load) for load in obj.loads)}
 RAM: {fmt_bytes(obj.mem.current)} / {fmt_bytes(obj.mem.total)}
 Uptime: {fmt_time(obj.uptime)}
 
@@ -32,7 +32,7 @@ Swap: {fmt_bytes(obj.swap.current)} / {fmt_bytes(obj.swap.total)}
 
 🌐 **Сеть & IP**
 IPv4: `{obj.publicIP.ipv4}`
-IPv6: `{obj.publicIP.ipv6 or 'Отключен'}`
+IPv6: `{obj.publicIP.ipv6 or "Отключен"}`
 Соединения: `{obj.tcpCount}` TCP / `{obj.udpCount}` UDP
 Скорость: ⬇️ {fmt_bytes(obj.netIO.down)}/s | ⬆️ {fmt_bytes(obj.netIO.up)}/s
 Трафик: ⬇️ {fmt_bytes(obj.netTraffic.recv)} | ⬆️ {fmt_bytes(obj.netTraffic.sent)}
@@ -50,10 +50,13 @@ Uptime: {fmt_time(obj.appStats.uptime)}"""
         await self._respond(interaction, "⏳ Получение статуса панелей...")
         statuses = await self.sub.panel_svc.statuses()
         if not statuses:
-            await self._respond(interaction, "❌ Статус панелей неизвестен", view=self.main_menu_view())
+            await self._respond(
+                interaction, "❌ Статус панелей неизвестен", view=self.main_menu_view()
+            )
             return
         for index, (panel, status) in enumerate(zip(self.sub.panels, statuses, strict=True)):
             await self._respond(
-                interaction, self._panel_text(panel.name, status),
+                interaction,
+                self._panel_text(panel.name, status),
                 view=self.main_menu_view() if index == len(statuses) - 1 else None,
             )

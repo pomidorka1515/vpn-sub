@@ -58,12 +58,17 @@ async def test_discord_quiesces_admitted_commands() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("interaction_type", [
-    discord.InteractionType.ping,
-    discord.InteractionType.application_command,
-    discord.InteractionType.autocomplete,
-])
-async def test_host_ignores_non_component_interactions(interaction_type: discord.InteractionType) -> None:
+@pytest.mark.parametrize(
+    "interaction_type",
+    [
+        discord.InteractionType.ping,
+        discord.InteractionType.application_command,
+        discord.InteractionType.autocomplete,
+    ],
+)
+async def test_host_ignores_non_component_interactions(
+    interaction_type: discord.InteractionType,
+) -> None:
     public, _, _, _ = make_bots()
     host = cast(SharedDiscordClient, public.bot)
     limiter = cast(MagicMock, public.limiter)
@@ -80,13 +85,18 @@ async def test_host_ignores_non_component_interactions(interaction_type: discord
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("interaction_type", "handler"), [
-    (discord.InteractionType.component, "dispatch_component"),
-    (discord.InteractionType.modal_submit, "dispatch_modal"),
-])
+@pytest.mark.parametrize(
+    ("interaction_type", "handler"),
+    [
+        (discord.InteractionType.component, "dispatch_component"),
+        (discord.InteractionType.modal_submit, "dispatch_modal"),
+    ],
+)
 @pytest.mark.parametrize("admin", [False, True])
 async def test_host_rate_limits_and_dispatches_components_and_modals(
-    interaction_type: discord.InteractionType, handler: str, admin: bool,
+    interaction_type: discord.InteractionType,
+    handler: str,
+    admin: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     public, admin_bot, _, _ = make_bots()
@@ -125,12 +135,18 @@ async def test_explicit_rate_limit_is_fail_closed(failed: bool) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [AppError("Invalid current password", status=401), PanelUnavailableError()])
-async def test_domain_errors_at_interaction_boundary_preserve_valid_session(error: AppError) -> None:
+@pytest.mark.parametrize(
+    "error", [AppError("Invalid current password", status=401), PanelUnavailableError()]
+)
+async def test_domain_errors_at_interaction_boundary_preserve_valid_session(
+    error: AppError,
+) -> None:
     public, _, store, _ = make_bots()
     host = cast(SharedDiscordClient, public.bot)
     fake = FakeInteraction()
-    await host.interact(cast(discord.Interaction, fake), AsyncMock(side_effect=error), operation="delete_modal")
+    await host.interact(
+        cast(discord.Interaction, fake), AsyncMock(side_effect=error), operation="delete_modal"
+    )
     assert store.token(7) == "token"
     assert fake.response.messages
     await host.close()
@@ -151,7 +167,9 @@ async def test_expired_token_is_handled_at_boundary() -> None:
 
 @pytest.mark.asyncio
 async def test_discord_startup_and_language_snapshots_without_api_routes(
-    database: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     language = tmp_path / "discord.lang.jsonc"
     language.write_bytes(LANG_PATH.read_bytes())
@@ -169,7 +187,15 @@ async def test_discord_startup_and_language_snapshots_without_api_routes(
     monkeypatch.setattr(SharedDiscordClient, "connect", AsyncMock())
     files = BoundedOffload(capacity=2, name="test-files")
     rendering = BoundedOffload(capacity=2, name="test-rendering")
-    runtime = DiscordApplication(sub, public.cfg, tmp_path, database, files=files, rendering=rendering, limiter=public.limiter)
+    runtime = DiscordApplication(
+        sub,
+        public.cfg,
+        tmp_path,
+        database,
+        files=files,
+        rendering=rendering,
+        limiter=public.limiter,
+    )
     try:
         await runtime.start()
         assert runtime.lang is not None
@@ -199,7 +225,9 @@ def test_component_arguments_share_rate_limit_buckets() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cancelled_chart_retains_shared_rendering_capacity_until_runtime_drain(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_cancelled_chart_retains_shared_rendering_capacity_until_runtime_drain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pool = BoundedOffload(capacity=1, name="test-rendering")
     runtime = Runtime(None, offloads=OffloadServices(rendering=pool))
     await runtime.start()
@@ -215,7 +243,9 @@ async def test_cancelled_chart_retains_shared_rendering_capacity_until_runtime_d
         assert release.wait(timeout=5)
 
     monkeypatch.setattr("discord_bot.public.traffic.bandwidth_chart", render)
-    task = asyncio.create_task(public.render_chart(cast(discord.Interaction, FakeInteraction()), 14))
+    task = asyncio.create_task(
+        public.render_chart(cast(discord.Interaction, FakeInteraction()), 14)
+    )
     competitor: asyncio.Task[object] | None = None
     stopping: asyncio.Task[None] | None = None
     try:

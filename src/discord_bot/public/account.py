@@ -52,7 +52,9 @@ class PublicAccountMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        await self.sub.code_svc.apply_bonus_code(username=await self.username(interaction), code=code)
+        await self.sub.code_svc.apply_bonus_code(
+            username=await self.username(interaction), code=code
+        )
         await self._reply_key(interaction, "bonus_success")
         await self.send_info(interaction)
 
