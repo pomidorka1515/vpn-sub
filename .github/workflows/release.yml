@@ -122,8 +122,11 @@ jobs:
           # their debug symbols intact. Strip these before onefile compression.
           python - <<'PY'
           from pathlib import Path
+          import os
+          import shutil
           import subprocess
           import sysconfig
+          import tempfile
 
           roots = {
               Path(sysconfig.get_config_var("DESTSHARED")),
@@ -139,7 +142,15 @@ jobs:
                       if stream.read(4) != b"\x7fELF":
                           continue
                   before = path.stat().st_size
-                  subprocess.run(["strip", "--strip-unneeded", str(path)], check=True)
+                  # Some stdlib extensions are already mapped into this Python
+                  # process. In-place stripping rewrites their backing inode
+                  # and can segfault it. Replace with a stripped copy instead;
+                  # existing mappings retain the original inode until exit.
+                  with tempfile.TemporaryDirectory(dir=path.parent) as temporary:
+                      stripped = Path(temporary) / path.name
+                      shutil.copy2(path, stripped)
+                      subprocess.run(["strip", "--strip-unneeded", str(stripped)], check=True)
+                      os.replace(stripped, path)
                   saved += before - path.stat().st_size
                   count += 1
           print(f"Stripped {count} extension modules; removed {saved:,} bytes")
