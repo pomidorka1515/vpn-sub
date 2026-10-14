@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import Protocol, cast
 
 from discord_bot.public.routing import PublicRoutingMixin
 from discord_bot.tests.discord_helpers import (
@@ -11,9 +11,6 @@ from discord_bot.tests.discord_helpers import (
     make_public_bot,
     run,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class SlashCommand(Protocol):
@@ -67,32 +64,28 @@ def test_unauthenticated_users_cannot_hit_protected_handlers() -> None:
     assert replies == ["not_logged_in"]
 
 
-def test_slash_wrapper_uses_command_requires_auth(tmp_path: Path) -> None:
+def test_slash_wrapper_uses_command_requires_auth() -> None:
     bot, store, _session = make_public_bot(
-        tmp_path,
         lambda method, path, params, payload, headers: json_ok(),
     )
     store.clear_token(7)
-    try:
-        info_cmd = bot.tree.get_command("info")
-        login_cmd = bot.tree.get_command("login")
-        assert info_cmd is not None
-        assert login_cmd is not None
-        assert bot.command_requires_auth("info")
-        assert not bot.command_requires_auth("login")
+    info_cmd = bot.tree.get_command("info")
+    login_cmd = bot.tree.get_command("login")
+    assert info_cmd is not None
+    assert login_cmd is not None
+    assert bot.command_requires_auth("info")
+    assert not bot.command_requires_auth("login")
 
-        info = FakeInteraction()
-        _invoke_slash(info_cmd, info)
-        assert not info.response.deferred
-        assert "not logged in" in str(info.response.messages[-1]["content"]).lower()
+    info = FakeInteraction()
+    _invoke_slash(info_cmd, info)
+    assert not info.response.deferred
+    assert "not logged in" in str(info.response.messages[-1]["content"]).lower()
 
-        login = FakeInteraction()
-        _invoke_slash(login_cmd, login)
-        assert login.response.modals
-        texts = [str(msg.get("content", "")).lower() for msg in login.response.messages]
-        assert all("not logged in" not in text for text in texts)
-    finally:
-        store.close()
+    login = FakeInteraction()
+    _invoke_slash(login_cmd, login)
+    assert login.response.modals
+    texts = [str(msg.get("content", "")).lower() for msg in login.response.messages]
+    assert all("not logged in" not in text for text in texts)
 
 
 def test_unauthenticated_menu_main_and_confirm_cancel_are_public() -> None:

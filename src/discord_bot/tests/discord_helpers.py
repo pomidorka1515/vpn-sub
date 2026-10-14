@@ -15,7 +15,7 @@ from discord_bot.admin.bot import AdminBot
 from discord_bot.adminapi import AdminApiClient
 from discord_bot.host import SharedDiscordClient
 from discord_bot.public.bot import PublicBot
-from discord_bot.sessions import SessionStore
+from discord_bot.sessions import SessionRecord
 from discord_bot.webapi import WebApiClient
 
 if TYPE_CHECKING:
@@ -230,13 +230,12 @@ def make_admin_client(handler: Handler) -> tuple[AdminApiClient, FakeSession]:
 
 
 def make_public_bot(
-    tmp_path: Path,
     handler: Handler,
     *,
     user_id: int = 7,
     rendering: BoundedOffload | None = None,
-) -> tuple[PublicBot, SessionStore, FakeSession]:
-    store = SessionStore(tmp_path / "discord-sessions.json")
+) -> tuple[PublicBot, MemorySessionStore, FakeSession]:
+    store = MemorySessionStore()
     store.set_lang(user_id, "en")
     store.set_token(user_id, "tok")
     session = FakeSession(handler)
@@ -256,6 +255,36 @@ def make_public_bot(
         rendering=rendering if rendering is not None else BoundedOffload(capacity=2, name="test-rendering"),
     )
     return bot, store, session
+
+
+class MemorySessionStore:
+    def __init__(self) -> None:
+        self.records: dict[str, SessionRecord] = {}
+
+    def get(self, user_id: int | str) -> SessionRecord:
+        key = str(user_id)
+        return self.records.get(key, SessionRecord(key, "", None))
+
+    def logged_in(self, user_id: int | str) -> bool:
+        return self.get(user_id).logged_in
+
+    def token(self, user_id: int | str) -> str | None:
+        return self.get(user_id).token or None
+
+    def lang(self, user_id: int | str) -> str | None:
+        return self.get(user_id).lang
+
+    def set_lang(self, user_id: int | str, lang: str) -> None:
+        if lang in {"en", "ru"}:
+            old = self.get(user_id)
+            self.records[old.user_id] = SessionRecord(old.user_id, old.token, lang)
+
+    def set_token(self, user_id: int | str, token: str) -> None:
+        old = self.get(user_id)
+        self.records[old.user_id] = SessionRecord(old.user_id, token, old.lang)
+
+    def clear_token(self, user_id: int | str) -> None:
+        self.set_token(user_id, "")
 
 
 def make_admin_bot(

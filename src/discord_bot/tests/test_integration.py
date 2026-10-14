@@ -176,7 +176,6 @@ async def test_discord_language_reads_use_off_loop_snapshots(
 @pytest.mark.parametrize("feature", ["public", "admin", "leaderboard"])
 async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
     feature: str,
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from discord_bot.tests.discord_helpers import (
@@ -208,9 +207,8 @@ async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
         return json_ok(stats_obj())
 
     public = None
-    store = None
     if feature == "public":
-        public, store, _ = make_public_bot(tmp_path, handler, rendering=rendering)
+        public, _, _ = make_public_bot(handler, rendering=rendering)
         monkeypatch.setattr("discord_bot.public.traffic.bandwidth_chart", render)
         operation = public.render_chart(FakeInteraction(), 14)  # type: ignore[arg-type]
     else:
@@ -259,5 +257,3 @@ async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
         await runtime.stop()
         if stop is not None:
             await stop
-        if store is not None:
-            store.close()

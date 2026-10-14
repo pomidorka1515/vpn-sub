@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from discord_bot.public.bot import PublicBot
-from discord_bot.sessions import SessionStore
 from discord_bot.tests.discord_helpers import (
     FakeInteraction,
     FakeResponse,
@@ -22,24 +21,17 @@ from discord_bot.tests.discord_helpers import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from pathlib import Path
+    from discord_bot.sessions import SessionStore
 
-PublicBotFactory = Callable[[Handler], tuple[PublicBot, SessionStore, FakeSession]]
+type PublicBotFactory = Callable[[Handler], tuple[PublicBot, SessionStore, FakeSession]]
 
 
 @pytest.fixture
-def public_bot_factory(tmp_path: Path) -> Iterator[PublicBotFactory]:
-    stores: list[SessionStore] = []
-
+def public_bot_factory() -> PublicBotFactory:
     def factory(handler: Handler) -> tuple[PublicBot, SessionStore, FakeSession]:
-        bot, store, session = make_public_bot(tmp_path, handler)
-        stores.append(store)
-        return bot, store, session
+        return make_public_bot(handler)
 
-    yield factory
-    for store in stores:
-        store.close()
+    return factory
 
 
 def test_info_uses_stats(public_bot_factory: PublicBotFactory) -> None:
