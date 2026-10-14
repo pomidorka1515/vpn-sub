@@ -26,7 +26,7 @@ def _legacy(**overrides: JsonValue) -> dict[str, JsonValue]:
     data: dict[str, JsonValue] = {
         "$schema": "../config.schema.json",
         "uri": "sub",
-        "api_token": "token",
+        "api_token": "test-admin-token-long-enough",
         "api_admin_ui_auth": ["user", "pass"],
         "provider_id": "provider",
         "panel_alert_cooldown": 3600,

@@ -133,7 +133,7 @@ def test_reads_pick_up_external_file_changes(cfg: Config) -> None:
 def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
     document: AppConfig = {
         "uri": "sub",
-        "api_token": "test",
+        "api_token": "test-admin-token-long-enough",
         "provider_id": "test",
         "salt": "test",
         "domain": "example.test",
@@ -180,6 +180,18 @@ def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
         yield config
     finally:
         config.close()
+
+
+@pytest.mark.parametrize("length", [0, 19, 20])
+def test_admin_token_minimum_length(app_cfg: Config[AppConfig], length: int) -> None:
+    if length < 20:
+        with pytest.raises(SchemaValidationError):
+            with app_cfg.edit() as tx:
+                tx["api_token"] = "x" * length
+    else:
+        with app_cfg.edit() as tx:
+            tx["api_token"] = "x" * length
+        assert app_cfg.view()["api_token"] == "x" * length
 
 
 def test_view_is_detached_typed_document(app_cfg: Config[AppConfig]) -> None:

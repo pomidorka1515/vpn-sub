@@ -33,6 +33,8 @@ class SnapshotStatus:
 class OpenRedis:
     def register_script(self, script: str) -> RateLimitScript:
         async def run(*, keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int:
+            if len(keys) == 2:
+                return 0 if args[2] == "valid" else -1
             return 1
 
         return run

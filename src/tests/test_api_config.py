@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from db import Database
 
 ROOT = Path(__file__).resolve().parents[2]
-HEADERS = {"Authorization": "secret-token"}
+HEADERS = {"Authorization": "secret-token-at-least-20"}
 
 
 class RecordingAudit:
@@ -43,7 +43,7 @@ async def config_api(
 ) -> AsyncIterator[tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit]]:
     path = tmp_path / "config.json"
     data = json.loads((ROOT / "docs/EXAMPLE.config.json").read_text())
-    data.update(api_token="secret-token", sub_name="before", funny_strings=["keep-me"])
+    data.update(api_token=HEADERS["Authorization"], sub_name="before", funny_strings=["keep-me"])
     path.write_text(json.dumps(data, indent=4) + "\n")
     async for app in api_app():
         sub = await make_subscription(database, app=app)

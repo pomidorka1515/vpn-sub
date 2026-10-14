@@ -25,7 +25,7 @@
         },
         "provider_id": { "type": "string" },
         "fallback_domain": { "type": "string", "description": "Fallback domain to retrieve the subscription from. Only works with Happ and if provider id is present.\nMust host a mirror of this service." },
-        "api_token": { "type": "string", "description": "Admin API Access token." },
+        "api_token": { "type": "string", "minLength": 20, "description": "Admin API Access token." },
         "panel_alert_cooldown": { "type": "integer", "description": "Panel alert cooldown in seconds.", "default": 3600 },
         "domain": { "type": "string", "description": "Your domain." },
         "ping_check_url": { "type": "string", "description": "URL used for checking connectivity in Happ, works with provider id only, must return 204." },

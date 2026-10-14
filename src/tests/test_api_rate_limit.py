@@ -25,6 +25,8 @@ class RedisStore:
         assert "EXPIRE" in script
 
         async def run(*, keys: tuple[str, ...], args: tuple[float, float, str, int, int]) -> int:
+            if len(keys) == 2:
+                return 0 if args[2] == "valid" else -1
             if self.failed:
                 raise OSError("Redis down")
             now, window, _, limit, ttl = args

@@ -2,6 +2,8 @@
   
 ## Introduction  
 Authentication: `Authorization` header with the admin API token.  
+`api_token` must contain at least 20 characters; use a randomly generated token. Existing shorter tokens must be replaced before loading or saving configuration.  
+Missing or incorrect tokens count toward a shared per-client-IP limit across all admin API routes: 10 failures within 5 minutes trigger a 15-minute lockout. Failures return `401`; the triggering attempt and subsequent attempts (including valid tokens) return `429` with `Retry-After` seconds. Blocked requests do not extend the lockout. Successful authentication clears pending failures. Redis stores the counters and lockouts; authentication returns `503` if that store is unavailable. Client IPs use the configured trusted-proxy handling.  
 On failure, returns HTTP 401.  
   
 ## Root URI  

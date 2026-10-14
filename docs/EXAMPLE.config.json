@@ -3,7 +3,7 @@
     "uri": "sub",
     "api_uri": "privapi",
     "provider_id": "",
-    "api_token": "",
+    "api_token": "replace-with-a-long-random-admin-token",
     "api_admin_ui_auth": [
         "username",
         "password"
