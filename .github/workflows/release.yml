@@ -125,7 +125,7 @@ jobs:
           old = 'VERSION = "0.0.0"'
           new = f'VERSION = {os.environ["GITHUB_REF_NAME"].removeprefix("v")!r}'
           if old not in source:
-              raise SystemExit("src/version.py has no VERSION = \\"0.0.0\\" placeholder")
+              raise SystemExit(f"src/version.py has no {old} placeholder")
           path.write_text(source.replace(old, new, 1))
           PY
           export CCFLAGS="${CCFLAGS:--O3 -fno-plt -fdata-sections -ffunction-sections}"
