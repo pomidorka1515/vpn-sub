@@ -287,6 +287,78 @@ async def test_failed_disable_and_delete_are_recovered(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("user_count", [0, 1, 9])
+async def test_reconcile_uses_bounded_workers_and_user_ownership(
+    async_db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    user_count: int,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    users = [f"user{index}" for index in range(user_count)]
+    started: list[str] = []
+    active = 0
+    peak = 0
+    saturated = asyncio.Event()
+    release = asyncio.Event()
+
+    async def list_users() -> list[str]:
+        return users
+
+    async def add_users(
+        username: str,
+        _called_internally: bool = False,
+        *,
+        work: str = "foreground",
+    ) -> None:
+        nonlocal active, peak
+        assert _called_internally
+        assert work == "background"
+        task = asyncio.current_task()
+        assert task is not None
+        assert sub.res.coordinator._owners[task] == frozenset([username])
+        started.append(username)
+        active += 1
+        peak = max(peak, active)
+        if active == min(4, user_count):
+            saturated.set()
+        try:
+            await release.wait()
+        finally:
+            active -= 1
+
+    async def sync_enabled(username: str, *, work: str = "foreground") -> None:
+        assert work == "background"
+        if int(username.removeprefix("user")) % 2 == 0:
+            raise PanelRejectedError("test reconciliation failure")
+
+    monkeypatch.setattr(sub.user_svc, "list_users", list_users)
+    monkeypatch.setattr(sub.business_svc, "add_users", add_users)
+    monkeypatch.setattr(sub.business_svc, "_sync_enabled", sync_enabled)
+    reconcile = asyncio.create_task(sub.business_svc.reconcile())
+    try:
+        if users:
+            async with asyncio.timeout(5):
+                await saturated.wait()
+            assert len(started) == min(4, user_count)
+            workers = [
+                task for task in asyncio.all_tasks()
+                if task.get_name().startswith("core:reconcile-worker:")
+            ]
+            assert len(workers) == min(4, user_count)
+        release.set()
+        async with asyncio.timeout(5):
+            assert await reconcile == users[::2]
+        assert sorted(started) == users
+        assert peak == min(4, user_count)
+        assert sub.res.coordinator.lock_count == 0
+    finally:
+        release.set()
+        await reconcile
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
 async def test_panel_payloads_reconcile_and_whitelist_separation(
     async_db: Database,
     tmp_path: Path,

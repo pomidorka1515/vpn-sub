@@ -621,14 +621,23 @@ class BusinessUserService(BaseService):
         await self._sync_enabled(username, work="background")
 
     async def reconcile(self) -> list[str]:
-        failures: list[str] = []
-        for username in await self.user_svc.list_users():
-            try:
-                await self.reconcile_user(username)
-            except Exception:
-                failures.append(username)
-                self.log.exception("user reconcile failed for %s", username)
-        return failures
+        users = await self.user_svc.list_users()
+        pending = iter(users)
+        failures: set[str] = set()
+
+        async def worker() -> None:
+            # Taking the next user has no await, so workers share the iterator safely.
+            for username in pending:
+                try:
+                    await self.reconcile_user(username)
+                except Exception:
+                    failures.add(username)
+                    self.log.exception("user reconcile failed for %s", username)
+
+        async with asyncio.TaskGroup() as group:
+            for index in range(min(4, len(users))):
+                group.create_task(worker(), name=f"core:reconcile-worker:{index}")
+        return [username for username in users if username in failures]
 
     async def recover_pending(self) -> None:
         for prefix in (
