@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 import time
@@ -155,8 +156,11 @@ class BusinessUserService(BaseService):
     async def get_info(self, username: str, pretty: bool = False) -> UserInfo:
         conf = self.cfg.view()
         user = await self.user_svc.user(username)
-        bw = await self.bandwidth_svc.bandwidth(username)
-        wl = await self.bandwidth_svc.bandwidth(username, whitelist=True)
+        bw, wl, online = await asyncio.gather(
+            self.bandwidth_svc.bandwidth(username),
+            self.bandwidth_svc.bandwidth(username, whitelist=True),
+            self.panel_svc.is_online(username),
+        )
         if pretty:
             bw, wl = bw.format_all_mb(), wl.format_all_mb()
         return UserInfo(
@@ -169,7 +173,7 @@ class BusinessUserService(BaseService):
             enabled=bool(user["enabled"]),
             wl_enabled=bool(user["enabled_wl"]),
             time=user["expires_at"],
-            online=await self.panel_svc.is_online(username),
+            online=online,
             bandwidth=UserInfoBandwidth(
                 total=UserInfoBandwidthTotal(
                     upload=bw.upload,

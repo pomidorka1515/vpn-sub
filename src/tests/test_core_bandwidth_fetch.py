@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -155,3 +156,39 @@ async def test_get_info_keeps_raw_whitelist_bytes(database: Database) -> None:
     pretty = await subscription.business_svc.get_info("alice", pretty=True)
     assert info.bandwidth.wl_total.total == 30
     assert pretty.bandwidth.wl_total.total == 0.0
+
+
+@pytest.mark.asyncio
+async def test_get_info_fetches_traffic_and_online_concurrently(
+    database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subscription = await make_subscription(database)
+    await create_alice(database)
+    started: set[str] = set()
+    all_started = asyncio.Event()
+
+    async def rendezvous(name: str) -> None:
+        started.add(name)
+        if len(started) == 3:
+            all_started.set()
+        await all_started.wait()
+
+    async def bandwidth(username: str, whitelist: bool = False) -> BandwidthInfo:
+        assert username == "alice"
+        await rendezvous("whitelist" if whitelist else "main")
+        return BandwidthInfo(10, 20, 30) if whitelist else BandwidthInfo(100, 200, 300)
+
+    async def is_online(username: str) -> bool:
+        assert username == "alice"
+        await rendezvous("online")
+        return True
+
+    monkeypatch.setattr(subscription.bandwidth_svc, "bandwidth", bandwidth)
+    monkeypatch.setattr(subscription.panel_svc, "is_online", is_online)
+
+    info = await asyncio.wait_for(subscription.business_svc.get_info("alice"), timeout=5)
+
+    assert info.bandwidth.total.total == 300
+    assert info.bandwidth.wl_total.total == 30
+    assert info.online is True
