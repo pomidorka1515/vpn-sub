@@ -25,8 +25,10 @@ async def session_store(tmp_path: Path) -> AsyncIterator[DatabaseSessionStore]:
         await store.start(tmp_path / "discord-sessions.json")
         yield store
     finally:
-        await store.settle()
-        await db.close()
+        try:
+            await store.settle()
+        finally:
+            await db.close()
 
 
 @pytest.mark.asyncio
@@ -66,3 +68,35 @@ async def test_language_updates_preserve_token_and_ignore_invalid_language(
     payload = await session_store.db.get_metadata("discord_sessions")
     assert payload is not None
     assert json.loads(payload) == {"123": {"token": "secret-token", "lang": "ru"}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("queued", [True, False])
+async def test_session_writes_recover_after_failure(
+    session_store: DatabaseSessionStore,
+    monkeypatch: pytest.MonkeyPatch,
+    queued: bool,
+) -> None:
+    set_metadata = session_store.db.set_metadata
+    attempts = 0
+
+    async def fail_once(key: str, value: str) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("temporary persistence failure")
+        await set_metadata(key, value)
+
+    monkeypatch.setattr(session_store.db, "set_metadata", fail_once)
+    session_store.set_token(123, "secret-token")
+    if not queued:
+        with pytest.raises(OSError, match="temporary persistence failure"):
+            await session_store.flush()
+    session_store.set_lang(123, "en")
+    assert session_store.get(123) == SessionRecord("123", "secret-token", "en")
+
+    await session_store.flush()
+    assert attempts == 2
+    payload = await session_store.db.get_metadata("discord_sessions")
+    assert payload is not None
+    assert json.loads(payload) == {"123": {"token": "secret-token", "lang": "en"}}

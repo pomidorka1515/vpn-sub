@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -95,7 +96,10 @@ class DatabaseSessionStore:
 
         async def write() -> None:
             if previous is not None:
-                await previous
+                # Preserve ordering, but let the latest snapshot recover from a
+                # failed write. TaskRegistry already reports the earlier error.
+                with suppress(Exception):
+                    await previous
             await self.db.set_metadata("discord_sessions", payload)
 
         self._writes = self.tasks.create(write, name="discord:session-write")
