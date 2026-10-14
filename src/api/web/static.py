@@ -111,11 +111,13 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         return await self._static("common.js", "text/javascript")
 
     async def common_css(self) -> ResponseType:
-        source = await self.sub.res.offloads.files.run(
-            lambda: (RES_DIR / "common.css").read_text(encoding="utf-8"),
+        body = await self.sub.res.offloads.files.run(
+            lambda: embed_font_faces(
+                (RES_DIR / "common.css").read_text(encoding="utf-8"),
+                self.prefix,
+            ).encode("utf-8"),
         )
-        body = embed_font_faces(source, self.prefix)
-        return await self._static("common.css", "text/css", body.encode("utf-8"))
+        return await self._static("common.css", "text/css", body)
 
     async def font_file(self, name: str) -> ResponseType:
         if name not in FONT_FILES:
