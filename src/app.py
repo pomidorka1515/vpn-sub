@@ -16,7 +16,7 @@ from app_runtime.rate_limit import AsyncRateLimiter
 from app_runtime.settings import AppOptions, AppPaths, PanelTransportFactory, verbose_overrides
 from app_runtime.tasks import MutationRegistry, TaskRegistry
 from bots.discord.runtime import DiscordApplication
-from bots.telegram import AsyncAdminBot, AsyncPublicBot
+from bots.telegram import TelegramAdminBot, TelegramPublicBot
 from bots.telegram.logging import AsyncBotLogging
 from bots.telegram.polling import AsyncTelegramSession
 from bwatch.watch import BWatch
@@ -77,8 +77,8 @@ class ApplicationDependencies:
     subscription: Subscription
     limiter: AsyncRateLimiter
     watcher: BWatch
-    admin_bot: AsyncAdminBot | None = None
-    public_bot: AsyncPublicBot | None = None
+    admin_bot: TelegramAdminBot | None = None
+    public_bot: TelegramPublicBot | None = None
     discord_bot: DiscordApplication | None = None
 
 
@@ -173,12 +173,12 @@ async def create_application(
         )
         conf = cfg.view()
         admin_bot = (
-            AsyncAdminBot(sub, lang, cfg)
+            TelegramAdminBot(sub, lang, cfg)
             if options.start_bots and conf.get("bot", {}).get("token")
             else None
         )
         public_bot = (
-            AsyncPublicBot(sub, cfg, lang)
+            TelegramPublicBot(sub, cfg, lang)
             if options.start_bots and conf.get("publicbot", {}).get("token")
             else None
         )

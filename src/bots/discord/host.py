@@ -14,8 +14,8 @@ from loggers import Logger
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from bots.discord.admin.bot import AdminBot
-    from bots.discord.public.bot import PublicBot
+    from bots.discord.admin.bot import DiscordAdminBot
+    from bots.discord.public.bot import DiscordPublicBot
 
 __all__ = ["SharedDiscordClient"]
 
@@ -33,12 +33,12 @@ class SharedDiscordClient(discord.Client):
     ) -> None:
         super().__init__(intents=intents)
         self.tree = tree or app_commands.CommandTree(self)
-        self._public: PublicBot | None = None
-        self._admin: AdminBot | None = None
+        self._public: DiscordPublicBot | None = None
+        self._admin: DiscordAdminBot | None = None
         self.handlers = TaskRegistry()
         self._wire_events()
 
-    def attach(self, public: PublicBot, admin: AdminBot) -> None:
+    def attach(self, public: DiscordPublicBot, admin: DiscordAdminBot) -> None:
         self._public = public
         self._admin = admin
 

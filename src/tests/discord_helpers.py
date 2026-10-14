@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 from app_runtime.offload import BoundedOffload
 from app_runtime.rate_limit import AsyncRateLimiter
-from bots.discord.admin import AdminBot
+from bots.discord.admin import DiscordAdminBot
 from bots.discord.host import SharedDiscordClient
-from bots.discord.public import PublicBot
+from bots.discord.public import DiscordPublicBot
 from bots.discord.sessions import SessionRecord
 from config import AppConfig, Config, DiscordLangConfig
 from core import Subscription
@@ -176,7 +176,7 @@ def services() -> MagicMock:
 
 def make_bots(
     *, whitelist: list[int] | None = None, rendering: BoundedOffload | None = None,
-) -> tuple[PublicBot, AdminBot, MemorySessionStore, MagicMock]:
+) -> tuple[DiscordPublicBot, DiscordAdminBot, MemorySessionStore, MagicMock]:
     cfg = MagicMock(spec=Config)
     cfg.view.return_value = cast(
         AppConfig,
@@ -201,9 +201,9 @@ def make_bots(
     limiter.allow = AsyncMock(return_value=True)
     sub = services()
     pool = rendering or BoundedOffload(capacity=2, name="test-rendering")
-    public = PublicBot(
+    public = DiscordPublicBot(
         cfg, LANG, sub, store, client=host, tree=host.tree, rendering=pool, limiter=limiter,
     )
-    admin = AdminBot(cfg, LANG, sub, client=host, tree=host.tree, rendering=pool, limiter=limiter)
+    admin = DiscordAdminBot(cfg, LANG, sub, client=host, tree=host.tree, rendering=pool, limiter=limiter)
     host.attach(public, admin)
     return public, admin, store, sub

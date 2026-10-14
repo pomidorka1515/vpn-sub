@@ -9,7 +9,7 @@ import pytest
 from bot_helpers import subscription_mock, telegram_mock
 from telebot import types
 
-from bots.telegram import AsyncAdminBot
+from bots.telegram import TelegramAdminBot
 from errors import AppError
 
 
@@ -26,8 +26,8 @@ def _callback(data: str, user_id: int = 42) -> types.CallbackQuery:
 
 
 @pytest.fixture
-def admin() -> tuple[AsyncAdminBot, MagicMock, MagicMock]:
-    bot = AsyncAdminBot.__new__(AsyncAdminBot)
+def admin() -> tuple[TelegramAdminBot, MagicMock, MagicMock]:
+    bot = TelegramAdminBot.__new__(TelegramAdminBot)
     telegram = telegram_mock()
     subscription = subscription_mock()
     setattr(bot, "_expect", MagicMock())
@@ -51,10 +51,10 @@ def admin() -> tuple[AsyncAdminBot, MagicMock, MagicMock]:
 
 @pytest.mark.asyncio
 async def test_callback_exception_is_reported(
-    admin: tuple[AsyncAdminBot, MagicMock, MagicMock],
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
 ) -> None:
     bot, _telegram, _subscription = admin
-    with patch.object(AsyncAdminBot, "_handle_cancel", side_effect=RuntimeError("boom")):
+    with patch.object(TelegramAdminBot, "_handle_cancel", side_effect=RuntimeError("boom")):
         await bot.handle_callbacks(_callback("cancel"))
     cast(MagicMock, bot.log).exception.assert_called()
     cast(MagicMock, bot._send_message).assert_called_once_with(7, "⚠️ Внутренняя ошибка")
@@ -62,7 +62,7 @@ async def test_callback_exception_is_reported(
 
 @pytest.mark.asyncio
 async def test_cancel_clears_pending_edit_and_step(
-    admin: tuple[AsyncAdminBot, MagicMock, MagicMock],
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, _subscription = admin
     bot._pending_edits[7] = {"username": "alice"}
@@ -76,7 +76,7 @@ async def test_cancel_clears_pending_edit_and_step(
 
 @pytest.mark.asyncio
 async def test_menus_prompt_next_step_or_report_empty(
-    admin: tuple[AsyncAdminBot, MagicMock, MagicMock],
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, subscription = admin
     subscription.user_svc.list_users.return_value = []
@@ -110,7 +110,7 @@ async def test_menus_prompt_next_step_or_report_empty(
 
 @pytest.mark.asyncio
 async def test_code_type_and_edit_sessions_expire(
-    admin: tuple[AsyncAdminBot, MagicMock, MagicMock],
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, _subscription = admin
     await bot.handle_callbacks(_callback("codetype_bonus"))
@@ -126,7 +126,7 @@ async def test_code_type_and_edit_sessions_expire(
     assert "Сессия истекла" in telegram.send_message.call_args.args[1]
 
     bot._pending_edits[7] = {"username": "alice"}
-    with patch.object(AsyncAdminBot, "_cb_edit_limit") as edit:
+    with patch.object(TelegramAdminBot, "_cb_edit_limit") as edit:
         await bot.handle_callbacks(_callback("edit_limit"))
     edit.assert_called_once_with(7, "alice")
 
@@ -136,7 +136,7 @@ async def test_code_type_and_edit_sessions_expire(
 
 @pytest.mark.asyncio
 async def test_fingerprint_save_and_leaderboard_order(
-    admin: tuple[AsyncAdminBot, MagicMock, MagicMock],
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, subscription = admin
     await bot.handle_callbacks(_callback("fp_save_firefox"))
@@ -157,12 +157,12 @@ async def test_fingerprint_save_and_leaderboard_order(
     )
     assert "firefox" in cast(MagicMock, bot._send_message).call_args.args[1]
 
-    with patch.object(AsyncAdminBot, "_cb_leaderboard_order") as order:
+    with patch.object(TelegramAdminBot, "_cb_leaderboard_order") as order:
         await bot.handle_callbacks(_callback("lbt_monthly"))
     assert bot._pending_leaderboard[7] == {"type": "monthly"}
     order.assert_called_once_with(7)
 
-    with patch.object(AsyncAdminBot, "_cb_leaderboard_window") as window:
+    with patch.object(TelegramAdminBot, "_cb_leaderboard_window") as window:
         await bot.handle_callbacks(_callback("lbo_asc"))
         await bot.handle_callbacks(_callback("lbo_desc"))
     assert bot._pending_leaderboard[7]["order"] == "desc"

@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from .bot import AdminBot
+from .bot import DiscordAdminBot
 
-__all__ = ["AdminBot"]
+__all__ = ["DiscordAdminBot"]

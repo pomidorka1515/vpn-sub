@@ -103,7 +103,7 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 - `src/api/` — Quart routes (`AsyncApi` for admin, `AsyncWebApi` for end users)  
 - `src/api/decorators/rate_limit.py` — Redis sliding-window limiter, shared by
   async HTTP caller  
-- `src/bots/telegram/` — Telegram `AsyncAdminBot` (management), `AsyncPublicBot` (user
+- `src/bots/telegram/` — Telegram `TelegramAdminBot` (management), `TelegramPublicBot` (user
   self-service)
 - `src/bots/discord/` — optional Discord client owned by `create_application()`. One token serves public commands and
   `/admin`. See [src/discord/README.md](src/discord/README.md).

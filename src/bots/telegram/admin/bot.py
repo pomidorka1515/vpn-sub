@@ -23,10 +23,10 @@ if TYPE_CHECKING:
     from core import Subscription
     from core.common import Snapshot
 
-__all__ = ["AsyncAdminBot"]
+__all__ = ["TelegramAdminBot"]
 
 
-class AsyncAdminBot(
+class TelegramAdminBot(
     AdminCommonMixin,
     AdminUsersMixin,
     AdminCodesMixin,

@@ -20,10 +20,10 @@ if TYPE_CHECKING:
     from core import Subscription
     from core.common import Snapshot
 
-__all__ = ["AsyncPublicBot"]
+__all__ = ["TelegramPublicBot"]
 
 
-class AsyncPublicBot(
+class TelegramPublicBot(
     PublicCommonMixin,
     PublicLoginMixin,
     PublicSettingsMixin,

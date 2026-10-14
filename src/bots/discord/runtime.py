@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING
 
 import discord
 from app_runtime.tasks import TaskRegistry
-from bots.discord.admin import AdminBot
+from bots.discord.admin import DiscordAdminBot
 from bots.discord.host import SharedDiscordClient
-from bots.discord.public import PublicBot
+from bots.discord.public import DiscordPublicBot
 from bots.discord.sessions import DatabaseSessionStore
 from config import Config, DiscordLangConfig
 from config.store import AsyncConfig
@@ -73,7 +73,7 @@ class DiscordApplication:
         self.sessions = DatabaseSessionStore(self.db)
         await self.sessions.start(self.data / "discord-sessions.json")
         conf = self.cfg.view()
-        public = PublicBot(
+        public = DiscordPublicBot(
             self.cfg,
             self.lang,
             self.sub,
@@ -83,7 +83,7 @@ class DiscordApplication:
             rendering=self.rendering,
             limiter=self.limiter,
         )
-        admin = AdminBot(
+        admin = DiscordAdminBot(
             self.cfg,
             self.lang,
             self.sub,

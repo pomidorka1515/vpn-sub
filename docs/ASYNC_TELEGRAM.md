@@ -1,6 +1,6 @@
 # Async Telegram (phase 9)  
   
-`AsyncAdminBot` and `AsyncPublicBot` replace the synchronous bots in place, retaining the admin/public feature modules, localized keyboards, commands, callback payloads, and business validation. Both dependency manifests require pyTelegramBotAPI 4.37–4.x; compatibility was inspected and tested against 4.37.0. Constructors register handlers without starting polling or opening sessions.  
+`TelegramAdminBot` and `TelegramPublicBot` replace the synchronous bots in place, retaining the admin/public feature modules, localized keyboards, commands, callback payloads, and business validation. Both dependency manifests require pyTelegramBotAPI 4.37–4.x; compatibility was inspected and tested against 4.37.0. Constructors register handlers without starting polling or opening sessions.  
   
 ## Library and lifecycle  
   

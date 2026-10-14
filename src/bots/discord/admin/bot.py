@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from core.common import Snapshot
     from discord import app_commands
 
-__all__ = ["AdminBot"]
+__all__ = ["DiscordAdminBot"]
 
 
-class AdminBot(
+class DiscordAdminBot(
     AdminCommonMixin,
     AdminUsersMixin,
     AdminCodesMixin,

@@ -26,12 +26,12 @@ if TYPE_CHECKING:
     from core.common import Snapshot
     from discord import Client, Interaction, app_commands
 
-__all__ = ["PublicBot"]
+__all__ = ["DiscordPublicBot"]
 
 type Coro[T = None] = Coroutine[Any, Any, T]
 
 
-class PublicBot(
+class DiscordPublicBot(
     PublicCommonMixin,
     PublicLoginMixin,
     PublicSettingsMixin,

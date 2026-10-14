@@ -9,7 +9,7 @@ import pytest
 from bot_helpers import subscription_mock, telegram_mock
 from telebot import types
 
-from bots.telegram import AsyncAdminBot, AsyncPublicBot
+from bots.telegram import TelegramAdminBot, TelegramPublicBot
 from bots.telegram.handler_backend import ConversationRouter
 
 if TYPE_CHECKING:
@@ -28,8 +28,8 @@ def message(text: str, *, uid: int = 42) -> types.Message:
     )
 
 
-def public_bot() -> AsyncPublicBot:
-    bot = AsyncPublicBot.__new__(AsyncPublicBot)
+def public_bot() -> TelegramPublicBot:
+    bot = TelegramPublicBot.__new__(TelegramPublicBot)
     bot.bot = telegram_mock()
     bot.sub = subscription_mock()
     bot.log = MagicMock()
@@ -85,7 +85,7 @@ async def test_expiry_commands_and_menu_do_not_consume_password_step() -> None:
 
 @pytest.mark.asyncio
 async def test_admin_authorization_is_rechecked_at_transition() -> None:
-    bot = AsyncAdminBot.__new__(AsyncAdminBot)
+    bot = TelegramAdminBot.__new__(TelegramAdminBot)
     bot.bot = telegram_mock()
     bot.log = MagicMock()
     bot.admin_uids = [42]

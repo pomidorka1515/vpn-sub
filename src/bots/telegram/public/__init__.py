@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .bot import AsyncPublicBot
+from .bot import TelegramPublicBot
 
-__all__ = ["AsyncPublicBot"]
+__all__ = ["TelegramPublicBot"]

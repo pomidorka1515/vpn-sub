@@ -9,7 +9,7 @@ from bot_helpers import subscription_mock, telegram_mock
 from helpers import config_mock, language_config, subscription_config
 from telebot import types
 
-from bots.telegram import AsyncPublicBot
+from bots.telegram import TelegramPublicBot
 
 
 def _public_message(text: str) -> types.Message:
@@ -20,8 +20,8 @@ def _public_message(text: str) -> types.Message:
 
 
 @pytest.fixture
-def public_bot() -> tuple[AsyncPublicBot, MagicMock, MagicMock]:
-    bot = AsyncPublicBot.__new__(AsyncPublicBot)
+def public_bot() -> tuple[TelegramPublicBot, MagicMock, MagicMock]:
+    bot = TelegramPublicBot.__new__(TelegramPublicBot)
     telegram = telegram_mock()
     subscription = subscription_mock()
     setattr(bot, "_expect", MagicMock())
@@ -39,27 +39,27 @@ def public_bot() -> tuple[AsyncPublicBot, MagicMock, MagicMock]:
     ("button", "handler_name", "lang"),
     [
         (button, handler_name, lang)
-        for button, handler_name, _requires_reg in AsyncPublicBot.ROUTES
+        for button, handler_name, _requires_reg in TelegramPublicBot.ROUTES
         for lang in ("ru", "en")
     ],
 )
 @pytest.mark.asyncio
 async def test_routes_both_languages_to_first_matching_handler(
-    public_bot: tuple[AsyncPublicBot, MagicMock, MagicMock],
+    public_bot: tuple[TelegramPublicBot, MagicMock, MagicMock],
     button: str,
     handler_name: str,
     lang: str,
 ) -> None:
     bot, _telegram, _subscription = public_bot
     message = _public_message(bot.TEXTS[lang][button])
-    with patch.object(AsyncPublicBot, handler_name) as handler:
+    with patch.object(TelegramPublicBot, handler_name) as handler:
         await bot.handle_text(message)
     handler.assert_called_once_with(message, 42, "en")
 
 
 @pytest.mark.asyncio
 async def test_unknown_text_is_ignored(
-    public_bot: tuple[AsyncPublicBot, MagicMock, MagicMock],
+    public_bot: tuple[TelegramPublicBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, subscription = public_bot
     await bot.handle_text(_public_message("not a button"))
@@ -69,7 +69,7 @@ async def test_unknown_text_is_ignored(
 
 @pytest.mark.asyncio
 async def test_chart_buttons_keep_original_order_and_registration_guard(
-    public_bot: tuple[AsyncPublicBot, MagicMock, MagicMock],
+    public_bot: tuple[TelegramPublicBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, subscription = public_bot
     bot.TEXTS["en"].update(btn_chart_days="Last {days} days", choose_chart_days="Choose a period")
@@ -93,12 +93,12 @@ async def test_chart_buttons_keep_original_order_and_registration_guard(
 
 @pytest.mark.asyncio
 async def test_registered_routes_are_blocked_before_handler_dispatch(
-    public_bot: tuple[AsyncPublicBot, MagicMock, MagicMock],
+    public_bot: tuple[TelegramPublicBot, MagicMock, MagicMock],
 ) -> None:
     bot, _telegram, subscription = public_bot
     subscription.telegram_svc.is_registered.return_value = False
     message = _public_message(bot.TEXTS["en"]["btn_info"])
-    with patch.object(AsyncPublicBot, "_handle_info") as handler:
+    with patch.object(TelegramPublicBot, "_handle_info") as handler:
         await bot.handle_text(message)
     handler.assert_not_called()
     subscription.telegram_svc.is_registered.assert_called_once_with(42)
@@ -107,7 +107,7 @@ async def test_registered_routes_are_blocked_before_handler_dispatch(
 @pytest.mark.asyncio
 async def test_public_bot_construction_starts_no_work() -> None:
     with patch("bots.telegram.public.bot.AsyncTeleBot") as telebot_cls:
-        bot = AsyncPublicBot(
+        bot = TelegramPublicBot(
             sub=MagicMock(),
             cfg=config_mock(subscription_config(publicbot={"token": "1:token"})),
             lang_cfg=config_mock(language_config()),

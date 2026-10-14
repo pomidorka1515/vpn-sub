@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 from loggers.delivery import AsyncTelegramLogger, LogDelivery
 
 if TYPE_CHECKING:
-    from .admin import AsyncAdminBot
+    from .admin import TelegramAdminBot
 
 
 class AsyncBotLogging:
-    def __init__(self, bot: AsyncAdminBot) -> None:
+    def __init__(self, bot: TelegramAdminBot) -> None:
         self.delivery = LogDelivery(bot.msg, name="logs:Telegram")
         self.handler = AsyncTelegramLogger(self.delivery)
         self.handler.setLevel(logging.WARNING)
