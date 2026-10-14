@@ -9,9 +9,9 @@ from bot_helpers import subscription_mock, telegram_mock
 from helpers import config_mock, profile_config, subscription_config
 from telebot import types
 
-from bots.public.common import PublicCommonMixin
-from bots.public.subscription import PublicSubscriptionMixin
-from bots.public.text_routing import PublicTextRoutingMixin
+from bots.telegram.public.common import PublicCommonMixin
+from bots.telegram.public.subscription import PublicSubscriptionMixin
+from bots.telegram.public.text_routing import PublicTextRoutingMixin
 
 
 def _button_text(button: types.KeyboardButton | dict[str, str]) -> str:
@@ -269,7 +269,7 @@ async def test_send_link_builds_qr_and_happ_redirect() -> None:
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
-            "bots.public.subscription.make_qr",
+            "bots.telegram.public.subscription.make_qr",
             qr,
         )
         await mixin.send_link(7, 42, "en")

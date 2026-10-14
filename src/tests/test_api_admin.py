@@ -233,7 +233,7 @@ async def test_user_refresh_uses_bounded_workers(
         app.test_client().get(
             "/sub/api/api/user/refresh",
             headers={"Authorization": "secret"},
-        )
+        ),
     )
     try:
         if users:
@@ -331,7 +331,7 @@ async def test_user_refresh_abort_drains_in_flight_and_stops_new_users(
         app.test_client().get(
             "/sub/api/api/user/refresh",
             headers={"Authorization": "secret"},
-        )
+        ),
     )
     try:
         async with asyncio.timeout(5):

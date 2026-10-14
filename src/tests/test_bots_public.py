@@ -9,7 +9,7 @@ from bot_helpers import subscription_mock, telegram_mock
 from helpers import config_mock, language_config, subscription_config
 from telebot import types
 
-from bots import AsyncPublicBot
+from bots.telegram import AsyncPublicBot
 
 
 def _public_message(text: str) -> types.Message:
@@ -106,7 +106,7 @@ async def test_registered_routes_are_blocked_before_handler_dispatch(
 
 @pytest.mark.asyncio
 async def test_public_bot_construction_starts_no_work() -> None:
-    with patch("bots.public.bot.AsyncTeleBot") as telebot_cls:
+    with patch("bots.telegram.public.bot.AsyncTeleBot") as telebot_cls:
         bot = AsyncPublicBot(
             sub=MagicMock(),
             cfg=config_mock(subscription_config(publicbot={"token": "1:token"})),

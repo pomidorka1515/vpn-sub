@@ -10,10 +10,10 @@ from bot_helpers import subscription_mock, telegram_mock
 from helpers import config_mock, language_config, profile_config, subscription_config
 from telebot import types
 
-from bots.public.account import PublicAccountMixin
-from bots.public.login import PublicLoginMixin
-from bots.public.settings import PublicSettingsMixin
-from bots.public.traffic import PublicTrafficMixin
+from bots.telegram.public.account import PublicAccountMixin
+from bots.telegram.public.login import PublicLoginMixin
+from bots.telegram.public.settings import PublicSettingsMixin
+from bots.telegram.public.traffic import PublicTrafficMixin
 from errors import AppError, NotFoundError
 
 TEXTS = {
@@ -416,12 +416,12 @@ async def test_public_chart_submission_and_render(
     )
     subscription.bandwidth_svc.get_bw_history.return_value = []
     subscription.business_svc.get_info.return_value = info
-    with patch("bots.public.traffic.bandwidth_chart", return_value=b"png"):
+    with patch("bots.telegram.public.traffic.bandwidth_chart", return_value=b"png"):
         await mixin._render_chart(uid=42, username="alice", days=3, lang="en", chat_id=7)
     telegram.send_photo.assert_called_once()
     assert "Unlimited" in telegram.send_photo.call_args.kwargs["caption"]
 
-    with patch("bots.public.traffic.bandwidth_chart", return_value=None):
+    with patch("bots.telegram.public.traffic.bandwidth_chart", return_value=None):
         await mixin._render_chart(uid=42, username="alice", days=3, lang="en", chat_id=7)
     assert "empty" in telegram.send_message.call_args.args[1]
 

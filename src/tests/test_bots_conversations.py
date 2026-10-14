@@ -9,11 +9,11 @@ import pytest
 from bot_helpers import subscription_mock, telegram_mock
 from telebot import types
 
-from bots import AsyncAdminBot, AsyncPublicBot
-from bots.handler_backend import ConversationRouter
+from bots.telegram import AsyncAdminBot, AsyncPublicBot
+from bots.telegram.handler_backend import ConversationRouter
 
 if TYPE_CHECKING:
-    from bots.handler_backend import ConversationKey
+    from bots.telegram.handler_backend import ConversationKey
 
 
 def message(text: str, *, uid: int = 42) -> types.Message:
@@ -108,7 +108,7 @@ async def test_admin_authorization_is_rechecked_at_transition() -> None:
 async def test_callback_values_are_user_scoped_and_expire() -> None:
     from contextvars import ContextVar
 
-    from bots.pending import PendingValues
+    from bots.telegram.pending import PendingValues
 
     context: ContextVar[ConversationKey] = ContextVar("test conversation")
     values = PendingValues[str](context)

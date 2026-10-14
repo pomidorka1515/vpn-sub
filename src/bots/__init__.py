@@ -1,6 +1,5 @@
-from __future__ import annotations
+"""
+Keep platform imports explicit because Telegram and Discord bot names can collide.
 
-from .admin import AsyncAdminBot
-from .public import AsyncPublicBot
-
-__all__ = ["AsyncAdminBot", "AsyncPublicBot"]
+Import from bots.telegram or bots.discord; this package intentionally exports no bots.
+"""

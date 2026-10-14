@@ -15,9 +15,10 @@ from app_runtime.offload import OffloadServices
 from app_runtime.rate_limit import AsyncRateLimiter
 from app_runtime.settings import AppOptions, AppPaths, PanelTransportFactory, verbose_overrides
 from app_runtime.tasks import MutationRegistry, TaskRegistry
-from bots import AsyncAdminBot, AsyncPublicBot
-from bots.logging import AsyncBotLogging
-from bots.polling import AsyncTelegramSession
+from bots.discord.runtime import DiscordApplication
+from bots.telegram import AsyncAdminBot, AsyncPublicBot
+from bots.telegram.logging import AsyncBotLogging
+from bots.telegram.polling import AsyncTelegramSession
 from bwatch.watch import BWatch
 from config import AppConfig, Config, LangConfig, LinesConfig
 from config.store import AsyncConfig, AsyncLinesConfig
@@ -25,7 +26,6 @@ from core import Subscription
 from core.coordination import MutationCoordinator
 from core.services.audit import AuditService
 from db import Database
-from discord_bot.runtime import DiscordApplication
 from notify.notifier import Notifier
 from paths import bundled_root, compiled
 
@@ -223,7 +223,7 @@ async def create_application(
         )
         if discord_bot is not None:
             await open_resource(
-                OwnedResource("Discord bot", discord_bot, quiesce=discord_bot.close)
+                OwnedResource("Discord bot", discord_bot, quiesce=discord_bot.close),
             )
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)

@@ -8,8 +8,8 @@ import pytest
 from bot_helpers import telegram_mock
 from telebot.async_telebot import AsyncTeleBot
 
-from bots.handler_backend import ConversationRouter
-from bots.polling import TelegramPollingMixin, _sanitize_polling_error
+from bots.telegram.handler_backend import ConversationRouter
+from bots.telegram.polling import TelegramPollingMixin, _sanitize_polling_error
 
 
 class PollingBot(TelegramPollingMixin):

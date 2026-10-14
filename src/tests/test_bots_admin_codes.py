@@ -8,7 +8,7 @@ import pytest
 from bot_helpers import subscription_mock, telegram_mock
 from telebot import types
 
-from bots.admin.codes import AdminCodesMixin
+from bots.telegram.admin.codes import AdminCodesMixin
 from custom_types import CodeObject
 from errors import AppError, NotFoundError
 

@@ -8,7 +8,7 @@ The explicit Flask, Gunicorn and types-gunicorn requirements have been removed d
   
 ## Release contract  
   
-The single `vpn-sub` Nuitka onefile build explicitly includes ASGI, Quart, Hypercorn, aiohttp, aiosqlite, redis.asyncio, telebot async modules, discord.py and `discord_bot`. It bundles `res/`, `lang.jsonc`, `discord.lang.jsonc`, `config.schema.json` and certifi data. No WSGI/Gunicorn entrypoint is explicitly included. Nuitka 4.x is the supported build major; the existing Python 3.14 compression workaround fails visibly if its target changes.  
+The single `vpn-sub` Nuitka onefile build explicitly includes ASGI, Quart, Hypercorn, aiohttp, aiosqlite, redis.asyncio, telebot async modules, discord.py and `bots.discord`. It bundles `res/`, `lang.jsonc`, `discord.lang.jsonc`, `config.schema.json` and certifi data. No WSGI/Gunicorn entrypoint is explicitly included. Nuitka 4.x is the supported build major; the existing Python 3.14 compression workaround fails visibly if its target changes.  
   
 Discord is optional at runtime and shares the application's event loop and lifecycle. There is no separate binary or schema. The probe imports both application and Discord dependencies and checks their packed resources without starting runtime I/O. The XML compilation report is retained as a CI artifact.  
   

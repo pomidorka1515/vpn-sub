@@ -8,7 +8,7 @@ import pytest
 from bot_helpers import telegram_mock
 from telebot import types
 
-from bots import AsyncAdminBot
+from bots.telegram import AsyncAdminBot
 
 
 def _callback(data: str, user_id: int = 42) -> types.CallbackQuery:

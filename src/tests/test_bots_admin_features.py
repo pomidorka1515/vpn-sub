@@ -8,9 +8,9 @@ import pytest
 from bot_helpers import subscription_mock, telegram_mock
 from telebot import types
 
-from bots.admin.leaderboard import AdminLeaderboardMixin
-from bots.admin.panels import AdminPanelsMixin
-from bots.admin.traffic import AdminTrafficMixin
+from bots.telegram.admin.leaderboard import AdminLeaderboardMixin
+from bots.telegram.admin.panels import AdminPanelsMixin
+from bots.telegram.admin.traffic import AdminTrafficMixin
 from custom_types import (
     AppStats,
     DiskStats,
@@ -147,7 +147,7 @@ async def test_render_chart_sends_photo_text_or_error(
     mixin, telegram, subscription = traffic
     subscription.bandwidth_svc.get_bw_history.return_value = ["snap"]
     subscription.business_svc.get_info.return_value = _info()
-    with patch("bots.admin.traffic.bandwidth_chart", return_value=b"png") as chart:
+    with patch("bots.telegram.admin.traffic.bandwidth_chart", return_value=b"png") as chart:
         await mixin._render_chart(username="alice", days=7, chat_id=7)
     chart.assert_called_once()
     telegram.send_photo.assert_called_once()
@@ -156,7 +156,7 @@ async def test_render_chart_sends_photo_text_or_error(
     assert "50%" in caption
     assert "Безлимит" in caption
 
-    with patch("bots.admin.traffic.bandwidth_chart", return_value=None):
+    with patch("bots.telegram.admin.traffic.bandwidth_chart", return_value=None):
         await mixin._render_chart(username="alice", days=7, chat_id=7)
     assert "Нет данных" in telegram.send_message.call_args.args[1]
 
@@ -233,11 +233,11 @@ async def test_leaderboard_result_renders_or_reports_empty(
 ) -> None:
     mixin, telegram, subscription = leaderboard
     subscription.leaderboard_svc.leaderboard.return_value = {"alice": 10, "bob": 20}
-    with patch("bots.admin.leaderboard.leaderboard_chart", return_value=None):
+    with patch("bots.telegram.admin.leaderboard.leaderboard_chart", return_value=None):
         await mixin._handle_leaderboard_result(7, "total", "desc", 0)
     telegram.send_message.assert_called_with(7, "Нет данных!")
 
-    with patch("bots.admin.leaderboard.leaderboard_chart", return_value=b"png"):
+    with patch("bots.telegram.admin.leaderboard.leaderboard_chart", return_value=b"png"):
         await mixin._handle_leaderboard_result(7, "total", "desc", 0)
     caption = telegram.send_photo.call_args.args[2]
     assert caption.index("bob") < caption.index("alice")
@@ -245,7 +245,7 @@ async def test_leaderboard_result_renders_or_reports_empty(
 
     long_name = "ю" * 600
     subscription.leaderboard_svc.leaderboard.return_value = {long_name: 5}
-    with patch("bots.admin.leaderboard.leaderboard_chart", return_value=b"png"):
+    with patch("bots.telegram.admin.leaderboard.leaderboard_chart", return_value=b"png"):
         await mixin._handle_leaderboard_result(7, "monthly", "asc", 2)
     caption = telegram.send_photo.call_args.args[2]
     assert "..." in caption

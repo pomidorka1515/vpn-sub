@@ -50,8 +50,8 @@ def probe() -> None:
         "telebot.asyncio_helper",
         "session.transport",
         "db.database",
-        "bots.polling",
-        "discord_bot.runtime",
+        "bots.telegram.polling",
+        "bots.discord.runtime",
     ):
         import_module(module)
 

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from bot_helpers import subscription_mock, telegram_mock
 
-from bots.public.subscription import PublicSubscriptionMixin
+from bots.telegram.public.subscription import PublicSubscriptionMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
 
 if TYPE_CHECKING:

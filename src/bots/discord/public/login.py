@@ -1,0 +1,175 @@
+from __future__ import annotations
+
+from typing import Self
+from uuid import uuid4
+
+import discord
+from bots.discord.composition import PublicFeatureMixin
+from errors import AppError, ValidationError
+from util import sanitize
+
+__all__ = ["PublicLoginMixin"]
+
+
+class LoginModal(discord.ui.Modal):
+    def __init__(self, title: str, username_label: str, password_label: str) -> None:
+        super().__init__(title=title, custom_id="login_modal")
+        self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=username_label,
+            custom_id="username",
+            min_length=1,
+            max_length=32,
+        )
+        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=password_label,
+            custom_id="password",
+            min_length=1,
+            max_length=128,
+            style=discord.TextStyle.short,
+        )
+        self.add_item(self.username)
+        self.add_item(self.password)
+
+
+class RegisterModal(discord.ui.Modal):
+    def __init__(
+        self,
+        title: str,
+        username_label: str,
+        password_label: str,
+        code_label: str,
+        name_label: str,
+    ) -> None:
+        super().__init__(title=title, custom_id="register_modal")
+        self.username: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=username_label,
+            custom_id="username",
+            min_length=1,
+            max_length=32,
+        )
+        self.password: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=password_label,
+            custom_id="password",
+            min_length=1,
+            max_length=128,
+        )
+        self.code: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=code_label,
+            custom_id="code",
+            min_length=1,
+            max_length=64,
+        )
+        self.name: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=name_label,
+            custom_id="name",
+            min_length=1,
+            max_length=16,
+        )
+        self.add_item(self.username)
+        self.add_item(self.password)
+        self.add_item(self.code)
+        self.add_item(self.name)
+
+
+class PublicLoginMixin(PublicFeatureMixin):
+    async def cmd_login(self, interaction: discord.Interaction) -> None:
+        uid = interaction.user.id
+        if self.is_logged_in(uid):
+            await self._reply_key(interaction, "already_logged_in")
+            return
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        modal = LoginModal(
+            title=t.get("btn_login", "Login"),
+            username_label=t.get("enter_email", "Username"),
+            password_label=t.get("enter_pass", "Password"),
+        )
+        try:
+            await interaction.response.send_modal(modal)
+        except Exception:
+            self.log.exception("failed to open login modal")
+
+    async def cmd_register(self, interaction: discord.Interaction) -> None:
+        uid = interaction.user.id
+        if self.is_logged_in(uid):
+            await self._reply_key(interaction, "already_logged_in")
+            return
+        lang = self.get_lang(uid)
+        t = self.TEXTS[lang]
+        modal = RegisterModal(
+            title=t.get("btn_register", "Register"),
+            username_label=t.get("enter_email", "Username"),
+            password_label=t.get("enter_pass", "Password"),
+            code_label=t.get("enter_invite", "Invite code"),
+            name_label=t.get("name_label", "Name"),
+        )
+        try:
+            await interaction.response.send_modal(modal)
+        except Exception:
+            self.log.exception("failed to open register modal")
+
+    async def handle_login_modal(self, interaction: discord.Interaction) -> None:
+        uid = interaction.user.id
+        if self.is_logged_in(uid):
+            await self._reply_key(interaction, "already_logged_in")
+            return
+        values = self.modal_values(interaction)
+        username = values.get("username", "").strip()
+        password = values.get("password", "")
+        await self._defer(interaction)
+        try:
+            token = await self.sub.account_svc.login(username, password)
+        except AppError as error:
+            if error.status != 401:
+                raise
+            await self._reply_key(interaction, "login_fail")
+            return
+        self.sessions.set_token(uid, token)
+        lang = self.get_lang(uid)
+        await self._reply_key(
+            interaction,
+            "login_success",
+            view=self.main_menu_view(lang, logged_in=True),
+        )
+        await self.send_info(interaction)
+
+    async def handle_register_modal(self, interaction: discord.Interaction) -> None:
+        uid = interaction.user.id
+        if self.is_logged_in(uid):
+            await self._reply_key(interaction, "already_logged_in")
+            return
+        values = self.modal_values(interaction)
+        username = values.get("username", "").strip()
+        password = values.get("password", "")
+        code = values.get("code", "").strip()
+        name = values.get("name", "").strip()
+        await self._defer(interaction)
+        if not username or username != sanitize(username, "external") or len(username) > 32:
+            await self._reply_key(interaction, "length_username", ln=32)
+            return
+        if await self.sub.user_svc.external_username_exists(username):
+            await self._reply_key(interaction, "username_taken")
+            return
+        for field, value, maximum in (
+            ("name", name, 16),
+            ("password", password, 128),
+            ("code", code, 64),
+        ):
+            if not 1 <= len(value) <= maximum:
+                raise ValidationError(f"'{field}' must be 1-{maximum} characters")
+        await self.sub.business_code_svc.register_with_code(
+            code=code,
+            username=f"web_{uuid4().hex[:16]}",
+            displayname=name,
+            ext_username=username,
+            ext_password=password,
+        )
+        token = await self.sub.account_svc.login(username, password)
+        self.sessions.set_token(uid, token)
+        lang = self.get_lang(uid)
+        await self._reply_key(
+            interaction,
+            "reg_success",
+            view=self.main_menu_view(lang, logged_in=True),
+        )
+        await self.send_info(interaction)

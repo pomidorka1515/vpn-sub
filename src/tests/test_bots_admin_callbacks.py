@@ -9,7 +9,7 @@ import pytest
 from bot_helpers import subscription_mock, telegram_mock
 from telebot import types
 
-from bots import AsyncAdminBot
+from bots.telegram import AsyncAdminBot
 from errors import AppError
 
 

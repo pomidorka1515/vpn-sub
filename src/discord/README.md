@@ -39,5 +39,5 @@ schema migration is needed. Discord startup is independent of API route registra
   
 `PATH_DISCORD_LANG` optionally overrides Discord's language asset. The checkout  
 uses `src/discord/lang.jsonc`; releases pack it as `discord.lang.jsonc`.  
-Implementation: `src/discord_bot/`. See [public API](../../docs/API.md) and  
+Implementation: `src/bots/discord/`. See [public API](../../docs/API.md) and  
 [admin API](../../docs/API_ADMIN.md) for command behavior.  

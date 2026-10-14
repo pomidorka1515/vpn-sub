@@ -29,12 +29,12 @@ async def async_db(tmp_path: Path) -> AsyncIterator[Database]:
 
 @pytest.mark.asyncio
 async def test_shared_login_logout_credentials_and_reset(
-    async_db: Database, tmp_path: Path
+    async_db: Database, tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         await sub.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice", ext_password="secret"
+            "alice", "Alice", ext_username="alice", ext_password="secret",
         )
         with pytest.raises(AppError, match="Invalid credentials"):
             await sub.account_svc.login("alice", "wrong")
@@ -48,7 +48,7 @@ async def test_shared_login_logout_credentials_and_reset(
             await sub.account_svc.settings("alice", ext_password="newsecret")
         with pytest.raises(AppError, match="Invalid current password"):
             await sub.account_svc.settings(
-                "alice", ext_password="newsecret", current_password="wrong"
+                "alice", ext_password="newsecret", current_password="wrong",
             )
         assert await sub.user_svc.auth_token_to_user(replacement) == "alice"
         await sub.account_svc.settings("alice", ext_password="newsecret", current_password="secret")
@@ -69,7 +69,7 @@ async def test_shared_account_delete_requires_password(async_db: Database, tmp_p
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         await sub.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice", ext_password="secret"
+            "alice", "Alice", ext_username="alice", ext_password="secret",
         )
         token = await sub.account_svc.login("alice", "secret")
         with pytest.raises(AppError, match="Invalid current password"):
@@ -108,7 +108,7 @@ async def test_account_settings_preserve_route_validation(
 
 @pytest.mark.asyncio
 async def test_bulk_refresh_bounds_concurrency_and_preserves_failure_order(
-    async_db: Database, tmp_path: Path
+    async_db: Database, tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     active = peak = 0
@@ -139,7 +139,7 @@ async def test_bulk_refresh_bounds_concurrency_and_preserves_failure_order(
 
 @pytest.mark.asyncio
 async def test_bulk_refresh_aborts_new_claims_and_drains_inflight(
-    async_db: Database, tmp_path: Path
+    async_db: Database, tmp_path: Path,
 ) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     entered = asyncio.Event()

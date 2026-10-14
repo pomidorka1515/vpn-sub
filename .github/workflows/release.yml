@@ -34,8 +34,7 @@ jobs:
               --include-data-files=lang.jsonc=lang.jsonc
               --include-data-files=config.schema.json=config.schema.json
               --include-package=discord
-              --include-package=discord_bot
-              --nofollow-import-to=discord_bot.tests
+              --include-package=bots.discord
               --include-data-files=src/discord/lang.jsonc=discord.lang.jsonc
     steps:
       - uses: actions/checkout@v4

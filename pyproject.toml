@@ -374,7 +374,7 @@ reportUnusedFunction = false
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]
-root = "src/bots"
+root = "src/bots/telegram"
 
 [[tool.pyright.executionEnvironments]]
 extraPaths = ["src", "src/tests", "scripts"]
@@ -382,14 +382,8 @@ root = "src/tests"
 reportPrivateUsage = false
 
 [[tool.pyright.executionEnvironments]]
-extraPaths = ["src", "src/discord_bot/tests"]
-root = "src/discord_bot/tests"
-reportPrivateUsage = false
-reportUnusedFunction = false
-
-[[tool.pyright.executionEnvironments]]
 extraPaths = ["src"]
-root = "src/discord_bot"
+root = "src/bots/discord"
 reportPrivateUsage = false
 reportUnusedFunction = false
 
@@ -403,8 +397,8 @@ required-environments = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "src/discord_bot/tests"]
-testpaths = ["src/tests", "src/discord_bot/tests"]
+pythonpath = ["src", "src/tests"]
+testpaths = ["src/tests"]
 # Async tests opt in explicitly; loop-bound resources live on their test's loop.
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"

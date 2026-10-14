@@ -9,7 +9,7 @@ from bot_helpers import subscription_mock, telegram_mock
 from helpers import config_mock, subscription_config
 from telebot import types
 
-from bots.admin.users import AdminUsersMixin
+from bots.telegram.admin.users import AdminUsersMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
 from errors import AppError, NotFoundError, PanelUnavailableError
 

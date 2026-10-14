@@ -12,7 +12,7 @@ from api.application import create_api_application
 from app import AppOptions, AppPaths, create_application, verbose_overrides
 from app_runtime.lifecycle import RuntimeState
 from app_runtime.rate_limit import AsyncRateLimiter
-from discord_bot.host import SharedDiscordClient
+from bots.discord.host import SharedDiscordClient
 
 
 def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -321,7 +321,7 @@ async def test_factory_retains_cleanup_after_repeated_cancellation(
                 start_background=False,
                 limiter=limiter,
             ),
-        )
+        ),
     )
     try:
         await asyncio.wait_for(starting.wait(), timeout=5)
@@ -376,7 +376,7 @@ async def test_factory_optional_async_bots_and_notice_wiring(
         await asyncio.Event().wait()
 
     with patch(
-        "bots.polling.TelegramPollingMixin._poll_forever",
+        "bots.telegram.polling.TelegramPollingMixin._poll_forever",
         new=AsyncMock(side_effect=polling),
     ):
         runtime = await create_application(
