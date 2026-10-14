@@ -116,6 +116,35 @@ jobs:
                   decoded.load()
           PY
 
+      - name: strip runtime extension debug symbols
+        run: |
+          # Nuitka strips its executable, but copies extension modules with
+          # their debug symbols intact. Strip these before onefile compression.
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sysconfig
+
+          roots = {
+              Path(sysconfig.get_config_var("DESTSHARED")),
+              Path(sysconfig.get_path("platlib")),
+          }
+          saved = 0
+          count = 0
+          for root in sorted(roots):
+              for path in sorted(root.rglob("*.so")):
+                  if path.is_symlink():
+                      continue
+                  with path.open("rb") as stream:
+                      if stream.read(4) != b"\x7fELF":
+                          continue
+                  before = path.stat().st_size
+                  subprocess.run(["strip", "--strip-unneeded", str(path)], check=True)
+                  saved += before - path.stat().st_size
+                  count += 1
+          print(f"Stripped {count} extension modules; removed {saved:,} bytes")
+          PY
+
       - name: patch nuitka onefile compression
         run: |
           python - <<'PY'
