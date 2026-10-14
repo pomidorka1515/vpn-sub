@@ -6,10 +6,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import discord
 from chart import leaderboard_chart
 from discord_bot.composition import AdminFeatureMixin
-from discord_bot.payloads import number, object_rows
 from util import fmt_bytes, truncate_utf8
-
-from .common import result_obj
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -102,22 +99,12 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         bw_type = cast(Literal["total", "monthly", "wl_monthly"], pending.get("type", "total"))
         order = cast(Literal["asc", "desc"], pending.get("order", "desc"))
         await self._defer(interaction)
-        result = await self.http.leaderboard(
+        lb_data = await self.sub.leaderboard_svc.leaderboard(
             bw_type,
-            window,
-            displaynames=True,
+            top_n=window,
+            use_displaynames=True,
             flip=order == "asc",
         )
-        if not await self.consume_result(interaction, result):
-            return
-        raw = result_obj(result)
-        rows = object_rows(raw)
-        lb_data: dict[str, int] = {}
-        for item in rows:
-            user = str(item.get("username") or "")
-            amount = int(number(item.get("amount")))
-            if user:
-                lb_data[user] = amount
         if not lb_data:
             await self._respond(interaction, "Нет данных!", view=self.main_menu_view())
             return

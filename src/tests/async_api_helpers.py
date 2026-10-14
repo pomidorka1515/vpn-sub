@@ -7,7 +7,7 @@ from async_core_helpers import close_async_subscription, make_async_subscription
 from helpers import config_mock, subscription_config
 
 from api.application import create_api_application
-from api.decorators.rate_limit import AsyncRateLimiter
+from app_runtime.rate_limit import AsyncRateLimiter
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from quart import Quart
     from typing_contracts import AppOverrides
 
-    from api.decorators.rate_limit import RateLimitScript
+    from app_runtime.rate_limit import RateLimitScript
     from config import AppConfig, Config, LangConfig
     from config.store import AsyncConfig
     from core import Subscription

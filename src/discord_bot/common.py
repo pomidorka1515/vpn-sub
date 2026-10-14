@@ -8,7 +8,6 @@ from discord_bot.composition import PublicFeatureMixin
 if TYPE_CHECKING:
     import discord
     from discord_bot.payloads import ResponseOptions
-    from discord_bot.webapi import ApiResult
 
 __all__ = ["DiscordIOMixin"]
 
@@ -107,29 +106,12 @@ class DiscordIOMixin(PublicFeatureMixin):
                     out[cid] = value if isinstance(value, str) else str(value or "")
         return out
 
-    def apply_api_status[T](self, user_id: int, result: ApiResult[T]) -> str | None:
-        if result.status == 401:
-            self.sessions.clear_token(user_id)
-            return "session_expired"
-        if result.status == 429:
-            return "rate_limited"
-        if result.status == 0 or result.msg == "http_unavailable":
-            return "http_unavailable"
-        return None
+    async def username(self, interaction: discord.Interaction) -> str:
+        from discord_bot.exceptions import SessionExpiredError
 
-    async def consume_result[T](
-        self,
-        interaction: discord.Interaction,
-        result: ApiResult[T],
-    ) -> bool:
-        key = self.apply_api_status(interaction.user.id, result)
-        if key is not None:
-            await self._reply_key(interaction, key)
-            return False
-        if not result.ok:
-            if result.msg:
-                await self._respond(interaction, result.msg)
-            else:
-                await self._reply_key(interaction, "bad_response")
-            return False
-        return True
+        token = self.sessions.token(interaction.user.id)
+        username = await self.sub.user_svc.auth_token_to_user(token) if token else None
+        if username is None:
+            self.sessions.clear_token(interaction.user.id)
+            raise SessionExpiredError
+        return username

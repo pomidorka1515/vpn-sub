@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 import pytest
 from quart import Quart
 
-from api.decorators.rate_limit import AsyncRateLimiter
+from app_runtime.rate_limit import AsyncRateLimiter
 
 if TYPE_CHECKING:
     from quart import Response
 
-    from api.decorators.rate_limit import RateLimitScript
+    from app_runtime.rate_limit import RateLimitScript
 
 
 class RedisStore:

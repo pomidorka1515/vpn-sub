@@ -52,9 +52,7 @@ class PublicAccountMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.bonus(token, code)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.code_svc.apply_bonus_code(username=await self.username(interaction), code=code)
         await self._reply_key(interaction, "bonus_success")
         await self.send_info(interaction)
 
@@ -91,10 +89,9 @@ class PublicAccountMixin(PublicFeatureMixin):
         token = self.sessions.token(interaction.user.id)
         await self._defer(interaction)
         if token:
-            result = await self.http.logout(token)
-            if result.status not in {200, 401} and not result.ok:
-                if not await self.consume_result(interaction, result):
-                    return
+            username = await self.sub.user_svc.auth_token_to_user(token)
+            if username is not None:
+                await self.sub.account_svc.logout(username)
         self.sessions.clear_token(interaction.user.id)
         lang = self.get_lang(interaction.user.id)
         await self._reply_key(
@@ -109,18 +106,7 @@ class PublicAccountMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.reset(token)
-        if result.status == 429:
-            await self._reply_key(interaction, "rate_limited")
-            return
-        if result.status == 401:
-            self.sessions.clear_token(interaction.user.id)
-            await self._reply_key(interaction, "session_expired")
-            return
-        if not result.ok:
-            if result.msg:
-                await self._respond(interaction, result.msg)
-            return
+        await self.sub.business_svc.reset_user(await self.username(interaction))
         self.sessions.clear_token(interaction.user.id)
         lang = self.get_lang(interaction.user.id)
         await self._reply_key(
@@ -137,16 +123,7 @@ class PublicAccountMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.delete(token, password)
-        if result.status == 401:
-            if result.msg and "password" in result.msg.lower():
-                await self._respond(interaction, result.msg)
-                return
-            self.sessions.clear_token(interaction.user.id)
-            await self._reply_key(interaction, "session_expired")
-            return
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.account_svc.delete(await self.username(interaction), password)
         self.sessions.clear_token(interaction.user.id)
         lang = self.get_lang(interaction.user.id)
         await self._reply_key(

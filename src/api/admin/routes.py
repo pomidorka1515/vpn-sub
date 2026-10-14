@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from quart import Quart
 
     from api.common import Route, SnapshotStatus
-    from api.decorators.rate_limit import AsyncRateLimiter
+    from app_runtime.rate_limit import AsyncRateLimiter
     from config import AppConfig
     from config.store import AsyncConfig, AsyncLinesConfig
     from core import Subscription

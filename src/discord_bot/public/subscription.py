@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import io
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import discord
 from discord_bot.composition import PublicFeatureMixin
-from discord_bot.payloads import number
-from util import fmt_bytes
+from util import fmt_bytes, make_qr
 
 if TYPE_CHECKING:
-    from discord_bot.webapi import StatsPayload
+    from custom_types import UserInfo
 
 __all__ = ["PublicSubscriptionMixin"]
 
@@ -23,39 +21,35 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             return f"*{unlimited}*"
         return f"{fmt_bytes(used)} / {limit} GB"
 
-    def _info_text(self, lang: str, obj: StatsPayload) -> str | None:
+    def _info_text(self, lang: str, obj: UserInfo) -> str | None:
         t = self.TEXTS[lang]
         template = t.get("info_text")
         if not template:
             return None
         daystext = t["days_word"]
-        expiry = number(obj.get("time"))
-        try:
-            expiry_i = int(expiry)
-        except TypeError, ValueError:
-            expiry_i = 0
+        expiry_i = obj.time
         if expiry_i:
             days_left = str((expiry_i - int(time.time())) // 86400)
             date_end = datetime.fromtimestamp(expiry_i, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t.get("lifetime", "Lifetime")
-        bandwidth = obj.get("bandwidth", {})
-        total = bandwidth.get("total", {})
-        wl_total = bandwidth.get("wl_total", {})
-        monthly = number(bandwidth.get("monthly"))
-        wl_monthly = number(bandwidth.get("wl_monthly"))
-        limit = number(bandwidth.get("limit"))
-        wl_limit = number(bandwidth.get("wl_limit"))
-        upload = number(total.get("upload"))
-        download = number(total.get("download"))
-        wl_up = number(wl_total.get("upload"))
-        wl_down = number(wl_total.get("download"))
+        bandwidth = obj.bandwidth
+        total = bandwidth.total
+        wl_total = bandwidth.wl_total
+        monthly = bandwidth.monthly
+        wl_monthly = bandwidth.wl_monthly
+        limit = bandwidth.limit
+        wl_limit = bandwidth.wl_limit
+        upload = total.upload
+        download = total.download
+        wl_up = wl_total.upload
+        wl_down = wl_total.download
         return template.format(
-            username=obj.get("displayname") or "",
-            status="🟢" if obj.get("enabled") else "🔴",
-            wl_status="🟢" if obj.get("wl_enabled") else "🔴",
-            online="🟢" if obj.get("online") else "🔴",
+            username=obj.displayname,
+            status="🟢" if obj.enabled else "🔴",
+            wl_status="🟢" if obj.wl_enabled else "🔴",
+            online="🟢" if obj.online else "🔴",
             total=fmt_bytes(int(upload) + int(download)),
             monthly=self._quota(lang, monthly, limit),
             wl_total=fmt_bytes(int(wl_up) + int(wl_down)),
@@ -65,7 +59,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             wl_up=fmt_bytes(wl_up),
             wl_down=fmt_bytes(wl_down),
             days=time_str,
-            fingerprint=obj.get("fingerprint") or "",
+            fingerprint=obj.fingerprint,
         )
 
     async def send_info(self, interaction: discord.Interaction) -> None:
@@ -74,14 +68,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         if not token:
             await self._reply_key(interaction, "not_logged_in")
             return
-        result = await self.http.stats(token)
-        if not await self.consume_result(interaction, result):
-            return
-        raw_obj = result.obj
-        if raw_obj is None:
-            await self._reply_key(interaction, "bad_response")
-            return
-        obj = raw_obj
+        obj = await self.sub.business_svc.get_info(await self.username(interaction))
         lang = self.get_lang(uid)
         text = self._info_text(lang, obj)
         if text:
@@ -98,18 +85,13 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction, ephemeral=True)
-        stats = await self.http.stats(token)
-        if not await self.consume_result(interaction, stats):
-            return
-        raw_obj = stats.obj
-        if raw_obj is None:
-            await self._reply_key(interaction, "bad_response")
-            return
-        obj = raw_obj
-        link = str(obj.get("link") or "")
+        obj = await self.sub.business_svc.get_info(await self.username(interaction))
+        link = obj.link
         lang = self.get_lang(uid)
         t = self.TEXTS[lang]
-        qr = await self.http.qr(token, happ=False, lang=lang)
+        conf = self.cfg.view()
+        qr_link = f"{conf['domain']}/{conf['uri'].strip('/')}?token={obj.token}&lang={lang}"
+        qr = await self.rendering.run(make_qr, qr_link)
         view = discord.ui.View(timeout=None)
         content = t.get("get_sub_text")
         if link:
@@ -118,9 +100,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
             happ = link if link.startswith("happ://") else f"happ://add/{link}"
             extra = t.get("get_sub_btn_happ", "Happ")
             content = f"{content}\n\n{extra}: `{happ}`" if content else f"{extra}: `{happ}`"
-        file: discord.File | None = None
-        if qr.ok and qr.body:
-            file = discord.File(io.BytesIO(qr.body), filename="qr.png")
+        file = discord.File(qr, filename="qr.png")
         await self._respond(interaction, content, view=view, file=file, ephemeral=True)
 
     async def cmd_sub(self, interaction: discord.Interaction) -> None:

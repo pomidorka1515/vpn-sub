@@ -19,11 +19,12 @@ if TYPE_CHECKING:
 
     import discord
     from app_runtime.offload import BoundedOffload
-    from config import DiscordConfig, DiscordLangConfig
+    from app_runtime.rate_limit import AsyncRateLimiter
+    from config import AppConfig, DiscordLangConfig
+    from core import Subscription
     from core.common import Snapshot
     from discord import Client, Interaction, app_commands
     from discord_bot.sessions import SessionStore
-    from discord_bot.webapi import WebApiClient
 
 __all__ = ["PublicBot"]
 
@@ -41,20 +42,22 @@ class PublicBot(
 ):
     def __init__(
         self,
-        cfg: Snapshot[DiscordConfig],
+        cfg: Snapshot[AppConfig],
         lang_cfg: Snapshot[DiscordLangConfig],
-        http: WebApiClient,
+        sub: Subscription,
         sessions: SessionStore,
         *,
         client: discord.Client,
         tree: app_commands.CommandTree,
         rendering: BoundedOffload,
+        limiter: AsyncRateLimiter,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
             self.lang_cfg = lang_cfg
-            self.http = http
+            self.sub = sub
+            self.limiter = limiter
             self.rendering = rendering
             self.sessions = sessions
             self.bot = client
@@ -91,12 +94,11 @@ class PublicBot(
                 from discord_bot.host import SharedDiscordClient
 
                 async def invoke() -> None:
-                    if self.command_requires_auth(command_name) and not self.is_logged_in(interaction.user.id):
-                        await self._reply_key(interaction, "not_logged_in")
+                    if self.command_requires_auth(command_name) and not await self.require_login(interaction):
                         return
                     await command_handler(interaction)
                 if isinstance(self.bot, SharedDiscordClient):
-                    await self.bot.process(str(interaction.user.id), invoke)
+                    await self.bot.interact(interaction, invoke, operation=command_name)
 
             wrapped.__name__ = command_name
             wrapped.__qualname__ = command_name
@@ -104,9 +106,3 @@ class PublicBot(
 
         for name, handler, description in commands:
             self.tree.command(name=name, description=description)(bind(name, handler))
-
-    async def start(self) -> None:
-        return
-
-    async def stop(self) -> None:
-        return

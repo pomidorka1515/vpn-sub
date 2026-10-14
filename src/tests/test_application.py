@@ -9,9 +9,9 @@ from async_api_helpers import OpenRedis
 from quart import request
 
 from api.application import create_api_application
-from api.decorators.rate_limit import AsyncRateLimiter
 from app import AppOptions, AppPaths, create_application, verbose_overrides
 from app_runtime.lifecycle import RuntimeState
+from app_runtime.rate_limit import AsyncRateLimiter
 from discord_bot.host import SharedDiscordClient
 
 
@@ -162,7 +162,7 @@ async def test_optional_discord_shares_runtime(
         assert logged_in == (["token"] if enabled else [])
         if bot is not None:
             assert bot.db is runtime.dependencies.db
-            assert bot.app is runtime.app
+            assert bot.sub is runtime.dependencies.subscription
             assert bot.runner is not None
     finally:
         await runtime.stop()

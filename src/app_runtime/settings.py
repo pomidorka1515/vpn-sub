@@ -10,7 +10,7 @@ from paths import bundled_root, program_dir, runtime_dir
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from api.decorators.rate_limit import AsyncRateLimiter
+    from app_runtime.rate_limit import AsyncRateLimiter
     from session.transport import XUiPanelTransport
 
 type PanelTransportFactory = Callable[[], XUiPanelTransport]

@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 from api import AsyncApi, AsyncWebApi
 from api.application import create_api_application
-from api.decorators.rate_limit import AsyncRateLimiter
 from api.subscription import register_subscription_route
 from app_runtime.composition import PrimaryLock, build_panels
 from app_runtime.interfaces import OwnedResource
 from app_runtime.lifecycle import Runtime
 from app_runtime.offload import OffloadServices
+from app_runtime.rate_limit import AsyncRateLimiter
 from app_runtime.settings import AppOptions, AppPaths, PanelTransportFactory, verbose_overrides
 from app_runtime.tasks import MutationRegistry, TaskRegistry
 from bots import AsyncAdminBot, AsyncPublicBot
@@ -208,16 +208,16 @@ async def create_application(
         for name, bot in (("admin bot", admin_bot), ("public bot", public_bot)):
             if bot is not None:
                 await open_resource(OwnedResource(name, bot, quiesce=bot.close))
-        AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
-        AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
-        register_subscription_route(app, sub)
         discord_bot = (
-            DiscordApplication(app, cfg, paths.data, db, files=offloads.files, rendering=offloads.rendering)
+            DiscordApplication(sub, cfg, paths.data, db, files=offloads.files, rendering=offloads.rendering, limiter=limiter)
             if options.start_bots and conf.get("discord", {}).get("token")
             else None
         )
         if discord_bot is not None:
             await open_resource(OwnedResource("Discord bot", discord_bot, quiesce=discord_bot.close))
+        AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
+        AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
+        register_subscription_route(app, sub)
         runtime = Application(
             ApplicationDependencies(
                 app,

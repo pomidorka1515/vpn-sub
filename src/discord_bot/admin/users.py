@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
-from typing import cast
 
 import discord
 from discord_bot.composition import AdminFeatureMixin
-
-from .common import obj_map, result_obj, str_list
 
 __all__ = ["AdminUsersMixin"]
 
@@ -15,18 +12,7 @@ __all__ = ["AdminUsersMixin"]
 class AdminUsersMixin(AdminFeatureMixin):
     async def _cb_list_users(self, interaction: discord.Interaction, page: int = 0) -> None:
         await self._defer(interaction)
-        result = await self.http.list_users()
-        if not await self.consume_result(interaction, result):
-            return
-        payload = result_obj(result)
-        users = str_list(payload)
-        if payload is not None and not isinstance(payload, list):
-            await self._respond(
-                interaction,
-                "❌ Некорректный ответ сервиса.",
-                view=self.main_menu_view(),
-            )
-            return
+        users = await self.sub.user_svc.list_users()
         if not users:
             await self._respond(
                 interaction,
@@ -78,19 +64,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_online_users(self, interaction: discord.Interaction) -> None:
         await self._defer(interaction)
-        result = await self.http.onlines()
-        if not await self.consume_result(interaction, result):
-            return
-        raw: object = result_obj(result)
-        users: dict[str, str | None] = {}
-        if isinstance(raw, dict):
-            payload = obj_map(cast(object, raw))
-            nested = payload.get("users")
-            if isinstance(nested, dict):
-                nested_map = cast(dict[object, object], nested)
-                users = {str(k): (str(v) if v is not None else None) for k, v in nested_map.items()}
-            elif isinstance(nested, list):
-                users = {str(item): None for item in cast(list[object], nested)}
+        result = await self.sub.panel_svc.get_online_status(True)
+        users = result.users if isinstance(result.users, dict) else dict.fromkeys(result.users)
         if not users:
             await self._respond(
                 interaction,
@@ -107,14 +82,12 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_refresh(self, interaction: discord.Interaction) -> None:
         await self._defer(interaction)
-        result = await self.http.refresh()
-        payload = obj_map(result_obj(result))
-        aborted = payload.get("aborted")
+        result = await self.sub.refresh_svc.refresh()
+        aborted = result.aborted
         if aborted:
-            failed = payload.get("failed")
-            panel_failures = len(cast(list[object], failed)) if isinstance(failed, list) else 0
-            succeeded = payload.get("succeeded")
-            total = payload.get("total")
+            panel_failures = len(result.failed)
+            succeeded = result.succeeded
+            total = result.total
             await self._respond(
                 interaction,
                 (
@@ -124,15 +97,8 @@ class AdminUsersMixin(AdminFeatureMixin):
                 view=self.main_menu_view(),
             )
             return
-        if not await self.consume_result(interaction, result):
-            return
-        if payload.get("failed"):
-            failed = payload.get("failed")
-            names = (
-                ", ".join(str(item) for item in cast(list[object], failed))
-                if isinstance(failed, list)
-                else str(failed)
-            )
+        if result.failed:
+            names = ", ".join(result.failed)
             await self._respond(
                 interaction,
                 f"⚠️ Обновление завершено с ошибками: {names}",
@@ -147,46 +113,34 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_info_user(self, interaction: discord.Interaction, username: str) -> None:
         await self._defer(interaction)
-        result = await self.http.user_info(username, pretty=True)
-        if not await self.consume_result(interaction, result):
-            return
-        info: object = result_obj(result)
-        if not isinstance(info, dict):
-            await self._respond(
-                interaction,
-                "❌ Некорректный ответ сервиса.",
-                view=self.main_menu_view(),
-            )
-            return
-        typed = obj_map(cast(object, info))
-        bandwidth = obj_map(typed.get("bandwidth"))
-        total = obj_map(bandwidth.get("total"))
-        wl_total = obj_map(bandwidth.get("wl_total"))
-        time_value = typed.get("time")
-        times = int(time_value) if isinstance(time_value, (str, int, float)) else 0
+        typed = await self.sub.business_svc.get_info(username, pretty=True)
+        bandwidth = typed.bandwidth
+        total = bandwidth.total
+        wl_total = bandwidth.wl_total
+        times = typed.time
         if times:
             days_left = str((times - int(time.time())) // 86400)
             date = datetime.fromtimestamp(times, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
         else:
             days_left = "N/A"
             date = "N/A"
-        status = "🟢 Включен" if typed.get("enabled") else "🔴 Отключен"
-        wl_status = "🟢 Включен" if typed.get("wl_enabled") else "🔴 Отключен"
-        online = "🟢 Да" if typed.get("online") else "🔴 Нет"
-        link = typed.get("link") or ""
+        status = "🟢 Включен" if typed.enabled else "🔴 Отключен"
+        wl_status = "🟢 Включен" if typed.wl_enabled else "🔴 Отключен"
+        online = "🟢 Да" if typed.online else "🔴 Нет"
+        link = typed.link
         text = (
             f"ℹ️ **Информация о `{username}`**\n\n"
-            f"Имя: `{typed.get('displayname')}`\n"
+            f"Имя: `{typed.displayname}`\n"
             f"Статус: {status}\n"
             f"Статус WL: {wl_status}\n"
             f"В сети: {online}\n"
-            f"Трафик в этом месяце: {bandwidth.get('monthly') or 0} MB / {bandwidth.get('limit')} GB\n"
-            f"Трафик WL в этом месяце: {bandwidth.get('wl_monthly') or 0} MB / {bandwidth.get('wl_limit')} GB\n"
+            f"Трафик в этом месяце: {bandwidth.monthly} MB / {bandwidth.limit} GB\n"
+            f"Трафик WL в этом месяце: {bandwidth.wl_monthly} MB / {bandwidth.wl_limit} GB\n"
             f"Дата окончания: {date}\n"
             f"Дней осталось: {days_left}\n"
-            f"Upload: {total.get('upload')} MB | Download: {total.get('download')} MB\n"
-            f"WL Upload: {wl_total.get('upload')} MB | Download: {wl_total.get('download')} MB\n"
-            f"Отпечаток: `{typed.get('fingerprint')}`\n"
+            f"Upload: {total.upload} MB | Download: {total.download} MB\n"
+            f"WL Upload: {wl_total.upload} MB | Download: {wl_total.download} MB\n"
+            f"Отпечаток: `{typed.fingerprint}`\n"
             f"Ссылка: `{link}`\n"
         )
         view = discord.ui.View(timeout=None)
@@ -208,9 +162,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_del_user(self, interaction: discord.Interaction, username: str) -> None:
         await self._defer(interaction)
-        result = await self.http.delete_user(username, perma=True)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.business_svc.delete_user(username, perma=True)
         await self._respond(
             interaction,
             f"✅ Пользователь **{username}** удален.",
@@ -269,16 +221,9 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_edit_fingerprint(self, interaction: discord.Interaction, username: str) -> None:
         await self._defer(interaction)
-        info = await self.http.user_info(username, pretty=False)
-        if not await self.consume_result(interaction, info):
-            return
-        fps = await self.http.fingerprints()
-        if not await self.consume_result(interaction, fps):
-            return
-        current = ""
-        if isinstance(result_obj(info), dict):
-            current = str(obj_map(result_obj(info)).get("fingerprint") or "")
-        raw_fps = str_list(result_obj(fps))
+        info = await self.sub.business_svc.get_info(username, pretty=False)
+        current = info.fingerprint
+        raw_fps = self.cfg.view()["fingerprints"]
         view = discord.ui.View(timeout=None)
         for fp in raw_fps:
             name = str(fp)
@@ -363,13 +308,10 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self._respond(interaction, "❌ Введите username.", view=self.main_menu_view())
             return
         await self._defer(interaction)
-        result = await self.http.reset_user(username)
-        if not await self.consume_result(interaction, result):
-            return
-        obj = obj_map(result_obj(result))
+        obj = await self.sub.business_svc.reset_user(username)
         await self._respond(
             interaction,
-            f"✅ Пользователь был сброшен.\n\nToken: `{obj.get('token')}`\nUUID: `{obj.get('uuid')}`",
+            f"✅ Пользователь был сброшен.\n\nToken: `{obj.token}`\nUUID: `{obj.uuid}`",
             view=self.main_menu_view(),
         )
 
@@ -380,6 +322,8 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             limit = int(values.get("limit", "0").strip())
             days = int(values.get("days", "0").strip())
+            if min(limit, days) < 0:
+                raise ValueError
         except ValueError:
             await self._respond(
                 interaction,
@@ -389,9 +333,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         timee = int(time.time() + (days * 86400)) if days else 0
         await self._defer(interaction)
-        result = await self.http.add_user(username, displayname, limit=limit, timee=timee)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.business_svc.add_new_user(username=username, displayname=displayname, limit=limit, timee=timee)
         await self._respond(
             interaction,
             f"✅ Пользователь **{username}** успешно добавлен!",
@@ -409,12 +351,12 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         try:
             limit = int(self.modal_values(interaction).get("limit", "").strip())
+            if limit < 0:
+                raise ValueError
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
-        result = await self.http.update_user(pending["username"], limit=limit)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.business_svc.update_params(username=pending["username"], limit=limit)
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,
@@ -433,12 +375,12 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         try:
             wl_limit = int(self.modal_values(interaction).get("wl_limit", "").strip())
+            if wl_limit < 0:
+                raise ValueError
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
-        result = await self.http.update_user(pending["username"], wl_limit=wl_limit)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.business_svc.update_params(username=pending["username"], wl_limit=wl_limit)
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,
@@ -457,13 +399,13 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         try:
             days = int(self.modal_values(interaction).get("days", "").strip())
+            if days < 0:
+                raise ValueError
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
         timee = int(time.time() + (days * 86400)) if days else 0
-        result = await self.http.update_user(pending["username"], timee=timee)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.business_svc.update_params(username=pending["username"], timee=timee)
         self._pending_edits.pop(interaction.user.id, None)
         if days:
             new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
@@ -496,9 +438,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 view=self.main_menu_view(),
             )
             return
-        result = await self.http.update_user(pending["username"], displayname=new_name)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.business_svc.update_params(username=pending["username"], displayname=new_name)
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,

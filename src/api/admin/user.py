@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, cast
 
@@ -9,7 +8,6 @@ from quart import g, request
 from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_args, requires_fields_strict
-from errors import PanelUnavailableError
 from util import err, ok, parse_bool
 
 if TYPE_CHECKING:
@@ -112,36 +110,10 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
 
     @requires_admin_auth
     async def user_refresh(self) -> ResponseType:
-        users = await self.sub.user_svc.list_users()
-        pending = iter(users)
-        failed: set[str] = set()
-        aborted: str | None = None
-        succeeded = 0
-
-        async def worker() -> None:
-            nonlocal aborted, succeeded
-            # Claiming a user and checking the abort flag have no intervening await.
-            for username in pending:
-                if aborted is not None:
-                    return
-                try:
-                    await self.sub.business_svc.add_users(username)
-                except PanelUnavailableError:
-                    failed.add(username)
-                    self.log.exception("user refresh failed for %s", username)
-                except Exception:
-                    if aborted is None:
-                        aborted = username
-                    self.log.critical("bulk user refresh aborted for %s", username, exc_info=True)
-                else:
-                    succeeded += 1
-
-        # On abort, drain in-flight mutations rather than cancelling them midway.
-        async with asyncio.TaskGroup() as group:
-            for index in range(min(4, len(users))):
-                group.create_task(worker(), name=f"api:user-refresh-worker:{index}")
-
-        failures = [username for username in users if username in failed]
+        result = await self.sub.refresh_svc.refresh()
+        failures = result.failed
+        aborted = result.aborted
+        succeeded = result.succeeded
         if aborted is not None:
             return err(
                 "Refresh aborted",
@@ -150,14 +122,14 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
                     "failed": failures,
                     "aborted": aborted,
                     "succeeded": succeeded,
-                    "total": len(users),
+                    "total": result.total,
                 },
             )
-        if failures and len(failures) == len(users):
+        if failures and len(failures) == result.total:
             return err(
                 "Panel refresh failed for all users",
                 502,
-                {"failed": failures, "total": len(users)},
+                {"failed": failures, "total": result.total},
             )
         if failures:
             return ok(
@@ -165,7 +137,7 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
                 obj={
                     "failed": failures,
                     "succeeded": succeeded,
-                    "total": len(users),
+                    "total": result.total,
                 },
             )
         return ok("Refreshed all users.")

@@ -7,8 +7,7 @@ from discord_bot.public.routing import PublicRoutingMixin
 from discord_bot.tests.discord_helpers import (
     FakeInteraction,
     FakeUser,
-    json_ok,
-    make_public_bot,
+    make_bots,
     run,
 )
 
@@ -50,6 +49,12 @@ def test_unauthenticated_users_cannot_hit_protected_handlers() -> None:
 
     mixin.is_logged_in = lambda user_id: False  # type: ignore[method-assign]
     setattr(mixin, "_reply_key", reply_key)
+
+    async def require_login(interaction: object) -> bool:
+        await reply_key(interaction, "not_logged_in")
+        return False
+
+    mixin.require_login = require_login  # type: ignore[method-assign]
     run(mixin.dispatch_component(Interaction()))  # type: ignore[arg-type]
     assert replies == ["not_logged_in"]
 
@@ -65,9 +70,7 @@ def test_unauthenticated_users_cannot_hit_protected_handlers() -> None:
 
 
 def test_slash_wrapper_uses_command_requires_auth() -> None:
-    bot, store, _session = make_public_bot(
-        lambda method, path, params, payload, headers: json_ok(),
-    )
+    bot, _, store, _sub = make_bots()
     store.clear_token(7)
     info_cmd = bot.tree.get_command("info")
     login_cmd = bot.tree.get_command("login")

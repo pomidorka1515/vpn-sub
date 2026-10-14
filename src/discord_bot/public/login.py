@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from typing import Self
+from uuid import uuid4
 
 import discord
 from discord_bot.composition import PublicFeatureMixin
+from errors import AppError, ValidationError
+from util import sanitize
 
 __all__ = ["PublicLoginMixin"]
 
@@ -114,15 +117,12 @@ class PublicLoginMixin(PublicFeatureMixin):
         username = values.get("username", "").strip()
         password = values.get("password", "")
         await self._defer(interaction)
-        result = await self.http.login(username, password)
-        if result.status == 401:
+        try:
+            token = await self.sub.account_svc.login(username, password)
+        except AppError as error:
+            if error.status != 401:
+                raise
             await self._reply_key(interaction, "login_fail")
-            return
-        if not await self.consume_result(interaction, result):
-            return
-        token = result.auth_token
-        if not token:
-            await self._reply_key(interaction, "http_unavailable")
             return
         self.sessions.set_token(uid, token)
         lang = self.get_lang(uid)
@@ -144,31 +144,20 @@ class PublicLoginMixin(PublicFeatureMixin):
         code = values.get("code", "").strip()
         name = values.get("name", "").strip()
         await self._defer(interaction)
-        check = await self.http.validate_username(username)
-        if not await self.consume_result(interaction, check):
-            return
-        obj = check.obj
-        if not isinstance(obj, dict):
-            await self._reply_key(interaction, "bad_response")
-            return
-        if not obj.get("valid"):
+        if not username or username != sanitize(username, "external") or len(username) > 32:
             await self._reply_key(interaction, "length_username", ln=32)
             return
-        if obj.get("taken"):
+        if await self.sub.user_svc.external_username_exists(username):
             await self._reply_key(interaction, "username_taken")
             return
-        result = await self.http.register(username, password, code, name)
-        if not result.ok:
-            if result.status in {400, 404, 409} and result.msg:
-                await self._respond(interaction, result.msg)
-                return
-            if not await self.consume_result(interaction, result):
-                return
-            return
-        token = result.auth_token
-        if not token:
-            await self._reply_key(interaction, "http_unavailable")
-            return
+        for field, value, maximum in (("name", name, 16), ("password", password, 128), ("code", code, 64)):
+            if not 1 <= len(value) <= maximum:
+                raise ValidationError(f"'{field}' must be 1-{maximum} characters")
+        await self.sub.business_code_svc.register_with_code(
+            code=code, username=f"web_{uuid4().hex[:16]}", displayname=name,
+            ext_username=username, ext_password=password,
+        )
+        token = await self.sub.account_svc.login(username, password)
         self.sessions.set_token(uid, token)
         lang = self.get_lang(uid)
         await self._reply_key(

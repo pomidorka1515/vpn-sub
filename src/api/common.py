@@ -17,7 +17,7 @@ from paths import bundled_root
 if TYPE_CHECKING:
     from quart import Quart
 
-    from api.decorators.rate_limit import AsyncRateLimiter
+    from app_runtime.rate_limit import AsyncRateLimiter
     from config import AppConfig, LangConfig
     from config.store import AsyncConfig
     from core import Subscription

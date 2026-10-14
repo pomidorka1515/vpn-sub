@@ -5,9 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from chart import bandwidth_chart
-from custom_types import BandwidthSnapshot
 from discord_bot.composition import PublicFeatureMixin
-from discord_bot.payloads import number
 from util import fmt_bytes, format_usage, truncate_utf8
 
 if TYPE_CHECKING:
@@ -75,62 +73,43 @@ class PublicTrafficMixin(PublicFeatureMixin):
             async with lock:
                 await self._defer(interaction)
                 await self._reply_key(interaction, "chart_generating")
-                history = await self.http.history(token, days)
-                if not await self.consume_result(interaction, history):
-                    return
-                stats = await self.http.stats(token)
-                if not await self.consume_result(interaction, stats):
-                    return
+                username = await self.username(interaction)
+                snapshots = await self.sub.bandwidth_svc.get_bw_history(username, days)
+                obj = await self.sub.business_svc.get_info(username)
                 lang = self.get_lang(uid)
                 t = self.TEXTS[lang]
-                raw_obj = stats.obj
-                if raw_obj is None:
-                    await self._reply_key(interaction, "bad_response")
-                    return
-                obj = raw_obj
-                bandwidth = obj.get("bandwidth", {})
-                total = bandwidth.get("total", {})
-                wl_total = bandwidth.get("wl_total", {})
+                bandwidth = obj.bandwidth
+                total = bandwidth.total
+                wl_total = bandwidth.wl_total
                 used_str, limit_str, percent_str = format_usage(
-                    number(bandwidth.get("monthly")),
-                    number(bandwidth.get("limit")),
+                    bandwidth.monthly,
+                    bandwidth.limit,
                     t.get("unlimited", "Unlimited"),
                 )
                 wl_used_str, wl_limit_str, wl_percent_str = format_usage(
-                    number(bandwidth.get("wl_monthly")),
-                    number(bandwidth.get("wl_limit")),
+                    bandwidth.wl_monthly,
+                    bandwidth.wl_limit,
                     t.get("unlimited", "Unlimited"),
                 )
                 text = t.get("chart_text", "").format(
                     days=days,
-                    upload=fmt_bytes(number(total.get("upload"))),
-                    download=fmt_bytes(number(total.get("download"))),
+                    upload=fmt_bytes(total.upload),
+                    download=fmt_bytes(total.download),
                     used=used_str,
                     limit=limit_str,
                     percent=percent_str,
-                    wl_upload=fmt_bytes(number(wl_total.get("upload"))),
-                    wl_download=fmt_bytes(number(wl_total.get("download"))),
+                    wl_upload=fmt_bytes(wl_total.upload),
+                    wl_download=fmt_bytes(wl_total.download),
                     wl_used=wl_used_str,
                     wl_limit=wl_limit_str,
                     wl_percent=wl_percent_str,
                 )
                 text = truncate_utf8(text, 1024)
-                raw_history = history.obj or []
-                snapshots: list[BandwidthSnapshot] = [
-                    BandwidthSnapshot(
-                        ts=int(number(item.get("ts"))),
-                        up=int(number(item.get("up"))),
-                        down=int(number(item.get("down"))),
-                        wl_up=int(number(item.get("wl_up"))),
-                        wl_down=int(number(item.get("wl_down"))),
-                    )
-                    for item in raw_history
-                ]
                 chart_lang = self._chart_lang(lang)
                 image = await self.rendering.run(
                     bandwidth_chart,
                     snapshots,
-                    label=str(obj.get("displayname") or ""),
+                    label=obj.displayname,
                     lang=chart_lang,
                 )
                 file: discord.File | None = None

@@ -8,11 +8,13 @@ from argon2 import PasswordHasher
 from loggers import Logger
 
 from .common import SharedCoreResources
+from .services.account import AccountService
 from .services.bandwidth import BandwidthService
 from .services.code import BusinessCodeService, CodeService
 from .services.leaderboard import LeaderboardService
 from .services.panel import PanelService
 from .services.password import PasswordService
+from .services.refresh import RefreshService
 from .services.telegram import TelegramService
 from .services.user import BusinessUserService, CommonUserService
 
@@ -99,6 +101,8 @@ class Subscription:
             bandwidth_svc=self.bandwidth_svc,
         )
         self._close_task: asyncio.Task[None] | None = None
+        self.account_svc = AccountService(self)
+        self.refresh_svc = RefreshService(self)
 
     async def start(self) -> None:
         await self.business_code_svc.recover_rollback_failures()

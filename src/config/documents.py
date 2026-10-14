@@ -141,24 +141,6 @@ AppConfig = TypedDict(
 )
 
 
-class DiscordBotConfig(TypedDict):
-    token: str
-
-
-class DiscordPrivateConfig(TypedDict):
-    whitelist: list[int]
-
-
-DiscordConfig = TypedDict(
-    "DiscordConfig",
-    {
-        "public": DiscordBotConfig,
-        "private": DiscordPrivateConfig,
-        "$schema": NotRequired[str],
-    },
-)
-
-
 class LangConfig(TypedDict):
     description: dict[str, dict[str, str]]
     chart: dict[str, dict[str, str]]

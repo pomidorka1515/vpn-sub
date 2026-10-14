@@ -105,14 +105,9 @@ class PublicRoutingMixin(PublicFeatureMixin):
             return
         await self._defer(interaction)
         lang = self.get_lang(interaction.user.id)
-        result = await self.http.profiles(token, lang)
-        if not await self.consume_result(interaction, result):
-            return
-        raw_obj = result.obj
-        if not isinstance(raw_obj, dict):
-            await self._reply_key(interaction, "bad_response")
-            return
-        obj = raw_obj
+        await self.username(interaction)
+        index = 0 if lang == "en" else 1
+        obj = {profile["name"][index]: profile["description"][index] for profile in self.cfg.view()["profiles"].values()}
         lines: list[str] = []
         for name, desc in obj.items():
             lines.append(f"`{name}` — {desc}")
@@ -126,8 +121,7 @@ class PublicRoutingMixin(PublicFeatureMixin):
         custom_id = self._custom_id(interaction)
         if not custom_id:
             return
-        if self._requires_auth(custom_id) and not self.is_logged_in(interaction.user.id):
-            await self._reply_key(interaction, "not_logged_in")
+        if self._requires_auth(custom_id) and not await self.require_login(interaction):
             return
         if custom_id.startswith("lang_"):
             await self.set_lang_callback(interaction, custom_id.split("_", 1)[1])
@@ -156,8 +150,7 @@ class PublicRoutingMixin(PublicFeatureMixin):
 
     async def dispatch_modal(self, interaction: discord.Interaction) -> None:
         custom_id = self._custom_id(interaction)
-        if self._requires_auth(custom_id) and not self.is_logged_in(interaction.user.id):
-            await self._reply_key(interaction, "not_logged_in")
+        if self._requires_auth(custom_id) and not await self.require_login(interaction):
             return
         if custom_id == "login_modal":
             await self.handle_login_modal(interaction)

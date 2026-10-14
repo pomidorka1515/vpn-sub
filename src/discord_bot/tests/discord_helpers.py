@@ -1,118 +1,26 @@
 from __future__ import annotations
 
 import asyncio
-from collections import UserDict
-from collections.abc import Callable, Mapping
-from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self
-from unittest.mock import MagicMock
+from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 from app_runtime.offload import BoundedOffload
-from config import Config, DiscordLangConfig
-from discord_bot.admin.bot import AdminBot
-from discord_bot.adminapi import AdminApiClient
+from app_runtime.rate_limit import AsyncRateLimiter
+from config import AppConfig, Config, DiscordLangConfig
+from core import Subscription
+from custom_types import BandwidthSnapshot, UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
+from discord_bot.admin import AdminBot
 from discord_bot.host import SharedDiscordClient
-from discord_bot.public.bot import PublicBot
+from discord_bot.public import PublicBot
 from discord_bot.sessions import SessionRecord
-from discord_bot.webapi import WebApiClient
 
 if TYPE_CHECKING:
-    from collections.abc import Coroutine
+    from collections.abc import Coroutine, Mapping
 
-    from config import DiscordConfig
-
-DISCORD_ROOT = Path(__file__).resolve().parents[2] / "discord"
-LANG_PATH = DISCORD_ROOT / "lang.jsonc"
+LANG_PATH = Path(__file__).resolve().parents[2] / "discord/lang.jsonc"
 LANG = Config[DiscordLangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
-
-
-def config_mock(document: DiscordConfig) -> Config[DiscordConfig]:
-    mock = MagicMock(spec=Config)
-    mock.view.side_effect = lambda: deepcopy(document)
-    return mock
-
-
-type Handler = Callable[
-    [
-        str,
-        str,
-        Mapping[str, object] | None,
-        Mapping[str, str | int] | None,
-        Mapping[str, str] | None,
-    ],
-    FakeResponse,
-]
-
-
-class FakeHeaders(UserDict[str, str]):
-    def getall(self, key: str, default: list[str] | None = None) -> list[str]:
-        if key in self:
-            return [self[key]]
-        for item, value in self.items():
-            if item.lower() == key.lower():
-                return [value]
-        return default or []
-
-
-class FakeResponse:
-    def __init__(
-        self,
-        status: int,
-        headers: Mapping[str, str],
-        payload: object | None = None,
-        body: bytes = b"",
-        content_type: str = "application/json",
-    ) -> None:
-        self.status = status
-        self.headers = FakeHeaders(dict(headers))
-        self._payload = payload
-        self._body = body
-        self.content_type = content_type
-
-    async def json(self, content_type: str | None = None) -> object:
-        del content_type
-        if isinstance(self._payload, BaseException):
-            raise self._payload
-        return self._payload
-
-    async def read(self) -> bytes:
-        return self._body
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *args: object) -> bool:
-        del args
-        return False
-
-
-class FakeSession:
-    closed = False
-
-    def __init__(self, handler: Handler) -> None:
-        self.handler = handler
-        self.calls: list[dict[str, object]] = []
-
-    def request(
-        self,
-        method: str,
-        url: str,
-        json: Mapping[str, object] | None = None,
-        params: Mapping[str, str | int] | None = None,
-        headers: Mapping[str, str] | None = None,
-    ) -> FakeResponse:
-        self.calls.append(
-            {
-                "method": method,
-                "url": url,
-                "json": dict(json) if json is not None else None,
-                "params": dict(params) if params is not None else None,
-                "headers": dict(headers) if headers is not None else None,
-            },
-        )
-        return self.handler(method, url, json, params, headers)
 
 
 class FakeUser:
@@ -154,13 +62,7 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(
-        self,
-        user_id: int = 7,
-        *,
-        data: dict[str, object] | None = None,
-        guild_id: int | None = None,
-    ) -> None:
+    def __init__(self, user_id: int = 7, *, data: dict[str, object] | None = None, guild_id: int | None = None) -> None:
         self.user = FakeUser(user_id)
         self.data = data or {}
         self.guild_id = guild_id
@@ -170,91 +72,27 @@ class FakeInteraction:
         self.followup = FakeFollowup(self.response)
 
 
-def json_ok(obj: object = None, msg: str = "ok", status: int = 200) -> FakeResponse:
-    return FakeResponse(status, {}, {"success": True, "msg": msg, "obj": obj})
-
-
 def run[T](coro: Coroutine[Any, Any, T]) -> T:
     return asyncio.run(coro)
 
 
-def stats_obj() -> dict[str, object]:
-    return {
-        "displayname": "alice",
-        "enabled": True,
-        "wl_enabled": False,
-        "online": True,
-        "time": 0,
-        "fingerprint": "chrome",
-        "link": "https://example.test/sub/alice",
-        "bandwidth": {
-            "total": {"upload": 10, "download": 20},
-            "wl_total": {"upload": 1, "download": 2},
-            "monthly": 3,
-            "wl_monthly": 4,
-            "limit": 100,
-            "wl_limit": 50,
-        },
-    }
+def stats_obj() -> UserInfo:
+    return UserInfo(
+        _="alice", token="a" * 40, uuid="uuid", displayname="alice", enabled=True,
+        wl_enabled=False, online=True, time=0, fingerprint="chrome",
+        link="https://example.test/sub/alice",
+        bandwidth=UserInfoBandwidth(
+            total=UserInfoBandwidthTotal(upload=10, download=20, total=30),
+            wl_total=UserInfoBandwidthTotal(upload=1, download=2, total=3),
+            monthly=3, wl_monthly=4, limit=100, wl_limit=50,
+        ),
+    )
 
 
 def modal_data(custom_id: str, fields: Mapping[str, str]) -> dict[str, object]:
-    return {
-        "custom_id": custom_id,
-        "components": [
-            {"components": [{"custom_id": key, "value": value} for key, value in fields.items()]},
-        ],
-    }
-
-
-def make_web_client(handler: Handler) -> tuple[WebApiClient, FakeSession]:
-    session = FakeSession(handler)
-    client = WebApiClient(
-        "http://127.0.0.1:5550",
-        "sub",
-        session=session,  # type: ignore[arg-type]
-    )
-    return client, session
-
-
-def make_admin_client(handler: Handler) -> tuple[AdminApiClient, FakeSession]:
-    session = FakeSession(handler)
-    client = AdminApiClient(
-        "http://127.0.0.1:5550",
-        "sub",
-        "adminapi",
-        "api-token",
-        session=session,  # type: ignore[arg-type]
-    )
-    return client, session
-
-
-def make_public_bot(
-    handler: Handler,
-    *,
-    user_id: int = 7,
-    rendering: BoundedOffload | None = None,
-) -> tuple[PublicBot, MemorySessionStore, FakeSession]:
-    store = MemorySessionStore()
-    store.set_lang(user_id, "en")
-    store.set_token(user_id, "tok")
-    session = FakeSession(handler)
-    host = SharedDiscordClient(intents=discord.Intents.none())
-    bot = PublicBot(
-        config_mock(
-            {
-                "public": {"token": "discord-token"},
-                "private": {"whitelist": [7]},
-            },
-        ),
-        LANG,
-        WebApiClient("http://127.0.0.1:5550", "sub", session=session),  # type: ignore[arg-type]
-        store,
-        client=host,
-        tree=host.tree,
-        rendering=rendering if rendering is not None else BoundedOffload(capacity=2, name="test-rendering"),
-    )
-    return bot, store, session
+    return {"custom_id": custom_id, "components": [
+        {"components": [{"custom_id": key, "value": value} for key, value in fields.items()]},
+    ]}
 
 
 class MemorySessionStore:
@@ -287,33 +125,50 @@ class MemorySessionStore:
         self.set_token(user_id, "")
 
 
-def make_admin_bot(
-    handler: Handler,
-    *,
-    whitelist: list[int] | None = None,
-    rendering: BoundedOffload | None = None,
-) -> tuple[AdminBot, FakeSession]:
-    session = FakeSession(handler)
+def services() -> MagicMock:
+    sub = MagicMock(spec=Subscription)
+    sub.user_svc = MagicMock()
+    sub.user_svc.auth_token_to_user = AsyncMock(return_value="alice")
+    sub.user_svc.external_username_exists = AsyncMock(return_value=False)
+    sub.user_svc.list_users = AsyncMock(return_value=["alice", "bob"])
+    sub.business_svc = MagicMock()
+    sub.business_svc.get_info = AsyncMock(return_value=stats_obj())
+    for method in ("reset_user", "delete_user", "update_params", "add_new_user"):
+        setattr(sub.business_svc, method, AsyncMock())
+    sub.account_svc = MagicMock()
+    sub.account_svc.login = AsyncMock(return_value="newtoken")
+    for method in ("settings", "logout", "delete"):
+        setattr(sub.account_svc, method, AsyncMock())
+    sub.business_code_svc = MagicMock()
+    sub.business_code_svc.register_with_code = AsyncMock()
+    sub.code_svc = MagicMock()
+    for method in ("apply_bonus_code", "add_code", "delete_code", "get_code", "list_code"):
+        setattr(sub.code_svc, method, AsyncMock())
+    sub.bandwidth_svc = MagicMock()
+    sub.bandwidth_svc.get_bw_history = AsyncMock(return_value=[BandwidthSnapshot(ts=1, up=10, down=20, wl_up=1, wl_down=2)])
+    sub.leaderboard_svc = MagicMock()
+    sub.leaderboard_svc.leaderboard = AsyncMock(return_value={"alice": 10})
+    sub.refresh_svc = MagicMock()
+    sub.refresh_svc.refresh = AsyncMock()
+    return sub
+
+
+def make_bots(*, whitelist: list[int] | None = None, rendering: BoundedOffload | None = None) -> tuple[PublicBot, AdminBot, MemorySessionStore, MagicMock]:
+    cfg = MagicMock(spec=Config)
+    cfg.view.return_value = cast(AppConfig, {
+        "discord": {"token": "discord-token", "whitelist": whitelist if whitelist is not None else [7]},
+        "domain": "https://example.test", "uri": "sub", "fingerprints": ["chrome", "firefox"],
+        "profiles": {"default": {"name": ["Default", "По умолчанию"], "description": ["VPN", "VPN"]}},
+    })
+    store = MemorySessionStore()
+    store.set_lang(7, "en")
+    store.set_token(7, "token")
     host = SharedDiscordClient(intents=discord.Intents.none())
-    bot = AdminBot(
-        config_mock(
-            {
-                "public": {"token": "discord-token"},
-                "private": {
-                    "whitelist": whitelist if whitelist is not None else [7],
-                },
-            },
-        ),
-        LANG,
-        AdminApiClient(
-            "http://127.0.0.1:5550",
-            "sub",
-            "adminapi",
-            "api-token",
-            session=session,  # type: ignore[arg-type]
-        ),
-        client=host,
-        tree=host.tree,
-        rendering=rendering if rendering is not None else BoundedOffload(capacity=2, name="test-rendering"),
-    )
-    return bot, session
+    limiter = MagicMock(spec=AsyncRateLimiter)
+    limiter.allow = AsyncMock(return_value=True)
+    sub = services()
+    pool = rendering or BoundedOffload(capacity=2, name="test-rendering")
+    public = PublicBot(cfg, LANG, sub, store, client=host, tree=host.tree, rendering=pool, limiter=limiter)
+    admin = AdminBot(cfg, LANG, sub, client=host, tree=host.tree, rendering=pool, limiter=limiter)
+    host.attach(public, admin)
+    return public, admin, store, sub

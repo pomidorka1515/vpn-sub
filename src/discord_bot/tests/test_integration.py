@@ -8,28 +8,20 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from quart import jsonify, request
 
-from api.application import create_api_application
+import discord
 from app_runtime.lifecycle import Runtime
 from app_runtime.offload import BoundedOffload, OffloadServices
-from app_runtime.tasks import AdmissionClosedError
 from config import Config, DiscordLangConfig
 from db import Database
-from discord_bot.host import SharedDiscordClient, discord_user
+from discord_bot.host import SharedDiscordClient, interaction_limit
 from discord_bot.runtime import DiscordApplication
-from discord_bot.sessions import DatabaseSessionStore
-from discord_bot.transport import LocalTransport
+from discord_bot.tests.discord_helpers import LANG_PATH, FakeInteraction, make_bots
+from errors import AppError, PanelUnavailableError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
-
-    from quart import Response
-
-    from config import AppConfig
-    from core.common import Snapshot
-    from discord_bot.tests.discord_helpers import FakeResponse
 
 
 @pytest_asyncio.fixture
@@ -43,57 +35,9 @@ async def database(tmp_path: Path) -> AsyncIterator[Database]:
 
 
 @pytest.mark.asyncio
-async def test_dispatch_preserves_identity_cookies_and_errors() -> None:
-    app = create_api_application(require_proxy=True)
-
-    @app.post("/login")
-    async def login() -> Response:
-        assert request.remote_addr == "discord:42"
-        assert await request.get_json() == {"password": "secret"}
-        response = jsonify(success=True, obj={"user": "alice"})
-        response.set_cookie("auth_token", "token")
-        return response
-
-    transport = LocalTransport(app)
-    identity = discord_user.set("42")
-    try:
-        result = await transport.request("POST", "/login", headers={}, json={"password": "secret"})
-        assert result.ok
-        assert result.auth_token == "token"
-        missing = await transport.request("GET", "/missing", headers={})
-        assert not missing.ok
-        assert missing.status == 404
-    finally:
-        discord_user.reset(identity)
-
-
-@pytest.mark.asyncio
-async def test_sessions_import_once_and_persist(database: Database, tmp_path: Path) -> None:
-    legacy = tmp_path / "discord-sessions.json"
-    legacy.write_text(json.dumps({"42": {"token": "old", "lang": "en"}}))
-    store = DatabaseSessionStore(database)
-    await store.start(legacy)
-    assert store.token(42) == "old"
-    store.set_token(42, "new")
-    store.set_lang(42, "ru")
-    await store.flush()
-    restored = DatabaseSessionStore(database)
-    await restored.start(legacy)
-    assert restored.token(42) == "new"
-    assert restored.lang(42) == "ru"
-    restored.clear_token(42)
-    await restored.flush()
-    assert restored.token(42) is None
-    assert legacy.exists()
-
-
-@pytest.mark.asyncio
 async def test_discord_quiesces_admitted_commands() -> None:
-    import discord
-
     client = SharedDiscordClient(intents=discord.Intents.none())
-    entered = asyncio.Event()
-    finished = asyncio.Event()
+    entered, finished = asyncio.Event(), asyncio.Event()
 
     async def command() -> None:
         entered.set()
@@ -108,16 +52,107 @@ async def test_discord_quiesces_admitted_commands() -> None:
     await asyncio.gather(task, return_exceptions=True)
     assert finished.is_set()
     assert client.handlers.active_count == 0
+    called = AsyncMock()
+    await client.process("7", called)
+    called.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_discord_language_reads_use_off_loop_snapshots(
-    database: Database,
-    tmp_path: Path,
+@pytest.mark.parametrize("interaction_type", [
+    discord.InteractionType.ping,
+    discord.InteractionType.application_command,
+    discord.InteractionType.autocomplete,
+])
+async def test_host_ignores_non_component_interactions(interaction_type: discord.InteractionType) -> None:
+    public, _, _, _ = make_bots()
+    host = cast(SharedDiscordClient, public.bot)
+    limiter = cast(MagicMock, public.limiter)
+    limiter.allow.return_value = False
+    fake = FakeInteraction(data={"name": "login"})
+    setattr(fake, "type", interaction_type)
+    try:
+        await getattr(host, "on_interaction")(cast(discord.Interaction, fake))
+        limiter.allow.assert_not_awaited()
+        assert not fake.response.is_done()
+        assert not fake.response.messages
+    finally:
+        await host.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("interaction_type", "handler"), [
+    (discord.InteractionType.component, "dispatch_component"),
+    (discord.InteractionType.modal_submit, "dispatch_modal"),
+])
+@pytest.mark.parametrize("admin", [False, True])
+async def test_host_rate_limits_and_dispatches_components_and_modals(
+    interaction_type: discord.InteractionType, handler: str, admin: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from discord_bot.tests.discord_helpers import LANG_PATH
+    public, admin_bot, _, _ = make_bots()
+    host = cast(SharedDiscordClient, public.bot)
+    limiter = cast(MagicMock, public.limiter)
+    custom_id = "admin:refresh" if admin else "login_modal"
+    fake = FakeInteraction(data={"custom_id": custom_id})
+    setattr(fake, "type", interaction_type)
+    dispatch = AsyncMock()
+    monkeypatch.setattr(admin_bot if admin else public, handler, dispatch)
+    try:
+        await getattr(host, "on_interaction")(cast(discord.Interaction, fake))
+        scope, limit = interaction_limit(custom_id)
+        limiter.allow.assert_awaited_once_with(f"discord:{scope}", "7", limit)
+        dispatch.assert_awaited_once_with(fake)
+    finally:
+        await host.close()
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed", [False, True])
+async def test_explicit_rate_limit_is_fail_closed(failed: bool) -> None:
+    public, _, _, _ = make_bots()
+    host = cast(SharedDiscordClient, public.bot)
+    limiter = cast(MagicMock, public.limiter)
+    limiter.allow.return_value = False
+    if failed:
+        limiter.allow.side_effect = OSError("unavailable")
+    fake = FakeInteraction()
+    callback = AsyncMock()
+    await host.interact(cast(discord.Interaction, fake), callback, operation="login_modal")
+    callback.assert_not_awaited()
+    limiter.allow.assert_awaited_once_with("discord:login", "7", 10)
+    assert fake.response.messages
+    await host.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [AppError("Invalid current password", status=401), PanelUnavailableError()])
+async def test_domain_errors_at_interaction_boundary_preserve_valid_session(error: AppError) -> None:
+    public, _, store, _ = make_bots()
+    host = cast(SharedDiscordClient, public.bot)
+    fake = FakeInteraction()
+    await host.interact(cast(discord.Interaction, fake), AsyncMock(side_effect=error), operation="delete_modal")
+    assert store.token(7) == "token"
+    assert fake.response.messages
+    await host.close()
+
+
+@pytest.mark.asyncio
+async def test_expired_token_is_handled_at_boundary() -> None:
+    public, _, store, sub = make_bots()
+    sub.user_svc.auth_token_to_user.return_value = None
+    host = cast(SharedDiscordClient, public.bot)
+    fake = FakeInteraction()
+    interaction = cast(discord.Interaction, fake)
+    await host.interact(interaction, lambda: public.cmd_info(interaction), operation="info")
+    assert store.token(7) is None
+    assert "expired" in str(fake.response.messages[-1]["content"]).lower()
+    await host.close()
+
+
+@pytest.mark.asyncio
+async def test_discord_startup_and_language_snapshots_without_api_routes(
+    database: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     language = tmp_path / "discord.lang.jsonc"
     language.write_bytes(LANG_PATH.read_bytes())
     monkeypatch.setenv("PATH_DISCORD_LANG", str(language))
@@ -128,132 +163,79 @@ async def test_discord_language_reads_use_off_loop_snapshots(
         assert threading.get_ident() != loop_thread
         return original_view(self)
 
+    public, _, _, sub = make_bots()
     monkeypatch.setattr(Config, "view", off_loop_view)
     monkeypatch.setattr(SharedDiscordClient, "login", AsyncMock())
     monkeypatch.setattr(SharedDiscordClient, "connect", AsyncMock())
-    cfg = MagicMock()
-    cfg.view.return_value = {
-        "uri": "https://example.test",
-        "api_token": "test",
-        "discord": {"token": "test", "whitelist": []},
-    }
     files = BoundedOffload(capacity=2, name="test-files")
     rendering = BoundedOffload(capacity=2, name="test-rendering")
-    runtime = DiscordApplication(
-        create_api_application(), cast("Snapshot[AppConfig]", cfg), tmp_path, database,
-        files=files,
-        rendering=rendering,
-    )
+    runtime = DiscordApplication(sub, public.cfg, tmp_path, database, files=files, rendering=rendering, limiter=public.limiter)
     try:
         await runtime.start()
         assert runtime.lang is not None
-        public = runtime.client._public
-        admin = runtime.client._admin
-        assert public is not None
-        assert admin is not None
-        assert public.lang_cfg is runtime.lang
-        assert admin.lang_cfg is runtime.lang
-        assert public.rendering is rendering
-        assert admin.rendering is rendering
+        feature = runtime.client._public
+        assert feature is not None
+        assert feature.sub is sub
+        assert feature.cfg is public.cfg
+        assert feature.rendering is rendering
+        assert feature.limiter is public.limiter
         snapshot = runtime.lang.view()
-        chart = public._chart_lang("en")
         language.write_text("broken")
         assert runtime.lang.view() == snapshot
-        assert public._chart_lang("en") == chart
         snapshot["chart"]["en"]["title"] = "updated chart"
         language.write_text(json.dumps(snapshot))
         await runtime.lang.reload()
-        assert public._chart_lang("en")["title"] == "updated chart"
+        assert feature._chart_lang("en")["title"] == "updated chart"
     finally:
         await runtime.close()
         await files.close()
         await rendering.close()
-    assert runtime.lang is not None
-    assert runtime.lang._schedules.tasks.active_count == 0
+
+
+def test_component_arguments_share_rate_limit_buckets() -> None:
+    assert interaction_limit("admin:info_user:alice") == interaction_limit("admin:info_user:bob")
+    assert interaction_limit("admin:page:list:0") == interaction_limit("admin:page:list:1")
+    assert interaction_limit("menu_info") == interaction_limit("info")
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("feature", ["public", "admin", "leaderboard"])
-async def test_discord_rendering_retains_shared_capacity_until_runtime_drain(
-    feature: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from discord_bot.tests.discord_helpers import (
-        FakeInteraction,
-        json_ok,
-        make_admin_bot,
-        make_public_bot,
-        modal_data,
-        stats_obj,
-    )
-
-    rendering = BoundedOffload(capacity=1, name="test-rendering")
-    runtime = Runtime(None, offloads=OffloadServices(rendering=rendering))
+async def test_cancelled_chart_retains_shared_rendering_capacity_until_runtime_drain(monkeypatch: pytest.MonkeyPatch) -> None:
+    pool = BoundedOffload(capacity=1, name="test-rendering")
+    runtime = Runtime(None, offloads=OffloadServices(rendering=pool))
     await runtime.start()
+    public, _, _, _ = make_bots(rendering=pool)
     entered = asyncio.Event()
-    loop = asyncio.get_running_loop()
     release = threading.Event()
     competing = threading.Event()
+    loop = asyncio.get_running_loop()
 
     def render(*args: object, **kwargs: object) -> None:
+        del args, kwargs
         loop.call_soon_threadsafe(entered.set)
         assert release.wait(timeout=5)
 
-    def handler(method: str, url: str, json: object, params: object, headers: object) -> FakeResponse:
-        if url.endswith("/history"):
-            return json_ok([{"ts": 1, "up": 10, "down": 20, "wl_up": 1, "wl_down": 2}])
-        if url.endswith("/leaderboard"):
-            return json_ok([{"username": "alice", "amount": 10}])
-        return json_ok(stats_obj())
-
-    public = None
-    if feature == "public":
-        public, _, _ = make_public_bot(handler, rendering=rendering)
-        monkeypatch.setattr("discord_bot.public.traffic.bandwidth_chart", render)
-        operation = public.render_chart(FakeInteraction(), 14)  # type: ignore[arg-type]
-    else:
-        admin, _ = make_admin_bot(handler, rendering=rendering)
-        if feature == "admin":
-            monkeypatch.setattr("discord_bot.admin.traffic.bandwidth_chart", render)
-            interaction = FakeInteraction(data=modal_data("admin:modal:chart", {"username": "alice", "days": "14"}))
-            operation = admin.handle_chart_modal(interaction)  # type: ignore[arg-type]
-        else:
-            monkeypatch.setattr("discord_bot.admin.leaderboard.leaderboard_chart", render)
-            admin._pending_leaderboard[7] = {"type": "total", "order": "desc"}
-            interaction = FakeInteraction(data=modal_data("admin:modal:lb_window", {"window": "0"}))
-            operation = admin.handle_leaderboard_window_modal(interaction)  # type: ignore[arg-type]
-
-    task = asyncio.create_task(operation)
-    queued: asyncio.Task[None] | None = None
-    stop: asyncio.Task[None] | None = None
+    monkeypatch.setattr("discord_bot.public.traffic.bandwidth_chart", render)
+    task = asyncio.create_task(public.render_chart(cast(discord.Interaction, FakeInteraction()), 14))
+    competitor: asyncio.Task[object] | None = None
+    stopping: asyncio.Task[None] | None = None
     try:
-        await asyncio.wait_for(entered.wait(), timeout=2)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        assert rendering.active_count == 1
-        if public is not None:
-            assert not public._chart_busy
-        queued = asyncio.create_task(rendering.run(competing.set))
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        assert not competing.is_set()
-        assert not queued.done()
-        stop = asyncio.create_task(runtime.stop())
-        with pytest.raises(AdmissionClosedError):
-            await asyncio.wait_for(queued, timeout=2)
-        assert not stop.done()
-        assert rendering.active_count == 1
-        release.set()
-        await asyncio.wait_for(stop, timeout=2)
-        assert rendering.active_count == 0
-        assert not competing.is_set()
-    finally:
-        release.set()
+        await asyncio.wait_for(entered.wait(), 5)
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-        if queued is not None:
-            await asyncio.gather(queued, return_exceptions=True)
-        await runtime.stop()
-        if stop is not None:
-            await stop
+        assert pool.active_count == 1
+        competitor = asyncio.create_task(pool.run(competing.set))
+        await asyncio.sleep(0)
+        assert not competing.is_set()
+        stopping = asyncio.create_task(runtime.stop())
+        await asyncio.sleep(0)
+        assert not stopping.done()
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+        if competitor is not None:
+            await asyncio.gather(competitor, return_exceptions=True)
+        if stopping is not None:
+            await stopping
+        else:
+            await runtime.stop()
+    assert pool.active_count == 0

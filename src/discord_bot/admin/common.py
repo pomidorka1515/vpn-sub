@@ -5,24 +5,11 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from discord_bot.composition import AdminFeatureMixin
-from discord_bot.payloads import obj_map
 
 if TYPE_CHECKING:
     from discord_bot.payloads import ResponseOptions
-    from discord_bot.webapi import ApiResult
 
-__all__ = ["AdminCommonMixin", "obj_map", "result_obj", "str_list"]
-
-
-def str_list(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in cast(list[object], value)]
-
-
-def result_obj(result: ApiResult) -> object:
-    payload: object = result.obj
-    return payload
+__all__ = ["AdminCommonMixin"]
 
 
 class AdminCommonMixin(AdminFeatureMixin):
@@ -113,43 +100,6 @@ class AdminCommonMixin(AdminFeatureMixin):
                     value = item.get("value")
                     out[cid] = value if isinstance(value, str) else str(value or "")
         return out
-
-    async def consume_result(
-        self,
-        interaction: discord.Interaction,
-        result: ApiResult,
-        *,
-        view: discord.ui.View | None = None,
-    ) -> bool:
-        if result.status == 401:
-            await self._respond(
-                interaction,
-                "❌ Нет доступа к API.",
-                view=view or self.main_menu_view(),
-            )
-            return False
-        if result.status == 429:
-            await self._respond(
-                interaction,
-                "⏳ Слишком много запросов. Подождите минуту.",
-                view=view or self.main_menu_view(),
-            )
-            return False
-        if result.status == 0 or result.msg == "http_unavailable":
-            await self._respond(
-                interaction,
-                "⚠ Сервис временно недоступен.",
-                view=view or self.main_menu_view(),
-            )
-            return False
-        if not result.ok:
-            await self._respond(
-                interaction,
-                f"❌ {result.msg}" if result.msg else "❌ Внутренняя ошибка",
-                view=view or self.main_menu_view(),
-            )
-            return False
-        return True
 
     async def require_admin(self, interaction: discord.Interaction) -> bool:
         if self.is_admin(interaction.user.id):

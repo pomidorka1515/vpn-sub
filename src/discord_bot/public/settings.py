@@ -4,6 +4,7 @@ from typing import Self
 
 import discord
 from discord_bot.composition import PublicFeatureMixin
+from util import sanitize
 
 __all__ = ["PublicSettingsMixin"]
 
@@ -140,11 +141,8 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.fingerprints(token)
-        if not await self.consume_result(interaction, result):
-            return
-        raw_fps = result.obj
-        fps = raw_fps if isinstance(raw_fps, list) else []
+        await self.username(interaction)
+        fps = self.cfg.view()["fingerprints"]
         options: list[discord.SelectOption] = [
             discord.SelectOption(label=item, value=item) for item in fps
         ]
@@ -169,9 +167,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.settings(token, fingerprint=fingerprint)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.account_svc.settings(await self.username(interaction), fingerprint=fingerprint)
         await self._reply_key(interaction, "settings_fp_success")
 
     async def handle_name_modal(self, interaction: discord.Interaction) -> None:
@@ -188,9 +184,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.settings(token, name=name)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.account_svc.settings(await self.username(interaction), displayname=name)
         await self._reply_key(interaction, "settings_name_success")
 
     async def handle_login_change_modal(self, interaction: discord.Interaction) -> None:
@@ -202,26 +196,17 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        check = await self.http.validate_username(username)
-        if not await self.consume_result(interaction, check):
-            return
-        obj = check.obj
-        if not isinstance(obj, dict):
-            await self._reply_key(interaction, "bad_response")
-            return
-        if not obj.get("valid"):
+        if not username or username != sanitize(username, "external") or len(username) > 32:
             await self._reply_key(interaction, "length_username", ln=32)
             return
-        if obj.get("taken"):
+        if await self.sub.user_svc.external_username_exists(username):
             await self._reply_key(interaction, "username_taken")
             return
-        result = await self.http.settings(
-            token,
-            username=username,
+        await self.sub.account_svc.settings(
+            await self.username(interaction),
+            ext_username=username,
             current_password=current_password,
         )
-        if not await self.consume_result(interaction, result):
-            return
         await self._reply_key(interaction, "settings_login_success")
 
     async def handle_pass_change_modal(self, interaction: discord.Interaction) -> None:
@@ -233,11 +218,9 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        result = await self.http.settings(
-            token,
-            password=password,
+        await self.sub.account_svc.settings(
+            await self.username(interaction),
+            ext_password=password,
             current_password=current_password,
         )
-        if not await self.consume_result(interaction, result):
-            return
         await self._reply_key(interaction, "settings_pass_success")

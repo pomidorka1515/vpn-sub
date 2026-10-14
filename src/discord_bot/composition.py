@@ -10,20 +10,21 @@ if TYPE_CHECKING:
 
     import discord
     from app_runtime.offload import BoundedOffload
-    from config import DiscordConfig, DiscordLangConfig
+    from app_runtime.rate_limit import AsyncRateLimiter
+    from config import AppConfig, DiscordLangConfig
+    from core import Subscription
     from core.common import Snapshot
     from discord import app_commands
-    from discord_bot.adminapi import AdminApiClient
     from discord_bot.sessions import SessionStore
-    from discord_bot.webapi import ApiResult, WebApiClient
     from loggers import Logger
 
     class PublicFeatureMixin:
         bot: discord.Client
         log: Logger
-        cfg: Snapshot[DiscordConfig]
+        cfg: Snapshot[AppConfig]
         lang_cfg: Snapshot[DiscordLangConfig]
-        http: WebApiClient
+        sub: Subscription
+        limiter: AsyncRateLimiter
         rendering: BoundedOffload
         sessions: SessionStore
         TEXTS: dict[str, dict[str, str]]
@@ -69,12 +70,7 @@ if TYPE_CHECKING:
             *,
             ephemeral: bool | None = None,
         ) -> None: ...
-        def apply_api_status(self, user_id: int, result: ApiResult) -> str | None: ...
-        async def consume_result[T](
-            self,
-            interaction: discord.Interaction,
-            result: ApiResult[T],
-        ) -> bool: ...
+        async def username(self, interaction: discord.Interaction) -> str: ...
         async def cmd_start(self, interaction: discord.Interaction) -> None: ...
         async def cmd_support(self, interaction: discord.Interaction) -> None: ...
         async def cmd_login(self, interaction: discord.Interaction) -> None: ...
@@ -116,9 +112,10 @@ if TYPE_CHECKING:
         bot: discord.Client
         tree: app_commands.CommandTree
         log: Logger
-        cfg: Snapshot[DiscordConfig]
+        cfg: Snapshot[AppConfig]
         lang_cfg: Snapshot[DiscordLangConfig]
-        http: AdminApiClient
+        sub: Subscription
+        limiter: AsyncRateLimiter
         rendering: BoundedOffload
         admin_uids: list[int]
         USERS_PER_PAGE: int
@@ -159,13 +156,6 @@ if TYPE_CHECKING:
             interaction: discord.Interaction,
             modal: discord.ui.Modal,
         ) -> None: ...
-        async def consume_result(
-            self,
-            interaction: discord.Interaction,
-            result: ApiResult,
-            *,
-            view: discord.ui.View | None = None,
-        ) -> bool: ...
         async def _finish_add_code(self, interaction: discord.Interaction) -> None: ...
         async def require_admin(self, interaction: discord.Interaction) -> bool: ...
         async def cmd_admin(self, interaction: discord.Interaction) -> None: ...

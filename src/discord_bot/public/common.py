@@ -211,6 +211,7 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
 
     async def require_login(self, interaction: discord.Interaction) -> bool:
         if self.is_logged_in(interaction.user.id):
+            await self.username(interaction)
             return True
         await self._reply_key(interaction, "not_logged_in")
         return False

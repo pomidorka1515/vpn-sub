@@ -4,12 +4,8 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from chart import bandwidth_chart
-from custom_types import BandwidthSnapshot
 from discord_bot.composition import AdminFeatureMixin
-from discord_bot.payloads import number, object_rows
 from util import fmt_bytes, format_usage, truncate_utf8
-
-from .common import obj_map, result_obj
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -52,64 +48,39 @@ class AdminTrafficMixin(AdminFeatureMixin):
             return
         await self._defer(interaction)
         await self._respond(interaction, "⏳ Генерация графика...")
-        history = await self.http.history(username, days)
-        if not await self.consume_result(interaction, history):
-            return
-        info = await self.http.user_info(username, pretty=False)
-        if not await self.consume_result(interaction, info):
-            return
-        payload: object = result_obj(info)
-        if not isinstance(payload, dict):
-            await self._respond(
-                interaction,
-                "❌ Некорректный ответ сервиса.",
-                view=self.main_menu_view(),
-            )
-            return
-        obj = obj_map(cast(object, payload))
-        bandwidth = obj_map(obj.get("bandwidth"))
-        total = obj_map(bandwidth.get("total"))
-        wl_total = obj_map(bandwidth.get("wl_total"))
+        snapshots = await self.sub.bandwidth_svc.get_bw_history(username, days)
+        obj = await self.sub.business_svc.get_info(username, pretty=False)
+        bandwidth = obj.bandwidth
+        total = bandwidth.total
+        wl_total = bandwidth.wl_total
         used_str, limit_str, percent_str = format_usage(
-            number(bandwidth.get("monthly")),
-            number(bandwidth.get("limit")),
+            bandwidth.monthly,
+            bandwidth.limit,
         )
         wl_used_str, wl_limit_str, wl_percent_str = format_usage(
-            number(bandwidth.get("wl_monthly")),
-            number(bandwidth.get("wl_limit")),
+            bandwidth.wl_monthly,
+            bandwidth.wl_limit,
         )
         text = f"""📈 **График трафика за {days} дней**
 
-**Пользователь:** `{username}` ({obj.get("displayname")})
+**Пользователь:** `{username}` ({obj.displayname})
 
 **Общий трафик:**
-├ Upload: {fmt_bytes(number(total.get("upload")))}
-├ Download: {fmt_bytes(number(total.get("download")))}
+├ Upload: {fmt_bytes(total.upload)}
+├ Download: {fmt_bytes(total.download)}
 ├ Использовано: {used_str} / {limit_str}
 └ Процент: {percent_str}
 
 **WL трафик:**
-├ Upload: {fmt_bytes(number(wl_total.get("upload")))}
-├ Download: {fmt_bytes(number(wl_total.get("download")))}
+├ Upload: {fmt_bytes(wl_total.upload)}
+├ Download: {fmt_bytes(wl_total.download)}
 ├ Использовано: {wl_used_str} / {wl_limit_str}
 └ Процент: {wl_percent_str}"""
         text = truncate_utf8(text, 2000)
-        history_raw = history.obj
-        items = object_rows(history_raw)
-        snapshots: list[BandwidthSnapshot] = [
-            BandwidthSnapshot(
-                ts=int(number(item.get("ts"))),
-                up=int(number(item.get("up"))),
-                down=int(number(item.get("down"))),
-                wl_up=int(number(item.get("wl_up"))),
-                wl_down=int(number(item.get("wl_down"))),
-            )
-            for item in items
-        ]
         image = await self.rendering.run(
             bandwidth_chart,
             snapshots,
-            label=str(obj.get("displayname") or ""),
+            label=obj.displayname,
             lang=self._chart_lang(),
         )
         if image is not None:

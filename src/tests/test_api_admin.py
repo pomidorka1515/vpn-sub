@@ -239,7 +239,7 @@ async def test_user_refresh_uses_bounded_workers(
             assert started == users[:4]
             workers = [
                 task for task in asyncio.all_tasks()
-                if task.get_name().startswith("api:user-refresh-worker:")
+                if task.get_name().startswith("core:user-refresh-worker:")
             ]
             assert len(workers) == min(4, user_count)
         release.set()

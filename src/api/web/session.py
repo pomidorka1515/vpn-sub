@@ -13,7 +13,7 @@ from api.decorators import (
     requires_webapi_auth,
 )
 from api.web._base import AsyncWebApiMixin
-from util import err, generate_token, ok, sanitize
+from util import err, ok, sanitize
 
 if TYPE_CHECKING:
     from quart import Response
@@ -66,13 +66,7 @@ class AsyncSessionRoutes(AsyncWebApiMixin):
     async def delete(self, username: str) -> ResponseType:
         content = g.json_obj
         current_password: str = content.get("current_password")
-        cur_ext = await self.sub.user_svc.get_external_username(username)
-        if not cur_ext:
-            return err("Account has no credentials set", 400)
-        if await self.sub.password_svc.validate_credentials(cur_ext, current_password) != username:
-            return err("Invalid current password", 401)
-        await self.sub.user_svc.set_auth_token(username, None)
-        await self.sub.business_svc.delete_user(username=username, perma=True)
+        await self.sub.account_svc.delete(username, current_password)
 
         resp, code = ok(msg="Deleted account")
         self._clear_auth_cookies(resp)
@@ -81,7 +75,7 @@ class AsyncSessionRoutes(AsyncWebApiMixin):
     @requires_webapi_auth
     async def logout(self, username: str) -> ResponseType:
         resp, code = ok(msg="Logged out")
-        await self.sub.user_svc.set_auth_token(username, None)
+        await self.sub.account_svc.logout(username)
         self._clear_auth_cookies(resp)
         return resp, code
 
@@ -117,11 +111,7 @@ class AsyncSessionRoutes(AsyncWebApiMixin):
     async def login(self) -> ResponseType:
         """Get the cookie for auth."""
         content = g.json_obj
-        internal = await self.validate_credentials(content["username"], content["password"])
-        if not isinstance(internal, str):
-            return err("Invalid credentials.", 401)
-        auth_token = generate_token("auth")
-        await self.sub.user_svc.set_auth_token(internal, auth_token)
+        auth_token = await self.sub.account_svc.login(content["username"], content["password"])
         r, code = ok(msg="Successful login", obj={"username": content["username"]})
         r.set_cookie(
             key="auth_token",

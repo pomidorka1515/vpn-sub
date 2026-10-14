@@ -6,8 +6,6 @@ from typing import ClassVar, cast
 import discord
 from discord_bot.composition import AdminFeatureMixin
 
-from .common import result_obj, str_list
-
 __all__ = ["AdminRoutingMixin"]
 
 
@@ -182,18 +180,8 @@ class AdminRoutingMixin(AdminFeatureMixin):
         await self._send_modal(interaction, modal)
 
     async def _load_users(self, interaction: discord.Interaction) -> list[str] | None:
-        result = await self.http.list_users()
-        if not await self.consume_result(interaction, result):
-            return None
-        raw: object = result_obj(result)
-        if not isinstance(raw, list):
-            await self._respond(
-                interaction,
-                "❌ Некорректный ответ сервиса.",
-                view=self.main_menu_view(),
-            )
-            return None
-        return str_list(cast(object, raw))
+        del interaction
+        return await self.sub.user_svc.list_users()
 
     async def _handle_info_menu(self, data: str, interaction: discord.Interaction) -> None:
         del data
@@ -413,9 +401,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
             )
             return
         fp = data.split("admin:fp_save:", 1)[1]
-        result = await self.http.update_user(pending["username"], fingerprint=fp)
-        if not await self.consume_result(interaction, result):
-            return
+        await self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,

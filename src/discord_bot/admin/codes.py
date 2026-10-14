@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from typing import cast
-
 import discord
 from discord_bot.composition import AdminFeatureMixin
-
-from .common import obj_map, result_obj
 
 __all__ = ["AdminCodesMixin"]
 
@@ -13,14 +9,11 @@ __all__ = ["AdminCodesMixin"]
 class AdminCodesMixin(AdminFeatureMixin):
     async def _cb_list_codes(self, interaction: discord.Interaction) -> None:
         await self._defer(interaction)
-        result = await self.http.list_codes()
-        if not await self.consume_result(interaction, result, view=self.codes_menu_view()):
-            return
-        raw = result_obj(result)
-        if not isinstance(raw, list) or not raw:
+        raw = await self.sub.code_svc.list_code()
+        if not raw:
             await self._respond(interaction, "Список кодов пуст.", view=self.codes_menu_view())
             return
-        text = "🎟 **Список кодов:**\n\n" + "\n".join([f"- `{c}`" for c in cast(list[object], raw)])
+        text = "🎟 **Список кодов:**\n\n" + "\n".join(f"- `{c}`" for c in raw)
         await self._respond(interaction, text, view=self.codes_menu_view())
 
     async def handle_info_code_modal(self, interaction: discord.Interaction) -> None:
@@ -29,26 +22,15 @@ class AdminCodesMixin(AdminFeatureMixin):
             await self._respond(interaction, "❌ Введите код.", view=self.codes_menu_view())
             return
         await self._defer(interaction)
-        result = await self.http.code_info(code)
-        if not await self.consume_result(interaction, result, view=self.codes_menu_view()):
-            return
-        info: object = result_obj(result)
-        if not isinstance(info, dict):
-            await self._respond(
-                interaction,
-                "❌ Некорректный ответ сервиса.",
-                view=self.codes_menu_view(),
-            )
-            return
-        typed = obj_map(cast(object, info))
+        typed = await self.sub.code_svc.get_code(code)
         text = (
             f"ℹ️ **Код: `{code}`**\n\n"
-            f"Тип: `{typed.get('action')}`\n"
-            f"Перманентный: **{'Да' if typed.get('perma') else 'Нет'}**\n"
-            f"Использований: `{typed.get('uses')}`\n"
-            f"Дней: `{typed.get('days')}`\n"
-            f"Гигабайт: `{typed.get('gb')}`\n"
-            f"ВЛ Гигабайт: `{typed.get('wl_gb')}`\n"
+            f"Тип: `{typed.action}`\n"
+            f"Перманентный: **{'Да' if typed.perma else 'Нет'}**\n"
+            f"Использований: `{typed.uses}`\n"
+            f"Дней: `{typed.days}`\n"
+            f"Гигабайт: `{typed.gb}`\n"
+            f"ВЛ Гигабайт: `{typed.wl_gb}`\n"
         )
         await self._respond(interaction, text, view=self.codes_menu_view())
 
@@ -58,9 +40,7 @@ class AdminCodesMixin(AdminFeatureMixin):
             await self._respond(interaction, "❌ Введите код.", view=self.codes_menu_view())
             return
         await self._defer(interaction)
-        result = await self.http.delete_code(code)
-        if not await self.consume_result(interaction, result, view=self.codes_menu_view()):
-            return
+        await self.sub.code_svc.delete_code(code)
         await self._respond(interaction, f"✅ Код `{code}` удалён.", view=self.codes_menu_view())
 
     async def handle_add_code_name_modal(self, interaction: discord.Interaction) -> None:
@@ -182,7 +162,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         raw_uses = pending.get("uses")
         uses = int(raw_uses) if isinstance(raw_uses, int) else 1
         await self._defer(interaction)
-        result = await self.http.add_code(
+        await self.sub.code_svc.add_code(
             code_name,
             code_type,
             permanent=perma,
@@ -191,8 +171,6 @@ class AdminCodesMixin(AdminFeatureMixin):
             wl_gb=wl_gb,
             uses=uses,
         )
-        if not await self.consume_result(interaction, result, view=self.codes_menu_view()):
-            return
         await self._respond(
             interaction,
             (

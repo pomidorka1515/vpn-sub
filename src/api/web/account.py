@@ -84,32 +84,13 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
         ext_username: str | None = content.get("username", None)
         ext_password: str | None = content.get("password", None)
         current_password: str | None = content.get("current_password", None)
-        if fingerprint:
-            conf = self.cfg.view()
-            if fingerprint not in conf["fingerprints"]:
-                return err("Unknown fingerprint")
-        if displayname and len(displayname) > 16:
-            return err("displayname exceeds max. length of 16")
-        if ext_username and len(ext_username) > 32:
-            return err("username exceeds max. length of 32")
-        # credential changes require the current password (guards stolen cookies)
-        if ext_username or ext_password:
-            if not current_password:
-                return err("current_password required to change credentials", 400)
-            cur_ext = await self.sub.user_svc.get_external_username(username)
-            if not cur_ext:
-                return err("Account has no credentials set", 400)
-            if (
-                await self.sub.password_svc.validate_credentials(cur_ext, current_password)
-                != username
-            ):
-                return err("Invalid current password", 401)
-        await self.sub.business_svc.update_params(
+        await self.sub.account_svc.settings(
             username=username,
             ext_username=ext_username,
             ext_password=ext_password,
             displayname=displayname,
             fingerprint=fingerprint,
+            current_password=current_password,
         )
         return ok()
 

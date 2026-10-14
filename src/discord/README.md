@@ -15,14 +15,19 @@ Omit the section or leave `token` empty to disable Discord. `whitelist` contains
 Discord user IDs allowed to use `/admin`; an empty list allows no administrators.  
 Restart after changing the token or whitelist.  
   
-Commands use the production API handlers in-process, retaining authentication,  
-validation, auditing and Redis rate limits keyed by Discord user ID. No loopback  
-listener, duplicated API token, `SUB_*` variables or separate unit is required.  
+Commands call the application's shared `Subscription` services directly, using  
+typed service results and config snapshots. Account workflows are shared with  
+WebAPI; bulk refresh shares its bounded concurrency and partial-failure handling.  
+Domain errors are handled at the Discord interaction boundary. Redis rate limits  
+use the runtime-owned limiter with explicit Discord user IDs. QR images and charts  
+use the shared rendering pool; subscription stats are fetched fresh each time.  
   
 Sessions and language preferences are stored in SQLite. Existing  
 `data/discord-sessions.json` is imported once when Discord first starts; the  
 original is retained. Login, logout and account reset keep the WebAPI's shared  
 auth-token semantics.  
+Persisted tokens resolve directly through `user_svc.auth_token_to_user`. No session  
+schema migration is needed. Discord startup is independent of API route registration.  
   
 ## Upgrade from the separate bot
   

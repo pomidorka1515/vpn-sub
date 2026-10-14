@@ -15,10 +15,11 @@ from .users import AdminUsersMixin
 if TYPE_CHECKING:
     import discord
     from app_runtime.offload import BoundedOffload
-    from config import DiscordConfig, DiscordLangConfig
+    from app_runtime.rate_limit import AsyncRateLimiter
+    from config import AppConfig, DiscordLangConfig
+    from core import Subscription
     from core.common import Snapshot
     from discord import app_commands
-    from discord_bot.adminapi import AdminApiClient
 
 __all__ = ["AdminBot"]
 
@@ -34,24 +35,29 @@ class AdminBot(
 ):
     def __init__(
         self,
-        cfg: Snapshot[DiscordConfig],
+        cfg: Snapshot[AppConfig],
         lang_cfg: Snapshot[DiscordLangConfig],
-        http: AdminApiClient,
+        sub: Subscription,
         *,
         client: discord.Client,
         tree: app_commands.CommandTree,
         rendering: BoundedOffload,
+        limiter: AsyncRateLimiter,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
             self.lang_cfg = lang_cfg
-            self.http = http
+            self.sub = sub
+            self.limiter = limiter
             self.rendering = rendering
             self.bot = client
             self.tree = tree
             conf = cfg.view()
-            whitelist = conf["private"]["whitelist"]
+            section = conf.get("discord")
+            if section is None:
+                raise RuntimeError("Discord configuration missing")
+            whitelist = section["whitelist"]
             self.admin_uids = [int(item) for item in whitelist]
             self._pending_codes: dict[int, dict[str, str | int | bool]] = {}
             self._pending_edits: dict[int, dict[str, str]] = {}
@@ -64,14 +70,8 @@ class AdminBot(
             from discord_bot.host import SharedDiscordClient
 
             if isinstance(self.bot, SharedDiscordClient):
-                await self.bot.process(str(interaction.user.id), lambda: self.cmd_admin(interaction))
+                await self.bot.interact(interaction, lambda: self.cmd_admin(interaction), operation="admin", admin=True)
 
         wrapped.__name__ = "admin"
         wrapped.__qualname__ = "admin"
         self.tree.command(name="admin", description="Open the VPN admin panel")(wrapped)
-
-    async def start(self) -> None:
-        return
-
-    async def stop(self) -> None:
-        return
