@@ -20,7 +20,7 @@ jobs:
             entry: src/main.py
             extra: >-
               --include-module=asgi
-              --include-package=hypercorn
+              --include-module=hypercorn.asyncio
               --include-package=quart
               --include-module=telebot.async_telebot
               --include-module=telebot.asyncio_helper
@@ -33,7 +33,7 @@ jobs:
               --include-data-dir=res=res
               --include-data-files=lang.jsonc=lang.jsonc
               --include-data-files=config.schema.json=config.schema.json
-              --include-package=discord
+              --include-module=discord
               --include-package=bots.discord
               --include-data-files=src/discord/lang.jsonc=discord.lang.jsonc
     steps:
@@ -220,6 +220,12 @@ jobs:
           # Keep quart.testing (imported by quart.app), click.testing (used by
           # quart.testing), werkzeug.test (exported by werkzeug), and jinja2.tests
           # (template predicates). Charts/QR codes need only PNG and fonts.
+          # Discord's own __init__ imports voice support; follow those imports,
+          # but do not force in unused discord.ext commands/tasks.
+          # The package config removes eager shell/debugger imports in Quart
+          # and Click before excluding their unused interactive dependencies.
+          # Only Hypercorn's asyncio TCP server is used; omit its CLI, middleware,
+          # StatsD logging and optional HTTP/3/QUIC UDP stack.
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile \
             --onefile-tempdir-spec="{CACHE_DIR}/${{ matrix.name }}/${version}/{PID}_{TIME_US}_{RANDOM}" \
@@ -237,6 +243,7 @@ jobs:
             --noinclude-unittest-mode=nofollow \
             --noinclude-IPython-mode=nofollow \
             --noinclude-pydoc-mode=nofollow \
+            --user-package-configuration-file=.github/nuitka-package.config.yml \
             --noinclude-custom-mode=telebot:bytecode \
             --noinclude-custom-mode=redis:bytecode \
             --noinclude-custom-mode=discord:bytecode \
@@ -258,6 +265,24 @@ jobs:
             --noinclude-custom-mode=jsonschema:bytecode \
             --noinclude-custom-mode=referencing:bytecode \
             --nofollow-import-to=doctest \
+            --nofollow-import-to=pdb \
+            --nofollow-import-to=bdb \
+            --nofollow-import-to=cmd \
+            --nofollow-import-to=code \
+            --nofollow-import-to='_pyrepl*' \
+            --nofollow-import-to=readline \
+            --nofollow-import-to=rlcompleter \
+            --nofollow-import-to=werkzeug.debug \
+            --nofollow-import-to=discord.ext \
+            --nofollow-import-to=telebot.ext \
+            --nofollow-import-to=qrcode.image.pure \
+            --nofollow-import-to=modulefinder \
+            --nofollow-import-to=pyclbr \
+            --nofollow-import-to=pstats \
+            --nofollow-import-to=trace \
+            --nofollow-import-to=timeit \
+            --nofollow-import-to=imaplib \
+            --nofollow-import-to=poplib \
             --nofollow-import-to=pydoc_data \
             --nofollow-import-to=idlelib \
             --nofollow-import-to=tkinter \
@@ -270,6 +295,16 @@ jobs:
             --nofollow-import-to=psutil._pssunos \
             --nofollow-import-to=psutil._psaix \
             --nofollow-import-to=hypercorn.trio \
+            --nofollow-import-to=hypercorn.__main__ \
+            --nofollow-import-to=hypercorn.run \
+            --nofollow-import-to=hypercorn.middleware \
+            --nofollow-import-to=hypercorn.statsd \
+            --nofollow-import-to=hypercorn.asyncio.statsd \
+            --nofollow-import-to=hypercorn.asyncio.udp_server \
+            --nofollow-import-to=hypercorn.protocol.h3 \
+            --nofollow-import-to=hypercorn.protocol.quic \
+            --nofollow-import-to=aioquic \
+            --nofollow-import-to=uvloop \
             --nofollow-import-to=trio \
             --nofollow-import-to=zstandard \
             --output-filename=${{ matrix.name }} \
@@ -349,7 +384,7 @@ jobs:
             ${{ matrix.entry }}
           ccache --show-stats
 
-      - name: verify codec exclusions
+      - name: verify runtime exclusions
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -364,9 +399,17 @@ jobs:
                   if "zstandard" in path.parts or path.name.startswith(forbidden):
                       raise SystemExit(f"Unwanted codec in payload: {path}")
           report = ET.parse("build/dist/${{ matrix.name }}-report.xml")
+          excluded_modules = (
+              "zstandard", "aioquic", "trio", "uvloop",
+              "hypercorn.__main__", "hypercorn.run", "hypercorn.middleware",
+              "hypercorn.statsd", "hypercorn.asyncio.statsd", "hypercorn.asyncio.udp_server",
+              "hypercorn.protocol.h3", "hypercorn.protocol.quic", "hypercorn.trio",
+              "telebot.ext", "qrcode.image.pure", "modulefinder", "pyclbr",
+              "pstats", "trace", "timeit", "imaplib", "poplib",
+          )
           for module in report.iter("module"):
               name = module.get("name", "")
-              if name == "zstandard" or name.startswith("zstandard."):
+              if any(name == excluded or name.startswith(excluded + ".") for excluded in excluded_modules):
                   raise SystemExit(f"Unwanted module in compilation report: {name}")
           PY
 

@@ -1,0 +1,31 @@
+# Quart imports its shell CLI and test helpers during normal initialization.
+# Keep those modules importable without bundling interactive Python/debuggers.
+- module-name: 'quart.cli'
+  anti-bloat:
+    - description: 'remove unused Quart interactive shell dependency'
+      replacements_plain:
+        'import code': 'code = None'
+
+- module-name: 'click.testing'
+  anti-bloat:
+    - description: 'remove unused Click test runner debugger dependency'
+      replacements_plain:
+        'import pdb': 'pdb = None'
+
+# The binary uses programmatic asyncio serving with ServerLogger and TCP binds.
+# Remove eager optional imports before excluding their modules from the payload.
+- module-name: 'hypercorn.asyncio.run'
+  anti-bloat:
+    - description: 'remove unused Hypercorn QUIC and StatsD dependencies'
+      replacements_plain:
+        'from .udp_server import UDPServer': 'UDPServer = None'
+        'from .statsd import StatsdLogger': 'StatsdLogger = None'
+        'config.set_statsd_logger_class(StatsdLogger)': 'pass'
+        'for sock in sockets.quic_sockets:': 'for sock in ():'
+
+- module-name: 'qrcode.main'
+  anti-bloat:
+    - description: 'use required Pillow instead of optional PyPNG fallback'
+      replacements_plain:
+        'from qrcode.image.pure import PyPNGImage': 'PyPNGImage = None'
+        'image_factory = PilImage if Image else PyPNGImage': 'image_factory = PilImage'
