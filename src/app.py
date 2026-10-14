@@ -14,7 +14,7 @@ from app_runtime.interfaces import OwnedResource
 from app_runtime.lifecycle import Runtime
 from app_runtime.offload import OffloadServices
 from app_runtime.settings import AppOptions, AppPaths, PanelTransportFactory, verbose_overrides
-from app_runtime.tasks import MutationRegistry
+from app_runtime.tasks import MutationRegistry, TaskRegistry
 from bots import AsyncAdminBot, AsyncPublicBot
 from bots.logging import AsyncBotLogging
 from bots.polling import AsyncTelegramSession
@@ -43,6 +43,26 @@ __all__ = [
     "create_application",
     "verbose_overrides",
 ]
+
+_startup_cleanup_tasks = TaskRegistry()
+
+
+async def _cleanup_startup(opened: list[OwnedResource], offloads: OffloadServices) -> None:
+    errors: list[BaseException] = []
+    while opened:
+        resource = opened.pop()
+        try:
+            await resource.resource.close()
+        except (Exception, asyncio.CancelledError) as error:
+            error.add_note(f"closing startup resource: {resource.name}")
+            errors.append(error)
+    try:
+        await offloads.close()
+    except (Exception, asyncio.CancelledError) as error:
+        error.add_note("closing startup offloads")
+        errors.append(error)
+    if errors:
+        raise BaseExceptionGroup("application startup cleanup failed", errors)
 
 
 @dataclass(slots=True)
@@ -222,7 +242,11 @@ async def create_application(
         app.extensions["runtime"] = runtime
         return runtime
     except Exception, asyncio.CancelledError:
-        for resource in reversed(opened):
-            await resource.resource.close()
-        await offloads.close()
+        # The registry retains cleanup and observes failures if the caller is
+        # cancelled again while shielded cleanup is still running.
+        cleanup = _startup_cleanup_tasks.create(
+            lambda: _cleanup_startup(opened, offloads),
+            name="application:startup-unwind",
+        )
+        await asyncio.shield(cleanup)
         raise

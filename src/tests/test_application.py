@@ -225,6 +225,125 @@ async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_close", [False, True])
+async def test_factory_cleanup_continues_after_close_failures(
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, cancel_close: bool,
+) -> None:
+    from app_runtime.composition import PrimaryLock
+    from app_runtime.offload import OffloadServices
+
+    events: list[str] = []
+    close_offloads = OffloadServices.close
+
+    class BrokenRedis(OpenRedis):
+        async def ping(self) -> bool:
+            raise OSError("Redis unavailable")
+
+        async def aclose(self) -> None:
+            events.append("redis")
+            if cancel_close:
+                raise asyncio.CancelledError("Redis close cancelled")
+            raise ValueError("Redis close failed")
+
+    async def broken_offloads_close(self: OffloadServices) -> None:
+        await close_offloads(self)
+        events.append("offloads")
+        raise OSError("offloads close failed")
+
+    monkeypatch.setattr(OffloadServices, "close", broken_offloads_close)
+    limiter = AsyncRateLimiter("redis://test", client=BrokenRedis())
+    limiter._owned = True
+    with pytest.raises(BaseExceptionGroup, match="application startup cleanup failed") as caught:
+        await create_application(
+            paths,
+            AppOptions(
+                start_background=False,
+                limiter=limiter,
+            ),
+        )
+    assert events == ["redis", "offloads"]
+    errors = caught.value.exceptions
+    assert len(errors) == 2
+    assert isinstance(errors[0], asyncio.CancelledError if cancel_close else ValueError)
+    assert errors[0].__notes__ == ["closing startup resource: Redis"]
+    assert errors[1].__notes__ == ["closing startup offloads"]
+    assert isinstance(caught.value.__context__, OSError)
+    lock = PrimaryLock(paths.primary_lock)
+    await lock.start()
+    await lock.close()
+
+
+@pytest.mark.asyncio
+async def test_factory_retains_cleanup_after_repeated_cancellation(
+    paths: AppPaths, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    import app as application
+    from app_runtime.composition import PrimaryLock
+    from app_runtime.offload import OffloadServices
+
+    starting = asyncio.Event()
+    closing = asyncio.Event()
+    release = asyncio.Event()
+    offloads_closed = asyncio.Event()
+    close_offloads = OffloadServices.close
+
+    class BlockingRedis(OpenRedis):
+        async def ping(self) -> bool:
+            starting.set()
+            await asyncio.Event().wait()
+            return True
+
+        async def aclose(self) -> None:
+            closing.set()
+            await release.wait()
+            raise OSError("detached Redis close failed")
+
+    async def record_offloads_close(self: OffloadServices) -> None:
+        await close_offloads(self)
+        offloads_closed.set()
+
+    monkeypatch.setattr(OffloadServices, "close", record_offloads_close)
+    limiter = AsyncRateLimiter("redis://test", client=BlockingRedis())
+    limiter._owned = True
+    caller = asyncio.create_task(create_application(
+        paths,
+        AppOptions(
+            start_background=False,
+            limiter=limiter,
+        ),
+    ))
+    try:
+        await asyncio.wait_for(starting.wait(), timeout=5)
+        caller.cancel()
+        await asyncio.wait_for(closing.wait(), timeout=5)
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+        assert application._startup_cleanup_tasks.active_count == 1
+        assert not offloads_closed.is_set()
+        cleanup = tuple(application._startup_cleanup_tasks._tasks)
+        release.set()
+        results = await asyncio.wait_for(
+            asyncio.gather(*cleanup, return_exceptions=True), timeout=5,
+        )
+        assert isinstance(results[0], ExceptionGroup)
+        assert offloads_closed.is_set()
+        assert application._startup_cleanup_tasks.active_count == 0
+        assert "application:startup-unwind failed" in caplog.text
+        lock = PrimaryLock(paths.primary_lock)
+        await lock.start()
+        await lock.close()
+    finally:
+        release.set()
+        if not caller.done():
+            caller.cancel()
+        await asyncio.gather(caller, return_exceptions=True)
+        await asyncio.gather(
+            *application._startup_cleanup_tasks._tasks, return_exceptions=True,
+        )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("enabled", [False, True])
 async def test_factory_optional_async_bots_and_notice_wiring(
     paths: AppPaths,
