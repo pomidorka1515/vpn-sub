@@ -415,6 +415,21 @@ jobs:
           # and loopback panel fake; exercise resources, DB, Lua limiter and lifespan.
           python scripts/smoke_async_release.py --binary build/dist/vpn-sub --report build/dist/vpn-sub-report.xml
 
+      - name: record binary sizes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          output = Path("build/dist")
+          payloads = list(output.glob("*.dist"))
+          if len(payloads) != 1:
+              raise SystemExit(f"Expected one standalone payload, found {len(payloads)}")
+          compressed = (output / "${{ matrix.name }}").stat().st_size
+          raw = sum(path.stat().st_size for path in payloads[0].rglob("*") if path.is_file())
+          footer = f"\n---\ncompressed={compressed / 1_000_000:.1f}MB raw={raw / 1_000_000:.1f}MB\n"
+          (output / "${{ matrix.name }}-sizes.txt").write_text(footer)
+          PY
+
       - uses: actions/upload-artifact@v4
         with:
           name: build-report-${{ matrix.name }}
@@ -424,7 +439,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: build/dist/${{ matrix.name }}
+          path: |
+            build/dist/${{ matrix.name }}
+            build/dist/${{ matrix.name }}-sizes.txt
           if-no-files-found: error
 
   publish:
@@ -455,6 +472,7 @@ jobs:
             exit 1
           fi
           printf '%s\n' "${notes}" > notes.md
+          cat build/dist/vpn-sub-sizes.txt >> notes.md
           release_flags=()
           case "${GITHUB_REF_NAME%%+*}" in
             *-*)
