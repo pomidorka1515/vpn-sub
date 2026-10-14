@@ -54,7 +54,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential ccache patchelf redis-server
+            build-essential ccache patchelf redis-server \
+            zlib1g-dev libfreetype6-dev libraqm-dev
 
       - name: restore ccache
         uses: actions/cache@v4
@@ -69,6 +70,51 @@ jobs:
           python -m pip install -U pip
           python -m pip install 'nuitka>=4,<5' ordered-set zstandard
           python -m pip install -r requirements.txt
+
+      - name: build PNG-only Pillow
+        run: |
+          # Import exclusions cannot remove codecs linked into the Pillow wheel.
+          # Rebuild the installed version, preserving PNG and font/text layout.
+          # Avoid pip's cached full-featured wheel, including across tag builds.
+          pillow_version="$(python -c 'import PIL; print(PIL.__version__)')"
+          CFLAGS="-O2 -g0" python -m pip install --force-reinstall --no-deps \
+            --no-cache-dir --no-binary=pillow "Pillow==${pillow_version}" \
+            -C zlib=enable -C freetype=enable -C raqm=enable \
+            -C jpeg=disable -C tiff=disable -C jpeg2000=disable \
+            -C webp=disable -C avif=disable -C lcms=disable \
+            -C imagequant=disable -C xcb=disable
+          python - <<'PY'
+          from io import BytesIO
+          from pathlib import Path
+          import sys
+
+          import qrcode
+          from PIL import Image, ImageDraw, ImageFont, features
+
+          # Simulate the Nuitka exclusion while keeping zstandard installed for
+          # the build tools. Fail early if this Python lacks stdlib zstd support.
+          import compression.zstd
+          sys.modules["zstandard"] = None
+          import discord.utils
+          if discord.utils._ZSTD_SOURCE != "compression.zstd":
+              raise SystemExit("Discord did not select stdlib zstd")
+
+          for feature in ("zlib", "freetype2", "raqm"):
+              if not features.check(feature):
+                  raise SystemExit(f"Pillow is missing required feature: {feature}")
+          for feature in ("jpg", "libtiff", "jpg_2000", "webp", "avif", "littlecms2", "libimagequant", "xcb"):
+              if features.check(feature):
+                  raise SystemExit(f"Pillow retained unwanted feature: {feature}")
+          image = Image.new("RGB", (240, 80), "white")
+          font = ImageFont.truetype(str(next(Path("res/fonts").glob("*.ttf"))), 16)
+          ImageDraw.Draw(image).text((5, 5), "VPN тест", font=font, fill="black")
+          for image in (image, qrcode.make("https://example.com/sub")):
+              buffer = BytesIO()
+              image.save(buffer, format="PNG")
+              buffer.seek(0)
+              with Image.open(buffer, formats=["PNG"]) as decoded:
+                  decoded.load()
+          PY
 
       - name: patch nuitka onefile compression
         run: |
@@ -133,7 +179,7 @@ jobs:
           # Audit reports exposed bundled aiosqlite tests and unused Pillow formats.
           # Keep quart.testing (imported by quart.app), click.testing (used by
           # quart.testing), werkzeug.test (exported by werkzeug), and jinja2.tests
-          # (template predicates). Charts/QR codes need PNG; retain JPEG/TIFF too.
+          # (template predicates). Charts/QR codes need only PNG and fonts.
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile \
             --onefile-tempdir-spec="{CACHE_DIR}/${{ matrix.name }}/${version}/{PID}_{TIME_US}_{RANDOM}" \
@@ -185,6 +231,7 @@ jobs:
             --nofollow-import-to=psutil._psaix \
             --nofollow-import-to=hypercorn.trio \
             --nofollow-import-to=trio \
+            --nofollow-import-to=zstandard \
             --output-filename=${{ matrix.name }} \
             --output-dir=build/dist \
             --report=build/dist/${{ matrix.name }}-report.xml \
@@ -207,6 +254,9 @@ jobs:
             --nofollow-import-to=PIL.ImageShow \
             --nofollow-import-to=PIL.ImageGrab \
             --nofollow-import-to=PIL.ImageWin \
+            --nofollow-import-to=PIL.ImageCms \
+            --nofollow-import-to=PIL.JpegImagePlugin \
+            --nofollow-import-to=PIL.TiffImagePlugin \
             --nofollow-import-to=PIL.SpiderImagePlugin \
             --nofollow-import-to=PIL.DdsImagePlugin \
             --nofollow-import-to=PIL.BlpImagePlugin \
@@ -258,6 +308,27 @@ jobs:
             ${{ matrix.extra }} \
             ${{ matrix.entry }}
           ccache --show-stats
+
+      - name: verify codec exclusions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          dists = list(Path("build/dist").glob("*.dist"))
+          if not dists:
+              raise SystemExit("No standalone payload available for codec audit")
+          forbidden = ("libjpeg", "libtiff", "libopenjp2", "libwebp", "libavif", "liblcms", "libXau", "libxcb")
+          for dist in dists:
+              for path in dist.rglob("*"):
+                  if "zstandard" in path.parts or path.name.startswith(forbidden):
+                      raise SystemExit(f"Unwanted codec in payload: {path}")
+          report = ET.parse("build/dist/${{ matrix.name }}-report.xml")
+          for module in report.iter("module"):
+              name = module.get("name", "")
+              if name == "zstandard" or name.startswith("zstandard."):
+                  raise SystemExit(f"Unwanted module in compilation report: {name}")
+          PY
 
       - name: inspect payload
         run: |
