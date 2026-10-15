@@ -2,11 +2,10 @@ name: release
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  workflow_dispatch:
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -60,14 +59,31 @@ jobs:
             zlib1g-dev libfreetype6-dev libraqm-dev
 
       - name: restore ccache
-        # Tags cannot read each other's caches. Builds on main populate a
-        # default-branch cache that subsequent tag builds can restore.
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ matrix.name }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ matrix.name }}-
+        # Actions caches are tag-scoped; artifacts can be read across tag runs.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_ARTIFACT: ccache-${{ runner.os }}-${{ runner.arch }}-${{ matrix.name }}
+        run: |
+          mkdir -p "$HOME/.cache/ccache"
+          artifact_id="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts" \
+            -f name="$CACHE_ARTIFACT" -f per_page=100 \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | last | .id // empty')"
+          if [ -z "$artifact_id" ]; then
+            echo "No previous ccache artifact; starting with an empty cache"
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$RUNNER_TEMP/ccache.zip"
+          python - "$RUNNER_TEMP" <<'PY'
+          from pathlib import Path
+          import sys
+          from zipfile import ZipFile
+
+          temporary = Path(sys.argv[1])
+          with ZipFile(temporary / "ccache.zip") as archive:
+              (temporary / "ccache.tar").write_bytes(archive.read("ccache.tar"))
+          PY
+          tar -xf "$RUNNER_TEMP/ccache.tar" -C "$HOME/.cache/ccache"
+          echo "Restored ccache artifact $artifact_id"
 
       - name: install runtime dependencies
         run: |
@@ -190,7 +206,7 @@ jobs:
           # and the compiler runs uncached.
           NUITKA_CCACHE_BINARY: /usr/bin/ccache
         run: |
-          # actions/cache restores to ~/.cache/ccache. Nuitka honors
+          # The artifact restores to ~/.cache/ccache. Nuitka honors
           # CCACHE_DIR only when it is already in the environment; otherwise
           # it stores objects under its own cache and the restore is unused.
           mkdir -p "$HOME/.cache/ccache"
@@ -202,11 +218,7 @@ jobs:
           # GitHub ubuntu-22.04 runners are 2 vCPU. Nuitka's default job count
           # oversubscribes them once --lto=yes is linking.
           jobs="$(nproc)"
-          version=0.0.0
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            version="${GITHUB_REF_NAME#v}"
-          fi
-          export BUILD_VERSION="$version"
+          version="${GITHUB_REF_NAME#v}"
           # Nuitka product metadata accepts only numbers; runtime/tag identity
           # and the unpack cache retain the complete prerelease/build suffix.
           product_version="${version%%+*}"
@@ -217,7 +229,7 @@ jobs:
           path = Path("src/version.py")
           source = path.read_text()
           old = 'VERSION = "0.0.0"'
-          new = f'VERSION = {os.environ["BUILD_VERSION"]!r}'
+          new = f'VERSION = {os.environ["GITHUB_REF_NAME"].removeprefix("v")!r}'
           if old not in source:
               raise SystemExit(f"src/version.py has no {old} placeholder")
           path.write_text(source.replace(old, new, 1))
@@ -484,6 +496,18 @@ jobs:
           (output / "${{ matrix.name }}-sizes.txt").write_text(footer)
           PY
 
+      - name: pack ccache
+        run: tar -cf "$RUNNER_TEMP/ccache.tar" -C "$HOME/.cache/ccache" .
+
+      - name: save ccache
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccache-${{ runner.os }}-${{ runner.arch }}-${{ matrix.name }}
+          path: ${{ runner.temp }}/ccache.tar
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@v4
         with:
           name: build-report-${{ matrix.name }}
@@ -499,7 +523,6 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: binaries
     runs-on: ubuntu-22.04
     steps:
