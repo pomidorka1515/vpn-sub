@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from quart import Quart
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from quart import Response
 
     from app_runtime.rate_limit import RateLimitScript
+    from core import Subscription
 
 
 class RedisStore:
@@ -138,5 +140,40 @@ async def test_reused_decorator_and_unknown_address() -> None:
             assert denied[1] == 429
         assert len(store.events) == 2
         assert all(key.endswith(":<unknown>") for key in store.events)
+    finally:
+        await limiter.close()
+
+
+@pytest.mark.asyncio
+async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.subscription import register_subscription_route
+    from util import ok
+
+    sub = MagicMock()
+    sub.res.cfg.view.return_value = {"uri": "/sub/"}
+
+    def build(*args: object, **kwargs: object) -> tuple[Response, int]:
+        return ok()
+
+    builder = AsyncMock(side_effect=build)
+    monkeypatch.setattr("api.subscription.get_subscription", builder)
+    monkeypatch.setattr(time, "time", lambda: 100)
+    store = RedisStore()
+    limiter = AsyncRateLimiter("redis://test", client=store)
+    await limiter.start()
+    app = Quart(__name__)
+    register_subscription_route(app, cast("Subscription", sub), limiter)
+    client = app.test_client()
+    try:
+        for index in range(60):
+            assert (await client.get(f"/sub?token={index}")).status_code == 200
+        assert (await client.get("/sub/")).status_code == 429
+        assert builder.await_count == 60
+        assert (await client.get("/sub", scope_base={"client": ("other-ip", 1234)})).status_code == 200
+        monkeypatch.setattr(time, "time", lambda: 160)
+        assert (await client.get("/sub")).status_code == 200
+        store.failed = True
+        assert (await client.get("/sub")).status_code == 429
+        assert builder.await_count == 62
     finally:
         await limiter.close()

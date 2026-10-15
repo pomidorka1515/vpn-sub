@@ -227,7 +227,7 @@ async def create_application(
             )
         AsyncApi(app=app, cfg=cfg, audit_cfg=audit, sub=sub, bw=status, limiter=limiter)
         AsyncWebApi(app=app, cfg=cfg, sub=sub, bw=status, limiter=limiter)
-        register_subscription_route(app, sub)
+        register_subscription_route(app, sub, limiter)
         runtime = Application(
             ApplicationDependencies(
                 app,
