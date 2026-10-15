@@ -2,7 +2,9 @@ name: release
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -58,6 +60,8 @@ jobs:
             zlib1g-dev libfreetype6-dev libraqm-dev
 
       - name: restore ccache
+        # Tags cannot read each other's caches. Builds on main populate a
+        # default-branch cache that subsequent tag builds can restore.
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
@@ -198,7 +202,11 @@ jobs:
           # GitHub ubuntu-22.04 runners are 2 vCPU. Nuitka's default job count
           # oversubscribes them once --lto=yes is linking.
           jobs="$(nproc)"
-          version="${GITHUB_REF_NAME#v}"
+          version=0.0.0
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          export BUILD_VERSION="$version"
           # Nuitka product metadata accepts only numbers; runtime/tag identity
           # and the unpack cache retain the complete prerelease/build suffix.
           product_version="${version%%+*}"
@@ -209,7 +217,7 @@ jobs:
           path = Path("src/version.py")
           source = path.read_text()
           old = 'VERSION = "0.0.0"'
-          new = f'VERSION = {os.environ["GITHUB_REF_NAME"].removeprefix("v")!r}'
+          new = f'VERSION = {os.environ["BUILD_VERSION"]!r}'
           if old not in source:
               raise SystemExit(f"src/version.py has no {old} placeholder")
           path.write_text(source.replace(old, new, 1))
@@ -382,7 +390,10 @@ jobs:
             --include-package-data=certifi \
             ${{ matrix.extra }} \
             ${{ matrix.entry }}
-          ccache --show-stats
+
+      - name: ccache statistics
+        if: always()
+        run: CCACHE_DIR="$HOME/.cache/ccache" ccache --show-stats --verbose
 
       - name: verify runtime exclusions
         run: |
@@ -488,6 +499,7 @@ jobs:
           if-no-files-found: error
 
   publish:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: binaries
     runs-on: ubuntu-22.04
     steps:
