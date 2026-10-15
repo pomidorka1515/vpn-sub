@@ -4,4 +4,5 @@ export const state = {
   authBlocked: false,
   currentUsers: [],
   selectedUser: null,
+  panelsConfigured: true,
 };

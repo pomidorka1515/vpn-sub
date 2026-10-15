@@ -6,8 +6,11 @@ from typing import TYPE_CHECKING
 
 from errors import PanelUnavailableError
 
+from ..common import BaseService
+
 if TYPE_CHECKING:
-    from core import Subscription
+    from ..common import SharedCoreResources
+    from .user import BusinessUserService, CommonUserService
 
 
 @dataclass
@@ -18,12 +21,21 @@ class RefreshResult:
     total: int
 
 
-class RefreshService:
-    def __init__(self, sub: Subscription) -> None:
-        self.sub = sub
+class RefreshService(BaseService):
+    def __init__(
+        self,
+        res: SharedCoreResources,
+        *,
+        user_svc: CommonUserService,
+        business_svc: BusinessUserService,
+    ) -> None:
+        super().__init__(res)
+        self.user_svc = user_svc
+        self.business_svc = business_svc
 
     async def refresh(self) -> RefreshResult:
-        users = await self.sub.user_svc.list_users()
+        self.require_panels()
+        users = await self.user_svc.list_users()
         pending = iter(users)
         failed: set[str] = set()
         aborted: str | None = None
@@ -35,14 +47,14 @@ class RefreshService:
                 if aborted is not None:
                     return
                 try:
-                    await self.sub.business_svc.add_users(username)
+                    await self.business_svc.add_users(username)
                 except PanelUnavailableError:
                     failed.add(username)
-                    self.sub.res.log.exception("user refresh failed for %s", username)
+                    self.log.exception("user refresh failed for %s", username)
                 except Exception:
                     if aborted is None:
                         aborted = username
-                    self.sub.res.log.critical(
+                    self.log.critical(
                         "bulk user refresh aborted for %s", username, exc_info=True,
                     )
                 else:

@@ -346,5 +346,9 @@ async def test_is_online_requires_healthy_panel(
 
 
 @pytest.mark.asyncio
-async def test_is_online_false_without_panels(subscription: Subscription) -> None:
-    assert (await subscription.panel_svc.is_online("alice")) is False
+async def test_is_online_unavailable_without_panels(database: Database) -> None:
+    from errors import NoPanelsConfiguredError
+
+    subscription = await make_subscription(database, panels=[])
+    with pytest.raises(NoPanelsConfiguredError):
+        await subscription.panel_svc.is_online("alice")

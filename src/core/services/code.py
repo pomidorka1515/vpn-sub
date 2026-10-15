@@ -11,7 +11,7 @@ from errors import CodeError, ConflictError, DuplicateError, NotFoundError, Vali
 from util import generate_token, isusername, sanitize
 
 from ..common import BaseService
-from ..coordination import user_mutation
+from ..coordination import panel_mutation, user_mutation
 
 # pyright: reportUnnecessaryIsInstance=false
 
@@ -124,8 +124,9 @@ class BusinessCodeService(BaseService):
         self.password_svc = password_svc
         self.user_svc = user_svc
 
-    @user_mutation
+    @panel_mutation
     async def _rollback_registered_user(self, *, username: str) -> None:
+        self.require_panels()
         key = f"registration_rollback_failed:{username}"
         await self.db.set_metadata(key, str(int(time.time())))
         user = await self.db.get_user(username)
@@ -135,7 +136,7 @@ class BusinessCodeService(BaseService):
         await self.db.rollback_registration_sync(username)
         await self.db.delete_metadata(key)
 
-    @user_mutation
+    @panel_mutation
     async def register_with_code(
         self,
         *,
@@ -145,6 +146,7 @@ class BusinessCodeService(BaseService):
         ext_username: str,
         ext_password: str,
     ) -> RegisterWithCodeInfo:
+        self.require_panels()
         if not isinstance(code, str) or not code:
             raise ValidationError("Invalid code")
         if not isinstance(username, str) or not isusername(username):
@@ -217,6 +219,8 @@ class BusinessCodeService(BaseService):
         return result
 
     async def recover_rollback_failures(self) -> None:
+        if not self.panels:
+            return
         # Pending rows cover a crash before a failure marker could be written.
         users = set(await self.db.pending_registrations())
         users.update(

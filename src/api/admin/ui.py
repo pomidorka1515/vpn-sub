@@ -60,7 +60,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
     async def admin_token(self) -> ResponseType:
         if not await self._admin_cookie_ok():
             return err("Unauthorized", 401)
-        return ok(obj={"token": self.token, "api_root": self.uri})
+        return ok(obj={"token": self.token, "api_root": self.uri, "panels_configured": bool(self.sub.panels)})
 
     async def admin_session(self) -> ResponseType:
         content = await request.get_json(silent=True)

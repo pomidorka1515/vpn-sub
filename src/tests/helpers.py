@@ -97,7 +97,7 @@ async def make_subscription(
     sub = await make_async_subscription(
         database,
         Path(tempfile.mkdtemp(dir=Path(database.path).parent)),
-        cast("list[FakePanel]", panels or []),
+        cast("list[FakePanel] | None", panels),
         cast("FakePanel | None", whitelist_panel),
     )
     sub.res = replace(sub.res, cfg=config_mock(subscription_config(**config_overrides)))

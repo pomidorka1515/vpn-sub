@@ -158,6 +158,12 @@ Pure migration scripts use stdlib; `reconcile_clients.py` requires the checkout'
 
 ### 3x-ui panel auth
 
+For initial setup, use `"3xui": {}` to run without panels. Configuration and  
+DB-only operations remain available; panel-dependent operations (including user  
+creation, deletion, resets, and live traffic) return `503 No panels configured`.  
+Panel-dependent background jobs and recovery pause until panels are added and  
+the service is restarted. Pending recovery records are preserved.  
+  
 Each panel in `3xui.*` authenticates with an **admin-scoped API token**
 (Bearer), not a username/password login:
 

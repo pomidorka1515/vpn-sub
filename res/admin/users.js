@@ -33,8 +33,8 @@ function renderUsersTable() {
           <tr>
             <td class="mono">${escapeHtml(u)}</td>
             <td class="actions">
-              <button class="btn-tiny" data-user="${escapeHtml(u)}" data-user-action="view">${t('info')}</button>
-              <button class="btn-tiny danger" data-user="${escapeHtml(u)}" data-user-action="delete">${t('delete')}</button>
+              <button class="btn-tiny" data-user="${escapeHtml(u)}" data-user-action="view" ${state.panelsConfigured ? '' : 'disabled'}>${t('info')}</button>
+              <button class="btn-tiny danger" data-user="${escapeHtml(u)}" data-user-action="delete" ${state.panelsConfigured ? '' : 'disabled'}>${t('delete')}</button>
             </td>
           </tr>
         `).join('')}

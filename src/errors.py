@@ -9,6 +9,7 @@ __all__ = (
     "DuplicateError",
     "FileCorruptionError",
     "MigrationError",
+    "NoPanelsConfiguredError",
     "NotFoundError",
     "PanelRejectedError",
     "PanelUnavailableError",
@@ -115,6 +116,12 @@ class XUiSessionError(AppError):
 class PanelUnavailableError(XUiSessionError):
     def __init__(self, message: str = "Panel operation failed") -> None:
         super().__init__(message, status=502)
+
+
+class NoPanelsConfiguredError(PanelUnavailableError):
+    def __init__(self) -> None:
+        super().__init__("No panels configured")
+        self.status = 503
 
 
 class PanelRejectedError(PanelUnavailableError):

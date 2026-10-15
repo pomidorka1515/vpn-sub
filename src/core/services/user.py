@@ -29,7 +29,7 @@ from errors import (
 from util import generate_token, isusername, isuuid, sanitize
 
 from ..common import BaseService
-from ..coordination import user_mutation
+from ..coordination import panel_mutation, user_mutation
 from .client_payload import already_exists, client_payload_from
 
 if TYPE_CHECKING:
@@ -154,6 +154,7 @@ class BusinessUserService(BaseService):
             await self.panel_svc.invalidate_inbounds(panel)
 
     async def get_info(self, username: str, pretty: bool = False) -> UserInfo:
+        self.require_panels()
         conf = self.cfg.view()
         user = await self.user_svc.user(username)
         bw, wl, online = await asyncio.gather(
@@ -192,7 +193,7 @@ class BusinessUserService(BaseService):
             ),
         )
 
-    @user_mutation
+    @panel_mutation
     async def add_users(
         self,
         username: str,
@@ -200,6 +201,7 @@ class BusinessUserService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> None:
+        self.require_panels()
         if not _called_internally:
             await self.require_recovered(username)
         user = await self.user_svc.user(username)
@@ -266,7 +268,7 @@ class BusinessUserService(BaseService):
             await self.audit_svc.audit(name="user_refresh", info={"username": username})
         await self._drop_cache()
 
-    @user_mutation
+    @panel_mutation
     async def rollback_panel_clients(
         self,
         username: str,
@@ -274,6 +276,8 @@ class BusinessUserService(BaseService):
         expected_uuid: str | None = None,
         work: WorkClass = "foreground",
     ) -> None:
+        self.require_panels()
+
         async def delete(panel: XUiSession) -> None:
             # Live reads make repeated compensation safe; unavailable is never
             # confused with absent, and foreign shared-panel clients survive.
@@ -291,7 +295,7 @@ class BusinessUserService(BaseService):
 
         await self.panel_svc.map_panels(self.panels, delete, work=work)
 
-    @user_mutation
+    @panel_mutation
     async def delete_user(
         self,
         username: str,
@@ -299,6 +303,7 @@ class BusinessUserService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> None:
+        self.require_panels()
         # Retrying a failed delete is safe; other pending workflows reserve
         # their identity until their own compensation has completed.
         if (
@@ -335,7 +340,7 @@ class BusinessUserService(BaseService):
             "user update",
         )
 
-    @user_mutation
+    @panel_mutation
     async def update_user(
         self,
         username: str,
@@ -345,6 +350,7 @@ class BusinessUserService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> None:
+        self.require_panels()
         await self.require_recovered(username)
         await self.user_svc.user(username)
         fields: UserFields = {}
@@ -380,6 +386,7 @@ class BusinessUserService(BaseService):
         whitelist: bool = True,
         work: WorkClass = "foreground",
     ) -> None:
+        self.require_panels()
         user = await self.user_svc.user(username)
         panels = [
             panel for panel in self.panels if (whitelist if panel == self.whitelist_panel else main)
@@ -393,9 +400,10 @@ class BusinessUserService(BaseService):
         await self.panel_svc.map_panels(panels, write, work=work)
         await self.db.delete_metadata(f"user_sync_pending:{username}")
 
-    @user_mutation
+    @panel_mutation
     async def apply_quota(self, username: str, *, now: int | None = None) -> None:
         """Watcher decisions use current limits/expiry under shared ownership."""
+        self.require_panels()
         user = await self.user_svc.user(username)
         current = int(time.time()) if now is None else now
         time_ok = user["expires_at"] == 0 or user["expires_at"] >= current
@@ -409,7 +417,7 @@ class BusinessUserService(BaseService):
             work="background",
         )
 
-    @user_mutation
+    @panel_mutation
     async def add_new_user(
         self,
         username: str,
@@ -423,6 +431,7 @@ class BusinessUserService(BaseService):
         wl_limit: int = 5,
         timee: int = 0,
     ) -> NewUserInfo:
+        self.require_panels()
         await self.require_recovered(username)
         if not isusername(username):
             raise ValidationError("Invalid username")
@@ -550,8 +559,9 @@ class BusinessUserService(BaseService):
         )
         await self._drop_cache()
 
-    @user_mutation
+    @panel_mutation
     async def update_uuid(self, username: str, uid: str, *, _resetting: bool = False) -> None:
+        self.require_panels()
         await self.require_recovered(username, allow_reset=_resetting)
         if not isuuid(uid):
             raise ValidationError("Invalid UUID")
@@ -595,8 +605,9 @@ class BusinessUserService(BaseService):
         )
         await self._drop_cache()
 
-    @user_mutation
+    @panel_mutation
     async def reset_user(self, username: str) -> ResetUserObject:
+        self.require_panels()
         await self.require_recovered(username)
         uid, token = str(uuid.uuid4()), generate_token("sub")
         await self.db.set_metadata(
@@ -611,8 +622,9 @@ class BusinessUserService(BaseService):
         )
         return ResetUserObject(uuid=uid, token=token)
 
-    @user_mutation
+    @panel_mutation
     async def reconcile_user(self, username: str) -> None:
+        self.require_panels()
         await self.require_recovered(username)
         if await self.db.get_metadata(f"uuid_rollback_failed:{username}") is not None:
             raise ConflictError("User requires pending operation recovery before reconcile")
@@ -621,6 +633,7 @@ class BusinessUserService(BaseService):
         await self._sync_enabled(username, work="background")
 
     async def reconcile(self) -> list[str]:
+        self.require_panels()
         users = await self.user_svc.list_users()
         pending = iter(users)
         failures: set[str] = set()
@@ -640,6 +653,8 @@ class BusinessUserService(BaseService):
         return [username for username in users if username in failures]
 
     async def recover_pending(self) -> None:
+        if not self.panels:
+            return
         for prefix in (
             "user_delete_pending:",
             "user_create_pending:",

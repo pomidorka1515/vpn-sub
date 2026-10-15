@@ -44,6 +44,7 @@ class BandwidthService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> BandwidthInfo:
+        self.require_panels()
         await self.user_svc.user(username)
         rows = await self.panel_svc.map_panels(
             self._target_panels(whitelist),
@@ -60,6 +61,7 @@ class BandwidthService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> dict[str, BandwidthInfo]:
+        self.require_panels()
         panels = self._target_panels(whitelist)
         if not panels:
             return {}

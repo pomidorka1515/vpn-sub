@@ -113,3 +113,23 @@ def user_mutation[**P, T](
         )
 
     return wrapped
+
+
+def panel_mutation[**P, T](
+    function: Callable[P, Coroutine[object, object, T]],
+) -> Callable[P, Coroutine[object, object, T]]:
+    """Reject missing panels before admitting or awaiting a user mutation."""
+    mutation = user_mutation(function)
+    sig = signature(function)
+
+    @wraps(function)
+    async def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
+        from .common import BaseService
+
+        service = sig.bind(*args, **kwargs).arguments["self"]
+        if not isinstance(service, BaseService):
+            raise TypeError("panel mutation requires a service")
+        service.require_panels()
+        return await mutation(*args, **kwargs)
+
+    return wrapped

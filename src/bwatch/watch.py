@@ -117,8 +117,14 @@ class BWatch:
         if not self.scheduled:
             self._started = True
             return
-        wl = await self.sub.bandwidth_svc.all_traffic(whitelist=True, work="background")
-        main = await self.sub.bandwidth_svc.all_traffic(work="background")
+        wl = (
+            await self.sub.bandwidth_svc.all_traffic(whitelist=True, work="background")
+            if self.sub.panels else {}
+        )
+        main = (
+            await self.sub.bandwidth_svc.all_traffic(work="background")
+            if self.sub.panels else {}
+        )
         for state in await self.sub.user_svc.list_user_states():
             name = state["username"]
             self.wl_mem[name] = wl.get(name, BandwidthInfo(0, 0, 0))
@@ -148,6 +154,8 @@ class BWatch:
         await self.close()
 
     async def _job(self, name: str, operation: Callable[[], Awaitable[None]]) -> None:
+        if not self.sub.panels and name in {"quota", "bandwidth", "daily bandwidth", "reconcile", "health"}:
+            return
         async with self._jobs.setdefault(name, asyncio.Lock()):
             if self._closed:
                 return

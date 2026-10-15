@@ -318,6 +318,7 @@ class PanelService(BaseService):
         fresh: bool = False,
         work: WorkClass = "foreground",
     ) -> OnlineStatus:
+        self.require_panels()
         snapshot = self._online
         if fresh or snapshot is None or monotonic() - snapshot[2] >= 4:
             if (

@@ -143,7 +143,7 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
     for part in (b"fonts.googleapis", b"fonts.gstatic", b"jsdelivr"):
         assert part not in body
     response = await client.get("/sub/admin/token")
-    assert (await response.get_json())["obj"] == {"token": "secret", "api_root": "/sub/api"}
+    assert (await response.get_json())["obj"] == {"token": "secret", "api_root": "/sub/api", "panels_configured": True}
 
 
 async def test_admin_relogin_and_logout(admin_api: tuple[Quart, Subscription]) -> None:
@@ -432,7 +432,7 @@ async def test_admin_empty_uri_contract(
         assert response.status_code == 200
         payload = await response.get_json()
         assert payload["success"] is True
-        assert payload["obj"] == {"token": "secret", "api_root": root}
+        assert payload["obj"] == {"token": "secret", "api_root": root, "panels_configured": True}
         response = await client.post(f"{panel}/logout")
         assert response.status_code == 200
         assert f"Path={panel}" in response.headers["Set-Cookie"]
@@ -454,6 +454,9 @@ async def test_state_collects_panels_and_host_concurrently(
     app, sub = admin_api
     panels_started = asyncio.Event()
     host_started = asyncio.Event()
+    for panel in sub.panels:
+        await panel.close()
+    sub.panels.clear()
 
     async def statuses() -> list[None]:
         panels_started.set()

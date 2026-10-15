@@ -132,7 +132,7 @@ export function validateDraft(draft) {
   });
 
   const panels = isPlainObject(draft['3xui']) ? draft['3xui'] : null;
-  if (!panels || !Object.keys(panels).length) issues.push(issue('3xui', t('config_last_panel')));
+  if (!panels) issues.push(issue('3xui', t('config_err_required')));
   else Object.entries(panels).forEach(([id, panel]) => {
     if (!id) issues.push(issue('3xui.' + id + '.id', t('config_err_required')));
     if (!isPlainObject(panel)) {

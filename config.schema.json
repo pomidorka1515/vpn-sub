@@ -124,7 +124,7 @@
 
         "3xui": {
             "type": "object",
-            "description": "3x-ui panels.",
+            "description": "3x-ui panels. An empty object enables panel-free setup; panel-dependent operations are unavailable until panels are configured and the service is restarted.",
             "additionalProperties": {
                 "type": "object",
                 "required": ["name", "address", "port", "uri", "token", "https", "whitelist", "inbounds_list", "mode"],

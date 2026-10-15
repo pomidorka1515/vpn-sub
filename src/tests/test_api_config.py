@@ -142,6 +142,17 @@ async def test_config_commit_and_conflict(
 
 
 @pytest.mark.asyncio
+async def test_empty_panels_are_patchable(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
+    app, cfg, path, _ = config_api
+    response = await set_config(app, base_for(path), {"3xui": {}})
+    assert response.status_code == 200
+    assert cfg.view()["3xui"] == {}
+    assert (await response.get_json())["obj"]["restart"] == ["3xui"]
+
+
+@pytest.mark.asyncio
 async def test_unknown_profile_node_preserves_config(
     config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
 ) -> None:
@@ -164,7 +175,6 @@ async def test_unknown_profile_node_preserves_config(
     [
         ({"nope": 1}, "Unknown key"),
         ({"panel_alert_cooldown": "soon"}, "Schema validation"),
-        ({"3xui": {}}, "3xui must contain"),
         ({"$schema": "other.json"}, "$schema"),
         ({"domain": None}, "required"),
     ],

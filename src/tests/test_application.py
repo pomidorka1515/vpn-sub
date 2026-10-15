@@ -129,6 +129,39 @@ def paths(tmp_path: Path) -> AppPaths:
 
 
 @pytest.mark.asyncio
+async def test_factory_without_panels(paths: AppPaths) -> None:
+    document = json.loads(paths.config.read_text())
+    document["3xui"] = {}
+    paths.config.write_text(json.dumps(document))
+    runtime = await create_application(
+        paths,
+        AppOptions(
+            start_background=True,
+            start_bots=False,
+            limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+        ),
+    )
+    try:
+        assert runtime.dependencies.subscription.panels == []
+        assert runtime.dependencies.watcher._started
+        response = await runtime.app.test_client().get(
+            "/sub/privapi/api/user/list",
+            headers={"Authorization": document["api_token"]},
+        )
+        assert response.status_code == 200
+        response = await runtime.app.test_client().post(
+            "/sub/privapi/api/user/add",
+            headers={"Authorization": document["api_token"]},
+            json={"user": "alice", "displayname": "Alice"},
+        )
+        assert response.status_code == 503
+        assert (await response.get_json())["msg"] == "No panels configured"
+        assert await runtime.dependencies.db.list_users() == []
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("enabled", [False, True])
 async def test_optional_discord_shares_runtime(
     paths: AppPaths,

@@ -58,7 +58,18 @@ async function bootstrap() {
     }
     state.apiToken = data.obj.token;
     state.baseUrl = location.origin + data.obj.api_root;
+    state.panelsConfigured = data.obj.panels_configured !== false;
     finishBoot();
+    if (!state.panelsConfigured) {
+      const notice = document.createElement('div');
+      notice.className = 'result-box';
+      notice.textContent = t('no_panels');
+      document.querySelector('.admin-content').prepend(notice);
+      document.querySelectorAll('#btnShowAdd, #btnDoReset, #btnDoDelete, #btnDoAdd, #btnDoRefresh, #btnLoadOnline, #onlineKeyed').forEach(btn => {
+        btn.disabled = true;
+        btn.title = t('no_panels');
+      });
+    }
   } catch (e) {
     failBoot('network_err');
   }

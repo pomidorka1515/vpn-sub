@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Unpack
 from urllib.parse import urlsplit
 
 from argon2 import PasswordHasher
-from helpers import config_mock, language_config, subscription_config
+from helpers import FakePanel, config_mock, language_config, subscription_config
 
 from app_runtime.offload import OffloadServices
 from app_runtime.tasks import MutationRegistry
@@ -16,8 +16,6 @@ from session.transport import PanelResponse
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from helpers import FakePanel
 
     from db.database import Database
     from session.transport import RequestKwargs
@@ -56,7 +54,7 @@ async def make_async_subscription(
             inbounds_list=panel.inbounds_list,
             mode="whitelist" if panel.mode == "whitelist" else "blacklist",
         )
-        for panel in panels or []
+        for panel in ([FakePanel(name="fixture-panel")] if panels is None else panels)
     ]
     wl = (
         XUiSession(

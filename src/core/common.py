@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from errors import NoPanelsConfiguredError
 from tracer import trace
 
 if TYPE_CHECKING:
@@ -40,6 +41,10 @@ class SharedCoreResources:
 class BaseService:
     def __init__(self, res: SharedCoreResources) -> None:
         self.res = res
+
+    def require_panels(self) -> None:
+        if not self.panels:
+            raise NoPanelsConfiguredError
 
     def trace(self, operation: TraceOp, event: str, **fields: JsonValue) -> None:
         if self.res.verbose:

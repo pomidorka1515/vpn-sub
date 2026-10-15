@@ -103,10 +103,6 @@ def check_config_document(data: Mapping[str, object]) -> None:
             if isinstance(node, str) and node not in nodes:
                 raise ValidationError(f"profiles.{profile_id}.node {node!r} is not a key of nodes")
 
-    panels = data.get("3xui")
-    if isinstance(panels, Mapping) and len(cast("Mapping[str, object]", panels)) == 0:
-        raise ValidationError("3xui must contain at least one panel")
-
     publicbot = data.get("publicbot")
     if isinstance(publicbot, Mapping):
         token = cast("Mapping[str, object]", publicbot).get("token")

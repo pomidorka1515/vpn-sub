@@ -23,14 +23,13 @@ function panelHeader(id, panel) {
 }
 
 function cardShell(kind, id, titleHtml, body, open) {
-  const last = kind === 'panels' && Object.keys(editor.draft['3xui'] || {}).length <= 1;
   const safe = attr(id);
   return `<div class="panel-card${open ? ' open' : ''}" data-kind="${kind}" data-id="${safe}">
     <div class="panel-card-header">
       <div class="panel-card-title">${titleHtml}</div>
       <div class="panel-card-meta">
         ${kind === 'panels' ? restartIcon() : ''}
-        <button type="button" class="btn-tiny danger config-card-delete" ${last ? 'disabled' : ''} title="${last ? attr(t('config_last_panel')) : ''}" ${last ? `aria-label="${attr(t('config_last_panel'))}"` : ''}>${escapeHtml(t('delete'))}</button>
+        <button type="button" class="btn-tiny danger config-card-delete">${escapeHtml(t('delete'))}</button>
         <button type="button" class="config-card-toggle" aria-expanded="${open}" aria-label="${safe}"><svg class="panel-card-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4,6 8,10 12,6"/></svg></button>
       </div>
     </div>
@@ -273,7 +272,6 @@ export function createCardEditor({ markDirty, openNew }) {
   async function deleteConfigCard(event, kind, id) {
     event.stopPropagation();
     const map = kind === 'inbounds' ? editor.draft.profiles : editor.draft['3xui'];
-    if (kind === 'panels' && Object.keys(map).length <= 1) return;
     const ok = await confirmDialog(t('config_confirm_delete'), t('confirm'));
     if (!ok) return;
     delete map[id];
