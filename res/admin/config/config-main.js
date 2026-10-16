@@ -113,6 +113,16 @@ export function createMainEditor(markDirty) {
         control += `<label class="config-sub">${escapeHtml(t('config_whitelist'))}</label>${rowList('cfg-rows-bot', rows, 'int')}`;
       }
       control += `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`;
+    } else if (key === 'support_text') {
+      const obj = isPlainObject(editor.draft.support_text) ? editor.draft.support_text : {};
+      control = ['discord', 'telegram'].map(platform => {
+        const enabled = Object.hasOwn(obj, platform);
+        const pair = Array.isArray(obj[platform]) ? obj[platform] : ['', ''];
+        return `<label class="config-sub">${platform}</label>
+          ${enabled ? ['en', 'ru'].map((lang, index) => `<label for="cfg-support-${platform}-${index}">${escapeHtml(t('config_' + lang))}</label>
+            <textarea id="cfg-support-${platform}-${index}" spellcheck="false">${escapeHtml(pair[index] ?? '')}</textarea>`).join('') : `<div class="config-absent">${escapeHtml(t('config_not_set'))}</div>`}
+          <button type="button" class="btn-tiny" data-support-platform="${platform}">${escapeHtml(t(enabled ? 'config_remove' : 'config_add'))}</button>`;
+      }).join('');
     } else if (key === 'json_template') {
       const value = editor.jsonInputs.get('json_template') ?? jsonText(editor.draft.json_template);
       control = `<textarea id="cfg-json_template" class="config-json" spellcheck="false">${escapeHtml(value)}</textarea>`;
@@ -162,6 +172,27 @@ export function createMainEditor(markDirty) {
         markDirty();
       });
     }
+    if (key === 'support_text') {
+      slot.querySelectorAll('[data-support-platform]').forEach(button => {
+        button.addEventListener('click', () => {
+          const platform = button.dataset.supportPlatform;
+          if (Object.hasOwn(editor.draft.support_text, platform)) delete editor.draft.support_text[platform];
+          else editor.draft.support_text[platform] = ['', ''];
+          paintBox(key);
+          validateField(key);
+          markDirty();
+        });
+      });
+      ['discord', 'telegram'].forEach(platform => {
+        [0, 1].forEach(index => {
+          document.getElementById(`cfg-support-${platform}-${index}`)?.addEventListener('input', event => {
+            editor.draft.support_text[platform][index] = event.target.value;
+            validateField(key);
+            markDirty();
+          });
+        });
+      });
+    }
     const input = document.getElementById('cfg-' + key);
     if (input && key !== 'json_template') {
       input.addEventListener('input', () => commitMainField(key));
@@ -186,6 +217,7 @@ export function createMainEditor(markDirty) {
     else if (key === 'funny_strings') editor.draft[key] = [];
     else if (key === 'bot') editor.draft.bot = { token: '', whitelist: [] };
     else if (key === 'publicbot') editor.draft.publicbot = { token: '' };
+    else if (key === 'support_text') editor.draft.support_text = {};
     paintBox(key);
     validateField(key);
     markDirty();

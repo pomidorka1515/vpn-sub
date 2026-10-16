@@ -141,7 +141,9 @@ class PublicTextRoutingMixin(PublicFeatureMixin):
     async def _handle_support(self, message: types.Message, uid: int, lang: str) -> None:
         del uid
         t = self.TEXTS[lang]
-        await self.bot.send_message(message.chat.id, t["support_text"], parse_mode="HTML")
+        pair = self.cfg.view().get("support_text", {}).get("telegram")
+        text = pair[0 if lang == "en" else 1] if pair is not None else t["support_text"]
+        await self.bot.send_message(message.chat.id, text, parse_mode="HTML")
 
     async def _handle_logout(self, message: types.Message, uid: int, lang: str) -> None:
         t = self.TEXTS[lang]

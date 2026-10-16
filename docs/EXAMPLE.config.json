@@ -56,6 +56,10 @@
     "publicbot": {
         "token": ""
     },
+    "support_text": {
+        "discord": ["💬 For any questions contact: example_support", "💬 По всем вопросам обращайтесь: example_support"],
+        "telegram": ["💬 For any questions contact: @example_support", "💬 По всем вопросам обращайтесь: @example_support"]
+    },
     "3xui": {
         "local_panel": {
             "name": "x",

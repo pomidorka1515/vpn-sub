@@ -222,6 +222,48 @@ def test_view_reloads_external_changes(app_cfg: Config[AppConfig]) -> None:
     assert app_cfg.view()["domain"] == "changed.example.test"
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        {},
+        {"telegram": ["English", "Русский"]},
+        {"discord": ["English", "Русский"]},
+        {"telegram": ["", ""], "discord": ["English", "Русский"]},
+    ],
+)
+def test_support_text_accepts_optional_platforms(
+    app_cfg: Config[AppConfig], value: JsonValue,
+) -> None:
+    assert "support_text" not in app_cfg.view()
+    assert "discord" not in app_cfg.view()
+    with app_cfg.edit() as tx:
+        tx["support_text"] = value
+    assert app_cfg.copy()["support_text"] == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        [],
+        "support",
+        {"unknown": ["en", "ru"]},
+        {"telegram": []},
+        {"discord": ["en"]},
+        {"telegram": ["en", "ru", "extra"]},
+        {"discord": ["en", 1]},
+        {"telegram": None},
+    ],
+)
+def test_support_text_rejects_invalid_overrides(
+    app_cfg: Config[AppConfig], value: JsonValue,
+) -> None:
+    with pytest.raises(SchemaValidationError):
+        with app_cfg.edit() as tx:
+            tx["support_text"] = value
+    assert "support_text" not in app_cfg.view()
+
+
 def test_transaction_view_is_active_and_commits_nested_edits(app_cfg: Config[AppConfig]) -> None:
     transaction = ConfigTransaction(app_cfg)
     with pytest.raises(RuntimeError, match="not active"):

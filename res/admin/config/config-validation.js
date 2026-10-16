@@ -12,7 +12,7 @@ export function validateDraft(draft) {
   ['uri', 'api_uri', 'fallback_domain', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt', '$schema'].forEach(key => {
     if (Object.hasOwn(draft, key) && typeof draft[key] !== 'string') issues.push(issue(key, t('config_err_required')));
   });
-  ['redis', 'bot', 'publicbot'].forEach(key => {
+  ['redis', 'bot', 'publicbot', 'support_text'].forEach(key => {
     if (Object.hasOwn(draft, key) && !isPlainObject(draft[key])) issues.push(issue(key, t('config_err_required')));
   });
   if (!Array.isArray(draft.api_admin_ui_auth)) issues.push(issue('api_admin_ui_auth', t('config_err_required')));
@@ -64,6 +64,14 @@ export function validateDraft(draft) {
     if (typeof draft.publicbot.token !== 'string' || Object.keys(draft.publicbot).some(key => key !== 'token')) {
       issues.push(issue('publicbot', t('config_err_required')));
     }
+  }
+  if (isPlainObject(draft.support_text)) {
+    Object.entries(draft.support_text).forEach(([platform, pair]) => {
+      if (!['discord', 'telegram'].includes(platform)) issues.push(issue('support_text', t('config_err_unknown')));
+      else if (!Array.isArray(pair) || pair.length !== 2 || pair.some(item => typeof item !== 'string')) {
+        issues.push(issue('support_text', t('config_err_required')));
+      }
+    });
   }
   if (typeof draft.json_template === 'string') issues.push(issue('json_template', t('config_err_json')));
   else if (isPlainObject(draft.json_template)) {

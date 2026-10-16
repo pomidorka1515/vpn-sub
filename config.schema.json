@@ -122,6 +122,16 @@
             }
         },
 
+        "support_text": {
+            "type": "object",
+            "description": "Optional complete support messages as [English, Russian]. Omitted platforms use their language-file defaults. Applied without restart.",
+            "additionalProperties": false,
+            "properties": {
+                "discord": { "$ref": "#/$defs/bilingualPair" },
+                "telegram": { "$ref": "#/$defs/bilingualPair" }
+            }
+        },
+
         "3xui": {
             "type": "object",
             "description": "3x-ui panels. An empty object enables panel-free setup; panel-dependent operations are unavailable until panels are configured and the service is restarted.",

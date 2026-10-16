@@ -144,7 +144,7 @@
 
             // help and support
             "help_text": "ℹ️ <b>Описания профилей</b>\n\n{text}",
-            "support_text": "💬 По всем вопросам обращайтесь: @pomidorka_1515",
+            "support_text": "💬 По всем вопросам обращайтесь: @example_support",
 
             // subscription warnings
             "warning_expired": "⚠ Ваша подписка истекла.",
@@ -251,7 +251,7 @@
 
             // help and support
             "help_text": "ℹ️ <b>VPN Profile descriptions</b>\n\n{text}",
-            "support_text": "💬 For any questions contact: @pomidorka_1515",
+            "support_text": "💬 For any questions contact: @example_support",
 
             // subscription warnings
             "warning_expired": "⚠ Your subscription has expired.",
@@ -921,6 +921,7 @@
                 "config_hint_redis": "Applied at next boot.",
                 "config_hint_bot": "Applied at next boot. An empty bot token does not start that bot.",
                 "config_hint_publicbot": "Applied at next boot. An empty token does not start that bot.",
+                "config_hint_support_text": "Optional complete messages in English and Russian. Missing platforms use language-file defaults. Applied immediately. Telegram supports HTML; Discord supports Markdown.",
                 "config_hint_json_template": "A JSON object. Required keys are dns, routing, inbounds, outbounds, remarks.",
                 "config_hint_schema": "Not editable.",
                 "config_err_required": "Required",
@@ -1259,6 +1260,7 @@
                 "config_hint_redis": "Применяется при следующем запуске.",
                 "config_hint_bot": "Применяется при следующем запуске. Пустой токен бота его не запускает.",
                 "config_hint_publicbot": "Применяется при следующем запуске. Пустой токен бота его не запускает.",
+                "config_hint_support_text": "Необязательные полные сообщения на английском и русском. Для отсутствующих платформ используется текст из языкового файла. Применяется сразу. Telegram поддерживает HTML, Discord — Markdown.",
                 "config_hint_json_template": "JSON-объект. Обязательные ключи: dns, routing, inbounds, outbounds, remarks.",
                 "config_hint_schema": "Не редактируется.",
                 "config_err_required": "Обязательно",

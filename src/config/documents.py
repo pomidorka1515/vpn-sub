@@ -111,6 +111,11 @@ class DiscordSection(TypedDict):
     whitelist: list[int]
 
 
+class SupportTextConfig(TypedDict, total=False):
+    discord: list[str]
+    telegram: list[str]
+
+
 AppConfig = TypedDict(
     "AppConfig",
     {
@@ -133,6 +138,7 @@ AppConfig = TypedDict(
         "bot": NotRequired[BotConfig],
         "publicbot": NotRequired[PublicBotConfig],
         "discord": NotRequired[DiscordSection],
+        "support_text": NotRequired[SupportTextConfig],
         "api_uri": NotRequired[str],
         "fallback_domain": NotRequired[str],
         "$schema": NotRequired[str],

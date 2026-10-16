@@ -10,6 +10,7 @@ from config.documents import (
     ProfileTemplate,
     PublicBotConfig,
     RedisConfig,
+    SupportTextConfig,
 )
 
 if TYPE_CHECKING:
@@ -107,6 +108,7 @@ AppOverrides = TypedDict(
         "bot": BotConfig,
         "publicbot": PublicBotConfig,
         "discord": DiscordSection,
+        "support_text": SupportTextConfig,
         "api_uri": str,
         "fallback_domain": str,
         "$schema": str,

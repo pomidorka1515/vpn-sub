@@ -57,6 +57,7 @@ SCHEMA_PROPERTIES: frozenset[str] = frozenset(
         "bot",
         "publicbot",
         "discord",
+        "support_text",
         "api_uri",
         "fallback_domain",
         "funny_strings",
