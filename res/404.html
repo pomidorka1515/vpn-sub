@@ -16,12 +16,12 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     color-scheme: dark;
-    --bg: #0a0a0b; --surface: #131316; --border: #252529;
+    --bg: #0a0a0b; --box: #050506; --border: #252529;
     --text: #e4e4e7; --muted: #8e8e96; --accent: #6366f1;
   }
   [data-theme="light"] {
     color-scheme: light;
-    --bg: #fff; --surface: #fff; --border: #e4e4e7;
+    --bg: #fff; --box: #f4f4f5; --border: #e4e4e7;
     --text: #18181b; --muted: #3f3f46;
   }
   :root { font-size: 100%; }
@@ -35,17 +35,17 @@
     font-family: 'Outfit', sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  main { width: 100%; max-width: 380px; text-align: center; }
-  .code {
-    display: inline-flex; align-items: center; gap: 10px;
-    border: 1px solid var(--border); border-radius: 100px;
-    padding: 7px 13px; background: var(--surface);
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 12px; letter-spacing: 2px; color: var(--muted);
+  main {
+    width: 100%; max-width: 23.75rem; text-align: center;
+    background: var(--box); border: 1px solid var(--border); border-radius: 14px;
+    padding: 36px 32px;
   }
-  .code::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-  .symbol { display: block; width: 80px; height: 80px; margin: 32px auto 24px; color: var(--accent); }
-  h1 { font-size: clamp(24px, 5vw, 30px); font-weight: 500; letter-spacing: -.7px; line-height: 1.25; }
+  .code {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.6875rem; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
+  }
+  h1 { font-size: clamp(20px, 5vw, 24px); font-weight: 500; letter-spacing: -.3px; line-height: 1.25; }
   p { margin: 14px auto 28px; max-width: 310px; color: var(--muted); font-size: 14px; line-height: 1.7; text-wrap: pretty; }
   button {
     display: inline-flex; align-items: center; justify-content: center; gap: 9px;
@@ -61,13 +61,7 @@
 </head>
 <body>
 <main>
-  <div class="code" aria-hidden="true">404</div>
-  <svg class="symbol" viewBox="0 0 80 80" fill="none" aria-hidden="true">
-    <rect x="13" y="13" width="54" height="54" rx="16" stroke="currentColor" stroke-opacity=".2"/>
-    <path d="M28 29h9m6 0h9M28 40h24M28 51h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="53" cy="53" r="12" fill="var(--bg)"/>
-    <path d="m49 49 8 8m0-8-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  </svg>
+  <div class="code">404</div>
   <h1 id="heading">Page not found</h1>
   <p id="description">This page may have moved, or the link is incorrect. Check the address and try again.</p>
   <button type="button" id="back">
