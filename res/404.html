@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="robots" content="noindex">
+<title>404 · Page not found</title>
+<script>
+  // Apply the saved theme before the first paint, even on an unknown route.
+  try {
+    if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light';
+  } catch (_) {}
+</script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    color-scheme: dark;
+    --bg: #0a0a0b; --surface: #131316; --border: #252529;
+    --text: #e4e4e7; --muted: #8e8e96; --accent: #6366f1;
+  }
+  [data-theme="light"] {
+    color-scheme: light;
+    --bg: #fff; --surface: #fff; --border: #e4e4e7;
+    --text: #18181b; --muted: #3f3f46;
+  }
+  :root { font-size: 100%; }
+  @media (min-width: 1024px) {
+    :root { font-size: 112.5%; }
+  }
+  body {
+    min-height: 100vh; min-height: 100svh;
+    display: grid; place-items: center; padding: 24px;
+    background: var(--bg); color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 380px; text-align: center; }
+  .code {
+    display: inline-flex; align-items: center; gap: 10px;
+    border: 1px solid var(--border); border-radius: 100px;
+    padding: 7px 13px; background: var(--surface);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px; letter-spacing: 2px; color: var(--muted);
+  }
+  .code::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .symbol { display: block; width: 80px; height: 80px; margin: 32px auto 24px; color: var(--accent); }
+  h1 { font-size: clamp(24px, 5vw, 30px); font-weight: 500; letter-spacing: -.7px; line-height: 1.25; }
+  p { margin: 14px auto 28px; max-width: 310px; color: var(--muted); font-size: 14px; line-height: 1.7; text-wrap: pretty; }
+  button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+    min-height: 44px; padding: 11px 22px; border: 1px solid transparent; border-radius: 8px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: background .2s;
+  }
+  button:hover { background: #4f46e5; }
+  button[hidden] { display: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  button svg { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="code" aria-hidden="true">404</div>
+  <svg class="symbol" viewBox="0 0 80 80" fill="none" aria-hidden="true">
+    <rect x="13" y="13" width="54" height="54" rx="16" stroke="currentColor" stroke-opacity=".2"/>
+    <path d="M28 29h9m6 0h9M28 40h24M28 51h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="53" cy="53" r="12" fill="var(--bg)"/>
+    <path d="m49 49 8 8m0-8-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <h1 id="heading">Page not found</h1>
+  <p id="description">This page may have moved, or the link is incorrect. Check the address and try again.</p>
+  <button type="button" id="back">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"/></svg>
+    <span id="backLabel">Go back</span>
+  </button>
+</main>
+<script>
+  (() => {
+    const supported = value => value === 'en' || value === 'ru';
+    let lang;
+    try {
+      lang = [localStorage.getItem('lang'), localStorage.getItem('admin_lang')].find(supported);
+    } catch (_) {}
+    if (!lang) lang = (navigator.languages || [navigator.language]).map(value => value.split('-')[0].toLowerCase()).find(supported) || 'en';
+    document.documentElement.lang = lang;
+    if (lang === 'ru') {
+      document.title = '404 · Страница не найдена';
+      document.getElementById('heading').textContent = 'Страница не найдена';
+      document.getElementById('description').textContent = 'Возможно, страница переехала или в ссылке ошибка. Проверьте адрес и попробуйте снова.';
+      document.getElementById('backLabel').textContent = 'Вернуться назад';
+    }
+    const back = document.getElementById('back');
+    if (history.length > 1) back.addEventListener('click', () => history.back());
+    else back.hidden = true;
+  })();
+</script>
+</body>
+</html>

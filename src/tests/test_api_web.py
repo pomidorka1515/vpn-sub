@@ -146,6 +146,25 @@ async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> Non
     assert (await web_api[0].test_client().get(f"/custom/{path}")).status_code == 404
 
 
+@pytest.mark.parametrize("path", ["/missing", "/custom/fonts/missing.woff2"])
+@pytest.mark.parametrize("browser", [True, False])
+async def test_not_found_uses_html_only_for_browsers(
+    web_api: tuple[Quart, Database], path: str, *, browser: bool,
+) -> None:
+    agent = "Mozilla/5.0 Chrome/130.0 Safari/537.36" if browser else "curl/8.0"
+    response = await web_api[0].test_client().get(path, headers={"User-Agent": agent})
+    assert response.status_code == 404
+    if browser:
+        assert response.mimetype == "text/html"
+        body = await response.get_data(as_text=True)
+        assert "Page not found" in body
+        assert "<script src=" not in body
+        assert '<link rel="stylesheet"' not in body
+    else:
+        assert response.mimetype == "application/json"
+        assert (await response.get_json())["success"] is False
+
+
 async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, Database]) -> None:
     client = web_api[0].test_client()
     russian = await client.get("/custom/auth?lang=ru")
