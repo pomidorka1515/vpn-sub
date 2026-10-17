@@ -199,6 +199,52 @@ jobs:
           path.write_text(source.replace(old, new, 1))
           PY
 
+      - name: patch nuitka early-import codecs
+        run: |
+          python - <<'PY'
+          """Keep Nuitka from force-importing CJK/legacy multibyte codecs.
+
+          Nuitka probes every `encodings.<name>` and marks whatever the probe
+          pulls in as "Technically required for CPython library startup", which
+          no --nofollow-import-to can override. The CJK and ISO-2022 probes drag
+          in _codecs_{cn,hk,jp,kr,tw,iso2022} and _multibytecodec, roughly 0.9MB
+          uncompressed that this ru/en service can never reach. Drop them from
+          the probe; the workflow's nofollow list keeps them out afterwards.
+          """
+          import pathlib
+
+          import nuitka.freezer.ImportDetection as detection
+
+          path = pathlib.Path(detection.__file__)
+          source = path.read_text()
+          marker = "vpn-sub: drop CJK/legacy codecs from early imports."
+          if marker in source:
+              raise SystemExit(0)
+          old = (
+              "    encoding_names = [\n"
+              '        m[1] for m in pkgutil.iter_modules(sys.modules["encodings"].__path__)\n'
+              "    ]\n"
+          )
+          new = old + (
+              "\n"
+              "    # vpn-sub: drop CJK/legacy codecs from early imports. They pull in\n"
+              "    # _codecs_{cn,hk,jp,kr,tw,iso2022} and _multibytecodec instead.\n"
+              "    for _dropped_encoding in (\n"
+              '        "big5", "big5hkscs", "cp932", "cp949", "cp950",\n'
+              '        "euc_jis_2004", "euc_jisx0213", "euc_jp", "euc_kr",\n'
+              '        "gb2312", "gbk", "gb18030", "hz",\n'
+              '        "iso2022_jp", "iso2022_jp_1", "iso2022_jp_2", "iso2022_jp_2004",\n'
+              '        "iso2022_jp_3", "iso2022_jp_ext", "iso2022_kr", "johab",\n'
+              '        "shift_jis", "shift_jis_2004", "shift_jisx0213",\n'
+              "    ):\n"
+              "        if _dropped_encoding in encoding_names:\n"
+              "            encoding_names.remove(_dropped_encoding)\n"
+          )
+          if old not in source:
+              raise SystemExit(f"nuitka early-import patch missed its target in {path}")
+          path.write_text(source.replace(old, new, 1))
+          PY
+
       - name: build ${{ matrix.name }}
         env:
           # Must be an existing file. Nuitka does os.path.exists() on this
@@ -246,6 +292,14 @@ jobs:
           # and Click before excluding their unused interactive dependencies.
           # Only Hypercorn's asyncio TCP server is used; omit its CLI, middleware,
           # StatsD logging and optional HTTP/3/QUIC UDP stack.
+          # Werkzeug's dev server is re-exported eagerly by werkzeug/flask; the
+          # package config neutralizes those imports so it can be excluded too.
+          # Stdlib e-mail/archive/URL chains are only reached through lazy
+          # importers (logging.handlers, shutil, urllib.request, click), the
+          # unused concurrent process-pool modules are never imported eagerly,
+          # and the C decimal accelerator has a bundled pure-Python fallback.
+          # The CJK codecs are dropped from Nuitka's early-import probe by the
+          # patch step above, then kept out with the nofollow entries below.
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile \
             --onefile-tempdir-spec="{CACHE_DIR}/${{ matrix.name }}/${version}/{PID}_{TIME_US}_{RANDOM}" \
@@ -369,6 +423,22 @@ jobs:
             --nofollow-import-to=uvloop \
             --nofollow-import-to=trio \
             --nofollow-import-to=zstandard \
+            --nofollow-import-to=smtplib \
+            --nofollow-import-to=tarfile \
+            --nofollow-import-to=ftplib \
+            --nofollow-import-to=webbrowser \
+            --nofollow-import-to=concurrent.futures.process \
+            --nofollow-import-to=concurrent.futures.interpreter \
+            --nofollow-import-to=concurrent.interpreters \
+            --nofollow-import-to=werkzeug.serving \
+            --nofollow-import-to=_decimal \
+            --nofollow-import-to=_codecs_cn \
+            --nofollow-import-to=_codecs_hk \
+            --nofollow-import-to=_codecs_jp \
+            --nofollow-import-to=_codecs_kr \
+            --nofollow-import-to=_codecs_tw \
+            --nofollow-import-to=_codecs_iso2022 \
+            --nofollow-import-to=_multibytecodec \
             --output-filename=${{ matrix.name }} \
             --output-dir=build/dist \
             --report=build/dist/${{ matrix.name }}-report.xml \
@@ -471,6 +541,12 @@ jobs:
               "hypercorn.protocol.h3", "hypercorn.protocol.quic", "hypercorn.trio",
               "telebot.ext", "qrcode.image.pure", "modulefinder", "pyclbr",
               "pstats", "trace", "timeit", "imaplib", "poplib",
+              "smtplib", "tarfile", "ftplib", "webbrowser",
+              "concurrent.futures.process",
+              "concurrent.futures.interpreter", "concurrent.interpreters",
+              "werkzeug.serving", "_decimal",
+              "_codecs_cn", "_codecs_hk", "_codecs_jp", "_codecs_kr",
+              "_codecs_tw", "_codecs_iso2022", "_multibytecodec",
           )
           for module in report.iter("module"):
               name = module.get("name", "")

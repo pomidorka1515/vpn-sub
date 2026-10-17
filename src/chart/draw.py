@@ -27,6 +27,10 @@ REG_UP = "#d1d5db"
 WL_DOWN = "#6b7280"
 WL_UP = "#a1a1aa"
 
+# Subset of DejaVu Sans: Latin/Latin-ext, Greek, Cyrillic, punctuation,
+# currency, arrows and common symbols, so chart labels stay covered at ~1/3
+# of the upstream font size. Regenerate with pyftsubset if new ranges are
+# needed (the full family is only used server-side, for chart rendering).
 _FONT_PATH = bundled_root() / "res" / "fonts" / "DejaVuSans.ttf"
 
 BW_SIZE = (1400, 980)

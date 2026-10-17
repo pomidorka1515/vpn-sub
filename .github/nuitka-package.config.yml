@@ -29,3 +29,26 @@
       replacements_plain:
         'from qrcode.image.pure import PyPNGImage': 'PyPNGImage = None'
         'image_factory = PilImage if Image else PyPNGImage': 'image_factory = PilImage'
+
+# The binary serves asynchronously through Hypercorn and never starts Werkzeug's
+# development server. Werkzeug, Flask's app and its CLI re-export/import the
+# dev-server helpers eagerly, so neutralize those imports before excluding
+# werkzeug.serving. `is_running_from_reloader` is only consulted inside the
+# never-called Flask.run(), hence the constant stub.
+- module-name: 'werkzeug'
+  anti-bloat:
+    - description: 'remove eager werkzeug.serving re-export'
+      replacements_plain:
+        'from .serving import run_simple as run_simple': 'run_simple = None'
+
+- module-name: 'flask.app'
+  anti-bloat:
+    - description: 'remove eager werkzeug.serving reloader helper import'
+      replacements_plain:
+        'from werkzeug.serving import is_running_from_reloader': 'is_running_from_reloader = lambda: False'
+
+- module-name: 'flask.cli'
+  anti-bloat:
+    - description: 'remove eager werkzeug.serving reloader helper import'
+      replacements_plain:
+        'from werkzeug.serving import is_running_from_reloader': 'is_running_from_reloader = lambda: False'
