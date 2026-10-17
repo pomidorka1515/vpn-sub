@@ -67,7 +67,7 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
         except ValidationError as exc:
             return err(exc.message)
         except SchemaValidationError as exc:
-            # Message includes the path. Do not log it: jsonschema echoes the value.
+            # Message includes the path. Do not log it: validation can echo the value.
             return err(exc.message)
 
         if conflict is not None:

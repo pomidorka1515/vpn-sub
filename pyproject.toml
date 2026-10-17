@@ -7,7 +7,7 @@ readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.14" # 3.13 is supported, 3.14 for development
 dependencies = [
-    "jsonschema>=4.20.0",
+    "fastjsonschema>=2.21,<3",
     "requests>=2.31.0",
     "pyTelegramBotAPI>=4.37,<5",
     "Quart>=0.20,<1",
@@ -34,7 +34,6 @@ dev = [
     "types-psutil",
     "types-qrcode",
     "types-requests>=2.31",
-    "types-jsonschema>=4.23",
     "types-Pillow>=10.2",
 ]
 
@@ -285,6 +284,7 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 # ---------------------------------------------------------------------------
 
 [tool.mypy]
+mypy_path = "$MYPY_CONFIG_FILE_DIR/typings"
 python_version = "3.14"
 cache_dir = "$MYPY_CONFIG_FILE_DIR/.mypy_cache"
 
@@ -326,6 +326,7 @@ disable_error_code             = ["override"]
 
 # -- pylance compatibility ----------------------------------------------
 [tool.pyright]
+stubPath = "typings"
 pythonVersion = "3.14"
 include = ["src/", "scripts/"]
 exclude = [

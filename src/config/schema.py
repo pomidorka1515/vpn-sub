@@ -5,18 +5,23 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import jsonschema
+import fastjsonschema
 
 from .atomic import stat_signature
 from .constants import JsonValue
 from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from .core import Config
 
 from errors import ConfigError, FileCorruptionError, SchemaValidationError
+
+
+def compile_schema(schema: Mapping[str, JsonValue]) -> Callable[[object], object]:
+    """Compile a local Draft 7 schema without inserting defaults into config data."""
+    return fastjsonschema.compile(dict(schema), use_default=False, use_formats=False)
 
 
 def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
@@ -82,9 +87,11 @@ def load_schema[Doc](
     if not isinstance(schema, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise SchemaValidationError(f"Schema file '{schema_path}' must contain a JSON object.")
 
+    validator = compile_schema(schema)
     cfg.schema_cache_path = schema_path
     cfg.schema_cache_signature = schema_sig
     cfg.schema_cache = schema
+    cfg.schema_validator = validator
     return schema
 
 
@@ -94,9 +101,10 @@ def validate_schema[Doc](cfg: Config[Doc], data: dict[str, JsonValue]) -> None:
         return
 
     try:
-        jsonschema.validate(data, schema)
-    except jsonschema.ValidationError as exc:
-        message = f"Schema validation error: {exc.message} at path {list(exc.absolute_path)}"
+        if cfg.schema_validator is not None:
+            cfg.schema_validator(data)
+    except fastjsonschema.JsonSchemaValueException as exc:
+        message = f"Schema validation error: {exc.message} at path {exc.path[1:]}"
         if cfg.strict_schema:
             raise SchemaValidationError(message) from exc
         cfg.log.warning(message)

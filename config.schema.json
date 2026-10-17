@@ -1,5 +1,5 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "VPN Config",
     "description": "Static deployment and presentation settings. Mutable user, quota, code, notification, Telegram, and snapshot state is stored in SQLite.",
     "type": "object",
@@ -15,11 +15,11 @@
         "api_uri": { "type": "string", "description": "Admin API URI." },
         "api_admin_ui_auth": {
         	"type": "array",
-        	"prefixItems": [
+            "items": [
         		{ "type": "string", "description": "Username"},
         		{ "type": "string", "description": "Password"}
         	],
-        	"items": false,
+            "additionalItems": false,
         	"minItems": 2,
         	"maxItems": 2
         },

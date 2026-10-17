@@ -133,6 +133,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         self.schema_cache_path: str | None = None
         self.schema_cache_signature: FileSignature | None = None
         self.schema_cache: dict[str, JsonValue] | None = None
+        self.schema_validator: Callable[[object], object] | None = None
 
         self._warned_update_callable: bool = False
 

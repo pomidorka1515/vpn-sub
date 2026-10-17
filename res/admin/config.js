@@ -49,7 +49,7 @@ function showResult(message, kind) {
 }
 
 function safeServerMessage(message) {
-  // jsonschema messages can quote values, including whole objects with secrets.
+  // Schema validation messages can quote values, including whole objects with secrets.
   if (String(message || '').startsWith('Schema validation error:')) return t('config_err_schema');
   return message || t('error');
 }

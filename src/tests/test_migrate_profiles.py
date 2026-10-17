@@ -282,11 +282,11 @@ def test_schema_validation_failure_does_not_replace_file(
     path = _write(tmp_path, _legacy())
     before = path.read_bytes()
 
-    def fail(data: object, schema: object) -> None:
-        del data, schema
-        raise mp.jsonschema.ValidationError("forced failure")
+    def fail(schema: object, **kwargs: object) -> None:
+        del schema, kwargs
+        raise mp.fastjsonschema.JsonSchemaValueException("forced failure")
 
-    monkeypatch.setattr(mp.jsonschema, "validate", fail)
+    monkeypatch.setattr(mp.fastjsonschema, "compile", fail)
 
     assert mp.main(["--config", str(path), "--apply"]) == 1
 

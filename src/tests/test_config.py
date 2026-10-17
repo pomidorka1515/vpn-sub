@@ -488,6 +488,62 @@ def test_local_schema_accepts_valid_document(tmp_path: Path) -> None:
         cfg.close()
 
 
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("api_admin_ui_auth", ["admin", 1]),
+        ("api_admin_ui_auth", ["admin", "password", "extra"]),
+        ("api_admin_ui_auth", ["admin"]),
+        ("panel_alert_cooldown", True),
+        ("fingerprints", ["chrome", "chrome"]),
+        ("redis", {"url": "redis://localhost/0", "socket_timeout": 0}),
+        ("redis", {"url": "redis://localhost/0", "socket_timeout": True}),
+        ("unexpected", "value"),
+    ],
+)
+def test_schema_constraints_reject_invalid_commit(
+    app_cfg: Config[AppConfig], key: str, value: JsonValue,
+) -> None:
+    before = Path(app_cfg.path).read_bytes()
+    with pytest.raises(SchemaValidationError):
+        with app_cfg.edit() as tx:
+            tx[key] = value
+    assert Path(app_cfg.path).read_bytes() == before
+
+
+def test_schema_does_not_insert_defaults_and_recompiles_changes(tmp_path: Path) -> None:
+    schema_path = tmp_path / "schema.json"
+    schema: JsonDict = {"properties": {"optional": {"type": "string", "default": "default"}}}
+    schema_path.write_text(json.dumps(schema), encoding="utf-8")
+    config = Config(
+        path=tmp_path / "config.json", schema_path=schema_path, sync_mode="none",
+    )
+    try:
+        assert config.copy() == {}
+        config["other"] = "ok"
+        assert config.copy() == {"other": "ok"}
+        schema["required"] = ["optional"]
+        schema_path.write_text(json.dumps(schema), encoding="utf-8")
+        with pytest.raises(SchemaValidationError, match="optional"):
+            config.validate_document({"other": "ok"})
+    finally:
+        config.close()
+
+
+def test_non_strict_schema_logs_validation_failure(tmp_path: Path) -> None:
+    schema_path = tmp_path / "schema.json"
+    schema_path.write_text('{"required": ["name"]}', encoding="utf-8")
+    config = Config(
+        path=tmp_path / "config.json", schema_path=schema_path,
+        strict_schema=False, sync_mode="none",
+    )
+    try:
+        config["other"] = "allowed"
+        assert config.copy() == {"other": "allowed"}
+    finally:
+        config.close()
+
+
 def test_backup_now_requires_backup_dir(cfg: Config) -> None:
     with pytest.raises(ConfigError, match="backup_dir"):
         cfg.backup_now()

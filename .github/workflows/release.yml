@@ -337,8 +337,7 @@ jobs:
             --noinclude-custom-mode=urllib3:bytecode \
             --noinclude-custom-mode=PIL:bytecode \
             --noinclude-custom-mode=qrcode:bytecode \
-            --noinclude-custom-mode=jsonschema:bytecode \
-            --noinclude-custom-mode=referencing:bytecode \
+            --noinclude-custom-mode=fastjsonschema:bytecode \
             --noinclude-custom-mode=click:bytecode \
             --noinclude-custom-mode=attr:bytecode \
             --noinclude-custom-mode=attrs:bytecode \
@@ -359,7 +358,6 @@ jobs:
             --noinclude-custom-mode=propcache:bytecode \
             --noinclude-custom-mode=frozenlist:bytecode \
             --noinclude-custom-mode=aiosignal:bytecode \
-            --noinclude-custom-mode=jsonschema_specifications:bytecode \
             --noinclude-custom-mode=certifi:bytecode \
             --nofollow-import-to=doctest \
             --nofollow-import-to=pdb \

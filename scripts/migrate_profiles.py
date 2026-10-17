@@ -26,7 +26,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import jsonschema
+import fastjsonschema
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -236,8 +236,8 @@ def _validate(data: Mapping[str, JsonValue]) -> None:
         raise MigrateError(f"schema {_SCHEMA_PATH} must be a JSON object")
     schema = cast(JsonDict, loaded)
     try:
-        jsonschema.validate(data, schema)
-    except jsonschema.ValidationError as exc:
+        fastjsonschema.compile(schema, use_default=False, use_formats=False)(data)
+    except fastjsonschema.JsonSchemaValueException as exc:
         raise MigrateError(f"migrated config failed schema validation: {exc.message}") from exc
 
 
