@@ -234,8 +234,8 @@ jobs:
               raise SystemExit(f"src/version.py has no {old} placeholder")
           path.write_text(source.replace(old, new, 1))
           PY
-          export CCFLAGS="${CCFLAGS:--O3 -fno-plt -fdata-sections -ffunction-sections}"
-          export LDFLAGS="${LDFLAGS:--Wl,--gc-sections -Wl,-O1 -Wl,--as-needed}"
+          export CCFLAGS="-Os -fno-plt -fdata-sections -ffunction-sections"
+          export LDFLAGS="-Wl,--gc-sections -Wl,-O2 -Wl,--as-needed -Wl,--strip-all"
           # Audit reports exposed bundled aiosqlite tests and unused Pillow formats.
           # Keep quart.testing (imported by quart.app), click.testing (used by
           # quart.testing), werkzeug.test (exported by werkzeug), and jinja2.tests
@@ -256,6 +256,7 @@ jobs:
             --jobs="${jobs}" \
             --static-libpython=yes \
             --python-flag=no_docstrings \
+            --python-flag=no_asserts \
             --python-flag=no_site \
             --python-flag=isolated \
             --noinclude-setuptools-mode=nofollow \
@@ -290,6 +291,22 @@ jobs:
             --noinclude-custom-mode=dacite:bytecode \
             --noinclude-custom-mode=aiosqlite:bytecode \
             --noinclude-custom-mode=idna:bytecode \
+            --noinclude-custom-mode=wsproto:bytecode \
+            --noinclude-custom-mode=yarl:bytecode \
+            --noinclude-custom-mode=charset_normalizer:bytecode \
+            --noinclude-custom-mode=itsdangerous:bytecode \
+            --noinclude-custom-mode=aiofiles:bytecode \
+            --noinclude-custom-mode=argon2:bytecode \
+            --noinclude-custom-mode=aiohappyeyeballs:bytecode \
+            --noinclude-custom-mode=markupsafe:bytecode \
+            --noinclude-custom-mode=blinker:bytecode \
+            --noinclude-custom-mode=priority:bytecode \
+            --noinclude-custom-mode=multidict:bytecode \
+            --noinclude-custom-mode=propcache:bytecode \
+            --noinclude-custom-mode=frozenlist:bytecode \
+            --noinclude-custom-mode=aiosignal:bytecode \
+            --noinclude-custom-mode=jsonschema_specifications:bytecode \
+            --noinclude-custom-mode=certifi:bytecode \
             --nofollow-import-to=doctest \
             --nofollow-import-to=pdb \
             --nofollow-import-to=bdb \
@@ -330,6 +347,22 @@ jobs:
             --nofollow-import-to=hypercorn.protocol.h3 \
             --nofollow-import-to=hypercorn.protocol.quic \
             --nofollow-import-to=multidict._multidict_py \
+            --nofollow-import-to=bz2 \
+            --nofollow-import-to=_bz2 \
+            --nofollow-import-to=lzma \
+            --nofollow-import-to=_lzma \
+            --nofollow-import-to=_blake2 \
+            --nofollow-import-to=_sha3 \
+            --nofollow-import-to=_sha2 \
+            --nofollow-import-to=_sha1 \
+            --nofollow-import-to=_md5 \
+            --nofollow-import-to=_interpreters \
+            --nofollow-import-to=_interpqueues \
+            --nofollow-import-to=_posixshmem \
+            --nofollow-import-to=csv \
+            --nofollow-import-to=_csv \
+            --nofollow-import-to=statistics \
+            --nofollow-import-to=_statistics \
             --nofollow-import-to=yarl._quoting_py \
             --nofollow-import-to=propcache._helpers_py \
             --nofollow-import-to=aioquic \
