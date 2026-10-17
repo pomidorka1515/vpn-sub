@@ -345,7 +345,6 @@ jobs:
             --noinclude-custom-mode=idna:bytecode \
             --noinclude-custom-mode=wsproto:bytecode \
             --noinclude-custom-mode=yarl:bytecode \
-            --noinclude-custom-mode=charset_normalizer:bytecode \
             --noinclude-custom-mode=itsdangerous:bytecode \
             --noinclude-custom-mode=aiofiles:bytecode \
             --noinclude-custom-mode=argon2:bytecode \
@@ -420,6 +419,8 @@ jobs:
             --nofollow-import-to=uvloop \
             --nofollow-import-to=trio \
             --nofollow-import-to=zstandard \
+            --nofollow-import-to=charset_normalizer \
+            --nofollow-import-to=chardet \
             --nofollow-import-to=compression.zstd \
             --nofollow-import-to=_zstd \
             --nofollow-import-to=smtplib \

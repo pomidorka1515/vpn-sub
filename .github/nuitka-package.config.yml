@@ -79,3 +79,25 @@
       replacements_plain:
         'from zstandard import ZstdDecompressor': 'raise ImportError'
         'from compression.zstd import ZstdDecompressor': 'raise ImportError'
+
+# Panel responses are UTF-8 JSON; Requests already falls back to UTF-8 when
+# no detector is available. Keep its other dependency compatibility checks.
+- module-name: 'requests'
+  anti-bloat:
+    - description: 'remove optional charset detector imports and missing-detector warning'
+      replacements_plain:
+        'from charset_normalizer import __version__ as charset_normalizer_version': 'raise ImportError'
+        'from chardet import __version__ as chardet_version': 'raise ImportError'
+        ? |-
+          warnings.warn(
+                      "Unable to find acceptable character detection dependency "
+                      "(chardet or charset_normalizer).",
+                      RequestsDependencyWarning,
+                  )
+        : 'pass'
+
+- module-name: 'requests.compat'
+  anti-bloat:
+    - description: 'use UTF-8 fallback instead of optional charset detection'
+      replacements_plain:
+        'chardet = _resolve_char_detection()': 'chardet = None'
