@@ -111,13 +111,12 @@ jobs:
           import qrcode
           from PIL import Image, ImageDraw, ImageFont, features
 
-          # Simulate the Nuitka exclusion while keeping zstandard installed for
-          # the build tools. Fail early if this Python lacks stdlib zstd support.
-          import compression.zstd
+          # Simulate the runtime exclusions while keeping zstd for build tools.
           sys.modules["zstandard"] = None
+          sys.modules["compression.zstd"] = None
           import discord.utils
-          if discord.utils._ZSTD_SOURCE != "compression.zstd":
-              raise SystemExit("Discord did not select stdlib zstd")
+          if discord.utils._ActiveDecompressionContext.COMPRESSION_TYPE != "zlib-stream":
+              raise SystemExit("Discord did not select zlib gateway compression")
 
           for feature in ("zlib", "freetype2", "raqm"):
               if not features.check(feature):
@@ -421,6 +420,8 @@ jobs:
             --nofollow-import-to=uvloop \
             --nofollow-import-to=trio \
             --nofollow-import-to=zstandard \
+            --nofollow-import-to=compression.zstd \
+            --nofollow-import-to=_zstd \
             --nofollow-import-to=smtplib \
             --nofollow-import-to=tarfile \
             --nofollow-import-to=ftplib \
@@ -429,6 +430,7 @@ jobs:
             --nofollow-import-to=concurrent.futures.interpreter \
             --nofollow-import-to=concurrent.interpreters \
             --nofollow-import-to=werkzeug.serving \
+            --nofollow-import-to=decimal \
             --nofollow-import-to=_decimal \
             --nofollow-import-to=_codecs_cn \
             --nofollow-import-to=_codecs_hk \

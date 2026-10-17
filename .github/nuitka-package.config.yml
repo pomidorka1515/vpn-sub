@@ -52,3 +52,30 @@
     - description: 'remove eager werkzeug.serving reloader helper import'
       replacements_plain:
         'from werkzeug.serving import is_running_from_reloader': 'is_running_from_reloader = lambda: False'
+
+# Application data does not use Decimal values.
+- module-name: 'flask.json.provider'
+  anti-bloat:
+    - description: 'remove unused decimal dependency'
+      replacements_plain:
+        'import decimal': ''
+
+- module-name: 'werkzeug.sansio.response'
+  anti-bloat:
+    - description: 'remove unused decimal dependency'
+      replacements_plain:
+        'import decimal': ''
+
+- module-name: 'PIL.ImageOps'
+  anti-bloat:
+    - description: 'remove unused decimal dependency'
+      replacements_plain:
+        'import decimal': ''
+
+# The gateway uses discord.utils' active decompressor; retain only zlib-stream.
+- module-name: 'discord.utils'
+  anti-bloat:
+    - description: 'force zlib gateway compression instead of optional zstd'
+      replacements_plain:
+        'from zstandard import ZstdDecompressor': 'raise ImportError'
+        'from compression.zstd import ZstdDecompressor': 'raise ImportError'
