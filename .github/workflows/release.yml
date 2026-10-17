@@ -284,6 +284,12 @@ jobs:
             --noinclude-custom-mode=qrcode:bytecode \
             --noinclude-custom-mode=jsonschema:bytecode \
             --noinclude-custom-mode=referencing:bytecode \
+            --noinclude-custom-mode=click:bytecode \
+            --noinclude-custom-mode=attr:bytecode \
+            --noinclude-custom-mode=attrs:bytecode \
+            --noinclude-custom-mode=dacite:bytecode \
+            --noinclude-custom-mode=aiosqlite:bytecode \
+            --noinclude-custom-mode=idna:bytecode \
             --nofollow-import-to=doctest \
             --nofollow-import-to=pdb \
             --nofollow-import-to=bdb \
@@ -323,6 +329,9 @@ jobs:
             --nofollow-import-to=hypercorn.asyncio.udp_server \
             --nofollow-import-to=hypercorn.protocol.h3 \
             --nofollow-import-to=hypercorn.protocol.quic \
+            --nofollow-import-to=multidict._multidict_py \
+            --nofollow-import-to=yarl._quoting_py \
+            --nofollow-import-to=propcache._helpers_py \
             --nofollow-import-to=aioquic \
             --nofollow-import-to=uvloop \
             --nofollow-import-to=trio \
