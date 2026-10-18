@@ -135,6 +135,11 @@ jobs:
                   decoded.load()
           PY
 
+      - name: build private OpenSSL
+        run: |
+          bash scripts/build_openssl.sh "$RUNNER_TEMP/openssl-small" "$(command -v python)"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/openssl-small/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
       - name: strip runtime extension debug symbols
         run: |
           # Nuitka strips its executable, but copies extension modules with
@@ -299,6 +304,8 @@ jobs:
           # and the C decimal accelerator has a bundled pure-Python fallback.
           # The CJK codecs are dropped from Nuitka's early-import probe by the
           # patch step above, then kept out with the nofollow entries below.
+          # _hashlib supplies SHA/MD5 through private OpenSSL; BLAKE2 constructors
+          # still require _blake2 even when OpenSSL supports those algorithms.
           PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
             --onefile \
             --onefile-tempdir-spec="{CACHE_DIR}/${{ matrix.name }}/${version}/{PID}_{TIME_US}_{RANDOM}" \
@@ -401,7 +408,6 @@ jobs:
             --nofollow-import-to=_bz2 \
             --nofollow-import-to=lzma \
             --nofollow-import-to=_lzma \
-            --nofollow-import-to=_blake2 \
             --nofollow-import-to=_sha3 \
             --nofollow-import-to=_sha2 \
             --nofollow-import-to=_sha1 \
@@ -513,6 +519,7 @@ jobs:
             --nofollow-import-to=numpy \
             --nofollow-import-to=pandas \
             --include-package-data=certifi \
+            --include-data-files="$RUNNER_TEMP/openssl-small/LICENSE.txt=licenses/OpenSSL.txt" \
             ${{ matrix.extra }} \
             ${{ matrix.entry }}
 
@@ -596,6 +603,7 @@ jobs:
           # missing config or Redis must not look like a bad binary, and a
           # crash must not look like success. Exit 0 is the only pass.
           build/dist/vpn-sub --probe
+          env -u LD_LIBRARY_PATH python scripts/smoke_crypto_release.py --binary build/dist/vpn-sub --openssl-prefix "$RUNNER_TEMP/openssl-small"
           # Run away from the checkout with a temporary DB/config, private Redis,
           # and loopback panel fake; exercise resources, DB, Lua limiter and lifespan.
           python scripts/smoke_async_release.py --binary build/dist/vpn-sub --report build/dist/vpn-sub-report.xml

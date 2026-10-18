@@ -28,6 +28,13 @@ def dispatch(prog: str, probe: Callable[[], None]) -> None:
     if len(sys.argv) <= 1:
         return
     flag = sys.argv[1]
+    if flag == "--crypto-probe":
+        from pathlib import Path
+
+        from cli.crypto_probe import probe as crypto_probe
+
+        crypto_probe(Path(sys.argv[2]))
+        raise SystemExit(0)
     if flag in {"--help", "-h"}:
         from cli.help import print_help
 
