@@ -437,7 +437,6 @@ jobs:
             --nofollow-import-to=concurrent.futures.interpreter \
             --nofollow-import-to=concurrent.interpreters \
             --nofollow-import-to=werkzeug.serving \
-            --nofollow-import-to=decimal \
             --nofollow-import-to=_decimal \
             --nofollow-import-to=_codecs_cn \
             --nofollow-import-to=_codecs_hk \
