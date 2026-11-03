@@ -186,7 +186,11 @@ async def test_recovery_only_restores_unexpired_accounts(
         )
         await watch.check()
         # Also cover recovery from a traffic disable on a valid subscription.
-        await db.update_user("alice", enabled=False, enabled_time=False)
+        await db.update_user("alice", status=False, status_time=False)
+        state = await db.get_user("alice")
+        assert state is not None
+        assert not state["enabled"]
+        assert not state["enabled_time"]
         for _ in range(2):
             await watch.bandwidth_check()
             await watch.check()
