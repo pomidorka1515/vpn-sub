@@ -71,7 +71,7 @@ class AccountService(BaseService):
             raise ValidationError("displayname exceeds max. length of 16")
         if ext_username and len(ext_username) > 32:
             raise ValidationError("username exceeds max. length of 32")
-        if ext_username or ext_password:
+        if ext_username is not None or ext_password is not None:
             await self.confirm_password(username, current_password)
         await self.business_svc.update_params(
             username=username,

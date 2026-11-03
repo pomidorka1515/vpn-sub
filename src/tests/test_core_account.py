@@ -65,6 +65,35 @@ async def test_shared_login_logout_credentials_and_reset(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fields", [{"ext_password": ""}, {"ext_username": ""}])
+@pytest.mark.parametrize("current_password", [None, "", "wrong"])
+async def test_empty_credentials_require_current_password(
+    async_db: Database,
+    tmp_path: Path,
+    fields: dict[str, str],
+    current_password: str | None,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    try:
+        await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice", ext_password="secret",
+        )
+        token = await sub.account_svc.login("alice", "secret")
+        before = await async_db.get_user("alice")
+        error = "Invalid current password" if current_password else "current_password required"
+        with pytest.raises(AppError, match=error):
+            await sub.account_svc.settings(
+                "alice", **fields, current_password=current_password,
+            )
+        assert await async_db.get_user("alice") == before
+        assert await sub.user_svc.auth_token_to_user(token) == "alice"
+        assert await sub.password_svc.validate_credentials("alice", "secret") == "alice"
+        assert await sub.password_svc.validate_credentials("alice", "") is None
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
 async def test_shared_account_delete_requires_password(async_db: Database, tmp_path: Path) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:
