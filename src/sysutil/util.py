@@ -222,7 +222,7 @@ class SysUtil:
                 f.readline()
                 udp_count += sum(1 for _ in f)
 
-        return ConnCount(tcp=tcp_count - 2, udp=udp_count - 2)
+        return ConnCount(tcp=tcp_count, udp=udp_count)
 
     @staticmethod
     def app_memory() -> AppMemory:
