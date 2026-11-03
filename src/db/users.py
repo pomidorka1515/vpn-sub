@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Unpack, cast
 
+from constants import SESSION_MAX_AGE
 from custom_types import UserRecord
 from errors import DatabaseError, DuplicateError
 
@@ -189,7 +190,7 @@ class UsersMixin(ConnectionMixin):
         """Publish reset credentials and remove intent atomically after UUID sync."""
         async with self.transaction(immediate=True) as conn:
             count = await conn.execute(
-                "UPDATE users SET token = ?, auth_token = NULL WHERE username = ? AND uuid = ?",
+                "UPDATE users SET token = ?, auth_token = NULL, auth_token_expires_at = NULL WHERE username = ? AND uuid = ?",
                 (token, username, expected_uuid),
             )
             if count != 1:
@@ -210,14 +211,17 @@ class UsersMixin(ConnectionMixin):
 
     async def auth_token_to_user(self, auth_token: str) -> str | None:
         async with self.connection() as conn:
-            row = await conn.row("SELECT username FROM users WHERE auth_token = ?", (auth_token,))
+            row = await conn.row(
+                "SELECT username FROM users WHERE auth_token = ? AND auth_token_expires_at > ?",
+                (auth_token, time.time()),
+            )
             return str(row[0]) if row else None
 
     async def set_auth_token(self, username: str, auth_token: str | None) -> None:
         async with self.transaction(immediate=True) as conn:
             count = await conn.execute(
-                "UPDATE users SET auth_token = ? WHERE username = ?",
-                (auth_token, username),
+                "UPDATE users SET auth_token = ?, auth_token_expires_at = ? WHERE username = ?",
+                (auth_token, int(time.time()) + SESSION_MAX_AGE if auth_token else None, username),
             )
             if count != 1:
                 raise DatabaseError("failed to set auth token")

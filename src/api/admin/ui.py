@@ -12,6 +12,7 @@ from api.decorators.auth import (
     new_admin_ui_session,
 )
 from api.decorators.rate_limit import rate_limit
+from constants import SESSION_MAX_AGE
 from util import compare, err, ok
 
 if TYPE_CHECKING:
@@ -84,7 +85,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         response.set_cookie(
             key=ADMIN_UI_COOKIE,
             value=session,
-            max_age=30 * 24 * 3600,
+            max_age=SESSION_MAX_AGE,
             httponly=True,
             secure=True,
             samesite="Lax",

@@ -52,6 +52,17 @@ async def web_api(database: Database) -> AsyncIterator[tuple[Quart, Database]]:
         language.close()
 
 
+async def test_expired_web_cookie_cannot_be_replayed(web_api: tuple[Quart, Database]) -> None:
+    app, db = web_api
+    await db.set_auth_token("alice", "a" * 100)
+    async with db.transaction(immediate=True) as conn:
+        await conn.execute("UPDATE users SET auth_token_expires_at = 1 WHERE username = 'alice'")
+    client = app.test_client()
+    client.set_cookie("localhost", "auth_token", "a" * 100)
+    assert (await client.get("/custom/panel")).status_code == 302
+    assert (await client.post("/custom/webapi/logout")).status_code == 401
+
+
 async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None:
     app, db = web_api
     client = app.test_client()

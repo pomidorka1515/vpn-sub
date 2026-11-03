@@ -35,6 +35,7 @@ def _state(**overrides: Unpack[UserRecordOverrides]) -> UserRecord:
         "uuid": "u",
         "token": "t",
         "auth_token": None,
+        "auth_token_expires_at": None,
         "fingerprint": "chrome",
         "displayname": "Alice",
         "enabled": 1,

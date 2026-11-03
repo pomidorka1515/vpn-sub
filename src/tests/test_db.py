@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 import uuid
 from typing import TYPE_CHECKING
 
 import pytest
 
+from constants import SESSION_MAX_AGE
 from db import Database
 from errors import DuplicateError, MigrationError
 
@@ -40,7 +42,7 @@ async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 5
             )
             assert (
                 conn.execute(
@@ -54,6 +56,65 @@ async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
         assert (await db.admin_ui_session()) is None
     finally:
         (await db.close())
+
+
+@pytest.mark.asyncio
+async def test_sessions_expire_and_stay_expired_after_restart(
+    database: Database, db_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = int(time.time())
+    monkeypatch.setattr(time, "time", lambda: now)
+    await create_user(database)
+    await database.set_auth_token("alice", "web-session")
+    await database.set_admin_ui_session("admin-session")
+    now += SESSION_MAX_AGE - 1
+    assert await database.auth_token_to_user("web-session") == "alice"
+    assert await database.admin_ui_session() == "admin-session"
+    now += 1
+    assert await database.auth_token_to_user("web-session") is None
+    assert await database.admin_ui_session() is None
+    await database.close()
+    db = Database(path=db_path)
+    await db.start()
+    try:
+        assert await db.auth_token_to_user("web-session") is None
+        assert await db.admin_ui_session() is None
+        await db.set_auth_token("alice", "new-web-session")
+        await db.set_admin_ui_session("new-admin-session")
+        assert await db.auth_token_to_user("new-web-session") == "alice"
+        assert await db.admin_ui_session() == "new-admin-session"
+        await db.set_auth_token("alice", None)
+        record = await db.get_user("alice")
+        assert record is not None
+        assert record["auth_token_expires_at"] is None
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_session_expiry_migration_revokes_legacy_sessions(
+    database: Database, db_path: Path,
+) -> None:
+    await create_user(database)
+    await database.set_auth_token("alice", "legacy-web")
+    await database.set_admin_ui_session("legacy-admin")
+    await database.close()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
+        conn.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session_expires_at'")
+        conn.execute("UPDATE schema_version SET version = 4")
+    db = Database(path=db_path)
+    await db.start()
+    try:
+        assert await db.auth_token_to_user("legacy-web") is None
+        assert await db.admin_ui_session() is None
+        record = await db.get_user("alice")
+        assert record is not None
+        assert record["auth_token"] is None
+        assert record["auth_token_expires_at"] is None
+        assert await db.token_to_user(record["token"]) == "alice"
+    finally:
+        await db.close()
 
 
 @pytest.mark.asyncio
@@ -178,6 +239,7 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
     (await database.close())
     connection = sqlite3.connect(db_path)
     connection.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session'")
+    connection.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
     connection.execute("UPDATE schema_version SET version = 3")
     connection.commit()
     connection.close()
@@ -188,7 +250,7 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 4
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 5
             )
             assert (
                 conn.execute(

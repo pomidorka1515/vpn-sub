@@ -122,6 +122,7 @@ class UserRecord(TypedDict):
     uuid: str
     token: str
     auth_token: str | None
+    auth_token_expires_at: int | None
     fingerprint: str
     displayname: str
     enabled: int

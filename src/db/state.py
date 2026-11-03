@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import TYPE_CHECKING, TypedDict, cast
 
+from constants import SESSION_MAX_AGE
 from custom_types import BandwidthSnapshotPayload
 
 from .common import ConnectionMixin
@@ -126,10 +128,28 @@ class StateMixin(ConnectionMixin):
             await conn.execute("DELETE FROM app_metadata WHERE key = ?", (key,))
 
     async def admin_ui_session(self) -> str | None:
-        return await self.get_metadata("admin_ui_session") or None
+        async with self.connection() as conn:
+            rows = await conn.rows(
+                "SELECT key, value FROM app_metadata WHERE key IN ('admin_ui_session', 'admin_ui_session_expires_at')",
+            )
+        values = {str(row[0]): str(row[1]) for row in rows}
+        try:
+            expires_at = int(values.get("admin_ui_session_expires_at", "0"))
+        except ValueError:
+            return None
+        if expires_at <= time.time():
+            return None
+        return values.get("admin_ui_session") or None
 
     async def set_admin_ui_session(self, token: str | None) -> None:
-        await self.set_metadata("admin_ui_session", token or "")
+        async with self.transaction(immediate=True) as conn:
+            await conn.executemany(
+                "INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [
+                    ("admin_ui_session", token or ""),
+                    ("admin_ui_session_expires_at", str(int(time.time()) + SESSION_MAX_AGE) if token else "0"),
+                ],
+            )
 
     async def add_bandwidth_snapshot(
         self,

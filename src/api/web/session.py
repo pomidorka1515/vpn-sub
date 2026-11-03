@@ -13,6 +13,7 @@ from api.decorators import (
     requires_webapi_auth,
 )
 from api.web._base import AsyncWebApiMixin
+from constants import SESSION_MAX_AGE
 from util import err, ok, sanitize
 
 if TYPE_CHECKING:
@@ -116,7 +117,7 @@ class AsyncSessionRoutes(AsyncWebApiMixin):
         r.set_cookie(
             key="auth_token",
             value=auth_token,
-            max_age=30 * 24 * 3600,
+            max_age=SESSION_MAX_AGE,
             httponly=True,
             secure=True,
             samesite="Lax",

@@ -10,6 +10,7 @@ SCHEMA_STATEMENTS = (
         uuid TEXT NOT NULL UNIQUE,
         token TEXT NOT NULL UNIQUE,
         auth_token TEXT UNIQUE,
+        auth_token_expires_at INTEGER,
         fingerprint TEXT NOT NULL,
         displayname TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
@@ -78,7 +79,7 @@ SCHEMA_STATEMENTS = (
 
 
 class SchemaMixin(ConnectionMixin):
-    SCHEMA_VERSION = 4
+    SCHEMA_VERSION = 5
 
     async def initialize(self) -> None:
         async with self.transaction(immediate=True) as conn:
@@ -128,6 +129,13 @@ class SchemaMixin(ConnectionMixin):
                 await conn.execute(
                     "INSERT INTO app_metadata(key, value) VALUES ('admin_ui_session', '') ON CONFLICT(key) DO NOTHING",
                 )
+                version = 4
+            if version == 4:
+                await conn.execute("ALTER TABLE users ADD COLUMN auth_token_expires_at INTEGER")
+                # Legacy sessions have no trustworthy issuance time. Require a new login.
+                await conn.execute("UPDATE users SET auth_token = NULL")
+                await conn.execute("UPDATE app_metadata SET value = '' WHERE key = 'admin_ui_session'")
+                await conn.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session_expires_at'")
             await conn.execute(
                 "UPDATE schema_version SET version = ? WHERE id = 1",
                 (self.SCHEMA_VERSION,),

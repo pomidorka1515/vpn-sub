@@ -146,6 +146,18 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
     assert (await response.get_json())["obj"] == {"token": "secret", "api_root": "/sub/api", "panels_configured": True}
 
 
+async def test_expired_admin_cookie_cannot_be_replayed(admin_api: tuple[Quart, Subscription]) -> None:
+    app, sub = admin_api
+    client = app.test_client()
+    await sign_in(client)
+    session = await sub.res.db.admin_ui_session()
+    assert session is not None
+    await sub.res.db.set_metadata("admin_ui_session_expires_at", "1")
+    client.set_cookie("localhost", "admin_ui", session, path="/sub/admin")
+    assert (await client.get("/sub/admin")).status_code == 302
+    assert (await client.get("/sub/admin/token")).status_code == 401
+
+
 async def test_admin_relogin_and_logout(admin_api: tuple[Quart, Subscription]) -> None:
     app, sub = admin_api
     client = app.test_client()
