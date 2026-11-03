@@ -17,15 +17,17 @@ from fonts import FONT_FILES, embed_font_faces
 from util import err
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
-
     from api.common import (
         ResponseType,
     )
 
 
-def _admin_module_method(name: str) -> Callable[[AsyncWebApiMixin], Awaitable[ResponseType]]:
-    async def handler(self: AsyncWebApiMixin) -> ResponseType:
+class AsyncStaticRoutes(AsyncWebApiMixin):
+    """Pages, CSS/JS, fonts, and the redirect interstitial."""
+
+    async def admin_module_js(self, name: str) -> ResponseType:
+        if name not in admin_module_names():
+            return err("Not found", 404)
         version = await self.sub.res.offloads.files.run(asset_version)
         source = await self.sub.res.offloads.files.run(
             lambda: (RES_DIR / "admin" / f"{name}.js").read_text(encoding="utf-8"),
@@ -40,21 +42,7 @@ def _admin_module_method(name: str) -> Callable[[AsyncWebApiMixin], Awaitable[Re
             ),
             source,
         )
-        return await self._static(f"admin/{name}.js", "text/javascript", body.encode("utf-8"))  # pyright: ignore[reportPrivateUsage]
-
-    handler.__name__ = "admin_" + name.replace("/", "_") + "_js"
-    return handler
-
-
-class AsyncStaticRoutes(AsyncWebApiMixin):
-    """Pages, CSS/JS, fonts, and the redirect interstitial."""
-
-    _admin_module = ""
-    for _admin_module in admin_module_names():
-        locals()["admin_" + _admin_module.replace("/", "_") + "_js"] = _admin_module_method(
-            _admin_module,
-        )
-    del _admin_module
+        return await self._static(f"admin/{name}.js", "text/javascript", body.encode("utf-8"))
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
         Route("GET", "/redirect", "redirect_page"),
@@ -66,10 +54,7 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         Route("GET", "/history.css", "history_css"),
         Route("GET", "/charts.css", "charts_css"),
         Route("GET", "/admin.css", "admin_css"),
-        *(
-            Route("GET", f"/admin/{name}.js", "admin_" + name.replace("/", "_") + "_js")
-            for name in admin_module_names()
-        ),
+        Route("GET", "/admin/<path:name>.js", "admin_module_js"),
         Route("GET", "/dashboard.js", "dashboard_js"),
         Route("GET", "/history.js", "history_js"),
         Route("GET", "/chart.umd.min.js", "chart_js"),

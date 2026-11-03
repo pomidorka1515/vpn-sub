@@ -151,7 +151,13 @@ async def test_nested_config_modules(web_api: tuple[Quart, Database], module: st
 
 @pytest.mark.parametrize(
     "path",
-    ["fonts/DejaVuSans.ttf", "fonts/../common.css", "admin/not-a-module.js"],
+    [
+        "fonts/DejaVuSans.ttf",
+        "fonts/../common.css",
+        "admin/not-a-module.js",
+        "admin/config/not-a-module.js",
+        "admin/../dashboard.js",
+    ],
 )
 async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> None:
     assert (await web_api[0].test_client().get(f"/custom/{path}")).status_code == 404
