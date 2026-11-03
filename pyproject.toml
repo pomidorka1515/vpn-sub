@@ -146,6 +146,10 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 "src/cli/scripts.py" = ["TID251"]
 # Central response and constant-time comparison helpers use otherwise banned APIs.
 "src/util.py" = ["TID251"]
+# Updater downloads release binaries via requests.get outside the session client.
+"src/cli/updater.py" = ["TID251"]
+# Backup performs raw sqlite3 connections to copy database files.
+"src/db/backup.py" = ["TID251"]
 # Op() class has lowercase nested classes.
 "src/tracer.py" = ["N801"]
 # Test helpers intentionally exercise dynamic attributes and insecure fixtures.
@@ -162,6 +166,7 @@ quote-annotations = false # Prefer postponed annotations over string annotations
     "SLF001",  # Private access is unavoidable in tests
     "PLC2701", # Tests may import private implementation helpers
     "INP001",  # Tests are not meant to be imported
+    "TID251",  # Tests may connect to sqlite3 directly to inspect state
     "B903",    # Test doubles may use plain classes instead of dataclasses
     "RUF069",  # Exact float comparisons are intentional for known test values
     "PLC1901", # Explicit empty-string comparisons clarify test expectations
@@ -294,6 +299,32 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 "importlib.resources.path".msg = "Use `importlib.resources.as_file` with `files(...).joinpath(...)`."
 "importlib.resources.contents".msg = "Use `importlib.resources.files(...).iterdir()`."
 "importlib.resources.is_resource".msg = "Use `importlib.resources.files(...).joinpath(...).is_file()`."
+
+# Unsafe deserialization and opaque state formats.
+"pickle".msg = "Use JSON via config.atomic; pickle deserialization is unsafe."
+"shelve".msg = "Use the sqlite-backed db package."
+"marshal".msg = "Internal CPython format; use JSON."
+"dill".msg = "Use JSON; do not serialize code objects."
+
+# Shell execution shortcuts bypass subprocess.run auditing.
+"os.system".msg = "Use subprocess.run with an argument list."
+"os.popen".msg = "Use subprocess.run with capture_output=True."
+"subprocess.getoutput".msg = "Use subprocess.run; shell=True requires audit."
+"subprocess.getstatusoutput".msg = "Use subprocess.run; shell=True requires audit."
+"tempfile.mktemp".msg = "TOCTOU-unsafe; use tempfile.mkstemp."
+
+# TLS downgrade paths.
+"ssl.match_hostname".msg = "Removed in 3.12; CertificateError handling lives in transport."
+"ssl.wrap_socket".msg = "Removed in 3.12; use ssl.SSLContext."
+"ssl._create_unverified_context".msg = "Never disable certificate verification."
+"ssl._create_default_https_context".msg = "Never disable certificate verification."
+
+# Project architecture: single-framework and single-boundary enforcement.
+"flask".msg = "This project uses Quart, not Flask."
+"sqlite3.connect".msg = "Route connections through the db package."
+"requests.get".msg = "Use the session client so timeouts and retries are enforced."
+"requests.post".msg = "Use the session client so timeouts and retries are enforced."
+"xml.etree.ElementTree".msg = "XXE-prone; use defusedxml or explicit parser hardening."
 
 # ---------------------------------------------------------------------------
 # mypy
