@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING
 
 import pytest
@@ -156,6 +157,47 @@ async def test_notice_failure_and_concurrent_delivery(tmp_path: Path) -> None:
         )
         assert calls == 2
     finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("expiry_offset", [-1, 0, 1, None])
+async def test_recovery_only_restores_unexpired_accounts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    expiry_offset: int | None,
+) -> None:
+    now = int(time.time())
+    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    try:
+        await db.create_user(
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            expires_at=now + expiry_offset if expiry_offset is not None else 0,
+            bw_limit_gb=10,
+            wl_limit_gb=0,
+        )
+        await watch.check()
+        # Also cover recovery from a traffic disable on a valid subscription.
+        await db.update_user("alice", enabled=False, enabled_time=False)
+        for _ in range(2):
+            await watch.bandwidth_check()
+            await watch.check()
+            state = await db.get_user("alice")
+            assert state is not None
+            expected = expiry_offset is None or expiry_offset > 0
+            assert bool(state["enabled"]) is expected
+            assert bool(state["enabled_time"]) is expected
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
         await db.close()
 
 

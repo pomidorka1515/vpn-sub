@@ -232,13 +232,14 @@ class BWatch:
         async def operation() -> None:
             state = await self.sub.user_svc.get_user_state(username)
             now = int(time.time())
-            time_ok = state["expires_at"] == 0 or state["expires_at"] >= now
+            time_ok = state["expires_at"] == 0 or state["expires_at"] > now
             wl_ok = state["wl_limit_gb"] == 0 or state["wl_used"] < state["wl_limit_gb"] * 10**9
             # Poll re-enables only; the 120s job handles terminal disables.
             if recover:
                 main = (
                     True
-                    if state["bw_limit_gb"] != 0
+                    if time_ok
+                    and state["bw_limit_gb"] != 0
                     and state["bw_used"] < state["bw_limit_gb"] * 10**9
                     and not state["enabled"]
                     else None
