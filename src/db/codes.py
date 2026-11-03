@@ -217,7 +217,10 @@ class CodesMixin(ConnectionMixin):
             )
             if row is not None:
                 await conn.execute(
-                    "DELETE FROM codes WHERE code = ? AND permanent = 0 AND uses = 0",
+                    """DELETE FROM codes WHERE code = ? AND permanent = 0 AND uses = 0
+                    AND NOT EXISTS (
+                        SELECT 1 FROM pending_registration_sync WHERE code = codes.code
+                    )""",
                     (str(row["code"]),),
                 )
 

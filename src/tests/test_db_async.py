@@ -113,6 +113,52 @@ async def test_atomic_registration_race_and_refund(repository: Database) -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("rollback_second", [False, True])
+async def test_shared_code_confirmation_preserves_pending_registration(
+    repository: Database,
+    *,
+    rollback_second: bool,
+) -> None:
+    db = repository
+    await db.add_code("shared", "register", uses=2)
+
+    async def register(name: str) -> None:
+        await db.register_with_code(
+            code="shared",
+            username=name,
+            uuid=name,
+            token=name,
+            fingerprint="chrome",
+            displayname=name,
+            ext_username=name,
+            ext_password_hash="hash",
+        )
+
+    await asyncio.gather(register("alice"), register("bob"))
+    assert await db.get_code("shared") is None
+    await db.confirm_registration_sync("alice")
+    assert await db.pending_registrations() == ["bob"]
+    assert await db.user_exists("alice")
+    async with db.connection() as conn:
+        row = await conn.row("SELECT uses FROM codes WHERE code = ?", ("shared",))
+        assert row is not None
+        assert row["uses"] == 0
+
+    if rollback_second:
+        await db.rollback_registration_sync("bob")
+        restored = await db.get_code("shared")
+        assert restored is not None
+        assert restored["uses"] == 1
+        assert not await db.user_exists("bob")
+    else:
+        await db.confirm_registration_sync("bob")
+        assert await db.user_exists("bob")
+        async with db.connection() as conn:
+            assert await conn.row("SELECT 1 FROM codes WHERE code = ?", ("shared",)) is None
+    assert await db.pending_registrations() == []
+
+
+@pytest.mark.asyncio
 async def test_bonus_usage_notifications_and_snapshots(repository: Database) -> None:
     db = repository
     await create_user(db)
