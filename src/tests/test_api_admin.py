@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -170,11 +171,58 @@ async def test_admin_relogin_and_logout(admin_api: tuple[Quart, Subscription]) -
     assert (await client.get("/sub/admin")).status_code == 302
     await sign_in(client)
     response = await client.post("/sub/admin/logout")
+    assert response.status_code == 200
     assert "Path=/sub/admin" in response.headers["Set-Cookie"]
     assert "Max-Age=0" in response.headers["Set-Cookie"]
     assert await sub.res.db.admin_ui_session() is None
     assert (await client.get("/sub/admin")).status_code == 302
     assert (await client.get("/sub/admin/token")).status_code == 401
+
+
+@pytest.mark.parametrize("cookie", [None, "invalid", "x" * 100, "stale"])
+async def test_admin_logout_rejects_unauthenticated_callers(
+    admin_api: tuple[Quart, Subscription],
+    cookie: str | None,
+) -> None:
+    app, sub = admin_api
+    admin = app.test_client()
+    await sign_in(admin)
+    if cookie == "stale":
+        cookie = await sub.res.db.admin_ui_session()
+        await sign_in(admin)
+    session = await sub.res.db.admin_ui_session()
+    attacker = app.test_client()
+    if cookie is not None:
+        attacker.set_cookie("localhost", "admin_ui", cookie, path="/sub/admin")
+
+    response = await attacker.post("/sub/admin/logout")
+
+    assert response.status_code == 401
+    assert "Set-Cookie" not in response.headers
+    assert await sub.res.db.admin_ui_session() == session
+    assert (await admin.get("/sub/admin/token")).status_code == 200
+
+
+async def test_admin_logout_is_rate_limited(
+    admin_api: tuple[Quart, Subscription],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, sub = admin_api
+    admin = app.test_client()
+    await sign_in(admin)
+    session = await sub.res.db.admin_ui_session()
+    allow = AsyncMock(side_effect=[True] * 10 + [False])
+    monkeypatch.setattr(app.extensions["limiter"], "allow", allow)
+    attacker = app.test_client()
+    for _ in range(10):
+        assert (await attacker.post("/sub/admin/logout")).status_code == 401
+    assert (await attacker.post("/sub/admin/logout")).status_code == 429
+    assert allow.await_count == 11
+    for call in allow.await_args_list:
+        assert call.args[0].endswith("AsyncUiRoutes.admin_logout:10")
+        assert call.args[2] == 10
+    assert await sub.res.db.admin_ui_session() == session
+    assert (await admin.get("/sub/admin/token")).status_code == 200
 
 
 async def test_user_refresh_aborts_on_non_panel_error(

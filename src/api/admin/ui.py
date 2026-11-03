@@ -35,7 +35,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             func = getattr(type(self), handler)
             url = "/" + "/".join(p.strip("/") for p in (prefix, path) if p.strip("/"))
             methods = ["POST"] if handler in {"admin_session", "admin_logout"} else ["GET"]
-            if handler == "admin_session":
+            if handler in {"admin_session", "admin_logout"}:
                 func = rate_limit(10)(func)
             func = func.__get__(self, type(self))
             self.app.add_url_rule(url, handler, func, methods=methods, strict_slashes=False)
@@ -94,6 +94,8 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         return response, code
 
     async def admin_logout(self) -> ResponseType:
+        if not await self._admin_cookie_ok():
+            return err("Unauthorized", 401)
         await self.sub.res.db.set_admin_ui_session(None)
         response, code = ok(msg="Logged out")
         response.set_cookie(
