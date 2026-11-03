@@ -33,8 +33,7 @@ def requires_admin_auth[API_T: AsyncAdminApiMixin, **P, R](
     @wraps(f)
     async def wrapper(self: API_T, *args: P.args, **kwargs: P.kwargs) -> WrappedReturn[R]:
         provided = request.headers.get("Authorization", "")
-        # ASCII encoding lets compare handle non-ASCII tokens without raising.
-        valid = bool(provided) and compare(provided.encode().hex(), self.token.encode().hex())
+        valid = bool(provided) and compare(provided, self.token)
         try:
             result = await self.limiter.admin_auth(request.remote_addr or "<unknown>", valid=valid)
         except Exception:

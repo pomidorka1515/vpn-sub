@@ -78,7 +78,9 @@ def isbrowser(ua: str) -> bool:
 
 
 def compare(a: str, b: str) -> bool:
-    return hmac.compare_digest(a, b)
+    """Central constant-time compare function.
+    Supports non-ASCII inputs without raising TypeError."""
+    return hmac.compare_digest(a.encode(), b.encode())
 
 
 def isuuid(s: str) -> bool:
