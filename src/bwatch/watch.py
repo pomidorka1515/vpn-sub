@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import asdict
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from app_runtime.tasks import TaskRegistry
 from custom_types import BandwidthInfo
@@ -114,26 +115,18 @@ class BWatch:
         if self._closed:
             raise RuntimeError("watcher is closed")
         self._failure = await self._load_failure()
+        await self._load_usage_baselines(await self.sub.user_svc.list_user_states())
         if not self.scheduled:
             self._started = True
             return
-        wl = (
-            await self.sub.bandwidth_svc.all_traffic(whitelist=True, work="background")
-            if self.sub.panels else {}
-        )
-        main = (
-            await self.sub.bandwidth_svc.all_traffic(work="background")
-            if self.sub.panels else {}
-        )
-        for state in await self.sub.user_svc.list_user_states():
-            name = state["username"]
-            self.wl_mem[name] = wl.get(name, BandwidthInfo(0, 0, 0))
-            if state["bw_limit_gb"] != 0:
-                self.mem[name] = main.get(name, BandwidthInfo(0, 0, 0))
+        await self.is_first()
+        try:
+            await self.bandwidth_check()
+        except PanelUnavailableError:
+            self.log.exception("initial bandwidth poll failed")
         self.snap_mem, self.snap_wl_mem = dict(self.mem), dict(self.wl_mem)
         self._snapshot_initialized = True
         await self._run_due_daily_snapshots(time.monotonic())
-        await self.is_first()
         for name, interval, jobs in self._INTERVALS:
 
             async def loop(
@@ -145,6 +138,18 @@ class BWatch:
             self._tasks.create(loop, name=f"watcher:{name}")
         self._tasks.create(self._daily_loop, name="watcher:daily snapshots")
         self._started = True
+
+    async def _load_usage_baselines(self, states: list[UserRecord]) -> None:
+        raw_baselines = await self.db.get_metadata("watcher_usage_baselines")
+        if raw_baselines is not None:
+            saved = cast(dict[str, dict[str, list[str | int]]], json.loads(raw_baselines))
+            self.mem, self.wl_mem = {}, {}
+            for state in states:
+                name = state["username"]
+                for kind, target in (("main", self.mem), ("whitelist", self.wl_mem)):
+                    entry = saved.get(kind, {}).get(name)
+                    if entry is not None and entry[0] == state["uuid"]:
+                        target[name] = BandwidthInfo(int(entry[1]), int(entry[2]), int(entry[3]))
 
     async def close(self) -> None:
         self._closed = True
@@ -313,19 +318,19 @@ class BWatch:
 
     async def bandwidth_check(self) -> None:
         async def operation() -> None:
-            for username in await self.sub.user_svc.list_users():
-                await self._quota(username, recover=True)
             states = await self.sub.user_svc.list_user_states()
             main, wl = await self._traffic(states)
             sampled = {s["username"]: s for s in states}
 
             async def commit() -> None:
                 current_states = await self.sub.user_svc.list_user_states()
+                # A cancelled commit may have reached SQLite before cancellation.
+                await self._load_usage_baselines(current_states)
                 usage: dict[str, tuple[int, int]] = {}
                 next_main, next_wl = dict(self.mem), dict(self.wl_mem)
                 for state in current_states:
                     name = state["username"]
-                    if name not in sampled:
+                    if name not in sampled or sampled[name]["uuid"] != state["uuid"]:
                         continue
                     deltas: list[int] = []
                     for limit, values, baseline in (
@@ -339,10 +344,20 @@ class BWatch:
                             else 0
                         )
                         deltas.append(delta)
+                        if not limit:
+                            baseline.pop(name, None)
                         if limit and (name not in baseline or delta > 0):
                             baseline[name] = current
                     usage[name] = (deltas[0], deltas[1])
-                await self.db.increment_usages(usage)
+                identities = {state["username"]: state["uuid"] for state in current_states}
+                baselines = json.dumps({
+                    kind: {
+                        name: [identities[name], int(value.upload), int(value.download), int(value.total)]
+                        for name, value in values.items() if name in identities
+                    }
+                    for kind, values in (("main", next_main), ("whitelist", next_wl))
+                })
+                await self.db.increment_usages(usage, baselines=baselines)
                 self.mem, self.wl_mem = next_main, next_wl
 
             await self.sub.res.coordinator.run(
@@ -350,6 +365,8 @@ class BWatch:
                 commit,
                 name="watcher:usage",
             )
+            for username in await self.sub.user_svc.list_users():
+                await self._quota(username, recover=True)
 
         await self._job("bandwidth", operation)
 

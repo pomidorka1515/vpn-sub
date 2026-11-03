@@ -159,6 +159,22 @@ async def test_shared_code_confirmation_preserves_pending_registration(
 
 
 @pytest.mark.asyncio
+async def test_usage_and_baselines_roll_back_together(repository: Database) -> None:
+    await create_user(repository)
+    async with repository.transaction(immediate=True) as conn:
+        await conn.execute(
+            "CREATE TRIGGER reject_baseline BEFORE INSERT ON app_metadata "
+            "WHEN NEW.key = 'watcher_usage_baselines' BEGIN SELECT RAISE(ABORT, 'failed'); END",
+        )
+    with pytest.raises(DatabaseError, match="failed"):
+        await repository.increment_usages({"alice": (5, 6)}, baselines="{}")
+    user = await repository.get_user("alice")
+    assert user is not None
+    assert (user["bw_used"], user["wl_used"]) == (0, 0)
+    assert await repository.get_metadata("watcher_usage_baselines") is None
+
+
+@pytest.mark.asyncio
 async def test_bonus_usage_notifications_and_snapshots(repository: Database) -> None:
     db = repository
     await create_user(db)

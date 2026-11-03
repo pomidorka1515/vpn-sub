@@ -11,6 +11,7 @@ from helpers import USER_UUID
 from bwatch.watch import BWatch
 from custom_types import BandwidthInfo
 from db import Database
+from errors import PanelUnavailableError
 from notify import classify
 from notify.notifier import Notifier
 
@@ -47,7 +48,7 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
         sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
         increment = db.increment_usages
 
-        async def failed_commit(updates: object) -> None:
+        async def failed_commit(updates: object, *, baselines: str | None = None) -> None:
             raise RuntimeError("disk unavailable")
 
         db.increment_usages = failed_commit  # type: ignore[method-assign]
@@ -292,5 +293,93 @@ async def test_unlimited_quotas_restore_access(tmp_path: Path, expired: bool) ->
         assert state["enabled_wl"]
     finally:
         await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    restarted = BWatch(sub.res.cfg, db, sub, scheduled=True)
+    total = 100
+
+    async def traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, BandwidthInfo]:
+        return {"alice": BandwidthInfo(total, 0, total)}
+
+    async def no_snapshots(now: float) -> None:
+        return None
+
+    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    restarted._run_due_daily_snapshots = no_snapshots  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        await watch.start()
+        await watch.bandwidth_check()
+        total = 130
+        await watch.bandwidth_check()
+        await watch.close()
+        total = 180
+        await restarted.start()
+        await restarted.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (80, 80)
+    finally:
+        await watch.close()
+        await restarted.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Path) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    restarted = BWatch(sub.res.cfg, db, sub, scheduled=True)
+    total = 100
+    offline = False
+
+    async def traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, BandwidthInfo]:
+        if offline:
+            raise PanelUnavailableError("panel offline")
+        return {"alice": BandwidthInfo(total, 0, total)}
+
+    async def no_snapshots(now: float) -> None:
+        return None
+
+    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    restarted._run_due_daily_snapshots = no_snapshots  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1,
+        )
+        await watch.start()
+        await watch.bandwidth_check()
+        await watch.close()
+        total = 150
+        offline = True
+        await restarted.start()
+        assert restarted.mem["alice"].total == 100
+        offline = False
+        await restarted.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert state["bw_used"] == 50
+    finally:
+        await watch.close()
+        await restarted.close()
         await close_async_subscription(sub)
         await db.close()

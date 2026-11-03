@@ -25,18 +25,26 @@ class StateMixin(ConnectionMixin):
     async def increment_usage(self, username: str, *, regular: int = 0, whitelist: int = 0) -> None:
         await self.increment_usages({username: (regular, whitelist)})
 
-    async def increment_usages(self, updates: Mapping[str, tuple[int, int]]) -> None:
+    async def increment_usages(
+        self, updates: Mapping[str, tuple[int, int]], *, baselines: str | None = None,
+    ) -> None:
         rows = [
             (regular, whitelist, username)
             for username, (regular, whitelist) in updates.items()
             if regular or whitelist
         ]
-        if rows:
+        if rows or baselines is not None:
             async with self.transaction(immediate=True) as conn:
                 await conn.executemany(
                     "UPDATE users SET bw_used = bw_used + ?, wl_used = wl_used + ? WHERE username = ?",
                     rows,
                 )
+                if baselines is not None:
+                    await conn.execute(
+                        "INSERT INTO app_metadata(key, value) VALUES ('watcher_usage_baselines', ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (baselines,),
+                    )
 
     async def reset_monthly(self, month: str, today: str) -> bool:
         async with self.transaction(immediate=True) as conn:
