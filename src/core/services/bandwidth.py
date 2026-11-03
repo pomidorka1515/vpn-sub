@@ -68,12 +68,12 @@ class BandwidthService(BaseService):
         known = await self.db.usernames()
         outcomes = await self.panel_svc.outcomes(panels, self.panel_svc.list_clients, work=work)
         totals: dict[str, list[int]] = {}
-        queried = 0
         for outcome in outcomes:
             if outcome.error is not None:
                 self.log.error("client traffic listing failed for panel %s", outcome.panel)
-                continue
-            queried += 1
+                raise PanelUnavailableError(
+                    f"Could not query client traffic for panel {outcome.panel}",
+                ) from outcome.error
             for client in outcome.value or []:
                 traffic = client.traffic
                 if traffic is None or client.email not in known:
@@ -81,8 +81,6 @@ class BandwidthService(BaseService):
                 acc = totals.setdefault(client.email, [0, 0])
                 acc[0] += traffic.up
                 acc[1] += traffic.down
-        if not queried:
-            raise PanelUnavailableError("No panel could be queried for client traffic")
         return {email: BandwidthInfo(up, down, up + down) for email, (up, down) in totals.items()}
 
     async def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:

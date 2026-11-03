@@ -108,14 +108,16 @@ async def test_all_traffic_raises_when_no_panel_queryable(database: Database) ->
 
 
 @pytest.mark.asyncio
-async def test_all_traffic_returns_partial_when_one_panel_fails(database: Database) -> None:
+async def test_all_traffic_rejects_partial_when_one_panel_fails(database: Database) -> None:
     one = FakePanel(name="one", get_error=RuntimeError("down"))
     two = FakePanel(name="two", clients=[make_panel_client("alice", [2], up=7, down=8)])
     subscription = await make_subscription(database, panels=[one, two])
     (await create_alice(database))
 
-    traffic = await subscription.bandwidth_svc.all_traffic()
-    assert traffic == {"alice": BandwidthInfo(7, 8, 15)}
+    from errors import PanelUnavailableError
+
+    with pytest.raises(PanelUnavailableError):
+        await subscription.bandwidth_svc.all_traffic()
 
 
 @pytest.mark.asyncio
