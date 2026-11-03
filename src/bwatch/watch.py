@@ -233,6 +233,7 @@ class BWatch:
             state = await self.sub.user_svc.get_user_state(username)
             now = int(time.time())
             time_ok = state["expires_at"] == 0 or state["expires_at"] > now
+            main_ok = state["bw_limit_gb"] == 0 or state["bw_used"] < state["bw_limit_gb"] * 10**9
             wl_ok = state["wl_limit_gb"] == 0 or state["wl_used"] < state["wl_limit_gb"] * 10**9
             # Poll re-enables only; the 120s job handles terminal disables.
             if recover:
@@ -254,7 +255,7 @@ class BWatch:
                     else None
                 )
                 if timing is not None and main is None:
-                    main = True
+                    main = main_ok
                 if main is not None or whitelist is not None:
                     await self.sub.business_svc.update_user(
                         username,

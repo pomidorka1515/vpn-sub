@@ -243,3 +243,27 @@ async def test_quota_rereads_limits_after_waiting_for_admin(tmp_path: Path) -> N
         await watch.close()
         await close_async_subscription(sub)
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_expiry_recovery_keeps_exhausted_main_disabled(tmp_path: Path) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1,
+        )
+        await db.increment_usage("alice", regular=10**9)
+        await db.update_user("alice", status=False, status_time=False)
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert not state["enabled"]
+        assert state["enabled_time"]
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
