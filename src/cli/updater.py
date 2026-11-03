@@ -9,7 +9,6 @@ and ``python -m`` is not an install. ``vpn-sub --update`` calls
 from __future__ import annotations
 
 import hashlib
-import hmac
 import os
 import re
 import shutil
@@ -28,6 +27,7 @@ if TYPE_CHECKING:
 import contextlib
 
 from paths import compiled, program_dir
+from util import compare
 from version import VERSION
 
 __all__ = ["notice", "update"]
@@ -504,7 +504,7 @@ def _fetch(asset: Asset, target: Path) -> None:
                 os.fsync(handle.fileno())
         if size != asset.size:
             raise ValueError(f"size {size} != {asset.size}")
-        if not hmac.compare_digest(digest.hexdigest(), asset.digest):
+        if not compare(digest.hexdigest(), asset.digest):
             raise ValueError("sha256 digest does not match the release")
         temporary.replace(target)
     except BaseException:

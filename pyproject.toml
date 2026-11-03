@@ -141,7 +141,11 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 # File mirrors x-ui keys.
 "src/custom_types.py" = ["N815", "ERA001"]
 # Standalone scripts may print user-facing output and intentionally have unused arguments.
-"scripts/*" = ["T201", "ARG", "INP001"]
+"scripts/*" = ["T201", "ARG", "INP001", "TID251"]
+# CLI script integrity checks may compare digests directly.
+"src/cli/scripts.py" = ["TID251"]
+# Central response and constant-time comparison helpers use otherwise banned APIs.
+"src/util.py" = ["TID251"]
 # Op() class has lowercase nested classes.
 "src/tracer.py" = ["N801"]
 # Test helpers intentionally exercise dynamic attributes and insecure fixtures.
@@ -165,6 +169,18 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "asyncio.to_thread".msg = "Use threadutil.named_to_thread so worker logs identify the operation."
+# TID251 catches imported or qualified builtins, not bare builtin references.
+"builtins.locals".msg = "Avoid inspecting local namespaces."
+"builtins.globals".msg = "Avoid inspecting global namespaces."
+"builtins.__builtins__".msg = "Do not access the builtins namespace dynamically."
+"builtins.__import__".msg = "Use explicit imports."
+"builtins.eval".msg = "Do not execute dynamically generated code."
+"builtins.exec".msg = "Do not execute dynamically generated code."
+"builtins.compile".msg = "Do not compile dynamically generated code."
+"hmac.compare_digest".msg = "Use util.compare for constant-time string comparisons."
+"secrets.compare_digest".msg = "Use util.compare for constant-time string comparisons."
+"quart.jsonify".msg = "Use util.ok or util.err for standard JSON API responses."
+"quart.json.jsonify".msg = "Use util.ok or util.err for standard JSON API responses."
 # Require PEP 695 generics/type aliases and stdlib typing.
 "typing.TypeVar".msg = "Use 3.12 syntax: `class MyClass[T]:` or `def func[T]():`"
 "typing.ParamSpec".msg = "Use 3.12 syntax."
