@@ -240,8 +240,7 @@ class BWatch:
                 main = (
                     True
                     if time_ok
-                    and state["bw_limit_gb"] != 0
-                    and state["bw_used"] < state["bw_limit_gb"] * 10**9
+                    and main_ok
                     and not state["enabled"]
                     else None
                 )
@@ -251,7 +250,7 @@ class BWatch:
                     restored_main = False
                 whitelist = (
                     True
-                    if state["wl_limit_gb"] != 0 and wl_ok and not state["enabled_wl"]
+                    if wl_ok and not state["enabled_wl"]
                     else None
                 )
                 if timing is not None and main is None:

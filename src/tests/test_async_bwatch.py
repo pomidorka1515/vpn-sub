@@ -267,3 +267,30 @@ async def test_expiry_recovery_keeps_exhausted_main_disabled(tmp_path: Path) -> 
         await watch.close()
         await close_async_subscription(sub)
         await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("expired", [False, True])
+async def test_unlimited_quotas_restore_access(tmp_path: Path, expired: bool) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            expires_at=int(time.time()) - 1 if expired else 0,
+        )
+        await db.increment_usage("alice", regular=10**9, whitelist=10**9)
+        await db.update_user("alice", status=False, status_wl=False)
+        await sub.business_svc.update_params("alice", limit=0, wl_limit=0)
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert bool(state["enabled"]) is not expired
+        assert state["enabled_wl"]
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
