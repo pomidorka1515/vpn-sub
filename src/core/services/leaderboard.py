@@ -38,6 +38,9 @@ class LeaderboardService(BaseService):
         raw: dict[str, int] = {}
         for record in records:
             name = record["displayname"] if use_displaynames else record["username"]
+            # Display names (including disambiguated labels) need not be unique.
+            while name in raw:
+                name = f"{name} ({record['username']})"
             if category == "total":
                 info = totals.get(record["username"])
                 raw[name] = int(info.total) if info is not None else 0
