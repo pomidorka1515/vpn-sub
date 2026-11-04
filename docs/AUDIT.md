@@ -69,8 +69,7 @@ Description: A new user was created.
 Description: A user was deleted.  
 ```jsonc  
 {  
-    "username": "", // str, internal username  
-    "perma": true   // bool, true = deleted from DB too  
+    "username": "" // str, internal username  
 }  
 ```  
   

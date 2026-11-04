@@ -71,6 +71,38 @@ async def sign_in(client: TestClientProtocol) -> None:
         assert part in response.headers["Set-Cookie"]
 
 
+@pytest.mark.parametrize("perma", [False, True, "false"])
+async def test_delete_rejects_retired_flag(
+    admin_api: tuple[Quart, Subscription],
+    perma: bool | str,
+) -> None:
+    app, sub = admin_api
+    delete = AsyncMock()
+    sub.business_svc.delete_user = delete  # type: ignore[method-assign]
+    response = await app.test_client().post(
+        "/sub/api/api/user/delete",
+        headers={"Authorization": "secret"},
+        json={"user": "alice", "perma": perma},
+    )
+    assert response.status_code == 400
+    delete.assert_not_awaited()
+
+
+async def test_delete_calls_permanent_service_without_flag(
+    admin_api: tuple[Quart, Subscription],
+) -> None:
+    app, sub = admin_api
+    delete = AsyncMock()
+    sub.business_svc.delete_user = delete  # type: ignore[method-assign]
+    response = await app.test_client().post(
+        "/sub/api/api/user/delete",
+        headers={"Authorization": "secret"},
+        json={"user": "alice"},
+    )
+    assert response.status_code == 200
+    delete.assert_awaited_once_with("alice")
+
+
 async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) -> None:
     client = admin_api[0].test_client()
     response = await client.get("/sub/admin")

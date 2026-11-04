@@ -42,7 +42,7 @@ class PublicAccountMixin(PublicFeatureMixin):
             )
             return None
         try:
-            await self.sub.business_svc.delete_user(username=username, perma=True)
+            await self.sub.business_svc.delete_user(username=username)
             await self.bot.send_message(
                 message.chat.id,
                 t["delete_success"],

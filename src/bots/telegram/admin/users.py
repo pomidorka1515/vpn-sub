@@ -175,7 +175,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_del_user(self, chat_id: int, username: str) -> None:
         try:
-            await self.sub.business_svc.delete_user(username=username, perma=True)
+            await self.sub.business_svc.delete_user(username=username)
         except AppError as error:
             await self._send_message(
                 chat_id,

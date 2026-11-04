@@ -41,7 +41,6 @@ NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         "internal_add",
         "create",
         "delete",
-        "permanent_delete",
         "rollback",
         "uuid",
         "reset",
@@ -70,7 +69,6 @@ async def test_uuid_failure_blocks_conflicting_mutations(
             "internal_add": lambda: svc.add_users("alice", _called_internally=True),
             "create": lambda: svc.add_new_user("alice", "Changed"),
             "delete": lambda: svc.delete_user("alice"),
-            "permanent_delete": lambda: svc.delete_user("alice", perma=True),
             "rollback": lambda: svc.rollback_panel_clients("alice", expected_uuid=NEW_UUID),
             "uuid": lambda: svc.update_uuid("alice", NEW_UUID),
             "reset": lambda: svc.reset_user("alice"),
@@ -261,7 +259,7 @@ async def test_user_code_credentials_and_telegram_workflow(
         assert reset.uuid != created.uuid
         assert reset.token != created.token
         assert await sub.user_svc.auth_token_to_user("x" * 100) is None
-        await sub.business_svc.delete_user("alice", perma=True)
+        await sub.business_svc.delete_user("alice")
         assert not await sub.user_svc.isuser("alice")
         assert sub.res.coordinator.lock_count == 0
     finally:
@@ -342,6 +340,47 @@ async def test_uuid_partial_failure_retains_manual_repair_marker(
 
 
 @pytest.mark.asyncio
+async def test_deleted_user_is_not_recreated_by_reconciliation(
+    async_db: Database,
+    tmp_path: Path,
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1])], inbounds=[make_inbound(1)])
+    sub = await make_async_subscription(async_db, tmp_path, [panel])
+    try:
+        await create_alice(async_db)
+        await sub.business_svc.delete_user("alice")
+        assert not await async_db.user_exists("alice")
+        assert panel.clients == []
+        assert await sub.business_svc.reconcile() == []
+        assert panel.clients == []
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy_perma", [None, True, False])
+async def test_delete_recovery_preserves_legacy_intent(
+    async_db: Database,
+    tmp_path: Path,
+    legacy_perma: bool | None,
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1])], inbounds=[make_inbound(1)])
+    sub = await make_async_subscription(async_db, tmp_path, [panel])
+    try:
+        await create_alice(async_db)
+        details: dict[str, str | bool] = {"uuid": USER_UUID}
+        if legacy_perma is not None:
+            details["perma"] = legacy_perma
+        await async_db.set_metadata("user_delete_pending:alice", json.dumps(details))
+        await sub.business_svc.recover_pending()
+        assert await async_db.user_exists("alice") is (legacy_perma is False)
+        assert panel.clients == []
+        assert await async_db.get_metadata("user_delete_pending:alice") is None
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
 async def test_failed_disable_and_delete_are_recovered(
     async_db: Database,
     tmp_path: Path,
@@ -368,7 +407,7 @@ async def test_failed_disable_and_delete_are_recovered(
         rejected_payload: dict[str, JsonValue] = {"success": False, "msg": "rejected", "obj": None}
         panel._post_payload = rejected_payload
         with pytest.raises(PanelRejectedError):
-            await sub.business_svc.delete_user("alice", perma=True)
+            await sub.business_svc.delete_user("alice")
         assert await async_db.get_metadata("user_delete_pending:alice") is not None
         panel._post_payload = None
         await sub.business_svc.recover_pending()

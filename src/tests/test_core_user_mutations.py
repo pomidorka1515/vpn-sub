@@ -179,7 +179,7 @@ async def test_delete_user_calls_clients_del_once_per_panel(database: Database) 
 
     assert [url for url, _ in panel.posts] == ["panel/api/clients/del/alice"]
     assert panel.clients == []
-    assert await database.user_exists("alice")
+    assert not await database.user_exists("alice")
 
 
 @pytest.mark.asyncio

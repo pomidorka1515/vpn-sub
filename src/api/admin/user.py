@@ -102,10 +102,9 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
     async def user_delete(self) -> ResponseType:
         content = g.json_obj
         username: str = content.get("user")
-        perma = parse_bool(content.get("perma", "true"))
-        if perma is None:
-            return err("'perma' must be bool-like")
-        await self.sub.business_svc.delete_user(username, perma)
+        if "perma" in content:
+            return err("'perma' is no longer supported; deletion is always permanent")
+        await self.sub.business_svc.delete_user(username)
         return ok("Deleted")
 
     @requires_admin_auth

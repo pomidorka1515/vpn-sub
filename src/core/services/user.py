@@ -309,7 +309,6 @@ class BusinessUserService(BaseService):
     async def delete_user(
         self,
         username: str,
-        perma: bool = False,
         *,
         work: WorkClass = "foreground",
     ) -> None:
@@ -324,14 +323,13 @@ class BusinessUserService(BaseService):
             raise ConflictError("User requires registration recovery")
         user = await self.user_svc.user(username)
         key = f"user_delete_pending:{username}"
-        await self.db.set_metadata(key, json.dumps({"uuid": user["uuid"], "perma": perma}))
+        await self.db.set_metadata(key, json.dumps({"uuid": user["uuid"]}))
         await self.rollback_panel_clients(username, expected_uuid=user["uuid"], work=work)
-        if perma:
-            await self.db.delete_user(username)
-            await self.db.delete_metadata(f"user_sync_pending:{username}")
-            await self.db.delete_metadata(f"user_reset_pending:{username}")
+        await self.db.delete_user(username)
+        await self.db.delete_metadata(f"user_sync_pending:{username}")
+        await self.db.delete_metadata(f"user_reset_pending:{username}")
         await self.db.delete_metadata(key)
-        await self.audit_svc.audit(name="user_delete", info={"username": username, "perma": perma})
+        await self.audit_svc.audit(name="user_delete", info={"username": username})
         await self._drop_cache()
 
     async def _set_enabled(
@@ -738,7 +736,9 @@ class BusinessUserService(BaseService):
                         if user is not None and user["uuid"] != expected:
                             raise ConflictError("Delete recovery identity changed")
                         await self.rollback_panel_clients(username, expected_uuid=expected)
-                        if details["perma"]:
+                        # Preserve old panel-only deletion intent during upgrades.
+                        # New markers omit the retired flag and always delete SQLite.
+                        if details.get("perma", True):
                             await self.db.delete_user(username)
                             await self.db.delete_metadata(f"user_sync_pending:{username}")
                             await self.db.delete_metadata(f"user_reset_pending:{username}")

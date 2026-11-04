@@ -82,7 +82,7 @@ async def test_user_workflow_without_live_panels(database: Database) -> None:
     info = await subscription.business_svc.get_info("alice")
     assert (info.displayname, info.fingerprint) == ("Alice 2", "firefox")
     assert info.link == f"https://example.test/sub?token={created.token}"
-    (await subscription.business_svc.delete_user("alice", perma=True))
+    (await subscription.business_svc.delete_user("alice"))
     assert not (await subscription.user_svc.isuser("alice"))
 
 

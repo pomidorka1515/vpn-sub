@@ -31,7 +31,7 @@ async def test_panel_workflows_have_no_side_effects(database: Database, tmp_path
                 code="invite", username="bob", displayname="Bob",
                 ext_username="bob", ext_password="password",
             ),
-            lambda: sub.business_svc.delete_user("alice", perma=True),
+            lambda: sub.business_svc.delete_user("alice"),
             lambda: sub.account_svc.delete("alice", "password"),
             lambda: sub.business_svc.update_user("alice", enable=False),
             lambda: sub.business_svc.update_uuid("alice", "11234567-89ab-cdef-0123-456789abcdef"),

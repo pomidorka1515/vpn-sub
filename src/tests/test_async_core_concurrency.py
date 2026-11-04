@@ -132,7 +132,7 @@ async def test_reset_delete_race_does_not_resurrect_client(
     delete: asyncio.Task[None] | None = None
     try:
         await started.wait()
-        delete = asyncio.create_task(sub.business_svc.delete_user("alice", perma=True))
+        delete = asyncio.create_task(sub.business_svc.delete_user("alice"))
         await asyncio.sleep(0)
         assert panel.clients
         assert not delete.done()

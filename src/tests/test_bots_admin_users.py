@@ -184,7 +184,7 @@ async def test_delete_and_edit_options(
 ) -> None:
     mixin, telegram, subscription = users
     await mixin._cb_del_user(7, "alice")
-    subscription.business_svc.delete_user.assert_called_once_with(username="alice", perma=True)
+    subscription.business_svc.delete_user.assert_called_once_with(username="alice")
     assert "удален" in cast(MagicMock, mixin._send_message).call_args.args[1]
 
     subscription.business_svc.delete_user.side_effect = AppError("nope")

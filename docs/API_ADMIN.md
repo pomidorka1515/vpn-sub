@@ -134,13 +134,12 @@ Response (error):
 ---  
   
 ### POST /api/user/delete  
-Description: Delete a user.  
+Description: Permanently delete a user from panels and SQLite. The retired `perma` field is rejected.  
 Authentication: header  
 Body:  
 ```jsonc  
 {  
-    "user": "",      // str, internal username  
-    "perma": true    // OPTIONAL bool-like (true, 'yes', '1', 'on', 'y'), permanent delete (default: true)  
+    "user": ""      // str, internal username  
 }  
 ```  
 Response (success):  

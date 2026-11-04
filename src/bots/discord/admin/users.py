@@ -162,7 +162,7 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_del_user(self, interaction: discord.Interaction, username: str) -> None:
         await self._defer(interaction)
-        await self.sub.business_svc.delete_user(username, perma=True)
+        await self.sub.business_svc.delete_user(username)
         await self._respond(
             interaction,
             f"✅ Пользователь **{username}** удален.",

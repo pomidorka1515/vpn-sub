@@ -295,7 +295,7 @@ async def test_delete_reset_and_bonus(
     assert "Error" in cast(MagicMock, mixin._send_message).call_args.args[1]
     subscription.business_svc.delete_user.side_effect = None
     await mixin.step_delete(_message("DELETE"))
-    subscription.business_svc.delete_user.assert_called_with(username="alice", perma=True)
+    subscription.business_svc.delete_user.assert_called_with(username="alice")
     assert "deleted" in telegram.send_message.call_args.args[1]
 
     await mixin.step_reset(_message("/start"))

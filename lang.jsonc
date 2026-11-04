@@ -672,7 +672,7 @@
                 // confirmations
                 "confirm": "Confirm",
                 "cancel": "Cancel",
-                "confirm_delete_user": "Delete user permanently?",
+                "confirm_delete_user": "Permanently delete this user from all panels and the database? This cannot be undone.",
                 "confirm_reset_user": "Reset token and UUID?",
                 "confirm_delete_code": "Delete this code?",
                 "confirm_resolve_rollback": "Mark this rollback as manually repaired and remove it?",
@@ -1013,7 +1013,7 @@
                 // confirmations
                 "confirm": "Подтвердить",
                 "cancel": "Отмена",
-                "confirm_delete_user": "Удалить пользователя навсегда?",
+                "confirm_delete_user": "Навсегда удалить пользователя со всех панелей и из базы данных? Это действие нельзя отменить.",
                 "confirm_reset_user": "Сбросить токен и UUID?",
                 "confirm_delete_code": "Удалить этот код?",
                 "confirm_resolve_rollback": "Подтвердить ручное исправление и удалить этот маркер?",

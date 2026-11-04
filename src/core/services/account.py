@@ -53,7 +53,7 @@ class AccountService(BaseService):
         self.require_panels()
         await self.confirm_password(username, password)
         await self.logout(username)
-        await self.business_svc.delete_user(username=username, perma=True)
+        await self.business_svc.delete_user(username=username)
 
     async def settings(
         self,
