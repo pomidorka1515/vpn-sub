@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
@@ -13,7 +12,6 @@ from async_api_helpers import api_app, config_snapshot, make_subscription, make_
 from helpers import FakePanel, subscription_config
 
 from api import AsyncApi
-from config import Config, LangConfig
 from config.store import AsyncLinesConfig
 from errors import AppError, DatabaseError, PanelUnavailableError
 
@@ -24,11 +22,11 @@ if TYPE_CHECKING:
     from quart.testing.connections import TestHTTPConnection
     from quart.typing import TestClientProtocol
 
+    from config import Config, LangConfig
     from core import Subscription
     from db import Database
 
 pytestmark = pytest.mark.asyncio
-LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
 
 
 class Audit:
@@ -42,9 +40,9 @@ class Audit:
 @pytest_asyncio.fixture
 async def admin_api(
     database: Database,
+    language: Config[LangConfig],
 ) -> AsyncIterator[tuple[Quart, Subscription]]:
     async for app in api_app():
-        language = Config[LangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
         sub = await make_subscription(database, app=app, lang_cfg=language)
         AsyncApi(
             app=app,
@@ -61,7 +59,6 @@ async def admin_api(
             limiter=app.extensions["limiter"],
         )
         yield app, sub
-        language.close()
 
 
 async def sign_in(client: TestClientProtocol) -> None:

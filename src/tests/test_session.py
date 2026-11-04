@@ -384,7 +384,13 @@ async def test_real_timeout_cancellation_and_transport_limit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_health_task_is_started_explicitly_and_settled_on_close() -> None:
+async def test_health_task_is_started_explicitly_and_settled_on_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock, Mock
+
+    sleep = AsyncMock()
+    monkeypatch.setattr("session.client.asyncio", Mock(wraps=asyncio, sleep=sleep))
     transport = BlockingTransport()
     panel = XUiSession(
         name="test",
@@ -400,6 +406,7 @@ async def test_health_task_is_started_explicitly_and_settled_on_close() -> None:
     assert panel._health.active_count == 1
     try:
         await asyncio.wait_for(transport.entered.wait(), timeout=3)
+        sleep.assert_awaited_once_with(1)
     finally:
         await panel.close()
     assert transport.cancelled.is_set()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
 import pytest
 
@@ -46,9 +47,20 @@ async def test_live_sampler_shared_and_stops_with_last_viewer() -> None:
         await live.close()
 
 
-async def test_live_sampler_recovers_and_bounds_slow_viewers() -> None:
+async def test_live_sampler_recovers_and_bounds_slow_viewers(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
     sampled = asyncio.Event()
+    ticks: asyncio.Queue[None] = asyncio.Queue()
+
+    async def tick(delay: float) -> None:
+        assert delay == 1
+        await ticks.get()
+
+    # Replace only this module's clock, not asyncio.sleep shared by the suite.
+    monkeypatch.setattr(
+        "api.admin.live.asyncio",
+        Mock(wraps=asyncio, sleep=tick, CancelledError=asyncio.CancelledError),
+    )
 
     async def sample() -> JsonifyValue:
         nonlocal calls
@@ -67,9 +79,12 @@ async def test_live_sampler_recovers_and_bounds_slow_viewers() -> None:
             failed = await anext(stream)
             assert "secret" not in failed
             assert json.loads(failed.removeprefix("data: "))["success"] is False
+            ticks.put_nowait(None)
             recovered = await anext(stream)
             assert json.loads(recovered.removeprefix("data: "))["success"] is True
             # A paused viewer retains only the freshest sample.
+            ticks.put_nowait(None)
+            ticks.put_nowait(None)
             await sampled.wait()
         assert all(queue.qsize() == 1 for queue in live.queues)
         frame = await anext(stream)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -11,7 +10,6 @@ from async_api_helpers import api_app, config_snapshot, make_subscription, make_
 from helpers import subscription_config
 
 from api import AsyncWebApi
-from config import Config, LangConfig
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -19,16 +17,17 @@ if TYPE_CHECKING:
     from quart import Quart
     from quart.typing import TestClientProtocol
 
+    from config import Config, LangConfig
     from db import Database
 
 pytestmark = pytest.mark.asyncio
-LANG_PATH = Path(__file__).resolve().parents[2] / "lang.jsonc"
 
 
 @pytest_asyncio.fixture
-async def web_api(database: Database) -> AsyncIterator[tuple[Quart, Database]]:
+async def web_api(
+    database: Database, language: Config[LangConfig],
+) -> AsyncIterator[tuple[Quart, Database]]:
     async for app in api_app():
-        language = Config[LangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
         sub = await make_subscription(database, app=app, lang_cfg=language, uri="custom")
         await database.create_user(
             username="alice",
@@ -49,7 +48,6 @@ async def web_api(database: Database) -> AsyncIterator[tuple[Quart, Database]]:
             limiter=app.extensions["limiter"],
         )
         yield app, database
-        language.close()
 
 
 @pytest.mark.parametrize("field", ["name", "fingerprint", "username", "password", "current_password"])

@@ -1,21 +1,36 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
 from helpers import SUBSCRIPTIONS, make_subscription, make_watch
 
+from config import Config, LangConfig
 from db import Database
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
-    from pathlib import Path
+    from collections.abc import AsyncIterator, Iterator
 
     from bwatch import BWatch
     from core import Subscription
 
-__all__ = ["database", "db_path", "subscription", "watch"]
+__all__ = ["database", "db_path", "language", "subscription", "watch"]
+
+
+@pytest.fixture(scope="session")
+def language() -> Iterator[Config[LangConfig]]:
+    """Parse bundled translations once; consumers receive detached views."""
+    cfg = Config[LangConfig](
+        path=Path(__file__).resolve().parents[2] / "lang.jsonc",
+        read_only=True,
+        read_only_jsonc=True,
+    )
+    try:
+        yield cfg
+    finally:
+        cfg.close()
 
 
 @pytest.fixture
