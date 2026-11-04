@@ -46,7 +46,11 @@ def requires_fields[**P, R](
 def requires_fields_strict[**P, R](
     *fields: tuple[str, type[JsonifyValue]],
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[WrappedReturn[R]]]]:
-    """Validate request JSON object, store it on quart.g.json_obj, and require named fields with strict type checking."""
+    """Require typed JSON fields; null is accepted only when the declared type is NoneType.
+
+    Optional nullable fields are not required here and must be validated separately.
+    Validated request JSON is stored on quart.g.json_obj.
+    """
 
     def decorator(f: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[WrappedReturn[R]]]:
         @wraps(f)
@@ -62,8 +66,7 @@ def requires_fields_strict[**P, R](
                 if field not in content:
                     return err(f"Missing field: {field}", 400)
                 value = content[field]
-                # None is allowed for optional fields
-                if value is not None and not isinstance(value, expected_type):
+                if not isinstance(value, expected_type):
                     return err(
                         f"Field '{field}' must be {expected_type.__name__}, got {type(value).__name__}",
                         400,

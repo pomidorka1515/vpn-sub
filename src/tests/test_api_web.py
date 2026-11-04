@@ -50,6 +50,24 @@ async def web_api(
         yield app, database
 
 
+@pytest.mark.parametrize("field", ["username", "password", "code", "name"])
+@pytest.mark.parametrize("invalid", [None, 42, [], {}])
+async def test_register_rejects_invalid_required_fields(
+    web_api: tuple[Quart, Database], field: str, invalid: object,
+) -> None:
+    app, db = web_api
+    body: dict[str, object] = {
+        "username": "new-user", "password": "secret", "code": "invite", "name": "New User",
+    }
+    body[field] = invalid
+    response = await app.test_client().post("/custom/webapi/register", json=body)
+    assert response.status_code == 400
+    data = await response.get_json()
+    assert data["success"] is False
+    assert data["msg"] == f"Field '{field}' must be str, got {type(invalid).__name__}"
+    assert await db.ext_to_user("new-user") is None
+
+
 @pytest.mark.parametrize("field", ["name", "fingerprint", "username", "password", "current_password"])
 @pytest.mark.parametrize("value", [42, 0, 1.5, True, False, [], {}, ["chrome"]])
 async def test_settings_reject_non_string_fields(
