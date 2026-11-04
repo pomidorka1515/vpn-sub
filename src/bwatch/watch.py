@@ -94,6 +94,8 @@ class BWatch:
         self.log = Logger(type(self).__name__)
         self.mem: dict[str, BandwidthInfo] = {}
         self.wl_mem: dict[str, BandwidthInfo] = {}
+        self._reset_mem: dict[str, BandwidthInfo] = {}
+        self._reset_wl_mem: dict[str, BandwidthInfo] = {}
         self.snap_mem: dict[str, BandwidthInfo] = {}
         self.snap_wl_mem: dict[str, BandwidthInfo] = {}
         self._snapshot_initialized = False
@@ -144,9 +146,13 @@ class BWatch:
         if raw_baselines is not None:
             saved = cast(dict[str, dict[str, list[str | int]]], json.loads(raw_baselines))
             self.mem, self.wl_mem = {}, {}
+            self._reset_mem, self._reset_wl_mem = {}, {}
             for state in states:
                 name = state["username"]
-                for kind, target in (("main", self.mem), ("whitelist", self.wl_mem)):
+                for kind, target in (
+                    ("main", self.mem), ("whitelist", self.wl_mem),
+                    ("main_reset", self._reset_mem), ("whitelist_reset", self._reset_wl_mem),
+                ):
                     entry = saved.get(kind, {}).get(name)
                     if entry is not None and entry[0] == state["uuid"]:
                         target[name] = BandwidthInfo(int(entry[1]), int(entry[2]), int(entry[3]))
@@ -328,26 +334,38 @@ class BWatch:
                 await self._load_usage_baselines(current_states)
                 usage: dict[str, tuple[int, int]] = {}
                 next_main, next_wl = dict(self.mem), dict(self.wl_mem)
+                reset_main, reset_wl = dict(self._reset_mem), dict(self._reset_wl_mem)
                 for state in current_states:
                     name = state["username"]
                     if name not in sampled or sampled[name]["uuid"] != state["uuid"]:
                         continue
                     deltas: list[int] = []
-                    for limit, values, baseline in (
-                        (state["bw_limit_gb"] and sampled[name]["bw_limit_gb"], main, next_main),
-                        (state["wl_limit_gb"] and sampled[name]["wl_limit_gb"], wl, next_wl),
+                    for limit, values, baseline, pending in (
+                        (state["bw_limit_gb"] and sampled[name]["bw_limit_gb"], main, next_main, reset_main),
+                        (state["wl_limit_gb"] and sampled[name]["wl_limit_gb"], wl, next_wl, reset_wl),
                     ):
-                        current = values.get(name, BandwidthInfo(0, 0, 0))
-                        delta = (
-                            max(0, int(current.total - baseline.get(name, current).total))
-                            if limit
-                            else 0
-                        )
-                        deltas.append(delta)
                         if not limit:
                             baseline.pop(name, None)
-                        if limit and (name not in baseline or delta > 0):
-                            baseline[name] = current
+                            pending.pop(name, None)
+                        current = values.get(name) if limit else None
+                        delta = 0
+                        if current is None:
+                            pending.pop(name, None)
+                        if current is not None:
+                            previous = baseline.get(name)
+                            if previous is None or current.total >= previous.total:
+                                delta = int(current.total - previous.total) if previous is not None else 0
+                                baseline[name] = current
+                                pending.pop(name, None)
+                            else:
+                                candidate = pending.get(name)
+                                if candidate is not None and current.total >= candidate.total:
+                                    delta = int(current.total - candidate.total)
+                                    baseline[name] = current
+                                    pending.pop(name, None)
+                                else:
+                                    pending[name] = current
+                        deltas.append(delta)
                     usage[name] = (deltas[0], deltas[1])
                 identities = {state["username"]: state["uuid"] for state in current_states}
                 baselines = json.dumps({
@@ -355,10 +373,14 @@ class BWatch:
                         name: [identities[name], int(value.upload), int(value.download), int(value.total)]
                         for name, value in values.items() if name in identities
                     }
-                    for kind, values in (("main", next_main), ("whitelist", next_wl))
+                    for kind, values in (
+                        ("main", next_main), ("whitelist", next_wl),
+                        ("main_reset", reset_main), ("whitelist_reset", reset_wl),
+                    )
                 })
                 await self.db.increment_usages(usage, baselines=baselines)
                 self.mem, self.wl_mem = next_main, next_wl
+                self._reset_mem, self._reset_wl_mem = reset_main, reset_wl
 
             await self.sub.res.coordinator.run(
                 [s["username"] for s in states],

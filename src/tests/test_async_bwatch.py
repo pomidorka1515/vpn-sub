@@ -103,6 +103,55 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
+async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    restarted = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    totals: dict[str, int | None] = {"main": 100, "whitelist": 200}
+
+    async def traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, BandwidthInfo]:
+        total = totals["whitelist" if whitelist else "main"]
+        return {} if total is None else {"alice": BandwidthInfo(total, 0, total)}
+
+    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        await watch.start()
+        await watch.bandwidth_check()
+        totals.update(main=10, whitelist=20)
+        await watch.bandwidth_check()
+        totals.update(main=110, whitelist=210)
+        await watch.bandwidth_check()  # A single low sample was a flake.
+        totals.update(main=5, whitelist=7)
+        await watch.bandwidth_check()
+        await watch.close()
+        await restarted.start()
+        totals.update(main=8, whitelist=11)
+        await restarted.bandwidth_check()
+        totals.update(main=12, whitelist=16)
+        await restarted.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (17, 19)
+        totals.update(main=None, whitelist=None)
+        await restarted.bandwidth_check()
+        assert restarted.mem["alice"].total == 12
+        assert restarted.wl_mem["alice"].total == 16
+    finally:
+        await watch.close()
+        await restarted.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
 async def test_job_serialization_and_failure_retry(tmp_path: Path) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
