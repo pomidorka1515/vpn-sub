@@ -200,11 +200,21 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                             raise RuntimeError("bundled admin template did not render")
                 await stop(service)
                 check_exit(service)
-                if "/panel/api/clients/list" not in panel_requests:
-                    raise RuntimeError("watcher did not seed against the test panel")
                 with sqlite3.connect(data / "state.sqlite3") as db:
                     if db.execute("PRAGMA integrity_check").fetchone() != ("ok",):
                         raise RuntimeError("database integrity check failed")
+                    # Empty deployments need no traffic query. Seed a disposable
+                    # quota-bearing account while stopped so restart must poll.
+                    db.execute(
+                        """INSERT INTO users
+                        (username, uuid, token, fingerprint, displayname, bw_limit_gb)
+                        VALUES (?, ?, ?, ?, ?, ?)""",
+                        (
+                            "smoke", "00000000-0000-4000-8000-000000000001",
+                            "smoke-subscription-token-not-a-production-secret", "chrome", "Smoke", 1,
+                        ),
+                    )
+                panel_requests.clear()
                 # Restart against the same state: verifies lock release, recovery,
                 # resource reopening and an additional orderly shutdown.
                 service = await asyncio.create_subprocess_exec(
@@ -229,6 +239,8 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                         await asyncio.sleep(0.1)
                 await stop(service)
                 check_exit(service)
+                if "/panel/api/clients/list" not in panel_requests:
+                    raise RuntimeError("watcher did not seed against the test panel")
             except Exception:
                 print(log_path.read_text(errors="replace"), file=sys.stderr)
                 raise

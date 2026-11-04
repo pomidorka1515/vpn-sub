@@ -72,8 +72,8 @@ class UsersMixin(ConnectionMixin):
                     """INSERT INTO users
                     (username, uuid, token, fingerprint, displayname, enabled,
                      enabled_time, enabled_wl, expires_at, bw_limit_gb, wl_limit_gb,
-                     ext_username, ext_password_hash, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     ext_username, ext_password_hash, created_at, admin_disabled, admin_disabled_wl)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         username,
                         uuid,
@@ -89,6 +89,8 @@ class UsersMixin(ConnectionMixin):
                         ext_username,
                         ext_password_hash,
                         int(time.time()),
+                        int(not enabled),
+                        int(not enabled_wl),
                     ),
                 )
                 if pending_sync:
@@ -157,17 +159,36 @@ class UsersMixin(ConnectionMixin):
         enabled: bool | None,
         enabled_time: bool | None,
         enabled_wl: bool | None,
+        quota: bool = False,
     ) -> None:
-        """Publish desired flags and retry identity in one short transaction."""
+        """Atomically publish flags, administrative intent, and retry identity."""
         async with self.transaction(immediate=True) as conn:
+            if not quota:
+                for column, value in (
+                    ("admin_disabled", enabled),
+                    ("admin_disabled_wl", enabled_wl),
+                ):
+                    if value is not None:
+                        await conn.execute(
+                            f"UPDATE users SET {column} = ? WHERE username = ?",
+                            (int(not value), username),
+                        )
             for column, value in (
                 ("enabled", enabled),
                 ("enabled_time", enabled_time if enabled is not None else None),
                 ("enabled_wl", enabled_wl),
             ):
                 if value is not None:
+                    # Quota changes never override administrative intent, even
+                    # when the intent was recorded while already exhausted.
+                    guard = ""
+                    if quota and value:
+                        guard = {
+                            "enabled": " AND admin_disabled = 0",
+                            "enabled_wl": " AND admin_disabled_wl = 0",
+                        }.get(column, "")
                     await conn.execute(
-                        f"UPDATE users SET {column} = ? WHERE username = ?",
+                        f"UPDATE users SET {column} = ? WHERE username = ?{guard}",
                         (int(value), username),
                     )
             await conn.execute(

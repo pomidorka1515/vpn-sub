@@ -17,8 +17,8 @@ from errors import PanelRejectedError, ValidationError
 from session import XUiSession
 
 if TYPE_CHECKING:
+    from config import JsonValue
     from core import Subscription
-    from custom_types import JsonValue
     from db import Database
 
 NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

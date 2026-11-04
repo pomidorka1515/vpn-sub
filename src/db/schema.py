@@ -16,6 +16,8 @@ SCHEMA_STATEMENTS = (
         enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
         enabled_time INTEGER NOT NULL DEFAULT 1 CHECK (enabled_time IN (0, 1)),
         enabled_wl INTEGER NOT NULL DEFAULT 1 CHECK (enabled_wl IN (0, 1)),
+        admin_disabled INTEGER NOT NULL DEFAULT 0 CHECK (admin_disabled IN (0, 1)),
+        admin_disabled_wl INTEGER NOT NULL DEFAULT 0 CHECK (admin_disabled_wl IN (0, 1)),
         expires_at INTEGER NOT NULL DEFAULT 0 CHECK (expires_at >= 0),
         bw_limit_gb INTEGER NOT NULL DEFAULT 0 CHECK (bw_limit_gb >= 0),
         bw_used INTEGER NOT NULL DEFAULT 0 CHECK (bw_used >= 0),
@@ -79,7 +81,7 @@ SCHEMA_STATEMENTS = (
 
 
 class SchemaMixin(ConnectionMixin):
-    SCHEMA_VERSION = 5
+    SCHEMA_VERSION = 6
 
     async def initialize(self) -> None:
         async with self.transaction(immediate=True) as conn:
@@ -136,6 +138,19 @@ class SchemaMixin(ConnectionMixin):
                 await conn.execute("UPDATE users SET auth_token = NULL")
                 await conn.execute("UPDATE app_metadata SET value = '' WHERE key = 'admin_ui_session'")
                 await conn.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session_expires_at'")
+                version = 5
+            if version == 5:
+                await conn.execute(
+                    "ALTER TABLE users ADD COLUMN admin_disabled INTEGER NOT NULL DEFAULT 0 CHECK (admin_disabled IN (0, 1))",
+                )
+                await conn.execute(
+                    "ALTER TABLE users ADD COLUMN admin_disabled_wl INTEGER NOT NULL DEFAULT 0 CHECK (admin_disabled_wl IN (0, 1))",
+                )
+                # Old flags have no provenance. Preserve disabled access until an
+                # explicit enable rather than guessing that quota caused it.
+                await conn.execute(
+                    "UPDATE users SET admin_disabled = NOT enabled, admin_disabled_wl = NOT enabled_wl",
+                )
             await conn.execute(
                 "UPDATE schema_version SET version = ? WHERE id = 1",
                 (self.SCHEMA_VERSION,),

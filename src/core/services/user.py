@@ -353,8 +353,10 @@ class BusinessUserService(BaseService):
         timee: bool | None = None,
         wl_enable: bool | None = None,
         *,
+        quota: bool = False,
         work: WorkClass = "foreground",
     ) -> None:
+        """Set explicit intent unless this is a quota-derived status change."""
         self.require_panels()
         await self.require_recovered(username)
         await self.user_svc.user(username)
@@ -371,6 +373,7 @@ class BusinessUserService(BaseService):
             enabled=enable,
             enabled_time=timee,
             enabled_wl=wl_enable,
+            quota=quota,
         )
         if pending_sync:
             # The previous intent may cover other panels or unfinished client
@@ -425,6 +428,7 @@ class BusinessUserService(BaseService):
             enable=time_ok and main_ok,
             timee=time_ok,
             wl_enable=wl_ok,
+            quota=True,
             work="background",
         )
 

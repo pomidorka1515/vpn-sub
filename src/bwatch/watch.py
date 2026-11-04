@@ -255,6 +255,7 @@ class BWatch:
                     if time_ok
                     and main_ok
                     and not state["enabled"]
+                    and not state["admin_disabled"]
                     else None
                 )
                 restored_main = main is True
@@ -263,17 +264,18 @@ class BWatch:
                     restored_main = False
                 whitelist = (
                     True
-                    if wl_ok and not state["enabled_wl"]
+                    if wl_ok and not state["enabled_wl"] and not state["admin_disabled_wl"]
                     else None
                 )
                 if timing is not None and main is None:
-                    main = main_ok
+                    main = main_ok and not state["admin_disabled"]
                 if main is not None or whitelist is not None:
                     await self.sub.business_svc.update_user(
                         username,
                         enable=main,
                         timee=timing,
                         wl_enable=whitelist,
+                        quota=True,
                         work="background",
                     )
                 await self._deliver(
@@ -291,6 +293,7 @@ class BWatch:
                                     username,
                                     enable=False,
                                     timee=False,
+                                    quota=True,
                                     work="background",
                                 )
                             elif notice.kind is Kind.TRAFFIC_EXHAUSTED:
@@ -298,12 +301,14 @@ class BWatch:
                                     username,
                                     enable=False,
                                     timee=True,
+                                    quota=True,
                                     work="background",
                                 )
                             elif notice.kind is Kind.WHITELIST_EXHAUSTED:
                                 await self.sub.business_svc.update_user(
                                     username,
                                     wl_enable=False,
+                                    quota=True,
                                     work="background",
                                 )
                         except AppError:

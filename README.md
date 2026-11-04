@@ -325,6 +325,9 @@ Override this at your own risk: it's always best to leave TLS, etc. to reverse
 proxies.
 
 ## Deployment
+- SQLite schema 6 separates administrative disables from quota state. Polling
+  restores only quota-disabled access. On upgrade, existing disabled sides stay
+  disabled until explicitly enabled, since their original disable reason is unknown.  
 - The async HTTP entrypoint runs under Hypercorn behind nginx (TLS).  
   Application rate limits use local Redis.
 - Systemd unit recommended for persistence

@@ -41,6 +41,8 @@ def _state(**overrides: Unpack[UserRecordOverrides]) -> UserRecord:
         "enabled": 1,
         "enabled_time": 1,
         "enabled_wl": 1,
+        "admin_disabled": 0,
+        "admin_disabled_wl": 0,
         "expires_at": 0,
         "bw_limit_gb": 0,
         "bw_used": 0,

@@ -4,6 +4,7 @@ import asyncio
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock
 
 import pytest
 from async_core_helpers import close_async_subscription, make_async_subscription
@@ -13,11 +14,100 @@ from bwatch.watch import BWatch
 from custom_types import BandwidthInfo
 from db import Database
 from errors import PanelUnavailableError
-from notify import classify
+from notify import Kind, classify
 from notify.notifier import Notifier
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("whitelist", [False, True])
+@pytest.mark.parametrize("exhausted", [False, True])
+async def test_poll_preserves_explicit_disable(
+    tmp_path: Path, whitelist: bool, exhausted: bool,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    notices = AsyncMock()
+    watch._deliver = notices  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        if exhausted:
+            await db.increment_usage("alice", regular=10**9, whitelist=10**9)
+            await watch.check()
+        await sub.business_svc.update_user(
+            "alice", enable=None if whitelist else False,
+            wl_enable=False if whitelist else None,
+        )
+        # Recovery after a reset, including a fresh watcher, must respect intent.
+        await db.update_user("alice", bw_used=0, wl_bw_used=0)
+        await watch.close()
+        watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+        watch._deliver = notices  # type: ignore[method-assign]
+        notices.reset_mock()
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert not state["enabled_wl" if whitelist else "enabled"]
+        assert state["enabled" if whitelist else "enabled_wl"]
+        blocked_notice = Kind.WHITELIST_RESTORED if whitelist else Kind.RESTORED
+        for call in notices.await_args_list:
+            assert all(notice.kind is not blocked_notice for notice in call.args[1])
+        # The shared quota helper must obey the same rule as polling.
+        await sub.business_svc.apply_quota("alice")
+        state = await db.get_user("alice")
+        assert state is not None
+        assert not state["enabled_wl" if whitelist else "enabled"]
+        await sub.business_svc.update_user(
+            "alice", enable=None if whitelist else True,
+            wl_enable=True if whitelist else None,
+        )
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert state["enabled"]
+        assert state["enabled_wl"]
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_quota_disable_recovers_after_reset(tmp_path: Path) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        await db.increment_usage("alice", regular=10**9, whitelist=10**9)
+        await watch.check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert not state["enabled"]
+        assert not state["enabled_wl"]
+        assert not state["admin_disabled"]
+        assert not state["admin_disabled_wl"]
+        await db.update_user("alice", bw_used=0, wl_bw_used=0)
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert state["enabled"]
+        assert state["enabled_wl"]
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
 
 
 @pytest.mark.asyncio

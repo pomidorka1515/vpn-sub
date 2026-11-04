@@ -42,7 +42,7 @@ async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 5
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 6
             )
             assert (
                 conn.execute(
@@ -101,6 +101,8 @@ async def test_session_expiry_migration_revokes_legacy_sessions(
     await database.close()
     with sqlite3.connect(db_path) as conn:
         conn.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
+        conn.execute("ALTER TABLE users DROP COLUMN admin_disabled")
+        conn.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
         conn.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session_expires_at'")
         conn.execute("UPDATE schema_version SET version = 4")
     db = Database(path=db_path)
@@ -240,6 +242,8 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
     connection = sqlite3.connect(db_path)
     connection.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session'")
     connection.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
+    connection.execute("ALTER TABLE users DROP COLUMN admin_disabled")
+    connection.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
     connection.execute("UPDATE schema_version SET version = 3")
     connection.commit()
     connection.close()
@@ -250,7 +254,7 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 5
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 6
             )
             assert (
                 conn.execute(
@@ -262,6 +266,39 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
         assert (await db.admin_ui_session()) == "c" * 100
     finally:
         (await db.close())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("enabled_wl", [False, True])
+async def test_disable_intent_migration_preserves_legacy_flags(
+    database: Database, db_path: Path, enabled: bool, enabled_wl: bool,
+) -> None:
+    await create_user(database)
+    await database.set_user("alice", status=enabled, status_wl=enabled_wl)
+    await database.close()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("ALTER TABLE users DROP COLUMN admin_disabled")
+        conn.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
+        conn.execute("UPDATE schema_version SET version = 5")
+    for _ in range(2):
+        db = Database(path=db_path, start_backup=False)
+        await db.start()
+        try:
+            state = await db.get_user("alice")
+            assert state is not None
+            assert bool(state["admin_disabled"]) is not enabled
+            assert bool(state["admin_disabled_wl"]) is not enabled_wl
+            # Intent and effective flags commit together and survive restart.
+            await db.set_enabled_pending(
+                "alice", enabled=True, enabled_time=True, enabled_wl=True, quota=True,
+            )
+            state = await db.get_user("alice")
+            assert state is not None
+            assert bool(state["enabled"]) is enabled
+            assert bool(state["enabled_wl"]) is enabled_wl
+        finally:
+            await db.close()
 
 
 @pytest.mark.asyncio

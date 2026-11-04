@@ -128,6 +128,8 @@ class UserRecord(TypedDict):
     enabled: int
     enabled_time: int
     enabled_wl: int
+    admin_disabled: int
+    admin_disabled_wl: int
     expires_at: int
     bw_limit_gb: int
     bw_used: int
