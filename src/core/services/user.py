@@ -607,6 +607,7 @@ class BusinessUserService(BaseService):
     @panel_mutation
     async def reset_user(self, username: str) -> ResetUserObject:
         self.require_panels()
+        await self._recover_reset(username)
         await self.require_recovered(username)
         uid, token = str(uuid.uuid4()), generate_token("sub")
         await self.db.set_metadata(
@@ -624,6 +625,7 @@ class BusinessUserService(BaseService):
     @panel_mutation
     async def reconcile_user(self, username: str) -> None:
         self.require_panels()
+        await self._recover_reset(username)
         await self.require_recovered(username)
         if await self.db.get_metadata(f"uuid_rollback_failed:{username}") is not None:
             raise ConflictError("User requires pending operation recovery before reconcile")
@@ -650,6 +652,17 @@ class BusinessUserService(BaseService):
             for index in range(min(4, len(users))):
                 group.create_task(worker(), name=f"core:reconcile-worker:{index}")
         return [username for username in users if username in failures]
+
+    async def _recover_reset(self, username: str) -> None:
+        value = await self.db.get_metadata(f"user_reset_pending:{username}")
+        if value is None:
+            return
+        details = json.loads(value)
+        uid = str(details["uuid"])
+        # Replay even if SQLite already has the UUID: a previous attempt may
+        # have stopped between individual panel writes.
+        await self.update_uuid(username, uid, _resetting=True)
+        await self.db.finalize_reset(username, uid, str(details["token"]))
 
     async def recover_pending(self) -> None:
         if not self.panels:
@@ -684,12 +697,7 @@ class BusinessUserService(BaseService):
                             await self.db.delete_metadata(f"user_sync_pending:{username}")
                             await self.db.delete_metadata(f"user_reset_pending:{username}")
                     elif prefix == "user_reset_pending:":
-                        details = json.loads(value)
-                        await self.db.finalize_reset(
-                            username,
-                            str(details["uuid"]),
-                            str(details["token"]),
-                        )
+                        await self._recover_reset(username)
                     elif user is not None:
                         await self.reconcile_user(username)
                     await self.db.delete_metadata(key)
