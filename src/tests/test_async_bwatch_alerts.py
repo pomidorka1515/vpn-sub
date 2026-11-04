@@ -1,17 +1,49 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 from async_core_helpers import close_async_subscription, make_async_subscription
+from bot_helpers import telegram_mock
 from helpers import USER_UUID
 
+from bots.telegram import TelegramAdminBot
 from bwatch.watch import BWatch
 from db import Database
 from notify.notifier import Notifier
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("plain text\nnext line", "plain text\nnext line"),
+        ("snapshot: <disk> & failed", "snapshot: &lt;disk&gt; &amp; failed"),
+        ('Xray: <invalid & "broken">', "Xray: &lt;invalid &amp; &quot;broken&quot;&gt;"),
+        ("Panel 'a<b>':", "Panel &#x27;a&lt;b&gt;&#x27;:"),
+        ("reconcile: alice&bob", "reconcile: alice&amp;bob"),
+        ("literal &lt;tag&gt;", "literal &amp;lt;tag&amp;gt;"),
+    ],
+)
+async def test_admin_alerts_escape_plain_text_for_telegram(
+    watch: BWatch, message: str, expected: str,
+) -> None:
+    bot = TelegramAdminBot.__new__(TelegramAdminBot)
+    telegram = telegram_mock()
+    bot.bot = telegram
+    bot.admin_uids = [42, 43]
+    bot.log = MagicMock()
+    watch.alert = bot.msg
+
+    await watch._alert_admin(message)
+
+    assert telegram.send_message.await_count == 2
+    telegram.send_message.assert_any_await(42, expected, parse_mode="HTML")
+    telegram.send_message.assert_any_await(43, expected, parse_mode="HTML")
 
 
 @pytest.mark.asyncio

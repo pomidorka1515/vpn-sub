@@ -5,6 +5,7 @@ import json
 import time
 from dataclasses import asdict
 from datetime import UTC, datetime
+from html import escape
 from typing import TYPE_CHECKING, Literal, cast
 
 from app_runtime.tasks import TaskRegistry
@@ -184,7 +185,8 @@ class BWatch:
     async def _alert_admin(self, message: str) -> None:
         if self.alert is not None:
             try:
-                await self.alert(message)
+                # Watcher alerts are plain text; the admin sender uses HTML parsing.
+                await self.alert(escape(message))
             except Exception:
                 self.log.exception("watcher alert failed")
 
