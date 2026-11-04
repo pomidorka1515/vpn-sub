@@ -358,6 +358,7 @@ class BusinessUserService(BaseService):
         self.require_panels()
         await self.require_recovered(username)
         await self.user_svc.user(username)
+        pending_sync = await self.db.get_metadata(f"user_sync_pending:{username}") is not None
         fields: UserFields = {}
         if enable is not None:
             fields["status"] = enable
@@ -371,12 +372,17 @@ class BusinessUserService(BaseService):
             enabled_time=timee,
             enabled_wl=wl_enable,
         )
-        await self._sync_enabled(
-            username,
-            main=enable is not None,
-            whitelist=wl_enable is not None,
-            work=work,
-        )
+        if pending_sync:
+            # The previous intent may cover other panels or unfinished client
+            # creation/attachment. Repair it before clearing the shared marker.
+            await self.reconcile_user(username)
+        else:
+            await self._sync_enabled(
+                username,
+                main=enable is not None,
+                whitelist=wl_enable is not None,
+                work=work,
+            )
         await self.audit_svc.audit(
             name="user_update",
             info={"username": username, **cast(dict[str, JsonValue], dict(fields))},

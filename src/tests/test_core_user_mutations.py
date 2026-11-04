@@ -18,6 +18,7 @@ from session import XUiSession
 
 if TYPE_CHECKING:
     from core import Subscription
+    from custom_types import JsonValue
     from db import Database
 
 NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -229,6 +230,57 @@ async def test_update_user_enable_uses_bulk_enable(database: Database) -> None:
 
     assert [url for url, _ in panel.posts] == ["panel/api/clients/bulkEnable"]
     assert panel.clients[0].enable is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_side", ["main", "whitelist"])
+@pytest.mark.parametrize("later_side", ["main", "whitelist", "neither"])
+@pytest.mark.parametrize("still_failing", [False, True])
+async def test_update_user_repairs_previous_failed_sync(
+    database: Database,
+    failed_side: str,
+    later_side: str,
+    still_failing: bool,
+) -> None:
+    regular = FakePanel(name="regular", clients=[make_panel_client("alice", [1])])
+    whitelist = FakePanel(name="whitelist", clients=[make_panel_client("alice", [2])])
+    failed = regular if failed_side == "main" else whitelist
+    rejection: dict[str, JsonValue] = {"success": False, "msg": "rejected", "obj": None}
+    failed._post_payload = rejection
+    subscription = await make_subscription(
+        database, panels=[regular], whitelist_panel=whitelist,
+    )
+    await create_alice(database)
+
+    with pytest.raises(PanelRejectedError):
+        await subscription.business_svc.update_user("alice", enable=False, wl_enable=False)
+    assert await database.get_metadata("user_sync_pending:alice") is not None
+    assert failed.clients[0].enable is True
+
+    if not still_failing:
+        failed._post_payload = None
+
+    async def update() -> None:
+        await subscription.business_svc.update_user(
+            "alice",
+            enable=True if later_side == "main" else None,
+            wl_enable=True if later_side == "whitelist" else None,
+        )
+
+    if still_failing:
+        with pytest.raises(PanelRejectedError):
+            await update()
+        assert await database.get_metadata("user_sync_pending:alice") is not None
+        failed._post_payload = None
+        await subscription.business_svc.recover_pending()
+    else:
+        await update()
+
+    record = await database.get_user("alice")
+    assert record is not None
+    assert regular.clients[0].enable == bool(record["enabled"]) == (later_side == "main")
+    assert whitelist.clients[0].enable == bool(record["enabled_wl"]) == (later_side == "whitelist")
+    assert await database.get_metadata("user_sync_pending:alice") is None
 
 
 @pytest.mark.asyncio
