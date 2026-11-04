@@ -159,11 +159,12 @@ class BusinessCodeService(BaseService):
         ):
             raise ValidationError("Invalid credentials")
         await self.user_svc.require_recovered(username)
-        external = sanitize(ext_username, "external")
-        if not external or len(external) > 32:
+        if len(ext_username) > 32:
             raise ValidationError("Invalid username")
+        external = sanitize(ext_username, "external")
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
+        displayname = sanitize(displayname, "display")
         token, uid = generate_token("sub"), str(uuid.uuid4())
         fingerprint = random.choice(self.cfg.view()["fingerprints"])
         hashed = await self.password_svc.hash(ext_password)
@@ -174,7 +175,7 @@ class BusinessCodeService(BaseService):
                 uuid=uid,
                 token=token,
                 fingerprint=fingerprint,
-                displayname=sanitize(displayname, "display"),
+                displayname=displayname,
                 ext_username=external,
                 ext_password_hash=hashed,
             )

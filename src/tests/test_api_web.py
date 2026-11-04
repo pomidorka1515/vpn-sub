@@ -63,6 +63,28 @@ async def test_expired_web_cookie_cannot_be_replayed(web_api: tuple[Quart, Datab
     assert (await client.post("/custom/webapi/logout")).status_code == 401
 
 
+@pytest.mark.parametrize(
+    ("username", "valid", "taken", "sanitized"),
+    [
+        ("!!!", False, False, ""),
+        ("alice-login", True, True, "alice-login"),
+        ("alice!", False, False, "alice"),
+        ("a" * 33, False, False, "a" * 32),
+    ],
+)
+async def test_validate_username_sanitization(
+    web_api: tuple[Quart, Database], username: str, *, valid: bool, taken: bool, sanitized: str,
+) -> None:
+    response = await web_api[0].test_client().get(
+        "/custom/webapi/validate", query_string={"username": username},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["obj"] == {
+        "MAX_LENGTH": 32, "valid": valid, "taken": taken, "sanitized": sanitized,
+    }
+
+
 async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None:
     app, db = web_api
     client = app.test_client()

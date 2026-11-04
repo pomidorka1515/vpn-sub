@@ -116,7 +116,10 @@ async def test_shared_account_delete_requires_password(async_db: Database, tmp_p
     "fields",
     [
         {"displayname": "a" * 17},
+        {"displayname": "###"},
+        {"displayname": "   "},
         {"ext_username": "a" * 33},
+        {"ext_username": "!!!"},
         {"fingerprint": "unknown"},
     ],
 )

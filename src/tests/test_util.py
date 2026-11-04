@@ -5,13 +5,38 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import psutil
+import pytest
 
+from errors import ValidationError
 from sysutil import SysUtil
+from util import sanitize
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Literal
 
-    import pytest
+
+@pytest.mark.parametrize(
+    ("kind", "value"),
+    [("external", ""), ("external", " !@ "), ("display", ""),
+     ("display", " \t"), ("display", " @# ")],
+)
+def test_sanitize_rejects_empty_results(kind: Literal["external", "display"], value: str) -> None:
+    with pytest.raises(ValidationError):
+        sanitize(value, kind)
+
+
+@pytest.mark.parametrize(
+    ("kind", "value", "expected"),
+    [
+        ("external", "!" * 32 + "alice" + "a" * 32, "alice" + "a" * 27),
+        ("display", "#" * 16 + "Alice" + "a" * 16, "Alice" + "a" * 11),
+    ],
+)
+def test_sanitize_filters_before_truncating(
+    kind: Literal["external", "display"], value: str, expected: str,
+) -> None:
+    assert sanitize(value, kind) == expected
 
 
 def test_ipaddr_uses_interface_addresses_not_hosts_file(

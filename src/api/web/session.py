@@ -14,6 +14,7 @@ from api.decorators import (
 )
 from api.web._base import AsyncWebApiMixin
 from constants import SESSION_MAX_AGE
+from errors import ValidationError
 from util import err, ok, sanitize
 
 if TYPE_CHECKING:
@@ -57,9 +58,12 @@ class AsyncSessionRoutes(AsyncWebApiMixin):
         raw = request.args.get("username", None)
         if not raw:
             return err("'username' field is missing")
-        sanitized = sanitize(raw, "external")
-        valid = raw == sanitized and len(raw) > 0
-        taken = await self.sub.user_svc.external_username_exists(sanitized)
+        try:
+            sanitized = sanitize(raw, "external")
+        except ValidationError:
+            sanitized = ""
+        valid = raw == sanitized
+        taken = bool(sanitized) and await self.sub.user_svc.external_username_exists(sanitized)
         return ok(obj={"MAX_LENGTH": 32, "valid": valid, "taken": taken, "sanitized": sanitized})
 
     @requires_webapi_auth

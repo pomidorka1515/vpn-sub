@@ -4,7 +4,7 @@ from typing import Self
 
 import discord
 from bots.discord.composition import PublicFeatureMixin
-from util import sanitize
+from util import isusername
 
 __all__ = ["PublicSettingsMixin"]
 
@@ -198,7 +198,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self._reply_key(interaction, "not_logged_in")
             return
         await self._defer(interaction)
-        if not username or username != sanitize(username, "external") or len(username) > 32:
+        if not isusername(username) or len(username) > 32:
             await self._reply_key(interaction, "length_username", ln=32)
             return
         if await self.sub.user_svc.external_username_exists(username):

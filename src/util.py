@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import qrcode
 
+from errors import ValidationError
+
 if TYPE_CHECKING:
     from quart import Response
 
@@ -48,12 +50,18 @@ def sanitize(s: str, kind: Literal["external", "display"], /) -> str:
             "external" -> whitelist: A-Z, a-z, 0-9, and _, - chars allowed, max length 32
             "display"  -> blacklist: filters special chars, max length 16.
 
+    Raises:
+        ValidationError: If no non-whitespace characters remain after filtering.
+
     """
     match kind:
         case "external":
-            return re.sub(r"[^A-Za-z0-9_\-]", "", s[:32])
+            result = re.sub(r"[^A-Za-z0-9_\-]", "", s)[:32]
         case "display":
-            return s[:16].translate(str.maketrans("", "", r""":;"'?/<>{}[]*&^%$#@\|`"""))
+            result = s.translate(str.maketrans("", "", r""":;"'?/<>{}[]*&^%$#@\|`"""))[:16]
+    if not result.strip():
+        raise ValidationError(f"Invalid {kind} name")
+    return result
 
 
 def generate_token(kind: Literal["sub", "auth"], /) -> str:
