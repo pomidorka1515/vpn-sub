@@ -3,6 +3,7 @@ from __future__ import annotations
 import fcntl
 from typing import TYPE_CHECKING, BinaryIO, cast
 
+from errors import SchemaValidationError
 from session.client import XUiSession
 from threadutil import named_to_thread
 
@@ -51,7 +52,10 @@ def build_panels(
 ) -> tuple[list[XUiSession], XUiSession | None]:
     panels: list[XUiSession] = []
     whitelist: XUiSession | None = None
-    for section in cfg.view()["3xui"].values():
+    sections = cfg.view()["3xui"]
+    if sum(section["whitelist"] for section in sections.values()) > 1:
+        raise SchemaValidationError("At most one whitelist panel is allowed")
+    for section in sections.values():
         panel = XUiSession(
             name=section["name"],
             address=section["address"],

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import pytest
 
 from config import AppConfig, Config, JsonDict, LinesConfig
+from config.panels import validate_panel_limit
 from config.transaction import ConfigTransaction
 from errors import (
     ConfigError,
@@ -173,6 +174,7 @@ def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
     config = Config[AppConfig](
         path=path,
         schema_path=Path(__file__).resolve().parents[2] / "config.schema.json",
+        validators=(validate_panel_limit,),
         backup_dir=None,
         sync_mode="none",
     )
@@ -180,6 +182,23 @@ def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
         yield config
     finally:
         config.close()
+
+
+def test_whitelist_panel_limit_on_commit_and_reload(app_cfg: Config[AppConfig]) -> None:
+    with app_cfg.edit() as tx:
+        panels = tx.view()["3xui"]
+        panels["local"]["whitelist"] = True
+        panels["regular"] = {**panels["local"], "whitelist": False}
+    before = Path(app_cfg.path).read_bytes()
+    with pytest.raises(SchemaValidationError, match="At most one whitelist panel"):
+        with app_cfg.edit() as tx:
+            tx.view()["3xui"]["regular"]["whitelist"] = True
+    assert Path(app_cfg.path).read_bytes() == before
+    document = app_cfg.view()
+    document["3xui"]["regular"]["whitelist"] = True
+    Path(app_cfg.path).write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(SchemaValidationError, match="At most one whitelist panel"):
+        app_cfg.reload()
 
 
 @pytest.mark.parametrize("length", [0, 19, 20])

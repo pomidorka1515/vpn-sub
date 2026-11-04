@@ -13,6 +13,7 @@ from app import AppOptions, AppPaths, create_application, verbose_overrides
 from app_runtime.lifecycle import RuntimeState
 from app_runtime.rate_limit import AsyncRateLimiter
 from bots.discord.host import SharedDiscordClient
+from errors import SchemaValidationError
 
 
 def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -24,6 +25,17 @@ def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert verbose_overrides("bwatch,nope") == frozenset({"bwatch", "nope"})
     monkeypatch.delenv("VERBOSE_LOGGING_OVERRIDES")
     assert verbose_overrides() == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_startup_rejects_multiple_whitelist_panels(paths: AppPaths) -> None:
+    document = json.loads(paths.config.read_text())
+    panel = next(iter(document["3xui"].values()))
+    panel["whitelist"] = True
+    document["3xui"]["second"] = {**panel, "name": "second"}
+    paths.config.write_text(json.dumps(document))
+    with pytest.raises(SchemaValidationError, match="At most one whitelist panel"):
+        await create_application(paths, AppOptions(start_background=False, start_bots=False))
 
 
 def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> None:

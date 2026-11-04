@@ -163,6 +163,9 @@ DB-only operations remain available; panel-dependent operations (including user
 creation, deletion, resets, and live traffic) return `503 No panels configured`.  
 Panel-dependent background jobs and recovery pause until panels are added and  
 the service is restarted. Pending recovery records are preserved.  
+At most one panel may have `"whitelist": true`; zero is also allowed. This  
+selects the dedicated whitelist-traffic panel and is separate from each panel's  
+inbound-list `mode`. Configurations with multiple whitelist panels are rejected.  
   
 Each panel in `3xui.*` authenticates with an **admin-scoped API token**
 (Bearer), not a username/password login:

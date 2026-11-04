@@ -21,6 +21,7 @@ from bots.telegram.logging import AsyncBotLogging
 from bots.telegram.polling import AsyncTelegramSession
 from bwatch.watch import BWatch
 from config import AppConfig, Config, LangConfig, LinesConfig
+from config.panels import validate_panel_limit
 from config.store import AsyncConfig, AsyncLinesConfig
 from core import Subscription
 from core.coordination import MutationCoordinator
@@ -113,6 +114,7 @@ async def create_application(
                 indent=4,
                 strict_schema=True,
                 schema_path=bundled_root() / "config.schema.json" if compiled() else None,
+                validators=(validate_panel_limit,),
                 sync_mode="data",
                 isolate_commits=True,
                 backup_dir=paths.backups,

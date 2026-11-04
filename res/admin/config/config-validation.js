@@ -140,6 +140,8 @@ export function validateDraft(draft) {
   });
 
   const panels = isPlainObject(draft['3xui']) ? draft['3xui'] : null;
+  const whitelistPanels = panels ? Object.entries(panels).filter(([, panel]) => isPlainObject(panel) && panel.whitelist === true) : [];
+  if (whitelistPanels.length > 1) whitelistPanels.forEach(([id]) => issues.push(issue('3xui.' + id + '.whitelist', t('config_err_whitelist_panel_limit'))));
   if (!panels) issues.push(issue('3xui', t('config_err_required')));
   else Object.entries(panels).forEach(([id, panel]) => {
     if (!id) issues.push(issue('3xui.' + id + '.id', t('config_err_required')));

@@ -936,6 +936,7 @@
                 "config_err_unique": "Must be unique",
                 "config_err_node": "Node is not a key of nodes",
                 "config_err_token_len": "Token must be at least 20 characters",
+                "config_err_whitelist_panel_limit": "Only one whitelist panel is allowed",
                 "config_err_unknown": "Unknown key",
                 "config_err_schema": "The configuration does not match the schema. Check the edited fields."
             },
@@ -1275,6 +1276,7 @@
                 "config_err_unique": "Должно быть уникальным",
                 "config_err_node": "Узел не является ключом nodes",
                 "config_err_token_len": "Токен должен быть не короче 20 символов",
+                "config_err_whitelist_panel_limit": "Допускается только одна панель белого списка",
                 "config_err_unknown": "Неизвестный ключ",
                 "config_err_schema": "Конфигурация не соответствует схеме. Проверьте изменённые поля."
             }

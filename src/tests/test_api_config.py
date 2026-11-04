@@ -11,6 +11,7 @@ from async_api_helpers import api_app, make_subscription, make_watch
 from api import AsyncApi
 from api.config_patch import REQUIRED_KEYS, config_etag
 from config import AppConfig, Config
+from config.panels import validate_panel_limit
 from config.store import AsyncConfig
 from core.services.audit import AuditService
 
@@ -51,6 +52,7 @@ async def config_api(
             lambda: Config[AppConfig](
                 path=path,
                 schema_path=ROOT / "config.schema.json",
+                validators=(validate_panel_limit,),
                 backup_dir=tmp_path / "backup",
                 indent=4,
                 sync_mode="none",
@@ -89,6 +91,22 @@ async def set_config(app: Quart, base: str, values: dict[str, JsonValue]) -> Res
 
 def base_for(path: Path) -> str:
     return config_etag(cast("dict[str, JsonValue]", json.loads(path.read_bytes())))
+
+
+@pytest.mark.asyncio
+async def test_config_rejects_multiple_whitelist_panels(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
+    app, _, path, _ = config_api
+    document = json.loads(path.read_text())
+    panels = document["3xui"]
+    panel = next(iter(panels.values()))
+    panel["whitelist"] = True
+    panels["second"] = {**panel, "name": "second"}
+    before = path.read_bytes()
+    response = await set_config(app, base_for(path), {"3xui": panels})
+    assert response.status_code == 400
+    assert path.read_bytes() == before
 
 
 @pytest.mark.asyncio

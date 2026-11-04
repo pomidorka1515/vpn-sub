@@ -134,7 +134,7 @@
 
         "3xui": {
             "type": "object",
-            "description": "3x-ui panels. An empty object enables panel-free setup; panel-dependent operations are unavailable until panels are configured and the service is restarted.",
+            "description": "3x-ui panels. At most one panel may have whitelist set to true (enforced by the application). An empty object enables panel-free setup; panel-dependent operations are unavailable until panels are configured and the service is restarted.",
             "additionalProperties": {
                 "type": "object",
                 "required": ["name", "address", "port", "uri", "token", "https", "whitelist", "inbounds_list", "mode"],
@@ -146,7 +146,7 @@
                     "uri": { "type": "string" },
                     "token": { "type": "string", "minLength": 20, "description": "Admin-scoped 3x-ui API token (panel Settings -> Security -> API Token)." },
                     "https": { "type": "boolean" },
-                    "whitelist": { "type": "boolean" },
+                    "whitelist": { "type": "boolean", "description": "Whether this is the dedicated whitelist traffic panel; at most one panel may be true." },
                     "nginx_auth": {
                         "type": "array",
                         "items": { "type": "string" },
