@@ -126,6 +126,7 @@
 
             // traffic chart
             "choose_chart_days": "Выберите кол-во дней.",
+            "chart_invalid_period": "❌ Неверный период графика. Выберите от 1 до 90 дней.",
             "chart_generating": "⌛ Генерация графика...",
             "chart_text": "📊 График: последние <b>{days}</b> дней\n\n<b>За всё время</b>\n<b>Обычный трафик</b>\n⬆️ {upload} выгружено (Up)\n⬇️ {download} загружено (Down)\nЭтот месяц:\n📦 {used} / {limit} GB <i>({percent})</i>\n\n<b>Whitelist</b>\n⬆️ {upload} выгружено\n⬇️ {download} загружено\nЭтот месяц:\n📦 {wl_used} / {wl_limit} GB <i>({wl_percent})</i>",
 
@@ -233,6 +234,7 @@
 
             // traffic chart
             "choose_chart_days": "Choose a day amount.",
+            "chart_invalid_period": "❌ Invalid chart period. Choose between 1 and 90 days.",
             "chart_generating": "⌛ Generating chart...",
             "chart_text": "📊 Chart: last <b>{days}</b> days\n\n<b>All-Time</b>\n<b>Regular traffic</b>\n⬆️ {upload} uploaded\n⬇️ {download} downloaded\nThis month:\n📦 {used} / {limit} GB <i>({percent})</i>\n\n<b>Whitelist</b>\n⬆️ {upload} uploaded\n⬇️ {download} downloaded\nThis month:\n📦 {wl_used} / {wl_limit} GB <i>({wl_percent})</i>",
 

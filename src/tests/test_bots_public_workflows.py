@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,6 +15,7 @@ from bots.telegram.public.account import PublicAccountMixin
 from bots.telegram.public.login import PublicLoginMixin
 from bots.telegram.public.settings import PublicSettingsMixin
 from bots.telegram.public.traffic import PublicTrafficMixin
+from config import Config, LangConfig
 from errors import AppError, NotFoundError
 
 TEXTS = {
@@ -230,7 +232,9 @@ async def test_fingerprint_and_settings_steps(
 
     await mixin.step_settings_login(_message("/menu"))
     await mixin.step_settings_login(_message("y" * 33))
-    assert "login>16" in telegram.send_message.call_args.args[1]
+    assert "login>32" in telegram.send_message.call_args.args[1]
+    await mixin.step_settings_login(_message("y" * 32))
+    subscription.business_svc.update_params.assert_called_with(username="alice", ext_username="y" * 32)
     subscription.business_svc.update_params.side_effect = AppError("taken")
     await mixin.step_settings_login(_message("bob"))
     assert "taken" in telegram.send_message.call_args.args[1]
@@ -379,6 +383,36 @@ def traffic() -> tuple[PublicTrafficMixin, MagicMock, MagicMock]:
     language["chart"] = {"en": {"bandwidth": "bw"}}
     mixin.lang_cfg = config_mock(language)
     return mixin, telegram, subscription
+
+
+@pytest.fixture
+def shipped_publicbot_texts() -> dict[str, dict[str, str]]:
+    language = Config[LangConfig](
+        path=Path(__file__).resolve().parents[2] / "lang.jsonc", read_only=True, read_only_jsonc=True,
+    )
+    return language.view()["publicbot"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lang", ["en", "ru"])
+@pytest.mark.parametrize("data", ["chart", "chart_bad", "chart_0", "chart_91"])
+async def test_invalid_chart_period_uses_shipped_translations(
+    traffic: tuple[PublicTrafficMixin, MagicMock, MagicMock],
+    shipped_publicbot_texts: dict[str, dict[str, str]],
+    lang: str,
+    data: str,
+) -> None:
+    mixin, _, subscription = traffic
+    mixin.TEXTS = shipped_publicbot_texts
+    cast(AsyncMock, mixin.get_lang).return_value = lang
+    subscription.telegram_svc.is_registered.return_value = True
+
+    await mixin.chart_callback(_call(data))
+
+    cast(AsyncMock, mixin._answer_callback).assert_awaited_once_with(
+        "cb", mixin.TEXTS[lang]["chart_invalid_period"],
+    )
+    subscription.telegram_svc.get_username_telegram.assert_not_awaited()
 
 
 @pytest.mark.asyncio

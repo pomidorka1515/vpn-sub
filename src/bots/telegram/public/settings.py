@@ -148,7 +148,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         if len(new_login) > 32:
             await self.bot.send_message(
                 message.chat.id,
-                t["length_username"].format(ln=16),
+                t["length_username"].format(ln=32),
                 reply_markup=await self.get_menu(uid),
             )
             return None
