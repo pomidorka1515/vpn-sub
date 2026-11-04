@@ -30,12 +30,22 @@ class AccountService(BaseService):
         self.business_svc = business_svc
 
     async def login(self, username: str, password: str) -> str:
-        internal = await self.password_svc.validate_credentials(username, password)
+        internal = await self.db.ext_to_user(username)
         if internal is None:
             raise AppError("Invalid credentials.", status=401)
-        token = generate_token("auth")
-        await self.user_svc.set_auth_token(internal, token)
-        return token
+
+        async def issue_session() -> str:
+            # The external name may have moved while waiting for this user's lock.
+            # Reject it before nested verification can resolve a different user.
+            if await self.user_svc.get_external_username(internal) != username:
+                raise AppError("Invalid credentials.", status=401)
+            if await self.password_svc.validate_credentials(username, password) != internal:
+                raise AppError("Invalid credentials.", status=401)
+            token = generate_token("auth")
+            await self.user_svc.set_auth_token(internal, token)
+            return token
+
+        return await self.res.coordinator.run([internal], issue_session, name="core:login")
 
     async def logout(self, username: str) -> None:
         await self.user_svc.set_auth_token(username, None)

@@ -65,6 +65,90 @@ async def test_shared_login_logout_credentials_and_reset(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["password", "reset"])
+async def test_login_coordinates_verification_and_session_issuance(
+    async_db: Database, tmp_path: Path, mutation: str,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    verified = asyncio.Event()
+    release = asyncio.Event()
+    changed = asyncio.Event()
+    validate = sub.password_svc.validate_credentials
+
+    async def pause_after_verification(username: str, password: str) -> str | None:
+        result = await validate(username, password)
+        verified.set()
+        await release.wait()
+        return result
+
+    async def change_account() -> None:
+        if mutation == "password":
+            await sub.business_svc.update_params("alice", ext_password="newsecret")
+        else:
+            await sub.business_svc.reset_user("alice")
+        changed.set()
+
+    try:
+        await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice-login", ext_password="secret",
+        )
+        with patch.object(sub.password_svc, "validate_credentials", pause_after_verification):
+            async with asyncio.TaskGroup() as tasks:
+                login = tasks.create_task(sub.account_svc.login("alice-login", "secret"))
+                await asyncio.wait_for(verified.wait(), timeout=5)
+                tasks.create_task(change_account())
+                try:
+                    with pytest.raises(TimeoutError):
+                        await asyncio.wait_for(changed.wait(), timeout=0.1)
+                finally:
+                    release.set()
+        assert changed.is_set()
+        token = login.result()
+        assert len(token) == 100
+        if mutation == "reset":
+            assert await sub.user_svc.auth_token_to_user(token) is None
+        else:
+            assert await sub.user_svc.auth_token_to_user(token) == "alice"
+            assert await validate("alice-login", "secret") is None
+    finally:
+        release.set()
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_login_rejects_external_username_reassigned_before_lock(
+    async_db: Database, tmp_path: Path,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    resolve = async_db.ext_to_user
+    moved = False
+
+    async def resolve_then_reassign(external: str) -> str | None:
+        nonlocal moved
+        internal = await resolve(external)
+        if not moved:
+            moved = True
+            await sub.business_svc.update_params("alice", ext_username="alice-new")
+            await sub.business_svc.update_params("bob", ext_username="alice-login")
+        return internal
+
+    try:
+        for username in ("alice", "bob"):
+            await sub.business_svc.add_new_user(
+                username, username, ext_username=f"{username}-login", ext_password="secret",
+            )
+        with (
+            patch.object(async_db, "ext_to_user", resolve_then_reassign),
+            pytest.raises(AppError, match="Invalid credentials"),
+        ):
+            await sub.account_svc.login("alice-login", "secret")
+        for username in ("alice", "bob"):
+            assert (await sub.user_svc.user(username))["auth_token"] is None
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("fields", [{"ext_password": ""}, {"ext_username": ""}])
 @pytest.mark.parametrize("current_password", [None, "", "wrong"])
 async def test_empty_credentials_require_current_password(
