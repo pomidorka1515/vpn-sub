@@ -84,7 +84,6 @@ def run[T](coro: Coroutine[Any, Any, T]) -> T:
 
 def stats_obj() -> UserInfo:
     return UserInfo(
-        _="alice",
         token="a" * 40,
         uuid="uuid",
         displayname="alice",

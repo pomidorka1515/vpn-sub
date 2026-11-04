@@ -466,7 +466,6 @@ class UserInfoBandwidth:
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class UserInfo:
-    _: str
     token: str
     link: str
     displayname: str

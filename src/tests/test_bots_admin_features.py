@@ -39,7 +39,6 @@ def _message(text: str | None, chat_id: int = 7) -> types.Message:
 
 def _info() -> UserInfo:
     return UserInfo(
-        _="test",
         token="t" * 40,
         link="https://example.test/sub",
         displayname="Alice",

@@ -249,6 +249,7 @@ async def create_application(
             mutations=mutations,
         )
         await runtime.start()
+        app.extensions["response_config"] = cfg
         app.extensions["runtime"] = runtime
         return runtime
     except Exception, asyncio.CancelledError:

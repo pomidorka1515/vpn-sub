@@ -165,7 +165,6 @@ class BusinessUserService(BaseService):
         if pretty:
             bw, wl = bw.format_all_mb(), wl.format_all_mb()
         return UserInfo(
-            _=random.choice(conf.get("funny_strings", [])),
             token=user["token"],
             link=f"{conf['domain']}/{conf['uri'].strip('/')}?token={user['token']}",
             displayname=user["displayname"],

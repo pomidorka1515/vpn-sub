@@ -115,16 +115,24 @@ def isusername(s: str) -> bool:
 
 def ok(msg: str | None = None, code: int = 200, obj: JsonifyValue = None) -> tuple[Response, int]:
     """Internal helper function to return a successful Response."""
-    from quart import jsonify
-
-    return jsonify({"success": True, "msg": msg, "obj": obj}), code
+    return _response(True, msg, code, obj)
 
 
 def err(msg: str | None = None, code: int = 400, obj: JsonifyValue = None) -> tuple[Response, int]:
     """Internal helper function to return an error Response."""
-    from quart import jsonify
+    return _response(False, msg, code, obj)
 
-    return jsonify({"success": False, "msg": msg, "obj": obj}), code
+
+def _response(success: bool, msg: str | None, code: int, obj: JsonifyValue) -> tuple[Response, int]:
+    from quart import current_app, jsonify
+
+    body: dict[str, JsonifyValue] = {"success": success, "msg": msg, "obj": obj}
+    cfg = current_app.extensions.get("response_config")
+    if cfg is not None:
+        strings = cfg.view().get("funny_strings")
+        if strings:
+            body["_"] = secrets.choice(strings)
+    return jsonify(body), code
 
 
 class _PartialFormatter(UserDict[str, object]):

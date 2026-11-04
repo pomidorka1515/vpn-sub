@@ -48,7 +48,6 @@ def _info(**overrides: Unpack[UserInfoOverrides]) -> UserInfo:
     }
     payload.update(overrides)
     return UserInfo(
-        _=payload["_"],
         token=payload["token"],
         link=payload["link"],
         displayname=payload["displayname"],

@@ -108,7 +108,7 @@
         
         "funny_strings": {
             "type": "array",
-            "description": "type shit",
+            "description": "Optional strings to randomly include as the top-level '_' field in success and error JSON responses. Omit or leave empty to disable.",
             "items": { "type": "string" }
         },
 

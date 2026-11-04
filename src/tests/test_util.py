@@ -6,14 +6,40 @@ from typing import TYPE_CHECKING
 
 import psutil
 import pytest
+from quart import Quart
 
 from errors import ValidationError
 from sysutil import SysUtil
-from util import sanitize
+from util import err, ok, sanitize
 
 if TYPE_CHECKING:
     from pathlib import Path
     from typing import Literal
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("success", "code"), [(True, 200), (False, 400)])
+async def test_response_funny_strings(success: bool, code: int) -> None:
+    app = Quart(__name__)
+    config: dict[str, list[str]] = {}
+    app.extensions["response_config"] = SimpleNamespace(view=lambda: config)
+    async with app.app_context():
+        respond = ok if success else err
+        for strings in (None, [], ["one"], ["one", "two"]):
+            if strings is None:
+                config.pop("funny_strings", None)
+            else:
+                config["funny_strings"] = strings
+            response, status = respond("message", obj={"value": 1})
+            body = await response.get_json()
+            assert status == code
+            assert body["success"] is success
+            assert body["msg"] == "message"
+            assert body["obj"] == {"value": 1}
+            if strings:
+                assert body["_"] in strings
+            else:
+                assert "_" not in body
 
 
 @pytest.mark.parametrize(

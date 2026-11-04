@@ -17,9 +17,11 @@ Every response follows this pattern:
 {  
     "success": true, // boolean  
     "msg": null, // str on error/success (varies), null or str on success  
-    "obj": null // any object or null  
+    "obj": null, // any object or null  
+    "_": "..." // optional random string from funny_strings  
 }  
 ```  
+The `_` field is present in success and error responses when `funny_strings` is configured and non-empty; otherwise it is omitted.  
 Missing/invalid authorization:  
 ```jsonc  
 // HTTP 401  
