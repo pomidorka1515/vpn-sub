@@ -102,7 +102,6 @@ class BWatch:
         self._reset_wl_mem: Counters = {}
         self.snap_mem: dict[str, BandwidthInfo] = {}
         self.snap_wl_mem: dict[str, BandwidthInfo] = {}
-        self._snapshot_initialized = False
         self._tasks = TaskRegistry()
         self._jobs: dict[str, asyncio.Lock] = {}
         self._started = False
@@ -121,7 +120,9 @@ class BWatch:
         if self._closed:
             raise RuntimeError("watcher is closed")
         self._failure = await self._load_failure()
-        await self._load_usage_baselines(await self.sub.user_svc.list_user_states())
+        states = await self.sub.user_svc.list_user_states()
+        await self._load_usage_baselines(states)
+        has_snapshot_baselines = await self._load_snapshot_baselines(states)
         if not self.scheduled:
             self._started = True
             return
@@ -130,9 +131,10 @@ class BWatch:
             await self.bandwidth_check()
         except PanelUnavailableError:
             self.log.exception("initial bandwidth poll failed")
-        self.snap_mem = self._aggregate_counters(self.mem)
-        self.snap_wl_mem = self._aggregate_counters(self.wl_mem)
-        self._snapshot_initialized = True
+        if not has_snapshot_baselines:
+            # First run/upgrade: historical daily baselines cannot be recovered.
+            self.snap_mem = self._aggregate_counters(self.mem)
+            self.snap_wl_mem = self._aggregate_counters(self.wl_mem)
         await self._run_due_daily_snapshots(time.monotonic())
         for name, interval, jobs in self._INTERVALS:
 
@@ -175,6 +177,19 @@ class BWatch:
                 old.upload + value.upload, old.download + value.download, old.total + value.total,
             )
         return totals
+
+    async def _load_snapshot_baselines(self, states: list[UserRecord]) -> bool:
+        raw = await self.db.get_metadata("watcher_snapshot_baselines")
+        if raw is None:
+            return False
+        records = cast(dict[str, list[tuple[str, str, int, int, int]]], json.loads(raw))
+        identities = {state["username"]: state["uuid"] for state in states}
+        self.snap_mem, self.snap_wl_mem = {}, {}
+        for kind, target in (("main", self.snap_mem), ("whitelist", self.snap_wl_mem)):
+            for name, uuid, up, down, total in records[kind]:
+                if identities.get(name) == uuid:
+                    target[name] = BandwidthInfo(up, down, total)
+        return True
 
     async def close(self) -> None:
         self._closed = True
@@ -480,6 +495,9 @@ class BWatch:
                 raise
 
             async def commit() -> None:
+                current_states = await self.sub.user_svc.list_user_states()
+                # SQLite may have committed even if the previous call was cancelled.
+                await self._load_snapshot_baselines(current_states)
                 next_main, next_wl = dict(self.snap_mem), dict(self.snap_wl_mem)
                 rows: list[tuple[str, int, int, int, int, int]] = []
                 midnight = int(time.time()) // 86400 * 86400
@@ -487,6 +505,8 @@ class BWatch:
                     if not await self.sub.user_svc.isuser(old["username"]):
                         continue
                     state = await self.sub.user_svc.get_user_state(old["username"])
+                    if state["uuid"] != old["uuid"]:
+                        continue
                     name = state["username"]
                     up, down, baseline = self._daily_snapshot_delta(
                         main.get(name, BandwidthInfo(0, 0, 0))
@@ -505,7 +525,15 @@ class BWatch:
                         next_main[name] = baseline
                     if wl_baseline is not None:
                         next_wl[name] = wl_baseline
-                await self.db.add_bandwidth_snapshots(rows)
+                identities = {state["username"]: state["uuid"] for state in current_states}
+                baselines = json.dumps({
+                    kind: [
+                        [name, identities[name], int(value.upload), int(value.download), int(value.total)]
+                        for name, value in values.items() if name in identities
+                    ]
+                    for kind, values in (("main", next_main), ("whitelist", next_wl))
+                })
+                await self.db.add_bandwidth_snapshots(rows, baselines=baselines)
                 self.snap_mem, self.snap_wl_mem = next_main, next_wl
                 await self.db.delete_metadata("daily_bw_snapshot_failures")
                 self._failure = None

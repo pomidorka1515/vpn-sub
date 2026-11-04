@@ -175,6 +175,23 @@ async def test_usage_and_baselines_roll_back_together(repository: Database) -> N
 
 
 @pytest.mark.asyncio
+async def test_snapshots_and_baselines_roll_back_together(repository: Database) -> None:
+    await create_user(repository)
+    await repository.add_bandwidth_snapshots([("alice", 10, 1, 2, 3, 4)], baselines="old")
+    async with repository.transaction(immediate=True) as conn:
+        await conn.execute(
+            "CREATE TRIGGER reject_snapshot_baseline BEFORE INSERT ON app_metadata "
+            "WHEN NEW.key = 'watcher_snapshot_baselines' BEGIN SELECT RAISE(ABORT, 'failed'); END",
+        )
+    with pytest.raises(DatabaseError, match="failed"):
+        await repository.add_bandwidth_snapshots([("alice", 10, 5, 6, 7, 8)], baselines="new")
+    assert await repository.get_bandwidth_snapshots("alice", 0) == [
+        {"ts": 10, "up": 1, "down": 2, "wl_up": 3, "wl_down": 4},
+    ]
+    assert await repository.get_metadata("watcher_snapshot_baselines") == "old"
+
+
+@pytest.mark.asyncio
 async def test_bonus_usage_notifications_and_snapshots(repository: Database) -> None:
     db = repository
     await create_user(db)

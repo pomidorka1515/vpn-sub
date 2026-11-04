@@ -605,6 +605,100 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=True)
+    total = 100
+
+    async def traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, BandwidthInfo]:
+        return {"alice": BandwidthInfo(total, total * 2, total * 3)}
+
+    async def panel_traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {"panel": await traffic(whitelist, work=work)}
+
+    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    sub.bandwidth_svc.panel_traffic = panel_traffic  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        watch.record_snap_snapshot = AsyncMock()  # type: ignore[method-assign]
+        await watch.start()
+        for reading in (150, 180, 180):
+            total = reading
+            # Usage polling advances independently of the last daily snapshot.
+            await watch.bandwidth_check()
+            await watch.close()
+            watch = BWatch(sub.res.cfg, db, sub, scheduled=True)
+            watch.record_snap_snapshot = AsyncMock()  # type: ignore[method-assign]
+            await watch.start()
+        rows = await db.get_bandwidth_snapshots("alice", 0)
+        assert sum(row["up"] for row in rows) == 80
+        assert sum(row["down"] for row in rows) == 160
+        assert sum(row["wl_up"] for row in rows) == 80
+        assert sum(row["wl_down"] for row in rows) == 160
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("committed", [False, True])
+async def test_daily_snapshot_retry_reloads_durable_baselines(
+    tmp_path: Path, committed: bool,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    total = 100
+
+    async def traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, BandwidthInfo]:
+        return {"alice": BandwidthInfo(total, total * 2, total * 3)}
+
+    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    save = db.add_bandwidth_snapshots
+
+    async def interrupted(
+        rows: list[tuple[str, int, int, int, int, int]], *, baselines: str | None = None,
+    ) -> None:
+        if committed:
+            await save(rows, baselines=baselines)
+        raise asyncio.CancelledError
+
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        await watch.record_daily_snapshot()
+        total = 150
+        db.add_bandwidth_snapshots = interrupted  # type: ignore[method-assign]
+        with pytest.raises(asyncio.CancelledError):
+            await watch.record_daily_snapshot()
+        assert watch.snap_mem["alice"].upload == 100
+        db.add_bandwidth_snapshots = save  # type: ignore[method-assign]
+        await watch.record_daily_snapshot()
+        rows = await db.get_bandwidth_snapshots("alice", 0)
+        assert rows[0]["up"] == rows[0]["wl_up"] == 50
+        assert rows[0]["down"] == rows[0]["wl_down"] == 100
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
 async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Path) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()

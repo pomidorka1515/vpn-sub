@@ -173,8 +173,10 @@ class StateMixin(ConnectionMixin):
     async def add_bandwidth_snapshots(
         self,
         rows: list[tuple[str, int, int, int, int, int]],
+        *,
+        baselines: str | None = None,
     ) -> None:
-        if rows:
+        if rows or baselines is not None:
             async with self.transaction(immediate=True) as conn:
                 await conn.executemany(
                     """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
@@ -183,6 +185,12 @@ class StateMixin(ConnectionMixin):
                 wl_up=wl_up + excluded.wl_up, wl_down=wl_down + excluded.wl_down""",
                     rows,
                 )
+                if baselines is not None:
+                    await conn.execute(
+                        "INSERT INTO app_metadata(key, value) VALUES ('watcher_snapshot_baselines', ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (baselines,),
+                    )
 
     async def get_bandwidth_snapshots(
         self,
