@@ -101,8 +101,4 @@ def build_description(
         else:
             desc = format(desc, slot_time="")
 
-    final = format(desc, username=name)
-    if "{" in final:
-        raise ValueError("formatted description contains unformatted placeholders")
-
-    return final
+    return format(desc, username=name)
