@@ -91,6 +91,10 @@ async def test_all_traffic_sums_across_panels_and_skips_unknown_emails(
 
     traffic = await subscription.bandwidth_svc.all_traffic()
     assert traffic == {"alice": BandwidthInfo(101, 202, 303)}
+    assert await subscription.bandwidth_svc.panel_traffic() == {
+        "one": {"alice": BandwidthInfo(100, 200, 300)},
+        "two": {"alice": BandwidthInfo(1, 2, 3)},
+    }
     assert (await subscription.bandwidth_svc.all_traffic(whitelist=True)) == {}
 
 

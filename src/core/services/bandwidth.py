@@ -61,27 +61,45 @@ class BandwidthService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> dict[str, BandwidthInfo]:
+        panels = await self.panel_traffic(whitelist, work=work)
+        totals: dict[str, BandwidthInfo] = {}
+        for values in panels.values():
+            for email, traffic in values.items():
+                old = totals.get(email, BandwidthInfo(0, 0, 0))
+                totals[email] = BandwidthInfo(
+                    old.upload + traffic.upload,
+                    old.download + traffic.download,
+                    old.total + traffic.total,
+                )
+        return totals
+
+    async def panel_traffic(
+        self,
+        whitelist: bool = False,
+        *,
+        work: WorkClass = "foreground",
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        """Return counters without merging independent panel reset domains."""
         self.require_panels()
         panels = self._target_panels(whitelist)
         if not panels:
             return {}
         known = await self.db.usernames()
         outcomes = await self.panel_svc.outcomes(panels, self.panel_svc.list_clients, work=work)
-        totals: dict[str, list[int]] = {}
+        result: dict[str, dict[str, BandwidthInfo]] = {}
         for outcome in outcomes:
             if outcome.error is not None:
                 self.log.error("client traffic listing failed for panel %s", outcome.panel)
                 raise PanelUnavailableError(
                     f"Could not query client traffic for panel {outcome.panel}",
                 ) from outcome.error
+            values = result[outcome.panel] = {}
             for client in outcome.value or []:
                 traffic = client.traffic
                 if traffic is None or client.email not in known:
                     continue
-                acc = totals.setdefault(client.email, [0, 0])
-                acc[0] += traffic.up
-                acc[1] += traffic.down
-        return {email: BandwidthInfo(up, down, up + down) for email, (up, down) in totals.items()}
+                values[client.email] = BandwidthInfo(traffic.up, traffic.down, traffic.up + traffic.down)
+        return result
 
     async def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
         return [

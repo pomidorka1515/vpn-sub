@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
 from notify.kinds import Kind, Scope
 
+type CounterKey = tuple[str, str, str]  # panel, username, account UUID
+type Counters = dict[CounterKey, BandwidthInfo]
+
 
 class BWatch:
     """Runtime-owned jobs. Public job methods share locks with scheduled calls."""
@@ -93,10 +96,10 @@ class BWatch:
         self.notifier, self.alert = notifier, alert
         self.scheduled, self.verbose = scheduled, verbose
         self.log = Logger(type(self).__name__)
-        self.mem: dict[str, BandwidthInfo] = {}
-        self.wl_mem: dict[str, BandwidthInfo] = {}
-        self._reset_mem: dict[str, BandwidthInfo] = {}
-        self._reset_wl_mem: dict[str, BandwidthInfo] = {}
+        self.mem: Counters = {}
+        self.wl_mem: Counters = {}
+        self._reset_mem: Counters = {}
+        self._reset_wl_mem: Counters = {}
         self.snap_mem: dict[str, BandwidthInfo] = {}
         self.snap_wl_mem: dict[str, BandwidthInfo] = {}
         self._snapshot_initialized = False
@@ -127,7 +130,8 @@ class BWatch:
             await self.bandwidth_check()
         except PanelUnavailableError:
             self.log.exception("initial bandwidth poll failed")
-        self.snap_mem, self.snap_wl_mem = dict(self.mem), dict(self.wl_mem)
+        self.snap_mem = self._aggregate_counters(self.mem)
+        self.snap_wl_mem = self._aggregate_counters(self.wl_mem)
         self._snapshot_initialized = True
         await self._run_due_daily_snapshots(time.monotonic())
         for name, interval, jobs in self._INTERVALS:
@@ -145,18 +149,32 @@ class BWatch:
     async def _load_usage_baselines(self, states: list[UserRecord]) -> None:
         raw_baselines = await self.db.get_metadata("watcher_usage_baselines")
         if raw_baselines is not None:
-            saved = cast(dict[str, dict[str, list[str | int]]], json.loads(raw_baselines))
+            saved = json.loads(raw_baselines)
             self.mem, self.wl_mem = {}, {}
             self._reset_mem, self._reset_wl_mem = {}, {}
-            for state in states:
-                name = state["username"]
-                for kind, target in (
-                    ("main", self.mem), ("whitelist", self.wl_mem),
-                    ("main_reset", self._reset_mem), ("whitelist_reset", self._reset_wl_mem),
-                ):
-                    entry = saved.get(kind, {}).get(name)
-                    if entry is not None and entry[0] == state["uuid"]:
-                        target[name] = BandwidthInfo(int(entry[1]), int(entry[2]), int(entry[3]))
+            # Legacy aggregate counters cannot be split reliably between panels.
+            # Rebaseline once on upgrade rather than invent usage or reset evidence.
+            if saved.get("version") != 2:
+                return
+            identities = {state["username"]: state["uuid"] for state in states}
+            records = cast(dict[str, list[tuple[str, str, str, int, int, int]]], saved["counters"])
+            for kind, target in (
+                ("main", self.mem), ("whitelist", self.wl_mem),
+                ("main_reset", self._reset_mem), ("whitelist_reset", self._reset_wl_mem),
+            ):
+                for panel, name, uuid, up, down, total in records.get(kind, []):
+                    if identities.get(name) == uuid:
+                        target[panel, name, uuid] = BandwidthInfo(up, down, total)
+
+    @staticmethod
+    def _aggregate_counters(counters: Counters) -> dict[str, BandwidthInfo]:
+        totals: dict[str, BandwidthInfo] = {}
+        for (_, name, _), value in counters.items():
+            old = totals.get(name, BandwidthInfo(0, 0, 0))
+            totals[name] = BandwidthInfo(
+                old.upload + value.upload, old.download + value.download, old.total + value.total,
+            )
+        return totals
 
     async def close(self) -> None:
         self._closed = True
@@ -332,7 +350,14 @@ class BWatch:
     async def bandwidth_check(self) -> None:
         async def operation() -> None:
             states = await self.sub.user_svc.list_user_states()
-            main, wl = await self._traffic(states)
+            main = (
+                await self.sub.bandwidth_svc.panel_traffic(work="background")
+                if any(s["bw_limit_gb"] for s in states) else {}
+            )
+            wl = (
+                await self.sub.bandwidth_svc.panel_traffic(whitelist=True, work="background")
+                if any(s["wl_limit_gb"] for s in states) else {}
+            )
             sampled = {s["username"]: s for s in states}
 
             async def commit() -> None:
@@ -342,6 +367,9 @@ class BWatch:
                 usage: dict[str, tuple[int, int]] = {}
                 next_main, next_wl = dict(self.mem), dict(self.wl_mem)
                 reset_main, reset_wl = dict(self._reset_mem), dict(self._reset_wl_mem)
+                keys_by_name: dict[str, set[CounterKey]] = {}
+                for key in next_main.keys() | next_wl.keys() | reset_main.keys() | reset_wl.keys():
+                    keys_by_name.setdefault(key[1], set()).add(key)
                 for state in current_states:
                     name = state["username"]
                     if name not in sampled or sampled[name]["uuid"] != state["uuid"]:
@@ -351,40 +379,51 @@ class BWatch:
                         (state["bw_limit_gb"] and sampled[name]["bw_limit_gb"], main, next_main, reset_main),
                         (state["wl_limit_gb"] and sampled[name]["wl_limit_gb"], wl, next_wl, reset_wl),
                     ):
-                        if not limit:
-                            baseline.pop(name, None)
-                            pending.pop(name, None)
-                        current = values.get(name) if limit else None
                         delta = 0
-                        if current is None:
-                            pending.pop(name, None)
-                        if current is not None:
-                            previous = baseline.get(name)
+                        # Retain baselines across missing samples, but require two
+                        # consecutive low samples to confirm a reset.
+                        for key in keys_by_name.get(name, ()):
+                            if key[1] == name and (
+                                not limit or key[2] != state["uuid"]
+                            ):
+                                baseline.pop(key, None)
+                                pending.pop(key, None)
+                            elif key[1] == name and values.get(key[0], {}).get(name) is None:
+                                pending.pop(key, None)
+                        for panel, readings in values.items() if limit else ():
+                            current = readings.get(name)
+                            if current is None:
+                                continue
+                            key = (panel, name, state["uuid"])
+                            previous = baseline.get(key)
                             if previous is None or current.total >= previous.total:
-                                delta = int(current.total - previous.total) if previous is not None else 0
-                                baseline[name] = current
-                                pending.pop(name, None)
+                                delta += int(current.total - previous.total) if previous is not None else 0
+                                baseline[key] = current
+                                pending.pop(key, None)
                             else:
-                                candidate = pending.get(name)
+                                candidate = pending.get(key)
                                 if candidate is not None and current.total >= candidate.total:
-                                    delta = int(current.total - candidate.total)
-                                    baseline[name] = current
-                                    pending.pop(name, None)
+                                    # The reset zeroed this panel's counter. Include
+                                    # traffic already present in the first low read.
+                                    delta += int(current.total)
+                                    baseline[key] = current
+                                    pending.pop(key, None)
                                 else:
-                                    pending[name] = current
+                                    pending[key] = current
                         deltas.append(delta)
                     usage[name] = (deltas[0], deltas[1])
                 identities = {state["username"]: state["uuid"] for state in current_states}
-                baselines = json.dumps({
-                    kind: {
-                        name: [identities[name], int(value.upload), int(value.download), int(value.total)]
-                        for name, value in values.items() if name in identities
-                    }
+                baselines = json.dumps({"version": 2, "counters": {
+                    kind: [
+                        [*key, int(value.upload), int(value.download), int(value.total)]
+                        for key, value in values.items()
+                        if identities.get(key[1]) == key[2]
+                    ]
                     for kind, values in (
                         ("main", next_main), ("whitelist", next_wl),
                         ("main_reset", reset_main), ("whitelist_reset", reset_wl),
                     )
-                })
+                }})
                 await self.db.increment_usages(usage, baselines=baselines)
                 self.mem, self.wl_mem = next_main, next_wl
                 self._reset_mem, self._reset_wl_mem = reset_main, reset_wl

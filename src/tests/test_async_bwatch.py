@@ -158,7 +158,7 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
             wl_limit_gb=0,
         )
         await watch.start()
-        watch.mem["alice"] = BandwidthInfo(10, 20, 30)
+        watch.mem["panel", "alice", USER_UUID] = BandwidthInfo(10, 20, 30)
 
         async def traffic(
             whitelist: bool = False,
@@ -168,6 +168,13 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
             return {"alice": BandwidthInfo(20, 40, 60)}
 
         sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+
+        async def panel_traffic(
+            whitelist: bool = False, *, work: str = "foreground",
+        ) -> dict[str, dict[str, BandwidthInfo]]:
+            return {"panel": await traffic(whitelist, work=work)}
+
+        sub.bandwidth_svc.panel_traffic = panel_traffic  # type: ignore[method-assign]
         increment = db.increment_usages
 
         async def failed_commit(updates: object, *, baselines: str | None = None) -> None:
@@ -176,7 +183,7 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
         db.increment_usages = failed_commit  # type: ignore[method-assign]
         with pytest.raises(RuntimeError, match="disk unavailable"):
             await watch.bandwidth_check()
-        assert watch.mem["alice"].total == 30
+        assert watch.mem["panel", "alice", USER_UUID].total == 30
         db.increment_usages = increment  # type: ignore[method-assign]
         await watch.bandwidth_check()
         await watch.bandwidth_check()
@@ -203,11 +210,11 @@ async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
 
     async def traffic(
         whitelist: bool = False, *, work: str = "foreground",
-    ) -> dict[str, BandwidthInfo]:
+    ) -> dict[str, dict[str, BandwidthInfo]]:
         total = totals["whitelist" if whitelist else "main"]
-        return {} if total is None else {"alice": BandwidthInfo(total, 0, total)}
+        return {"panel": {} if total is None else {"alice": BandwidthInfo(total, 0, total)}}
 
-    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     try:
         await db.create_user(
             username="alice", uuid=USER_UUID, token="a" * 40,
@@ -229,14 +236,100 @@ async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
         await restarted.bandwidth_check()
         state = await db.get_user("alice")
         assert state is not None
-        assert (state["bw_used"], state["wl_used"]) == (17, 19)
+        assert (state["bw_used"], state["wl_used"]) == (22, 26)
         totals.update(main=None, whitelist=None)
         await restarted.bandwidth_check()
-        assert restarted.mem["alice"].total == 12
-        assert restarted.wl_mem["alice"].total == 16
+        assert restarted.mem["panel", "alice", USER_UUID].total == 12
+        assert restarted.wl_mem["panel", "alice", USER_UUID].total == 16
     finally:
         await watch.close()
         await restarted.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("readings", "expected"),
+    [
+        ([(100, 100), (10, 250), (12, 300)], 212),
+        ([(100, 100), (0, 100), (0, 100), (4, 105)], 9),
+        ([(100, 100), (10, 100), (None, 100), (12, 100), (14, 100)], 14),
+        ([(100, 100), (10, 250), (110, 300)], 210),
+        ([(100, 100), (10, 100), (5, 100), (8, 100)], 8),
+    ],
+)
+async def test_panel_resets_account_full_confirmed_traffic(
+    tmp_path: Path, readings: list[tuple[int | None, int]], expected: int,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    totals: tuple[int | None, int] = readings[0]
+
+    async def traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {
+            panel: {} if total is None else {"alice": BandwidthInfo(total, 0, total)}
+            for panel, total in zip(("one", "two"), totals, strict=True)
+        }
+
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        await watch.start()
+        for reading in readings:
+            totals = reading
+            await watch.bandwidth_check()
+        await watch.bandwidth_check()  # Committed traffic is not counted twice.
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (expected, expected)
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_usage_baselines_do_not_cross_account_identities(tmp_path: Path) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    total = 100
+
+    async def traffic(
+        whitelist: bool = False, *, work: str = "foreground",
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
+
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        await watch.start()
+        await watch.bandwidth_check()
+        total = 10
+        await watch.bandwidth_check()  # Old identity has a pending reset.
+        await db.update_user("alice", uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+        total = 12
+        await watch.bandwidth_check()  # New identity starts a fresh baseline.
+        total = 15
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (3, 3)
+        assert all(key[2] != USER_UUID for key in watch.mem.keys() | watch.wl_mem.keys())
+    finally:
+        await watch.close()
         await close_async_subscription(sub)
         await db.close()
 
@@ -479,13 +572,13 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
 
     async def traffic(
         whitelist: bool = False, *, work: str = "foreground",
-    ) -> dict[str, BandwidthInfo]:
-        return {"alice": BandwidthInfo(total, 0, total)}
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
     async def no_snapshots(now: float) -> None:
         return None
 
-    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     restarted._run_due_daily_snapshots = no_snapshots  # type: ignore[method-assign]
     try:
         await db.create_user(
@@ -523,15 +616,15 @@ async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Pat
 
     async def traffic(
         whitelist: bool = False, *, work: str = "foreground",
-    ) -> dict[str, BandwidthInfo]:
+    ) -> dict[str, dict[str, BandwidthInfo]]:
         if offline:
             raise PanelUnavailableError("panel offline")
-        return {"alice": BandwidthInfo(total, 0, total)}
+        return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
     async def no_snapshots(now: float) -> None:
         return None
 
-    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     restarted._run_due_daily_snapshots = no_snapshots  # type: ignore[method-assign]
     try:
         await db.create_user(
@@ -544,7 +637,7 @@ async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Pat
         total = 150
         offline = True
         await restarted.start()
-        assert restarted.mem["alice"].total == 100
+        assert restarted.mem["panel", "alice", USER_UUID].total == 100
         offline = False
         await restarted.bandwidth_check()
         state = await db.get_user("alice")

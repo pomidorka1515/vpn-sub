@@ -57,6 +57,14 @@ Designed to run on a single small VPS.
   bandwidth and state snapshots, with retry and admin alerts. Monthly reset
   check and inbound reconcile about every 2 hours. Panel polls fan out on a
   bounded async workers, with separate foreground/background capacity.  
+  Quota counters are tracked per panel and account UUID. Two consecutive
+  readings below the previous baseline, with the second at least as large as
+  the first, confirm a reset: the full second counter is charged once. A lone
+  low reading is ignored; missing readings interrupt reset confirmation.
+  Baselines and pending resets persist atomically with quota usage. Legacy
+  aggregate baselines are reinitialized on the first poll after upgrade (stored
+  usage is retained, but traffic since the last legacy poll cannot be recovered
+  reliably). Daily snapshots retain their separate aggregate-counter policy.  
 - **Auth, audit, backups.** Argon2id passwords (legacy salted hashes still
   verify). JSONL audit trail. `config.json` validated against
   `config.schema.json` on load and commit; remote schemas are rejected.
