@@ -26,7 +26,14 @@ Designed to run on a single small VPS.
   configured panel. Panel writes are rolled back if the database commit fails. A
   failed registration rollback is marked and retried at the next startup. UUID
   updates are not rolled back the same way: the first failing panel is recorded,
-  and later panels may already hold the new UUID.
+  and later panels may already hold the new UUID. The UUID failure marker blocks
+  further user mutations, including deletion and reconciliation. A pending reset
+  is replayed from its durable old/new UUID intent at startup or by reset/reconcile;
+  only successful panel writes and a SQLite UUID commit clear its UUID marker.
+  Standalone UUID failures require manual repair: restore every panel client to
+  the user's SQLite UUID, verify agreement, then explicitly clear the `uuid`
+  rollback marker through the admin rollback controls. Clearing a marker alone
+  does not repair panel state; do not clear it before verification.
 - **Invite and bonus codes.** Register codes and bonus codes grant days, monthly
   GB, and whitelist GB. One-shot or reusable. A bonus adds GB onto a 0 limit (no
   allowance, not unlimited). Expiry 0 stays unlimited. A lapsed finite expiry

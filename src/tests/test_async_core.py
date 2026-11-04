@@ -21,13 +21,105 @@ from errors import (
 from session.transport import PanelResponse
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Mapping
+    from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
     from pathlib import Path
 
     from config import JsonValue
     from session.client import XUiSession
 
 NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "params",
+        "enabled",
+        "quota",
+        "add",
+        "internal_add",
+        "create",
+        "delete",
+        "permanent_delete",
+        "rollback",
+        "uuid",
+        "reset",
+        "reconcile",
+        "auth_token",
+    ],
+)
+async def test_uuid_failure_blocks_conflicting_mutations(
+    async_db: Database,
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1], uuid=NEW_UUID)])
+    sub = await make_async_subscription(async_db, tmp_path, [panel])
+    try:
+        await create_alice(async_db)
+        before = await async_db.get_user("alice")
+        marker = "123:interrupted"
+        await async_db.set_metadata("uuid_rollback_failed:alice", marker)
+        svc = sub.business_svc
+        operations: dict[str, Callable[[], Awaitable[object]]] = {
+            "params": lambda: svc.update_params("alice", displayname="Changed"),
+            "enabled": lambda: svc.update_user("alice", enable=False),
+            "quota": lambda: svc.apply_quota("alice"),
+            "add": lambda: svc.add_users("alice"),
+            "internal_add": lambda: svc.add_users("alice", _called_internally=True),
+            "create": lambda: svc.add_new_user("alice", "Changed"),
+            "delete": lambda: svc.delete_user("alice"),
+            "permanent_delete": lambda: svc.delete_user("alice", perma=True),
+            "rollback": lambda: svc.rollback_panel_clients("alice", expected_uuid=NEW_UUID),
+            "uuid": lambda: svc.update_uuid("alice", NEW_UUID),
+            "reset": lambda: svc.reset_user("alice"),
+            "reconcile": lambda: svc.reconcile_user("alice"),
+            "auth_token": lambda: sub.user_svc.set_auth_token("alice", "x" * 100),
+        }
+        with pytest.raises(ConflictError, match="UUID recovery"):
+            await operations[operation]()
+        assert await async_db.get_user("alice") == before
+        assert await async_db.get_metadata("uuid_rollback_failed:alice") == marker
+        assert await async_db.get_metadata("user_reset_pending:alice") is None
+        assert await async_db.get_metadata("user_delete_pending:alice") is None
+        assert await async_db.get_metadata("user_sync_pending:alice") is None
+        assert panel.posts == []
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_startup_preserves_standalone_uuid_failure_until_manual_clearance(
+    async_db: Database,
+    tmp_path: Path,
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1], uuid=NEW_UUID)])
+    sub = await make_async_subscription(async_db, tmp_path, [panel])
+    try:
+        await create_alice(async_db)
+        await async_db.set_metadata("uuid_rollback_failed:alice", "123:interrupted")
+        await async_db.set_metadata(
+            "user_delete_pending:alice",
+            json.dumps({"uuid": USER_UUID, "perma": True}),
+        )
+        await sub.business_svc.recover_pending()
+        assert await async_db.get_metadata("uuid_rollback_failed:alice") == "123:interrupted"
+        assert await async_db.get_metadata("user_delete_pending:alice") is not None
+        assert panel.posts == []
+        with pytest.raises(ConflictError, match="UUID recovery"):
+            await sub.business_svc.update_params("alice", displayname="Changed")
+
+        # Operator repairs the panel and clears the marker, not a blind retry.
+        panel.clients[0] = replace(panel.clients[0], uuid=USER_UUID)
+        await async_db.delete_metadata("user_delete_pending:alice")
+        await sub.business_code_svc.clear_rollback_failure("uuid", "alice")
+        await sub.business_svc.update_params("alice", displayname="Changed")
+        user = await async_db.get_user("alice")
+        assert user is not None
+        assert user["displayname"] == "Changed"
+    finally:
+        await close_async_subscription(sub)
 
 
 @pytest.mark.asyncio

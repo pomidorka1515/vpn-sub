@@ -75,8 +75,13 @@ class CommonUserService(BaseService):
 
     @user_mutation
     async def set_auth_token(self, username: str, auth_token: str | None) -> None:
+        await self.require_uuid_recovered(username)
         await self.user(username)
         await self.db.set_auth_token(username, auth_token)
+
+    async def require_uuid_recovered(self, username: str) -> None:
+        if await self.db.get_metadata(f"uuid_rollback_failed:{username}") is not None:
+            raise ConflictError("User requires UUID recovery before further mutations")
 
     async def get_fingerprint(self, username: str) -> str:
         return (await self.user(username))["fingerprint"]
@@ -108,6 +113,10 @@ class BusinessUserService(BaseService):
 
     async def require_recovered(self, username: str, *, allow_reset: bool = False) -> None:
         """A retained identity is reserved for recovery, not a new workflow."""
+        # Only update_uuid's validated durable reset replay may bypass this.
+        # Standalone UUID failures require manual repair and explicit clearance.
+        if not allow_reset:
+            await self.user_svc.require_uuid_recovered(username)
         if await self.db.registration_pending(username):
             raise ConflictError("User has a pending registration")
         for prefix in (
@@ -201,6 +210,7 @@ class BusinessUserService(BaseService):
         work: WorkClass = "foreground",
     ) -> None:
         self.require_panels()
+        await self.user_svc.require_uuid_recovered(username)
         if not _called_internally:
             await self.require_recovered(username)
         user = await self.user_svc.user(username)
@@ -276,6 +286,7 @@ class BusinessUserService(BaseService):
         work: WorkClass = "foreground",
     ) -> None:
         self.require_panels()
+        await self.user_svc.require_uuid_recovered(username)
 
         async def delete(panel: XUiSession) -> None:
             # Live reads make repeated compensation safe; unavailable is never
@@ -305,6 +316,7 @@ class BusinessUserService(BaseService):
         self.require_panels()
         # Retrying a failed delete is safe; other pending workflows reserve
         # their identity until their own compensation has completed.
+        await self.user_svc.require_uuid_recovered(username)
         if (
             await self.db.registration_pending(username)
             or await self.db.get_metadata(f"user_create_pending:{username}") is not None
@@ -661,8 +673,6 @@ class BusinessUserService(BaseService):
         self.require_panels()
         await self._recover_reset(username)
         await self.require_recovered(username)
-        if await self.db.get_metadata(f"uuid_rollback_failed:{username}") is not None:
-            raise ConflictError("User requires pending operation recovery before reconcile")
         await self.db.set_metadata(f"user_sync_pending:{username}", "enabled")
         await self.add_users(username, _called_internally=True, work="background")
         await self._sync_enabled(username, work="background")
@@ -705,6 +715,7 @@ class BusinessUserService(BaseService):
             "user_delete_pending:",
             "user_create_pending:",
             "user_reset_pending:",
+            "uuid_rollback_failed:",
             "user_sync_pending:",
         ):
             for key, value in (await self.db.list_metadata(prefix)).items():
@@ -721,6 +732,7 @@ class BusinessUserService(BaseService):
                         await self.rollback_panel_clients(username, expected_uuid=value)
                         await self.db.rollback_created_user(username, value)
                     elif prefix == "user_delete_pending:":
+                        await self.user_svc.require_uuid_recovered(username)
                         details = json.loads(value)
                         expected = str(details["uuid"])
                         if user is not None and user["uuid"] != expected:
@@ -732,6 +744,12 @@ class BusinessUserService(BaseService):
                             await self.db.delete_metadata(f"user_reset_pending:{username}")
                     elif prefix == "user_reset_pending:":
                         await self._recover_reset(username)
+                    elif prefix == "uuid_rollback_failed:":
+                        # A standalone marker has no old/new UUID intent. Keep
+                        # it (and log the failure) until an operator repairs the
+                        # panels and explicitly clears it. Never infer ownership.
+                        await self._recover_reset(username)
+                        await self.user_svc.require_uuid_recovered(username)
                     elif user is not None:
                         await self.reconcile_user(username)
                     await self.db.delete_metadata(key)
