@@ -205,8 +205,8 @@ async def test_bonus_usage_notifications_and_snapshots(repository: Database) -> 
     assert sum(isinstance(result, CodeError) for result in results) == 1
     user = await db.get_user("alice")
     assert user is not None
-    assert user["bw_limit_gb"] == 3
-    assert user["wl_limit_gb"] == 2
+    assert user["bw_limit_gb"] == 0
+    assert user["wl_limit_gb"] == 0
     assert user["expires_at"] == 0
     await db.increment_usage("alice", regular=4)
     await db.increment_usages({"alice": (2, 3)})

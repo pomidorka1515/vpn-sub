@@ -188,8 +188,13 @@ class CodesMixin(ConnectionMixin):
             days = int(row["days"])
             current = int(user["expires_at"])
             new_time = current if current == 0 or days == 0 else max(current, now) + days * 86400
-            limit = int(user["bw_limit_gb"]) + int(row["gb"])
-            wl_limit = int(user["wl_limit_gb"]) + int(row["wl_gb"])
+            # Zero means unlimited independently for each allowance, as in enforcement.
+            limit = int(user["bw_limit_gb"])
+            wl_limit = int(user["wl_limit_gb"])
+            if limit != 0:
+                limit += int(row["gb"])
+            if wl_limit != 0:
+                wl_limit += int(row["wl_gb"])
             await conn.execute(
                 "UPDATE users SET expires_at = ?, bw_limit_gb = ?, wl_limit_gb = ? WHERE username = ?",
                 (new_time, limit, wl_limit, username),

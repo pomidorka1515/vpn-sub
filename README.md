@@ -35,8 +35,9 @@ Designed to run on a single small VPS.
   rollback marker through the admin rollback controls. Clearing a marker alone
   does not repair panel state; do not clear it before verification.
 - **Invite and bonus codes.** Register codes and bonus codes grant days, monthly
-  GB, and whitelist GB. One-shot or reusable. A bonus adds GB onto a 0 limit (no
-  allowance, not unlimited). Expiry 0 stays unlimited. A lapsed finite expiry
+  GB, and whitelist GB. One-shot or reusable. A bonus adds GB only to finite
+  limits; 0 stays unlimited independently for main and whitelist allowances.
+  Expiry 0 stays unlimited. A lapsed finite expiry
   restarts from now. Re-enable waits for the bandwidth watcher.
 - **Whitelist panel.** Optional dedicated panel with its own quota, separate
   from the main traffic limit. Inbound lists can be whitelist or blacklist.

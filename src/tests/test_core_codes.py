@@ -71,11 +71,19 @@ async def test_apply_bonus_code_updates_user_limits(
 
 
 @pytest.mark.asyncio
-async def test_apply_bonus_code_grants_quota_on_zero_limit(
+@pytest.mark.parametrize(
+    ("main_limit", "wl_limit", "expected_main", "expected_wl"),
+    [(0, 0, 0, 0), (0, 2, 0, 6), (1, 0, 4, 0)],
+)
+async def test_apply_bonus_code_preserves_unlimited_allowances(
     database: Database,
     subscription: Subscription,
+    main_limit: int,
+    wl_limit: int,
+    expected_main: int,
+    expected_wl: int,
 ) -> None:
-    (await create_alice(database, bw_limit_gb=0, wl_limit_gb=0, expires_at=0))
+    (await create_alice(database, bw_limit_gb=main_limit, wl_limit_gb=wl_limit, expires_at=0))
     (await database.update_user("alice", status=False, status_time=False, status_wl=False))
     (
         await subscription.code_svc.add_code(
@@ -90,11 +98,13 @@ async def test_apply_bonus_code_grants_quota_on_zero_limit(
     result = await subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
     record = await database.get_user("alice")
     assert record is not None
-    assert result.limit == 3
-    assert result.wl_limit == 4
-    assert record["bw_limit_gb"] == 3
-    assert record["wl_limit_gb"] == 4
+    assert result.limit == expected_main
+    assert result.wl_limit == expected_wl
+    assert record["bw_limit_gb"] == expected_main
+    assert record["wl_limit_gb"] == expected_wl
     assert record["expires_at"] == 0
+    with pytest.raises(NotFoundError):
+        await subscription.code_svc.get_code("bonus1")
 
 
 @pytest.mark.asyncio
