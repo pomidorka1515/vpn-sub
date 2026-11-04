@@ -114,6 +114,17 @@ async def test_whitelist_is_independent_of_main() -> None:
     assert _kinds(state) == (Kind.WHITELIST_EXHAUSTED,)
 
 
+@pytest.mark.parametrize("used", [10**9 - 1, 10**9, 10**9 + 1])
+def test_quota_boundary_for_both_sides(used: int) -> None:
+    state = _state(bw_limit_gb=1, bw_used=used, wl_limit_gb=1, wl_used=used)
+    expected = (
+        (Kind.WHITELIST_SOON, Kind.TRAFFIC_SOON)
+        if used < 10**9
+        else (Kind.WHITELIST_EXHAUSTED, Kind.TRAFFIC_EXHAUSTED)
+    )
+    assert _kinds(state) == expected
+
+
 @pytest.mark.asyncio
 async def test_disabled_main_does_not_repeat_near_limit() -> None:
     state = _state(enabled=0, bw_limit_gb=10, bw_used=int(9.6 * 10**9))

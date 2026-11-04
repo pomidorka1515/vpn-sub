@@ -15,11 +15,13 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("used", "disabled"), [(10**9, False), (10**9 + 1, True)])
-async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(
+@pytest.mark.parametrize(("used", "disabled"), [(10**9 - 1, False), (10**9, True), (10**9 + 1, True)])
+@pytest.mark.parametrize("whitelist", [False, True])
+async def test_terminal_alert_uses_pre_disable_state_at_quota_boundary(
     tmp_path: Path,
     used: int,
     disabled: bool,
+    whitelist: bool,
 ) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -45,10 +47,10 @@ async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(
             token="a" * 40,
             fingerprint="chrome",
             displayname="Alice",
-            bw_limit_gb=1,
-            wl_limit_gb=0,
+            bw_limit_gb=0 if whitelist else 1,
+            wl_limit_gb=1 if whitelist else 0,
         )
-        await db.increment_usages({"alice": (used, 0)})
+        await db.increment_usages({"alice": (0, used) if whitelist else (used, 0)})
         state = await db.get_user("alice")
         assert state is not None
         from notify import classify
@@ -64,7 +66,7 @@ async def test_terminal_alert_uses_pre_disable_state_and_original_threshold(
         await watch.check()
         result = await db.get_user("alice")
         assert result is not None
-        assert bool(result["enabled"]) is not disabled
+        assert bool(result["enabled_wl" if whitelist else "enabled"]) is not disabled
         assert sent == ["warning"]
         assert f"alice:{notice.marker}" in await db.notification_markers()
         await watch.check()

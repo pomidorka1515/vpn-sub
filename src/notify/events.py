@@ -27,7 +27,7 @@ def _traffic_bucket(used: int, limit_gb: int) -> int | None:
     if limit_gb <= 0:
         return None
     limit = limit_gb * _GB
-    if used > limit:
+    if used >= limit:
         return None
     ratio = used / limit
     for percent in _TRAFFIC_BUCKETS:
@@ -77,7 +77,7 @@ def classify(state: UserRecord, now: int) -> tuple[Notice, ...]:
 
     wl_limit = int(state["wl_limit_gb"])
     wl_used = int(state["wl_used"])
-    if wl_limit != 0 and wl_used > wl_limit * _GB:
+    if wl_limit != 0 and wl_used >= wl_limit * _GB:
         if bool(state["enabled_wl"]):
             notices.append(
                 Notice(
@@ -102,7 +102,7 @@ def classify(state: UserRecord, now: int) -> tuple[Notice, ...]:
 
     bw_limit = int(state["bw_limit_gb"])
     bw_used = int(state["bw_used"])
-    over_main = bw_limit != 0 and bw_used > bw_limit * _GB
+    over_main = bw_limit != 0 and bw_used >= bw_limit * _GB
     if bool(state["enabled"]) and over_main:
         notices.append(
             Notice(
