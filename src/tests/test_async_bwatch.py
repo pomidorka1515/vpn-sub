@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -17,6 +18,37 @@ from notify.notifier import Notifier
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.mark.asyncio
+async def test_monthly_reset_catches_up_once_after_outage(
+    database: Database, watch: BWatch, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> Clock:
+            return cls(2026, 10, 3, tzinfo=UTC)
+
+    monkeypatch.setattr("bwatch.watch.datetime", Clock)
+    await database.create_user(
+        username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome",
+        displayname="Alice", bw_limit_gb=10, wl_limit_gb=10,
+    )
+    await database.reset_monthly("2026-09", "2026-09-01")
+    await database.increment_usage("alice", regular=100, whitelist=200)
+
+    await watch.is_first()
+    state = await database.get_user("alice")
+    assert state is not None
+    assert (state["bw_used"], state["wl_used"]) == (0, 0)
+    assert await database.get_metadata("last_reset_month") == "2026-10"
+    assert await database.get_metadata("last_reset") == "2026-10-03"
+
+    await database.increment_usage("alice", regular=30, whitelist=40)
+    await watch.is_first()
+    state = await database.get_user("alice")
+    assert state is not None
+    assert (state["bw_used"], state["wl_used"]) == (30, 40)
 
 
 @pytest.mark.asyncio
@@ -321,6 +353,7 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
             username="alice", uuid=USER_UUID, token="a" * 40,
             fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
         )
+        await watch.is_first()
         await watch.start()
         await watch.bandwidth_check()
         total = 130

@@ -483,16 +483,15 @@ class BWatch:
     async def is_first(self) -> None:
         async def operation() -> None:
             now = datetime.now(UTC)
-            if now.day == 1:
 
-                async def reset() -> None:
-                    await self.db.reset_monthly(now.strftime("%Y-%m"), now.strftime("%Y-%m-%d"))
+            async def reset() -> None:
+                await self.db.reset_monthly(now.strftime("%Y-%m"), now.strftime("%Y-%m-%d"))
 
-                await self.sub.res.coordinator.run(
-                    await self.sub.user_svc.list_users(),
-                    reset,
-                    name="watcher:monthly reset",
-                )
+            await self.sub.res.coordinator.run(
+                await self.sub.user_svc.list_users(),
+                reset,
+                name="watcher:monthly reset",
+            )
 
         await self._job("monthly", operation)
 
