@@ -34,10 +34,14 @@
 
         "fingerprints": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+                "type": "string",
+                "enum": ["chrome", "safari", "edge", "ios", "firefox", "android", "360", "qq", "random", "randomized"]
+            },
+            "minItems": 1,
             "uniqueItems": true,
             "default": ["safari", "chrome", "edge", "firefox"],
-            "description": "List of allowed fingerprints. Dont add anything invalid, see xray uTLS section for the full list."
+            "description": "Nonempty list of unique allowed TLS fingerprints."
         },
 
         "nodes": {

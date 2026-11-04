@@ -514,6 +514,14 @@ def test_local_schema_accepts_valid_document(tmp_path: Path) -> None:
         ("api_admin_ui_auth", ["admin", "password", "extra"]),
         ("api_admin_ui_auth", ["admin"]),
         ("panel_alert_cooldown", True),
+        ("fingerprints", []),
+        ("fingerprints", ["unknown"]),
+        ("fingerprints", ["chrome", "unknown"]),
+        ("fingerprints", [""]),
+        ("fingerprints", ["Chrome"]),
+        ("fingerprints", [" chrome"]),
+        ("fingerprints", [360]),
+        ("fingerprints", "chrome"),
         ("fingerprints", ["chrome", "chrome"]),
         ("redis", {"url": "redis://localhost/0", "socket_timeout": 0}),
         ("redis", {"url": "redis://localhost/0", "socket_timeout": True}),
@@ -528,6 +536,30 @@ def test_schema_constraints_reject_invalid_commit(
         with app_cfg.edit() as tx:
             tx[key] = value
     assert Path(app_cfg.path).read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "fingerprint",
+    ["chrome", "safari", "edge", "ios", "firefox", "android", "360", "qq", "random", "randomized"],
+)
+def test_schema_accepts_allowed_fingerprints(app_cfg: Config[AppConfig], fingerprint: str) -> None:
+    with app_cfg.edit() as tx:
+        tx["fingerprints"] = [fingerprint]
+    assert app_cfg["fingerprints"] == [fingerprint]
+
+
+@pytest.mark.parametrize("fingerprints", [[], ["unknown"], ["chrome", "unknown"]])
+def test_schema_rejects_invalid_fingerprints_on_load(
+    app_cfg: Config[AppConfig], fingerprints: list[str],
+) -> None:
+    path = Path(app_cfg.path)
+    document = app_cfg.copy()
+    document["fingerprints"] = fingerprints
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(SchemaValidationError, match="fingerprints"):
+        Config[AppConfig](
+            path=path, schema_path=app_cfg.schema_path, backup_dir=None, sync_mode="none",
+        )
 
 
 def test_schema_does_not_insert_defaults_and_recompiles_changes(tmp_path: Path) -> None:

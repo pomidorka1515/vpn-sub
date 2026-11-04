@@ -37,6 +37,7 @@ export function validateDraft(draft) {
   ['fingerprints', 'bypass_packages'].forEach(key => {
     const list = draft[key];
     if (!Array.isArray(list) || list.some(item => typeof item !== 'string')) issues.push(issue(key, t('config_err_required')));
+    else if (key === 'fingerprints' && (list.length === 0 || list.some(item => !['chrome', 'safari', 'edge', 'ios', 'firefox', 'android', '360', 'qq', 'random', 'randomized'].includes(item)))) issues.push(issue(key, t('config_err_fingerprints')));
     else if (key === 'fingerprints' && new Set(list).size !== list.length) issues.push(issue(key, t('config_err_unique')));
   });
   if (Object.prototype.hasOwnProperty.call(draft, 'funny_strings')) {
