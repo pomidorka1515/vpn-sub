@@ -317,38 +317,24 @@ class BWatch:
                 )
             else:
                 notices = classify(state, now)
-                applied: list[Notice] = []
-                for notice in notices:
-                    if notice.kind.scope is Scope.EPISODE:
-                        try:
-                            if notice.kind is Kind.EXPIRED:
-                                await self.sub.business_svc.update_user(
-                                    username,
-                                    enable=False,
-                                    timee=False,
-                                    quota=True,
-                                    work="background",
-                                )
-                            elif notice.kind is Kind.TRAFFIC_EXHAUSTED:
-                                await self.sub.business_svc.update_user(
-                                    username,
-                                    enable=False,
-                                    timee=True,
-                                    quota=True,
-                                    work="background",
-                                )
-                            elif notice.kind is Kind.WHITELIST_EXHAUSTED:
-                                await self.sub.business_svc.update_user(
-                                    username,
-                                    wl_enable=False,
-                                    quota=True,
-                                    work="background",
-                                )
-                        except AppError:
-                            self.log.exception("background user update failed for %s", username)
-                            continue
-                    applied.append(notice)
-                await self._deliver(state, tuple(applied))
+                terminal = {notice.kind for notice in notices if notice.kind.scope is Scope.EPISODE}
+                if terminal:
+                    disable_main = bool(terminal & {Kind.EXPIRED, Kind.TRAFFIC_EXHAUSTED})
+                    try:
+                        # Apply the combined state once: traffic exhaustion must
+                        # never overwrite an expired account's time flag.
+                        await self.sub.business_svc.update_user(
+                            username,
+                            enable=False if disable_main else None,
+                            timee=time_ok if disable_main else None,
+                            wl_enable=False if Kind.WHITELIST_EXHAUSTED in terminal else None,
+                            quota=True,
+                            work="background",
+                        )
+                    except AppError:
+                        self.log.exception("background user update failed for %s", username)
+                        notices = tuple(notice for notice in notices if notice.kind not in terminal)
+                await self._deliver(state, notices)
 
         try:
             await self.sub.res.coordinator.run([username], operation, name="watcher:quota")

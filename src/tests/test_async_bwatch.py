@@ -427,6 +427,69 @@ async def test_notice_failure_and_concurrent_delivery(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("expiry_offset", [-1, 0, 1, None])
+@pytest.mark.parametrize("exhausted", [False, True])
+@pytest.mark.parametrize("whitelist_exhausted", [False, True])
+async def test_quota_applies_combined_terminal_state_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    expiry_offset: int | None,
+    exhausted: bool,
+    whitelist_exhausted: bool,
+) -> None:
+    now = int(time.time())
+    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    update = AsyncMock(wraps=sub.business_svc.update_user)
+    monkeypatch.setattr(sub.business_svc, "update_user", update)
+    notices = AsyncMock()
+    watch._deliver = notices  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            expires_at=now + expiry_offset if expiry_offset is not None else 0,
+        )
+        await db.increment_usage(
+            "alice", regular=10**9 if exhausted else 0,
+            whitelist=10**9 if whitelist_exhausted else 0,
+        )
+        await watch.check()
+        expired = expiry_offset is not None and expiry_offset <= 0
+        state = await db.get_user("alice")
+        assert state is not None
+        assert bool(state["enabled"]) is not (expired or exhausted)
+        assert bool(state["enabled_time"]) is not expired
+        assert bool(state["enabled_wl"]) is not whitelist_exhausted
+        expected_terminal: set[Kind] = set()
+        if expired:
+            expected_terminal.add(Kind.EXPIRED)
+        if exhausted:
+            expected_terminal.add(Kind.TRAFFIC_EXHAUSTED)
+        if whitelist_exhausted:
+            expected_terminal.add(Kind.WHITELIST_EXHAUSTED)
+        assert update.await_count == int(bool(expected_terminal))
+        delivered = {notice.kind for notice in notices.await_args_list[0].args[1]}
+        assert delivered & {
+            Kind.EXPIRED, Kind.TRAFFIC_EXHAUSTED, Kind.WHITELIST_EXHAUSTED,
+        } == expected_terminal
+        await watch.bandwidth_check()
+        await watch.check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert bool(state["enabled"]) is not (expired or exhausted)
+        assert bool(state["enabled_time"]) is not expired
+        assert update.await_count == int(bool(expected_terminal))
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("expiry_offset", [-1, 0, 1, None])
 async def test_recovery_only_restores_unexpired_accounts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
