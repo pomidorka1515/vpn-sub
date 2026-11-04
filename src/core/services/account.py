@@ -65,6 +65,16 @@ class AccountService(BaseService):
         ext_password: str | None = None,
         current_password: str | None = None,
     ) -> None:
+        # JSON callers can supply values outside the annotated service contract.
+        for field, value in (
+            ("name", displayname),
+            ("fingerprint", fingerprint),
+            ("username", ext_username),
+            ("password", ext_password),
+            ("current_password", current_password),
+        ):
+            if value is not None and not isinstance(value, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+                raise ValidationError(f"Field '{field}' must be a string or null")
         if fingerprint and fingerprint not in self.cfg.view()["fingerprints"]:
             raise ValidationError("Unknown fingerprint")
         if displayname and len(displayname) > 16:

@@ -52,6 +52,41 @@ async def web_api(database: Database) -> AsyncIterator[tuple[Quart, Database]]:
         language.close()
 
 
+@pytest.mark.parametrize("field", ["name", "fingerprint", "username", "password", "current_password"])
+@pytest.mark.parametrize("value", [42, 0, 1.5, True, False, [], {}, ["chrome"]])
+async def test_settings_reject_non_string_fields(
+    web_api: tuple[Quart, Database], field: str, value: object,
+) -> None:
+    app, db = web_api
+    await db.set_auth_token("alice", "a" * 100)
+    client = app.test_client()
+    client.set_cookie("localhost", "auth_token", "a" * 100)
+    before = await db.get_user("alice")
+    response = await client.post(
+        "/custom/webapi/settings", json={"name": "Updated", field: value},
+    )
+    assert response.status_code == 400
+    assert (await response.get_json())["success"] is False
+    assert await db.get_user("alice") == before
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{}, dict.fromkeys(["name", "fingerprint", "username", "password", "current_password"])],
+)
+async def test_settings_allow_omitted_and_null_fields(
+    web_api: tuple[Quart, Database], fields: dict[str, None],
+) -> None:
+    app, db = web_api
+    await db.set_auth_token("alice", "a" * 100)
+    client = app.test_client()
+    client.set_cookie("localhost", "auth_token", "a" * 100)
+    before = await db.get_user("alice")
+    response = await client.post("/custom/webapi/settings", json=fields)
+    assert response.status_code == 200
+    assert await db.get_user("alice") == before
+
+
 async def test_expired_web_cookie_cannot_be_replayed(web_api: tuple[Quart, Database]) -> None:
     app, db = web_api
     await db.set_auth_token("alice", "a" * 100)
