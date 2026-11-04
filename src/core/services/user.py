@@ -328,9 +328,15 @@ class BusinessUserService(BaseService):
         username: str,
         enabled: bool,
         clients: Mapping[str, PanelClient],
+        expected_uuid: str,
     ) -> None:
-        if clients.get(username) is None:
+        client = clients.get(username)
+        if client is None:
             return
+        if client.uuid != expected_uuid:
+            raise PanelRejectedError(
+                f"Panel {panel.name} email {username!r} is owned by a different UUID",
+            )
         action = "bulkEnable" if enabled else "bulkDisable"
         await self._post(
             panel,
@@ -394,7 +400,7 @@ class BusinessUserService(BaseService):
 
         async def write(panel: XUiSession) -> None:
             enabled = bool(user["enabled_wl"] if panel == self.whitelist_panel else user["enabled"])
-            await self._set_enabled(panel, username, enabled, known[panel.name])
+            await self._set_enabled(panel, username, enabled, known[panel.name], user["uuid"])
 
         await self.panel_svc.map_panels(panels, write, work=work)
         await self.db.delete_metadata(f"user_sync_pending:{username}")
@@ -564,8 +570,19 @@ class BusinessUserService(BaseService):
         await self.require_recovered(username, allow_reset=_resetting)
         if not isuuid(uid):
             raise ValidationError("Invalid UUID")
-        await self.user_svc.user(username)
+        user = await self.user_svc.user(username)
         key = f"uuid_rollback_failed:{username}"
+        expected_uuids = {user["uuid"]}
+        if _resetting:
+            pending = await self.db.get_metadata(f"user_reset_pending:{username}")
+            if pending is None:
+                raise ConflictError("User has no pending reset")
+            details = json.loads(pending)
+            old_uuid = str(details.get("old_uuid", user["uuid"]))
+            if details["uuid"] != uid or user["uuid"] not in {old_uuid, uid}:
+                raise ConflictError("Reset recovery identity changed")
+            # Only a durable reset intent proves ownership of both identities.
+            expected_uuids.update((old_uuid, uid))
         # Persist before writing: crash or forced runtime cancellation retains
         # the same manual-repair marker used by the existing service.
         await self.db.set_metadata(key, f"{int(time.time())}:UUID update in progress")
@@ -573,6 +590,12 @@ class BusinessUserService(BaseService):
         async def write(panel: XUiSession) -> None:
             current = await self.panel_svc.get_client(panel, username)
             if current is not None:
+                if current.uuid not in expected_uuids:
+                    raise PanelRejectedError(
+                        f"Panel {panel.name} email {username!r} is owned by a different UUID",
+                    )
+                if current.uuid == uid:
+                    return
                 payload = client_payload_from(current)
                 payload.id = uid
                 await self._post(
@@ -609,10 +632,11 @@ class BusinessUserService(BaseService):
         self.require_panels()
         await self._recover_reset(username)
         await self.require_recovered(username)
+        user = await self.user_svc.user(username)
         uid, token = str(uuid.uuid4()), generate_token("sub")
         await self.db.set_metadata(
             f"user_reset_pending:{username}",
-            json.dumps({"uuid": uid, "token": token}),
+            json.dumps({"uuid": uid, "token": token, "old_uuid": user["uuid"]}),
         )
         await self.update_uuid(username, uid, _resetting=True)
         await self.db.finalize_reset(username, uid, token)

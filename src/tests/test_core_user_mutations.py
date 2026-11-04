@@ -232,6 +232,35 @@ async def test_update_user_enable_uses_bulk_enable(database: Database) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.mark.parametrize("whitelist", [True, False])
+async def test_update_user_rejects_foreign_client(
+    database: Database,
+    enabled: bool,
+    whitelist: bool,
+) -> None:
+    client = replace(make_panel_client("alice", [1], uuid=NEW_UUID), enable=not enabled)
+    panel = FakePanel(name="panel", clients=[client])
+    subscription = await make_subscription(
+        database,
+        panels=[] if whitelist else [panel],
+        whitelist_panel=panel if whitelist else None,
+    )
+    await create_alice(database)
+
+    with pytest.raises(PanelRejectedError, match="different UUID"):
+        await subscription.business_svc.update_user(
+            "alice",
+            enable=None if whitelist else enabled,
+            wl_enable=enabled if whitelist else None,
+        )
+
+    assert panel.posts == []
+    assert panel.clients == [client]
+    assert await database.get_metadata("user_sync_pending:alice") is not None
+
+
+@pytest.mark.asyncio
 async def test_update_user_rejection_carries_panel_msg(database: Database) -> None:
     panel = FakePanel(
         name="panel",
@@ -318,6 +347,46 @@ async def test_update_uuid_sends_full_row_with_new_id(database: Database) -> Non
     record = await database.get_user("alice")
     assert record is not None
     assert str(record["uuid"]) == NEW_UUID
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign_uuid", [NEW_UUID, "ffffffff-ffff-ffff-ffff-ffffffffffff"])
+async def test_update_uuid_rejects_foreign_client(database: Database, foreign_uuid: str) -> None:
+    client = make_panel_client("alice", [1], uuid=foreign_uuid)
+    panel = FakePanel(name="panel", clients=[client])
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+
+    with pytest.raises(PanelRejectedError, match="different UUID"):
+        await subscription.business_svc.update_uuid("alice", NEW_UUID)
+
+    assert panel.posts == []
+    assert panel.clients == [client]
+    record = await database.get_user("alice")
+    assert record is not None
+    assert record["uuid"] == USER_UUID
+    assert await database.get_metadata("uuid_rollback_failed:alice") is not None
+
+
+@pytest.mark.asyncio
+async def test_reset_recovery_rejects_foreign_client(database: Database) -> None:
+    client = make_panel_client("alice", [1], uuid="ffffffff-ffff-ffff-ffff-ffffffffffff")
+    panel = FakePanel(name="panel", clients=[client])
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+
+    with pytest.raises(PanelRejectedError, match="different UUID"):
+        await subscription.business_svc.reset_user("alice")
+    with pytest.raises(PanelRejectedError, match="different UUID"):
+        await subscription.business_svc.reconcile_user("alice")
+
+    assert panel.posts == []
+    assert panel.clients == [client]
+    record = await database.get_user("alice")
+    assert record is not None
+    assert record["uuid"] == USER_UUID
+    assert record["token"] == "a" * 40
+    assert await database.get_metadata("user_reset_pending:alice") is not None
 
 
 @pytest.mark.asyncio

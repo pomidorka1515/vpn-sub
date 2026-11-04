@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -574,7 +575,7 @@ async def test_reset_recovery_replays_partial_panel_updates(
         await async_db.set_auth_token("alice", "x" * 100)
         await async_db.set_metadata(
             "user_reset_pending:alice",
-            '{"uuid":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","token":"new-token"}',
+            json.dumps({"uuid": NEW_UUID, "token": "new-token", "old_uuid": USER_UUID}),
         )
         await async_db.set_metadata("uuid_rollback_failed:alice", "interrupted")
         await sub.start()
