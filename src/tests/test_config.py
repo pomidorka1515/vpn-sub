@@ -656,6 +656,21 @@ def test_non_strict_schema_logs_validation_failure(tmp_path: Path) -> None:
         config.close()
 
 
+@pytest.mark.parametrize("forced", [False, True])
+@pytest.mark.parametrize("scheme", ["http", "https"])
+def test_strict_schema_rejects_remote_reference(
+    tmp_path: Path,
+    forced: bool,
+    scheme: str,
+) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"$schema": f"{scheme}://example.test/schema.json"}))
+    schema = tmp_path / "schema.json"
+    schema.write_text("{}")
+    with pytest.raises(SchemaValidationError, match="Remote JSON schemas"):
+        Config(path=path, strict_schema=True, schema_path=schema if forced else None)
+
+
 def test_backup_now_requires_backup_dir(cfg: Config) -> None:
     with pytest.raises(ConfigError, match="backup_dir"):
         cfg.backup_now()

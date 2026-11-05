@@ -46,6 +46,14 @@ def load_schema[Doc](
     data: Mapping[str, JsonValue],
 ) -> Mapping[str, JsonValue] | None:
     schema_ref = data.get("$schema")
+    if isinstance(schema_ref, str) and schema_ref.startswith(("http://", "https://")):
+        message = "Remote JSON schemas are not supported for security/reliability reasons."
+        if cfg.strict_schema:
+            raise SchemaValidationError(message)
+        cfg.log.warning(message)
+        if cfg.schema_path is None:
+            return None
+
     forced = cfg.schema_path
     if forced is not None:
         if schema_ref:
@@ -56,14 +64,6 @@ def load_schema[Doc](
     else:
         if not isinstance(schema_ref, str):
             raise SchemaValidationError("'$schema' must be a string.")
-
-        if schema_ref.startswith(("http://", "https://")):
-            message = "Remote JSON schemas are not supported for security/reliability reasons."
-            if cfg.strict_schema:
-                raise SchemaValidationError(message)
-            cfg.log.warning(message)
-
-            return None
 
         schema_path = os.path.normpath(Path(cfg.path).parent / schema_ref)
     schema_sig = stat_signature(schema_path)

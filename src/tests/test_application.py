@@ -64,6 +64,31 @@ def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["empty", "required", "type", "unknown", "remote"])
+async def test_factory_rejects_invalid_config_without_schema(
+    paths: AppPaths,
+    invalid: str,
+) -> None:
+    document = json.loads(paths.config.read_text())
+    document.pop("$schema")
+    match = "Schema validation error"
+    if invalid == "empty":
+        document = {}
+    elif invalid == "required":
+        document.pop("uri")
+    elif invalid == "type":
+        document["uri"] = 42
+    elif invalid == "unknown":
+        document["unexpected"] = True
+    else:
+        document["$schema"] = "https://example.test/schema.json"
+        match = "Remote JSON schemas"
+    paths.config.write_text(json.dumps(document))
+    with pytest.raises(SchemaValidationError, match=match):
+        await create_application(paths, AppOptions(start_background=False, start_bots=False))
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("compiled", [False, True])
 async def test_factory_schema_verbose_and_browser_assets(
     paths: AppPaths,
@@ -75,7 +100,17 @@ async def test_factory_schema_verbose_and_browser_assets(
 
     from paths import bundled_root
 
-    monkeypatch.setattr("app.compiled", lambda: compiled)
+    schema_root = bundled_root()
+    if compiled:
+        schema_root = paths.data / "payload"
+        schema_root.mkdir()
+        (schema_root / "config.schema.json").write_bytes(
+            (bundled_root() / "config.schema.json").read_bytes(),
+        )
+    monkeypatch.setattr("app.bundled_root", lambda: schema_root)
+    document = json.loads(paths.config.read_text())
+    document.pop("$schema")
+    paths.config.write_text(json.dumps(document))
     monkeypatch.setenv("VERBOSE_LOGGING_OVERRIDES", "core,panels")
     runtime = await create_application(
         paths,
@@ -87,9 +122,7 @@ async def test_factory_schema_verbose_and_browser_assets(
     )
     try:
         deps = runtime.dependencies
-        assert deps.cfg._require_store().schema_path == (
-            str((bundled_root() / "config.schema.json").resolve()) if compiled else None
-        )
+        assert deps.cfg._require_store().schema_path == str(schema_root / "config.schema.json")
         assert deps.subscription.res.verbose is True
         assert deps.panels
         assert all(panel.verbose for panel in deps.panels)

@@ -28,7 +28,7 @@ from core.coordination import MutationCoordinator
 from core.services.audit import AuditService
 from db import Database
 from notify.notifier import Notifier
-from paths import bundled_root, compiled
+from paths import bundled_root
 
 if TYPE_CHECKING:
     from quart import Quart
@@ -113,7 +113,7 @@ async def create_application(
                 path=paths.config,
                 indent=4,
                 strict_schema=True,
-                schema_path=bundled_root() / "config.schema.json" if compiled() else None,
+                schema_path=bundled_root() / "config.schema.json",
                 validators=(validate_panel_limit,),
                 sync_mode="data",
                 isolate_commits=True,
