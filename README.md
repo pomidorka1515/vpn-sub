@@ -428,6 +428,26 @@ automatic fixes, then review the diff. CI runs `ruff check .` alongside pytest,
 mypy, and pyright, plus `venv/bin/python scripts/smoke_async_release.py --checkout`
 with `redis-server` installed.
 
+Tests in `src/tests/` are Python packages grouped by subsystem (`api/`, `core/`,
+`bwatch/`, `config/`, `db/`, bots, and runtime). Run a subsystem or a single test:
+
+```bash
+venv/bin/pytest src/tests/core
+venv/bin/pytest src/tests/core/test_credentials.py::test_valid_legacy_hash_is_migrated_to_argon2
+venv/bin/pytest -m redis
+venv/bin/pytest -m "not integration"
+```
+
+Keep reusable factories and fakes in `tests.support`, with explicit imports such
+as `from tests.support.panels import FakePanel`. Put fixtures in the nearest
+subsystem's `conftest.py`; the root only owns shared DB/config/language fixtures.
+The database fixture owns a per-test subscription scope, so factory-created
+subscriptions are closed before SQLite, including on failure. Tests that create
+their own databases must close their subscriptions explicitly or use
+`subscription_scope()`. Async fixtures and tests retain function-scoped loops.
+Mark tests using external services or real network transports as `integration`;
+tests requiring the local Redis executable also use `redis` and skip if absent.
+
 HTTP contracts: [docs/API.md](docs/API.md) (cookie `auth_token`) and
 [docs/API_ADMIN.md](docs/API_ADMIN.md) (`Authorization` header).
 

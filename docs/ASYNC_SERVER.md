@@ -26,7 +26,7 @@ Runtime stop closes task/mutation admission and marks readiness false. Explicit 
   
 ## Verification and staging  
   
-`src/tests/test_asgi_server.py` runs real Hypercorn subprocesses for checkout CLI and the binary's programmatic serving function against a controlled lifespan dependency. Both serve an HTTP request, receive SIGTERM, execute shutdown, and exit successfully. Settings precedence, readiness rejection, and lifespan ownership are covered; `test_app_runtime.py` verifies producers quiesce before mutations and connection closure.  
+`src/tests/runtime/test_asgi_server.py` runs real Hypercorn subprocesses for checkout CLI and the binary's programmatic serving function against a controlled lifespan dependency. Both serve an HTTP request, receive SIGTERM, execute shutdown, and exit successfully. Settings precedence, readiness rejection, and lifespan ownership are covered; `src/tests/runtime/test_services.py` verifies producers quiesce before mutations and connection closure.  
   
 Verification: Ruff, mypy and pyright pass; full pytest suite passes with 642 tests. Actual Nuitka compilation/resource/start-stop acceptance belongs to step 11.  
   
