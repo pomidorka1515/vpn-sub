@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from quart import Response, g
 
 from api.admin._base import AsyncAdminApiMixin
+from api.admin._numeric import SQLITE_MAX_INT, bounded_int
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_fields_strict
 from custom_types import PollingPanelInfo
@@ -103,10 +104,10 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
     async def snapshots(self) -> ResponseType:
         content = g.json_obj
 
-        cutoff: int = content.get("cutoff")
-
-        if cutoff < 0:
-            return err("cutoff param must be higher than 0", 400)
+        try:
+            cutoff = bounded_int("cutoff", content.get("cutoff"), maximum=SQLITE_MAX_INT // 86400)
+        except ValueError as error:
+            return err(str(error), 400)
 
         obj = await self.sub.bandwidth_svc.get_snapshots(cutoff)
         return ok(obj=[asdict(s) for s in obj])

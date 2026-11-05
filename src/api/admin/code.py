@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 from quart import g, request
 
 from api.admin._base import AsyncAdminApiMixin
+from api.admin._numeric import MAX_GB, SQLITE_MAX_INT, bounded_int
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_args, requires_fields_strict
 from util import err, ok, parse_bool
@@ -66,10 +68,20 @@ class AsyncCodeRoutes(AsyncAdminApiMixin):
                     data[k] = parsed
 
                 case "days" | "gb" | "wl_gb" | "uses":
+                    maximum = SQLITE_MAX_INT
+                    if k in {"gb", "wl_gb"}:
+                        maximum = MAX_GB
+                    elif k == "days":
+                        maximum = (SQLITE_MAX_INT - int(time.time())) // 86400
                     try:
-                        data[k] = int(cast("str", v))
-                    except ValueError, TypeError:
-                        return err(f"{k} must be an integer, got: {v}")
+                        data[k] = bounded_int(
+                            k,
+                            v,
+                            minimum=-(2**63) if k == "uses" else 0,
+                            maximum=maximum,
+                        )
+                    except ValueError as error:
+                        return err(str(error), 400)
 
                 case "name" | "action":
                     if not isinstance(v, str):

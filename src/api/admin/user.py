@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 from quart import g, request
 
 from api.admin._base import AsyncAdminApiMixin
+from api.admin._numeric import MAX_GB, bounded_int
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_args, requires_fields_strict
 from util import err, ok, parse_bool
@@ -77,11 +78,9 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
 
             elif k in {"limit", "wl_limit", "time"}:
                 try:
-                    data[k] = int(cast("str", v))
-                except ValueError, TypeError:
-                    return err(f"{k} must be an integer, got: {v}")
-                if cast("int", data[k]) < 0:
-                    return err(f"{k} must be non-negative")
+                    data[k] = bounded_int(k, v, maximum=2**31 if k == "time" else MAX_GB)
+                except ValueError as error:
+                    return err(str(error), 400)
 
         await self.sub.business_svc.add_new_user(
             username=cast("str", data["user"]),
@@ -172,20 +171,18 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
         def _optional_int(name: str) -> int | None:
             if name not in content:
                 return None
-            try:
-                value = int(cast("str | int", content.get(name)))
-            except ValueError, TypeError:
-                raise ValueError(name) from None
-            if value < 0:
-                raise ValueError(name)
-            return value
+            return bounded_int(
+                name,
+                content.get(name),
+                maximum=2**31 if name == "time" else MAX_GB,
+            )
 
         try:
             limit = _optional_int("limit")
             wl_limit = _optional_int("wl_limit")
             timee = _optional_int("time")
         except ValueError as error:
-            return err(f"{error.args[0]} must be a non-negative integer")
+            return err(str(error), 400)
 
         await self.sub.business_svc.update_params(
             username=username,
