@@ -18,9 +18,10 @@ worst, but stopped is the clean option). Our own ``bw_used`` monthly counters
 are unaffected either way.
 
 Rerun safety: the traffic fold is guarded by ``reconcile_seed:{panel}:{user}``
-markers in the service DB recording the legacy totals already folded in. A
-rerun after a partial failure only folds the increase since the last
-successful seed (clamped at zero), so traffic is never counted twice; at worst
+markers in the service DB recording the legacy totals already folded in. An
+intent records the exact target counters before each panel write, so a rerun
+resolves an uncertain write before folding any further increase (clamped at zero).
+Traffic is never counted twice; at worst
 a few bytes accrued on a leftover legacy row between runs are dropped (the
 safe direction). Markers are removed once a user has no legacy rows left.
 
@@ -74,12 +75,21 @@ class ReconcileError(RuntimeError):
     """A panel query or mutation failed."""
 
 
+@dataclass(frozen=True)
+class SeedIntent:
+    folded: tuple[int, int]
+    target: tuple[int, int]
+
+
 class SeedLedger(Protocol):
     """Remembers how much legacy traffic was already folded per user/panel."""
 
     async def get(self, panel: str, username: str) -> tuple[int, int] | None: ...
     async def set(self, panel: str, username: str, up: int, down: int) -> None: ...
     async def clear(self, panel: str, username: str) -> None: ...
+    async def get_intent(self, panel: str, username: str) -> SeedIntent | None: ...
+    async def set_intent(self, panel: str, username: str, intent: SeedIntent) -> None: ...
+    async def clear_intent(self, panel: str, username: str) -> None: ...
 
 
 class NullSeedLedger:
@@ -92,6 +102,15 @@ class NullSeedLedger:
         pass
 
     async def clear(self, panel: str, username: str) -> None:
+        pass
+
+    async def get_intent(self, panel: str, username: str) -> SeedIntent | None:
+        return None
+
+    async def set_intent(self, panel: str, username: str, intent: SeedIntent) -> None:
+        pass
+
+    async def clear_intent(self, panel: str, username: str) -> None:
         pass
 
 
@@ -122,6 +141,27 @@ class DbSeedLedger:
 
     async def clear(self, panel: str, username: str) -> None:
         await self._db.delete_metadata(self._key(panel, username))
+
+    async def get_intent(self, panel: str, username: str) -> SeedIntent | None:
+        raw = await self._db.get_metadata(f"{self._key(panel, username)}:intent")
+        if raw is None:
+            return None
+        try:
+            up, down, target_up, target_down = (int(value) for value in raw.split(","))
+            if min(up, down, target_up, target_down) < 0:
+                raise ValueError("negative seed counter")
+        except ValueError as exc:
+            raise ReconcileError(f"invalid seed intent for {panel}:{username}") from exc
+        return SeedIntent((up, down), (target_up, target_down))
+
+    async def set_intent(self, panel: str, username: str, intent: SeedIntent) -> None:
+        await self._db.set_metadata(
+            f"{self._key(panel, username)}:intent",
+            ",".join(str(value) for value in (*intent.folded, *intent.target)),
+        )
+
+    async def clear_intent(self, panel: str, username: str) -> None:
+        await self._db.delete_metadata(f"{self._key(panel, username)}:intent")
 
 
 @dataclass
@@ -324,18 +364,37 @@ async def _reconcile_user(
                     f"client attach for {username}",
                 )
 
-    if not legacy:
-        # nothing left to fold; the seed marker has served its purpose
-        if apply:
-            await ledger.clear(panel.name, username)
-        return
-
     current: tuple[int, int] = (
         (canonical.traffic.up, canonical.traffic.down)
         if canonical is not None and canonical.traffic is not None
         else (0, 0)
     )
     folded = await ledger.get(panel.name, username)
+    intent = await ledger.get_intent(panel.name, username)
+    if intent is not None:
+        # A lost acknowledgement or ledger failure leaves this intent behind.
+        # Never add its legacy traffic to the observed counter a second time.
+        recovered = (max(current[0], intent.target[0]), max(current[1], intent.target[1]))
+        report.seeded[username] = recovered
+        if apply:
+            if recovered != current:
+                await _post(
+                    panel,
+                    f"panel/api/clients/updateTraffic/{email_path}",
+                    {"upload": recovered[0], "download": recovered[1]},
+                    f"traffic seed recovery for {username}",
+                )
+            await ledger.set(panel.name, username, *intent.folded)
+            await ledger.clear_intent(panel.name, username)
+        current = recovered
+        folded = intent.folded
+
+    if not legacy:
+        # Clear only after any uncertain seed has been resolved.
+        if apply:
+            await ledger.clear(panel.name, username)
+        return
+
     if folded is None:
         delta = (legacy_up, legacy_down)
     else:
@@ -349,6 +408,9 @@ async def _reconcile_user(
         seed_value = (current[0] + delta[0], current[1] + delta[1])
         report.seeded[username] = seed_value
         if apply:
+            await ledger.set_intent(
+                panel.name, username, SeedIntent((legacy_up, legacy_down), seed_value),
+            )
             await _post(
                 panel,
                 f"panel/api/clients/updateTraffic/{email_path}",
@@ -356,6 +418,7 @@ async def _reconcile_user(
                 f"traffic seed for {username}",
             )
             await ledger.set(panel.name, username, legacy_up, legacy_down)
+            await ledger.clear_intent(panel.name, username)
 
     for email in legacy:
         report.deleted.append(email)

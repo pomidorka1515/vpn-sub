@@ -19,9 +19,9 @@ from threadutil import named_to_thread
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
-    from reconcile_clients import PanelReport
+    from reconcile_clients import PanelReport, SeedIntent
 
-    from config import PanelConfig
+    from config import JsonValue, PanelConfig
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "reconcile_clients.py"
 _SPEC = importlib.util.spec_from_file_location("reconcile_clients", _SCRIPT_PATH)
@@ -281,6 +281,7 @@ class RecordingLedger:
     def __init__(self) -> None:
         self.folded: dict[tuple[str, str], tuple[int, int]] = {}
         self.cleared: list[tuple[str, str]] = []
+        self.intents: dict[tuple[str, str], SeedIntent] = {}
 
     async def get(self, panel: str, username: str) -> tuple[int, int] | None:
         return self.folded.get((panel, username))
@@ -291,6 +292,15 @@ class RecordingLedger:
     async def clear(self, panel: str, username: str) -> None:
         self.folded.pop((panel, username), None)
         self.cleared.append((panel, username))
+
+    async def get_intent(self, panel: str, username: str) -> SeedIntent | None:
+        return self.intents.get((panel, username))
+
+    async def set_intent(self, panel: str, username: str, intent: SeedIntent) -> None:
+        self.intents[panel, username] = intent
+
+    async def clear_intent(self, panel: str, username: str) -> None:
+        self.intents.pop((panel, username), None)
 
 
 @pytest.mark.asyncio
@@ -369,6 +379,141 @@ async def test_db_seed_ledger_round_trip(database: Database) -> None:
     assert await ledger.get("panel", "alice") == (101, 202)
     await ledger.clear("panel", "alice")
     assert await ledger.get("panel", "alice") is None
+    intent = rc.SeedIntent((101, 202), (111, 222))
+    await ledger.set_intent("panel", "alice", intent)
+    assert await rc.DbSeedLedger(database).get_intent("panel", "alice") == intent
+    await ledger.clear_intent("panel", "alice")
+    assert await ledger.get_intent("panel", "alice") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["intent", "before_write", "lost_ack", "commit", "clear"])
+async def test_seed_intent_recovers_partial_failure_without_double_counting(
+    panel_client: Callable[[FakePanel], XUiSession],
+    database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    panel = FakePanel(
+        name="panel",
+        inbounds=[make_inbound(1)],
+        clients=[
+            make_panel_client("alice", [1], up=10, down=20),
+            make_panel_client("alice-aaaaaaaa", [1], up=100, down=200),
+        ],
+    )
+    ledger = rc.DbSeedLedger(database)
+    original_post = rc._post
+    original_set = database.set_metadata
+    original_delete = database.delete_metadata
+
+    async def interrupted_post(
+        client: XUiSession, url: str, body: dict[str, JsonValue], what: str,
+    ) -> None:
+        if failure == "before_write":
+            raise RuntimeError("interrupted")
+        await original_post(client, url, body, what)
+        if failure == "lost_ack":
+            raise RuntimeError("interrupted")
+
+    async def interrupted_set(key: str, value: str) -> None:
+        if (failure == "intent" and key.endswith(":intent")) or (
+            failure == "commit" and not key.endswith(":intent")
+        ):
+            raise RuntimeError("interrupted")
+        await original_set(key, value)
+
+    async def interrupted_delete(key: str) -> None:
+        if failure == "clear" and key.endswith(":intent"):
+            raise RuntimeError("interrupted")
+        await original_delete(key)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(rc, "_post", interrupted_post)
+        patch.setattr(database, "set_metadata", interrupted_set)
+        patch.setattr(database, "delete_metadata", interrupted_delete)
+        with pytest.raises(RuntimeError, match="interrupted"):
+            await _reconcile(panel_client(panel), apply=True, ledger=ledger)
+
+    pending = await ledger.get_intent("panel", "alice")
+    if failure == "intent":
+        assert pending is None
+        assert panel.posts == []
+    else:
+        assert pending == rc.SeedIntent((100, 200), (110, 220))
+    assert len(panel.clients) == 2  # no deletion before the seed is committed
+
+    # A new ledger instance reads the durable intent. Dry-run must not consume it.
+    recovered_ledger = rc.DbSeedLedger(database)
+    posts = len(panel.posts)
+    dry_report = await _reconcile(panel_client(panel), apply=False, ledger=recovered_ledger)
+    assert dry_report.seeded == {"alice": (110, 220)}
+    assert len(panel.posts) == posts
+    assert await recovered_ledger.get_intent("panel", "alice") == pending
+
+    report = await _reconcile(panel_client(panel), apply=True, ledger=recovered_ledger)
+    assert report.errors == []
+    assert [client.email for client in panel.clients] == ["alice"]
+    traffic = panel.clients[0].traffic
+    assert traffic is not None
+    assert (traffic.up, traffic.down) == (110, 220)  # never 210 / 420
+    assert await recovered_ledger.get_intent("panel", "alice") is None
+    posts = len(panel.posts)
+    await _reconcile(panel_client(panel), apply=True, ledger=recovered_ledger)
+    assert len(panel.posts) == posts
+
+
+@pytest.mark.asyncio
+async def test_pending_seed_resolved_before_folding_new_traffic(
+    panel_client: Callable[[FakePanel], XUiSession], database: Database,
+) -> None:
+    panel = FakePanel(
+        name="panel",
+        inbounds=[make_inbound(1)],
+        clients=[
+            make_panel_client("alice", [1], up=113, down=223),
+            make_panel_client("alice-aaaaaaaa", [1], up=105, down=207),
+        ],
+    )
+    ledger = rc.DbSeedLedger(database)
+    await ledger.set_intent("panel", "alice", rc.SeedIntent((100, 200), (110, 220)))
+    report = await _reconcile(panel_client(panel), apply=True, ledger=ledger)
+    assert report.errors == []
+    assert report.seeded == {"alice": (118, 230)}
+    seed_bodies = [kw["json"] for url, kw in panel.posts if "updateTraffic" in url]
+    assert seed_bodies == [{"upload": 118, "download": 230}]
+
+
+@pytest.mark.asyncio
+async def test_rejected_seed_recovery_keeps_intent_and_legacy_rows(
+    panel_client: Callable[[FakePanel], XUiSession], database: Database,
+) -> None:
+    panel = FakePanel(
+        name="panel",
+        inbounds=[make_inbound(1)],
+        clients=[
+            make_panel_client("alice", [1], up=10, down=20),
+            make_panel_client("alice-aaaaaaaa", [1], up=105, down=207),
+        ],
+        post_queue=[{"success": False, "msg": "try later", "obj": None}],
+    )
+    ledger = rc.DbSeedLedger(database)
+    intent = rc.SeedIntent((100, 200), (110, 220))
+    await ledger.set_intent("panel", "alice", intent)
+    report = await _reconcile(panel_client(panel), apply=True, ledger=ledger)
+    assert report.errors
+    assert len(panel.clients) == 2
+    assert await ledger.get_intent("panel", "alice") == intent
+    assert await ledger.get("panel", "alice") is None
+
+    report = await _reconcile(panel_client(panel), apply=True, ledger=ledger)
+    assert report.errors == []
+    seed_bodies = [kw["json"] for url, kw in panel.posts if "updateTraffic" in url]
+    assert seed_bodies == [
+        {"upload": 110, "download": 220},  # rejected recovery
+        {"upload": 110, "download": 220},  # exact target, not current + legacy
+        {"upload": 115, "download": 227},  # only then fold new traffic
+    ]
 
 
 @pytest.mark.asyncio
