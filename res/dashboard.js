@@ -186,7 +186,8 @@ async function saveSettings() {
   const curPass = document.getElementById('setCurPass').value;
   if (name) body.name = name;
   if (fp) body.fingerprint = fp;
-  if (user && pass) { body.username = user; body.password = pass; }
+  if (user) body.username = user;
+  if (pass) body.password = pass;
   if (!Object.keys(body).length) return;
 
   const msg = document.getElementById('settingsMsg');
