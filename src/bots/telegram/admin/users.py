@@ -247,7 +247,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         conf = self.cfg.view()
         for fp in conf["fingerprints"]:
             label = f"✅ {fp}" if fp == current else fp
-            markup.add( # pyright: ignore[reportUnknownMemberType]
+            markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(label, callback_data=f"fp_save_{fp}:{generation}")
             )
         markup.add(types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
