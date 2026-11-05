@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import cast
 
 from telebot import types
@@ -26,7 +27,7 @@ class AdminCodesMixin(AdminFeatureMixin):
                     reply_markup=self.get_codes_menu(),
                 )
                 return
-            text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{c}</code>" for c in codes])
+            text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{escape(c)}</code>" for c in codes])
             await self._send_message(
                 chat_id,
                 text,
@@ -49,7 +50,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         try:
             info = await self.sub.code_svc.get_code(code)
             text = (
-                f"ℹ️ <b>Код: <code>{code}</code></b>\n\n"
+                f"ℹ️ <b>Код: <code>{escape(code)}</code></b>\n\n"
                 f"Тип: <code>{info.action}</code>\n"
                 f"Перманентный: <b>{'Да' if info.perma else 'Нет'}</b>\n"
                 f"Использований: <code>{info.uses}</code>\n"
@@ -101,7 +102,7 @@ class AdminCodesMixin(AdminFeatureMixin):
             return
         await self._send_message(
             message.chat.id,
-            f"✅ Код <code>{code}</code> удалён.",
+            f"✅ Код <code>{escape(code)}</code> удалён.",
             parse_mode="HTML",
             reply_markup=self.get_codes_menu(),
         )
@@ -120,7 +121,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         )
         await self.bot.send_message(
             message.chat.id,
-            f"Код: <b>{code_name}</b>\nВыберите тип:",
+            f"Код: <b>{escape(code_name)}</b>\nВыберите тип:",
             parse_mode="HTML",
             reply_markup=markup,
         )
@@ -315,7 +316,7 @@ class AdminCodesMixin(AdminFeatureMixin):
                 chat_id,
                 f"""✅ Код создан!
 
-Код: <code>{code_name}</code>
+Код: <code>{escape(code_name)}</code>
 Тип: <code>{code_type}</code>
 Перманентный: <b>{"Да" if perma else "Нет"}</b>
 Дней: <code>{days}</code>

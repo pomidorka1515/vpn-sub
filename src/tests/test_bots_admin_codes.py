@@ -114,6 +114,51 @@ async def test_list_and_info_codes(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("name", "escaped"),
+    [
+        ("a<b&c>", "a&lt;b&amp;c&gt;"),
+        ("<b>bonus</b>&amp;", "&lt;b&gt;bonus&lt;/b&gt;&amp;amp;"),
+    ],
+)
+async def test_code_names_are_escaped_only_in_html(
+    codes: tuple[AdminCodesMixin, MagicMock, MagicMock], name: str, escaped: str,
+) -> None:
+    mixin, telegram, subscription = codes
+    sent = cast(MagicMock, mixin._send_message)
+
+    subscription.code_svc.list_code.return_value = ["WELCOME", name]
+    await mixin._cb_list_codes(7)
+    assert sent.call_args.args[1] == (
+        f"🎟 <b>Список кодов:</b>\n\n- <code>WELCOME</code>\n- <code>{escaped}</code>"
+    )
+    assert sent.call_args.kwargs["parse_mode"] == "HTML"
+
+    subscription.code_svc.get_code.return_value = _code(code=name)
+    await mixin._step_info_code(_message(name))
+    subscription.code_svc.get_code.assert_awaited_once_with(name)
+    assert f"<b>Код: <code>{escaped}</code></b>" in sent.call_args.args[1]
+    assert sent.call_args.kwargs["parse_mode"] == "HTML"
+
+    await mixin._step_add_code_name(_message(name))
+    assert mixin._pending_codes[7] == name
+    assert telegram.send_message.call_args.args[1] == f"Код: <b>{escaped}</b>\nВыберите тип:"
+    assert telegram.send_message.call_args.kwargs["parse_mode"] == "HTML"
+
+    await mixin._step_add_code_uses(_real_message("2"), "bonus", name, 30, 10, 1, False)
+    subscription.code_svc.add_code.assert_awaited_once_with(
+        code=name, action="bonus", permanent=False, days=30, gb=10, wl_gb=1, uses=2,
+    )
+    assert f"Код: <code>{escaped}</code>" in sent.call_args.args[1]
+    assert sent.call_args.kwargs["parse_mode"] == "HTML"
+
+    await mixin._step_del_code(_message(name))
+    subscription.code_svc.delete_code.assert_awaited_once_with(name)
+    assert sent.call_args.args[1] == f"✅ Код <code>{escaped}</code> удалён."
+    assert sent.call_args.kwargs["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
 async def test_delete_code_and_type_prompt(
     codes: tuple[AdminCodesMixin, MagicMock, MagicMock],
 ) -> None:
