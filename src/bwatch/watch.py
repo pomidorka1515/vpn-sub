@@ -393,6 +393,8 @@ class BWatch:
             sampled_at = datetime.now(UTC)
             month = sampled_at.strftime("%Y-%m")
             states = await self.sub.user_svc.list_user_states()
+            # Per-panel reads omit outages so healthy panels and the independent
+            # whitelist pool can still commit, roll over, and run recovery checks.
             main = (
                 await self.sub.bandwidth_svc.panel_traffic(work="background")
                 if any(s["bw_limit_gb"] for s in states)

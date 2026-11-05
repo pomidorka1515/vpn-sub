@@ -123,6 +123,10 @@ async def test_all_traffic_rejects_partial_when_one_panel_fails(database: Databa
     with pytest.raises(PanelUnavailableError):
         await subscription.bandwidth_svc.all_traffic()
 
+    assert await subscription.bandwidth_svc.panel_traffic() == {
+        "two": {"alice": BandwidthInfo(7, 8, 15)},
+    }
+
 
 @pytest.mark.asyncio
 async def test_all_traffic_uses_whitelist_slot(database: Database) -> None:

@@ -61,7 +61,7 @@ class BandwidthService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> dict[str, BandwidthInfo]:
-        panels = await self.panel_traffic(whitelist, work=work)
+        panels = await self.panel_traffic(whitelist, work=work, require_complete=True)
         totals: dict[str, BandwidthInfo] = {}
         for values in panels.values():
             for email, traffic in values.items():
@@ -78,8 +78,13 @@ class BandwidthService(BaseService):
         whitelist: bool = False,
         *,
         work: WorkClass = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
-        """Return counters without merging independent panel reset domains."""
+        """Return independent counters, omitting unavailable panels unless completeness is required.
+
+        Omitted panels must keep their previous accounting baselines, not advance
+        to zero. Aggregate consumers require a complete sample instead.
+        """
         self.require_panels()
         panels = self._target_panels(whitelist)
         if not panels:
@@ -90,9 +95,11 @@ class BandwidthService(BaseService):
         for outcome in outcomes:
             if outcome.error is not None:
                 self.log.error("client traffic listing failed for panel %s", outcome.panel)
-                raise PanelUnavailableError(
-                    f"Could not query client traffic for panel {outcome.panel}",
-                ) from outcome.error
+                if require_complete:
+                    raise PanelUnavailableError(
+                        f"Could not query client traffic for panel {outcome.panel}",
+                    ) from outcome.error
+                continue
             values = result[outcome.panel] = {}
             for client in outcome.value or []:
                 traffic = client.traffic

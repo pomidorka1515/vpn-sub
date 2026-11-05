@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from async_core_helpers import close_async_subscription, make_async_subscription
-from helpers import USER_UUID, FakePanel, make_inbound
+from helpers import USER_UUID, FakePanel, make_inbound, make_panel_client
 
 from bwatch.watch import BWatch
 from custom_types import BandwidthInfo
@@ -325,6 +325,7 @@ async def test_month_rollover_rebaselines_atomically(
         whitelist: bool = False,
         *,
         work: str = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {} if missing else {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
@@ -370,6 +371,103 @@ async def test_month_rollover_rebaselines_atomically(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("outage", ["one", "main", "whitelist", "all"])
+async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    outage: str,
+) -> None:
+    now = datetime(2026, 9, 30, 23, 59, tzinfo=UTC)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> Clock:
+            return cls(now.year, now.month, now.day, now.hour, now.minute, tzinfo=UTC)
+
+    monkeypatch.setattr("bwatch.watch.datetime", Clock)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    panels = [FakePanel(name=name) for name in ("one", "two", "whitelist")]
+    sub = await make_async_subscription(db, tmp_path, panels=panels[:2], whitelist=panels[2])
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    recovery = AsyncMock()
+    watch._quota = recovery  # type: ignore[method-assign]
+
+    def readings(total: int) -> None:
+        for panel in panels:
+            panel.clients = [make_panel_client("alice", [1], up=total, down=0)]
+
+    failed = {
+        "one": {"one"},
+        "main": {"one", "two"},
+        "whitelist": {"whitelist"},
+        "all": {"one", "two", "whitelist"},
+    }[outage]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        readings(100)
+        await watch.bandwidth_check()
+        readings(140)
+        for panel in panels:
+            if panel.name in failed:
+                panel._get_error = RuntimeError("offline")
+        recovery.reset_mock()
+        await watch.bandwidth_check()
+        recovery.assert_awaited_once_with("alice", recover=True)
+        expected = (40 * len({"one", "two"} - failed), 0 if "whitelist" in failed else 40)
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == expected
+        for panel in panels:
+            baseline = watch.wl_mem if panel.name == "whitelist" else watch.mem
+            assert baseline[panel.name, "alice", USER_UUID].total == (
+                100 if panel.name in failed else 140
+            )
+
+        # An outage must preserve durable baselines across watcher restarts too.
+        await watch.close()
+        watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+        watch._quota = recovery  # type: ignore[method-assign]
+        await watch.bandwidth_check()
+        for panel in panels:
+            panel._get_error = None
+        readings(160)
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (120, 60)
+
+        # Reintroduce the outage across midnight: rollover cannot wait for it.
+        for panel in panels:
+            if panel.name in failed:
+                panel._get_error = RuntimeError("offline")
+        now = datetime(2026, 10, 1, tzinfo=UTC)
+        readings(900)
+        recovery.reset_mock()
+        await watch.bandwidth_check()
+        recovery.assert_awaited_once_with("alice", recover=True)
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (0, 0)
+        assert await db.get_metadata("last_reset_month") == "2026-10"
+        for panel in panels:
+            panel._get_error = None
+        await watch.bandwidth_check()  # Returning panels need new-month baselines.
+        readings(925)
+        await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (50, 25)
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
 async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -401,6 +499,7 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
             whitelist: bool = False,
             *,
             work: str = "foreground",
+            require_complete: bool = False,
         ) -> dict[str, dict[str, BandwidthInfo]]:
             return {"panel": await traffic(whitelist, work=work)}
 
@@ -447,6 +546,7 @@ async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
         whitelist: bool = False,
         *,
         work: str = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         total = totals["whitelist" if whitelist else "main"]
         return {"panel": {} if total is None else {"alice": BandwidthInfo(total, 0, total)}}
@@ -516,6 +616,7 @@ async def test_panel_resets_account_full_confirmed_traffic(
         whitelist: bool = False,
         *,
         work: str = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {
             panel: {} if total is None else {"alice": BandwidthInfo(total, 0, total)}
@@ -559,6 +660,7 @@ async def test_usage_baselines_do_not_cross_account_identities(tmp_path: Path) -
         whitelist: bool = False,
         *,
         work: str = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
@@ -916,6 +1018,7 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
         whitelist: bool = False,
         *,
         work: str = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
@@ -978,6 +1081,7 @@ async def test_daily_history_survives_repeated_scheduled_restarts(
         whitelist: bool = False,
         *,
         work: str = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": await traffic(whitelist, work=work)}
 
@@ -1152,6 +1256,7 @@ async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Pat
         whitelist: bool = False,
         *,
         work: str = "foreground",
+        require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         if offline:
             raise PanelUnavailableError("panel offline")
