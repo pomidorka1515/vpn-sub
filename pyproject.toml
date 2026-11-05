@@ -69,6 +69,7 @@ ignore = [
     "RUF002",  # Unicode characters in docstrings are intentional
     "RUF003",  # Unicode characters in comments are intentional
     "E501",    # Line length is not enforced
+    "COM812",  # Conflicts with ruff format, which owns trailing-comma placement
     "PLR2004", # Literal comparisons do not need named constants
     "PLC0415", # Lazy imports are intentional
     "E701",    # Compact single-line compound statements are allowed
