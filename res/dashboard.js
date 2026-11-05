@@ -111,6 +111,7 @@ function renderStats(s) {
   document.getElementById('infoToken').textContent = s.token || '—';
 
   document.getElementById('setName').value = s.displayname || '';
+  document.getElementById('setFp').value = s.fingerprint || '';
 }
 
 async function loadFingerprints() {
@@ -121,9 +122,9 @@ async function loadFingerprints() {
   (res.obj || []).forEach(fp => {
     const o = document.createElement('option');
     o.value = fp; o.textContent = fp;
-    if (currentStats && currentStats.fingerprint === fp) o.selected = true;
     sel.appendChild(o);
   });
+  sel.value = currentStats?.fingerprint || '';
 }
 
 function copyLink() {
