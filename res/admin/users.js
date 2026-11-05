@@ -156,9 +156,9 @@ export async function doAddUser() {
   if (fp) body.fingerprint = fp;
 
   const limit = parseInt(document.getElementById('addLimit').value) || 0;
-  const wlLimit = parseInt(document.getElementById('addWlLimit').value) || 5;
+  const wlLimit = parseInt(document.getElementById('addWlLimit').value);
   body.limit = limit;
-  body.wl_limit = wlLimit;
+  body.wl_limit = Number.isNaN(wlLimit) ? 5 : wlLimit;
 
   const expiry = document.getElementById('addExpiry').value;
   if (expiry) {
