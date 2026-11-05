@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import re
 import time
 import uuid
 from dataclasses import asdict
@@ -46,6 +47,11 @@ if TYPE_CHECKING:
     from .password import PasswordService
 
 
+def _valid_subscription_token(token: str) -> bool:
+    # Tokens are interpolated into subscription URLs across the UI and bots.
+    return re.fullmatch(r"[A-Za-z0-9._~-]{30,}", token) is not None
+
+
 class CommonUserService(BaseService):
     async def user(self, username: str) -> UserRecord:
         user = await self.db.get_user(username)
@@ -57,7 +63,7 @@ class CommonUserService(BaseService):
         return bool(username) and await self.db.user_exists(username)
 
     async def usertotoken(self, token: str) -> str | None:
-        return await self.db.token_to_user(token) if len(token) >= 30 else None
+        return await self.db.token_to_user(token) if _valid_subscription_token(token) else None
 
     async def get_user_state(self, username: str) -> UserRecord:
         return await self.user(username)
@@ -476,6 +482,8 @@ class BusinessUserService(BaseService):
         if timee > 2**31:
             raise ValidationError("Invalid timestamp")
         token = generate_token("sub") if token is None else token
+        if not _valid_subscription_token(token):
+            raise ValidationError("Subscription token must contain at least 30 URL-safe characters")
         userid = str(uuid.uuid4()) if userid is None else userid
         displayname = sanitize(displayname, "display")
         external = (
@@ -562,6 +570,8 @@ class BusinessUserService(BaseService):
                 raise ValidationError("Invalid time")
             fields["expiry_time"] = timee
         if token is not None:
+            if not _valid_subscription_token(token):
+                raise ValidationError("Subscription token must contain at least 30 URL-safe characters")
             fields["token"] = token
         if limit is not None:
             fields["bw_limit"] = limit

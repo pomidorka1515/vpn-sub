@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from helpers import make_subscription
@@ -10,6 +11,48 @@ from errors import ConflictError, DuplicateError, NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from db import Database
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "token",
+    ["", "short", "a" * 29, *["a" * 30 + char for char in "&=?#%+ /\n\ré"]],
+)
+async def test_custom_token_validation_before_mutation(database: Database, token: str) -> None:
+    subscription = await make_subscription(database)
+    with patch.object(subscription.business_svc, "add_users") as add_users:
+        with pytest.raises(ValidationError, match="Subscription token"):
+            await subscription.business_svc.add_new_user("alice", "Alice", token=token)
+        add_users.assert_not_called()
+    assert not await subscription.user_svc.isuser("alice")
+
+    created = await subscription.business_svc.add_new_user("alice", "Alice")
+    with patch.object(subscription.business_svc, "_drop_cache") as drop_cache:
+        with pytest.raises(ValidationError, match="Subscription token"):
+            await subscription.business_svc.update_params("alice", displayname="Changed", token=token)
+        drop_cache.assert_not_called()
+    user = await subscription.user_svc.user("alice")
+    assert user["token"] == created.token
+    assert user["displayname"] == "Alice"
+    assert await subscription.user_svc.usertotoken(created.token) == "alice"
+    assert await subscription.user_svc.usertotoken(token) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("token", ["a" * 30, "Az09._~-" * 5])
+async def test_custom_tokens_round_trip_subscription_links(database: Database, token: str) -> None:
+    subscription = await make_subscription(database)
+    created = await subscription.business_svc.add_new_user("alice", "Alice", token=token)
+    assert created.token == token
+    for current_token in (token, token + "updated"):
+        if current_token != token:
+            await subscription.business_svc.update_params("alice", token=current_token)
+            assert await subscription.user_svc.usertotoken(token) is None
+        info = await subscription.business_svc.get_info("alice")
+        link = urlsplit(info.link)
+        assert not link.fragment
+        assert parse_qs(link.query) == {"token": [current_token]}
+        assert await subscription.user_svc.usertotoken(parse_qs(link.query)["token"][0]) == "alice"
 
 
 @pytest.mark.asyncio
