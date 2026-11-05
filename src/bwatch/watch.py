@@ -41,10 +41,9 @@ class BWatch:
         ("Quota & Notifs", 120, (("periodic user check", "check"),)),
         ("Panels check", 300, (("panel health check", "panel_health_check"),)),
         (
-            "Date check & reconcile",
+            "Reconcile",
             7200,
             (
-                ("monthly reset check", "is_first"),
                 ("inbound reconcile", "reconcile_inbounds"),
             ),
         ),
@@ -100,6 +99,7 @@ class BWatch:
         self.wl_mem: Counters = {}
         self._reset_mem: Counters = {}
         self._reset_wl_mem: Counters = {}
+        self._usage_month: str | None = None
         self.snap_mem: dict[str, BandwidthInfo] = {}
         self.snap_wl_mem: dict[str, BandwidthInfo] = {}
         self._tasks = TaskRegistry()
@@ -126,7 +126,6 @@ class BWatch:
         if not self.scheduled:
             self._started = True
             return
-        await self.is_first()
         try:
             await self.bandwidth_check()
         except PanelUnavailableError:
@@ -149,14 +148,16 @@ class BWatch:
         self._started = True
 
     async def _load_usage_baselines(self, states: list[UserRecord]) -> None:
+        self._usage_month = await self.db.get_metadata("last_reset_month")
         raw_baselines = await self.db.get_metadata("watcher_usage_baselines")
         if raw_baselines is not None:
             saved = json.loads(raw_baselines)
+            self._usage_month = saved.get("month", self._usage_month)
             self.mem, self.wl_mem = {}, {}
             self._reset_mem, self._reset_wl_mem = {}, {}
             # Legacy aggregate counters cannot be split reliably between panels.
             # Rebaseline once on upgrade rather than invent usage or reset evidence.
-            if saved.get("version") != 2:
+            if saved.get("version") != 2 or self._usage_month is None:
                 return
             identities = {state["username"]: state["uuid"] for state in states}
             records = cast(dict[str, list[tuple[str, str, str, int, int, int]]], saved["counters"])
@@ -357,6 +358,8 @@ class BWatch:
 
     async def bandwidth_check(self) -> None:
         async def operation() -> None:
+            sampled_at = datetime.now(UTC)
+            month = sampled_at.strftime("%Y-%m")
             states = await self.sub.user_svc.list_user_states()
             main = (
                 await self.sub.bandwidth_svc.panel_traffic(work="background")
@@ -371,12 +374,21 @@ class BWatch:
             sampled = {s["username"]: s for s in states}
 
             async def commit() -> None:
+                # A poll spanning midnight has no reliable monthly attribution.
+                # Leave its baselines untouched and rebaseline on the next poll.
+                if datetime.now(UTC).strftime("%Y-%m") != month:
+                    return
                 current_states = await self.sub.user_svc.list_user_states()
                 # A cancelled commit may have reached SQLite before cancellation.
                 await self._load_usage_baselines(current_states)
                 usage: dict[str, tuple[int, int]] = {}
                 next_main, next_wl = dict(self.mem), dict(self.wl_mem)
                 reset_main, reset_wl = dict(self._reset_mem), dict(self._reset_wl_mem)
+                if self._usage_month is not None and self._usage_month != month:
+                    # Cumulative counters cannot split cross-month traffic. Drop
+                    # old baselines (including missing panels and reset evidence)
+                    # instead of billing an outage's traffic to the new month.
+                    next_main, next_wl, reset_main, reset_wl = {}, {}, {}, {}
                 keys_by_name: dict[str, set[CounterKey]] = {}
                 for key in next_main.keys() | next_wl.keys() | reset_main.keys() | reset_wl.keys():
                     keys_by_name.setdefault(key[1], set()).add(key)
@@ -438,6 +450,7 @@ class BWatch:
                 baselines = json.dumps(
                     {
                         "version": 2,
+                        "month": month,
                         "counters": {
                             kind: [
                                 [*key, int(value.upload), int(value.download), int(value.total)]
@@ -451,9 +464,13 @@ class BWatch:
                                 ("whitelist_reset", reset_wl),
                             )
                         },
-                    }
+                    },
                 )
-                await self.db.increment_usages(usage, baselines=baselines)
+                await self.db.increment_usages(
+                    usage,
+                    baselines=baselines,
+                    period=(month, sampled_at.strftime("%Y-%m-%d")),
+                )
                 self.mem, self.wl_mem = next_main, next_wl
                 self._reset_mem, self._reset_wl_mem = reset_main, reset_wl
 
@@ -554,7 +571,7 @@ class BWatch:
                             if name in identities
                         ]
                         for kind, values in (("main", next_main), ("whitelist", next_wl))
-                    }
+                    },
                 )
                 await self.db.add_bandwidth_snapshots(rows, baselines=baselines)
                 self.snap_mem, self.snap_wl_mem = next_main, next_wl
@@ -600,19 +617,8 @@ class BWatch:
         await self.db.prune_state_snapshots(int(time.time()) - retention * 86400)
 
     async def is_first(self) -> None:
-        async def operation() -> None:
-            now = datetime.now(UTC)
-
-            async def reset() -> None:
-                await self.db.reset_monthly(now.strftime("%Y-%m"), now.strftime("%Y-%m-%d"))
-
-            await self.sub.res.coordinator.run(
-                await self.sub.user_svc.list_users(),
-                reset,
-                name="watcher:monthly reset",
-            )
-
-        await self._job("monthly", operation)
+        """Compatibility entry point: rollover is owned by the usage poll."""
+        await self.bandwidth_check()
 
     async def reconcile_inbounds(self) -> None:
         async def operation() -> None:

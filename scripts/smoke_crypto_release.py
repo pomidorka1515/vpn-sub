@@ -145,7 +145,7 @@ async def smoke(directory: Path, binary: Path | None, prefix: Path | None) -> No
                         "ca": str(cert),
                         "port": port,
                         "version": "TLSv1.2" if version == ssl.TLSVersion.TLSv1_2 else "TLSv1.3",
-                    }
+                    },
                 )
         manifest = directory / "crypto.json"
         manifest.write_text(json.dumps({"private": binary is not None, "endpoints": endpoints}))

@@ -140,7 +140,7 @@ class AsyncRateLimiter:
                     _ADMIN_AUTH_FAILURES,
                     _ADMIN_AUTH_LOCKOUT,
                 ),
-            )
+            ),
         )
 
     async def allow(self, scope: str, key: str, max_requests: int) -> bool:

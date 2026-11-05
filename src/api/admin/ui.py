@@ -66,7 +66,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
                 "token": self.token,
                 "api_root": self.uri,
                 "panels_configured": bool(self.sub.panels),
-            }
+            },
         )
 
     async def admin_session(self) -> ResponseType:

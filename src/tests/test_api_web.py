@@ -75,7 +75,7 @@ async def test_register_rejects_invalid_required_fields(
 
 
 @pytest.mark.parametrize(
-    "field", ["name", "fingerprint", "username", "password", "current_password"]
+    "field", ["name", "fingerprint", "username", "password", "current_password"],
 )
 @pytest.mark.parametrize("value", [42, 0, 1.5, True, False, [], {}, ["chrome"]])
 async def test_settings_reject_non_string_fields(

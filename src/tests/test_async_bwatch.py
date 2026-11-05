@@ -163,6 +163,78 @@ async def test_monthly_reset_catches_up_once_after_outage(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("restart", [False, True])
+@pytest.mark.parametrize("missing_panel", [False, True])
+async def test_month_rollover_rebaselines_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    restart: bool,
+    missing_panel: bool,
+) -> None:
+    now = datetime(2026, 9, 30, 23, 59, tzinfo=UTC)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> Clock:
+            return cls(now.year, now.month, now.day, now.hour, now.minute, tzinfo=UTC)
+
+    monkeypatch.setattr("bwatch.watch.datetime", Clock)
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    total = 100
+    missing = False
+
+    async def traffic(
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {} if missing else {"panel": {"alice": BandwidthInfo(total, 0, total)}}
+
+    async def no_snapshots(now: float) -> None:
+        return None
+
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice", uuid=USER_UUID, token="a" * 40,
+            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+        )
+        await watch.bandwidth_check()
+        total = 140
+        await watch.bandwidth_check()
+        assert (await db.get_user("alice"))["bw_used"] == 40  # type: ignore[index]
+        now = datetime(2026, 10, 3 if restart else 1, tzinfo=UTC)
+        total = 900  # Unknown mix of September and October traffic.
+        missing = missing_panel
+        if restart:
+            await watch.close()
+            watch = BWatch(sub.res.cfg, db, sub, scheduled=True)
+            watch._run_due_daily_snapshots = no_snapshots  # type: ignore[method-assign]
+            await watch.start()
+        else:
+            await watch.bandwidth_check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (0, 0)
+        assert await db.get_metadata("last_reset_month") == "2026-10"
+        missing = False
+        await watch.bandwidth_check()  # Returning panels also need a fresh baseline.
+        total = 925
+        await watch.bandwidth_check()
+        await watch.is_first()  # A later date check must not erase October usage.
+        state = await db.get_user("alice")
+        assert state is not None
+        assert (state["bw_used"], state["wl_used"]) == (25, 25)
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
 async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -200,7 +272,12 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
         sub.bandwidth_svc.panel_traffic = panel_traffic  # type: ignore[method-assign]
         increment = db.increment_usages
 
-        async def failed_commit(updates: object, *, baselines: str | None = None) -> None:
+        async def failed_commit(
+            updates: object,
+            *,
+            baselines: str | None = None,
+            period: tuple[str, str] | None = None,
+        ) -> None:
             raise RuntimeError("disk unavailable")
 
         db.increment_usages = failed_commit  # type: ignore[method-assign]

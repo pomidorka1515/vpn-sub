@@ -30,14 +30,28 @@ class StateMixin(ConnectionMixin):
         updates: Mapping[str, tuple[int, int]],
         *,
         baselines: str | None = None,
+        period: tuple[str, str] | None = None,
     ) -> None:
         rows = [
             (regular, whitelist, username)
             for username, (regular, whitelist) in updates.items()
             if regular or whitelist
         ]
-        if rows or baselines is not None:
+        if rows or baselines is not None or period is not None:
             async with self.transaction(immediate=True) as conn:
+                if period is not None:
+                    month, today = period
+                    row = await conn.row("SELECT value FROM app_metadata WHERE key = 'last_reset_month'")
+                    if row is None or row[0] != month:
+                        # On upgrade, preserve usage when no period was recorded.
+                        if row is not None:
+                            await conn.execute("UPDATE users SET bw_used = 0, wl_used = 0")
+                            await conn.execute("DELETE FROM notification_state")
+                        await conn.executemany(
+                            "INSERT INTO app_metadata(key, value) VALUES (?, ?) "
+                            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                            [("last_reset", today), ("last_reset_month", month)],
+                        )
                 await conn.executemany(
                     "UPDATE users SET bw_used = bw_used + ?, wl_used = wl_used + ? WHERE username = ?",
                     rows,

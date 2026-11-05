@@ -55,7 +55,7 @@ async def test_panel_workflows_have_no_side_effects(database: Database, tmp_path
         for operation in operations:
             with (
                 patch.object(
-                    sub.res.coordinator, "run", side_effect=AssertionError("mutation admitted")
+                    sub.res.coordinator, "run", side_effect=AssertionError("mutation admitted"),
                 ),
                 patch.object(sub.user_svc, "user", side_effect=AssertionError("user read")),
                 pytest.raises(NoPanelsConfiguredError) as error,

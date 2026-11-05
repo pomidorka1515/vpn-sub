@@ -235,7 +235,7 @@ async def test_fingerprint_and_settings_steps(
     assert "login>32" in telegram.send_message.call_args.args[1]
     await mixin.step_settings_login(_message("y" * 32))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", ext_username="y" * 32
+        username="alice", ext_username="y" * 32,
     )
     subscription.business_svc.update_params.side_effect = AppError("taken")
     await mixin.step_settings_login(_message("bob"))

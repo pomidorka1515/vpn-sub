@@ -213,7 +213,7 @@ def make_bots(
         limiter=limiter,
     )
     admin = DiscordAdminBot(
-        cfg, LANG, sub, client=host, tree=host.tree, rendering=pool, limiter=limiter
+        cfg, LANG, sub, client=host, tree=host.tree, rendering=pool, limiter=limiter,
     )
     host.attach(public, admin)
     return public, admin, store, sub

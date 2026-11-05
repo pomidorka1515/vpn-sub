@@ -99,7 +99,7 @@ class BandwidthService(BaseService):
                 if traffic is None or client.email not in known:
                     continue
                 values[client.email] = BandwidthInfo(
-                    traffic.up, traffic.down, traffic.up + traffic.down
+                    traffic.up, traffic.down, traffic.up + traffic.down,
                 )
         return result
 

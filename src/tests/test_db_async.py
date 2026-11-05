@@ -175,6 +175,29 @@ async def test_usage_and_baselines_roll_back_together(repository: Database) -> N
 
 
 @pytest.mark.asyncio
+async def test_month_rollover_rolls_back_with_baselines(repository: Database) -> None:
+    await create_user(repository)
+    await repository.reset_monthly("2026-09", "2026-09-01")
+    await repository.increment_usages({"alice": (50, 60)}, baselines="old")
+    await repository.mark_notification("legacy", 12)
+    async with repository.transaction(immediate=True) as conn:
+        await conn.execute(
+            "CREATE TRIGGER reject_rollover BEFORE INSERT ON app_metadata "
+            "WHEN NEW.key = 'watcher_usage_baselines' BEGIN SELECT RAISE(ABORT, 'failed'); END",
+        )
+    with pytest.raises(DatabaseError, match="failed"):
+        await repository.increment_usages(
+            {"alice": (0, 0)}, baselines="new", period=("2026-10", "2026-10-01"),
+        )
+    user = await repository.get_user("alice")
+    assert user is not None
+    assert (user["bw_used"], user["wl_used"]) == (50, 60)
+    assert await repository.get_metadata("last_reset_month") == "2026-09"
+    assert await repository.get_metadata("watcher_usage_baselines") == "old"
+    assert await repository.notification_seen("legacy", 12)
+
+
+@pytest.mark.asyncio
 async def test_snapshots_and_baselines_roll_back_together(repository: Database) -> None:
     await create_user(repository)
     await repository.add_bandwidth_snapshots([("alice", 10, 1, 2, 3, 4)], baselines="old")

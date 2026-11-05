@@ -22,5 +22,5 @@ def validate_panel_limit(data: Mapping[str, JsonValue]) -> None:
     ]
     if len(names) > 1:
         raise SchemaValidationError(
-            f"At most one whitelist panel is allowed; configured: {', '.join(names)}"
+            f"At most one whitelist panel is allowed; configured: {', '.join(names)}",
         )
