@@ -4,6 +4,8 @@ import copy
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
+from errors import CommittedAuditError
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -34,6 +36,23 @@ class AuditService:
                 "info": copy.deepcopy(dict(info)) if info is not None else None,
             },
         )
+
+    async def audit_committed(
+        self,
+        *,
+        name: AUDIT_VALUES,
+        info: Mapping[str, JsonValue] | None = None,
+        result: JsonValue = None,
+    ) -> None:
+        """Distinguish audit failure from failure of an already committed mutation.
+
+        Pending does not imply automatic replay: callers must repair the audit,
+        never repeat the business mutation. Preserve any generated credentials.
+        """
+        try:
+            await self.audit(name=name, info=info)
+        except Exception as exc:
+            raise CommittedAuditError(result=result) from exc
 
 
 type AUDIT_VALUES = Literal[

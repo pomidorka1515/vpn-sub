@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from config import JsonValue
+
 __all__ = (
     "AppError",
     "CodeError",
+    "CommittedAuditError",
     "ConfigError",
     "ConflictError",
     "DatabaseError",
@@ -35,6 +41,17 @@ class AppError(Exception):
 
 class ValidationError(AppError):
     pass
+
+
+class CommittedAuditError(AppError):
+    """The mutation succeeded; only its subsequent audit append failed."""
+
+    def __init__(self, *, result: JsonValue = None) -> None:
+        super().__init__(
+            "Mutation committed; audit append pending. Do not retry the mutation.",
+            status=202,
+        )
+        self.result = result
 
 
 class NotFoundError(AppError):

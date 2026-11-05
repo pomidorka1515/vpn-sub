@@ -60,7 +60,9 @@ class CodeService(BaseService):
                 "Unknown user" if str(exc) == "unknown user" else "Unknown code",
             ) from exc
         result = ApplyBonusCodeObject(**data)
-        await self.audit_svc.audit(name="user_consume_code", info=asdict(result))
+        await self.audit_svc.audit_committed(
+            name="user_consume_code", info=asdict(result), result=asdict(result),
+        )
         return result
 
     async def add_code(
@@ -96,7 +98,7 @@ class CodeService(BaseService):
             )
         except DuplicateError as exc:
             raise ConflictError(f"code '{code}' already exists") from exc
-        await self.audit_svc.audit(
+        await self.audit_svc.audit_committed(
             name="code_add",
             info={
                 "code": code,
@@ -112,7 +114,7 @@ class CodeService(BaseService):
     async def delete_code(self, code: str) -> None:
         if not await self.db.delete_code(code):
             raise NotFoundError("Unknown code")
-        await self.audit_svc.audit(name="code_delete", info={"code": code})
+        await self.audit_svc.audit_committed(name="code_delete", info={"code": code})
 
     async def list_code(self) -> list[str]:
         return [row["code"] for row in await self.db.all_codes()]
@@ -213,8 +215,9 @@ class BusinessCodeService(BaseService):
             wl_limit=data["wl_gb"],
             time=data["time"],
         )
-        await self.audit_svc.audit(
+        await self.audit_svc.audit_committed(
             name="user_add",
+            result=asdict(result),
             info={
                 "username": username,
                 "ext_username": external,

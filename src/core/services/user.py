@@ -20,6 +20,7 @@ from custom_types import (
 )
 from errors import (
     AppError,
+    CommittedAuditError,
     ConflictError,
     DuplicateError,
     NotFoundError,
@@ -273,9 +274,9 @@ class BusinessUserService(BaseService):
         await self.panel_svc.map_panels(self.panels, sync, work=work)
         if await self.db.get_metadata(f"user_sync_pending:{username}") == "reconcile":
             await self.db.delete_metadata(f"user_sync_pending:{username}")
-        if not _called_internally:
-            await self.audit_svc.audit(name="user_refresh", info={"username": username})
         await self._drop_cache()
+        if not _called_internally:
+            await self.audit_svc.audit_committed(name="user_refresh", info={"username": username})
 
     @panel_mutation
     async def rollback_panel_clients(
@@ -329,8 +330,8 @@ class BusinessUserService(BaseService):
         await self.db.delete_metadata(f"user_sync_pending:{username}")
         await self.db.delete_metadata(f"user_reset_pending:{username}")
         await self.db.delete_metadata(key)
-        await self.audit_svc.audit(name="user_delete", info={"username": username})
         await self._drop_cache()
+        await self.audit_svc.audit_committed(name="user_delete", info={"username": username})
 
     async def _set_enabled(
         self,
@@ -396,11 +397,11 @@ class BusinessUserService(BaseService):
                 whitelist=wl_enable is not None,
                 work=work,
             )
-        await self.audit_svc.audit(
+        await self._drop_cache()
+        await self.audit_svc.audit_committed(
             name="user_update",
             info={"username": username, **cast(dict[str, JsonValue], dict(fields))},
         )
-        await self._drop_cache()
 
     async def _sync_enabled(
         self,
@@ -514,17 +515,19 @@ class BusinessUserService(BaseService):
                 )
             raise
         await self.db.delete_metadata(f"user_create_pending:{username}")
-        await self.audit_svc.audit(
-            name="user_add",
-            info={"username": username, "ext_username": external},
-        )
-        return NewUserInfo(
+        result = NewUserInfo(
             username=username,
             token=token,
             uuid=userid,
             fingerprint=fingerprint,
             displayname=displayname,
         )
+        await self.audit_svc.audit_committed(
+            name="user_add",
+            info={"username": username, "ext_username": external},
+            result=asdict(result),
+        )
+        return result
 
     @user_mutation
     async def update_params(
@@ -577,7 +580,8 @@ class BusinessUserService(BaseService):
         except DuplicateError as exc:
             raise ConflictError("Ext username exists") from exc
         audit_fields = cast(dict[str, JsonValue], dict(fields))
-        await self.audit_svc.audit(
+        await self._drop_cache()
+        await self.audit_svc.audit_committed(
             name="user_update_params",
             info={
                 "username": username,
@@ -588,7 +592,6 @@ class BusinessUserService(BaseService):
                 },
             },
         )
-        await self._drop_cache()
 
     @panel_mutation
     async def update_uuid(self, username: str, uid: str, *, _resetting: bool = False) -> None:
@@ -647,11 +650,11 @@ class BusinessUserService(BaseService):
             await self.db.set_metadata(key, f"{int(time.time())}:db duplicate uuid")
             raise ConflictError("UUID exists") from exc
         await self.db.delete_metadata(key)
-        await self.audit_svc.audit(
+        await self._drop_cache()
+        await self.audit_svc.audit_committed(
             name="user_update_uuid",
             info={"username": username, "uuid": uid},
         )
-        await self._drop_cache()
 
     @panel_mutation
     async def reset_user(self, username: str) -> ResetUserObject:
@@ -664,13 +667,21 @@ class BusinessUserService(BaseService):
             f"user_reset_pending:{username}",
             json.dumps({"uuid": uid, "token": token, "old_uuid": user["uuid"]}),
         )
-        await self.update_uuid(username, uid, _resetting=True)
+        uuid_audit_error: CommittedAuditError | None = None
+        try:
+            await self.update_uuid(username, uid, _resetting=True)
+        except CommittedAuditError as exc:
+            uuid_audit_error = exc
         await self.db.finalize_reset(username, uid, token)
-        await self.audit_svc.audit(
+        result = ResetUserObject(uuid=uid, token=token)
+        await self.audit_svc.audit_committed(
             name="user_reset",
             info={"username": username, "uuid": uid, "token": "redacted"},
+            result=asdict(result),
         )
-        return ResetUserObject(uuid=uid, token=token)
+        if uuid_audit_error is not None:
+            raise CommittedAuditError(result=asdict(result)) from uuid_audit_error
+        return result
 
     @panel_mutation
     async def reconcile_user(self, username: str) -> None:
@@ -709,8 +720,16 @@ class BusinessUserService(BaseService):
         uid = str(details["uuid"])
         # Replay even if SQLite already has the UUID: a previous attempt may
         # have stopped between individual panel writes.
-        await self.update_uuid(username, uid, _resetting=True)
+        uuid_audit_error: CommittedAuditError | None = None
+        try:
+            await self.update_uuid(username, uid, _resetting=True)
+        except CommittedAuditError as exc:
+            uuid_audit_error = exc
         await self.db.finalize_reset(username, uid, str(details["token"]))
+        if uuid_audit_error is not None:
+            raise CommittedAuditError(
+                result=asdict(ResetUserObject(uuid=uid, token=str(details["token"]))),
+            ) from uuid_audit_error
 
     async def recover_pending(self) -> None:
         if not self.panels:

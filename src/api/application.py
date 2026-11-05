@@ -5,9 +5,9 @@ from quart import Quart, Response, render_template, request
 from quart.json.provider import DefaultJSONProvider
 from werkzeug.exceptions import HTTPException
 
-from errors import AppError
+from errors import AppError, CommittedAuditError
 from loggers import Logger
-from util import err, isbrowser
+from util import err, isbrowser, ok
 
 from .common import RES_DIR
 from .middleware import ProxyMiddleware
@@ -31,6 +31,16 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
 
     @app.errorhandler(AppError)
     async def handle_app_error(error: AppError) -> tuple[Response, int]:
+        if isinstance(error, CommittedAuditError):
+            return ok(
+                error.message,
+                error.status,
+                obj={
+                    **(error.result if isinstance(error.result, dict) else {"result": error.result}),
+                    "committed": True,
+                    "audit_pending": True,
+                },
+            )
         return err(error.message, error.status)
 
     @app.errorhandler(HTTPException)
