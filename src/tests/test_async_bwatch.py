@@ -875,9 +875,11 @@ async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("committed", [False, True])
+@pytest.mark.parametrize("readings", [(100, 150), (100, 10, 15)])
 async def test_daily_snapshot_retry_reloads_durable_baselines(
     tmp_path: Path,
     committed: bool,
+    readings: tuple[int, ...],
 ) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -914,17 +916,77 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
             bw_limit_gb=1,
             wl_limit_gb=1,
         )
-        await watch.record_daily_snapshot()
-        total = 150
+        for reading in readings[:-1]:
+            total = reading
+            await watch.record_daily_snapshot()
+        total = readings[-1]
         db.add_bandwidth_snapshots = interrupted  # type: ignore[method-assign]
         with pytest.raises(asyncio.CancelledError):
             await watch.record_daily_snapshot()
-        assert watch.snap_mem["alice"].upload == 100
+        assert watch.snap_mem["alice"].upload == readings[0]
         db.add_bandwidth_snapshots = save  # type: ignore[method-assign]
         await watch.record_daily_snapshot()
         rows = await db.get_bandwidth_snapshots("alice", 0)
-        assert rows[0]["up"] == rows[0]["wl_up"] == 50
-        assert rows[0]["down"] == rows[0]["wl_down"] == 100
+        expected = 50 if len(readings) == 2 else 15
+        assert rows[0]["up"] == rows[0]["wl_up"] == expected
+        assert rows[0]["down"] == rows[0]["wl_down"] == expected * 2
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("readings", "expected"),
+    [
+        ([100, 10, 15, 20], 20),
+        ([100, 10, 110], 10),
+        ([100, 10, None, 15, 20], 20),
+        ([100, 10, 5, 8], 8),
+        ([100, 0, 0, 5], 5),
+    ],
+)
+async def test_daily_snapshot_reset_confirmation_survives_restart(
+    tmp_path: Path,
+    readings: list[int | None],
+    expected: int,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    total: int | None = None
+
+    async def traffic(
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
+    ) -> dict[str, BandwidthInfo]:
+        return {} if total is None else {"alice": BandwidthInfo(total, total * 2, total * 3)}
+
+    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
+        )
+        for reading in readings:
+            total = reading
+            await watch.start()
+            await watch.record_daily_snapshot()
+            await watch.close()
+            watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+        rows = await db.get_bandwidth_snapshots("alice", 0)
+        assert sum(row["up"] for row in rows) == expected
+        assert sum(row["down"] for row in rows) == expected * 2
+        assert sum(row["wl_up"] for row in rows) == expected
+        assert sum(row["wl_down"] for row in rows) == expected * 2
     finally:
         await watch.close()
         await close_async_subscription(sub)
