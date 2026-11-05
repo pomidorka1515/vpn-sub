@@ -188,7 +188,7 @@ def test_whitelist_panel_limit_on_commit_and_reload(app_cfg: Config[AppConfig]) 
     with app_cfg.edit() as tx:
         panels = tx.view()["3xui"]
         panels["local"]["whitelist"] = True
-        panels["regular"] = {**panels["local"], "whitelist": False}
+        panels["regular"] = {**panels["local"], "name": "regular", "whitelist": False}
     before = Path(app_cfg.path).read_bytes()
     with pytest.raises(SchemaValidationError, match="At most one whitelist panel"):
         with app_cfg.edit() as tx:
@@ -199,6 +199,55 @@ def test_whitelist_panel_limit_on_commit_and_reload(app_cfg: Config[AppConfig]) 
     Path(app_cfg.path).write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(SchemaValidationError, match="At most one whitelist panel"):
         app_cfg.reload()
+
+
+@pytest.mark.parametrize("whitelist", [False, True])
+def test_duplicate_panel_names_rejected_on_commit(
+    app_cfg: Config[AppConfig],
+    whitelist: bool,
+) -> None:
+    before = Path(app_cfg.path).read_bytes()
+    document = app_cfg.view()
+    with pytest.raises(SchemaValidationError, match="Duplicate panel name 'local'"):
+        with app_cfg.edit() as tx:
+            tx.view()["3xui"]["second"] = {
+                **document["3xui"]["local"],
+                "whitelist": whitelist,
+            }
+    assert Path(app_cfg.path).read_bytes() == before
+    assert app_cfg.view() == document
+
+
+@pytest.mark.parametrize("initial_load", [False, True])
+def test_duplicate_panel_names_rejected_on_load(
+    app_cfg: Config[AppConfig],
+    initial_load: bool,
+) -> None:
+    document = app_cfg.view()
+    panels = document["3xui"]
+    panels["second"] = {**panels["local"]}
+    path = Path(app_cfg.path)
+    path.write_text(json.dumps(document), encoding="utf-8")
+    if initial_load:
+        with pytest.raises(SchemaValidationError, match="Duplicate panel name 'local'"):
+            Config[AppConfig](
+                path=path,
+                schema_path=app_cfg.schema_path,
+                validators=(validate_panel_limit,),
+                backup_dir=None,
+                sync_mode="none",
+            )
+    else:
+        with pytest.raises(SchemaValidationError, match="Duplicate panel name 'local'"):
+            app_cfg.reload()
+
+
+def test_distinct_panel_names_accepted(app_cfg: Config[AppConfig]) -> None:
+    with app_cfg.edit() as tx:
+        panels = tx.view()["3xui"]
+        panels["second"] = {**panels["local"], "name": "second"}
+    app_cfg.reload()
+    assert app_cfg.view()["3xui"]["second"]["name"] == "second"
 
 
 @pytest.mark.parametrize("length", [0, 19, 20])

@@ -11,10 +11,22 @@ if TYPE_CHECKING:
 
 
 def validate_panel_limit(data: Mapping[str, JsonValue]) -> None:
-    """Allow at most one panel dedicated to whitelist traffic."""
+    """Require unique panel names and at most one whitelist panel."""
     panels = data.get("3xui")
     if not isinstance(panels, dict):
         return
+    panel_names: dict[str, str] = {}
+    for key, value in panels.items():
+        if not isinstance(value, dict):
+            continue
+        name = value.get("name")
+        if not isinstance(name, str):
+            continue
+        if name in panel_names:
+            raise SchemaValidationError(
+                f"Duplicate panel name {name!r}; configured in: {panel_names[name]}, {key}",
+            )
+        panel_names[name] = key
     names = [
         key
         for key, value in panels.items()
