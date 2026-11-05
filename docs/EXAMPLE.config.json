@@ -44,11 +44,11 @@
             "queryStrategy": "UseIPv4"
         },
         "routing": {
-            "rules": {},
+            "rules": [],
             "domainStrategy": "AsIs"
         },
         "inbounds": [],
-        "outbounds": [],
+        "outbounds": [{}],
         "remarks": ""
     },
     "bypass_packages": [],
@@ -82,7 +82,9 @@
             "json": {
                 "tag": "proxy",
                 "protocol": "vless",
-                "settings": {},
+                "settings": {
+                    "vnext": [{"address": "", "port": 443, "users": [{"id": ""}]}]
+                },
                 "streamSettings": {}
             },
             "description": ["English", "Russian"],

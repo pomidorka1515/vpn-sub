@@ -38,7 +38,7 @@ def _legacy(**overrides: JsonValue) -> dict[str, JsonValue]:
             "dns": {},
             "routing": {"rules": [], "domainStrategy": "AsIs"},
             "inbounds": [],
-            "outbounds": [],
+            "outbounds": [{}],
             "remarks": "",
         },
         "bypass_packages": [],
@@ -53,8 +53,16 @@ def _legacy(**overrides: JsonValue) -> dict[str, JsonValue]:
             "fast": ["Fast", "Быстрый"],
         },
         "json_profiles": {
-            "profile1": {"protocol": "vless"},
-            "fast": {"protocol": "vless", "tag": "fast"},
+            "profile1": {
+                "protocol": "vless",
+                "settings": {"vnext": [{"users": [{}]}]},
+                "streamSettings": {},
+            },
+            "fast": {
+                "protocol": "vless", "tag": "fast",
+                "settings": {"vnext": [{"users": [{}]}]},
+                "streamSettings": {},
+            },
         },
         "profileDescriptions": {
             "profile1": ["English", "Russian"],
@@ -140,7 +148,7 @@ def test_apply_joins_maps_and_preserves_key_order(tmp_path: Path) -> None:
     ]
     assert profile1["flag"] == "🇫🇮"
     assert profile1["name"] == ["English", "Russian"]
-    assert profile1["json"] == {"protocol": "vless"}
+    assert profile1["json"] == _object(_legacy()["json_profiles"])["profile1"]
     assert profile1["whitelist"] is False
     assert profile1["xhttpExtra"] == {"path": "/x"}
     assert profile1["masterLink"] == "vless://profile1"

@@ -85,6 +85,15 @@
             "default": {},
             "required": ["dns", "routing", "inbounds", "outbounds", "remarks"],
             "properties": {
+                "dns": { "type": "object" },
+                "inbounds": { "type": "array", "items": { "type": "object" } },
+                "outbounds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "object" }
+                },
+                "remarks": { "type": "string" },
+                "meta": { "type": "object" },
                 "servers": {
                     "type": "object",
                     "additionalProperties": false,
@@ -98,6 +107,10 @@
                     "type": "object",
                     "additionalProperties": true,
                     "required": ["rules", "domainStrategy"],
+                    "properties": {
+                        "rules": { "type": "array", "items": { "type": "object" } },
+                        "domainStrategy": { "type": "string" }
+                    },
                     "$comment": "im not writing a full schema"
                 }
             },
@@ -197,6 +210,50 @@
     },
 
     "$defs": {
+        "profileOutbound": {
+            "type": "object",
+            "required": ["settings", "streamSettings"],
+            "properties": {
+                "settings": {
+                    "type": "object",
+                    "required": ["vnext"],
+                    "properties": {
+                        "vnext": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": ["users"],
+                                "properties": {
+                                    "users": {
+                                        "type": "array",
+                                        "minItems": 1,
+                                        "items": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "streamSettings": {
+                    "type": "object",
+                    "properties": {
+                        "tlsSettings": { "type": ["object", "null"] },
+                        "realitySettings": { "type": ["object", "null"] },
+                        "xhttpSettings": { "type": ["object", "null"] },
+                        "grpcSettings": { "type": ["object", "null"] },
+                        "httpupgradeSettings": { "type": ["object", "null"] },
+                        "wsSettings": {
+                            "type": ["object", "null"],
+                            "properties": {
+                                "headers": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            },
+            "description": "Xray outbound with the mutable objects required by JSON subscription generation. Additional Xray fields are allowed."
+        },
         "bilingualPair": {
             "type": "array",
             "items": { "type": "string" },
@@ -213,7 +270,7 @@
             "properties": {
                 "flag": { "type": "string", "description": "Emoji shown beside the profile name. Empty is valid." },
                 "name": { "$ref": "#/$defs/bilingualPair" },
-                "json": { "type": "object", "description": "Xray outbound. Not schema-checked beyond being an object." },
+                "json": { "$ref": "#/$defs/profileOutbound" },
                 "description": { "$ref": "#/$defs/bilingualPair" },
                 "whitelist": { "type": "boolean" },
                 "xhttpExtra": { "type": "object" },
