@@ -223,7 +223,7 @@ async function doReset() {
   await withBusy(document.getElementById('btnReset'), async () => {
     const res = await api('POST', '/reset');
     if (!res) return;
-    if (res.success) { toast(t('ok')); loadStats(); }
+    if (res.success) { window.location.href = window.AUTH_PAGE; }
     else toast(res.msg || t('error'), 'error');
   });
 }
