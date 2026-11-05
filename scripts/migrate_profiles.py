@@ -296,13 +296,14 @@ def migrate(path: Path, *, apply: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    data = Path(os.getenv("DIR_DATA", _ROOT / "data"))
     parser = argparse.ArgumentParser(
         description="Fold legacy profile maps into one object per inbound.",
     )
     parser.add_argument(
         "--config",
-        default=os.getenv("PATH_CONFIG", str(_ROOT / "data" / "config.json")),
-        help="service config path (default: data/config.json or PATH_CONFIG)",
+        default=os.getenv("PATH_CONFIG", str(data / "config.json")),
+        help="service config path (default: PATH_CONFIG or config.json under DIR_DATA/repository data)",
     )
     parser.add_argument(
         "--apply",

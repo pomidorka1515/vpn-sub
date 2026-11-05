@@ -32,6 +32,46 @@ sys.modules["reconcile_clients"] = rc  # dataclasses resolves types via sys.modu
 _SPEC.loader.exec_module(rc)
 
 
+@pytest.mark.parametrize("source", ["fallback", "data", "relative_data", "env", "cli"])
+def test_main_path_precedence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(rc, "_ROOT", tmp_path)
+    for name in ("DIR_DATA", "PATH_CONFIG", "PATH_DB"):
+        monkeypatch.delenv(name, raising=False)
+    data = tmp_path / "data"
+    if source != "fallback":
+        data = Path("relative") if source == "relative_data" else tmp_path / "deployment"
+        monkeypatch.setenv("DIR_DATA", str(data))
+    config = data / "config.json"
+    database = data / "state.sqlite3"
+    if source in {"env", "cli"}:
+        config = tmp_path / "env.json"
+        database = tmp_path / "env.sqlite3"
+        monkeypatch.setenv("PATH_CONFIG", str(config))
+        monkeypatch.setenv("PATH_DB", str(database))
+    args: list[str] = []
+    if source == "cli":
+        config = tmp_path / "cli.json"
+        database = tmp_path / "cli.sqlite3"
+        args = ["--config", str(config), "--database", str(database)]
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(json.dumps({"3xui": {}}), encoding="utf-8")
+
+    async def run(
+        panels: dict[str, PanelConfig], keys: list[str], path: Path, *, apply: bool,
+    ) -> int:
+        assert panels == {}
+        assert keys == []
+        assert path == database
+        assert not apply
+        return 0
+
+    monkeypatch.setattr(rc, "_run", run)
+    assert rc.main(args) == 0
+
+
 @pytest_asyncio.fixture
 async def panel_client() -> AsyncIterator[Callable[[FakePanel], XUiSession]]:
     clients: list[XUiSession] = []

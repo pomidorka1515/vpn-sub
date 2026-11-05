@@ -451,18 +451,19 @@ def _print_report(key: str, report: PanelReport, *, apply: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    data = Path(os.getenv("DIR_DATA", _ROOT / "data"))
     parser = argparse.ArgumentParser(
         description="Reconcile legacy 3x-ui client rows into clients-first canonical clients.",
     )
     parser.add_argument(
         "--config",
-        default=os.getenv("PATH_CONFIG", str(_ROOT / "data" / "config.json")),
-        help="service config path (default: data/config.json or PATH_CONFIG)",
+        default=os.getenv("PATH_CONFIG", str(data / "config.json")),
+        help="service config path (default: PATH_CONFIG or config.json under DIR_DATA/repository data)",
     )
     parser.add_argument(
         "--database",
-        default=os.getenv("PATH_DB", str(_ROOT / "data" / "state.sqlite3")),
-        help="service database path (default: data/state.sqlite3 or PATH_DB)",
+        default=os.getenv("PATH_DB", str(data / "state.sqlite3")),
+        help="service database path (default: PATH_DB or state.sqlite3 under DIR_DATA/repository data)",
     )
     parser.add_argument(
         "--panel",

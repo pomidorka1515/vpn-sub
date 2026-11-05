@@ -86,6 +86,36 @@ def _legacy(**overrides: JsonValue) -> dict[str, JsonValue]:
     return data
 
 
+@pytest.mark.parametrize("source", ["fallback", "data", "relative_data", "env", "cli"])
+def test_main_config_path_precedence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mp, "_ROOT", tmp_path)
+    monkeypatch.delenv("DIR_DATA", raising=False)
+    monkeypatch.delenv("PATH_CONFIG", raising=False)
+    expected = tmp_path / "data" / "config.json"
+    if source != "fallback":
+        data = Path("relative") if source == "relative_data" else tmp_path / "deployment"
+        monkeypatch.setenv("DIR_DATA", str(data))
+        expected = data / "config.json"
+    if source in {"env", "cli"}:
+        expected = tmp_path / "env.json"
+        monkeypatch.setenv("PATH_CONFIG", str(expected))
+    args: list[str] = []
+    if source == "cli":
+        expected = tmp_path / "cli.json"
+        args = ["--config", str(expected)]
+
+    def migrate(path: Path, *, apply: bool) -> int:
+        assert path == expected
+        assert not apply
+        return 0
+
+    monkeypatch.setattr(mp, "migrate", migrate)
+    assert mp.main(args) == 0
+
+
 def _write(tmp_path: Path, data: dict[str, JsonValue], name: str = "config.json") -> Path:
     path = tmp_path / name
     path.write_text(json.dumps(data, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
