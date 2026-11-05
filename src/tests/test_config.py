@@ -206,7 +206,9 @@ def test_whitelist_panel_limit_on_commit_and_reload(app_cfg: Config[AppConfig]) 
 
 
 @pytest.mark.parametrize("boundary", ["load", "reload", "commit", "validate"])
-@pytest.mark.parametrize("invalid", ["profile_node", "removed_node", "username", "password"])
+@pytest.mark.parametrize(
+    "invalid", ["profile_node", "removed_node", "username", "password", "nginx_auth"],
+)
 def test_business_validation_at_config_boundaries(
     app_cfg: Config[AppConfig],
     boundary: str,
@@ -236,9 +238,14 @@ def test_business_validation_at_config_boundaries(
         document["profiles"]["profile"]["node"] = "missing"
     elif invalid == "removed_node":
         document["nodes"] = {}
+    elif invalid == "nginx_auth":
+        document["3xui"]["local"]["nginx_auth"] = ["proxy-user", "proxy-password"]
     else:
         document["api_admin_ui_auth"][0 if invalid == "username" else 1] = ""
-    message = "not a key of nodes" if "node" in invalid else "entries must not be empty"
+    if invalid == "nginx_auth":
+        message = "nginx_auth is incompatible with panel bearer authentication"
+    else:
+        message = "not a key of nodes" if "node" in invalid else "entries must not be empty"
     path = Path(app_cfg.path)
     before = path.read_bytes()
 
