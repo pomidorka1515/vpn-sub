@@ -91,6 +91,33 @@ async def test_missing_admin_resource_preserves_json(
     assert data["msg"]
 
 
+@pytest.mark.parametrize("exists", [True, False])
+async def test_panel_status_failure_preserves_missing_panel_response(
+    admin_api: tuple[Quart, Subscription],
+    monkeypatch: pytest.MonkeyPatch,
+    exists: bool,
+) -> None:
+    app, sub = admin_api
+    getstatus = AsyncMock(return_value=None)
+    monkeypatch.setattr(sub.panel_svc, "getstatus", getstatus)
+    name = sub.panels[0].name if exists else "missing"
+    response = await app.test_client().get(
+        "/sub/api/api/panel/status",
+        query_string={"name": name},
+        headers={"Authorization": "secret"},
+    )
+    assert response.status_code == (502 if exists else 404)
+    payload = await response.get_json()
+    assert payload["success"] is False
+    assert payload["msg"] == (
+        "getstatus() returned None; panel may be down" if exists else "panel not found"
+    )
+    if exists:
+        getstatus.assert_awaited_once_with(sub.panels[0])
+    else:
+        getstatus.assert_not_awaited()
+
+
 @pytest.mark.parametrize("operation", ["add", "update"])
 @pytest.mark.parametrize("field", ["limit", "wl_limit", "time"])
 @pytest.mark.parametrize(

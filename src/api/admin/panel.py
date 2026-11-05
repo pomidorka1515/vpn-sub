@@ -42,7 +42,7 @@ class AsyncPanelRoutes(AsyncAdminApiMixin):
             if panel.name == query:
                 res = await self.sub.panel_svc.getstatus(panel)
                 if res is None:
-                    return err("getstatus() returned None; panel may be down")
+                    return err("getstatus() returned None; panel may be down", 502)
                 return ok(obj=asdict(res))
 
         return err("panel not found", 404)
