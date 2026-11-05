@@ -63,7 +63,7 @@ async function viewUserRequest(username) {
   const s = res.obj;
   document.getElementById('userDetailCard').style.display = 'block';
   document.getElementById('userDetailInfo').innerHTML = `
-    <div class="info-row"><span class="info-label">${t('internal_user')}</span><span class="info-value">${escapeHtml(s.username || '—')}</span></div>
+    <div class="info-row"><span class="info-label">${t('internal_user')}</span><span class="info-value">${escapeHtml(username || '—')}</span></div>
     <div class="info-row"><span class="info-label">${t('display_name')}</span><span class="info-value">${escapeHtml(s.displayname || '—')}</span></div>
     <div class="info-row"><span class="info-label">${t('uuid')}</span><span class="info-value">${escapeHtml(s.uuid || '—')}</span></div>
     <div class="info-row"><span class="info-label">${t('token')}</span><span class="info-value">${escapeHtml(s.token || '—')}</span></div>
