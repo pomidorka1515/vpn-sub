@@ -13,7 +13,9 @@ def bounded_int(
     minimum: int = 0,
     maximum: int = SQLITE_MAX_INT,
 ) -> int:
-    """Keep existing integer coercion, but reject nonfinite and unsafe values."""
+    """Accept integer representations without truncation, within safe bounds."""
+    if isinstance(raw, bool) or (isinstance(raw, float) and not raw.is_integer()):
+        raise ValueError(f"{name} must be a finite integer")
     try:
         value = int(cast("str", raw))
     except ValueError, TypeError, OverflowError:

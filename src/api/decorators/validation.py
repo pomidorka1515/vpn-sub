@@ -66,7 +66,9 @@ def requires_fields_strict[**P, R](
                 if field not in content:
                     return err(f"Missing field: {field}", 400)
                 value = content[field]
-                if not isinstance(value, expected_type):
+                if not isinstance(value, expected_type) or (
+                    expected_type is int and isinstance(value, bool)
+                ):
                     return err(
                         f"Field '{field}' must be {expected_type.__name__}, got {type(value).__name__}",
                         400,

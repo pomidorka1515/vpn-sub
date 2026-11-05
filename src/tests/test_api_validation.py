@@ -59,3 +59,23 @@ async def test_required_typed_fields(
             assert data["msg"] == (
                 f"Field 'value' must be {expected_type.__name__}, got {actual_type}"
             )
+
+
+@pytest.mark.parametrize("value", [True, False, 1.9, 1.0, "1"])
+async def test_strict_integer_rejects_other_json_types(value: JsonifyValue) -> None:
+    app = create_api_application(proxy_hops=0)
+    called = False
+
+    @app.post("/test")
+    @requires_fields_strict(("value", int))
+    async def handler() -> ResponseType:
+        nonlocal called
+        called = True
+        return ok()
+
+    response = await app.test_client().post("/test", json={"value": value})
+    assert response.status_code == 400
+    assert not called
+    assert (await response.get_json())["msg"] == (
+        f"Field 'value' must be int, got {type(value).__name__}"
+    )

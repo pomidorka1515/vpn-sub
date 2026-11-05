@@ -75,7 +75,10 @@ async def sign_in(client: TestClientProtocol) -> None:
 @pytest.mark.parametrize("field", ["limit", "wl_limit", "time"])
 @pytest.mark.parametrize(
     "value",
-    [float("inf"), float("-inf"), float("nan"), 2**70, str(2**70), 2**63 - 1],
+    [
+        float("inf"), float("-inf"), float("nan"), 2**70, str(2**70), 2**63 - 1,
+        1.9, -0.5, True, False, "1.9",
+    ],
 )
 async def test_user_numeric_bounds(
     admin_api: tuple[Quart, Subscription],
@@ -139,7 +142,13 @@ async def test_code_numeric_boundary(
 
 
 @pytest.mark.parametrize("field", ["days", "gb", "wl_gb", "uses"])
-@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan"), 2**70, str(2**70)])
+@pytest.mark.parametrize(
+    "value",
+    [
+        float("inf"), float("-inf"), float("nan"), 2**70, str(2**70),
+        1.9, -0.5, True, False, "1.9",
+    ],
+)
 async def test_code_numeric_bounds(
     admin_api: tuple[Quart, Subscription],
     field: str,
@@ -158,6 +167,39 @@ async def test_code_numeric_bounds(
     assert field in message
     assert "range" in message or "finite integer" in message
     add.assert_not_awaited()
+
+
+@pytest.mark.parametrize("value", [0, 1, 1.0, "1", " +1 "])
+async def test_admin_integer_representations(
+    admin_api: tuple[Quart, Subscription], value: float | str,
+) -> None:
+    app, sub = admin_api
+    add_user = AsyncMock()
+    update_user = AsyncMock()
+    add_code = AsyncMock()
+    sub.business_svc.add_new_user = add_user  # type: ignore[method-assign]
+    sub.business_svc.update_params = update_user  # type: ignore[method-assign]
+    sub.code_svc.add_code = add_code  # type: ignore[method-assign]
+    for operation, mutation, fields, body, status in (
+        ("user/add", add_user, ("limit", "wl_limit", "time"),
+         {"user": "alice", "displayname": "Alice"}, 201),
+        ("user/update", update_user, ("limit", "wl_limit", "time"),
+         {"user": "alice"}, 200),
+        ("code/add", add_code, ("days", "gb", "wl_gb", "uses"),
+         {"code": "invite", "action": "register"}, 201),
+    ):
+        response = await app.test_client().post(
+            f"/sub/api/api/{operation}",
+            headers={"Authorization": "secret"},
+            json={**body, **dict.fromkeys(fields, value)},
+        )
+        assert response.status_code == status
+        mutation.assert_awaited_once()
+        assert mutation.await_args is not None
+        for field in fields:
+            result = mutation.await_args.kwargs["timee" if field == "time" else field]
+            assert type(result) is int
+            assert result == int(value)
 
 
 @pytest.mark.parametrize(
