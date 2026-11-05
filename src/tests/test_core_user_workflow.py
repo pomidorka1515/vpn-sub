@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 from helpers import make_subscription
@@ -9,6 +10,55 @@ from errors import ConflictError, DuplicateError, NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from db import Database
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ext_username", [None, ""])
+@pytest.mark.parametrize("ext_password", ["secret", ""])
+async def test_creation_requires_external_username_for_password(
+    database: Database,
+    ext_username: str | None,
+    ext_password: str,
+) -> None:
+    subscription = await make_subscription(database)
+    with patch.object(subscription.password_svc, "hash") as hash_password:
+        with pytest.raises(ValidationError, match="External username required"):
+            await subscription.business_svc.add_new_user(
+                "alice",
+                "Alice",
+                ext_username=ext_username,
+                ext_password=ext_password,
+            )
+        hash_password.assert_not_called()
+    assert not await subscription.user_svc.isuser("alice")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ext_username", ["   ", "!!!"])
+async def test_creation_rejects_external_username_empty_after_sanitizing(
+    database: Database,
+    ext_username: str,
+) -> None:
+    subscription = await make_subscription(database)
+    with patch.object(subscription.password_svc, "hash") as hash_password:
+        with pytest.raises(ValidationError, match="Invalid external name"):
+            await subscription.business_svc.add_new_user(
+                "alice",
+                "Alice",
+                ext_username=ext_username,
+                ext_password="secret",
+            )
+        hash_password.assert_not_called()
+    assert not await subscription.user_svc.isuser("alice")
+
+
+@pytest.mark.asyncio
+async def test_creation_without_external_credentials(database: Database) -> None:
+    subscription = await make_subscription(database)
+    await subscription.business_svc.add_new_user("alice", "Alice")
+    user = await subscription.user_svc.user("alice")
+    assert user["ext_username"] is None
+    assert await database.ext_password("alice") is None
 
 
 @pytest.mark.asyncio

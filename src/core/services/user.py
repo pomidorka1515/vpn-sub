@@ -464,6 +464,8 @@ class BusinessUserService(BaseService):
             raise ValidationError("Displayname too long")
         if ext_username is not None and len(ext_username) > 32:
             raise ValidationError("Ext Username too long")
+        if ext_password is not None and not ext_username:
+            raise ValidationError("External username required")
         if userid is not None and not isuuid(userid):
             raise ValidationError("Invalid UUID")
         conf = self.cfg.view()
@@ -475,8 +477,12 @@ class BusinessUserService(BaseService):
         token = generate_token("sub") if token is None else token
         userid = str(uuid.uuid4()) if userid is None else userid
         displayname = sanitize(displayname, "display")
+        external = (
+            sanitize(ext_username, "external")
+            if ext_username and ext_password is not None
+            else None
+        )
         hashed = await self.password_svc.hash(ext_password) if ext_password is not None else None
-        external = sanitize(ext_username, "external") if ext_username and hashed else None
         try:
             await self.db.create_user(
                 username=username,
