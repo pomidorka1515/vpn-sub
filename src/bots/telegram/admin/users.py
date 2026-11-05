@@ -9,6 +9,7 @@ from typing import cast
 
 from telebot import types
 
+from bots.list_messages import list_messages
 from errors import AppError, PanelUnavailableError
 
 from ..composition import AdminFeatureMixin
@@ -71,15 +72,18 @@ class AdminUsersMixin(AdminFeatureMixin):
                 reply_markup=self.get_main_menu(),
             )
             return
-        text = "👥 <b>Список пользователей онлайн:</b>\n\n" + "\n".join(
-            [f"- <code>{u}</code>{', логин: ' + v if v else ''}" for u, v in online_users.items()],
-        )
-        await self._send_message(
-            chat_id,
-            text,
-            parse_mode="HTML",
-            reply_markup=self.get_main_menu(),
-        )
+        for text in list_messages(
+            "👥 <b>Список пользователей онлайн:</b>\n\n",
+            online_users.items(),
+            limit=4096,
+            html=True,
+        ):
+            await self._send_message(
+                chat_id,
+                text,
+                parse_mode="HTML",
+                reply_markup=self.get_main_menu(),
+            )
 
     async def _cb_refresh(self, chat_id: int) -> None:
         failures: list[str] = []

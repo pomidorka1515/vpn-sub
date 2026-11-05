@@ -6,6 +6,7 @@ from secrets import token_hex
 
 import discord
 from bots.discord.composition import AdminFeatureMixin
+from bots.list_messages import list_messages
 
 __all__ = ["AdminUsersMixin"]
 
@@ -74,12 +75,12 @@ class AdminUsersMixin(AdminFeatureMixin):
                 view=self.main_menu_view(),
             )
             return
-        lines = [f"- `{u}`{', логин: ' + v if v else ''}" for u, v in users.items()]
-        await self._respond(
-            interaction,
-            "👥 **Список пользователей онлайн:**\n\n" + "\n".join(lines),
-            view=self.main_menu_view(),
-        )
+        for text in list_messages(
+            "👥 **Список пользователей онлайн:**\n\n",
+            users.items(),
+            limit=2000,
+        ):
+            await self._respond(interaction, text, view=self.main_menu_view())
 
     async def _cb_refresh(self, interaction: discord.Interaction) -> None:
         await self._defer(interaction)

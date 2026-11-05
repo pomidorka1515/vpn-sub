@@ -7,6 +7,7 @@ from typing import cast
 
 from telebot import types
 
+from bots.list_messages import list_messages
 from errors import AppError
 
 from ..composition import AdminFeatureMixin
@@ -27,13 +28,18 @@ class AdminCodesMixin(AdminFeatureMixin):
                     reply_markup=self.get_codes_menu(),
                 )
                 return
-            text = "🎟 <b>Список кодов:</b>\n\n" + "\n".join([f"- <code>{escape(c)}</code>" for c in codes])
-            await self._send_message(
-                chat_id,
-                text,
-                parse_mode="HTML",
-                reply_markup=self.get_codes_menu(),
-            )
+            for text in list_messages(
+                "🎟 <b>Список кодов:</b>\n\n",
+                ((code, None) for code in codes),
+                limit=4096,
+                html=True,
+            ):
+                await self._send_message(
+                    chat_id,
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=self.get_codes_menu(),
+                )
         except Exception:
             self.log.exception("Telegram handler failed")
             await self._send_message(
