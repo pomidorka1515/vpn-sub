@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from async_core_helpers import close_async_subscription, make_async_subscription
-from helpers import USER_UUID
+from helpers import USER_UUID, FakePanel, make_inbound
 
 from bwatch.watch import BWatch
 from custom_types import BandwidthInfo
@@ -145,6 +145,78 @@ async def test_poll_preserves_explicit_disable(
         assert state is not None
         assert state["enabled"]
         assert state["enabled_wl"]
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["expiry", "traffic", "whitelist", "combined"])
+@pytest.mark.parametrize("restart", [False, True])
+async def test_quota_check_retries_failed_disable_without_terminal_notice(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: str,
+    restart: bool,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    main = FakePanel(name="main", inbounds=[make_inbound(1)])
+    whitelist = FakePanel(name="whitelist", mode="whitelist", inbounds=[make_inbound(2)])
+    sub = await make_async_subscription(db, tmp_path, panels=[main], whitelist=whitelist)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    expired = reason in {"expiry", "combined"}
+    exhausted = reason in {"traffic", "combined"}
+    wl_exhausted = reason in {"whitelist", "combined"}
+    failed_panel = whitelist if reason == "whitelist" else main
+    try:
+        await db.create_user(
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            expires_at=int(time.time()) - 1 if expired else 0,
+            bw_limit_gb=1 if exhausted else 0,
+            wl_limit_gb=1 if wl_exhausted else 0,
+        )
+        await sub.business_svc.add_users("alice")
+        await db.increment_usage(
+            "alice",
+            regular=10**9 if exhausted else 0,
+            whitelist=10**9 if wl_exhausted else 0,
+        )
+        monkeypatch.setattr(failed_panel, "_post_payload", {"success": False, "msg": "offline"})
+        await watch.check()
+        state = await db.get_user("alice")
+        assert state is not None
+        assert bool(state["enabled"]) is not (expired or exhausted)
+        assert bool(state["enabled_time"]) is not expired
+        assert bool(state["enabled_wl"]) is not wl_exhausted
+        assert not classify(state, int(time.time()))
+        assert await db.get_metadata("user_sync_pending:alice") is not None
+        assert failed_panel.clients[0].enable
+
+        if restart:
+            await watch.close()
+            watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+        reconcile = AsyncMock(wraps=sub.business_svc.reconcile_user)
+        monkeypatch.setattr(sub.business_svc, "reconcile_user", reconcile)
+        # A second failed check must retain the marker for another retry.
+        await watch.check()
+        assert reconcile.await_count == 1
+        assert await db.get_metadata("user_sync_pending:alice") is not None
+        assert failed_panel.clients[0].enable
+
+        monkeypatch.setattr(failed_panel, "_post_payload", None)
+        await watch.check()
+        assert reconcile.await_count == 2
+        assert await db.get_metadata("user_sync_pending:alice") is None
+        assert main.clients[0].enable is not (expired or exhausted)
+        assert whitelist.clients[0].enable is not wl_exhausted
+        await watch.check()
+        assert reconcile.await_count == 2
     finally:
         await watch.close()
         await close_async_subscription(sub)

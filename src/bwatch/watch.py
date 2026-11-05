@@ -353,9 +353,9 @@ class BWatch:
             else:
                 notices = classify(state, now)
                 terminal = {notice.kind for notice in notices if notice.kind.scope is Scope.EPISODE}
-                if terminal:
-                    disable_main = bool(terminal & {Kind.EXPIRED, Kind.TRAFFIC_EXHAUSTED})
-                    try:
+                try:
+                    if terminal:
+                        disable_main = bool(terminal & {Kind.EXPIRED, Kind.TRAFFIC_EXHAUSTED})
                         # Apply the combined state once: traffic exhaustion must
                         # never overwrite an expired account's time flag.
                         await self.sub.business_svc.update_user(
@@ -366,9 +366,14 @@ class BWatch:
                             quota=True,
                             work="background",
                         )
-                    except AppError:
-                        self.log.exception("background user update failed for %s", username)
-                        notices = tuple(notice for notice in notices if notice.kind not in terminal)
+                    elif await self.db.get_metadata(f"user_sync_pending:{username}") is not None:
+                        # Failed panel writes leave SQLite disabled, so classification
+                        # no longer emits a terminal notice. Retry the durable intent
+                        # independently of notification eligibility or enabled flags.
+                        await self.sub.business_svc.reconcile_user(username)
+                except AppError:
+                    self.log.exception("background user update failed for %s", username)
+                    notices = tuple(notice for notice in notices if notice.kind not in terminal)
                 await self._deliver(state, notices)
 
         try:
