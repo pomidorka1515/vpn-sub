@@ -201,7 +201,7 @@ async function saveSettings() {
     body.current_password = curPass;
   }
   await withBusy(document.getElementById('btnSave'), async () => {
-    const res = await api('POST', '/settings', body);
+    const res = await api('POST', '/settings', body, { allow401: res => res.msg === 'Invalid current password' });
     if (!res) return;
     if (res.success) {
       msg.textContent = t('saved'); msg.className = 'settings-msg ok';
@@ -234,7 +234,7 @@ async function doDelete() {
   const curPass = await confirmDialog(t('current_pw_required'), t('confirm_title_delete'), { input: true, inputPlaceholder: t('current_password'), ...confirmOpts() });
   if (!curPass) return;
   await withBusy(document.getElementById('btnDelete'), async () => {
-    const res = await api('POST', '/delete', { current_password: curPass });
+    const res = await api('POST', '/delete', { current_password: curPass }, { allow401: res => res.msg === 'Invalid current password' });
     if (!res) return;
     if (res.success) { window.location.href = window.AUTH_PAGE; }
     else toast(res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')), 'error');

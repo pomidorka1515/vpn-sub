@@ -47,7 +47,7 @@
     el.setAttribute('role', 'alert'); el.setAttribute('aria-live', 'polite'); el.onclick = () => el.remove(); document.body.appendChild(el);
     setTimeout(() => el.remove(), 2500);
   };
-  w.api = async function (method, path, body) {
+  w.api = async function (method, path, body, options = {}) {
     const cfg = w.apiConfig || {};
     const str = (v) => (typeof v === 'function' ? v() : v);
     if (cfg.guard && cfg.guard()) {
@@ -69,10 +69,10 @@
       throw e;
     }
     if (r.status === 204) return { success: true, status: 204 };
-    if (r.status === 401 && cfg.on401) { cfg.on401(); return null; }
     let data = {}, rawJson = '';
     try { rawJson = await r.text(); data = JSON.parse(rawJson); } catch (_) { data = { success: false, msg: r.statusText || w.t('invalid_response') }; }
     const result = Object.assign({}, data, { status: r.status });
+    if (r.status === 401 && cfg.on401 && !(options.allow401 && options.allow401(result))) { cfg.on401(); return null; }
     Object.defineProperty(result, 'rawJson', { value: rawJson });
     const etag = r.headers.get('ETag');
     if (etag) result.etag = etag;
