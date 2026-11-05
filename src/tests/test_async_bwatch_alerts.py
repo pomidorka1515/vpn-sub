@@ -36,7 +36,7 @@ async def test_panel_alerts_respect_configured_cooldown(
     alert = AsyncMock()
     watch.alert = alert
     now = 100.0
-    monkeypatch.setattr("bwatch.watch.time", SimpleNamespace(monotonic=lambda: now))
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
 
     await watch.panel_health_check()
     alert.assert_awaited_once()

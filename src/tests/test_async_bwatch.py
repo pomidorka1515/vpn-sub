@@ -358,7 +358,7 @@ async def test_monthly_reset_catches_up_once_after_outage(
         def now(cls, tz: object = None) -> Clock:
             return cls(2026, 10, 3, tzinfo=UTC)
 
-    monkeypatch.setattr("bwatch.watch.datetime", Clock)
+    monkeypatch.setattr("bwatch.usage.datetime", Clock)
     await database.create_user(
         username="alice",
         uuid=USER_UUID,
@@ -401,7 +401,7 @@ async def test_month_rollover_rebaselines_atomically(
         def now(cls, tz: object = None) -> Clock:
             return cls(now.year, now.month, now.day, now.hour, now.minute, tzinfo=UTC)
 
-    monkeypatch.setattr("bwatch.watch.datetime", Clock)
+    monkeypatch.setattr("bwatch.usage.datetime", Clock)
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_async_subscription(db, tmp_path)
@@ -477,7 +477,7 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
         def now(cls, tz: object = None) -> Clock:
             return cls(now.year, now.month, now.day, now.hour, now.minute, tzinfo=UTC)
 
-    monkeypatch.setattr("bwatch.watch.datetime", Clock)
+    monkeypatch.setattr("bwatch.usage.datetime", Clock)
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     panels = [FakePanel(name=name) for name in ("one", "two", "whitelist")]
