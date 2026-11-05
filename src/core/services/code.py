@@ -23,9 +23,16 @@ if TYPE_CHECKING:
 
 
 class CodeService(BaseService):
-    def __init__(self, res: SharedCoreResources, *, audit_svc: AuditService) -> None:
+    def __init__(
+        self,
+        res: SharedCoreResources,
+        *,
+        audit_svc: AuditService,
+        user_svc: BusinessUserService,
+    ) -> None:
         super().__init__(res)
         self.audit_svc = audit_svc
+        self.user_svc = user_svc
 
     async def get_code(self, code: str) -> CodeObject:
         result = await self.db.get_code(code)
@@ -45,6 +52,7 @@ class CodeService(BaseService):
     async def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject:
         if not isinstance(code, str) or not code:
             raise ValidationError("Unknown code")
+        await self.user_svc.require_recovered(username)
         try:
             data = await self.db.adjust_bonus(username, code)
         except CodeError as exc:

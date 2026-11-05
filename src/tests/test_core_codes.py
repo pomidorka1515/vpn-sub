@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 from helpers import create_alice
 
-from errors import NotFoundError, ValidationError
+from errors import ConflictError, NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from core import Subscription
@@ -132,6 +132,54 @@ async def test_apply_bonus_code_restarts_lapsed_expiry(
     assert before + 2 * 86400 <= result.time <= after + 2 * 86400
     assert record["expires_at"] == result.time
     assert record["bw_limit_gb"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pending",
+    [
+        "registration",
+        "registration_rollback_failed",
+        "user_create_pending",
+        "user_delete_pending",
+        "user_reset_pending",
+        "uuid_rollback_failed",
+    ],
+)
+async def test_apply_bonus_code_rejects_pending_recovery_without_consuming_code(
+    database: Database,
+    subscription: Subscription,
+    pending: str,
+) -> None:
+    await create_alice(database, bw_limit_gb=1, wl_limit_gb=2, expires_at=1000)
+    await subscription.code_svc.add_code("bonus1", "bonus", days=1, gb=3, wl_gb=4)
+    if pending == "registration":
+        await database.add_code("invite", "register")
+        async with database.transaction(immediate=True) as conn:
+            await conn.execute(
+                "INSERT INTO pending_registration_sync(username, code, permanent) VALUES (?, ?, ?)",
+                ("alice", "invite", 0),
+            )
+    else:
+        await database.set_metadata(f"{pending}:alice", "123")
+    before = await database.get_user("alice")
+
+    with pytest.raises(ConflictError):
+        await subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
+
+    assert await database.get_user("alice") == before
+    assert (await subscription.code_svc.get_code("bonus1")).uses == 1
+    if pending == "registration":
+        assert await database.registration_pending("alice")
+        await database.confirm_registration_sync("alice")
+    else:
+        assert await database.get_metadata(f"{pending}:alice") == "123"
+        await database.delete_metadata(f"{pending}:alice")
+
+    result = await subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
+    assert (result.limit, result.wl_limit) == (4, 6)
+    with pytest.raises(NotFoundError):
+        await subscription.code_svc.get_code("bonus1")
 
 
 @pytest.mark.asyncio

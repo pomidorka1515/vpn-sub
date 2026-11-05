@@ -83,7 +83,11 @@ class Subscription:
             audit_svc=self.audit_svc,
             bandwidth_svc=self.bandwidth_svc,
         )
-        self.code_svc = CodeService(self.res, audit_svc=self.audit_svc)
+        self.code_svc = CodeService(
+            self.res,
+            audit_svc=self.audit_svc,
+            user_svc=self.business_svc,
+        )
         self.business_code_svc = BusinessCodeService(
             self.res,
             audit_svc=self.audit_svc,
