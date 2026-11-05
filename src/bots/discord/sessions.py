@@ -22,17 +22,11 @@ class SessionRecord:
     token: str
     lang: str | None
 
-    @property
-    def logged_in(self) -> bool:
-        return bool(self.token)
-
 
 class SessionStore(Protocol):
     """Immediate session access used by Discord commands, independent of persistence."""
 
     def get(self, user_id: int | str) -> SessionRecord: ...
-
-    def logged_in(self, user_id: int | str) -> bool: ...
 
     def token(self, user_id: int | str) -> str | None: ...
 
@@ -93,9 +87,6 @@ class DatabaseSessionStore:
     def get(self, user_id: int | str) -> SessionRecord:
         key = str(user_id)
         return self.records.get(key, SessionRecord(key, "", None))
-
-    def logged_in(self, user_id: int | str) -> bool:
-        return self.get(user_id).logged_in
 
     def token(self, user_id: int | str) -> str | None:
         return self.get(user_id).token or None

@@ -74,7 +74,7 @@ class RegisterModal(discord.ui.Modal):
 class PublicLoginMixin(PublicFeatureMixin):
     async def cmd_login(self, interaction: discord.Interaction) -> None:
         uid = interaction.user.id
-        if self.is_logged_in(uid):
+        if await self.is_logged_in(uid):
             await self._reply_key(interaction, "already_logged_in")
             return
         lang = self.get_lang(uid)
@@ -91,7 +91,7 @@ class PublicLoginMixin(PublicFeatureMixin):
 
     async def cmd_register(self, interaction: discord.Interaction) -> None:
         uid = interaction.user.id
-        if self.is_logged_in(uid):
+        if await self.is_logged_in(uid):
             await self._reply_key(interaction, "already_logged_in")
             return
         lang = self.get_lang(uid)
@@ -110,7 +110,7 @@ class PublicLoginMixin(PublicFeatureMixin):
 
     async def handle_login_modal(self, interaction: discord.Interaction) -> None:
         uid = interaction.user.id
-        if self.is_logged_in(uid):
+        if await self.is_logged_in(uid):
             await self._reply_key(interaction, "already_logged_in")
             return
         values = self.modal_values(interaction)
@@ -135,7 +135,7 @@ class PublicLoginMixin(PublicFeatureMixin):
 
     async def handle_register_modal(self, interaction: discord.Interaction) -> None:
         uid = interaction.user.id
-        if self.is_logged_in(uid):
+        if await self.is_logged_in(uid):
             await self._reply_key(interaction, "already_logged_in")
             return
         values = self.modal_values(interaction)

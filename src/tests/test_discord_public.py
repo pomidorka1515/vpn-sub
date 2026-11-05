@@ -91,7 +91,7 @@ async def test_login_invalid_credentials_does_not_persist_session() -> None:
         data=modal_data("login_modal", {"username": "alice", "password": "wrong"}),
     )
     await bot.handle_login_modal(cast(discord.Interaction, fake))
-    assert not store.logged_in(7)
+    assert store.token(7) is None
     assert fake.response.messages
 
 
@@ -110,7 +110,7 @@ async def test_account_operations_clear_discord_session(operation: str) -> None:
     else:
         await bot.handle_delete_modal(interaction)
         sub.account_svc.delete.assert_awaited_once_with("alice", "secret")
-    assert not store.logged_in(7)
+    assert store.token(7) is None
     assert store.lang(7) == "en"
 
 

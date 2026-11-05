@@ -48,7 +48,6 @@ def test_unauthenticated_users_cannot_hit_protected_handlers() -> None:
         del interaction, kwargs
         replies.append(key)
 
-    mixin.is_logged_in = lambda user_id: False  # type: ignore[method-assign]
     setattr(mixin, "_reply_key", reply_key)
 
     async def require_login(interaction: object) -> bool:
@@ -110,7 +109,6 @@ def test_unauthenticated_menu_main_and_confirm_cancel_are_public() -> None:
         del interaction
         started.append("start")
 
-    mixin.is_logged_in = lambda user_id: False  # type: ignore[method-assign]
     setattr(mixin, "_reply_key", reply_key)
     mixin.cmd_start = cmd_start  # type: ignore[method-assign]
 

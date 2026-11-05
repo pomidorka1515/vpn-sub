@@ -15,8 +15,15 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
     def has_lang(self, user_id: int) -> bool:
         return self.sessions.lang(user_id) in {"en", "ru"}
 
-    def is_logged_in(self, user_id: int) -> bool:
-        return self.sessions.logged_in(user_id)
+    async def is_logged_in(self, user_id: int) -> bool:
+        token = self.sessions.token(user_id)
+        if not token:
+            return False
+        if await self.sub.user_svc.auth_token_to_user(token) is not None:
+            return True
+        if self.sessions.token(user_id) == token:
+            self.sessions.clear_token(user_id)
+        return False
 
     def text(self, lang: str, key: str, **kwargs: object) -> str | None:
         table = self.TEXTS.get(lang) or self.TEXTS.get("en")
@@ -210,7 +217,7 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         return isinstance(channel, discord.DMChannel)
 
     async def require_login(self, interaction: discord.Interaction) -> bool:
-        if self.is_logged_in(interaction.user.id):
+        if await self.is_logged_in(interaction.user.id):
             await self.username(interaction)
             return True
         await self._reply_key(interaction, "not_logged_in")
@@ -226,11 +233,12 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
             )
             return
         lang = self.get_lang(uid)
-        key = "welcome_reg" if self.is_logged_in(uid) else "welcome_new"
+        logged_in = await self.is_logged_in(uid)
+        key = "welcome_reg" if logged_in else "welcome_new"
         await self._reply_key(
             interaction,
             key,
-            view=self.main_menu_view(lang, logged_in=self.is_logged_in(uid)),
+            view=self.main_menu_view(lang, logged_in=logged_in),
         )
 
     async def cmd_support(self, interaction: discord.Interaction) -> None:
@@ -248,5 +256,5 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         await self._reply_key(
             interaction,
             "lang_set",
-            view=self.main_menu_view(lang, logged_in=self.is_logged_in(interaction.user.id)),
+            view=self.main_menu_view(lang, logged_in=await self.is_logged_in(interaction.user.id)),
         )

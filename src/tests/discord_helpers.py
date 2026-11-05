@@ -121,9 +121,6 @@ class MemorySessionStore:
         key = str(user_id)
         return self.records.get(key, SessionRecord(key, "", None))
 
-    def logged_in(self, user_id: int | str) -> bool:
-        return self.get(user_id).logged_in
-
     def token(self, user_id: int | str) -> str | None:
         return self.get(user_id).token or None
 
