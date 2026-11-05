@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 from config import JsonValue
 from custom_types import (
+    BandwidthInfo,
     ClientPayload,
     NewUserInfo,
     ResetUserObject,
@@ -170,6 +171,7 @@ class BusinessUserService(BaseService):
             await self.panel_svc.invalidate_inbounds(panel)
 
     async def get_info(self, username: str, pretty: bool = False) -> UserInfo:
+        """Return usage in bytes, or decimal MB when pretty; limits remain in GB."""
         self.require_panels()
         conf = self.cfg.view()
         user = await self.user_svc.user(username)
@@ -201,8 +203,12 @@ class BusinessUserService(BaseService):
                     download=wl.download,
                     total=wl.total,
                 ),
-                monthly=user["bw_used"],
-                wl_monthly=user["wl_used"],
+                monthly=(
+                    BandwidthInfo.format_bytes_mb(user["bw_used"]) if pretty else user["bw_used"]
+                ),
+                wl_monthly=(
+                    BandwidthInfo.format_bytes_mb(user["wl_used"]) if pretty else user["wl_used"]
+                ),
                 limit=user["bw_limit_gb"],
                 wl_limit=user["wl_limit_gb"],
             ),

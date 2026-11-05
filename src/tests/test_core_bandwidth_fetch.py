@@ -201,6 +201,43 @@ async def test_get_info_keeps_raw_whitelist_bytes(database: Database) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("monthly", "wl_monthly", "expected_monthly", "expected_wl_monthly"),
+    [(0, 0, 0.0, 0.0), (1_000_000_000, 2_345_678_901, 1000.0, 2345.68)],
+)
+async def test_get_info_monthly_units_follow_pretty(
+    database: Database,
+    monthly: int,
+    wl_monthly: int,
+    expected_monthly: float,
+    expected_wl_monthly: float,
+) -> None:
+    subscription = await make_subscription(database)
+    await create_alice(database)
+    await database.update_user(
+        "alice", bw_used=monthly, wl_bw_used=wl_monthly, bw_limit=5, wl_bw_limit=10,
+    )
+
+    for info in (
+        await subscription.business_svc.get_info("alice"),
+        await subscription.business_svc.get_info("alice", pretty=False),
+    ):
+        assert info.bandwidth.monthly == monthly
+        assert info.bandwidth.wl_monthly == wl_monthly
+        assert isinstance(info.bandwidth.monthly, int)
+        assert isinstance(info.bandwidth.wl_monthly, int)
+
+    pretty = await subscription.business_svc.get_info("alice", pretty=True)
+    assert pretty.bandwidth.monthly == expected_monthly
+    assert pretty.bandwidth.wl_monthly == expected_wl_monthly
+    assert pretty.bandwidth.limit == 5
+    assert pretty.bandwidth.wl_limit == 10
+    user = await subscription.user_svc.user("alice")
+    assert user["bw_used"] == monthly
+    assert user["wl_used"] == wl_monthly
+
+
+@pytest.mark.asyncio
 async def test_get_info_fetches_traffic_and_online_concurrently(
     database: Database,
     monkeypatch: pytest.MonkeyPatch,
