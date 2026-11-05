@@ -234,7 +234,9 @@ async def test_fingerprint_and_settings_steps(
     await mixin.step_settings_login(_message("y" * 33))
     assert "login>32" in telegram.send_message.call_args.args[1]
     await mixin.step_settings_login(_message("y" * 32))
-    subscription.business_svc.update_params.assert_called_with(username="alice", ext_username="y" * 32)
+    subscription.business_svc.update_params.assert_called_with(
+        username="alice", ext_username="y" * 32
+    )
     subscription.business_svc.update_params.side_effect = AppError("taken")
     await mixin.step_settings_login(_message("bob"))
     assert "taken" in telegram.send_message.call_args.args[1]
@@ -388,7 +390,9 @@ def traffic() -> tuple[PublicTrafficMixin, MagicMock, MagicMock]:
 @pytest.fixture
 def shipped_publicbot_texts() -> dict[str, dict[str, str]]:
     language = Config[LangConfig](
-        path=Path(__file__).resolve().parents[2] / "lang.jsonc", read_only=True, read_only_jsonc=True,
+        path=Path(__file__).resolve().parents[2] / "lang.jsonc",
+        read_only=True,
+        read_only_jsonc=True,
     )
     return language.view()["publicbot"]
 
@@ -410,7 +414,8 @@ async def test_invalid_chart_period_uses_shipped_translations(
     await mixin.chart_callback(_call(data))
 
     cast(AsyncMock, mixin._answer_callback).assert_awaited_once_with(
-        "cb", mixin.TEXTS[lang]["chart_invalid_period"],
+        "cb",
+        mixin.TEXTS[lang]["chart_invalid_period"],
     )
     subscription.telegram_svc.get_username_telegram.assert_not_awaited()
 

@@ -136,8 +136,12 @@ class SchemaMixin(ConnectionMixin):
                 await conn.execute("ALTER TABLE users ADD COLUMN auth_token_expires_at INTEGER")
                 # Legacy sessions have no trustworthy issuance time. Require a new login.
                 await conn.execute("UPDATE users SET auth_token = NULL")
-                await conn.execute("UPDATE app_metadata SET value = '' WHERE key = 'admin_ui_session'")
-                await conn.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session_expires_at'")
+                await conn.execute(
+                    "UPDATE app_metadata SET value = '' WHERE key = 'admin_ui_session'"
+                )
+                await conn.execute(
+                    "DELETE FROM app_metadata WHERE key = 'admin_ui_session_expires_at'"
+                )
                 version = 5
             if version == 5:
                 await conn.execute(

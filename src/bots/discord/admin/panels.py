@@ -51,7 +51,9 @@ Uptime: {fmt_time(obj.appStats.uptime)}"""
         statuses = await self.sub.panel_svc.statuses()
         if not statuses:
             await self._respond(
-                interaction, "❌ Статус панелей неизвестен", view=self.main_menu_view(),
+                interaction,
+                "❌ Статус панелей неизвестен",
+                view=self.main_menu_view(),
             )
             return
         for index, (panel, status) in enumerate(zip(self.sub.panels, statuses, strict=True)):

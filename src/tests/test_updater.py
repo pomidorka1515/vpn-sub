@@ -237,7 +237,8 @@ def test_digest_mismatch_does_not_replace(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 def test_failed_replace_preserves_installed_binary(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     _compiled(monkeypatch)
     first = tmp_path / "vpn-sub"
@@ -328,7 +329,9 @@ def test_asset_requires_sha256() -> None:
     ],
 )
 def test_parse_preserves_suffix_and_compares_versions(
-    release: str, current: str, newer: bool,
+    release: str,
+    current: str,
+    newer: bool,
 ) -> None:
     parsed = updater._parse(release)
     installed = updater._parse(current)
@@ -344,7 +347,9 @@ def test_latest_includes_prereleases_and_skips_drafts(monkeypatch: pytest.Monkey
     draft = _release("v6.0.0")
     draft["draft"] = True
     monkeypatch.setattr(
-        updater, "_get", _get_stub([_release("v5.0.0-rc.9"), draft, rc, _release("v4.0.0")]),
+        updater,
+        "_get",
+        _get_stub([_release("v5.0.0-rc.9"), draft, rc, _release("v4.0.0")]),
     )
     latest = updater._latest(3)
     assert latest.tag == "v5.0.0-rc.10"
@@ -393,7 +398,8 @@ def test_rc_update_warns_before_confirmation_and_replaces_binary(
 
 
 def test_prerelease_notice_warns(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _compiled(monkeypatch)
     monkeypatch.setattr(updater, "VERSION", "5.0.0-beta")

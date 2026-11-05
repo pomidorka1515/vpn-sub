@@ -20,16 +20,22 @@ async def test_panel_workflows_have_no_side_effects(database: Database, tmp_path
     sub = await make_async_subscription(database, tmp_path, [])
     try:
         await database.create_user(
-            username="alice", uuid="01234567-89ab-cdef-0123-456789abcdef",
-            token="a" * 40, fingerprint="chrome", displayname="Alice",
+            username="alice",
+            uuid="01234567-89ab-cdef-0123-456789abcdef",
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
         )
         before = await database.get_user("alice")
         metadata = await database.list_metadata("")
         operations: list[Callable[[], Awaitable[object]]] = [
             lambda: sub.business_svc.add_new_user("bob", "Bob"),
             lambda: sub.business_code_svc.register_with_code(
-                code="invite", username="bob", displayname="Bob",
-                ext_username="bob", ext_password="password",
+                code="invite",
+                username="bob",
+                displayname="Bob",
+                ext_username="bob",
+                ext_password="password",
             ),
             lambda: sub.business_svc.delete_user("alice"),
             lambda: sub.account_svc.delete("alice", "password"),
@@ -48,7 +54,9 @@ async def test_panel_workflows_have_no_side_effects(database: Database, tmp_path
         ]
         for operation in operations:
             with (
-                patch.object(sub.res.coordinator, "run", side_effect=AssertionError("mutation admitted")),
+                patch.object(
+                    sub.res.coordinator, "run", side_effect=AssertionError("mutation admitted")
+                ),
                 patch.object(sub.user_svc, "user", side_effect=AssertionError("user read")),
                 pytest.raises(NoPanelsConfiguredError) as error,
             ):

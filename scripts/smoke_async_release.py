@@ -210,8 +210,12 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                         (username, uuid, token, fingerprint, displayname, bw_limit_gb)
                         VALUES (?, ?, ?, ?, ?, ?)""",
                         (
-                            "smoke", "00000000-0000-4000-8000-000000000001",
-                            "smoke-subscription-token-not-a-production-secret", "chrome", "Smoke", 1,
+                            "smoke",
+                            "00000000-0000-4000-8000-000000000001",
+                            "smoke-subscription-token-not-a-production-secret",
+                            "chrome",
+                            "Smoke",
+                            1,
                         ),
                     )
                 panel_requests.clear()

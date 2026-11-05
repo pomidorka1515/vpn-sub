@@ -178,7 +178,9 @@ async def test_support_text_patch_is_live_and_discord_remains_optional(
     assert response.status_code == 200
     assert "discord" not in cfg.view()
     response = await set_config(
-        app, base_for(path), {"support_text": {"telegram": ["Support EN", "Поддержка RU"]}},
+        app,
+        base_for(path),
+        {"support_text": {"telegram": ["Support EN", "Поддержка RU"]}},
     )
     assert response.status_code == 200
     assert (await response.get_json())["obj"]["restart"] == []

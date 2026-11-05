@@ -236,7 +236,9 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
     async def cmd_support(self, interaction: discord.Interaction) -> None:
         lang = self.get_lang(interaction.user.id)
         pair = self.cfg.view().get("support_text", {}).get("discord")
-        text = pair[0 if lang == "en" else 1] if pair is not None else self.text(lang, "support_text")
+        text = (
+            pair[0 if lang == "en" else 1] if pair is not None else self.text(lang, "support_text")
+        )
         await self._respond(interaction, text)
 
     async def set_lang_callback(self, interaction: discord.Interaction, lang: str) -> None:

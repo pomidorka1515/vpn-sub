@@ -27,7 +27,15 @@ async def auth_store(tmp_path: Path) -> AsyncIterator[tuple[AsyncRateLimiter, Re
     if executable is None:
         pytest.skip("redis-server is required for Redis script integration tests")
     process = await asyncio.create_subprocess_exec(
-        executable, "--port", "0", "--unixsocket", str(socket), "--save", "", "--appendonly", "no",
+        executable,
+        "--port",
+        "0",
+        "--unixsocket",
+        str(socket),
+        "--save",
+        "",
+        "--appendonly",
+        "no",
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )
@@ -94,7 +102,8 @@ async def test_routes_share_lockout_and_fail_closed(
     handler.token = "test-admin-token-at-least-20"
     app = Quart(__name__)
     async with app.test_request_context(  # pyright: ignore[reportUnknownMemberType]
-        "/first", headers={"Authorization": handler.token},
+        "/first",
+        headers={"Authorization": handler.token},
     ):
         response = await handler.first()
         assert isinstance(response, Response)
@@ -109,7 +118,8 @@ async def test_routes_share_lockout_and_fail_closed(
         assert response[1] == 429
         assert response[0].headers["Retry-After"] == "900"
     async with app.test_request_context(  # pyright: ignore[reportUnknownMemberType]
-        "/second", headers={"Authorization": handler.token},
+        "/second",
+        headers={"Authorization": handler.token},
     ):
         response = await handler.second()
         assert isinstance(response, tuple)

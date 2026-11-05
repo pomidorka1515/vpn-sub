@@ -15,6 +15,12 @@ def validate_panel_limit(data: Mapping[str, JsonValue]) -> None:
     panels = data.get("3xui")
     if not isinstance(panels, dict):
         return
-    names = [key for key, value in panels.items() if isinstance(value, dict) and value.get("whitelist") is True]
+    names = [
+        key
+        for key, value in panels.items()
+        if isinstance(value, dict) and value.get("whitelist") is True
+    ]
     if len(names) > 1:
-        raise SchemaValidationError(f"At most one whitelist panel is allowed; configured: {', '.join(names)}")
+        raise SchemaValidationError(
+            f"At most one whitelist panel is allowed; configured: {', '.join(names)}"
+        )

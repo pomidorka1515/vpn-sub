@@ -251,7 +251,8 @@ def test_view_reloads_external_changes(app_cfg: Config[AppConfig]) -> None:
     ],
 )
 def test_support_text_accepts_optional_platforms(
-    app_cfg: Config[AppConfig], value: JsonValue,
+    app_cfg: Config[AppConfig],
+    value: JsonValue,
 ) -> None:
     assert "support_text" not in app_cfg.view()
     assert "discord" not in app_cfg.view()
@@ -275,7 +276,8 @@ def test_support_text_accepts_optional_platforms(
     ],
 )
 def test_support_text_rejects_invalid_overrides(
-    app_cfg: Config[AppConfig], value: JsonValue,
+    app_cfg: Config[AppConfig],
+    value: JsonValue,
 ) -> None:
     with pytest.raises(SchemaValidationError):
         with app_cfg.edit() as tx:
@@ -529,7 +531,9 @@ def test_local_schema_accepts_valid_document(tmp_path: Path) -> None:
     ],
 )
 def test_schema_constraints_reject_invalid_commit(
-    app_cfg: Config[AppConfig], key: str, value: JsonValue,
+    app_cfg: Config[AppConfig],
+    key: str,
+    value: JsonValue,
 ) -> None:
     before = Path(app_cfg.path).read_bytes()
     with pytest.raises(SchemaValidationError):
@@ -550,7 +554,8 @@ def test_schema_accepts_allowed_fingerprints(app_cfg: Config[AppConfig], fingerp
 
 @pytest.mark.parametrize("fingerprints", [[], ["unknown"], ["chrome", "unknown"]])
 def test_schema_rejects_invalid_fingerprints_on_load(
-    app_cfg: Config[AppConfig], fingerprints: list[str],
+    app_cfg: Config[AppConfig],
+    fingerprints: list[str],
 ) -> None:
     path = Path(app_cfg.path)
     document = app_cfg.copy()
@@ -558,7 +563,10 @@ def test_schema_rejects_invalid_fingerprints_on_load(
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(SchemaValidationError, match="fingerprints"):
         Config[AppConfig](
-            path=path, schema_path=app_cfg.schema_path, backup_dir=None, sync_mode="none",
+            path=path,
+            schema_path=app_cfg.schema_path,
+            backup_dir=None,
+            sync_mode="none",
         )
 
 
@@ -567,7 +575,9 @@ def test_schema_does_not_insert_defaults_and_recompiles_changes(tmp_path: Path) 
     schema: JsonDict = {"properties": {"optional": {"type": "string", "default": "default"}}}
     schema_path.write_text(json.dumps(schema), encoding="utf-8")
     config = Config(
-        path=tmp_path / "config.json", schema_path=schema_path, sync_mode="none",
+        path=tmp_path / "config.json",
+        schema_path=schema_path,
+        sync_mode="none",
     )
     try:
         assert config.copy() == {}
@@ -585,8 +595,10 @@ def test_non_strict_schema_logs_validation_failure(tmp_path: Path) -> None:
     schema_path = tmp_path / "schema.json"
     schema_path.write_text('{"required": ["name"]}', encoding="utf-8")
     config = Config(
-        path=tmp_path / "config.json", schema_path=schema_path,
-        strict_schema=False, sync_mode="none",
+        path=tmp_path / "config.json",
+        schema_path=schema_path,
+        strict_schema=False,
+        sync_mode="none",
     )
     try:
         config["other"] = "allowed"

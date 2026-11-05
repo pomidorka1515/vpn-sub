@@ -59,10 +59,13 @@ class DatabaseSessionStore:
 
         payload = await self.db.get_metadata("discord_sessions")
         if payload is None and await named_to_thread(
-            "files:discord-session-exists", legacy.is_file,
+            "files:discord-session-exists",
+            legacy.is_file,
         ):
             payload = await named_to_thread(
-                "files:discord-session-import", legacy.read_text, encoding="utf-8",
+                "files:discord-session-import",
+                legacy.read_text,
+                encoding="utf-8",
             )
         raw: object = json.loads(payload or "{}")
         if not isinstance(raw, dict):

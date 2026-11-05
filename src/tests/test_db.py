@@ -60,7 +60,9 @@ async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_sessions_expire_and_stay_expired_after_restart(
-    database: Database, db_path: Path, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    db_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = int(time.time())
     monkeypatch.setattr(time, "time", lambda: now)
@@ -93,7 +95,8 @@ async def test_sessions_expire_and_stay_expired_after_restart(
 
 @pytest.mark.asyncio
 async def test_session_expiry_migration_revokes_legacy_sessions(
-    database: Database, db_path: Path,
+    database: Database,
+    db_path: Path,
 ) -> None:
     await create_user(database)
     await database.set_auth_token("alice", "legacy-web")
@@ -272,7 +275,10 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
 @pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.parametrize("enabled_wl", [False, True])
 async def test_disable_intent_migration_preserves_legacy_flags(
-    database: Database, db_path: Path, enabled: bool, enabled_wl: bool,
+    database: Database,
+    db_path: Path,
+    enabled: bool,
+    enabled_wl: bool,
 ) -> None:
     await create_user(database)
     await database.set_user("alice", status=enabled, status_wl=enabled_wl)
@@ -291,7 +297,11 @@ async def test_disable_intent_migration_preserves_legacy_flags(
             assert bool(state["admin_disabled_wl"]) is not enabled_wl
             # Intent and effective flags commit together and survive restart.
             await db.set_enabled_pending(
-                "alice", enabled=True, enabled_time=True, enabled_wl=True, quota=True,
+                "alice",
+                enabled=True,
+                enabled_time=True,
+                enabled_wl=True,
+                quota=True,
             )
             state = await db.get_user("alice")
             assert state is not None

@@ -130,16 +130,18 @@ class AsyncRateLimiter:
         if self._admin_auth_script is None:
             raise RuntimeError("Redis limiter has not started")
         prefix = f"admin-auth:{{{key}}}"
-        return int(await self._admin_auth_script(
-            keys=(f"{prefix}:failures", f"{prefix}:lockout"),
-            args=(
-                0.0,
-                _ADMIN_AUTH_WINDOW,
-                "valid" if valid else secrets.token_hex(16),
-                _ADMIN_AUTH_FAILURES,
-                _ADMIN_AUTH_LOCKOUT,
-            ),
-        ))
+        return int(
+            await self._admin_auth_script(
+                keys=(f"{prefix}:failures", f"{prefix}:lockout"),
+                args=(
+                    0.0,
+                    _ADMIN_AUTH_WINDOW,
+                    "valid" if valid else secrets.token_hex(16),
+                    _ADMIN_AUTH_FAILURES,
+                    _ADMIN_AUTH_LOCKOUT,
+                ),
+            )
+        )
 
     async def allow(self, scope: str, key: str, max_requests: int) -> bool:
         if self._script is None:

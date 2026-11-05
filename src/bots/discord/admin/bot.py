@@ -71,7 +71,10 @@ class DiscordAdminBot(
 
             if isinstance(self.bot, SharedDiscordClient):
                 await self.bot.interact(
-                    interaction, lambda: self.cmd_admin(interaction), operation="admin", admin=True,
+                    interaction,
+                    lambda: self.cmd_admin(interaction),
+                    operation="admin",
+                    admin=True,
                 )
 
         wrapped.__name__ = "admin"

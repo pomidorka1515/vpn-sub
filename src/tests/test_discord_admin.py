@@ -58,7 +58,10 @@ async def test_add_user_calls_business_service() -> None:
     )
     await bot.dispatch_modal(cast(discord.Interaction, fake))
     sub.business_svc.add_new_user.assert_awaited_once_with(
-        username="alice", displayname="Ada", limit=10, timee=0,
+        username="alice",
+        displayname="Ada",
+        limit=10,
+        timee=0,
     )
 
 
@@ -75,7 +78,13 @@ async def test_permanent_code_uses_shared_service() -> None:
     fake = FakeInteraction(data={"custom_id": "admin:code_perma:yes"})
     await bot.dispatch_component(cast(discord.Interaction, fake))
     sub.code_svc.add_code.assert_awaited_once_with(
-        "WELCOME", "register", permanent=True, days=30, gb=10, wl_gb=5, uses=-1,
+        "WELCOME",
+        "register",
+        permanent=True,
+        days=30,
+        gb=10,
+        wl_gb=5,
+        uses=-1,
     )
 
 
@@ -89,7 +98,8 @@ async def test_permanent_code_uses_shared_service() -> None:
     ],
 )
 async def test_refresh_reports_shared_partial_failure_result(
-    result: RefreshResult, needle: str,
+    result: RefreshResult,
+    needle: str,
 ) -> None:
     _, bot, _, sub = make_bots()
     sub.refresh_svc.refresh.return_value = result
@@ -110,7 +120,10 @@ async def test_leaderboard_uses_service_mapping_and_discord_text_limit() -> None
     with patch.object(bot.rendering, "run", new=AsyncMock(return_value=None)):
         await bot.dispatch_modal(cast(discord.Interaction, fake))
     sub.leaderboard_svc.leaderboard.assert_awaited_once_with(
-        "total", top_n=0, use_displaynames=True, flip=False,
+        "total",
+        top_n=0,
+        use_displaynames=True,
+        flip=False,
     )
     text = str(fake.response.messages[-1]["content"])
     assert "user-000" in text

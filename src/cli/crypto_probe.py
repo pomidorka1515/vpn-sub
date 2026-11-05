@@ -33,11 +33,20 @@ def check_hashes() -> None:
     for name in ("shake_128", "shake_256"):
         if len(getattr(hashlib, name)(b"abc").digest(32)) != 32:
             raise RuntimeError(f"XOF failed: {name}")
-    if hmac.digest(b"key", b"The quick brown fox jumps over the lazy dog", "sha256").hex() != "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8":
+    if (
+        hmac.digest(b"key", b"The quick brown fox jumps over the lazy dog", "sha256").hex()
+        != "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
+    ):
         raise RuntimeError("HMAC failed")
-    if hashlib.pbkdf2_hmac("sha256", b"password", b"salt", 1).hex() != "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b":
+    if (
+        hashlib.pbkdf2_hmac("sha256", b"password", b"salt", 1).hex()
+        != "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b"
+    ):
         raise RuntimeError("PBKDF2 failed")
-    if hashlib.scrypt(b"", salt=b"", n=16, r=1, p=1, dklen=64).hex() != "77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442fcd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906":
+    if (
+        hashlib.scrypt(b"", salt=b"", n=16, r=1, p=1, dklen=64).hex()
+        != "77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442fcd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906"
+    ):
         raise RuntimeError("scrypt failed")
 
 
@@ -48,7 +57,10 @@ async def check_tls(cafile: str, port: int, version: str) -> None:
     context = ssl.create_default_context(cafile=cafile)
     context.set_alpn_protocols(["http/1.1"])
     reader, writer = await asyncio.open_connection(
-        "127.0.0.1", port, ssl=context, server_hostname="localhost",
+        "127.0.0.1",
+        port,
+        ssl=context,
+        server_hostname="localhost",
     )
     try:
         connection = writer.get_extra_info("ssl_object")
@@ -67,7 +79,10 @@ async def check_tls(cafile: str, port: int, version: str) -> None:
     ):
         try:
             _, unexpected = await asyncio.open_connection(
-                "127.0.0.1", port, ssl=rejected_context, server_hostname=hostname,
+                "127.0.0.1",
+                port,
+                ssl=rejected_context,
+                server_hostname=hostname,
             )
         except ssl.SSLCertVerificationError:
             pass

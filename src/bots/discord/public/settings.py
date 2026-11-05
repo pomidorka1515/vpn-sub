@@ -168,7 +168,8 @@ class PublicSettingsMixin(PublicFeatureMixin):
             return
         await self._defer(interaction)
         await self.sub.account_svc.settings(
-            await self.username(interaction), fingerprint=fingerprint,
+            await self.username(interaction),
+            fingerprint=fingerprint,
         )
         await self._reply_key(interaction, "settings_fp_success")
 

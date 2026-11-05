@@ -32,7 +32,8 @@ if TYPE_CHECKING:
     ],
 )
 async def test_support_platform_overrides_and_fallbacks(
-    lang: str, overrides: SupportTextConfig | None,
+    lang: str,
+    overrides: SupportTextConfig | None,
 ) -> None:
     document = subscription_config()
     if overrides is not None:
@@ -67,7 +68,9 @@ async def test_support_platform_overrides_and_fallbacks(
             "discord": ["Updated DC EN", "Updated DC RU"],
         }
         await tg._handle_support(message, 7, lang)
-        assert telegram.send_message.call_args.args[1] == document["support_text"]["telegram"][index]
+        assert (
+            telegram.send_message.call_args.args[1] == document["support_text"]["telegram"][index]
+        )
         fake = FakeInteraction()
         await dc.cmd_support(cast(discord.Interaction, fake))
         assert fake.response.messages[-1]["content"] == document["support_text"]["discord"][index]

@@ -161,8 +161,10 @@ class BWatch:
             identities = {state["username"]: state["uuid"] for state in states}
             records = cast(dict[str, list[tuple[str, str, str, int, int, int]]], saved["counters"])
             for kind, target in (
-                ("main", self.mem), ("whitelist", self.wl_mem),
-                ("main_reset", self._reset_mem), ("whitelist_reset", self._reset_wl_mem),
+                ("main", self.mem),
+                ("whitelist", self.wl_mem),
+                ("main_reset", self._reset_mem),
+                ("whitelist_reset", self._reset_wl_mem),
             ):
                 for panel, name, uuid, up, down, total in records.get(kind, []):
                     if identities.get(name) == uuid:
@@ -174,7 +176,9 @@ class BWatch:
         for (_, name, _), value in counters.items():
             old = totals.get(name, BandwidthInfo(0, 0, 0))
             totals[name] = BandwidthInfo(
-                old.upload + value.upload, old.download + value.download, old.total + value.total,
+                old.upload + value.upload,
+                old.download + value.download,
+                old.total + value.total,
             )
         return totals
 
@@ -199,7 +203,13 @@ class BWatch:
         await self.close()
 
     async def _job(self, name: str, operation: Callable[[], Awaitable[None]]) -> None:
-        if not self.sub.panels and name in {"quota", "bandwidth", "daily bandwidth", "reconcile", "health"}:
+        if not self.sub.panels and name in {
+            "quota",
+            "bandwidth",
+            "daily bandwidth",
+            "reconcile",
+            "health",
+        }:
             return
         async with self._jobs.setdefault(name, asyncio.Lock()):
             if self._closed:
@@ -285,10 +295,7 @@ class BWatch:
             if recover:
                 main = (
                     True
-                    if time_ok
-                    and main_ok
-                    and not state["enabled"]
-                    and not state["admin_disabled"]
+                    if time_ok and main_ok and not state["enabled"] and not state["admin_disabled"]
                     else None
                 )
                 restored_main = main is True
@@ -353,11 +360,13 @@ class BWatch:
             states = await self.sub.user_svc.list_user_states()
             main = (
                 await self.sub.bandwidth_svc.panel_traffic(work="background")
-                if any(s["bw_limit_gb"] for s in states) else {}
+                if any(s["bw_limit_gb"] for s in states)
+                else {}
             )
             wl = (
                 await self.sub.bandwidth_svc.panel_traffic(whitelist=True, work="background")
-                if any(s["wl_limit_gb"] for s in states) else {}
+                if any(s["wl_limit_gb"] for s in states)
+                else {}
             )
             sampled = {s["username"]: s for s in states}
 
@@ -377,16 +386,24 @@ class BWatch:
                         continue
                     deltas: list[int] = []
                     for limit, values, baseline, pending in (
-                        (state["bw_limit_gb"] and sampled[name]["bw_limit_gb"], main, next_main, reset_main),
-                        (state["wl_limit_gb"] and sampled[name]["wl_limit_gb"], wl, next_wl, reset_wl),
+                        (
+                            state["bw_limit_gb"] and sampled[name]["bw_limit_gb"],
+                            main,
+                            next_main,
+                            reset_main,
+                        ),
+                        (
+                            state["wl_limit_gb"] and sampled[name]["wl_limit_gb"],
+                            wl,
+                            next_wl,
+                            reset_wl,
+                        ),
                     ):
                         delta = 0
                         # Retain baselines across missing samples, but require two
                         # consecutive low samples to confirm a reset.
                         for key in keys_by_name.get(name, ()):
-                            if key[1] == name and (
-                                not limit or key[2] != state["uuid"]
-                            ):
+                            if key[1] == name and (not limit or key[2] != state["uuid"]):
                                 baseline.pop(key, None)
                                 pending.pop(key, None)
                             elif key[1] == name and values.get(key[0], {}).get(name) is None:
@@ -398,7 +415,11 @@ class BWatch:
                             key = (panel, name, state["uuid"])
                             previous = baseline.get(key)
                             if previous is None or current.total >= previous.total:
-                                delta += int(current.total - previous.total) if previous is not None else 0
+                                delta += (
+                                    int(current.total - previous.total)
+                                    if previous is not None
+                                    else 0
+                                )
                                 baseline[key] = current
                                 pending.pop(key, None)
                             else:
@@ -414,17 +435,24 @@ class BWatch:
                         deltas.append(delta)
                     usage[name] = (deltas[0], deltas[1])
                 identities = {state["username"]: state["uuid"] for state in current_states}
-                baselines = json.dumps({"version": 2, "counters": {
-                    kind: [
-                        [*key, int(value.upload), int(value.download), int(value.total)]
-                        for key, value in values.items()
-                        if identities.get(key[1]) == key[2]
-                    ]
-                    for kind, values in (
-                        ("main", next_main), ("whitelist", next_wl),
-                        ("main_reset", reset_main), ("whitelist_reset", reset_wl),
-                    )
-                }})
+                baselines = json.dumps(
+                    {
+                        "version": 2,
+                        "counters": {
+                            kind: [
+                                [*key, int(value.upload), int(value.download), int(value.total)]
+                                for key, value in values.items()
+                                if identities.get(key[1]) == key[2]
+                            ]
+                            for kind, values in (
+                                ("main", next_main),
+                                ("whitelist", next_wl),
+                                ("main_reset", reset_main),
+                                ("whitelist_reset", reset_wl),
+                            )
+                        },
+                    }
+                )
                 await self.db.increment_usages(usage, baselines=baselines)
                 self.mem, self.wl_mem = next_main, next_wl
                 self._reset_mem, self._reset_wl_mem = reset_main, reset_wl
@@ -512,13 +540,22 @@ class BWatch:
                     if wl_baseline is not None:
                         next_wl[name] = wl_baseline
                 identities = {state["username"]: state["uuid"] for state in current_states}
-                baselines = json.dumps({
-                    kind: [
-                        [name, identities[name], int(value.upload), int(value.download), int(value.total)]
-                        for name, value in values.items() if name in identities
-                    ]
-                    for kind, values in (("main", next_main), ("whitelist", next_wl))
-                })
+                baselines = json.dumps(
+                    {
+                        kind: [
+                            [
+                                name,
+                                identities[name],
+                                int(value.upload),
+                                int(value.download),
+                                int(value.total),
+                            ]
+                            for name, value in values.items()
+                            if name in identities
+                        ]
+                        for kind, values in (("main", next_main), ("whitelist", next_wl))
+                    }
+                )
                 await self.db.add_bandwidth_snapshots(rows, baselines=baselines)
                 self.snap_mem, self.snap_wl_mem = next_main, next_wl
                 await self.db.delete_metadata("daily_bw_snapshot_failures")

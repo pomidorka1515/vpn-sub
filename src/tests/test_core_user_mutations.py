@@ -248,7 +248,9 @@ async def test_update_user_repairs_previous_failed_sync(
     rejection: dict[str, JsonValue] = {"success": False, "msg": "rejected", "obj": None}
     failed._post_payload = rejection
     subscription = await make_subscription(
-        database, panels=[regular], whitelist_panel=whitelist,
+        database,
+        panels=[regular],
+        whitelist_panel=whitelist,
     )
     await create_alice(database)
 

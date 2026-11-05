@@ -76,7 +76,9 @@ class SharedDiscordClient(discord.Client):
             scope, limit = interaction_limit(operation)
             try:
                 allowed = await feature.limiter.allow(
-                    f"discord:{scope}", str(interaction.user.id), limit,
+                    f"discord:{scope}",
+                    str(interaction.user.id),
+                    limit,
                 )
             except Exception:
                 log.error("Discord rate limit store failed")  # ruff: ignore[error-instead-of-exception] avoid logging Redis credentials
@@ -84,7 +86,8 @@ class SharedDiscordClient(discord.Client):
             if not allowed:
                 if admin:
                     await feature._respond(
-                        interaction, "⏳ Слишком много запросов. Подождите минуту.",
+                        interaction,
+                        "⏳ Слишком много запросов. Подождите минуту.",
                     )
                 elif self._public is not None:
                     await self._public._reply_key(interaction, "rate_limited")
@@ -138,15 +141,24 @@ class SharedDiscordClient(discord.Client):
             async def dispatch() -> None:
                 if interaction.type is discord.InteractionType.component:
                     await _dispatch(
-                        custom_id, admin.dispatch_component, public.dispatch_component, interaction,
+                        custom_id,
+                        admin.dispatch_component,
+                        public.dispatch_component,
+                        interaction,
                     )
                 elif interaction.type is discord.InteractionType.modal_submit:
                     await _dispatch(
-                        custom_id, admin.dispatch_modal, public.dispatch_modal, interaction,
+                        custom_id,
+                        admin.dispatch_modal,
+                        public.dispatch_modal,
+                        interaction,
                     )
 
             await self.interact(
-                interaction, dispatch, operation=custom_id, admin=custom_id.startswith("admin"),
+                interaction,
+                dispatch,
+                operation=custom_id,
+                admin=custom_id.startswith("admin"),
             )
 
     async def setup_hook(self) -> None:

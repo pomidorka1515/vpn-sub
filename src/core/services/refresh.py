@@ -55,7 +55,9 @@ class RefreshService(BaseService):
                     if aborted is None:
                         aborted = username
                     self.log.critical(
-                        "bulk user refresh aborted for %s", username, exc_info=True,
+                        "bulk user refresh aborted for %s",
+                        username,
+                        exc_info=True,
                     )
                 else:
                     succeeded += 1
@@ -65,5 +67,8 @@ class RefreshService(BaseService):
             for index in range(min(4, len(users))):
                 group.create_task(worker(), name=f"core:user-refresh-worker:{index}")
         return RefreshResult(
-            [name for name in users if name in failed], aborted, succeeded, len(users),
+            [name for name in users if name in failed],
+            aborted,
+            succeeded,
+            len(users),
         )

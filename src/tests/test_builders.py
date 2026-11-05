@@ -113,19 +113,22 @@ def test_description_fills_active_and_disabled_slots() -> None:
     assert "exceeded" in expired
     assert "expired" not in expired
 
-    assert build_description(
-        _lang({"en": {**DESC["en"], "main": "{username} {missing}"}}),
-        "Alice",
-        "en",
-        _bandwidth(),
-        status=True,
-        statusTime=True,
-        ts=0,
-        bw_limit=0,
-        bw_used=0,
-        wl_limit=0,
-        wl_used=0,
-    ) == "Alice {missing}"
+    assert (
+        build_description(
+            _lang({"en": {**DESC["en"], "main": "{username} {missing}"}}),
+            "Alice",
+            "en",
+            _bandwidth(),
+            status=True,
+            statusTime=True,
+            ts=0,
+            bw_limit=0,
+            bw_used=0,
+            wl_limit=0,
+            wl_used=0,
+        )
+        == "Alice {missing}"
+    )
 
 
 def _link_config() -> AppConfig:

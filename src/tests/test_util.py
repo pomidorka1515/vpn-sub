@@ -44,8 +44,13 @@ async def test_response_funny_strings(success: bool, code: int) -> None:
 
 @pytest.mark.parametrize(
     ("kind", "value"),
-    [("external", ""), ("external", " !@ "), ("display", ""),
-     ("display", " \t"), ("display", " @# ")],
+    [
+        ("external", ""),
+        ("external", " !@ "),
+        ("display", ""),
+        ("display", " \t"),
+        ("display", " @# "),
+    ],
 )
 def test_sanitize_rejects_empty_results(kind: Literal["external", "display"], value: str) -> None:
     with pytest.raises(ValidationError):
@@ -60,7 +65,9 @@ def test_sanitize_rejects_empty_results(kind: Literal["external", "display"], va
     ],
 )
 def test_sanitize_filters_before_truncating(
-    kind: Literal["external", "display"], value: str, expected: str,
+    kind: Literal["external", "display"],
+    value: str,
+    expected: str,
 ) -> None:
     assert sanitize(value, kind) == expected
 

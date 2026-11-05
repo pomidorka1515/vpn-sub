@@ -47,7 +47,9 @@ async def test_live_sampler_shared_and_stops_with_last_viewer() -> None:
         await live.close()
 
 
-async def test_live_sampler_recovers_and_bounds_slow_viewers(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_live_sampler_recovers_and_bounds_slow_viewers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls = 0
     sampled = asyncio.Event()
     ticks: asyncio.Queue[None] = asyncio.Queue()

@@ -136,7 +136,8 @@ async def test_explicit_rate_limit_is_fail_closed(failed: bool) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "error", [AppError("Invalid current password", status=401), PanelUnavailableError()],
+    "error",
+    [AppError("Invalid current password", status=401), PanelUnavailableError()],
 )
 async def test_domain_errors_at_interaction_boundary_preserve_valid_session(
     error: AppError,
@@ -145,7 +146,9 @@ async def test_domain_errors_at_interaction_boundary_preserve_valid_session(
     host = cast(SharedDiscordClient, public.bot)
     fake = FakeInteraction()
     await host.interact(
-        cast(discord.Interaction, fake), AsyncMock(side_effect=error), operation="delete_modal",
+        cast(discord.Interaction, fake),
+        AsyncMock(side_effect=error),
+        operation="delete_modal",
     )
     assert store.token(7) == "token"
     assert fake.response.messages

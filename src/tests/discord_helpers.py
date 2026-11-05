@@ -174,7 +174,9 @@ def services() -> MagicMock:
 
 
 def make_bots(
-    *, whitelist: list[int] | None = None, rendering: BoundedOffload | None = None,
+    *,
+    whitelist: list[int] | None = None,
+    rendering: BoundedOffload | None = None,
 ) -> tuple[DiscordPublicBot, DiscordAdminBot, MemorySessionStore, MagicMock]:
     cfg = MagicMock(spec=Config)
     cfg.view.return_value = cast(
@@ -201,8 +203,17 @@ def make_bots(
     sub = services()
     pool = rendering or BoundedOffload(capacity=2, name="test-rendering")
     public = DiscordPublicBot(
-        cfg, LANG, sub, store, client=host, tree=host.tree, rendering=pool, limiter=limiter,
+        cfg,
+        LANG,
+        sub,
+        store,
+        client=host,
+        tree=host.tree,
+        rendering=pool,
+        limiter=limiter,
     )
-    admin = DiscordAdminBot(cfg, LANG, sub, client=host, tree=host.tree, rendering=pool, limiter=limiter)
+    admin = DiscordAdminBot(
+        cfg, LANG, sub, client=host, tree=host.tree, rendering=pool, limiter=limiter
+    )
     host.attach(public, admin)
     return public, admin, store, sub

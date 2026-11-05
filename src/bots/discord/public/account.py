@@ -53,7 +53,8 @@ class PublicAccountMixin(PublicFeatureMixin):
             return
         await self._defer(interaction)
         await self.sub.code_svc.apply_bonus_code(
-            username=await self.username(interaction), code=code,
+            username=await self.username(interaction),
+            code=code,
         )
         await self._reply_key(interaction, "bonus_success")
         await self.send_info(interaction)

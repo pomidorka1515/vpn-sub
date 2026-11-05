@@ -334,7 +334,10 @@ class AdminUsersMixin(AdminFeatureMixin):
         timee = int(time.time() + (days * 86400)) if days else 0
         await self._defer(interaction)
         await self.sub.business_svc.add_new_user(
-            username=username, displayname=displayname, limit=limit, timee=timee,
+            username=username,
+            displayname=displayname,
+            limit=limit,
+            timee=timee,
         )
         await self._respond(
             interaction,
@@ -441,7 +444,8 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
             return
         await self.sub.business_svc.update_params(
-            username=pending["username"], displayname=new_name,
+            username=pending["username"],
+            displayname=new_name,
         )
         self._pending_edits.pop(interaction.user.id, None)
         await self._respond(

@@ -169,7 +169,9 @@ async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPa
             assert (await client.get(f"/sub?token={index}")).status_code == 200
         assert (await client.get("/sub/")).status_code == 429
         assert builder.await_count == 60
-        assert (await client.get("/sub", scope_base={"client": ("other-ip", 1234)})).status_code == 200
+        assert (
+            await client.get("/sub", scope_base={"client": ("other-ip", 1234)})
+        ).status_code == 200
         monkeypatch.setattr(time, "time", lambda: 160)
         assert (await client.get("/sub")).status_code == 200
         store.failed = True

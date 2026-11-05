@@ -25,7 +25,8 @@ pytestmark = pytest.mark.asyncio
 
 @pytest_asyncio.fixture
 async def web_api(
-    database: Database, language: Config[LangConfig],
+    database: Database,
+    language: Config[LangConfig],
 ) -> AsyncIterator[tuple[Quart, Database]]:
     async for app in api_app():
         sub = await make_subscription(database, app=app, lang_cfg=language, uri="custom")
@@ -53,11 +54,16 @@ async def web_api(
 @pytest.mark.parametrize("field", ["username", "password", "code", "name"])
 @pytest.mark.parametrize("invalid", [None, 42, [], {}])
 async def test_register_rejects_invalid_required_fields(
-    web_api: tuple[Quart, Database], field: str, invalid: object,
+    web_api: tuple[Quart, Database],
+    field: str,
+    invalid: object,
 ) -> None:
     app, db = web_api
     body: dict[str, object] = {
-        "username": "new-user", "password": "secret", "code": "invite", "name": "New User",
+        "username": "new-user",
+        "password": "secret",
+        "code": "invite",
+        "name": "New User",
     }
     body[field] = invalid
     response = await app.test_client().post("/custom/webapi/register", json=body)
@@ -68,10 +74,14 @@ async def test_register_rejects_invalid_required_fields(
     assert await db.ext_to_user("new-user") is None
 
 
-@pytest.mark.parametrize("field", ["name", "fingerprint", "username", "password", "current_password"])
+@pytest.mark.parametrize(
+    "field", ["name", "fingerprint", "username", "password", "current_password"]
+)
 @pytest.mark.parametrize("value", [42, 0, 1.5, True, False, [], {}, ["chrome"]])
 async def test_settings_reject_non_string_fields(
-    web_api: tuple[Quart, Database], field: str, value: object,
+    web_api: tuple[Quart, Database],
+    field: str,
+    value: object,
 ) -> None:
     app, db = web_api
     await db.set_auth_token("alice", "a" * 100)
@@ -79,7 +89,8 @@ async def test_settings_reject_non_string_fields(
     client.set_cookie("localhost", "auth_token", "a" * 100)
     before = await db.get_user("alice")
     response = await client.post(
-        "/custom/webapi/settings", json={"name": "Updated", field: value},
+        "/custom/webapi/settings",
+        json={"name": "Updated", field: value},
     )
     assert response.status_code == 400
     assert (await response.get_json())["success"] is False
@@ -91,7 +102,8 @@ async def test_settings_reject_non_string_fields(
     [{}, dict.fromkeys(["name", "fingerprint", "username", "password", "current_password"])],
 )
 async def test_settings_allow_omitted_and_null_fields(
-    web_api: tuple[Quart, Database], fields: dict[str, None],
+    web_api: tuple[Quart, Database],
+    fields: dict[str, None],
 ) -> None:
     app, db = web_api
     await db.set_auth_token("alice", "a" * 100)
@@ -124,15 +136,28 @@ async def test_expired_web_cookie_cannot_be_replayed(web_api: tuple[Quart, Datab
     ],
 )
 async def test_validate_username_sanitization(
-    web_api: tuple[Quart, Database], username: str, *, valid: bool, taken: bool, sanitized: str,
+    web_api: tuple[Quart, Database],
+    username: str,
+    *,
+    valid: bool,
+    taken: bool,
+    sanitized: str,
 ) -> None:
-    response = await web_api[0].test_client().get(
-        "/custom/webapi/validate", query_string={"username": username},
+    response = (
+        await web_api[0]
+        .test_client()
+        .get(
+            "/custom/webapi/validate",
+            query_string={"username": username},
+        )
     )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["obj"] == {
-        "MAX_LENGTH": 32, "valid": valid, "taken": taken, "sanitized": sanitized,
+        "MAX_LENGTH": 32,
+        "valid": valid,
+        "taken": taken,
+        "sanitized": sanitized,
     }
 
 
@@ -239,7 +264,10 @@ async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> Non
 @pytest.mark.parametrize("path", ["/missing", "/custom/fonts/missing.woff2"])
 @pytest.mark.parametrize("browser", [True, False])
 async def test_not_found_uses_html_only_for_browsers(
-    web_api: tuple[Quart, Database], path: str, *, browser: bool,
+    web_api: tuple[Quart, Database],
+    path: str,
+    *,
+    browser: bool,
 ) -> None:
     agent = "Mozilla/5.0 Chrome/130.0 Safari/537.36" if browser else "curl/8.0"
     response = await web_api[0].test_client().get(path, headers={"User-Agent": agent})

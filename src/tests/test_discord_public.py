@@ -119,12 +119,15 @@ async def test_settings_pass_password_confirmation_to_shared_workflow() -> None:
     bot, _, _, sub = make_bots()
     fake = FakeInteraction(
         data=modal_data(
-            "settings_login_modal", {"username": "newname", "current_password": "secret"},
+            "settings_login_modal",
+            {"username": "newname", "current_password": "secret"},
         ),
     )
     await bot.handle_login_change_modal(cast(discord.Interaction, fake))
     sub.account_svc.settings.assert_awaited_once_with(
-        "alice", ext_username="newname", current_password="secret",
+        "alice",
+        ext_username="newname",
+        current_password="secret",
     )
 
 

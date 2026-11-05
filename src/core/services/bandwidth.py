@@ -98,7 +98,9 @@ class BandwidthService(BaseService):
                 traffic = client.traffic
                 if traffic is None or client.email not in known:
                     continue
-                values[client.email] = BandwidthInfo(traffic.up, traffic.down, traffic.up + traffic.down)
+                values[client.email] = BandwidthInfo(
+                    traffic.up, traffic.down, traffic.up + traffic.down
+                )
         return result
 
     async def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:

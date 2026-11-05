@@ -26,7 +26,10 @@ class StateMixin(ConnectionMixin):
         await self.increment_usages({username: (regular, whitelist)})
 
     async def increment_usages(
-        self, updates: Mapping[str, tuple[int, int]], *, baselines: str | None = None,
+        self,
+        updates: Mapping[str, tuple[int, int]],
+        *,
+        baselines: str | None = None,
     ) -> None:
         rows = [
             (regular, whitelist, username)
@@ -155,7 +158,10 @@ class StateMixin(ConnectionMixin):
                 "INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [
                     ("admin_ui_session", token or ""),
-                    ("admin_ui_session_expires_at", str(int(time.time()) + SESSION_MAX_AGE) if token else "0"),
+                    (
+                        "admin_ui_session_expires_at",
+                        str(int(time.time()) + SESSION_MAX_AGE) if token else "0",
+                    ),
                 ],
             )
 

@@ -173,10 +173,16 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
     for part in (b"fonts.googleapis", b"fonts.gstatic", b"jsdelivr"):
         assert part not in body
     response = await client.get("/sub/admin/token")
-    assert (await response.get_json())["obj"] == {"token": "secret", "api_root": "/sub/api", "panels_configured": True}
+    assert (await response.get_json())["obj"] == {
+        "token": "secret",
+        "api_root": "/sub/api",
+        "panels_configured": True,
+    }
 
 
-async def test_expired_admin_cookie_cannot_be_replayed(admin_api: tuple[Quart, Subscription]) -> None:
+async def test_expired_admin_cookie_cannot_be_replayed(
+    admin_api: tuple[Quart, Subscription],
+) -> None:
     app, sub = admin_api
     client = app.test_client()
     await sign_in(client)

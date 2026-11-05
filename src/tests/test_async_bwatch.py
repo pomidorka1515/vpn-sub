@@ -25,7 +25,9 @@ if TYPE_CHECKING:
 @pytest.mark.parametrize("whitelist", [False, True])
 @pytest.mark.parametrize("exhausted", [False, True])
 async def test_poll_preserves_explicit_disable(
-    tmp_path: Path, whitelist: bool, exhausted: bool,
+    tmp_path: Path,
+    whitelist: bool,
+    exhausted: bool,
 ) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -35,14 +37,20 @@ async def test_poll_preserves_explicit_disable(
     watch._deliver = notices  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         if exhausted:
             await db.increment_usage("alice", regular=10**9, whitelist=10**9)
             await watch.check()
         await sub.business_svc.update_user(
-            "alice", enable=None if whitelist else False,
+            "alice",
+            enable=None if whitelist else False,
             wl_enable=False if whitelist else None,
         )
         # Recovery after a reset, including a fresh watcher, must respect intent.
@@ -65,7 +73,8 @@ async def test_poll_preserves_explicit_disable(
         assert state is not None
         assert not state["enabled_wl" if whitelist else "enabled"]
         await sub.business_svc.update_user(
-            "alice", enable=None if whitelist else True,
+            "alice",
+            enable=None if whitelist else True,
             wl_enable=True if whitelist else None,
         )
         await watch.bandwidth_check()
@@ -87,8 +96,13 @@ async def test_quota_disable_recovers_after_reset(tmp_path: Path) -> None:
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         await db.increment_usage("alice", regular=10**9, whitelist=10**9)
         await watch.check()
@@ -112,7 +126,9 @@ async def test_quota_disable_recovers_after_reset(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_monthly_reset_catches_up_once_after_outage(
-    database: Database, watch: BWatch, monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class Clock(datetime):
         @classmethod
@@ -121,8 +137,13 @@ async def test_monthly_reset_catches_up_once_after_outage(
 
     monkeypatch.setattr("bwatch.watch.datetime", Clock)
     await database.create_user(
-        username="alice", uuid=USER_UUID, token="a" * 40, fingerprint="chrome",
-        displayname="Alice", bw_limit_gb=10, wl_limit_gb=10,
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=10,
+        wl_limit_gb=10,
     )
     await database.reset_monthly("2026-09", "2026-09-01")
     await database.increment_usage("alice", regular=100, whitelist=200)
@@ -170,7 +191,9 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
         sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
 
         async def panel_traffic(
-            whitelist: bool = False, *, work: str = "foreground",
+            whitelist: bool = False,
+            *,
+            work: str = "foreground",
         ) -> dict[str, dict[str, BandwidthInfo]]:
             return {"panel": await traffic(whitelist, work=work)}
 
@@ -209,7 +232,9 @@ async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
     totals: dict[str, int | None] = {"main": 100, "whitelist": 200}
 
     async def traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, dict[str, BandwidthInfo]]:
         total = totals["whitelist" if whitelist else "main"]
         return {"panel": {} if total is None else {"alice": BandwidthInfo(total, 0, total)}}
@@ -217,8 +242,13 @@ async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
     sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         await watch.start()
         await watch.bandwidth_check()
@@ -260,7 +290,9 @@ async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
     ],
 )
 async def test_panel_resets_account_full_confirmed_traffic(
-    tmp_path: Path, readings: list[tuple[int | None, int]], expected: int,
+    tmp_path: Path,
+    readings: list[tuple[int | None, int]],
+    expected: int,
 ) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -269,7 +301,9 @@ async def test_panel_resets_account_full_confirmed_traffic(
     totals: tuple[int | None, int] = readings[0]
 
     async def traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {
             panel: {} if total is None else {"alice": BandwidthInfo(total, 0, total)}
@@ -279,8 +313,13 @@ async def test_panel_resets_account_full_confirmed_traffic(
     sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         await watch.start()
         for reading in readings:
@@ -305,15 +344,22 @@ async def test_usage_baselines_do_not_cross_account_identities(tmp_path: Path) -
     total = 100
 
     async def traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
     sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         await watch.start()
         await watch.bandwidth_check()
@@ -448,12 +494,18 @@ async def test_quota_applies_combined_terminal_state_once(
     watch._deliver = notices  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
             expires_at=now + expiry_offset if expiry_offset is not None else 0,
         )
         await db.increment_usage(
-            "alice", regular=10**9 if exhausted else 0,
+            "alice",
+            regular=10**9 if exhausted else 0,
             whitelist=10**9 if whitelist_exhausted else 0,
         )
         await watch.check()
@@ -472,9 +524,15 @@ async def test_quota_applies_combined_terminal_state_once(
             expected_terminal.add(Kind.WHITELIST_EXHAUSTED)
         assert update.await_count == int(bool(expected_terminal))
         delivered = {notice.kind for notice in notices.await_args_list[0].args[1]}
-        assert delivered & {
-            Kind.EXPIRED, Kind.TRAFFIC_EXHAUSTED, Kind.WHITELIST_EXHAUSTED,
-        } == expected_terminal
+        assert (
+            delivered
+            & {
+                Kind.EXPIRED,
+                Kind.TRAFFIC_EXHAUSTED,
+                Kind.WHITELIST_EXHAUSTED,
+            }
+            == expected_terminal
+        )
         await watch.bandwidth_check()
         await watch.check()
         state = await db.get_user("alice")
@@ -581,8 +639,12 @@ async def test_expiry_recovery_keeps_exhausted_main_disabled(tmp_path: Path) -> 
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
         )
         await db.increment_usage("alice", regular=10**9)
         await db.update_user("alice", status=False, status_time=False)
@@ -606,8 +668,13 @@ async def test_unlimited_quotas_restore_access(tmp_path: Path, expired: bool) ->
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
             expires_at=int(time.time()) - 1 if expired else 0,
         )
         await db.increment_usage("alice", regular=10**9, whitelist=10**9)
@@ -634,7 +701,9 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
     total = 100
 
     async def traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
@@ -645,8 +714,13 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
     restarted._run_due_daily_snapshots = no_snapshots  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         await watch.is_first()
         await watch.start()
@@ -676,12 +750,16 @@ async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path
     total = 100
 
     async def traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, BandwidthInfo]:
         return {"alice": BandwidthInfo(total, total * 2, total * 3)}
 
     async def panel_traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": await traffic(whitelist, work=work)}
 
@@ -689,8 +767,13 @@ async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path
     sub.bandwidth_svc.panel_traffic = panel_traffic  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         watch.record_snap_snapshot = AsyncMock()  # type: ignore[method-assign]
         await watch.start()
@@ -716,7 +799,8 @@ async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path
 @pytest.mark.asyncio
 @pytest.mark.parametrize("committed", [False, True])
 async def test_daily_snapshot_retry_reloads_durable_baselines(
-    tmp_path: Path, committed: bool,
+    tmp_path: Path,
+    committed: bool,
 ) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -725,7 +809,9 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
     total = 100
 
     async def traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, BandwidthInfo]:
         return {"alice": BandwidthInfo(total, total * 2, total * 3)}
 
@@ -733,7 +819,9 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
     save = db.add_bandwidth_snapshots
 
     async def interrupted(
-        rows: list[tuple[str, int, int, int, int, int]], *, baselines: str | None = None,
+        rows: list[tuple[str, int, int, int, int, int]],
+        *,
+        baselines: str | None = None,
     ) -> None:
         if committed:
             await save(rows, baselines=baselines)
@@ -741,8 +829,13 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
 
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         await watch.record_daily_snapshot()
         total = 150
@@ -772,7 +865,9 @@ async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Pat
     offline = False
 
     async def traffic(
-        whitelist: bool = False, *, work: str = "foreground",
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
     ) -> dict[str, dict[str, BandwidthInfo]]:
         if offline:
             raise PanelUnavailableError("panel offline")
@@ -785,8 +880,12 @@ async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Pat
     restarted._run_due_daily_snapshots = no_snapshots  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
         )
         await watch.start()
         await watch.bandwidth_check()

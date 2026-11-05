@@ -37,9 +37,23 @@ def certificate(directory: Path, algorithm: str) -> Path:
     command = ["openssl", "req", "-x509", "-newkey"]
     command += ["rsa:2048"] if algorithm == "rsa" else ["ec", "-pkeyopt", "ec_paramgen_curve:P-256"]
     subprocess.run(
-        [*command, "-nodes", "-sha256", "-days", "1", "-subj", "/CN=localhost",
-         "-addext", "subjectAltName=DNS:localhost", "-keyout", str(key), "-out", str(cert)],
-        check=True, capture_output=True,
+        [
+            *command,
+            "-nodes",
+            "-sha256",
+            "-days",
+            "1",
+            "-subj",
+            "/CN=localhost",
+            "-addext",
+            "subjectAltName=DNS:localhost",
+            "-keyout",
+            str(key),
+            "-out",
+            str(cert),
+        ],
+        check=True,
+        capture_output=True,
         # Independent system executable/libraries, not the candidate build.
         env={key: value for key, value in os.environ.items() if key != "LD_LIBRARY_PATH"},
     )
@@ -51,7 +65,8 @@ def audit(prefix: Path, binary: Path) -> None:
     from compression import zstd
 
     baseline = subprocess.check_output(
-        ["/usr/bin/ldd", _ssl.__file__], text=True,
+        ["/usr/bin/ldd", _ssl.__file__],
+        text=True,
         env={key: value for key, value in os.environ.items() if key != "LD_LIBRARY_PATH"},
     )
     payloads = list(binary.parent.glob("*.dist"))
@@ -69,14 +84,24 @@ def audit(prefix: Path, binary: Path) -> None:
             for index, library in enumerate((prefix / "lib" / name, candidates[0])):
                 section = Path(temporary) / str(index)
                 subprocess.run(
-                    ["/usr/bin/objcopy", "--dump-section", f".text={section}",
-                     str(library), str(Path(temporary) / f"copy-{index}")], check=True,
+                    [
+                        "/usr/bin/objcopy",
+                        "--dump-section",
+                        f".text={section}",
+                        str(library),
+                        str(Path(temporary) / f"copy-{index}"),
+                    ],
+                    check=True,
                 )
                 sections.append(section.read_bytes())
             if sections[0] != sections[1]:
                 raise RuntimeError(f"payload did not use private {name}: {expected.hex()}")
         print(f"private payload {name}: {candidates[0].stat().st_size:,} bytes")
-        original = next(Path(line.split("=>", 1)[1].split()[0]) for line in baseline.splitlines() if name in line)
+        original = next(
+            Path(line.split("=>", 1)[1].split()[0])
+            for line in baseline.splitlines()
+            if name in line
+        )
         old, new = original.read_bytes(), candidates[0].read_bytes()
         print(
             f"{name}: raw {len(old):,} -> {len(new):,}; "
@@ -88,7 +113,10 @@ def audit(prefix: Path, binary: Path) -> None:
         dynamic = subprocess.check_output(["/usr/bin/readelf", "-d", str(library)], text=True)
         if str(prefix) in dynamic:
             raise RuntimeError(f"private build path leaked into {library}")
-        if library.name.startswith(("libssl", "libcrypto")) and library.name not in {"libssl.so.3", "libcrypto.so.3"}:
+        if library.name.startswith(("libssl", "libcrypto")) and library.name not in {
+            "libssl.so.3",
+            "libcrypto.so.3",
+        }:
             raise RuntimeError(f"extra OpenSSL library: {library}")
 
 
@@ -112,7 +140,13 @@ async def smoke(directory: Path, binary: Path | None, prefix: Path | None) -> No
                 site = web.TCPSite(runner, "127.0.0.1", 0, ssl_context=context)
                 await site.start()
                 port = runner.addresses[0][1]
-                endpoints.append({"ca": str(cert), "port": port, "version": "TLSv1.2" if version == ssl.TLSVersion.TLSv1_2 else "TLSv1.3"})
+                endpoints.append(
+                    {
+                        "ca": str(cert),
+                        "port": port,
+                        "version": "TLSv1.2" if version == ssl.TLSVersion.TLSv1_2 else "TLSv1.3",
+                    }
+                )
         manifest = directory / "crypto.json"
         manifest.write_text(json.dumps({"private": binary is not None, "endpoints": endpoints}))
         command = [str(binary)] if binary else [sys.executable, "-m", "main"]
@@ -123,7 +157,11 @@ async def smoke(directory: Path, binary: Path | None, prefix: Path | None) -> No
             env["LD_LIBRARY_PATH"] = str(prefix / "lib")
         env["PYTHONPATH"] = str(ROOT / "src")
         process = await asyncio.create_subprocess_exec(
-            *command, "--crypto-probe", str(manifest), env=env, cwd=directory,
+            *command,
+            "--crypto-probe",
+            str(manifest),
+            env=env,
+            cwd=directory,
         )
         try:
             async with asyncio.timeout(90):

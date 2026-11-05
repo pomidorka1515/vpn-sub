@@ -207,8 +207,11 @@ async def test_register_rejects_invalid_names_without_consuming_code(
     await subscription.code_svc.add_code("invite", "register", uses=1)
     with pytest.raises(ValidationError):
         await subscription.business_code_svc.register_with_code(
-            code="invite", username="alice", displayname=displayname,
-            ext_username=external, ext_password="secret",
+            code="invite",
+            username="alice",
+            displayname=displayname,
+            ext_username=external,
+            ext_password="secret",
         )
     assert not await database.user_exists("alice")
     assert (await subscription.code_svc.get_code("invite")).uses == 1

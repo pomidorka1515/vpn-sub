@@ -17,11 +17,14 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.parametrize(
-    ("expected_type", "valid_value"), [(str, ""), (int, 0), (bool, False)],
+    ("expected_type", "valid_value"),
+    [(str, ""), (int, 0), (bool, False)],
 )
 @pytest.mark.parametrize("case", ["valid", "missing", "null", "wrong_type"])
 async def test_required_typed_fields(
-    expected_type: type[JsonifyValue], valid_value: JsonifyValue, case: str,
+    expected_type: type[JsonifyValue],
+    valid_value: JsonifyValue,
+    case: str,
 ) -> None:
     app = create_api_application(proxy_hops=0)
     called = False
@@ -33,9 +36,13 @@ async def test_required_typed_fields(
         called = True
         return ok(obj=g.json_obj)
 
-    body: dict[str, JsonifyValue] = {} if case == "missing" else {
-        "value": valid_value if case == "valid" else None if case == "null" else [],
-    }
+    body: dict[str, JsonifyValue] = (
+        {}
+        if case == "missing"
+        else {
+            "value": valid_value if case == "valid" else None if case == "null" else [],
+        }
+    )
     response = await app.test_client().post("/test", json=body)
     data = await response.get_json()
     assert called is (case == "valid")

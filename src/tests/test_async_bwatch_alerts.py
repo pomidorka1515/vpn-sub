@@ -30,7 +30,9 @@ if TYPE_CHECKING:
     ],
 )
 async def test_admin_alerts_escape_plain_text_for_telegram(
-    watch: BWatch, message: str, expected: str,
+    watch: BWatch,
+    message: str,
+    expected: str,
 ) -> None:
     bot = TelegramAdminBot.__new__(TelegramAdminBot)
     telegram = telegram_mock()
@@ -47,7 +49,9 @@ async def test_admin_alerts_escape_plain_text_for_telegram(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("used", "disabled"), [(10**9 - 1, False), (10**9, True), (10**9 + 1, True)])
+@pytest.mark.parametrize(
+    ("used", "disabled"), [(10**9 - 1, False), (10**9, True), (10**9 + 1, True)]
+)
 @pytest.mark.parametrize("whitelist", [False, True])
 async def test_terminal_alert_uses_pre_disable_state_at_quota_boundary(
     tmp_path: Path,
