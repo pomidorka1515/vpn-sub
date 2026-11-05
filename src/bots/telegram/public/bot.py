@@ -16,6 +16,7 @@ from .subscription import PublicSubscriptionMixin
 from .traffic import PublicTrafficMixin
 
 if TYPE_CHECKING:
+    from app_runtime.rate_limit import AsyncRateLimiter
     from config import AppConfig, LangConfig
     from core import Subscription
     from core.common import Snapshot
@@ -38,12 +39,15 @@ class TelegramPublicBot(
         sub: Subscription,
         cfg: Snapshot[AppConfig],
         lang_cfg: Snapshot[LangConfig],
+        *,
+        limiter: AsyncRateLimiter,
     ) -> None:
         self.log = Logger(type(self).__name__)
         with self.log.loading():
             self.cfg = cfg
             self.lang_cfg = lang_cfg
             self.sub = sub
+            self.limiter = limiter
             conf = self.cfg.view()
             if "publicbot" not in conf:
                 raise KeyError("publicbot")

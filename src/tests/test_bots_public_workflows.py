@@ -334,7 +334,9 @@ async def test_delete_reset_and_bonus(
 
 @pytest.fixture
 def login() -> tuple[PublicLoginMixin, MagicMock, MagicMock]:
-    return _wire(PublicLoginMixin.__new__(PublicLoginMixin))
+    wired = _wire(PublicLoginMixin.__new__(PublicLoginMixin))
+    wired[0].limiter = MagicMock(allow=AsyncMock(return_value=True))
+    return wired
 
 
 @pytest.mark.asyncio
@@ -379,6 +381,31 @@ async def test_login_flow(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("store_failed", [False, True])
+async def test_login_throttle_blocks_password_verification(
+    login: tuple[PublicLoginMixin, MagicMock, MagicMock],
+    store_failed: bool,
+) -> None:
+    mixin, telegram, subscription = login
+    allow = cast(AsyncMock, mixin.limiter.allow)
+    allow.return_value = False
+    if store_failed:
+        allow.side_effect = RuntimeError("redis://secret@unavailable")
+
+    await mixin.step_login_pass(_message("secret"), "bob@example.test")
+
+    allow.assert_awaited_once_with("telegram:login", "42", 10)
+    subscription.password_svc.validate_credentials.assert_not_awaited()
+    subscription.telegram_svc.set_telegram_user.assert_not_awaited()
+    cast(MagicMock, mixin._delete_message).assert_awaited_once_with(7, 5, secret=True)
+    assert "Too many requests" in telegram.send_message.call_args.args[1]
+    if store_failed:
+        cast(MagicMock, mixin.log).error.assert_called_once_with(
+            "Telegram login rate limit store failed",
+        )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("password", [" secret", "secret ", " secret ", "\tsecret\t"])
 async def test_login_preserves_password_whitespace(
     login: tuple[PublicLoginMixin, MagicMock, MagicMock],
@@ -396,6 +423,7 @@ async def test_login_preserves_password_whitespace(
     subscription.password_svc.validate_credentials.assert_awaited_once_with(
         "bob@example.test", password,
     )
+    cast(AsyncMock, mixin.limiter.allow).assert_awaited_once_with("telegram:login", "42", 10)
     subscription.telegram_svc.set_telegram_user.assert_awaited_once_with(42, "bob")
     cast(MagicMock, mixin._delete_message).assert_awaited_once_with(7, 5, secret=True)
     assert "in" in telegram.send_message.call_args.args[1]

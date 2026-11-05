@@ -59,6 +59,19 @@ class PublicLoginMixin(PublicFeatureMixin):
 
         await self._delete_message(message.chat.id, message.message_id, secret=True)
 
+        try:
+            allowed = await self.limiter.allow("telegram:login", str(uid), 10)
+        except Exception:
+            self.log.error("Telegram login rate limit store failed")  # ruff: ignore[error-instead-of-exception] avoid logging Redis credentials
+            allowed = False
+        if not allowed:
+            await self.bot.send_message(
+                message.chat.id,
+                t.get("rate_limited", "Too many requests. Please wait a minute."),
+                reply_markup=await self.get_menu(uid),
+            )
+            return None
+
         internal_username = await self.sub.password_svc.validate_credentials(email, password)
         if internal_username:
             await self.sub.telegram_svc.set_telegram_user(uid, internal_username)

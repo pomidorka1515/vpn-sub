@@ -111,6 +111,7 @@ async def test_public_bot_construction_starts_no_work() -> None:
             sub=MagicMock(),
             cfg=config_mock(subscription_config(publicbot={"token": "1:token"})),
             lang_cfg=config_mock(language_config()),
+            limiter=MagicMock(),
         )
     telebot_cls.assert_called_once_with("1:token")
     assert bot._polling_task is None

@@ -180,7 +180,7 @@ async def create_application(
             else None
         )
         public_bot = (
-            TelegramPublicBot(sub, cfg, lang)
+            TelegramPublicBot(sub, cfg, lang, limiter=limiter)
             if options.start_bots and conf.get("publicbot", {}).get("token")
             else None
         )

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from telebot import types
     from telebot.async_telebot import AsyncTeleBot
 
+    from app_runtime.rate_limit import AsyncRateLimiter
     from config import AppConfig, LangConfig
     from core import Subscription
     from core.common import Snapshot
@@ -90,6 +91,7 @@ if TYPE_CHECKING:
 
     class PublicFeatureMixin:
         bot: AsyncTeleBot
+        limiter: AsyncRateLimiter
         log: Logger
         cfg: Snapshot[AppConfig]
         lang_cfg: Snapshot[LangConfig]
