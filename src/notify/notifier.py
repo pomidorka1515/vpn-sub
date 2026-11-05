@@ -32,6 +32,13 @@ class Notifier:
         self._async_language = language
         self._delivery_lock = asyncio.Lock()
 
+    @staticmethod
+    def pending(username: str, notice: Notice, seen: set[str]) -> bool:
+        """Whether this notice still needs delivery, independent of sender availability."""
+        return account_key(username, notice.marker) not in seen and (
+            notice.kind.scope is not Scope.ONCE or _had_episode(username, notice, seen)
+        )
+
     async def deliver(
         self,
         username: str,
@@ -41,9 +48,7 @@ class Notifier:
     ) -> bool:
         async with self._delivery_lock:
             key = account_key(username, notice.marker)
-            if telegram_id is None or key in seen:
-                return False
-            if notice.kind.scope is Scope.ONCE and not _had_episode(username, notice, seen):
+            if telegram_id is None or not self.pending(username, notice, seen):
                 return False
             try:
                 lang = await self._async_language(telegram_id)

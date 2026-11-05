@@ -12,7 +12,7 @@ from app_runtime.tasks import TaskRegistry
 from custom_types import BandwidthInfo
 from errors import AppError, PanelUnavailableError
 from loggers import Logger
-from notify import classify, restored
+from notify import Notice, classify, restored
 from sysutil import SysUtil
 
 if TYPE_CHECKING:
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from custom_types import UserRecord
     from db import Database
     from db.state import StateSnapshot
-    from notify import Notice
     from notify.notifier import Notifier
 
 from notify.kinds import Kind, Scope
@@ -296,13 +295,58 @@ class BWatch:
             await self._run_due_daily_snapshots(time.monotonic())
 
     async def _deliver(self, state: UserRecord, notices: tuple[Notice, ...]) -> None:
-        if self.notifier is None or not notices:
+        if self.notifier is None:
             return
         # The account coordinator covers read/send/persist, including cancellation.
+        storage_key = f"user_notifications_pending:{state['username']}"
+        raw = await self.db.get_metadata(storage_key)
+        if raw is None and not notices:
+            return
         seen = await self.db.notification_markers()
         before = set(seen)
-        mapped = (await self.db.user_tgids()).get(state["username"])
+        pending: dict[str, Notice] = {}
+        if raw is not None:
+            saved = json.loads(raw)
+            if saved.get("uuid") == state["uuid"]:
+                for item in saved["notices"]:
+                    notice = Notice(
+                        Kind[item["kind"]], item["bucket"], item["fields"], tuple(item["clears"]),
+                    )
+                    pending[notice.marker] = notice
         for notice in notices:
+            # A newer transition supersedes undelivered news about the old state.
+            clears = set(notice.clears)
+            if notice.kind.opens_recovery is not None:
+                clears.add(notice.kind.opens_recovery.kind_id)
+            pending = {key: value for key, value in pending.items() if value.kind.kind_id not in clears}
+            if notice.kind.scope is not Scope.THRESHOLD:
+                pending[notice.marker] = notice
+        pending = {
+            key: notice
+            for key, notice in pending.items()
+            if self.notifier.pending(state["username"], notice, seen)
+        }
+
+        async def persist() -> None:
+            if pending:
+                await self.db.set_metadata(
+                    storage_key,
+                    json.dumps({
+                        "uuid": state["uuid"],
+                        "notices": [
+                            {**asdict(notice), "kind": notice.kind.name}
+                            for notice in pending.values()
+                        ],
+                    }),
+                )
+            else:
+                await self.db.delete_metadata(storage_key)
+
+        # Save intent before attempting Telegram; successful markers remain separate.
+        await persist()
+        mapped = (await self.db.user_tgids()).get(state["username"])
+        candidates = (*pending.values(), *(n for n in notices if n.kind.scope is Scope.THRESHOLD))
+        for notice in candidates:
             await self.notifier.deliver(
                 state["username"],
                 int(mapped) if mapped is not None else None,
@@ -311,6 +355,9 @@ class BWatch:
             )
             await self.db.sync_notifications(before, seen)
             before = set(seen)
+            if not self.notifier.pending(state["username"], notice, seen):
+                pending.pop(notice.marker, None)
+                await persist()
 
     async def _quota(self, username: str, *, recover: bool) -> None:
         async def operation() -> None:
