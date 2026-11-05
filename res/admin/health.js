@@ -246,7 +246,7 @@ export async function checkTeapot() {
 async function checkTeapotRequest() {
   const res = await api('GET', '/api/teapot');
   const status = document.getElementById('teapotStatus');
-  if (res && res.teapot) {
+  if (res?.obj?.teapot) {
     status.textContent = t('teapot_yes') + ' 🍵';
     status.style.color = 'var(--orange)';
   } else {
