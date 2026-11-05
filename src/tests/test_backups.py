@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TextIO
 from unittest.mock import patch
@@ -20,6 +22,112 @@ from config.backup import (
 )
 from db.backup import do_backup, prune_backups
 from loggers import Logger
+
+type BackupKind = Literal["json", "jsonl", "sqlite3"]
+
+
+def _snapshot(kind: BackupKind, source: Path, instance: Path, value: int) -> None:
+    if kind == "sqlite3":
+        connection = sqlite3.connect(source)
+        try:
+            connection.execute("CREATE TABLE IF NOT EXISTS items (value INTEGER)")
+            connection.execute("DELETE FROM items")
+            connection.execute("INSERT INTO items VALUES (?)", (value,))
+            connection.commit()
+        finally:
+            connection.close()
+        do_backup(str(source), 1, str(instance), _log())
+    else:
+        source.write_text(json.dumps({"value": value}) + "\n", encoding="utf-8")
+        config_do_backup(str(source), 2, str(instance), _log(), raw=kind == "jsonl")
+
+
+def _snapshot_value(kind: BackupKind, path: Path) -> int:
+    if kind == "sqlite3":
+        connection = sqlite3.connect(path)
+        try:
+            row = connection.execute("SELECT value FROM items").fetchone()
+            assert row is not None
+            return int(row[0])
+        finally:
+            connection.close()
+    return int(json.loads(path.read_text(encoding="utf-8"))["value"])
+
+
+def _prune(kind: BackupKind, instance: Path) -> None:
+    if kind == "sqlite3":
+        prune_backups(str(instance), 2, _log())
+    else:
+        config_prune_backups(str(instance), 2, _log(), kind)
+
+
+@pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
+def test_same_second_backups_preserve_versions_and_retention(
+    tmp_path: Path, kind: BackupKind,
+) -> None:
+    instance = tmp_path / "backups"
+    instance.mkdir()
+    legacy = instance / f"20260101-000000.{kind}"
+    legacy.write_bytes(b"legacy")
+    with patch("backuputil.datetime") as clock:
+        clock.now.return_value = datetime(2026, 1, 1, tzinfo=UTC)
+        for value in range(3):
+            _snapshot(kind, tmp_path / f"source.{kind}", instance, value)
+        saved = sorted(instance.glob(f"*.{kind}"))
+        assert saved[0] == legacy
+        assert legacy.read_bytes() == b"legacy"
+        assert [_snapshot_value(kind, path) for path in saved[1:]] == [0, 1, 2]
+        _prune(kind, instance)
+        # Retention must not cause a later snapshot to reuse an older sequence.
+        _snapshot(kind, tmp_path / f"source.{kind}", instance, 3)
+        _prune(kind, instance)
+    saved = sorted(instance.glob(f"*.{kind}"))
+    assert [_snapshot_value(kind, path) for path in saved] == [2, 3]
+    assert list(instance.glob(".tmp-*")) == []
+
+
+@pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
+def test_concurrent_same_second_backups_do_not_replace_snapshots(
+    tmp_path: Path, kind: BackupKind,
+) -> None:
+    instance = tmp_path / "backups"
+    barrier = threading.Barrier(4)
+    local = threading.local()
+    real_link = Path.hardlink_to
+
+    def racing_link(path: Path, target: str) -> None:
+        if not getattr(local, "ready", False):
+            local.ready = True
+            barrier.wait(timeout=10)
+        real_link(path, target)
+
+    def snapshot(value: int) -> None:
+        _snapshot(kind, tmp_path / f"source-{value}.{kind}", instance, value)
+
+    with (
+        patch("backuputil.datetime") as clock,
+        patch.object(Path, "hardlink_to", autospec=True, side_effect=racing_link),
+        ThreadPoolExecutor(max_workers=4) as executor,
+    ):
+        clock.now.return_value = datetime(2026, 1, 1, tzinfo=UTC)
+        list(executor.map(snapshot, range(4)))
+    saved = list(instance.glob(f"*.{kind}"))
+    assert len(saved) == 4
+    assert {_snapshot_value(kind, path) for path in saved} == set(range(4))
+    assert list(instance.glob(".tmp-*")) == []
+
+
+@pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
+def test_backup_publication_failure_cleans_temporary_snapshot(
+    tmp_path: Path, kind: BackupKind,
+) -> None:
+    instance = tmp_path / "backups"
+    with (
+        patch.object(Path, "hardlink_to", side_effect=OSError("publication failed")),
+        pytest.raises(OSError, match="publication failed"),
+    ):
+        _snapshot(kind, tmp_path / f"source.{kind}", instance, 1)
+    assert list(instance.iterdir()) == []
 
 
 def _log() -> Logger:

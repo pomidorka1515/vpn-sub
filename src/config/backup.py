@@ -6,10 +6,10 @@ import os
 import shutil
 import tempfile
 import threading
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from backuputil import publish_backup
 from loggers import Logger
 
 from .constants import JsonValue
@@ -49,15 +49,12 @@ def do_backup(
     """
     Path(instance_dir).mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-
     if raw:
-        backup_path = Path(instance_dir) / f"{timestamp}.jsonl"
         fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
         os.close(fd)
         try:
             shutil.copy2(path, tmp)
-            Path(tmp).replace(backup_path)
+            backup_path = publish_backup(tmp, instance_dir, ".jsonl")
         except FileNotFoundError:
             with contextlib.suppress(FileNotFoundError):
                 Path(tmp).unlink()
@@ -67,7 +64,6 @@ def do_backup(
                 Path(tmp).unlink()
             raise
     else:
-        backup_path = Path(instance_dir) / f"{timestamp}.json"
         if data is None:
             try:
                 content = Path(path).read_text(encoding="utf-8")
@@ -93,7 +89,7 @@ def do_backup(
                     json.dump(data, f, indent=None, separators=(",", ":"), ensure_ascii=False)
                 else:
                     json.dump(data, f, indent=indent, ensure_ascii=False)
-            Path(tmp).replace(backup_path)
+            backup_path = publish_backup(tmp, instance_dir, ".json")
         except Exception:
             with contextlib.suppress(FileNotFoundError):
                 Path(tmp).unlink()

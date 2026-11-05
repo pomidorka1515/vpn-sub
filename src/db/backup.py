@@ -4,9 +4,10 @@ import contextlib
 import os
 import sqlite3
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from backuputil import publish_backup
 
 if TYPE_CHECKING:
     from loggers import Logger
@@ -19,8 +20,6 @@ def instance_backup_dir(path: str, backup_dir: str) -> str:
 def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None:
     """Take an atomic SQLite snapshot in a per-instance backup directory."""
     Path(instance_dir).mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    backup_path = Path(instance_dir) / f"{timestamp}.sqlite3"
     fd, temporary = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".sqlite3")
     os.close(fd)
 
@@ -35,7 +34,7 @@ def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None
         destination = None
         source.close()
         source = None
-        Path(temporary).replace(backup_path)
+        backup_path = publish_backup(temporary, instance_dir, ".sqlite3")
     except Exception:
         if destination is not None:
             destination.close()
