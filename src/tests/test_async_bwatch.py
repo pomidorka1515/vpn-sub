@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -607,7 +608,7 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
         await watch.bandwidth_check()
         await watch.bandwidth_check()
         assert (await db.get_user("alice"))["bw_used"] == 30  # type: ignore[index]
-        watch.snap_mem["alice"] = BandwidthInfo(10, 20, 30)
+        watch.snap_mem["panel", "alice", USER_UUID] = BandwidthInfo(10, 20, 30)
         await watch.record_daily_snapshot()
         rows = await db.get_bandwidth_snapshots("alice", 0)
         assert rows[0]["up"] == 10
@@ -1223,10 +1224,11 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
         whitelist: bool = False,
         *,
         work: str = "foreground",
-    ) -> dict[str, BandwidthInfo]:
-        return {"alice": BandwidthInfo(total, total * 2, total * 3)}
+        require_complete: bool = False,
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {"panel": {"alice": BandwidthInfo(total, total * 2, total * 3)}}
 
-    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     save = db.add_bandwidth_snapshots
 
     async def interrupted(
@@ -1255,7 +1257,7 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
         db.add_bandwidth_snapshots = interrupted  # type: ignore[method-assign]
         with pytest.raises(asyncio.CancelledError):
             await watch.record_daily_snapshot()
-        assert watch.snap_mem["alice"].upload == readings[0]
+        assert watch.snap_mem["panel", "alice", USER_UUID].upload == readings[0]
         db.add_bandwidth_snapshots = save  # type: ignore[method-assign]
         await watch.record_daily_snapshot()
         rows = await db.get_bandwidth_snapshots("alice", 0)
@@ -1296,10 +1298,11 @@ async def test_daily_snapshot_reset_confirmation_survives_restart(
         whitelist: bool = False,
         *,
         work: str = "foreground",
-    ) -> dict[str, BandwidthInfo]:
-        return {} if total is None else {"alice": BandwidthInfo(total, total * 2, total * 3)}
+        require_complete: bool = False,
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {} if total is None else {"panel": {"alice": BandwidthInfo(total, total * 2, total * 3)}}
 
-    sub.bandwidth_svc.all_traffic = traffic  # type: ignore[method-assign]
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     try:
         await db.create_user(
             username="alice",
@@ -1317,6 +1320,74 @@ async def test_daily_snapshot_reset_confirmation_survives_restart(
             await watch.close()
             watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
         rows = await db.get_bandwidth_snapshots("alice", 0)
+        assert sum(row["up"] for row in rows) == expected
+        assert sum(row["down"] for row in rows) == expected * 2
+        assert sum(row["wl_up"] for row in rows) == expected
+        assert sum(row["wl_down"] for row in rows) == expected * 2
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outage", [False, True])
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_daily_history_keeps_panel_reset_domains_independent(
+    tmp_path: Path,
+    outage: bool,
+    legacy: bool,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    readings: dict[str, int] = {"a": 1000, "b": 1000}
+
+    async def traffic(
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
+        require_complete: bool = False,
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {
+            panel: {"alice": BandwidthInfo(total, total * 2, total * 3)}
+            for panel, total in readings.items()
+        }
+
+    sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
+    try:
+        await db.create_user(
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
+        )
+        if legacy:
+            await db.set_metadata(
+                "watcher_snapshot_baselines",
+                json.dumps({"main": [["alice", USER_UUID, 2000, 4000, 6000]]}),
+            )
+        samples = [{"a": 1000, "b": 1000}, {"a": 100, "b": 3000}]
+        if outage:
+            samples.extend(({"b": 3100}, {"a": 150, "b": 3200}))
+        samples.append({"a": 150 if outage else 100, "b": 3200 if outage else 3000})
+        for index, readings in enumerate(samples):
+            await watch.start()
+            await watch.record_daily_snapshot()
+            if index == 1:
+                rows = await db.get_bandwidth_snapshots("alice", 0)
+                assert sum(row["up"] for row in rows) == 2000
+            if outage and "a" not in readings:
+                assert watch.snap_mem["a", "alice", USER_UUID].upload == 1000
+                assert ("a", "alice", USER_UUID) not in watch._snap_reset_mem
+            await watch.close()
+            watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+        rows = await db.get_bandwidth_snapshots("alice", 0)
+        expected = 2350 if outage else 2100
         assert sum(row["up"] for row in rows) == expected
         assert sum(row["down"] for row in rows) == expected * 2
         assert sum(row["wl_up"] for row in rows) == expected

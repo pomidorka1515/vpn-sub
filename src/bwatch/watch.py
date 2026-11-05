@@ -116,10 +116,10 @@ class BWatch:
         self._reset_mem: Counters = {}
         self._reset_wl_mem: Counters = {}
         self._usage_month: str | None = None
-        self.snap_mem: dict[str, BandwidthInfo] = {}
-        self.snap_wl_mem: dict[str, BandwidthInfo] = {}
-        self._snap_reset_mem: dict[str, BandwidthInfo] = {}
-        self._snap_reset_wl_mem: dict[str, BandwidthInfo] = {}
+        self.snap_mem: Counters = {}
+        self.snap_wl_mem: Counters = {}
+        self._snap_reset_mem: Counters = {}
+        self._snap_reset_wl_mem: Counters = {}
         self._tasks = TaskRegistry()
         self._jobs: dict[str, asyncio.Lock] = {}
         self._started = False
@@ -150,8 +150,8 @@ class BWatch:
             self.log.exception("initial bandwidth poll failed")
         if not has_snapshot_baselines:
             # First run/upgrade: historical daily baselines cannot be recovered.
-            self.snap_mem = self._aggregate_counters(self.mem)
-            self.snap_wl_mem = self._aggregate_counters(self.wl_mem)
+            self.snap_mem = dict(self.mem)
+            self.snap_wl_mem = dict(self.wl_mem)
         await self._run_due_daily_snapshots(time.monotonic())
         for name, interval, jobs in self._INTERVALS:
 
@@ -189,35 +189,27 @@ class BWatch:
                     if identities.get(name) == uuid:
                         target[panel, name, uuid] = BandwidthInfo(up, down, total)
 
-    @staticmethod
-    def _aggregate_counters(counters: Counters) -> dict[str, BandwidthInfo]:
-        totals: dict[str, BandwidthInfo] = {}
-        for (_, name, _), value in counters.items():
-            old = totals.get(name, BandwidthInfo(0, 0, 0))
-            totals[name] = BandwidthInfo(
-                old.upload + value.upload,
-                old.download + value.download,
-                old.total + value.total,
-            )
-        return totals
-
     async def _load_snapshot_baselines(self, states: list[UserRecord]) -> bool:
         raw = await self.db.get_metadata("watcher_snapshot_baselines")
         if raw is None:
             return False
-        records = cast(dict[str, list[tuple[str, str, int, int, int]]], json.loads(raw))
+        saved = json.loads(raw)
         identities = {state["username"]: state["uuid"] for state in states}
         self.snap_mem, self.snap_wl_mem = {}, {}
         self._snap_reset_mem, self._snap_reset_wl_mem = {}, {}
+        # Aggregate baselines cannot recover independent panel reset domains.
+        if saved.get("version") != 2:
+            return False
+        records = cast(dict[str, list[tuple[str, str, str, int, int, int]]], saved["counters"])
         for kind, target in (
             ("main", self.snap_mem),
             ("whitelist", self.snap_wl_mem),
             ("main_reset", self._snap_reset_mem),
             ("whitelist_reset", self._snap_reset_wl_mem),
         ):
-            for name, uuid, up, down, total in records.get(kind, []):
+            for panel, name, uuid, up, down, total in records.get(kind, []):
                 if identities.get(name) == uuid:
-                    target[name] = BandwidthInfo(up, down, total)
+                    target[panel, name, uuid] = BandwidthInfo(up, down, total)
         return True
 
     async def close(self) -> None:
@@ -568,14 +560,14 @@ class BWatch:
     async def _traffic(
         self,
         states: list[UserRecord],
-    ) -> tuple[dict[str, BandwidthInfo], dict[str, BandwidthInfo]]:
+    ) -> tuple[dict[str, dict[str, BandwidthInfo]], dict[str, dict[str, BandwidthInfo]]]:
         main = (
-            await self.sub.bandwidth_svc.all_traffic(work="background")
+            await self.sub.bandwidth_svc.panel_traffic(work="background")
             if any(s["bw_limit_gb"] for s in states)
             else {}
         )
         wl = (
-            await self.sub.bandwidth_svc.all_traffic(whitelist=True, work="background")
+            await self.sub.bandwidth_svc.panel_traffic(whitelist=True, work="background")
             if any(s["wl_limit_gb"] for s in states)
             else {}
         )
@@ -621,52 +613,56 @@ class BWatch:
                     if state["uuid"] != old["uuid"]:
                         continue
                     name = state["username"]
-                    up, down, baseline, pending = self._daily_snapshot_delta(
-                        main.get(name)
-                        if state["bw_limit_gb"] and old["bw_limit_gb"]
-                        else None,
-                        self.snap_mem.get(name),
-                        self._snap_reset_mem.get(name),
-                    )
-                    wl_up, wl_down, wl_baseline, wl_pending = self._daily_snapshot_delta(
-                        wl.get(name)
-                        if state["wl_limit_gb"] and old["wl_limit_gb"]
-                        else None,
-                        self.snap_wl_mem.get(name),
-                        self._snap_reset_wl_mem.get(name),
-                    )
+                    deltas: list[int] = []
+                    for limit, values, baseline_values, resets in (
+                        (state["bw_limit_gb"] and old["bw_limit_gb"], main, next_main, reset_main),
+                        (state["wl_limit_gb"] and old["wl_limit_gb"], wl, next_wl, reset_wl),
+                    ):
+                        up = down = 0
+                        keys = {
+                            key for key in baseline_values.keys() | resets.keys() if key[1] == name
+                        } | {(panel, name, state["uuid"]) for panel in values}
+                        for key in keys:
+                            if not limit or key[2] != state["uuid"]:
+                                baseline_values.pop(key, None)
+                                resets.pop(key, None)
+                                continue
+                            delta_up, delta_down, baseline, pending = self._daily_snapshot_delta(
+                                values.get(key[0], {}).get(name),
+                                baseline_values.get(key),
+                                resets.get(key),
+                            )
+                            up += delta_up
+                            down += delta_down
+                            # Missing panels retain baselines but break consecutive
+                            # low readings, just like monthly accounting.
+                            if baseline is not None:
+                                baseline_values[key] = baseline
+                            if pending is None:
+                                resets.pop(key, None)
+                            else:
+                                resets[key] = pending
+                        deltas.extend((up, down))
                     # These are deltas since the previous successful reading, not
                     # calendar-day totals. Never backdate startup/retry samples.
-                    rows.append((name, sampled_at, up, down, wl_up, wl_down))
-                    if baseline is not None:
-                        next_main[name] = baseline
-                    if wl_baseline is not None:
-                        next_wl[name] = wl_baseline
-                    for target, candidate in ((reset_main, pending), (reset_wl, wl_pending)):
-                        if candidate is None:
-                            target.pop(name, None)
-                        else:
-                            target[name] = candidate
+                    rows.append((name, sampled_at, deltas[0], deltas[1], deltas[2], deltas[3]))
                 identities = {state["username"]: state["uuid"] for state in current_states}
                 baselines = json.dumps(
                     {
-                        kind: [
-                            [
-                                name,
-                                identities[name],
-                                int(value.upload),
-                                int(value.download),
-                                int(value.total),
+                        "version": 2,
+                        "counters": {
+                            kind: [
+                                [*key, int(value.upload), int(value.download), int(value.total)]
+                                for key, value in values.items()
+                                if identities.get(key[1]) == key[2]
                             ]
-                            for name, value in values.items()
-                            if name in identities
-                        ]
-                        for kind, values in (
-                            ("main", next_main),
-                            ("whitelist", next_wl),
-                            ("main_reset", reset_main),
-                            ("whitelist_reset", reset_wl),
-                        )
+                            for kind, values in (
+                                ("main", next_main),
+                                ("whitelist", next_wl),
+                                ("main_reset", reset_main),
+                                ("whitelist_reset", reset_wl),
+                            )
+                        },
                     },
                 )
                 await self.db.add_bandwidth_snapshots(rows, baselines=baselines)
