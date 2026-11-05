@@ -31,6 +31,83 @@ NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 
 @pytest.mark.asyncio
+async def test_subscription_start_runs_recovery_once(
+    async_db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    calls: list[str] = []
+
+    async def recover_codes() -> None:
+        calls.append("codes")
+        await asyncio.sleep(0)
+
+    async def recover_users() -> None:
+        calls.append("users")
+
+    monkeypatch.setattr(sub.business_code_svc, "recover_rollback_failures", recover_codes)
+    monkeypatch.setattr(sub.business_svc, "recover_pending", recover_users)
+    try:
+        await asyncio.gather(sub.start(), sub.start())
+        await sub.start()
+        assert calls == ["codes", "users"]
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replacement", [None, USER_UUID])
+async def test_recovery_rechecks_create_marker_after_waiting_for_ownership(
+    async_db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    replacement: str | None,
+) -> None:
+    panel = FakePanel(inbounds=[make_inbound(1)])
+    sub = await make_async_subscription(async_db, tmp_path, [panel])
+    creation_ready = asyncio.Event()
+    snapshot_taken = asyncio.Event()
+    delete_metadata = async_db.delete_metadata
+    list_metadata = async_db.list_metadata
+    key = "user_create_pending:alice"
+
+    async def finish_creation(key_to_delete: str) -> None:
+        if key_to_delete == key:
+            creation_ready.set()
+            await snapshot_taken.wait()
+        await delete_metadata(key_to_delete)
+        if key_to_delete == key and replacement is not None:
+            await async_db.set_metadata(key, replacement)
+
+    async def snapshot(prefix: str) -> dict[str, str]:
+        markers = await list_metadata(prefix)
+        if prefix == "user_create_pending:":
+            assert markers == {key: NEW_UUID}
+            snapshot_taken.set()
+        return markers
+
+    monkeypatch.setattr(async_db, "delete_metadata", finish_creation)
+    monkeypatch.setattr(async_db, "list_metadata", snapshot)
+    try:
+        async with asyncio.TaskGroup() as group:
+            creation = group.create_task(
+                sub.business_svc.add_new_user("alice", "Alice", userid=NEW_UUID),
+            )
+            await creation_ready.wait()
+            group.create_task(sub.business_svc.recover_pending())
+        assert creation.result().uuid == NEW_UUID
+        user = await async_db.get_user("alice")
+        assert user is not None
+        assert user["uuid"] == NEW_UUID
+        assert len(panel.clients) == 1
+        assert panel.clients[0].uuid == NEW_UUID
+        assert await async_db.get_metadata(key) == replacement
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "operation",
     [

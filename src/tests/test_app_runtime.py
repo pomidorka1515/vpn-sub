@@ -62,6 +62,22 @@ async def test_start_failure_unwinds_partial_resource_in_reverse_order() -> None
 
 
 @pytest.mark.asyncio
+async def test_started_resources_are_adopted_without_restarting() -> None:
+    events: list[str] = []
+    database = FakeResource("database", events)
+    await database.start()
+    runtime = Runtime(
+        object(),
+        started_resources=(OwnedResource("database", database),),
+        resources=(OwnedResource("bots", FakeResource("bots", events)),),
+    )
+    await runtime.start()
+    await runtime.start()
+    await runtime.stop()
+    assert events == ["start:database", "start:bots", "close:bots", "close:database"]
+
+
+@pytest.mark.asyncio
 async def test_repeated_stop_and_cleanup_failure_visibility() -> None:
     events: list[str] = []
     runtime = Runtime(

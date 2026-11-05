@@ -731,6 +731,10 @@ class BusinessUserService(BaseService):
                     value: str = value,
                     prefix: str = prefix,
                 ) -> None:
+                    # The snapshot may predate a live mutation finishing while
+                    # recovery waited for ownership. Never replay stale intent.
+                    if await self.db.get_metadata(key) != value:
+                        return
                     user = await self.db.get_user(username)
                     if prefix == "user_create_pending:":
                         await self.rollback_panel_clients(username, expected_uuid=value)

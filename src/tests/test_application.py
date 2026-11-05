@@ -141,6 +141,46 @@ def paths(tmp_path: Path) -> AppPaths:
 
 
 @pytest.mark.asyncio
+async def test_factory_recovers_once_before_starting_producers(
+    paths: AppPaths,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bwatch.watch import BWatch
+    from core import Subscription
+
+    document = json.loads(paths.config.read_text())
+    document["3xui"] = {}
+    paths.config.write_text(json.dumps(document))
+    events: list[str] = []
+    start_subscription = Subscription.start
+    start_watcher = BWatch.start
+
+    async def recover(subscription: Subscription) -> None:
+        events.append("recovery")
+        await start_subscription(subscription)
+
+    async def produce(watcher: BWatch) -> None:
+        events.append("watcher")
+        await start_watcher(watcher)
+
+    monkeypatch.setattr(Subscription, "start", recover)
+    monkeypatch.setattr(BWatch, "start", produce)
+    runtime = await create_application(
+        paths,
+        AppOptions(
+            start_background=False,
+            start_bots=False,
+            limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+        ),
+    )
+    try:
+        await runtime.start()
+        assert events == ["recovery", "watcher"]
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
 async def test_factory_without_panels(paths: AppPaths) -> None:
     document = json.loads(paths.config.read_text())
     document["3xui"] = {}

@@ -246,7 +246,7 @@ async def create_application(
                 public_bot,
                 discord_bot,
             ),
-            resources=tuple(opened),
+            started_resources=tuple(opened),
             offloads=offloads,
             mutations=mutations,
         )

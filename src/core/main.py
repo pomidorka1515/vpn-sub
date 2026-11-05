@@ -101,6 +101,8 @@ class Subscription:
             bandwidth_svc=self.bandwidth_svc,
         )
         self._close_task: asyncio.Task[None] | None = None
+        self._start_lock = asyncio.Lock()
+        self._started = False
         self.account_svc = AccountService(
             self.res,
             password_svc=self.password_svc,
@@ -114,8 +116,12 @@ class Subscription:
         )
 
     async def start(self) -> None:
-        await self.business_code_svc.recover_rollback_failures()
-        await self.business_svc.recover_pending()
+        async with self._start_lock:
+            if self._started:
+                return
+            await self.business_code_svc.recover_rollback_failures()
+            await self.business_svc.recover_pending()
+            self._started = True
 
     async def close(self) -> None:
         if self._close_task is None:

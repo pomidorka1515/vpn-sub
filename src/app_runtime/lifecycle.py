@@ -33,6 +33,7 @@ class Runtime[DependenciesT]:
         dependencies: DependenciesT,
         *,
         resources: tuple[OwnedResource, ...] = (),
+        started_resources: tuple[OwnedResource, ...] = (),
         offloads: OffloadServices | None = None,
         tasks: TaskRegistry | None = None,
         mutations: MutationRegistry | None = None,
@@ -44,7 +45,9 @@ class Runtime[DependenciesT]:
         self.state = RuntimeState.NEW
         self.stopping = asyncio.Event()
         self._resources = resources
-        self._opened: list[OwnedResource] = []
+        # Composition may need live dependencies to construct later resources.
+        # Adopt those lifetimes without replaying startup (especially recovery).
+        self._opened: list[OwnedResource] = list(started_resources)
         self._lifecycle_lock = asyncio.Lock()
         self._stop_task: asyncio.Task[None] | None = None
 
