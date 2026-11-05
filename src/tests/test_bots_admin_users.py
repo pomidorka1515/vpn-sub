@@ -9,6 +9,7 @@ from bot_helpers import subscription_mock, telegram_mock
 from helpers import config_mock, subscription_config
 from telebot import types
 
+from bots.telegram.admin.user_callbacks import user_callback
 from bots.telegram.admin.users import AdminUsersMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
 from errors import AppError, NotFoundError, PanelUnavailableError
@@ -88,6 +89,21 @@ def _buttons(markup: object) -> list[str]:
         for button in row
         if button.callback_data is not None
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("length", [54, 55, 200])
+async def test_info_edit_button_fits_long_existing_username(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock], length: int,
+) -> None:
+    mixin, telegram, subscription = users
+    username = "x" * length
+    subscription.business_svc.get_info.return_value = _info()
+    await mixin._cb_info_user(7, username)
+    buttons = _buttons(telegram.send_message.call_args.kwargs["reply_markup"])
+    assert user_callback("edit_user", username) in buttons
+    assert all(len(data.encode()) <= 64 for data in buttons)
+    subscription.business_svc.get_info.assert_awaited_once_with(username, pretty=True)
 
 
 @pytest.mark.asyncio

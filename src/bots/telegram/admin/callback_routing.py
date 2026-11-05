@@ -10,6 +10,7 @@ from telebot import types
 from errors import AppError
 
 from ..composition import AdminFeatureMixin
+from .user_callbacks import user_reference
 
 __all__ = ["AdminCallbackRoutingMixin"]
 
@@ -148,7 +149,26 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     async def _handle_info_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del message
-        await self._cb_info_user(chat_id, data.split("info_", 1)[1])
+        username = await self._resolve_user_callback(data.split("info_", 1)[1], chat_id)
+        if username is not None:
+            await self._cb_info_user(chat_id, username)
+
+    async def _resolve_user_callback(self, reference: str, chat_id: int) -> str | None:
+        if not reference.startswith(":"):
+            return reference
+        matches = [
+            username for username in await self.sub.user_svc.list_users()
+            if user_reference(username) == reference
+        ]
+        # Never resolve by list position or silently pick an ambiguous target.
+        if len(matches) == 1:
+            return matches[0]
+        await self.bot.send_message(
+            chat_id,
+            "❌ Сессия истекла, выберите пользователя заново.",
+            reply_markup=self.get_main_menu(),
+        )
+        return None
 
     async def _handle_delete_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
@@ -175,7 +195,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     async def _handle_delete_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del message
-        await self._cb_del_user(chat_id, data.split("dodel_", 1)[1])
+        username = await self._resolve_user_callback(data.split("dodel_", 1)[1], chat_id)
+        if username is not None:
+            await self._cb_del_user(chat_id, username)
 
     async def _handle_codes_menu(self, data: str, chat_id: int, message: types.Message) -> None:
         del data
@@ -240,7 +262,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     async def _handle_edit_user(self, data: str, chat_id: int, message: types.Message) -> None:
         del message
-        await self._cb_edit_user_options(chat_id, data.split("edit_user_", 1)[1])
+        username = await self._resolve_user_callback(data.split("edit_user_", 1)[1], chat_id)
+        if username is not None:
+            await self._cb_edit_user_options(chat_id, username)
 
     async def _handle_edit(self, data: str, chat_id: int, message: types.Message) -> None:
         del message

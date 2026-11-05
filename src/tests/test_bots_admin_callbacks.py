@@ -11,7 +11,9 @@ from helpers import config_mock, subscription_config
 from telebot import types
 
 from bots.telegram import TelegramAdminBot
+from bots.telegram.admin.user_callbacks import user_callback
 from errors import AppError
+from util import isusername
 
 
 def _callback(data: str, user_id: int = 42) -> types.CallbackQuery:
@@ -48,6 +50,56 @@ def admin() -> tuple[TelegramAdminBot, MagicMock, MagicMock]:
     bot._answer_callback = AsyncMock()  # type: ignore[method-assign]
     telegram.send_message.return_value = SimpleNamespace(message_id=3)
     return bot, telegram, subscription
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("length", [54, 55, 58, 59, 60, 64, 200])
+async def test_user_callbacks_fit_and_resolve_full_username(
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock], length: int,
+) -> None:
+    bot, telegram, subscription = admin
+    username = "a_" + "x" * (length - 2)
+    assert isusername(username)
+    subscription.user_svc.list_users.return_value = [username]
+    for prefix, handler in (("info", "_cb_info_user"), ("dodel", "_cb_del_user")):
+        menu = await TelegramAdminBot.get_users_menu(bot, prefix)
+        button = menu.inline_keyboard[0][0]
+        assert button.text == username
+        assert button.callback_data is not None
+        assert len(button.callback_data.encode()) <= 64
+        # A changed list must not cause an old callback to select another user.
+        subscription.user_svc.list_users.return_value = ["bob", username]
+        with patch.object(TelegramAdminBot, handler) as action:
+            await bot.handle_callbacks(_callback(button.callback_data))
+        action.assert_awaited_once_with(7, username)
+        subscription.user_svc.list_users.return_value = [username]
+
+    await bot.handle_callbacks(_callback(user_callback("edit_user", username)))
+    assert bot._pending_edits[7]["username"] == username
+    menu = telegram.send_message.call_args.kwargs["reply_markup"]
+    for row in menu.inline_keyboard:
+        for edit_button in row:
+            assert len(edit_button.callback_data.encode()) <= 64
+    generation = bot._pending_edits[7]["generation"]
+    with patch.object(TelegramAdminBot, "_cb_edit_limit") as edit:
+        await bot.handle_callbacks(_callback(f"edit_limit:{generation}"))
+    edit.assert_awaited_once_with(7, username)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["info", "dodel", "edit_user"])
+async def test_removed_user_reference_cannot_retarget_current_workflow(
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock], prefix: str,
+) -> None:
+    bot, telegram, subscription = admin
+    await bot._cb_edit_user_options(7, "alice")
+    current = bot._pending_edits[7]
+    subscription.user_svc.list_users.return_value = ["bob"]
+    await bot.handle_callbacks(_callback(user_callback(prefix, "x" * 200)))
+    assert "истекла" in telegram.send_message.call_args.args[1]
+    assert bot._pending_edits[7] is current
+    subscription.business_svc.get_info.assert_not_awaited()
+    subscription.business_svc.delete_user.assert_not_awaited()
 
 
 @pytest.mark.asyncio

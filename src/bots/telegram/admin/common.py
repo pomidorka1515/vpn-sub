@@ -11,6 +11,7 @@ from ..composition import AdminFeatureMixin
 from ..conversations import ConversationMixin
 from ..polling import TelegramPollingMixin
 from .callback_routing import AdminCallbackRoutingMixin
+from .user_callbacks import user_callback
 
 __all__ = ["AdminCommonMixin"]
 
@@ -74,7 +75,7 @@ class AdminCommonMixin(
 
         markup = types.InlineKeyboardMarkup(row_width=2)
         buttons: list[types.InlineKeyboardButton] = [
-            types.InlineKeyboardButton(user, callback_data=f"{prefix}_{user}")
+            types.InlineKeyboardButton(user, callback_data=user_callback(prefix, user))
             for user in page_users
         ]
         markup.add(*buttons)  # pyright: ignore[reportUnknownMemberType]

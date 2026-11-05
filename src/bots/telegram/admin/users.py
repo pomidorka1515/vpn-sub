@@ -12,6 +12,7 @@ from telebot import types
 from errors import AppError, PanelUnavailableError
 
 from ..composition import AdminFeatureMixin
+from .user_callbacks import user_callback
 
 __all__ = ["AdminUsersMixin"]
 
@@ -155,7 +156,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             markup.add(  # pyright: ignore[reportUnknownMemberType]
                 types.InlineKeyboardButton(
                     "✏️ Изменить пользователя",
-                    callback_data=f"edit_user_{username}",
+                    callback_data=user_callback("edit_user", username),
                 ),
                 types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"),
             )
