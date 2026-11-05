@@ -89,7 +89,7 @@ class BandwidthService(BaseService):
         panels = self._target_panels(whitelist)
         if not panels:
             return {}
-        known = await self.db.usernames()
+        known = {user["username"]: user["uuid"] for user in await self.db.list_user_records()}
         outcomes = await self.panel_svc.outcomes(panels, self.panel_svc.list_clients, work=work)
         result: dict[str, dict[str, BandwidthInfo]] = {}
         for outcome in outcomes:
@@ -103,7 +103,7 @@ class BandwidthService(BaseService):
             values = result[outcome.panel] = {}
             for client in outcome.value or []:
                 traffic = client.traffic
-                if traffic is None or client.email not in known:
+                if traffic is None or known.get(client.email) != client.uuid:
                     continue
                 values[client.email] = BandwidthInfo(
                     traffic.up, traffic.down, traffic.up + traffic.down,

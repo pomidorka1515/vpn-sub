@@ -99,6 +99,36 @@ async def test_all_traffic_sums_across_panels_and_skips_unknown_emails(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("whitelist", [False, True])
+@pytest.mark.parametrize("include_owned", [False, True])
+async def test_traffic_rejects_foreign_uuid_under_known_email(
+    database: Database,
+    whitelist: bool,
+    include_owned: bool,
+) -> None:
+    clients = [make_panel_client("alice", [1], up=5, down=6)] if include_owned else []
+    clients.append(
+        make_panel_client(
+            "alice", [2], up=9_000, down=9_000,
+            uuid="ffffffff-ffff-ffff-ffff-ffffffffffff",
+        ),
+    )
+    panel = FakePanel(name="target", clients=clients)
+    subscription = await make_subscription(
+        database,
+        panels=[] if whitelist else [panel],
+        whitelist_panel=panel if whitelist else None,
+    )
+    await create_alice(database)
+    expected = {"alice": BandwidthInfo(5, 6, 11)} if include_owned else {}
+
+    assert await subscription.bandwidth_svc.panel_traffic(whitelist=whitelist) == {
+        "target": expected,
+    }
+    assert await subscription.bandwidth_svc.all_traffic(whitelist=whitelist) == expected
+
+
+@pytest.mark.asyncio
 async def test_all_traffic_raises_when_no_panel_queryable(database: Database) -> None:
     one = FakePanel(name="one", get_error=RuntimeError("down"))
     two = FakePanel(name="two", get_error=RuntimeError("down"))
