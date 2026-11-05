@@ -5,6 +5,7 @@ from quart import Quart, Response, render_template, request
 from quart.json.provider import DefaultJSONProvider
 from werkzeug.exceptions import HTTPException
 
+from app_runtime.tasks import CapacityExceededError
 from errors import AppError, CommittedAuditError
 from loggers import Logger
 from util import err, isbrowser, ok
@@ -48,6 +49,12 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
                 },
             )
         return err(error.message, error.status)
+
+    @app.errorhandler(CapacityExceededError)
+    async def handle_capacity_error(_error: CapacityExceededError) -> tuple[Response, int]:
+        response, status = err("Service temporarily busy. Retry after 1 second.", 503)
+        response.headers["Retry-After"] = "1"
+        return response, status
 
     @app.errorhandler(HTTPException)
     async def handle_http_error(error: HTTPException) -> tuple[Response, int]:
