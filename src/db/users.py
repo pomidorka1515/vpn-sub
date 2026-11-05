@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import time
 from typing import TYPE_CHECKING, Unpack, cast
 
@@ -99,7 +100,9 @@ class UsersMixin(ConnectionMixin):
                         (f"user_create_pending:{username}", uuid),
                     )
         except DatabaseError as exc:
-            if "UNIQUE" in str(exc) or "PRIMARY KEY" in str(exc):
+            if isinstance(exc.__cause__, sqlite3.IntegrityError) and getattr(
+                exc.__cause__, "sqlite_errorcode", None,
+            ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError(
                     "username, UUID, token or external username already exists",
                 ) from exc
@@ -145,7 +148,9 @@ class UsersMixin(ConnectionMixin):
                         None if telegram_id is None else str(telegram_id),
                     )
         except DatabaseError as exc:
-            if "UNIQUE" in str(exc):
+            if isinstance(exc.__cause__, sqlite3.IntegrityError) and getattr(
+                exc.__cause__, "sqlite_errorcode", None,
+            ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError("unique user field already exists") from exc
             raise
 

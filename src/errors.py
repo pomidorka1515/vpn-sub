@@ -100,12 +100,21 @@ class ReadOnlyConfigError(ConfigError):
 # `db.py`
 # ------------------------------------------------------------
 class DatabaseError(AppError):
-    pass
+    def __init__(
+        self,
+        message: str = "Database operation failed",
+        *,
+        status: int = 500,
+        public_message: str = "Database operation failed",
+    ) -> None:
+        # Keep diagnostics in the exception/traceback, not in the HTTP response.
+        super().__init__(message, status=status)
+        self.message = public_message
 
 
 class DuplicateError(DatabaseError):
     def __init__(self, message: str = "A unique value provided is already in use.") -> None:
-        super().__init__(message, status=400)
+        super().__init__(message, status=400, public_message=message)
 
 
 class CodeError(DatabaseError):
@@ -113,7 +122,7 @@ class CodeError(DatabaseError):
         self,
         message: str = "The provided code is either invalid, expired or exhausted.",
     ) -> None:
-        super().__init__(message, status=400)
+        super().__init__(message, status=400, public_message=message)
 
 
 class MigrationError(DatabaseError):

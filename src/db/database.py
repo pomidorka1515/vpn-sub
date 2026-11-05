@@ -25,6 +25,27 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
 
+def _database_error(exc: sqlite3.Error | OSError) -> DatabaseError:
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(exc, sqlite3.IntegrityError) and code in {
+        sqlite3.SQLITE_CONSTRAINT_UNIQUE,
+        sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
+        sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY,
+        sqlite3.SQLITE_CONSTRAINT_CHECK,
+        sqlite3.SQLITE_CONSTRAINT_NOTNULL,
+    }:
+        return DatabaseError(
+            str(exc), status=400, public_message="Database constraint conflict",
+        )
+    if code is not None and code & 0xFF in {
+        sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED, sqlite3.SQLITE_CANTOPEN,
+    }:
+        return DatabaseError(
+            str(exc), status=503, public_message="Database temporarily unavailable",
+        )
+    return DatabaseError(str(exc))
+
+
 class Database(
     UsersMixin,
     CodesMixin,
@@ -116,7 +137,7 @@ class Database(
             await self._close_connections()
             await self._files.close()
             if isinstance(exc, (sqlite3.Error, OSError)):
-                raise DatabaseError(str(exc)) from exc
+                raise _database_error(exc) from exc
             raise
 
     def _check(self) -> asyncio.Task[object]:
@@ -147,8 +168,11 @@ class Database(
                 try:
                     yield Connection(conn)
                 except sqlite3.Error as exc:
-                    await settle(self._replace_reader(index))
-                    raise DatabaseError(str(exc)) from exc
+                    try:
+                        await settle(self._replace_reader(index))
+                    except (sqlite3.Error, OSError) as recovery_error:
+                        raise _database_error(recovery_error) from recovery_error
+                    raise _database_error(exc) from exc
                 finally:
                     self._owners.discard(task)
         finally:
@@ -170,7 +194,10 @@ class Database(
             self._owners.add(task)
             try:
                 if self._writer is None:
-                    await settle(self._open_writer())
+                    try:
+                        await settle(self._open_writer())
+                    except (sqlite3.Error, OSError) as exc:
+                        raise _database_error(exc) from exc
                 conn = self._writer
                 if conn is None:
                     raise DatabaseError("database writer is unavailable")
@@ -184,7 +211,7 @@ class Database(
                 except BaseException as exc:
                     await settle(self._recover_writer(conn, discard=isinstance(exc, sqlite3.Error)))
                     if isinstance(exc, sqlite3.Error):
-                        raise DatabaseError(str(exc)) from exc
+                        raise _database_error(exc) from exc
                     raise
             finally:
                 self._owners.discard(task)

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 import pytest_asyncio
 
+from api.application import create_api_application
 from db import Database
 from db.common import Connection
 from errors import CodeError, DatabaseError, DuplicateError, MigrationError
@@ -44,6 +45,144 @@ async def create_user(db: Database, name: str = "alice") -> None:
         ext_username=f"{name}@test",
         ext_password_hash="hash",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lease", ["connection", "transaction"])
+@pytest.mark.parametrize(
+    ("code", "status"),
+    [
+        (sqlite3.SQLITE_BUSY, 503),
+        (sqlite3.SQLITE_LOCKED, 503),
+        (sqlite3.SQLITE_CANTOPEN, 503),
+        (sqlite3.SQLITE_CORRUPT, 500),
+        (sqlite3.SQLITE_IOERR, 500),
+        (sqlite3.SQLITE_ERROR, 500),
+    ],
+)
+async def test_database_failures_have_safe_http_responses(
+    repository: Database, lease: str, code: int, status: int,
+) -> None:
+    cause = sqlite3.OperationalError("private/path.sqlite: UNIQUE secret SQL details")
+    cause.sqlite_errorcode = code
+    caught: list[DatabaseError] = []
+    app = create_api_application()
+
+    @app.get("/database-failure")
+    async def fail() -> str:
+        try:
+            async with getattr(repository, lease)():
+                raise cause
+        except DatabaseError as exc:
+            caught.append(exc)
+            raise
+
+    response = await app.test_client().get("/database-failure")
+    assert response.status_code == status
+    body = await response.get_data(as_text=True)
+    assert "Database" in body
+    assert "secret" not in body
+    assert "private/path" not in body
+    assert "UNIQUE" not in body
+    assert caught[0].__cause__ is cause
+    assert "secret SQL details" in str(caught[0])
+    assert await repository.list_users() == []
+
+
+@pytest.mark.asyncio
+async def test_real_lock_and_corrupt_startup_have_server_status(
+    repository: Database, tmp_path: Path,
+) -> None:
+    repository.timeout = 0.001
+    async with repository.transaction() as conn:
+        await conn.execute("PRAGMA busy_timeout = 1")
+    blocker = sqlite3.connect(repository.path)
+    try:
+        blocker.execute("BEGIN IMMEDIATE")
+        with pytest.raises(DatabaseError) as locked:
+            await create_user(repository)
+        assert locked.value.status == 503
+        assert "locked" not in locked.value.message
+        assert isinstance(locked.value.__cause__, sqlite3.OperationalError)
+    finally:
+        blocker.close()
+    await create_user(repository)
+
+    path = tmp_path / "corrupt.sqlite3"
+    path.write_text("not a database")
+    corrupt = Database(path=path, start_backup=False)
+    try:
+        with pytest.raises(DatabaseError) as failure:
+            await corrupt.start()
+        assert failure.value.status == 500
+        assert failure.value.message == "Database operation failed"
+        assert isinstance(failure.value.__cause__, sqlite3.DatabaseError)
+    finally:
+        await corrupt.close()
+
+
+@pytest.mark.asyncio
+async def test_operational_error_is_not_mistaken_for_duplicate(
+    repository: Database, monkeypatch: MonkeyPatch,
+) -> None:
+    original = Connection.execute
+    cause = sqlite3.OperationalError("UNIQUE index unavailable: private details")
+
+    async def execute(
+        conn: Connection, sql: str, parameters: Parameters = (),
+    ) -> int:
+        if sql.startswith("INSERT INTO users"):
+            raise cause
+        return await original(conn, sql, parameters)
+
+    monkeypatch.setattr(Connection, "execute", execute)
+    with pytest.raises(DatabaseError) as failure:
+        await create_user(repository)
+    assert not isinstance(failure.value, DuplicateError)
+    assert failure.value.status == 500
+    assert failure.value.message == "Database operation failed"
+    assert failure.value.__cause__ is cause
+
+
+@pytest.mark.asyncio
+async def test_reader_recovery_failure_is_sanitized(
+    repository: Database, monkeypatch: MonkeyPatch,
+) -> None:
+    cause = sqlite3.OperationalError("cannot reopen private/path.sqlite")
+    cause.sqlite_errorcode = sqlite3.SQLITE_CANTOPEN
+
+    async def fail_open(*, reader: bool = False) -> None:
+        raise cause
+
+    monkeypatch.setattr(repository, "_open", fail_open)
+    with pytest.raises(DatabaseError) as failure:
+        async with repository.connection() as conn:
+            await conn.execute("SELECT * FROM missing_private_table")
+    assert failure.value.status == 503
+    assert failure.value.message == "Database temporarily unavailable"
+    assert failure.value.__cause__ is cause
+
+
+@pytest.mark.asyncio
+async def test_constraint_and_validation_errors_remain_client_errors(repository: Database) -> None:
+    await create_user(repository)
+    with pytest.raises(DuplicateError) as duplicate:
+        await create_user(repository)
+    assert duplicate.value.status == 400
+    assert "already exists" in duplicate.value.message
+    await repository.add_code("duplicate", "register")
+    with pytest.raises(DuplicateError):
+        await repository.add_code("duplicate", "register")
+    with pytest.raises(CodeError) as invalid:
+        await repository.consume_code("missing", "register")
+    assert invalid.value.status == 400
+    with pytest.raises(DatabaseError) as constraint:
+        await repository.set_telegram_language(12, "bad")
+    assert constraint.value.status == 400
+    assert constraint.value.message == "Database constraint conflict"
+    assert isinstance(constraint.value.__cause__, sqlite3.IntegrityError)
+    assert DatabaseError("private diagnostics").status == 500
+    assert DatabaseError("private diagnostics").message == "Database operation failed"
 
 
 @pytest.mark.asyncio
