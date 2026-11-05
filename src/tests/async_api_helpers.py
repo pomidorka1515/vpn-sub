@@ -23,6 +23,14 @@ if TYPE_CHECKING:
     from db import Database
 
 
+class Audit:
+    async def read_all(self) -> list[dict[str, str]]:
+        return []
+
+    async def tail(self, n: int) -> list[dict[str, str]]:
+        return []
+
+
 class SnapshotStatus:
     """Snapshot status stub for API tests."""
 

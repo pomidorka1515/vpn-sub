@@ -3,23 +3,30 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 import pytest_asyncio
-from helpers import SUBSCRIPTIONS, make_subscription, make_watch
+from async_api_helpers import Audit, api_app, config_snapshot
+from async_api_helpers import make_subscription as make_api_subscription
+from async_api_helpers import make_watch as make_api_watch
+from helpers import SUBSCRIPTIONS, make_subscription, make_watch, subscription_config
 
+from api import AsyncApi
 from config import Config, LangConfig
+from config.store import AsyncLinesConfig
 from db import Database
 from threadutil import named_to_thread
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
 
+    from quart import Quart
+
     from bwatch import BWatch
     from core import Subscription
 
-__all__ = ["database", "db_path", "language", "subscription", "watch"]
+__all__ = ["admin_api", "database", "db_path", "language", "subscription", "watch"]
 
 
 @pytest.fixture(scope="session")
@@ -72,6 +79,30 @@ async def database(db_path: Path, database_template: Path) -> AsyncIterator[Data
                 await close_async_subscription(sub)
                 SUBSCRIPTIONS.remove(sub)
         await db.close()
+
+
+@pytest_asyncio.fixture
+async def admin_api(
+    database: Database,
+    language: Config[LangConfig],
+) -> AsyncIterator[tuple[Quart, Subscription]]:
+    async for app in api_app():
+        sub = await make_api_subscription(database, app=app, lang_cfg=language)
+        AsyncApi(
+            app=app,
+            cfg=config_snapshot(
+                subscription_config(
+                    api_uri="api",
+                    api_token="secret",
+                    api_admin_ui_auth=["admin", "panel-secret"],
+                ),
+            ),
+            audit_cfg=cast(AsyncLinesConfig, Audit()),
+            sub=sub,
+            bw=make_api_watch(database, sub),
+            limiter=app.extensions["limiter"],
+        )
+        yield app, sub
 
 
 @pytest_asyncio.fixture
