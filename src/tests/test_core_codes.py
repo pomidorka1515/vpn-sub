@@ -244,7 +244,15 @@ async def test_register_with_code_rejects_empty_code(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("displayname", "external"),
-    [("###", "alice"), ("   ", "alice"), ("Alice", "!!!"), ("Alice", "a" * 33)],
+    [
+        ("###", "alice"),
+        ("   ", "alice"),
+        ("Alice", "!!!"),
+        ("Alice", "a" * 33),
+        ("Alice", "a!lice"),
+        ("Alice", " alice "),
+        ("Alice", "alíce"),
+    ],
 )
 async def test_register_rejects_invalid_names_without_consuming_code(
     database: Database,

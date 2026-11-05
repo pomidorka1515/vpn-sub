@@ -74,6 +74,42 @@ async def test_register_rejects_invalid_required_fields(
     assert await db.ext_to_user("new-user") is None
 
 
+async def test_registration_rejects_changed_username_then_logs_in_with_exact_input(
+    web_api: tuple[Quart, Database],
+) -> None:
+    app, db = web_api
+    await db.add_code("invite", "register", uses=1)
+    client = app.test_client()
+    body = {
+        "username": "a!lice",
+        "password": "secret",
+        "code": "invite",
+        "name": "Alice",
+    }
+    response = await client.post("/custom/webapi/register", json=body)
+    assert response.status_code == 400
+    assert (await response.get_json())["success"] is False
+    assert await db.ext_to_user("alice") is None
+    assert await db.ext_to_user("a!lice") is None
+    invite = await db.get_code("invite")
+    assert invite is not None
+    assert invite["uses"] == 1
+
+    body["username"] = "Alice_01-test"
+    response = await client.post("/custom/webapi/register", json=body)
+    assert response.status_code == 201
+    internal = (await response.get_json())["obj"]["username"]
+    assert await db.ext_to_user(body["username"]) == internal
+    assert await db.get_code("invite") is None
+    response = await client.post(
+        "/custom/webapi/login",
+        json={"username": body["username"], "password": body["password"]},
+    )
+    assert response.status_code == 200
+    assert (await response.get_json())["success"] is True
+    assert "auth_token=" in response.headers["Set-Cookie"]
+
+
 @pytest.mark.parametrize(
     "field", ["name", "fingerprint", "username", "password", "current_password"],
 )

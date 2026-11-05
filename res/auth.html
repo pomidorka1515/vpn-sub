@@ -138,6 +138,7 @@ function validateUsername() {
 }
 
 async function doRegister() {
+  const username = document.getElementById('regUser').value;
   const pass = document.getElementById('regPass').value;
   const pass2 = document.getElementById('regPass2').value;
   if (pass !== pass2) { showError(t('passwords_not_match')); return; }
@@ -146,14 +147,14 @@ async function doRegister() {
   btn.disabled = true;
   try {
     const res = await api('POST', '/register', {
-      username: document.getElementById('regUser').value,
+      username,
       password: pass,
       code: document.getElementById('regCode').value,
       name: document.getElementById('regName').value
     });
     if (res.success) {
       const login = await api('POST', '/login', {
-        username: document.getElementById('regUser').value,
+        username,
         password: pass
       });
       if (login.success) window.location.href = DASHBOARD;

@@ -172,6 +172,8 @@ class BusinessCodeService(BaseService):
         if len(ext_username) > 32:
             raise ValidationError("Invalid username")
         external = sanitize(ext_username, "external")
+        if external != ext_username:
+            raise ValidationError("Invalid username")
         if len(displayname) > 16:
             raise ValidationError("Displayname too long")
         displayname = sanitize(displayname, "display")
