@@ -47,29 +47,15 @@ window.apiConfig = {
 
 function fmtDay(ts) {
   const d = new Date(ts * 1000);
-  // short M/D label, UTC to match endpoint's UTC midnights
-  return (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+  // Each bar is an interval ending at this sample, not a calendar-day total.
+  return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 }
 
-// build a contiguous day range (oldest -> newest), filling gaps with zeros
-function fillDays(entries, days) {
-  const map = new Map();
-  for (const e of entries) map.set(e.ts, e);
-
+// Preserve actual sample times; missing readings are not zero-traffic days.
+function selectSamples(entries, days) {
   const todayUtc = Math.floor(Date.now() / 1000 / 86400) * 86400;
-  const out = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const ts = todayUtc - i * 86400;
-    const e = map.get(ts);
-    out.push({
-      ts,
-      up: e?.up || 0,
-      down: e?.down || 0,
-      wl_up: e?.wl_up || 0,
-      wl_down: e?.wl_down || 0,
-    });
-  }
-  return out;
+  const cutoff = todayUtc - (days - 1) * 86400;
+  return entries.filter(e => e.ts >= cutoff).sort((a, b) => a.ts - b.ts);
 }
 
 let regChart = null, wlChart = null;
@@ -337,7 +323,7 @@ async function loadHistory() {
       handleChartJsError();
       return;
     }
-    const filled = fillDays(res.obj || [], days);
+    const filled = selectSamples(res.obj || [], days);
     if (!current()) return;
     lastData = filled;
     renderCharts(filled);

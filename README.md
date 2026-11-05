@@ -58,7 +58,11 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
   Baselines and pending resets persist atomically with quota usage. Legacy
   aggregate baselines are reinitialized on the first poll after upgrade (stored
   usage is retained, but traffic since the last legacy poll cannot be recovered
-  reliably). Daily snapshots retain their separate aggregate-counter policy.
+   reliably). Daily snapshots retain their separate aggregate-counter policy.
+   Scheduled snapshots align to UTC midnight; startup and retry readings retain
+   their actual collection timestamps. Bandwidth history shows deltas between
+   successful readings, not calendar-day totals (downtime cannot be split across
+   days from cumulative counters). Missing readings are not zero-traffic days.
 - **Auth, audit, backups.** Argon2id passwords (legacy salted hashes still
   verify). JSONL audit trail. `config.json` validated against
   `config.schema.json` on load and commit; remote schemas are rejected.

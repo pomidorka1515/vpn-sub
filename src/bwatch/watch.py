@@ -276,7 +276,9 @@ class BWatch:
                         kind,
                         failures,
                     )
-                delay = 86400.0
+                # Re-align after every run, including startup and delayed retries.
+                # A fixed 24h delay would preserve startup time and accumulate drift.
+                delay = 86400 - time.time() % 86400
             except Exception as exc:
                 failures = self._snapshot_failures.get(kind, 0) + 1
                 self._snapshot_failures[kind] = failures
@@ -527,6 +529,7 @@ class BWatch:
 
     async def record_daily_snapshot(self) -> None:
         async def operation() -> None:
+            sampled_at = int(time.time())
             states = [
                 s
                 for s in await self.sub.user_svc.list_user_states()
@@ -557,7 +560,6 @@ class BWatch:
                 next_main, next_wl = dict(self.snap_mem), dict(self.snap_wl_mem)
                 reset_main, reset_wl = dict(self._snap_reset_mem), dict(self._snap_reset_wl_mem)
                 rows: list[tuple[str, int, int, int, int, int]] = []
-                midnight = int(time.time()) // 86400 * 86400
                 for old in states:
                     if not await self.sub.user_svc.isuser(old["username"]):
                         continue
@@ -579,7 +581,9 @@ class BWatch:
                         self.snap_wl_mem.get(name),
                         self._snap_reset_wl_mem.get(name),
                     )
-                    rows.append((name, midnight, up, down, wl_up, wl_down))
+                    # These are deltas since the previous successful reading, not
+                    # calendar-day totals. Never backdate startup/retry samples.
+                    rows.append((name, sampled_at, up, down, wl_up, wl_down))
                     if baseline is not None:
                         next_main[name] = baseline
                     if wl_baseline is not None:
@@ -628,6 +632,7 @@ class BWatch:
 
     async def record_snap_snapshot(self) -> None:
         async def operation() -> None:
+            sampled_at = int(time.time())
             panels: dict[str, JsonDict] = {}
             statuses = await self.sub.panel_svc.statuses(work="background")
             for panel, status in zip(self.sub.panels, statuses, strict=True):
@@ -636,13 +641,12 @@ class BWatch:
                         f"state snapshot could not read panel status: {panel.name}",
                     )
                 panels[panel.name] = asdict(status.obj)
-            midnight = int(time.time()) // 86400 * 86400
             data: StateSnapshot = {
-                "ts": midnight,
+                "ts": sampled_at,
                 "host": asdict(await self.sub.res.offloads.metrics.run(SysUtil.full_info)),
                 "panels": panels,
             }
-            await self.db.upsert_state_snapshot(midnight, data)
+            await self.db.upsert_state_snapshot(sampled_at, data)
             await self.prune_old_snap_snapshots()
 
         await self._job("daily state", operation)

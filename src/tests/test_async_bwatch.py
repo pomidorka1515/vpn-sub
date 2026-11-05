@@ -22,6 +22,69 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
+async def test_daily_schedule_realigns_to_midnight_after_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path)
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    now = 86400.0 + 12 * 3600
+    monotonic = 100.0
+    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    # Keep the event loop's real monotonic clock untouched.
+    try:
+        watch.record_daily_snapshot = AsyncMock(side_effect=RuntimeError("offline"))  # type: ignore[method-assign]
+        watch.record_snap_snapshot = AsyncMock()  # type: ignore[method-assign]
+        before = time.monotonic()
+        await watch._run_due_daily_snapshots(monotonic)
+        after = time.monotonic()
+        assert before + 3600 <= watch._snapshot_due_at["bandwidth"] <= after + 3600
+        assert before + 12 * 3600 <= watch._snapshot_due_at["state"] <= after + 12 * 3600
+
+        # A successful late retry targets the next midnight, not retry time + 24h.
+        now += 3600
+        watch.record_daily_snapshot = AsyncMock()  # type: ignore[method-assign]
+        due = watch._snapshot_due_at["bandwidth"]
+        before = time.monotonic()
+        await watch._run_due_daily_snapshots(due)
+        after = time.monotonic()
+        assert before + 11 * 3600 <= watch._snapshot_due_at["bandwidth"] <= after + 11 * 3600
+        assert not watch._snapshot_failures
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_state_samples_preserve_collection_times_across_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    sub = await make_async_subscription(db, tmp_path, panels=[])
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    now = int(time.time()) // 86400 * 86400 + 3600
+    first = now
+    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    try:
+        await watch.record_snap_snapshot()
+        await watch.close()
+        now += 3600
+        watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+        await watch.record_snap_snapshot()
+        rows = await db.get_state_snapshots(0)
+        assert [row["ts"] for row in rows] == [now, first]
+    finally:
+        await watch.close()
+        await close_async_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("whitelist", [False, True])
 @pytest.mark.parametrize("exhausted", [False, True])
 async def test_poll_preserves_explicit_disable(
@@ -819,12 +882,18 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path) -> None:
+async def test_daily_history_survives_repeated_scheduled_restarts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_async_subscription(db, tmp_path)
     watch = BWatch(sub.res.cfg, db, sub, scheduled=True)
     total = 100
+    now = int(time.time()) // 86400 * 86400 + 3600
+    first = now
+    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
 
     async def traffic(
         whitelist: bool = False,
@@ -855,6 +924,7 @@ async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path
         watch.record_snap_snapshot = AsyncMock()  # type: ignore[method-assign]
         await watch.start()
         for reading in (150, 180, 180):
+            now += 3600
             total = reading
             # Usage polling advances independently of the last daily snapshot.
             await watch.bandwidth_check()
@@ -863,6 +933,7 @@ async def test_daily_history_survives_repeated_scheduled_restarts(tmp_path: Path
             watch.record_snap_snapshot = AsyncMock()  # type: ignore[method-assign]
             await watch.start()
         rows = await db.get_bandwidth_snapshots("alice", 0)
+        assert [row["ts"] for row in rows] == [first + i * 3600 for i in (3, 2, 1, 0)]
         assert sum(row["up"] for row in rows) == 80
         assert sum(row["down"] for row in rows) == 160
         assert sum(row["wl_up"] for row in rows) == 80
@@ -928,8 +999,10 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
         await watch.record_daily_snapshot()
         rows = await db.get_bandwidth_snapshots("alice", 0)
         expected = 50 if len(readings) == 2 else 15
-        assert rows[0]["up"] == rows[0]["wl_up"] == expected
-        assert rows[0]["down"] == rows[0]["wl_down"] == expected * 2
+        assert sum(row["up"] for row in rows) == expected
+        assert sum(row["wl_up"] for row in rows) == expected
+        assert sum(row["down"] for row in rows) == expected * 2
+        assert sum(row["wl_down"] for row in rows) == expected * 2
     finally:
         await watch.close()
         await close_async_subscription(sub)
