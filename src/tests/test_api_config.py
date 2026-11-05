@@ -11,8 +11,8 @@ from async_api_helpers import api_app, make_subscription, make_watch
 from api import AsyncApi
 from api.config_patch import REQUIRED_KEYS, config_etag
 from config import AppConfig, Config
-from config.panels import validate_panel_limit
 from config.store import AsyncConfig
+from config.validation import check_config_document
 from core.services.audit import AuditService
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ async def config_api(
             lambda: Config[AppConfig](
                 path=path,
                 schema_path=ROOT / "config.schema.json",
-                validators=(validate_panel_limit,),
+                validators=(check_config_document,),
                 backup_dir=tmp_path / "backup",
                 indent=4,
                 sync_mode="none",
@@ -216,6 +216,8 @@ async def test_unknown_profile_node_preserves_config(
         ({"panel_alert_cooldown": "soon"}, "Schema validation"),
         ({"$schema": "other.json"}, "$schema"),
         ({"domain": None}, "required"),
+        ({"api_admin_ui_auth": ["", "password"]}, "entries must not be empty"),
+        ({"api_admin_ui_auth": ["admin", ""]}, "entries must not be empty"),
     ],
 )
 async def test_rejected_patch_preserves_file(

@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING, Literal, cast
 import pytest
 
 from config import AppConfig, Config, JsonDict, LinesConfig
-from config.panels import validate_panel_limit
 from config.transaction import ConfigTransaction
+from config.validation import check_config_document
 from errors import (
     ConfigError,
     FileCorruptionError,
     ReadOnlyConfigError,
     SchemaValidationError,
+    ValidationError,
 )
 
 if TYPE_CHECKING:
@@ -174,7 +175,7 @@ def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
     config = Config[AppConfig](
         path=path,
         schema_path=Path(__file__).resolve().parents[2] / "config.schema.json",
-        validators=(validate_panel_limit,),
+        validators=(check_config_document,),
         backup_dir=None,
         sync_mode="none",
     )
@@ -199,6 +200,68 @@ def test_whitelist_panel_limit_on_commit_and_reload(app_cfg: Config[AppConfig]) 
     Path(app_cfg.path).write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(SchemaValidationError, match="At most one whitelist panel"):
         app_cfg.reload()
+
+
+@pytest.mark.parametrize("boundary", ["load", "reload", "commit", "validate"])
+@pytest.mark.parametrize("invalid", ["profile_node", "removed_node", "username", "password"])
+def test_business_validation_at_config_boundaries(
+    app_cfg: Config[AppConfig],
+    boundary: str,
+    invalid: str,
+) -> None:
+    with app_cfg.edit() as tx:
+        tx["nodes"] = {"local": "example.test"}
+        tx["profiles"] = {
+            "profile": {
+                "flag": "",
+                "name": ["local", "local"],
+                "json": {},
+                "description": ["", ""],
+                "whitelist": False,
+                "xhttpExtra": {},
+                "masterLink": "",
+                "node": "local",
+                "shortProfileDescription": ["", ""],
+            },
+        }
+    snapshot = app_cfg.copy()
+    document = app_cfg.view()
+    if invalid == "profile_node":
+        document["profiles"]["profile"]["node"] = "missing"
+    elif invalid == "removed_node":
+        document["nodes"] = {}
+    else:
+        document["api_admin_ui_auth"][0 if invalid == "username" else 1] = ""
+    message = "not a key of nodes" if "node" in invalid else "entries must not be empty"
+    path = Path(app_cfg.path)
+    before = path.read_bytes()
+
+    def exercise_boundary() -> None:
+        if boundary == "load":
+            path.write_text(json.dumps(document), encoding="utf-8")
+            Config[AppConfig](
+                path=path,
+                schema_path=app_cfg.schema_path,
+                validators=(check_config_document,),
+                backup_dir=None,
+                sync_mode="none",
+            )
+        elif boundary == "reload":
+            path.write_text(json.dumps(document), encoding="utf-8")
+            app_cfg.reload()
+        elif boundary == "commit":
+            with app_cfg.edit() as tx:
+                tx.update(cast("JsonDict", document))
+        else:
+            app_cfg.validate_document(cast("JsonDict", document))
+
+    with pytest.raises(ValidationError, match=message):
+        exercise_boundary()
+    assert app_cfg.data == snapshot
+    if boundary in {"commit", "validate"}:
+        assert path.read_bytes() == before
+    else:
+        assert json.loads(path.read_bytes()) == document
 
 
 @pytest.mark.parametrize("whitelist", [False, True])
@@ -233,7 +296,7 @@ def test_duplicate_panel_names_rejected_on_load(
             Config[AppConfig](
                 path=path,
                 schema_path=app_cfg.schema_path,
-                validators=(validate_panel_limit,),
+                validators=(check_config_document,),
                 backup_dir=None,
                 sync_mode="none",
             )

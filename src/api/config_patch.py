@@ -6,6 +6,7 @@ import math
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal, cast
 
+from config.validation import check_config_document
 from errors import ValidationError
 
 if TYPE_CHECKING:
@@ -77,58 +78,6 @@ def config_etag(data: Mapping[str, JsonValue]) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def _nonempty_str(value: object) -> bool:
-    return isinstance(value, str) and bool(value)
-
-
-def check_config_document(data: Mapping[str, object]) -> None:
-    """Refuse a document this process cannot boot, and a profile node that is not a node.
-
-    A wrong type falls through so schema validation raises SchemaValidationError
-    instead of TypeError. Does not tighten config.schema.json.
-    """
-    profiles = data.get("profiles")
-    nodes = data.get("nodes")
-    if isinstance(profiles, Mapping) and isinstance(nodes, Mapping):
-        profiles, nodes = (
-            cast("Mapping[str, object]", profiles),
-            cast("Mapping[str, object]", nodes),
-        )
-        for profile_id, profile in profiles.items():
-            if not isinstance(profile, Mapping):
-                continue
-            profile = cast("Mapping[str, object]", profile)
-            node = profile.get("node")
-            if isinstance(node, str) and node not in nodes:
-                raise ValidationError(f"profiles.{profile_id}.node {node!r} is not a key of nodes")
-
-    publicbot = data.get("publicbot")
-    if isinstance(publicbot, Mapping):
-        token = cast("Mapping[str, object]", publicbot).get("token")
-        if not isinstance(token, str):
-            raise ValidationError("publicbot.token must be a string")
-
-    bot = data.get("bot")
-    if isinstance(bot, Mapping):
-        token = cast("Mapping[str, object]", bot).get("token")
-        if not isinstance(token, str):
-            raise ValidationError("bot.token must be a string")
-
-    if not _nonempty_str(data.get("api_token")):
-        raise ValidationError("api_token must not be empty")
-
-    auth = data.get("api_admin_ui_auth")
-    if (
-        isinstance(auth, list)
-        and len(cast("list[object]", auth)) == 2
-        and (
-            not _nonempty_str(cast("list[object]", auth)[0])
-            or not _nonempty_str(cast("list[object]", auth)[1])
-        )
-    ):
-        raise ValidationError("api_admin_ui_auth entries must not be empty")
 
 
 def apply_config_patch(

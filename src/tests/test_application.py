@@ -13,7 +13,7 @@ from app import AppOptions, AppPaths, create_application, verbose_overrides
 from app_runtime.lifecycle import RuntimeState
 from app_runtime.rate_limit import AsyncRateLimiter
 from bots.discord.host import SharedDiscordClient
-from errors import SchemaValidationError
+from errors import SchemaValidationError, ValidationError
 
 
 def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,6 +36,23 @@ async def test_startup_rejects_multiple_whitelist_panels(paths: AppPaths) -> Non
     paths.config.write_text(json.dumps(document))
     with pytest.raises(SchemaValidationError, match="At most one whitelist panel"):
         await create_application(paths, AppOptions(start_background=False, start_bots=False))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["profile_node", "removed_node", "username", "password"])
+async def test_startup_rejects_business_invalid_config(paths: AppPaths, invalid: str) -> None:
+    document = json.loads(paths.config.read_text())
+    if invalid == "profile_node":
+        next(iter(document["profiles"].values()))["node"] = "missing"
+    elif invalid == "removed_node":
+        document["nodes"] = {}
+    else:
+        document["api_admin_ui_auth"][0 if invalid == "username" else 1] = ""
+    paths.config.write_text(json.dumps(document))
+    message = "not a key of nodes" if "node" in invalid else "entries must not be empty"
+    with pytest.raises(ValidationError, match=message):
+        await create_application(paths, AppOptions(start_background=False, start_bots=False))
+    assert not paths.database.exists()
 
 
 def test_from_env_defaults_to_project_root(monkeypatch: pytest.MonkeyPatch) -> None:
