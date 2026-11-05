@@ -58,7 +58,13 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
 
     @app.errorhandler(HTTPException)
     async def handle_http_error(error: HTTPException) -> tuple[Response, int]:
-        return err(error.description, error.code or 500)
+        response, status = err(error.description, error.code or 500)
+        response.headers.extend(
+            (name, value)
+            for name, value in error.get_response().headers
+            if name.lower() not in {"content-type", "content-length"}
+        )
+        return response, status
 
     @app.errorhandler(Exception)
     async def handle_unexpected_error(error: Exception) -> tuple[Response, int]:

@@ -4,15 +4,72 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
+from werkzeug.datastructures import WWWAuthenticate
+from werkzeug.exceptions import TooManyRequests, Unauthorized
+from werkzeug.wrappers import Response as WerkzeugResponse
 
 from api.application import create_api_application
 from app_runtime.tasks import CapacityExceededError, MutationRegistry, TaskRegistry
 from util import ok
 
 if TYPE_CHECKING:
+    from werkzeug.exceptions import HTTPException
+
     from api.common import ResponseType
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_method_not_allowed_preserves_allow_header() -> None:
+    app = create_api_application(proxy_hops=0)
+
+    @app.get("/work")
+    async def work() -> ResponseType:
+        return ok()
+
+    response = await app.test_client().post("/work")
+
+    assert response.status_code == 405
+    assert set(response.headers["Allow"].split(", ")) == {"GET", "HEAD", "OPTIONS"}
+    assert response.mimetype == "application/json"
+    assert (await response.get_json())["success"] is False
+    assert response.headers["Content-Length"] == str(len(await response.get_data()))
+
+
+@pytest.mark.parametrize(
+    ("error", "header", "values"),
+    [
+        (TooManyRequests(retry_after=60), "Retry-After", ["60"]),
+        (
+            Unauthorized(www_authenticate=[WWWAuthenticate("Basic"), WWWAuthenticate("Bearer")]),
+            "WWW-Authenticate",
+            ["Basic", "Bearer"],
+        ),
+        (
+            TooManyRequests(response=WerkzeugResponse(
+                "old body", status=429, content_type="text/plain", headers={"X-Error": "original"},
+            )),
+            "X-Error",
+            ["original"],
+        ),
+    ],
+)
+async def test_http_exception_preserves_headers_with_json_body(
+    error: HTTPException, header: str, values: list[str],
+) -> None:
+    app = create_api_application(proxy_hops=0)
+
+    @app.get("/work")
+    async def work() -> ResponseType:
+        raise error
+
+    response = await app.test_client().get("/work")
+
+    assert response.status_code == (error.code or 500)
+    assert response.headers.getlist(header) == values
+    assert response.headers.getlist("Content-Type") == ["application/json"]
+    assert response.headers.getlist("Content-Length") == [str(len(await response.get_data()))]
+    assert (await response.get_json())["success"] is False
 
 
 @pytest.mark.parametrize("owner", ["mutation", "panel", "config"])
