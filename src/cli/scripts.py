@@ -14,6 +14,7 @@ import binascii
 import hashlib
 import hmac
 import os
+import string
 from typing import TYPE_CHECKING, cast
 from urllib.parse import quote
 
@@ -131,6 +132,7 @@ def _script(name: str, digest: str) -> bytes:
     if encoding != "base64" or not isinstance(encoded, str) or not isinstance(sha, str):
         raise ValueError(f"{name} response has no base64 content")
     try:
+        encoded = encoded.translate(str.maketrans("", "", string.whitespace))
         content = base64.b64decode(encoded, validate=True)
     except binascii.Error as exc:
         raise ValueError(f"{name} content is not base64") from exc

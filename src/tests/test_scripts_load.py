@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import string
 import sys
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Protocol
+
+import pytest
 
 import cli.scripts as scripts_load
 from cli.scripts import load_scripts
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 class StubResponse(Protocol):
@@ -182,3 +183,59 @@ def test_scripts_use_full_prerelease_tag(monkeypatch: pytest.MonkeyPatch) -> Non
     assert scripts_load._script(name, digest) == b"script\n"
     assert len(urls) == 2
     assert all(url.endswith("?ref=v6.0.0-rc.2%2Bbuild.1") for url in urls)
+
+
+def _payload_stub(payload: object) -> GetStub:
+    class _Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> object:
+            return payload
+
+    def _get(url: str, *_args: object, **_kwargs: object) -> StubResponse:
+        return _Response()
+
+    return _get
+
+
+@pytest.mark.parametrize("whitespace", ["\n", "\r\n", string.whitespace])
+def test_script_accepts_wrapped_base64(monkeypatch: pytest.MonkeyPatch, whitespace: str) -> None:
+    content = b"print('wrapped script')\n" * 10
+    payload = _blob(content)
+    encoded = payload["content"]
+    payload["content"] = (
+        whitespace.join(encoded[index : index + 60] for index in range(0, len(encoded), 60))
+        + whitespace
+    )
+    monkeypatch.setattr(scripts_load, "_get", _payload_stub(payload))
+
+    assert scripts_load._script("script.py", payload["sha"]) == content
+
+
+@pytest.mark.parametrize("encoded", ["c2NyaXB0\n!", "c2NyaXB0\n=bad", "YQ\n", "c2NyaXB0\u00a0"])
+def test_script_rejects_malformed_base64(monkeypatch: pytest.MonkeyPatch, encoded: str) -> None:
+    payload = _blob(b"script")
+    payload["content"] = encoded
+    monkeypatch.setattr(scripts_load, "_get", _payload_stub(payload))
+
+    with pytest.raises(ValueError, match=r"base64|ASCII"):
+        scripts_load._script("script.py", payload["sha"])
+
+
+@pytest.mark.parametrize("mismatch", ["response", "listing"])
+def test_wrapped_script_rejects_digest_mismatch(
+    monkeypatch: pytest.MonkeyPatch, mismatch: str,
+) -> None:
+    payload = _blob(b"script\n")
+    digest = payload["sha"]
+    payload["content"] += "\n"
+    if mismatch == "response":
+        payload["sha"] = "0" * 40
+        digest = payload["sha"]
+    else:
+        digest = "0" * 40
+    monkeypatch.setattr(scripts_load, "_get", _payload_stub(payload))
+
+    with pytest.raises(ValueError, match="blob digest does not match"):
+        scripts_load._script("script.py", digest)
