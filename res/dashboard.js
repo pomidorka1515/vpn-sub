@@ -83,8 +83,8 @@ function renderStats(s) {
   document.getElementById('statWl').textContent = fmtBytes(bw.wl_total.upload + bw.wl_total.download);
   document.getElementById('statWlSub').textContent = '↑ ' + fmtBytes(bw.wl_total.upload) + '  ↓ ' + fmtBytes(bw.wl_total.download);
 
-  const limitB = bw.limit * 1073741824;
-  const wlLimitB = bw.wl_limit * 1073741824;
+  const limitB = bw.limit * 1000000000;
+  const wlLimitB = bw.wl_limit * 1000000000;
 
   if (limitB > 0) {
     const pct = (bw.monthly / limitB) * 100;
