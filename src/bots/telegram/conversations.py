@@ -39,7 +39,8 @@ class ConversationMixin:
         return False
 
     async def _message_entry(self, message: types.Message) -> None:
-        if message.from_user is None or message.text is None:
+        # Account replies and credential prompts must never run in shared chats.
+        if message.chat.type != "private" or message.from_user is None or message.text is None:
             return
         key = (message.chat.id, message.from_user.id)
         task = self._handlers.create(
@@ -69,7 +70,7 @@ class ConversationMixin:
                 self._conversation.reset(token)
 
     async def _callback_entry(self, call: types.CallbackQuery) -> None:
-        if call.message is None or call.data is None:
+        if call.message is None or call.message.chat.type != "private" or call.data is None:
             return
         key = (call.message.chat.id, call.from_user.id)
         task = self._handlers.create(

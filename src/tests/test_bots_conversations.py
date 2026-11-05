@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from bot_helpers import subscription_mock, telegram_mock
@@ -16,13 +16,13 @@ if TYPE_CHECKING:
     from bots.telegram.handler_backend import ConversationKey
 
 
-def message(text: str, *, uid: int = 42) -> types.Message:
+def message(text: str, *, uid: int = 42, chat_type: str = "private") -> types.Message:
     return cast(
         types.Message,
         SimpleNamespace(
             text=text,
             from_user=SimpleNamespace(id=uid),
-            chat=SimpleNamespace(id=7),
+            chat=SimpleNamespace(id=7, type=chat_type),
             message_id=1,
         ),
     )
@@ -39,6 +39,64 @@ def public_bot() -> TelegramPublicBot:
     setattr(bot, "handle_text", AsyncMock())
     setattr(bot, "cmd_start", AsyncMock())
     return bot
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bot_type", [TelegramPublicBot, TelegramAdminBot])
+@pytest.mark.parametrize("chat_type", ["group", "supergroup", "channel"])
+@pytest.mark.parametrize("text", ["/start", "Account", "Get", "secret"])
+async def test_non_private_messages_cannot_start_or_continue_workflows(
+    bot_type: type[TelegramPublicBot | TelegramAdminBot],
+    chat_type: str,
+    text: str,
+) -> None:
+    bot = bot_type.__new__(bot_type)
+    bot.bot = telegram_mock()
+    bot.log = MagicMock()
+    bot._initialize_polling()
+    bot._initialize_conversations()
+    step = AsyncMock()
+    bot._conversations.expect((7, 42), step)
+    with (
+        patch.object(bot, "cmd_start", new_callable=AsyncMock) as start,
+        patch.object(bot, "handle_text", new_callable=AsyncMock) as handle,
+    ):
+        await bot._message_entry(message(text, chat_type=chat_type))
+    start.assert_not_awaited()
+    handle.assert_not_awaited()
+    step.assert_not_awaited()
+    assert bot._handlers.active_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bot_type", [TelegramPublicBot, TelegramAdminBot])
+@pytest.mark.parametrize("chat_type", ["private", "group", "supergroup", "channel"])
+@pytest.mark.parametrize("data", ["get_sub", "login_credentials", "set_pass"])
+async def test_callbacks_only_route_in_private_chats(
+    bot_type: type[TelegramPublicBot | TelegramAdminBot],
+    chat_type: str,
+    data: str,
+) -> None:
+    bot = bot_type.__new__(bot_type)
+    bot.bot = telegram_mock()
+    bot.log = MagicMock()
+    bot._initialize_polling()
+    bot._initialize_conversations()
+    call = cast(
+        types.CallbackQuery,
+        SimpleNamespace(
+            message=message("menu", chat_type=chat_type),
+            from_user=SimpleNamespace(id=42),
+            data=data,
+        ),
+    )
+    with patch.object(bot, "_route_callback", new_callable=AsyncMock) as route:
+        await bot._callback_entry(call)
+    if chat_type == "private":
+        route.assert_awaited_once_with((7, 42), call)
+    else:
+        route.assert_not_awaited()
+    assert bot._handlers.active_count == 0
 
 
 @pytest.mark.asyncio
