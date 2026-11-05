@@ -212,10 +212,16 @@ class AdminUsersMixin(AdminFeatureMixin):
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("🔐 Отпечаток", callback_data=f"edit_fp:{generation}"),
-            types.InlineKeyboardButton("📊 Месячный лимит", callback_data=f"edit_limit:{generation}"),
-            types.InlineKeyboardButton("🌍 Мес. лимит WL", callback_data=f"edit_wl_limit:{generation}"),
+            types.InlineKeyboardButton(
+                "📊 Месячный лимит", callback_data=f"edit_limit:{generation}"
+            ),
+            types.InlineKeyboardButton(
+                "🌍 Мес. лимит WL", callback_data=f"edit_wl_limit:{generation}"
+            ),
             types.InlineKeyboardButton("⏰ Срок", callback_data=f"edit_time:{generation}"),
-            types.InlineKeyboardButton("🏷 Отображаемое имя", callback_data=f"edit_name:{generation}"),
+            types.InlineKeyboardButton(
+                "🏷 Отображаемое имя", callback_data=f"edit_name:{generation}"
+            ),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"),
         )
         await self.bot.send_message(
@@ -241,7 +247,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         conf = self.cfg.view()
         for fp in conf["fingerprints"]:
             label = f"✅ {fp}" if fp == current else fp
-            markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_save_{fp}:{generation}"))  # pyright: ignore[reportUnknownMemberType]
+            markup.add(
+                types.InlineKeyboardButton(label, callback_data=f"fp_save_{fp}:{generation}")
+            )  # pyright: ignore[reportUnknownMemberType]
         markup.add(types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         await self.bot.send_message(
             chat_id,
@@ -269,7 +277,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
         self._expect(msg, self._step_edit_limit, username, generation)  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_edit_limit(self, message: types.Message, username: str, generation: str) -> None:
+    async def _step_edit_limit(
+        self, message: types.Message, username: str, generation: str
+    ) -> None:
         pending = self._pending_edits.get(message.chat.id)
         if not pending or pending != {"username": username, "generation": generation}:
             return
@@ -322,7 +332,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
         self._expect(msg, self._step_edit_wl_limit, username, generation)  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_edit_wl_limit(self, message: types.Message, username: str, generation: str) -> None:
+    async def _step_edit_wl_limit(
+        self, message: types.Message, username: str, generation: str
+    ) -> None:
         pending = self._pending_edits.get(message.chat.id)
         if not pending or pending != {"username": username, "generation": generation}:
             return

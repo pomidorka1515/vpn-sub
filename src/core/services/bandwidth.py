@@ -106,7 +106,9 @@ class BandwidthService(BaseService):
                 if traffic is None or known.get(client.email) != client.uuid:
                     continue
                 values[client.email] = BandwidthInfo(
-                    traffic.up, traffic.down, traffic.up + traffic.down,
+                    traffic.up,
+                    traffic.down,
+                    traffic.up + traffic.down,
                 )
         return result
 

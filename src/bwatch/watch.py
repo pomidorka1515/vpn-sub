@@ -42,9 +42,7 @@ class BWatch:
         (
             "Reconcile",
             7200,
-            (
-                ("inbound reconcile", "reconcile_inbounds"),
-            ),
+            (("inbound reconcile", "reconcile_inbounds"),),
         ),
         (
             "Snapshots",
@@ -80,7 +78,9 @@ class BWatch:
             ):
                 return 0, 0, None, current
             return (
-                int(current.upload if current.upload < last.upload else current.upload - last.upload),
+                int(
+                    current.upload if current.upload < last.upload else current.upload - last.upload
+                ),
                 int(
                     current.download
                     if current.download < last.download
@@ -302,7 +302,10 @@ class BWatch:
             if saved.get("uuid") == state["uuid"]:
                 for item in saved["notices"]:
                     notice = Notice(
-                        Kind[item["kind"]], item["bucket"], item["fields"], tuple(item["clears"]),
+                        Kind[item["kind"]],
+                        item["bucket"],
+                        item["fields"],
+                        tuple(item["clears"]),
                     )
                     pending[notice.marker] = notice
         for notice in notices:
@@ -310,7 +313,9 @@ class BWatch:
             clears = set(notice.clears)
             if notice.kind.opens_recovery is not None:
                 clears.add(notice.kind.opens_recovery.kind_id)
-            pending = {key: value for key, value in pending.items() if value.kind.kind_id not in clears}
+            pending = {
+                key: value for key, value in pending.items() if value.kind.kind_id not in clears
+            }
             if notice.kind.scope is not Scope.THRESHOLD:
                 pending[notice.marker] = notice
         pending = {
@@ -323,13 +328,15 @@ class BWatch:
             if pending:
                 await self.db.set_metadata(
                     storage_key,
-                    json.dumps({
-                        "uuid": state["uuid"],
-                        "notices": [
-                            {**asdict(notice), "kind": notice.kind.name}
-                            for notice in pending.values()
-                        ],
-                    }),
+                    json.dumps(
+                        {
+                            "uuid": state["uuid"],
+                            "notices": [
+                                {**asdict(notice), "kind": notice.kind.name}
+                                for notice in pending.values()
+                            ],
+                        }
+                    ),
                 )
             else:
                 await self.db.delete_metadata(storage_key)
@@ -745,8 +752,9 @@ class BWatch:
                         problems.append(f"{label}: {value.current / value.total * 100:.0f}%")
                 if not problems:
                     self._panel_alerts.pop(panel.name, None)
-                elif time.monotonic() - self._panel_alerts.get(panel.name, float("-inf")) > (
-                    self.cfg.view()["panel_alert_cooldown"]
+                elif (
+                    time.monotonic() - self._panel_alerts.get(panel.name, float("-inf"))
+                    > (self.cfg.view()["panel_alert_cooldown"])
                 ):
                     await self._alert_admin(
                         f"⚠️ Panel {panel.name}:\n" + "\n".join(f"- {p}" for p in problems),

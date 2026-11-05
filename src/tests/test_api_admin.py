@@ -123,8 +123,17 @@ async def test_panel_status_failure_preserves_missing_panel_response(
 @pytest.mark.parametrize(
     "value",
     [
-        float("inf"), float("-inf"), float("nan"), 2**70, str(2**70), 2**63 - 1,
-        1.9, -0.5, True, False, "1.9",
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        2**70,
+        str(2**70),
+        2**63 - 1,
+        1.9,
+        -0.5,
+        True,
+        False,
+        "1.9",
     ],
 )
 async def test_user_numeric_bounds(
@@ -154,7 +163,9 @@ async def test_user_numeric_bounds(
 @pytest.mark.parametrize("operation", ["add", "update"])
 @pytest.mark.parametrize("field", ["limit", "wl_limit", "time"])
 async def test_user_numeric_boundary(
-    admin_api: tuple[Quart, Subscription], operation: str, field: str,
+    admin_api: tuple[Quart, Subscription],
+    operation: str,
+    field: str,
 ) -> None:
     app, sub = admin_api
     mutation = AsyncMock()
@@ -177,13 +188,18 @@ async def test_user_numeric_boundary(
 
 @pytest.mark.parametrize("field", ["gb", "wl_gb", "uses"])
 async def test_code_numeric_boundary(
-    admin_api: tuple[Quart, Subscription], field: str,
+    admin_api: tuple[Quart, Subscription],
+    field: str,
 ) -> None:
     maximum = 2**63 - 1 if field == "uses" else (2**63 - 1) // 10**9
-    response = await admin_api[0].test_client().post(
-        "/sub/api/api/code/add",
-        headers={"Authorization": "secret"},
-        json={"code": "invite", "action": "register", field: maximum},
+    response = (
+        await admin_api[0]
+        .test_client()
+        .post(
+            "/sub/api/api/code/add",
+            headers={"Authorization": "secret"},
+            json={"code": "invite", "action": "register", field: maximum},
+        )
     )
     assert response.status_code == 201
 
@@ -192,8 +208,16 @@ async def test_code_numeric_boundary(
 @pytest.mark.parametrize(
     "value",
     [
-        float("inf"), float("-inf"), float("nan"), 2**70, str(2**70),
-        1.9, -0.5, True, False, "1.9",
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        2**70,
+        str(2**70),
+        1.9,
+        -0.5,
+        True,
+        False,
+        "1.9",
     ],
 )
 async def test_code_numeric_bounds(
@@ -218,7 +242,8 @@ async def test_code_numeric_bounds(
 
 @pytest.mark.parametrize("value", [0, 1, 1.0, "1", " +1 "])
 async def test_admin_integer_representations(
-    admin_api: tuple[Quart, Subscription], value: float | str,
+    admin_api: tuple[Quart, Subscription],
+    value: float | str,
 ) -> None:
     app, sub = admin_api
     add_user = AsyncMock()
@@ -228,12 +253,21 @@ async def test_admin_integer_representations(
     sub.business_svc.update_params = update_user  # type: ignore[method-assign]
     sub.code_svc.add_code = add_code  # type: ignore[method-assign]
     for operation, mutation, fields, body, status in (
-        ("user/add", add_user, ("limit", "wl_limit", "time"),
-         {"user": "alice", "displayname": "Alice"}, 201),
-        ("user/update", update_user, ("limit", "wl_limit", "time"),
-         {"user": "alice"}, 200),
-        ("code/add", add_code, ("days", "gb", "wl_gb", "uses"),
-         {"code": "invite", "action": "register"}, 201),
+        (
+            "user/add",
+            add_user,
+            ("limit", "wl_limit", "time"),
+            {"user": "alice", "displayname": "Alice"},
+            201,
+        ),
+        ("user/update", update_user, ("limit", "wl_limit", "time"), {"user": "alice"}, 200),
+        (
+            "code/add",
+            add_code,
+            ("days", "gb", "wl_gb", "uses"),
+            {"code": "invite", "action": "register"},
+            201,
+        ),
     ):
         response = await app.test_client().post(
             f"/sub/api/api/{operation}",
@@ -276,7 +310,8 @@ async def test_code_numeric_unit_overflow(
 
 
 @pytest.mark.parametrize(
-    "cutoff", [2**70, 2**63 - 1, (2**63 - 1) // 86400 + 1, float("inf"), float("nan")],
+    "cutoff",
+    [2**70, 2**63 - 1, (2**63 - 1) // 86400 + 1, float("inf"), float("nan")],
 )
 async def test_snapshot_cutoff_bounds(
     admin_api: tuple[Quart, Subscription],
@@ -707,7 +742,11 @@ async def test_health_reports_db_and_process_status(
     assert obj["daily_snapshot_failure"] is None
     assert obj["rollback_failures"] == {"uuid": {}, "registration": {}}
     assert obj["pending_recovery"] == {
-        "registration": [], "create": [], "delete": [], "reset": [], "sync": [],
+        "registration": [],
+        "create": [],
+        "delete": [],
+        "reset": [],
+        "sync": [],
     }
 
 

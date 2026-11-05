@@ -225,7 +225,8 @@ def test_script_rejects_malformed_base64(monkeypatch: pytest.MonkeyPatch, encode
 
 @pytest.mark.parametrize("mismatch", ["response", "listing"])
 def test_wrapped_script_rejects_digest_mismatch(
-    monkeypatch: pytest.MonkeyPatch, mismatch: str,
+    monkeypatch: pytest.MonkeyPatch,
+    mismatch: str,
 ) -> None:
     payload = _blob(b"script\n")
     digest = payload["sha"]

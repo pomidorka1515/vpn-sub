@@ -79,10 +79,14 @@ async def test_invalid_registration_invitation_preserves_json(
     web_api: tuple[Quart, Database],
     agent: str,
 ) -> None:
-    response = await web_api[0].test_client().post(
-        "/custom/webapi/register",
-        headers={"User-Agent": agent},
-        json={"username": "new-user", "password": "secret", "code": "missing", "name": "New"},
+    response = (
+        await web_api[0]
+        .test_client()
+        .post(
+            "/custom/webapi/register",
+            headers={"User-Agent": agent},
+            json={"username": "new-user", "password": "secret", "code": "missing", "name": "New"},
+        )
     )
     assert response.status_code == 404
     assert response.mimetype == "application/json"
@@ -128,7 +132,8 @@ async def test_registration_rejects_changed_username_then_logs_in_with_exact_inp
 
 
 @pytest.mark.parametrize(
-    "field", ["name", "fingerprint", "username", "password", "current_password"],
+    "field",
+    ["name", "fingerprint", "username", "password", "current_password"],
 )
 @pytest.mark.parametrize("value", [42, 0, 1.5, True, False, [], {}, ["chrome"]])
 async def test_settings_reject_non_string_fields(
@@ -315,7 +320,8 @@ async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> Non
 
 
 @pytest.mark.parametrize(
-    "path", ["/missing", "/custom/fonts/missing.woff2", "/custom/admin/missing.js"],
+    "path",
+    ["/missing", "/custom/fonts/missing.woff2", "/custom/admin/missing.js"],
 )
 @pytest.mark.parametrize("browser", [True, False])
 async def test_not_found_uses_html_only_for_browsers(

@@ -157,7 +157,8 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         if not reference.startswith(":"):
             return reference
         matches = [
-            username for username in await self.sub.user_svc.list_users()
+            username
+            for username in await self.sub.user_svc.list_users()
             if user_reference(username) == reference
         ]
         # Never resolve by list position or silently pick an ambiguous target.

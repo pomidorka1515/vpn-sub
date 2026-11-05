@@ -55,7 +55,8 @@ def admin() -> tuple[TelegramAdminBot, MagicMock, MagicMock]:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("length", [54, 55, 58, 59, 60, 64, 200])
 async def test_user_callbacks_fit_and_resolve_full_username(
-    admin: tuple[TelegramAdminBot, MagicMock, MagicMock], length: int,
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
+    length: int,
 ) -> None:
     bot, telegram, subscription = admin
     username = "a_" + "x" * (length - 2)
@@ -89,7 +90,8 @@ async def test_user_callbacks_fit_and_resolve_full_username(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("prefix", ["info", "dodel", "edit_user"])
 async def test_removed_user_reference_cannot_retarget_current_workflow(
-    admin: tuple[TelegramAdminBot, MagicMock, MagicMock], prefix: str,
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
+    prefix: str,
 ) -> None:
     bot, telegram, subscription = admin
     await bot._cb_edit_user_options(7, "alice")
@@ -105,7 +107,8 @@ async def test_removed_user_reference_cannot_retarget_current_workflow(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("next_user", ["bob", "alice"])
 async def test_stale_edit_menus_cannot_retarget_or_clear_current_workflow(
-    admin: tuple[TelegramAdminBot, MagicMock, MagicMock], next_user: str,
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
+    next_user: str,
 ) -> None:
     bot, telegram, subscription = admin
     bot.cfg = config_mock(subscription_config(fingerprints=["chrome", "firefox"]))
@@ -132,7 +135,8 @@ async def test_stale_edit_menus_cannot_retarget_or_clear_current_workflow(
 
     await bot.handle_callbacks(_callback(f"fp_save_firefox:{current['generation']}"))
     subscription.business_svc.update_params.assert_awaited_once_with(
-        username=next_user, fingerprint="firefox",
+        username=next_user,
+        fingerprint="firefox",
     )
 
 

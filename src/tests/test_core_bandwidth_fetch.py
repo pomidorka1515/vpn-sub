@@ -109,7 +109,10 @@ async def test_traffic_rejects_foreign_uuid_under_known_email(
     clients = [make_panel_client("alice", [1], up=5, down=6)] if include_owned else []
     clients.append(
         make_panel_client(
-            "alice", [2], up=9_000, down=9_000,
+            "alice",
+            [2],
+            up=9_000,
+            down=9_000,
             uuid="ffffffff-ffff-ffff-ffff-ffffffffffff",
         ),
     )
@@ -215,7 +218,11 @@ async def test_get_info_monthly_units_follow_pretty(
     subscription = await make_subscription(database)
     await create_alice(database)
     await database.update_user(
-        "alice", bw_used=monthly, wl_bw_used=wl_monthly, bw_limit=5, wl_bw_limit=10,
+        "alice",
+        bw_used=monthly,
+        wl_bw_used=wl_monthly,
+        bw_limit=5,
+        wl_bw_limit=10,
     )
 
     for info in (

@@ -409,7 +409,9 @@ async def _reconcile_user(
         report.seeded[username] = seed_value
         if apply:
             await ledger.set_intent(
-                panel.name, username, SeedIntent((legacy_up, legacy_down), seed_value),
+                panel.name,
+                username,
+                SeedIntent((legacy_up, legacy_down), seed_value),
             )
             await _post(
                 panel,

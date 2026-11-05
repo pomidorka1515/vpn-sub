@@ -152,10 +152,12 @@ def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
             "dns": {},
             "routing": {"rules": [], "domainStrategy": "AsIs"},
             "inbounds": [],
-            "outbounds": [{
-                "settings": {"vnext": [{"address": "", "users": [{"id": ""}]}]},
-                "streamSettings": {},
-            }],
+            "outbounds": [
+                {
+                    "settings": {"vnext": [{"address": "", "users": [{"id": ""}]}]},
+                    "streamSettings": {},
+                }
+            ],
             "remarks": "test",
         },
         "3xui": {
@@ -207,7 +209,8 @@ def test_whitelist_panel_limit_on_commit_and_reload(app_cfg: Config[AppConfig]) 
 
 @pytest.mark.parametrize("boundary", ["load", "reload", "commit", "validate"])
 @pytest.mark.parametrize(
-    "invalid", ["profile_node", "removed_node", "username", "password", "nginx_auth"],
+    "invalid",
+    ["profile_node", "removed_node", "username", "password", "nginx_auth"],
 )
 def test_business_validation_at_config_boundaries(
     app_cfg: Config[AppConfig],
@@ -680,46 +683,57 @@ def test_schema_accepts_allowed_fingerprints(app_cfg: Config[AppConfig], fingerp
 @pytest.mark.parametrize("boundary", ["load", "reload", "commit", "validate"])
 @pytest.mark.parametrize(
     ("field", "value"),
-    cast("list[tuple[str, JsonValue]]", [
-        ("profiles.profile.json", {}),
-        ("profiles.profile.json.settings", None),
-        ("profiles.profile.json.settings", {}),
-        ("profiles.profile.json.settings.vnext", None),
-        ("profiles.profile.json.settings.vnext", []),
-        ("profiles.profile.json.settings.vnext", [{}]),
-        ("profiles.profile.json.settings.vnext", [{"users": []}]),
-        ("profiles.profile.json.settings.vnext", [{"users": [None]}]),
-        ("profiles.profile.json.streamSettings", None),
-        ("profiles.profile.json.streamSettings.tlsSettings", []),
-        ("profiles.profile.json.streamSettings.realitySettings", "invalid"),
-        ("profiles.profile.json.streamSettings.xhttpSettings", False),
-        ("profiles.profile.json.streamSettings.grpcSettings", 1),
-        ("profiles.profile.json.streamSettings.httpupgradeSettings", []),
-        ("profiles.profile.json.streamSettings.wsSettings", []),
-        ("profiles.profile.json.streamSettings.wsSettings", {"headers": None}),
-        ("json_template.outbounds", []),
-        ("json_template.outbounds", {}),
-        ("json_template.outbounds", [None]),
-        ("json_template.dns", []),
-        ("json_template.inbounds", {}),
-        ("json_template.remarks", None),
-        ("json_template.routing", []),
-        ("json_template.routing.rules", {}),
-        ("json_template.routing.domainStrategy", []),
-        ("json_template.meta", None),
-    ]),
+    cast(
+        "list[tuple[str, JsonValue]]",
+        [
+            ("profiles.profile.json", {}),
+            ("profiles.profile.json.settings", None),
+            ("profiles.profile.json.settings", {}),
+            ("profiles.profile.json.settings.vnext", None),
+            ("profiles.profile.json.settings.vnext", []),
+            ("profiles.profile.json.settings.vnext", [{}]),
+            ("profiles.profile.json.settings.vnext", [{"users": []}]),
+            ("profiles.profile.json.settings.vnext", [{"users": [None]}]),
+            ("profiles.profile.json.streamSettings", None),
+            ("profiles.profile.json.streamSettings.tlsSettings", []),
+            ("profiles.profile.json.streamSettings.realitySettings", "invalid"),
+            ("profiles.profile.json.streamSettings.xhttpSettings", False),
+            ("profiles.profile.json.streamSettings.grpcSettings", 1),
+            ("profiles.profile.json.streamSettings.httpupgradeSettings", []),
+            ("profiles.profile.json.streamSettings.wsSettings", []),
+            ("profiles.profile.json.streamSettings.wsSettings", {"headers": None}),
+            ("json_template.outbounds", []),
+            ("json_template.outbounds", {}),
+            ("json_template.outbounds", [None]),
+            ("json_template.dns", []),
+            ("json_template.inbounds", {}),
+            ("json_template.remarks", None),
+            ("json_template.routing", []),
+            ("json_template.routing.rules", {}),
+            ("json_template.routing.domainStrategy", []),
+            ("json_template.meta", None),
+        ],
+    ),
 )
 def test_json_profile_schema_rejects_malformed_structures(
-    app_cfg: Config[AppConfig], boundary: str, field: str, value: JsonValue,
+    app_cfg: Config[AppConfig],
+    boundary: str,
+    field: str,
+    value: JsonValue,
 ) -> None:
     document = cast(JsonDict, json.loads(json.dumps(app_cfg.copy())))
     document["nodes"] = {"local": "example.test"}
     document["profiles"] = {
         "profile": {
-            "flag": "", "name": ["local", "local"],
+            "flag": "",
+            "name": ["local", "local"],
             "json": {"settings": {"vnext": [{"users": [{}]}]}, "streamSettings": {}},
-            "description": ["", ""], "whitelist": False, "xhttpExtra": {},
-            "masterLink": "", "node": "local", "shortProfileDescription": ["", ""],
+            "description": ["", ""],
+            "whitelist": False,
+            "xhttpExtra": {},
+            "masterLink": "",
+            "node": "local",
+            "shortProfileDescription": ["", ""],
         },
     }
     target = document
@@ -764,7 +778,8 @@ def test_json_profile_schema_rejects_malformed_structures(
     ],
 )
 def test_json_profile_schema_preserves_supported_transports(
-    app_cfg: Config[AppConfig], stream: JsonDict,
+    app_cfg: Config[AppConfig],
+    stream: JsonDict,
 ) -> None:
     from builders.json_profiles import build_json
 
@@ -772,13 +787,20 @@ def test_json_profile_schema_preserves_supported_transports(
     document["nodes"] = {"local": "example.test"}
     document["profiles"] = {
         "profile": {
-            "flag": "", "name": ["local", "local"],
+            "flag": "",
+            "name": ["local", "local"],
             "json": {
-                "protocol": "vless", "settings": {"vnext": [{"users": [{}]}]},
-                "streamSettings": stream, "customExtension": {"enabled": True},
+                "protocol": "vless",
+                "settings": {"vnext": [{"users": [{}]}]},
+                "streamSettings": stream,
+                "customExtension": {"enabled": True},
             },
-            "description": ["", ""], "whitelist": False, "xhttpExtra": {},
-            "masterLink": "", "node": "local", "shortProfileDescription": ["", ""],
+            "description": ["", ""],
+            "whitelist": False,
+            "xhttpExtra": {},
+            "masterLink": "",
+            "node": "local",
+            "shortProfileDescription": ["", ""],
         },
     }
     with app_cfg.edit() as tx:

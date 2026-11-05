@@ -256,7 +256,9 @@ class AdminUsersMixin(AdminFeatureMixin):
         generation = self._pending_edits[interaction.user.id]["generation"]
         # Discord only accepts a modal as the first response. Fetching the
         # current limit first often exceeds the 3 second interaction window.
-        modal = discord.ui.Modal(title="Месячный лимит", custom_id=f"admin:modal:edit_limit:{generation}")
+        modal = discord.ui.Modal(
+            title="Месячный лимит", custom_id=f"admin:modal:edit_limit:{generation}"
+        )
         modal.add_item(
             discord.ui.TextInput(
                 label="Лимит GB (0 = безлимит)",
@@ -270,7 +272,9 @@ class AdminUsersMixin(AdminFeatureMixin):
     async def _cb_edit_wl_limit(self, interaction: discord.Interaction, username: str) -> None:
         del username
         generation = self._pending_edits[interaction.user.id]["generation"]
-        modal = discord.ui.Modal(title="WL лимит", custom_id=f"admin:modal:edit_wl_limit:{generation}")
+        modal = discord.ui.Modal(
+            title="WL лимит", custom_id=f"admin:modal:edit_wl_limit:{generation}"
+        )
         modal.add_item(
             discord.ui.TextInput(
                 label="Лимит GB (0 = безлимит)",
@@ -298,7 +302,9 @@ class AdminUsersMixin(AdminFeatureMixin):
     async def _cb_edit_name(self, interaction: discord.Interaction, username: str) -> None:
         del username
         generation = self._pending_edits[interaction.user.id]["generation"]
-        modal = discord.ui.Modal(title="Отображаемое имя", custom_id=f"admin:modal:edit_name:{generation}")
+        modal = discord.ui.Modal(
+            title="Отображаемое имя", custom_id=f"admin:modal:edit_name:{generation}"
+        )
         modal.add_item(
             discord.ui.TextInput(
                 label="Имя (макс. 16)",

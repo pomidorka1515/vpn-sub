@@ -10,8 +10,7 @@ def publish_backup(temporary: str, instance_dir: str, suffix: str) -> Path:
     directory = Path(instance_dir)
     # Start after existing sequences, including when retention removed earlier ones.
     sequences = (
-        path.stem.removeprefix(f"{timestamp}_")
-        for path in directory.glob(f"{timestamp}_*{suffix}")
+        path.stem.removeprefix(f"{timestamp}_") for path in directory.glob(f"{timestamp}_*{suffix}")
     )
     sequence = max((int(value) for value in sequences if value.isdecimal()), default=0) + 1
     while True:

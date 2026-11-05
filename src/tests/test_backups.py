@@ -63,7 +63,8 @@ def _prune(kind: BackupKind, instance: Path) -> None:
 
 @pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
 def test_same_second_backups_preserve_versions_and_retention(
-    tmp_path: Path, kind: BackupKind,
+    tmp_path: Path,
+    kind: BackupKind,
 ) -> None:
     instance = tmp_path / "backups"
     instance.mkdir()
@@ -88,7 +89,8 @@ def test_same_second_backups_preserve_versions_and_retention(
 
 @pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
 def test_concurrent_same_second_backups_do_not_replace_snapshots(
-    tmp_path: Path, kind: BackupKind,
+    tmp_path: Path,
+    kind: BackupKind,
 ) -> None:
     instance = tmp_path / "backups"
     barrier = threading.Barrier(4)
@@ -119,7 +121,8 @@ def test_concurrent_same_second_backups_do_not_replace_snapshots(
 
 @pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
 def test_backup_publication_failure_cleans_temporary_snapshot(
-    tmp_path: Path, kind: BackupKind,
+    tmp_path: Path,
+    kind: BackupKind,
 ) -> None:
     instance = tmp_path / "backups"
     with (

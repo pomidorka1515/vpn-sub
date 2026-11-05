@@ -89,7 +89,9 @@ class AdminRoutingMixin(AdminFeatureMixin):
         if not await self.require_admin(interaction):
             return
         custom_id = self._custom_id(interaction)
-        route = custom_id.rsplit(":", 1)[0] if custom_id.startswith("admin:modal:edit_") else custom_id
+        route = (
+            custom_id.rsplit(":", 1)[0] if custom_id.startswith("admin:modal:edit_") else custom_id
+        )
         handler_name = self.MODALS.get(route)
         if handler_name is None:
             return

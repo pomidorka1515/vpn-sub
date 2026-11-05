@@ -29,7 +29,9 @@ async def test_custom_token_validation_before_mutation(database: Database, token
     created = await subscription.business_svc.add_new_user("alice", "Alice")
     with patch.object(subscription.business_svc, "_drop_cache") as drop_cache:
         with pytest.raises(ValidationError, match="Subscription token"):
-            await subscription.business_svc.update_params("alice", displayname="Changed", token=token)
+            await subscription.business_svc.update_params(
+                "alice", displayname="Changed", token=token
+            )
         drop_cache.assert_not_called()
     user = await subscription.user_svc.user("alice")
     assert user["token"] == created.token

@@ -122,7 +122,9 @@ async def test_list_and_info_codes(
     ],
 )
 async def test_code_names_are_escaped_only_in_html(
-    codes: tuple[AdminCodesMixin, MagicMock, MagicMock], name: str, escaped: str,
+    codes: tuple[AdminCodesMixin, MagicMock, MagicMock],
+    name: str,
+    escaped: str,
 ) -> None:
     mixin, telegram, subscription = codes
     sent = cast(MagicMock, mixin._send_message)
@@ -147,7 +149,13 @@ async def test_code_names_are_escaped_only_in_html(
 
     await mixin._step_add_code_uses(_real_message("2"), "bonus", name, 30, 10, 1, False)
     subscription.code_svc.add_code.assert_awaited_once_with(
-        code=name, action="bonus", permanent=False, days=30, gb=10, wl_gb=1, uses=2,
+        code=name,
+        action="bonus",
+        permanent=False,
+        days=30,
+        gb=10,
+        wl_gb=1,
+        uses=2,
     )
     assert f"Код: <code>{escaped}</code>" in sent.call_args.args[1]
     assert sent.call_args.kwargs["parse_mode"] == "HTML"

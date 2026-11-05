@@ -94,7 +94,8 @@ def _buttons(markup: object) -> list[str]:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("length", [54, 55, 200])
 async def test_info_edit_button_fits_long_existing_username(
-    users: tuple[AdminUsersMixin, MagicMock, MagicMock], length: int,
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock],
+    length: int,
 ) -> None:
     mixin, telegram, subscription = users
     username = "x" * length
@@ -214,7 +215,9 @@ async def test_delete_and_edit_options(
     await mixin._cb_edit_user_options(7, "alice")
     assert mixin._pending_edits[7]["username"] == "alice"
     generation = mixin._pending_edits[7]["generation"]
-    assert f"edit_fp:{generation}" in _buttons(telegram.send_message.call_args.kwargs["reply_markup"])
+    assert f"edit_fp:{generation}" in _buttons(
+        telegram.send_message.call_args.kwargs["reply_markup"]
+    )
 
 
 @pytest.mark.asyncio
@@ -303,7 +306,9 @@ async def test_edit_steps_validate_and_update(
 @pytest.mark.parametrize("field", ["limit", "wl_limit", "time", "name"])
 @pytest.mark.parametrize("next_user", ["bob", "alice"])
 async def test_stale_edit_prompt_is_rejected(
-    users: tuple[AdminUsersMixin, MagicMock, MagicMock], field: str, next_user: str,
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock],
+    field: str,
+    next_user: str,
 ) -> None:
     mixin, _telegram, subscription = users
     subscription.business_svc.get_info.return_value = _info()

@@ -43,7 +43,9 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
                 error.message,
                 error.status,
                 obj={
-                    **(error.result if isinstance(error.result, dict) else {"result": error.result}),
+                    **(
+                        error.result if isinstance(error.result, dict) else {"result": error.result}
+                    ),
                     "committed": True,
                     "audit_pending": True,
                 },

@@ -579,7 +579,9 @@ class BusinessUserService(BaseService):
             fields["expiry_time"] = timee
         if token is not None:
             if not _valid_subscription_token(token):
-                raise ValidationError("Subscription token must contain at least 30 URL-safe characters")
+                raise ValidationError(
+                    "Subscription token must contain at least 30 URL-safe characters"
+                )
             fields["token"] = token
         if limit is not None:
             fields["bw_limit"] = limit

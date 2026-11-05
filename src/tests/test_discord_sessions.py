@@ -117,8 +117,11 @@ async def test_discord_authentication_checks_sqlite(
 ) -> None:
     db = session_store.db
     await db.create_user(
-        username="alice", uuid="uuid", token="subscription-token",
-        fingerprint="chrome", displayname="Alice",
+        username="alice",
+        uuid="uuid",
+        token="subscription-token",
+        fingerprint="chrome",
+        displayname="Alice",
     )
     await db.set_auth_token("alice", "auth-token")
     session_store.set_lang(7, "en")
@@ -126,7 +129,8 @@ async def test_discord_authentication_checks_sqlite(
     if state == "expired":
         async with db.transaction(immediate=True) as conn:
             await conn.execute(
-                "UPDATE users SET auth_token_expires_at = 0 WHERE username = ?", ("alice",),
+                "UPDATE users SET auth_token_expires_at = 0 WHERE username = ?",
+                ("alice",),
             )
     elif state == "replaced":
         await db.set_auth_token("alice", "other-login-token")

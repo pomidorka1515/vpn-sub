@@ -61,7 +61,10 @@ async def create_user(db: Database, name: str = "alice") -> None:
     ],
 )
 async def test_database_failures_have_safe_http_responses(
-    repository: Database, lease: str, code: int, status: int,
+    repository: Database,
+    lease: str,
+    code: int,
+    status: int,
 ) -> None:
     cause = sqlite3.OperationalError("private/path.sqlite: UNIQUE secret SQL details")
     cause.sqlite_errorcode = code
@@ -91,7 +94,8 @@ async def test_database_failures_have_safe_http_responses(
 
 @pytest.mark.asyncio
 async def test_real_lock_and_corrupt_startup_have_server_status(
-    repository: Database, tmp_path: Path,
+    repository: Database,
+    tmp_path: Path,
 ) -> None:
     repository.timeout = 0.001
     async with repository.transaction() as conn:
@@ -123,13 +127,16 @@ async def test_real_lock_and_corrupt_startup_have_server_status(
 
 @pytest.mark.asyncio
 async def test_operational_error_is_not_mistaken_for_duplicate(
-    repository: Database, monkeypatch: MonkeyPatch,
+    repository: Database,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     original = Connection.execute
     cause = sqlite3.OperationalError("UNIQUE index unavailable: private details")
 
     async def execute(
-        conn: Connection, sql: str, parameters: Parameters = (),
+        conn: Connection,
+        sql: str,
+        parameters: Parameters = (),
     ) -> int:
         if sql.startswith("INSERT INTO users"):
             raise cause
@@ -146,7 +153,8 @@ async def test_operational_error_is_not_mistaken_for_duplicate(
 
 @pytest.mark.asyncio
 async def test_reader_recovery_failure_is_sanitized(
-    repository: Database, monkeypatch: MonkeyPatch,
+    repository: Database,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     cause = sqlite3.OperationalError("cannot reopen private/path.sqlite")
     cause.sqlite_errorcode = sqlite3.SQLITE_CANTOPEN
@@ -326,7 +334,9 @@ async def test_month_rollover_rolls_back_with_baselines(repository: Database) ->
         )
     with pytest.raises(DatabaseError, match="failed"):
         await repository.increment_usages(
-            {"alice": (0, 0)}, baselines="new", period=("2026-10", "2026-10-01"),
+            {"alice": (0, 0)},
+            baselines="new",
+            period=("2026-10", "2026-10-01"),
         )
     user = await repository.get_user("alice")
     assert user is not None

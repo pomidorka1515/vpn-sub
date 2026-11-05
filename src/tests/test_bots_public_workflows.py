@@ -235,7 +235,8 @@ async def test_fingerprint_and_settings_steps(
     assert "login>32" in telegram.send_message.call_args.args[1]
     await mixin.step_settings_login(_message("y" * 32))
     subscription.business_svc.update_params.assert_called_with(
-        username="alice", ext_username="y" * 32,
+        username="alice",
+        ext_username="y" * 32,
     )
     subscription.business_svc.update_params.side_effect = AppError("taken")
     await mixin.step_settings_login(_message("bob"))
@@ -421,7 +422,8 @@ async def test_login_preserves_password_whitespace(
     await mixin.step_login_pass(_message(password), "bob@example.test")
 
     subscription.password_svc.validate_credentials.assert_awaited_once_with(
-        "bob@example.test", password,
+        "bob@example.test",
+        password,
     )
     cast(AsyncMock, mixin.limiter.allow).assert_awaited_once_with("telegram:login", "42", 10)
     subscription.telegram_svc.set_telegram_user.assert_awaited_once_with(42, "bob")

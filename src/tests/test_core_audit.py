@@ -52,7 +52,8 @@ async def test_audit_appends_when_configured(database: Database) -> None:
 
 @pytest.mark.asyncio
 async def test_bonus_audit_failure_reports_committed_result(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     await create_alice(database, bw_limit_gb=1)
     await subscription.code_svc.add_code("bonus", "bonus", gb=3, uses=2)
@@ -69,7 +70,9 @@ async def test_bonus_audit_failure_reports_committed_result(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["create", "reset", "register"])
 async def test_identity_audit_failure_preserves_committed_credentials(
-    database: Database, subscription: Subscription, operation: str,
+    database: Database,
+    subscription: Subscription,
+    operation: str,
 ) -> None:
     if operation == "reset":
         await create_alice(database)
@@ -83,8 +86,11 @@ async def test_identity_audit_failure_preserves_committed_credentials(
             await subscription.business_svc.reset_user("alice")
         else:
             await subscription.business_code_svc.register_with_code(
-                code="invite", username="alice", displayname="Alice",
-                ext_username="alice-login", ext_password="secret",
+                code="invite",
+                username="alice",
+                displayname="Alice",
+                ext_username="alice-login",
+                ext_password="secret",
             )
 
     with patch.object(subscription.audit_svc, "audit", new=AsyncMock(side_effect=OSError)):
@@ -123,7 +129,9 @@ async def test_api_reports_committed_audit_failure_as_success() -> None:
     body = await response.get_json()
     assert body["success"] is True
     assert body["obj"] == {
-        "committed": True, "audit_pending": True, "token": "committed-token",
+        "committed": True,
+        "audit_pending": True,
+        "token": "committed-token",
     }
 
 
@@ -141,7 +149,8 @@ async def test_code_management_audit_failures_are_committed(subscription: Subscr
 
 @pytest.mark.asyncio
 async def test_update_params_drops_cache_before_reporting_audit_failure(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     await create_alice(database)
     with (
@@ -156,11 +165,14 @@ async def test_update_params_drops_cache_before_reporting_audit_failure(
 
 @pytest.mark.asyncio
 async def test_reset_reports_pending_uuid_audit_even_if_reset_audit_succeeds(
-    database: Database, subscription: Subscription,
+    database: Database,
+    subscription: Subscription,
 ) -> None:
     await create_alice(database)
     with patch.object(
-        subscription.audit_svc, "audit", new=AsyncMock(side_effect=[OSError(), None]),
+        subscription.audit_svc,
+        "audit",
+        new=AsyncMock(side_effect=[OSError(), None]),
     ) as audit:
         with pytest.raises(CommittedAuditError) as caught:
             await subscription.business_svc.reset_user("alice")

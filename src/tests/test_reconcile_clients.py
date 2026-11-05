@@ -34,7 +34,9 @@ _SPEC.loader.exec_module(rc)
 
 @pytest.mark.parametrize("source", ["fallback", "data", "relative_data", "env", "cli"])
 def test_main_path_precedence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(rc, "_ROOT", tmp_path)
@@ -60,7 +62,11 @@ def test_main_path_precedence(
     config.write_text(json.dumps({"3xui": {}}), encoding="utf-8")
 
     async def run(
-        panels: dict[str, PanelConfig], keys: list[str], path: Path, *, apply: bool,
+        panels: dict[str, PanelConfig],
+        keys: list[str],
+        path: Path,
+        *,
+        apply: bool,
     ) -> int:
         assert panels == {}
         assert keys == []
@@ -448,7 +454,10 @@ async def test_seed_intent_recovers_partial_failure_without_double_counting(
     original_delete = database.delete_metadata
 
     async def interrupted_post(
-        client: XUiSession, url: str, body: dict[str, JsonValue], what: str,
+        client: XUiSession,
+        url: str,
+        body: dict[str, JsonValue],
+        what: str,
     ) -> None:
         if failure == "before_write":
             raise RuntimeError("interrupted")
@@ -505,7 +514,8 @@ async def test_seed_intent_recovers_partial_failure_without_double_counting(
 
 @pytest.mark.asyncio
 async def test_pending_seed_resolved_before_folding_new_traffic(
-    panel_client: Callable[[FakePanel], XUiSession], database: Database,
+    panel_client: Callable[[FakePanel], XUiSession],
+    database: Database,
 ) -> None:
     panel = FakePanel(
         name="panel",
@@ -526,7 +536,8 @@ async def test_pending_seed_resolved_before_folding_new_traffic(
 
 @pytest.mark.asyncio
 async def test_rejected_seed_recovery_keeps_intent_and_legacy_rows(
-    panel_client: Callable[[FakePanel], XUiSession], database: Database,
+    panel_client: Callable[[FakePanel], XUiSession],
+    database: Database,
 ) -> None:
     panel = FakePanel(
         name="panel",

@@ -260,7 +260,9 @@ async def test_terminal_and_recovery_notifications_retry(
         )
         await db.set_telegram("alice", "7")
         await db.increment_usage(
-            "alice", regular=10**9 if exhausted else 0, whitelist=10**9 if wl_exhausted else 0,
+            "alice",
+            regular=10**9 if exhausted else 0,
+            whitelist=10**9 if wl_exhausted else 0,
         )
         await watch.check()
         assert send.await_count == terminal_count
@@ -421,8 +423,13 @@ async def test_month_rollover_rebaselines_atomically(
     sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         await watch.bandwidth_check()
         total = 140
@@ -491,8 +498,13 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
     }[outage]
     try:
         await db.create_user(
-            username="alice", uuid=USER_UUID, token="a" * 40,
-            fingerprint="chrome", displayname="Alice", bw_limit_gb=1, wl_limit_gb=1,
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+            wl_limit_gb=1,
         )
         readings(100)
         await watch.bandwidth_check()
@@ -1300,7 +1312,11 @@ async def test_daily_snapshot_reset_confirmation_survives_restart(
         work: str = "foreground",
         require_complete: bool = False,
     ) -> dict[str, dict[str, BandwidthInfo]]:
-        return {} if total is None else {"panel": {"alice": BandwidthInfo(total, total * 2, total * 3)}}
+        return (
+            {}
+            if total is None
+            else {"panel": {"alice": BandwidthInfo(total, total * 2, total * 3)}}
+        )
 
     sub.bandwidth_svc.panel_traffic = traffic  # type: ignore[method-assign]
     try:

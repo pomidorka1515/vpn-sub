@@ -47,7 +47,8 @@ async def test_admin_list_and_edit_menu_routing() -> None:
 @pytest.mark.parametrize("next_user", ["bob", "alice"])
 @pytest.mark.parametrize("field", ["limit", "wl_limit", "time", "name", "fp"])
 async def test_stale_edit_components_and_modals_are_rejected(
-    next_user: str, field: str,
+    next_user: str,
+    field: str,
 ) -> None:
     _, bot, _, sub = make_bots()
     menu = FakeInteraction(data={"custom_id": "admin:edit_user:alice"})
@@ -55,8 +56,10 @@ async def test_stale_edit_components_and_modals_are_rejected(
     generation = bot._pending_edits[7]["generation"]
     view = cast(discord.ui.View, menu.response.messages[-1]["view"])
     button_id = next(
-        item.custom_id for item in view.children
-        if isinstance(item, discord.ui.Button) and item.custom_id == f"admin:edit:{field}:{generation}"
+        item.custom_id
+        for item in view.children
+        if isinstance(item, discord.ui.Button)
+        and item.custom_id == f"admin:edit:{field}:{generation}"
     )
     assert button_id is not None
     edit = FakeInteraction(data={"custom_id": button_id})
@@ -64,15 +67,21 @@ async def test_stale_edit_components_and_modals_are_rejected(
     if field == "fp":
         fingerprints = cast(discord.ui.View, edit.response.messages[-1]["view"])
         save_id = next(
-            item.custom_id for item in fingerprints.children
-            if isinstance(item, discord.ui.Button) and item.custom_id == f"admin:fp_save:chrome:{generation}"
+            item.custom_id
+            for item in fingerprints.children
+            if isinstance(item, discord.ui.Button)
+            and item.custom_id == f"admin:fp_save:chrome:{generation}"
         )
         assert save_id is not None
         stale = FakeInteraction(data={"custom_id": save_id})
     else:
         modal = cast(discord.ui.Modal, edit.response.modals[-1])
         assert modal.custom_id == f"admin:modal:edit_{field}:{generation}"
-        stale = FakeInteraction(data=modal_data(modal.custom_id, {"limit": "10", "wl_limit": "10", "days": "10", "name": "New"}))
+        stale = FakeInteraction(
+            data=modal_data(
+                modal.custom_id, {"limit": "10", "wl_limit": "10", "days": "10", "name": "New"}
+            )
+        )
 
     await bot._cb_edit_user_options(cast(discord.Interaction, FakeInteraction()), next_user)
     current = bot._pending_edits[7]
@@ -91,13 +100,17 @@ async def test_stale_edit_components_and_modals_are_rejected(
     assert bot._pending_edits[7] is current
 
     if field == "fp":
-        active = FakeInteraction(data={"custom_id": f"admin:fp_save:chrome:{current['generation']}"})
+        active = FakeInteraction(
+            data={"custom_id": f"admin:fp_save:chrome:{current['generation']}"}
+        )
         await bot.dispatch_component(cast(discord.Interaction, active))
     else:
-        active = FakeInteraction(data=modal_data(
-            f"admin:modal:edit_{field}:{current['generation']}",
-            {"limit": "10", "wl_limit": "10", "days": "10", "name": "New"},
-        ))
+        active = FakeInteraction(
+            data=modal_data(
+                f"admin:modal:edit_{field}:{current['generation']}",
+                {"limit": "10", "wl_limit": "10", "days": "10", "name": "New"},
+            )
+        )
         await bot.dispatch_modal(cast(discord.Interaction, active))
     sub.business_svc.update_params.assert_awaited_once()
     assert sub.business_svc.update_params.call_args.kwargs["username"] == next_user

@@ -59,7 +59,8 @@ def _legacy(**overrides: JsonValue) -> dict[str, JsonValue]:
                 "streamSettings": {},
             },
             "fast": {
-                "protocol": "vless", "tag": "fast",
+                "protocol": "vless",
+                "tag": "fast",
                 "settings": {"vnext": [{"users": [{}]}]},
                 "streamSettings": {},
             },
@@ -88,7 +89,9 @@ def _legacy(**overrides: JsonValue) -> dict[str, JsonValue]:
 
 @pytest.mark.parametrize("source", ["fallback", "data", "relative_data", "env", "cli"])
 def test_main_config_path_precedence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(mp, "_ROOT", tmp_path)

@@ -185,7 +185,9 @@ async def test_account_mutation_holds_lock_after_password_confirmation(
     async def change_credentials() -> AppError | None:
         try:
             await sub.account_svc.settings(
-                "alice", ext_password="intervening", current_password="secret",
+                "alice",
+                ext_password="intervening",
+                current_password="secret",
             )
         except AppError as exc:
             return exc
@@ -195,14 +197,19 @@ async def test_account_mutation_holds_lock_after_password_confirmation(
 
     try:
         await sub.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice", ext_password="secret",
+            "alice",
+            "Alice",
+            ext_username="alice",
+            ext_password="secret",
         )
         with patch.object(sub.account_svc, "confirm_password", pause_after_confirmation):
             async with asyncio.TaskGroup() as tasks:
                 if operation == "settings":
                     tasks.create_task(
                         sub.account_svc.settings(
-                            "alice", ext_password="newsecret", current_password="secret",
+                            "alice",
+                            ext_password="newsecret",
+                            current_password="secret",
                         ),
                     )
                 else:
@@ -273,29 +280,43 @@ async def test_credential_mutations_reject_invalid_password_lengths(
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         await sub.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice", ext_password="secret",
+            "alice",
+            "Alice",
+            ext_username="alice",
+            ext_password="secret",
         )
         before = await async_db.get_user("alice")
 
         async def mutate() -> None:
             if operation == "settings":
                 await sub.account_svc.settings(
-                    "alice", ext_password=password, current_password="secret",
+                    "alice",
+                    ext_password=password,
+                    current_password="secret",
                     displayname="Changed",
                 )
             elif operation == "update":
                 await sub.business_svc.update_params(
-                    "alice", ext_password=password, displayname="Changed",
+                    "alice",
+                    ext_password=password,
+                    displayname="Changed",
                 )
             elif operation == "create":
                 await sub.business_svc.add_new_user(
-                    "bob", "Bob", ext_username="bob", ext_password=password,
+                    "bob",
+                    "Bob",
+                    ext_username="bob",
+                    ext_password=password,
                 )
             else:
                 await sub.business_code_svc.register_with_code(
-                    code="unused", username="bob", displayname="Bob",
-                    ext_username="bob", ext_password=password,
+                    code="unused",
+                    username="bob",
+                    displayname="Bob",
+                    ext_username="bob",
+                    ext_password=password,
                 )
+
         with pytest.raises(ValidationError):
             await mutate()
         assert await async_db.get_user("alice") == before
@@ -317,12 +338,16 @@ async def test_credential_mutations_preserve_valid_password_whitespace(
     sub = await make_async_subscription(async_db, tmp_path)
     try:
         await sub.business_svc.add_new_user(
-            "alice", "Alice", ext_username="alice",
+            "alice",
+            "Alice",
+            ext_username="alice",
             ext_password=password if operation == "create" else "secret",
         )
         if operation == "settings":
             await sub.account_svc.settings(
-                "alice", ext_password=password, current_password="secret",
+                "alice",
+                ext_password=password,
+                current_password="secret",
             )
         elif operation == "update":
             await sub.business_svc.update_params("alice", ext_password=password)

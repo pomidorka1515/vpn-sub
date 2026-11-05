@@ -46,16 +46,23 @@ async def test_method_not_allowed_preserves_allow_header() -> None:
             ["Basic", "Bearer"],
         ),
         (
-            TooManyRequests(response=WerkzeugResponse(
-                "old body", status=429, content_type="text/plain", headers={"X-Error": "original"},
-            )),
+            TooManyRequests(
+                response=WerkzeugResponse(
+                    "old body",
+                    status=429,
+                    content_type="text/plain",
+                    headers={"X-Error": "original"},
+                )
+            ),
             "X-Error",
             ["original"],
         ),
     ],
 )
 async def test_http_exception_preserves_headers_with_json_body(
-    error: HTTPException, header: str, values: list[str],
+    error: HTTPException,
+    header: str,
+    values: list[str],
 ) -> None:
     app = create_api_application(proxy_hops=0)
 
@@ -114,7 +121,8 @@ async def test_capacity_exhaustion_is_retryable_and_does_not_submit(owner: str) 
 
 @pytest.mark.parametrize("error_type", [CapacityExceededError, RuntimeError])
 async def test_error_responses_do_not_expose_exception_details(
-    error_type: type[RuntimeError], caplog: pytest.LogCaptureFixture,
+    error_type: type[RuntimeError],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     app = create_api_application(proxy_hops=0)
 

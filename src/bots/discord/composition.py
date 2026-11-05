@@ -123,6 +123,7 @@ if TYPE_CHECKING:
         _pending_edits: dict[int, dict[str, str]]
 
         def _custom_id(self, interaction: discord.Interaction) -> str: ...
+
         _pagination_state: dict[int, dict[str, int]]
         _pending_leaderboard: dict[int, dict[str, str | int]]
 

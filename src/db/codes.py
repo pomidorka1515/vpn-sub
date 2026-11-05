@@ -61,7 +61,9 @@ class CodesMixin(ConnectionMixin):
                 )
         except DatabaseError as exc:
             if isinstance(exc.__cause__, sqlite3.IntegrityError) and getattr(
-                exc.__cause__, "sqlite_errorcode", None,
+                exc.__cause__,
+                "sqlite_errorcode",
+                None,
             ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError(f"code '{code}' already exists") from exc
             raise
@@ -169,7 +171,9 @@ class CodesMixin(ConnectionMixin):
                 }
         except DatabaseError as exc:
             if isinstance(exc.__cause__, sqlite3.IntegrityError) and getattr(
-                exc.__cause__, "sqlite_errorcode", None,
+                exc.__cause__,
+                "sqlite_errorcode",
+                None,
             ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError(
                     "username, UUID, token or external username already exists",

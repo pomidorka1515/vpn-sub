@@ -61,7 +61,9 @@ class CodeService(BaseService):
             ) from exc
         result = ApplyBonusCodeObject(**data)
         await self.audit_svc.audit_committed(
-            name="user_consume_code", info=asdict(result), result=asdict(result),
+            name="user_consume_code",
+            info=asdict(result),
+            result=asdict(result),
         )
         return result
 

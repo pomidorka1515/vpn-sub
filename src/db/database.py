@@ -35,13 +35,19 @@ def _database_error(exc: sqlite3.Error | OSError) -> DatabaseError:
         sqlite3.SQLITE_CONSTRAINT_NOTNULL,
     }:
         return DatabaseError(
-            str(exc), status=400, public_message="Database constraint conflict",
+            str(exc),
+            status=400,
+            public_message="Database constraint conflict",
         )
     if code is not None and code & 0xFF in {
-        sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED, sqlite3.SQLITE_CANTOPEN,
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+        sqlite3.SQLITE_CANTOPEN,
     }:
         return DatabaseError(
-            str(exc), status=503, public_message="Database temporarily unavailable",
+            str(exc),
+            status=503,
+            public_message="Database temporarily unavailable",
         )
     return DatabaseError(str(exc))
 

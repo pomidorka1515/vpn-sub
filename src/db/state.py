@@ -41,7 +41,9 @@ class StateMixin(ConnectionMixin):
             async with self.transaction(immediate=True) as conn:
                 if period is not None:
                     month, today = period
-                    row = await conn.row("SELECT value FROM app_metadata WHERE key = 'last_reset_month'")
+                    row = await conn.row(
+                        "SELECT value FROM app_metadata WHERE key = 'last_reset_month'"
+                    )
                     if row is None or row[0] != month:
                         # On upgrade, preserve usage when no period was recorded.
                         if row is not None:

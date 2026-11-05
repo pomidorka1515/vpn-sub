@@ -36,7 +36,8 @@ def test_list_messages_boundaries_and_oversized_fields(html: bool, limit: int) -
             names.extend(message.split("`")[1::2])
         logins.extend(
             unescape(line.split(", логин: ", 1)[1]) if html else line.split(", логин: ", 1)[1]
-            for line in message[len(header):].splitlines() if ", логин: " in line
+            for line in message[len(header) :].splitlines()
+            if ", логин: " in line
         )
     assert "".join(names) == name + "last"
     assert "".join(logins) == login
@@ -44,8 +45,14 @@ def test_list_messages_boundaries_and_oversized_fields(html: bool, limit: int) -
 
 @pytest.mark.parametrize("html", [True, False])
 def test_short_list_format_unchanged(html: bool) -> None:
-    row = "- <code>alice</code>, логин: tg\n- <code>bob</code>" if html else "- `alice`, логин: tg\n- `bob`"
-    assert list(list_messages("List\n\n", [("alice", "tg"), ("bob", None)], limit=2000, html=html)) == [
+    row = (
+        "- <code>alice</code>, логин: tg\n- <code>bob</code>"
+        if html
+        else "- `alice`, логин: tg\n- `bob`"
+    )
+    assert list(
+        list_messages("List\n\n", [("alice", "tg"), ("bob", None)], limit=2000, html=html)
+    ) == [
         "List\n\n" + row,
     ]
 
@@ -97,7 +104,9 @@ async def test_telegram_lists_split_and_keep_menus_and_html(codes: bool) -> None
 async def test_discord_online_list_uses_bounded_followups(guild_id: int | None) -> None:
     _, bot, _, sub = make_bots()
     entries = {f"user{i}😀": f"login{i}" for i in range(400)}
-    sub.panel_svc = MagicMock(get_online_status=AsyncMock(return_value=SimpleNamespace(users=entries)))
+    sub.panel_svc = MagicMock(
+        get_online_status=AsyncMock(return_value=SimpleNamespace(users=entries))
+    )
     fake = FakeInteraction(guild_id=guild_id)
     await bot._cb_online_users(cast(discord.Interaction, fake))
     assert fake.response.deferred
