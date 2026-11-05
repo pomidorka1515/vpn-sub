@@ -696,7 +696,7 @@ class BWatch:
                 if not problems:
                     self._panel_alerts.pop(panel.name, None)
                 elif time.monotonic() - self._panel_alerts.get(panel.name, float("-inf")) > (
-                    self.cfg.view()["panel_alert_cooldown"] or 3600
+                    self.cfg.view()["panel_alert_cooldown"]
                 ):
                     await self._alert_admin(
                         f"⚠️ Panel {panel.name}:\n" + "\n".join(f"- {p}" for p in problems),

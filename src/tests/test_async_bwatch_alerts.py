@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from async_core_helpers import close_async_subscription, make_async_subscription
 from bot_helpers import telegram_mock
-from helpers import USER_UUID
+from helpers import USER_UUID, config_mock, subscription_config
 
 from bots.telegram import TelegramAdminBot
 from bwatch.watch import BWatch
@@ -15,6 +16,34 @@ from notify.notifier import Notifier
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("cooldown", "expected_alerts"), [(0, 2), (3600, 1)])
+async def test_panel_alerts_respect_configured_cooldown(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    cooldown: int,
+    expected_alerts: int,
+) -> None:
+    watch.cfg = config_mock(subscription_config(panel_alert_cooldown=cooldown))
+    status = MagicMock()
+    status.obj.xray.state = "running"
+    status.obj.cpu = 95
+    status.obj.mem.total = 0
+    status.obj.disk.total = 0
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", AsyncMock(return_value=[status]))
+    alert = AsyncMock()
+    watch.alert = alert
+    now = 100.0
+    monkeypatch.setattr("bwatch.watch.time", SimpleNamespace(monotonic=lambda: now))
+
+    await watch.panel_health_check()
+    alert.assert_awaited_once()
+    now += 1
+    await watch.panel_health_check()
+
+    assert alert.await_count == expected_alerts
 
 
 @pytest.mark.asyncio
