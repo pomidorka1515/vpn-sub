@@ -80,10 +80,10 @@ async function loadOnlineUsersRequest(wrap, current) {
   if (keyed) {
     const entries = Object.entries(data);
     if (!entries.length) {
-      wrap.innerHTML = `<div class="table-empty">${t('no_online')}</div>`;
+      wrap.innerHTML += `<div class="table-empty">${t('no_online')}</div>`;
       return;
     }
-    wrap.innerHTML = `
+    wrap.innerHTML += `
       <table class="data-table">
         <thead><tr>
           <th>${t('internal_user')}</th>
@@ -103,10 +103,10 @@ async function loadOnlineUsersRequest(wrap, current) {
     `;
   } else {
     if (!data.length) {
-      wrap.innerHTML = `<div class="table-empty">${t('no_online')}</div>`;
+      wrap.innerHTML += `<div class="table-empty">${t('no_online')}</div>`;
       return;
     }
-    wrap.innerHTML = `
+    wrap.innerHTML += `
       <table class="data-table">
         <thead><tr>
           <th>${t('internal_user')}</th>
