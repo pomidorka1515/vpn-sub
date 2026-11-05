@@ -211,6 +211,37 @@ def test_existing_pre_v6_backup_is_not_overwritten(tmp_path: Path) -> None:
     assert "flags" not in _read(path)
 
 
+@pytest.mark.parametrize("existing_backup", [False, True])
+def test_replace_failure_preserves_current_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    existing_backup: bool,
+) -> None:
+    path = _write(tmp_path, _legacy())
+    original = path.read_bytes()
+    backup = path.with_name("config.json.pre-v6")
+    backup_bytes = b"stale backup\n" if existing_backup else original
+    if existing_backup:
+        backup.write_bytes(backup_bytes)
+
+    def fail_replace(source: Path, target: Path) -> None:
+        assert source.parent == tmp_path
+        assert target == path
+        assert path.read_bytes() == original
+        assert backup.read_bytes() == backup_bytes
+        raise OSError("forced replacement failure")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="forced replacement failure"):
+        mp.main(["--config", str(path), "--apply"])
+
+    assert path.read_bytes() == original
+    assert backup.read_bytes() == backup_bytes
+    assert not list(tmp_path.glob(".tmp_*.json"))
+
+
 def _drop_flag(data: dict[str, JsonValue]) -> None:
     _object(data["flags"]).pop("fast")
 

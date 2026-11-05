@@ -255,10 +255,9 @@ def _write(path: Path, data: Mapping[str, JsonValue]) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        if keep_backup:
-            path.unlink()
-        else:
-            path.replace(backup)
+        if not keep_backup:
+            # Preserve the original inode without removing the live config.
+            backup.hardlink_to(path)
         temp_path.replace(path)
     except Exception:
         temp_path.unlink(missing_ok=True)
