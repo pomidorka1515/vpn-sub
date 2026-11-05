@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,6 +11,7 @@ from helpers import SUBSCRIPTIONS, make_subscription, make_watch
 
 from config import Config, LangConfig
 from db import Database
+from threadutil import named_to_thread
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -38,8 +41,25 @@ def db_path(tmp_path: Path) -> Path:
     return tmp_path / "state.sqlite3"
 
 
+@pytest.fixture(scope="session")
+def database_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build the empty schema once; never share live connections or test data."""
+    path = tmp_path_factory.mktemp("database-template") / "state.sqlite3"
+
+    async def initialize() -> None:
+        db = Database(path=path, start_backup=False)
+        await db.start()
+        await db.close()
+
+    asyncio.run(initialize())
+    return path
+
+
 @pytest_asyncio.fixture
-async def database(db_path: Path) -> AsyncIterator[Database]:
+async def database(db_path: Path, database_template: Path) -> AsyncIterator[Database]:
+    # Closing the template checkpoints its WAL. Each test gets a private file
+    # and real startup on its own loop; migration tests using db_path stay fresh.
+    await named_to_thread("test-database-copy", shutil.copyfile, database_template, db_path)
     db = Database(path=db_path, timeout=2, start_backup=False)
     await db.start()
     try:

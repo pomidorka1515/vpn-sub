@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -21,7 +22,14 @@ from errors import ConfigError, FileCorruptionError, SchemaValidationError
 
 def compile_schema(schema: Mapping[str, JsonValue]) -> Callable[[object], object]:
     """Compile a local Draft 7 schema without inserting defaults into config data."""
-    return fastjsonschema.compile(dict(schema), use_default=False, use_formats=False)
+    # Config instances often use the same bundled schema. Key by content rather
+    # than path/signature so edits invalidate the cache, even across instances.
+    return _compile_schema(json.dumps(dict(schema)))
+
+
+@lru_cache(maxsize=32)
+def _compile_schema(document: str) -> Callable[[object], object]:
+    return fastjsonschema.compile(json.loads(document), use_default=False, use_formats=False)
 
 
 def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:

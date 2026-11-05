@@ -833,6 +833,26 @@ def test_schema_rejects_invalid_fingerprints_on_load(
         )
 
 
+def test_schema_compilation_reuses_content_without_retaining_mutable_input() -> None:
+    import fastjsonschema
+
+    from config.schema import compile_schema
+
+    schema: JsonDict = {"properties": {"cached_value": {"type": "string"}}}
+    validator = compile_schema(schema)
+    assert compile_schema(json.loads(json.dumps(schema))) is validator
+    assert validator({"cached_value": "ok"}) == {"cached_value": "ok"}
+    with pytest.raises(fastjsonschema.JsonSchemaValueException):
+        validator({"cached_value": 1})
+
+    schema["required"] = ["cached_value"]
+    changed = compile_schema(schema)
+    assert changed is not validator
+    with pytest.raises(fastjsonschema.JsonSchemaValueException):
+        changed({})
+    assert validator({}) == {}
+
+
 def test_schema_does_not_insert_defaults_and_recompiles_changes(tmp_path: Path) -> None:
     schema_path = tmp_path / "schema.json"
     schema: JsonDict = {"properties": {"optional": {"type": "string", "default": "default"}}}
