@@ -5,6 +5,7 @@ import threading
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, ClassVar
+from weakref import WeakSet
 
 from .colors import Colors
 from .common import _ANSI_ESCAPE
@@ -20,6 +21,10 @@ threading.main_thread().name = "main"
 
 
 class Logger(logging.Logger):
+    _instances: ClassVar[WeakSet[Logger]] = WeakSet()
+    _shared_handlers: ClassVar[set[logging.Handler]] = set()
+    _registry_lock: ClassVar[threading.RLock] = threading.RLock()
+
     COLORS: ClassVar[dict[str, str]] = {
         "TRACE": Colors.GREY,
         "DEBUG": Colors.CYAN,
@@ -47,6 +52,25 @@ class Logger(logging.Logger):
             handler = logging.StreamHandler()
             handler.setFormatter(self._make_formatter())
             self.addHandler(handler)
+        with self._registry_lock:
+            self._instances.add(self)
+            for shared_handler in self._shared_handlers:
+                self.addHandler(shared_handler)
+
+    @classmethod
+    def add_shared_handler(cls, handler: logging.Handler) -> None:
+        """Attach to every live instance, including future same-name loggers."""
+        with cls._registry_lock:
+            cls._shared_handlers.add(handler)
+            for logger in cls._instances:
+                logger.addHandler(handler)
+
+    @classmethod
+    def remove_shared_handler(cls, handler: logging.Handler) -> None:
+        with cls._registry_lock:
+            cls._shared_handlers.discard(handler)
+            for logger in cls._instances:
+                logger.removeHandler(handler)
 
     def trace(
         self,

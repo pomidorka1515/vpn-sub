@@ -8,6 +8,7 @@ import sys
 import threading
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
+from weakref import WeakSet
 
 from .common import _ANSI_ESCAPE
 
@@ -121,10 +122,16 @@ class AsyncTelegramLogger(logging.Handler):
     def __init__(self, delivery: LogDelivery[str]) -> None:
         super().__init__()
         self.delivery = delivery
+        self._seen: WeakSet[logging.LogRecord] = WeakSet()
 
     def emit(self, record: logging.LogRecord) -> None:
         if _IN_LOG_DELIVERY.get():
             return
+        # The same handler can be reached again through logger propagation.
+        # Handler.handle holds our lock; weak references do not retain records.
+        if record in self._seen:
+            return
+        self._seen.add(record)
         try:
             text = _ANSI_ESCAPE.sub("", self.format(record))
             self.delivery.submit(

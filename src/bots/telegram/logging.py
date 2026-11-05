@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from loggers import Logger
 from loggers.delivery import AsyncTelegramLogger, LogDelivery
 
 if TYPE_CHECKING:
@@ -28,8 +29,10 @@ class AsyncBotLogging:
         ]
         for logger in self._loggers:
             logger.addHandler(self.handler)
+        Logger.add_shared_handler(self.handler)
 
     async def close(self) -> None:
+        Logger.remove_shared_handler(self.handler)
         for logger in self._loggers:
             logger.removeHandler(self.handler)
         self._loggers.clear()
