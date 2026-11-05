@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -13,8 +14,9 @@ from async_api_helpers import make_watch as make_api_watch
 from helpers import SUBSCRIPTIONS, make_subscription, make_watch, subscription_config
 
 from api import AsyncApi
-from config import Config, LangConfig
+from config import AppConfig, Config, LangConfig
 from config.store import AsyncLinesConfig
+from config.validation import check_config_document
 from db import Database
 from threadutil import named_to_thread
 
@@ -27,6 +29,72 @@ if TYPE_CHECKING:
     from core import Subscription
 
 __all__ = ["admin_api", "database", "db_path", "language", "subscription", "watch"]
+
+
+@pytest.fixture
+def cfg(tmp_path: Path) -> Iterator[Config]:
+    config = Config(path=tmp_path / "config.json", backup_dir=None, sync_mode="none")
+    yield config
+    config.close()
+
+
+@pytest.fixture
+def app_cfg(tmp_path: Path) -> Iterator[Config[AppConfig]]:
+    document: AppConfig = {
+        "uri": "sub",
+        "api_token": "test-admin-token-long-enough",
+        "provider_id": "test",
+        "salt": "test",
+        "domain": "example.test",
+        "ping_check_url": "https://example.test/ping",
+        "sub_name": "test",
+        "api_admin_ui_auth": ["admin", "password"],
+        "fingerprints": ["chrome"],
+        "bypass_packages": [],
+        "panel_alert_cooldown": 3600,
+        "nodes": {},
+        "profiles": {},
+        "redis": {"url": "redis://localhost/0"},
+        "json_template": {
+            "dns": {},
+            "routing": {"rules": [], "domainStrategy": "AsIs"},
+            "inbounds": [],
+            "outbounds": [
+                {
+                    "settings": {"vnext": [{"address": "", "users": [{"id": ""}]}]},
+                    "streamSettings": {},
+                }
+            ],
+            "remarks": "test",
+        },
+        "3xui": {
+            "local": {
+                "name": "local",
+                "address": "localhost",
+                "port": 2053,
+                "uri": "panel",
+                "token": "test-token-at-least-20-characters",
+                "https": False,
+                "whitelist": False,
+                "inbounds_list": [1],
+                "mode": "whitelist",
+            },
+        },
+        "bot": {"token": "test", "whitelist": [1]},
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    config = Config[AppConfig](
+        path=path,
+        schema_path=Path(__file__).resolve().parents[2] / "config.schema.json",
+        validators=(check_config_document,),
+        backup_dir=None,
+        sync_mode="none",
+    )
+    try:
+        yield config
+    finally:
+        config.close()
 
 
 @pytest.fixture(scope="session")
