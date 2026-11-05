@@ -55,7 +55,7 @@ class PublicLoginMixin(PublicFeatureMixin):
         uid = cast(types.User, message.from_user).id
         lang = await self.get_lang(uid)
         t = self.TEXTS[lang]
-        password = text.strip()
+        password = text
 
         await self._delete_message(message.chat.id, message.message_id, secret=True)
 

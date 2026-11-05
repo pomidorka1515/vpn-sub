@@ -378,6 +378,29 @@ async def test_login_flow(
     assert "in" in telegram.send_message.call_args.args[1]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("password", [" secret", "secret ", " secret ", "\tsecret\t"])
+async def test_login_preserves_password_whitespace(
+    login: tuple[PublicLoginMixin, MagicMock, MagicMock],
+    password: str,
+) -> None:
+    mixin, telegram, subscription = login
+
+    def validate_credentials(email: str, supplied: str) -> str:
+        return "bob" if email == "bob@example.test" and supplied == password else ""
+
+    subscription.password_svc.validate_credentials.side_effect = validate_credentials
+
+    await mixin.step_login_pass(_message(password), "bob@example.test")
+
+    subscription.password_svc.validate_credentials.assert_awaited_once_with(
+        "bob@example.test", password,
+    )
+    subscription.telegram_svc.set_telegram_user.assert_awaited_once_with(42, "bob")
+    cast(MagicMock, mixin._delete_message).assert_awaited_once_with(7, 5, secret=True)
+    assert "in" in telegram.send_message.call_args.args[1]
+
+
 @pytest.fixture
 def traffic() -> tuple[PublicTrafficMixin, MagicMock, MagicMock]:
     mixin, telegram, subscription = _wire(PublicTrafficMixin.__new__(PublicTrafficMixin))
