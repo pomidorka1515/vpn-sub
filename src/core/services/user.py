@@ -473,6 +473,8 @@ class BusinessUserService(BaseService):
             raise ValidationError("Ext Username too long")
         if ext_password is not None and not ext_username:
             raise ValidationError("External username required")
+        if ext_password is not None:
+            self.password_svc.validate_new_password(ext_password)
         if userid is not None and not isuuid(userid):
             raise ValidationError("Invalid UUID")
         conf = self.cfg.view()
@@ -578,6 +580,7 @@ class BusinessUserService(BaseService):
         if wl_limit is not None:
             fields["wl_bw_limit"] = wl_limit
         if ext_password is not None:
+            self.password_svc.validate_new_password(ext_password)
             fields["ext_password"] = await self.password_svc.hash(ext_password)
         if (
             fields.get("ext_password") is not None

@@ -168,6 +168,7 @@ class BusinessCodeService(BaseService):
             or not ext_password
         ):
             raise ValidationError("Invalid credentials")
+        self.password_svc.validate_new_password(ext_password)
         await self.user_svc.require_recovered(username)
         if len(ext_username) > 32:
             raise ValidationError("Invalid username")

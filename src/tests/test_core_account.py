@@ -262,6 +262,77 @@ async def test_empty_credentials_require_current_password(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("password", ["", "x" * 129])
+@pytest.mark.parametrize("operation", ["settings", "update", "create", "register"])
+async def test_credential_mutations_reject_invalid_password_lengths(
+    async_db: Database,
+    tmp_path: Path,
+    password: str,
+    operation: str,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    try:
+        await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice", ext_password="secret",
+        )
+        before = await async_db.get_user("alice")
+
+        async def mutate() -> None:
+            if operation == "settings":
+                await sub.account_svc.settings(
+                    "alice", ext_password=password, current_password="secret",
+                    displayname="Changed",
+                )
+            elif operation == "update":
+                await sub.business_svc.update_params(
+                    "alice", ext_password=password, displayname="Changed",
+                )
+            elif operation == "create":
+                await sub.business_svc.add_new_user(
+                    "bob", "Bob", ext_username="bob", ext_password=password,
+                )
+            else:
+                await sub.business_code_svc.register_with_code(
+                    code="unused", username="bob", displayname="Bob",
+                    ext_username="bob", ext_password=password,
+                )
+        with pytest.raises(ValidationError):
+            await mutate()
+        assert await async_db.get_user("alice") == before
+        assert await async_db.get_user("bob") is None
+        assert await sub.password_svc.validate_credentials("alice", "secret") == "alice"
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("password", [" ", " padded password ", " " + "é" * 126 + " "])
+@pytest.mark.parametrize("operation", ["settings", "update", "create"])
+async def test_credential_mutations_preserve_valid_password_whitespace(
+    async_db: Database,
+    tmp_path: Path,
+    password: str,
+    operation: str,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    try:
+        await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice",
+            ext_password=password if operation == "create" else "secret",
+        )
+        if operation == "settings":
+            await sub.account_svc.settings(
+                "alice", ext_password=password, current_password="secret",
+            )
+        elif operation == "update":
+            await sub.business_svc.update_params("alice", ext_password=password)
+        assert await sub.password_svc.validate_credentials("alice", password) == "alice"
+        assert await sub.password_svc.validate_credentials("alice", password.strip()) is None
+    finally:
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
 async def test_shared_account_delete_requires_password(async_db: Database, tmp_path: Path) -> None:
     sub = await make_async_subscription(async_db, tmp_path)
     try:

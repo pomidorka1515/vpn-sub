@@ -4,12 +4,18 @@ import hashlib
 
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
+from errors import ValidationError
 from util import compare
 
 from ..common import BaseService
 
 
 class PasswordService(BaseService):
+    @staticmethod
+    def validate_new_password(value: object) -> None:
+        if not isinstance(value, str) or not 1 <= len(value) <= 128:
+            raise ValidationError("'password' must be 1-128 characters")
+
     async def hash(self, value: str) -> str:
         return await self.res.offloads.passwords.run(self.res.password_hasher.hash, value)
 
