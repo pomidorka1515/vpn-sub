@@ -71,6 +71,26 @@ async def sign_in(client: TestClientProtocol) -> None:
         assert part in response.headers["Set-Cookie"]
 
 
+@pytest.mark.parametrize("resource", ["user", "code"])
+@pytest.mark.parametrize("agent", ["Mozilla/5.0 Chrome/130.0 Safari/537.36", "curl/8.0"])
+async def test_missing_admin_resource_preserves_json(
+    admin_api: tuple[Quart, Subscription],
+    resource: str,
+    agent: str,
+) -> None:
+    client = admin_api[0].test_client()
+    response = await client.get(
+        f"/sub/api/api/{resource}/info",
+        query_string={resource: "missing"},
+        headers={"Authorization": "secret", "User-Agent": agent},
+    )
+    assert response.status_code == 404
+    assert response.mimetype == "application/json"
+    data = await response.get_json()
+    assert data["success"] is False
+    assert data["msg"]
+
+
 @pytest.mark.parametrize("operation", ["add", "update"])
 @pytest.mark.parametrize("field", ["limit", "wl_limit", "time"])
 @pytest.mark.parametrize(

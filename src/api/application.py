@@ -11,11 +11,13 @@ from util import err, isbrowser, ok
 
 from .common import RES_DIR
 from .middleware import ProxyMiddleware
+from .web.static import AsyncStaticRoutes
 
 log = Logger("api")
 
 
 def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) -> Quart:
+    page_endpoints = {route.handler for route in AsyncStaticRoutes.ROUTES}
     app = Quart(__name__)
     app.json = DefaultJSONProvider(app)
     app.json.sort_keys = False
@@ -25,7 +27,11 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
 
     @app.after_request
     async def browser_not_found(response: Response) -> Response:
-        if response.status_code == 404 and isbrowser(request.headers.get("User-Agent", "")):
+        if (
+            response.status_code == 404
+            and (request.url_rule is None or request.endpoint in page_endpoints)
+            and isbrowser(request.headers.get("User-Agent", ""))
+        ):
             return Response(await render_template("404.html"), status=404, mimetype="text/html")
         return response
 
