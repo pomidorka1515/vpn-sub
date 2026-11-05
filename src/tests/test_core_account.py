@@ -164,6 +164,70 @@ async def test_login_rejects_external_username_reassigned_before_lock(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["settings", "delete"])
+async def test_account_mutation_holds_lock_after_password_confirmation(
+    async_db: Database,
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    sub = await make_async_subscription(async_db, tmp_path)
+    confirmed = asyncio.Event()
+    release = asyncio.Event()
+    changed = asyncio.Event()
+    confirm = sub.account_svc.confirm_password
+
+    async def pause_after_confirmation(username: str, password: str | None) -> None:
+        await confirm(username, password)
+        if not confirmed.is_set():
+            confirmed.set()
+            await release.wait()
+
+    async def change_credentials() -> AppError | None:
+        try:
+            await sub.account_svc.settings(
+                "alice", ext_password="intervening", current_password="secret",
+            )
+        except AppError as exc:
+            return exc
+        finally:
+            changed.set()
+        return None
+
+    try:
+        await sub.business_svc.add_new_user(
+            "alice", "Alice", ext_username="alice", ext_password="secret",
+        )
+        with patch.object(sub.account_svc, "confirm_password", pause_after_confirmation):
+            async with asyncio.TaskGroup() as tasks:
+                if operation == "settings":
+                    tasks.create_task(
+                        sub.account_svc.settings(
+                            "alice", ext_password="newsecret", current_password="secret",
+                        ),
+                    )
+                else:
+                    tasks.create_task(sub.account_svc.delete("alice", "secret"))
+                await asyncio.wait_for(confirmed.wait(), timeout=5)
+                competing = tasks.create_task(change_credentials())
+                try:
+                    with pytest.raises(TimeoutError):
+                        await asyncio.wait_for(changed.wait(), timeout=0.1)
+                finally:
+                    release.set()
+        error = competing.result()
+        assert isinstance(error, AppError)
+        if operation == "settings":
+            assert str(error) == "Invalid current password"
+            assert await sub.password_svc.validate_credentials("alice", "newsecret") == "alice"
+        else:
+            assert isinstance(error, ValidationError)
+            assert not await sub.user_svc.isuser("alice")
+    finally:
+        release.set()
+        await close_async_subscription(sub)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("fields", [{"ext_password": ""}, {"ext_username": ""}])
 @pytest.mark.parametrize("current_password", [None, "", "wrong"])
 async def test_empty_credentials_require_current_password(

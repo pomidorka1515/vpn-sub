@@ -6,6 +6,7 @@ from errors import AppError, ValidationError
 from util import generate_token
 
 from ..common import BaseService
+from ..coordination import panel_mutation, user_mutation
 
 if TYPE_CHECKING:
     from ..common import SharedCoreResources
@@ -59,12 +60,14 @@ class AccountService(BaseService):
         if await self.password_svc.validate_credentials(external, password) != username:
             raise AppError("Invalid current password", status=401)
 
+    @panel_mutation
     async def delete(self, username: str, password: str) -> None:
         self.require_panels()
         await self.confirm_password(username, password)
         await self.logout(username)
         await self.business_svc.delete_user(username=username)
 
+    @user_mutation
     async def settings(
         self,
         username: str,
