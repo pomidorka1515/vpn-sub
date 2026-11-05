@@ -196,8 +196,9 @@ async def test_delete_and_edit_options(
     assert "Внутренняя ошибка" in cast(MagicMock, mixin._send_message).call_args.args[1]
 
     await mixin._cb_edit_user_options(7, "alice")
-    assert mixin._pending_edits[7] == {"username": "alice"}
-    assert "edit_fp" in _buttons(telegram.send_message.call_args.kwargs["reply_markup"])
+    assert mixin._pending_edits[7]["username"] == "alice"
+    generation = mixin._pending_edits[7]["generation"]
+    assert f"edit_fp:{generation}" in _buttons(telegram.send_message.call_args.kwargs["reply_markup"])
 
 
 @pytest.mark.asyncio
@@ -240,44 +241,64 @@ async def test_edit_steps_validate_and_update(
     users: tuple[AdminUsersMixin, MagicMock, MagicMock],
 ) -> None:
     mixin, telegram, subscription = users
-    mixin._pending_edits[7] = {"username": "alice"}
-    await mixin._step_edit_limit(_message("/start"), "alice")
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_limit(_message("/start"), "alice", "test")
     telegram.send_message.assert_not_called()
 
-    await mixin._step_edit_limit(_message("nope"), "alice")
+    await mixin._step_edit_limit(_message("nope"), "alice", "test")
     assert "число" in telegram.send_message.call_args.args[1]
 
     subscription.business_svc.update_params.side_effect = AppError("bad")
-    await mixin._step_edit_limit(_message(" 8 "), "alice")
+    await mixin._step_edit_limit(_message(" 8 "), "alice", "test")
     assert "bad" in telegram.send_message.call_args.args[1]
 
     subscription.business_svc.update_params.side_effect = None
-    await mixin._step_edit_limit(_message("8"), "alice")
+    await mixin._step_edit_limit(_message("8"), "alice", "test")
     subscription.business_svc.update_params.assert_called_with(username="alice", limit=8)
     assert 7 not in mixin._pending_edits
 
-    mixin._pending_edits[7] = {"username": "alice"}
-    await mixin._step_edit_wl_limit(_message("/x"), "alice")
-    await mixin._step_edit_wl_limit(_message("x"), "alice")
-    await mixin._step_edit_wl_limit(_message("3"), "alice")
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_wl_limit(_message("/x"), "alice", "test")
+    await mixin._step_edit_wl_limit(_message("x"), "alice", "test")
+    await mixin._step_edit_wl_limit(_message("3"), "alice", "test")
     subscription.business_svc.update_params.assert_called_with(username="alice", wl_limit=3)
 
-    mixin._pending_edits[7] = {"username": "alice"}
-    await mixin._step_edit_time(_message("0"), "alice")
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_time(_message("0"), "alice", "test")
     subscription.business_svc.update_params.assert_called_with(username="alice", timee=0)
     assert "безлимит" in telegram.send_message.call_args.args[1]
 
-    await mixin._step_edit_time(_message("2"), "alice")
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_time(_message("2"), "alice", "test")
     assert "дней" in telegram.send_message.call_args.args[1]
-    await mixin._step_edit_time(_message("bad"), "alice")
-    await mixin._step_edit_time(_message("/cancel"), "alice")
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_time(_message("bad"), "alice", "test")
+    await mixin._step_edit_time(_message("/cancel"), "alice", "test")
 
-    mixin._pending_edits[7] = {"username": "alice"}
-    await mixin._step_edit_name(_message("x" * 17), "alice")
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_name(_message("x" * 17), "alice", "test")
     assert "длинное" in telegram.send_message.call_args.args[1]
-    await mixin._step_edit_name(_message("  Bob  "), "alice")
+    await mixin._step_edit_name(_message("  Bob  "), "alice", "test")
     subscription.business_svc.update_params.assert_called_with(username="alice", displayname="Bob")
-    await mixin._step_edit_name(_message("/skip"), "alice")
+    await mixin._step_edit_name(_message("/skip"), "alice", "test")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["limit", "wl_limit", "time", "name"])
+@pytest.mark.parametrize("next_user", ["bob", "alice"])
+async def test_stale_edit_prompt_is_rejected(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock], field: str, next_user: str,
+) -> None:
+    mixin, _telegram, subscription = users
+    subscription.business_svc.get_info.return_value = _info()
+    await mixin._cb_edit_user_options(7, "alice")
+    await getattr(mixin, f"_cb_edit_{field}")(7, "alice")
+    args = cast(MagicMock, mixin._expect).call_args.args
+    await mixin._cb_edit_user_options(7, next_user)
+    current = mixin._pending_edits[7]
+    await args[1](_message("10"), *args[2:])
+    subscription.business_svc.update_params.assert_not_awaited()
+    assert mixin._pending_edits[7] is current
 
 
 @pytest.mark.asyncio

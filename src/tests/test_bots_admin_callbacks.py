@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from bot_helpers import subscription_mock, telegram_mock
+from helpers import config_mock, subscription_config
 from telebot import types
 
 from bots.telegram import TelegramAdminBot
@@ -50,6 +51,40 @@ def admin() -> tuple[TelegramAdminBot, MagicMock, MagicMock]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("next_user", ["bob", "alice"])
+async def test_stale_edit_menus_cannot_retarget_or_clear_current_workflow(
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock], next_user: str,
+) -> None:
+    bot, telegram, subscription = admin
+    bot.cfg = config_mock(subscription_config(fingerprints=["chrome", "firefox"]))
+    subscription.business_svc.get_info.return_value = SimpleNamespace(fingerprint="chrome")
+    await bot._cb_edit_user_options(7, "alice")
+    generation = bot._pending_edits[7]["generation"]
+    options = telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard
+    edit_button = options[0][0].callback_data
+    assert edit_button == f"edit_fp:{generation}"
+    await bot.handle_callbacks(_callback(edit_button))
+    fingerprints = telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard
+    save_button = fingerprints[0][0].callback_data
+    assert save_button == f"fp_save_chrome:{generation}"
+
+    await bot._cb_edit_user_options(7, next_user)
+    current = bot._pending_edits[7]
+    subscription.business_svc.get_info.reset_mock()
+    for stale in (edit_button, save_button, "edit_fp", "fp_save_chrome"):
+        await bot.handle_callbacks(_callback(stale))
+        assert "истекла" in telegram.send_message.call_args.args[1]
+        assert bot._pending_edits[7] is current
+    subscription.business_svc.get_info.assert_not_awaited()
+    subscription.business_svc.update_params.assert_not_awaited()
+
+    await bot.handle_callbacks(_callback(f"fp_save_firefox:{current['generation']}"))
+    subscription.business_svc.update_params.assert_awaited_once_with(
+        username=next_user, fingerprint="firefox",
+    )
+
+
+@pytest.mark.asyncio
 async def test_callback_exception_is_reported(
     admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
 ) -> None:
@@ -65,7 +100,7 @@ async def test_cancel_clears_pending_edit_and_step(
     admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
 ) -> None:
     bot, telegram, _subscription = admin
-    bot._pending_edits[7] = {"username": "alice"}
+    bot._pending_edits[7] = {"username": "alice", "generation": "test"}
     await bot.handle_callbacks(_callback("cancel"))
     assert 7 not in bot._pending_edits
     telegram.edit_message_text.assert_called_once()
@@ -125,9 +160,9 @@ async def test_code_type_and_edit_sessions_expire(
     await bot.handle_callbacks(_callback("edit_limit"))
     assert "Сессия истекла" in telegram.send_message.call_args.args[1]
 
-    bot._pending_edits[7] = {"username": "alice"}
+    bot._pending_edits[7] = {"username": "alice", "generation": "test"}
     with patch.object(TelegramAdminBot, "_cb_edit_limit") as edit:
-        await bot.handle_callbacks(_callback("edit_limit"))
+        await bot.handle_callbacks(_callback("edit_limit:test"))
     edit.assert_called_once_with(7, "alice")
 
     await bot.handle_callbacks(_callback("edit_unknown"))
@@ -142,15 +177,15 @@ async def test_fingerprint_save_and_leaderboard_order(
     await bot.handle_callbacks(_callback("fp_save_firefox"))
     assert "Сессия истекла" in telegram.send_message.call_args.args[1]
 
-    bot._pending_edits[7] = {"username": "alice"}
+    bot._pending_edits[7] = {"username": "alice", "generation": "test"}
     subscription.business_svc.update_params.side_effect = AppError("bad fp")
-    await bot.handle_callbacks(_callback("fp_save_firefox"))
+    await bot.handle_callbacks(_callback("fp_save_firefox:test"))
     assert "bad fp" in cast(MagicMock, bot._send_message).call_args.args[1]
     assert 7 not in bot._pending_edits
 
-    bot._pending_edits[7] = {"username": "alice"}
+    bot._pending_edits[7] = {"username": "alice", "generation": "test"}
     subscription.business_svc.update_params.side_effect = None
-    await bot.handle_callbacks(_callback("fp_save_firefox"))
+    await bot.handle_callbacks(_callback("fp_save_firefox:test"))
     subscription.business_svc.update_params.assert_called_with(
         username="alice",
         fingerprint="firefox",

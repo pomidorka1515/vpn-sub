@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
+from secrets import token_hex
 
 import discord
 from bots.discord.composition import AdminFeatureMixin
@@ -170,42 +171,43 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_user_options(self, interaction: discord.Interaction, username: str) -> None:
-        self._pending_edits[interaction.user.id] = {"username": username}
-        # Later edit buttons read this map. Write it before the menu is shown
-        # and again after the response so a failed send cannot drop the user.
+        # Each token identifies one immutable target selection, even when the
+        # same administrator opens another menu for the same username.
+        generation = token_hex(8)
+        self._pending_edits[interaction.user.id] = {"username": username, "generation": generation}
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(
                 label="🔐 Отпечаток",
-                custom_id="admin:edit:fp",
+                custom_id=f"admin:edit:fp:{generation}",
                 style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
                 label="📊 Месячный лимит",
-                custom_id="admin:edit:limit",
+                custom_id=f"admin:edit:limit:{generation}",
                 style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
                 label="🌍 Мес. лимит WL",
-                custom_id="admin:edit:wl_limit",
+                custom_id=f"admin:edit:wl_limit:{generation}",
                 style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
                 label="⏰ Срок",
-                custom_id="admin:edit:time",
+                custom_id=f"admin:edit:time:{generation}",
                 style=discord.ButtonStyle.secondary,
             ),
         )
         view.add_item(
             discord.ui.Button(
                 label="🏷 Отображаемое имя",
-                custom_id="admin:edit:name",
+                custom_id=f"admin:edit:name:{generation}",
                 style=discord.ButtonStyle.secondary,
             ),
         )
@@ -216,10 +218,10 @@ class AdminUsersMixin(AdminFeatureMixin):
                 style=discord.ButtonStyle.primary,
             ),
         )
-        self._pending_edits[interaction.user.id] = {"username": username}
         await self._respond(interaction, f"✏️ Что изменить для **{username}**?", view=view)
 
     async def _cb_edit_fingerprint(self, interaction: discord.Interaction, username: str) -> None:
+        generation = self._pending_edits.get(interaction.user.id, {}).get("generation", "")
         await self._defer(interaction)
         info = await self.sub.business_svc.get_info(username, pretty=False)
         current = info.fingerprint
@@ -231,7 +233,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             view.add_item(
                 discord.ui.Button(
                     label=label,
-                    custom_id=f"admin:fp_save:{name}",
+                    custom_id=f"admin:fp_save:{name}:{generation}",
                     style=discord.ButtonStyle.secondary,
                 ),
             )
@@ -250,9 +252,10 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_edit_limit(self, interaction: discord.Interaction, username: str) -> None:
         del username
+        generation = self._pending_edits[interaction.user.id]["generation"]
         # Discord only accepts a modal as the first response. Fetching the
         # current limit first often exceeds the 3 second interaction window.
-        modal = discord.ui.Modal(title="Месячный лимит", custom_id="admin:modal:edit_limit")
+        modal = discord.ui.Modal(title="Месячный лимит", custom_id=f"admin:modal:edit_limit:{generation}")
         modal.add_item(
             discord.ui.TextInput(
                 label="Лимит GB (0 = безлимит)",
@@ -265,7 +268,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_edit_wl_limit(self, interaction: discord.Interaction, username: str) -> None:
         del username
-        modal = discord.ui.Modal(title="WL лимит", custom_id="admin:modal:edit_wl_limit")
+        generation = self._pending_edits[interaction.user.id]["generation"]
+        modal = discord.ui.Modal(title="WL лимит", custom_id=f"admin:modal:edit_wl_limit:{generation}")
         modal.add_item(
             discord.ui.TextInput(
                 label="Лимит GB (0 = безлимит)",
@@ -278,7 +282,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_edit_time(self, interaction: discord.Interaction, username: str) -> None:
         del username
-        modal = discord.ui.Modal(title="Срок", custom_id="admin:modal:edit_time")
+        generation = self._pending_edits[interaction.user.id]["generation"]
+        modal = discord.ui.Modal(title="Срок", custom_id=f"admin:modal:edit_time:{generation}")
         modal.add_item(
             discord.ui.TextInput(
                 label="Дней (0 = безлимит)",
@@ -291,7 +296,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_edit_name(self, interaction: discord.Interaction, username: str) -> None:
         del username
-        modal = discord.ui.Modal(title="Отображаемое имя", custom_id="admin:modal:edit_name")
+        generation = self._pending_edits[interaction.user.id]["generation"]
+        modal = discord.ui.Modal(title="Отображаемое имя", custom_id=f"admin:modal:edit_name:{generation}")
         modal.add_item(
             discord.ui.TextInput(
                 label="Имя (макс. 16)",
@@ -347,7 +353,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def handle_edit_limit_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
-        if not pending:
+        generation = self._custom_id(interaction).removeprefix("admin:modal:edit_limit:")
+        if not pending or not generation or pending.get("generation") != generation:
             await self._respond(
                 interaction,
                 "❌ Сессия истекла, начните с /admin",
@@ -362,7 +369,8 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
         await self.sub.business_svc.update_params(username=pending["username"], limit=limit)
-        self._pending_edits.pop(interaction.user.id, None)
+        if self._pending_edits.get(interaction.user.id) is pending:
+            self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,
             f"✅ Месячный лимит обновлён: `{limit}` GB",
@@ -371,7 +379,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def handle_edit_wl_limit_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
-        if not pending:
+        generation = self._custom_id(interaction).removeprefix("admin:modal:edit_wl_limit:")
+        if not pending or not generation or pending.get("generation") != generation:
             await self._respond(
                 interaction,
                 "❌ Сессия истекла, начните с /admin",
@@ -386,7 +395,8 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
         await self.sub.business_svc.update_params(username=pending["username"], wl_limit=wl_limit)
-        self._pending_edits.pop(interaction.user.id, None)
+        if self._pending_edits.get(interaction.user.id) is pending:
+            self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,
             f"✅ Лимит обновлён: `{wl_limit}` GB",
@@ -395,7 +405,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def handle_edit_time_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
-        if not pending:
+        generation = self._custom_id(interaction).removeprefix("admin:modal:edit_time:")
+        if not pending or not generation or pending.get("generation") != generation:
             await self._respond(
                 interaction,
                 "❌ Сессия истекла, начните с /admin",
@@ -411,7 +422,8 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         timee = int(time.time() + (days * 86400)) if days else 0
         await self.sub.business_svc.update_params(username=pending["username"], timee=timee)
-        self._pending_edits.pop(interaction.user.id, None)
+        if self._pending_edits.get(interaction.user.id) is pending:
+            self._pending_edits.pop(interaction.user.id, None)
         if days:
             new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             await self._respond(
@@ -428,7 +440,8 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def handle_edit_name_modal(self, interaction: discord.Interaction) -> None:
         pending = self._pending_edits.get(interaction.user.id)
-        if not pending:
+        generation = self._custom_id(interaction).removeprefix("admin:modal:edit_name:")
+        if not pending or not generation or pending.get("generation") != generation:
             await self._respond(
                 interaction,
                 "❌ Сессия истекла, начните с /admin",
@@ -447,7 +460,8 @@ class AdminUsersMixin(AdminFeatureMixin):
             username=pending["username"],
             displayname=new_name,
         )
-        self._pending_edits.pop(interaction.user.id, None)
+        if self._pending_edits.get(interaction.user.id) is pending:
+            self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,
             f"✅ Имя обновлено: `{new_name}`",

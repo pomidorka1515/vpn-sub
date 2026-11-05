@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
+from secrets import token_hex
 from typing import cast
 
 from telebot import types
@@ -199,14 +200,17 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_user_options(self, chat_id: int, username: str) -> None:
-        self._pending_edits[chat_id] = {"username": username}
+        # The opaque token binds every downstream action to this target and menu,
+        # without putting potentially long usernames in Telegram callback data.
+        generation = token_hex(8)
+        self._pending_edits[chat_id] = {"username": username, "generation": generation}
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-            types.InlineKeyboardButton("🔐 Отпечаток", callback_data="edit_fp"),
-            types.InlineKeyboardButton("📊 Месячный лимит", callback_data="edit_limit"),
-            types.InlineKeyboardButton("🌍 Мес. лимит WL", callback_data="edit_wl_limit"),
-            types.InlineKeyboardButton("⏰ Срок", callback_data="edit_time"),
-            types.InlineKeyboardButton("🏷 Отображаемое имя", callback_data="edit_name"),
+            types.InlineKeyboardButton("🔐 Отпечаток", callback_data=f"edit_fp:{generation}"),
+            types.InlineKeyboardButton("📊 Месячный лимит", callback_data=f"edit_limit:{generation}"),
+            types.InlineKeyboardButton("🌍 Мес. лимит WL", callback_data=f"edit_wl_limit:{generation}"),
+            types.InlineKeyboardButton("⏰ Срок", callback_data=f"edit_time:{generation}"),
+            types.InlineKeyboardButton("🏷 Отображаемое имя", callback_data=f"edit_name:{generation}"),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"),
         )
         await self.bot.send_message(
@@ -217,6 +221,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_fingerprint(self, chat_id: int, username: str) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
@@ -231,7 +236,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         conf = self.cfg.view()
         for fp in conf["fingerprints"]:
             label = f"✅ {fp}" if fp == current else fp
-            markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_save_{fp}"))  # pyright: ignore[reportUnknownMemberType]
+            markup.add(types.InlineKeyboardButton(label, callback_data=f"fp_save_{fp}:{generation}"))  # pyright: ignore[reportUnknownMemberType]
         markup.add(types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
         await self.bot.send_message(
             chat_id,
@@ -241,6 +246,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_limit(self, chat_id: int, username: str) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
@@ -256,9 +262,12 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"📊 Введите новый лимит в GB для <b>{username}</b> (текущий: <code>{current}</code> GB, 0 = безлимит):",
             parse_mode="HTML",
         )
-        self._expect(msg, self._step_edit_limit, username)  # pyright: ignore[reportUnknownMemberType]
+        self._expect(msg, self._step_edit_limit, username, generation)  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_edit_limit(self, message: types.Message, username: str) -> None:
+    async def _step_edit_limit(self, message: types.Message, username: str, generation: str) -> None:
+        pending = self._pending_edits.get(message.chat.id)
+        if not pending or pending != {"username": username, "generation": generation}:
+            return
         text = cast(str, message.text)
         if text.startswith("/"):
             return
@@ -280,7 +289,8 @@ class AdminUsersMixin(AdminFeatureMixin):
                 reply_markup=self.get_main_menu(),
             )
             return
-        self._pending_edits.pop(message.chat.id, None)
+        if self._pending_edits.get(message.chat.id) is pending:
+            self._pending_edits.pop(message.chat.id, None)
         await self.bot.send_message(
             message.chat.id,
             f"✅ Месячный лимит обновлён: <code>{limit}</code> GB",
@@ -289,6 +299,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_wl_limit(self, chat_id: int, username: str) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
@@ -304,9 +315,12 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"🌍 Введите новый лимит ВЛ в GB для <b>{username}</b> (текущий: <code>{current}</code> GB, 0 = безлимит):",
             parse_mode="HTML",
         )
-        self._expect(msg, self._step_edit_wl_limit, username)  # pyright: ignore[reportUnknownMemberType]
+        self._expect(msg, self._step_edit_wl_limit, username, generation)  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_edit_wl_limit(self, message: types.Message, username: str) -> None:
+    async def _step_edit_wl_limit(self, message: types.Message, username: str, generation: str) -> None:
+        pending = self._pending_edits.get(message.chat.id)
+        if not pending or pending != {"username": username, "generation": generation}:
+            return
         text = cast(str, message.text)
         if text.startswith("/"):
             return
@@ -328,7 +342,8 @@ class AdminUsersMixin(AdminFeatureMixin):
                 reply_markup=self.get_main_menu(),
             )
             return
-        self._pending_edits.pop(message.chat.id, None)
+        if self._pending_edits.get(message.chat.id) is pending:
+            self._pending_edits.pop(message.chat.id, None)
         await self.bot.send_message(
             message.chat.id,
             f"✅ Лимит обновлён: <code>{wl_limit}</code> GB",
@@ -337,6 +352,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_time(self, chat_id: int, username: str) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
@@ -356,9 +372,12 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"⏰ Введите новое кол-во дней для <b>{username}</b> (текущая дата: <code>{date}</code>, 0 = безлимит):",
             parse_mode="HTML",
         )
-        self._expect(msg, self._step_edit_time, username)  # pyright: ignore[reportUnknownMemberType]
+        self._expect(msg, self._step_edit_time, username, generation)  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_edit_time(self, message: types.Message, username: str) -> None:
+    async def _step_edit_time(self, message: types.Message, username: str, generation: str) -> None:
+        pending = self._pending_edits.get(message.chat.id)
+        if not pending or pending != {"username": username, "generation": generation}:
+            return
         text = cast(str, message.text)
         if text.startswith("/"):
             return
@@ -381,7 +400,8 @@ class AdminUsersMixin(AdminFeatureMixin):
                 reply_markup=self.get_main_menu(),
             )
             return
-        self._pending_edits.pop(message.chat.id, None)
+        if self._pending_edits.get(message.chat.id) is pending:
+            self._pending_edits.pop(message.chat.id, None)
         if days:
             new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             await self.bot.send_message(
@@ -399,6 +419,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
 
     async def _cb_edit_name(self, chat_id: int, username: str) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
         try:
             info = await self.sub.business_svc.get_info(username, pretty=False)
         except AppError as error:
@@ -414,9 +435,12 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"🏷 Введите новое отображаемое для <b>{username}</b> (текущий: <code>{current}</code>):",
             parse_mode="HTML",
         )
-        self._expect(msg, self._step_edit_name, username)  # pyright: ignore[reportUnknownMemberType]
+        self._expect(msg, self._step_edit_name, username, generation)  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_edit_name(self, message: types.Message, username: str) -> None:
+    async def _step_edit_name(self, message: types.Message, username: str, generation: str) -> None:
+        pending = self._pending_edits.get(message.chat.id)
+        if not pending or pending != {"username": username, "generation": generation}:
+            return
         text = cast(str, message.text)
         if text.startswith("/"):
             return
@@ -437,7 +461,8 @@ class AdminUsersMixin(AdminFeatureMixin):
                 reply_markup=self.get_main_menu(),
             )
             return
-        self._pending_edits.pop(message.chat.id, None)
+        if self._pending_edits.get(message.chat.id) is pending:
+            self._pending_edits.pop(message.chat.id, None)
         await self.bot.send_message(
             message.chat.id,
             f"✅ Имя обновлено: <code>{new_name}</code>",

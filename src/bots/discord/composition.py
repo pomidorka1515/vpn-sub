@@ -121,6 +121,8 @@ if TYPE_CHECKING:
         USERS_PER_PAGE: int
         _pending_codes: dict[int, dict[str, str | int | bool]]
         _pending_edits: dict[int, dict[str, str]]
+
+        def _custom_id(self, interaction: discord.Interaction) -> str: ...
         _pagination_state: dict[int, dict[str, int]]
         _pending_leaderboard: dict[int, dict[str, str | int]]
 

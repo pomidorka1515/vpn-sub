@@ -244,8 +244,9 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     async def _handle_edit(self, data: str, chat_id: int, message: types.Message) -> None:
         del message
+        action, _, generation = data.partition(":")
         pending = self._pending_edits.get(chat_id)
-        if not pending:
+        if not pending or not generation or pending.get("generation") != generation:
             await self.bot.send_message(
                 chat_id,
                 "❌ Сессия истекла, начните с /info",
@@ -259,7 +260,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             "time": self._cb_edit_time,
             "name": self._cb_edit_name,
         }
-        handler = handlers.get(data.split("_", 1)[1])
+        handler = handlers.get(action.split("_", 1)[1])
         if handler is not None:
             await handler(chat_id, pending["username"])
 
@@ -270,15 +271,16 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         message: types.Message,
     ) -> None:
         del message
+        action, _, generation = data.partition(":")
         pending = self._pending_edits.get(chat_id)
-        if not pending:
+        if not pending or not generation or pending.get("generation") != generation:
             await self.bot.send_message(
                 chat_id,
                 "❌ Сессия истекла, начните с /info",
                 reply_markup=self.get_main_menu(),
             )
             return
-        fp = data.split("fp_save_", 1)[1]
+        fp = action.split("fp_save_", 1)[1]
         try:
             await self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
         except AppError as error:
@@ -294,7 +296,8 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
                 parse_mode="HTML",
                 reply_markup=self.get_main_menu(),
             )
-        self._pending_edits.pop(chat_id, None)
+        if self._pending_edits.get(chat_id) is pending:
+            self._pending_edits.pop(chat_id, None)
 
     async def _handle_leaderboard_type(
         self,

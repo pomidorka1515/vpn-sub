@@ -89,7 +89,8 @@ class AdminRoutingMixin(AdminFeatureMixin):
         if not await self.require_admin(interaction):
             return
         custom_id = self._custom_id(interaction)
-        handler_name = self.MODALS.get(custom_id)
+        route = custom_id.rsplit(":", 1)[0] if custom_id.startswith("admin:modal:edit_") else custom_id
+        handler_name = self.MODALS.get(route)
         if handler_name is None:
             return
         try:
@@ -372,8 +373,9 @@ class AdminRoutingMixin(AdminFeatureMixin):
         await self._cb_edit_user_options(interaction, data.split("admin:edit_user:", 1)[1])
 
     async def _handle_edit(self, data: str, interaction: discord.Interaction) -> None:
+        action, _, generation = data.removeprefix("admin:edit:").partition(":")
         pending = self._pending_edits.get(interaction.user.id)
-        if not pending:
+        if not pending or not generation or pending.get("generation") != generation:
             await self._respond(
                 interaction,
                 "❌ Сессия истекла, начните с /admin",
@@ -387,22 +389,23 @@ class AdminRoutingMixin(AdminFeatureMixin):
             "time": self._cb_edit_time,
             "name": self._cb_edit_name,
         }
-        handler = handlers.get(data.split("admin:edit:", 1)[1])
+        handler = handlers.get(action)
         if handler is not None:
             await handler(interaction, pending["username"])
 
     async def _handle_fingerprint_save(self, data: str, interaction: discord.Interaction) -> None:
+        fp, _, generation = data.removeprefix("admin:fp_save:").partition(":")
         pending = self._pending_edits.get(interaction.user.id)
-        if not pending:
+        if not pending or not generation or pending.get("generation") != generation:
             await self._respond(
                 interaction,
                 "❌ Сессия истекла, начните с /admin",
                 view=self.main_menu_view(),
             )
             return
-        fp = data.split("admin:fp_save:", 1)[1]
         await self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
-        self._pending_edits.pop(interaction.user.id, None)
+        if self._pending_edits.get(interaction.user.id) is pending:
+            self._pending_edits.pop(interaction.user.id, None)
         await self._respond(
             interaction,
             f"✅ fingerprint обновлён: `{fp}`",
