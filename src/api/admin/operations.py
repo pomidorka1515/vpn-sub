@@ -49,15 +49,21 @@ class AsyncOperationsRoutes(AsyncAdminApiMixin):
             )
         snapshot_failure = self.bw.get_daily_snapshot_failure()
         rollback_failures = await self.sub.business_code_svc.get_rollback_failures()
+        pending_recovery = await self.sub.business_code_svc.get_pending_recovery()
         return ok(
             obj={
                 "db": True,
                 "uptime": status.uptime,
                 "memory": memory,
                 "threads": status.threads,
-                "degraded": snapshot_failure is not None or any(rollback_failures.values()),
+                "degraded": (
+                    snapshot_failure is not None
+                    or any(rollback_failures.values())
+                    or any(pending_recovery.values())
+                ),
                 "daily_snapshot_failure": snapshot_failure,
                 "rollback_failures": rollback_failures,
+                "pending_recovery": pending_recovery,
             },
         )
 
@@ -67,6 +73,7 @@ class AsyncOperationsRoutes(AsyncAdminApiMixin):
             obj={
                 "daily_snapshot_failure": self.bw.get_daily_snapshot_failure(),
                 "rollback_failures": await self.sub.business_code_svc.get_rollback_failures(),
+                "pending_recovery": await self.sub.business_code_svc.get_pending_recovery(),
             },
         )
 

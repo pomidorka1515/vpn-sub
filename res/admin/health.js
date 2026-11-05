@@ -177,10 +177,26 @@ function renderRollbackMarkers(markers) {
   `;
 }
 
+function renderPendingRecovery(pending) {
+  const rows = Object.entries(pending || {}).flatMap(([kind, users]) =>
+    users.map(user => ({ kind, user }))
+  );
+  if (!rows.length) return '';
+  return `
+    <table class="data-table">
+      <thead><tr><th>${t('internal_user')}</th><th>${t('marker_type')}</th></tr></thead>
+      <tbody>${rows.map(({ kind, user }) => `
+        <tr><td class="mono">${escapeHtml(user)}</td><td>${escapeHtml(kind)} (pending)</td></tr>
+      `).join('')}</tbody>
+    </table>
+  `;
+}
+
 function renderOperationsStatus(obj) {
   const snapshot = obj?.daily_snapshot_failure;
   const markersHtml = renderRollbackMarkers(obj?.rollback_failures);
-  if (!snapshot && !markersHtml) {
+  const pendingHtml = renderPendingRecovery(obj?.pending_recovery);
+  if (!snapshot && !markersHtml && !pendingHtml) {
     return `<div class="table-empty">${t('no_recovery_issues')}</div>`;
   }
   return `
@@ -196,6 +212,7 @@ function renderOperationsStatus(obj) {
         </div>
       </div>` : ''}
     ${markersHtml}
+    ${pendingHtml}
   `;
 }
 

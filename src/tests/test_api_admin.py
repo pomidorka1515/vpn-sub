@@ -679,6 +679,42 @@ async def test_health_reports_db_and_process_status(
     assert set(obj["memory"]) == {"ram", "swap"}
     assert obj["daily_snapshot_failure"] is None
     assert obj["rollback_failures"] == {"uuid": {}, "registration": {}}
+    assert obj["pending_recovery"] == {
+        "registration": [], "create": [], "delete": [], "reset": [], "sync": [],
+    }
+
+
+@pytest.mark.parametrize("kind", ["create", "delete", "reset", "sync"])
+async def test_health_and_operations_report_pending_recovery(
+    admin_api: tuple[Quart, Subscription],
+    kind: str,
+) -> None:
+    app, sub = admin_api
+    key = f"user_{kind}_pending:alice"
+    # Even malformed intent values must be reported, never parsed or exposed.
+    await sub.res.db.set_metadata(key, "private recovery payload")
+    client = app.test_client()
+    headers = {"Authorization": "secret"}
+    health = await (await client.get("/sub/api/api/health", headers=headers)).get_json()
+    operations = await (
+        await client.get("/sub/api/api/operations/status", headers=headers)
+    ).get_json()
+    assert health["obj"]["degraded"] is True
+    assert health["obj"]["rollback_failures"] == {"uuid": {}, "registration": {}}
+    pending = health["obj"]["pending_recovery"]
+    assert pending[kind] == ["alice"]
+    assert operations["obj"]["pending_recovery"] == pending
+    assert "private recovery payload" not in str(health) + str(operations)
+    rejected = await client.post(
+        "/sub/api/api/operations/rollback/resolve",
+        headers=headers,
+        json={"kind": kind, "user": "alice"},
+    )
+    assert (await rejected.get_json())["success"] is False
+    assert await sub.res.db.get_metadata(key) == "private recovery payload"
+    await sub.res.db.delete_metadata(key)
+    recovered = await (await client.get("/sub/api/api/health", headers=headers)).get_json()
+    assert recovered["obj"]["degraded"] is False
 
 
 async def test_health_returns_503_when_database_ping_fails(

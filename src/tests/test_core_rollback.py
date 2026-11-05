@@ -31,10 +31,14 @@ async def test_startup_recovers_registration_rollback_marker(
             ext_password_hash="hash",
         )
     )
+    assert (await subscription.business_code_svc.get_pending_recovery())["registration"] == [
+        "alice",
+    ]
     (await database.set_metadata("registration_rollback_failed:alice", "123"))
     (await subscription.business_code_svc.recover_rollback_failures())
     assert (await database.get_metadata("registration_rollback_failed:alice")) is None
     assert not (await database.user_exists("alice"))
+    assert (await subscription.business_code_svc.get_pending_recovery())["registration"] == []
 
 
 @pytest.mark.asyncio

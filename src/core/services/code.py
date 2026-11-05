@@ -261,6 +261,17 @@ class BusinessCodeService(BaseService):
                 result[kind][key.removeprefix(prefix)] = {"ts": timestamp, "reason": reason}
         return result
 
+    async def get_pending_recovery(self) -> dict[str, list[str]]:
+        # Report identities only: reset intents contain credentials, and other
+        # intent values are recovery inputs rather than timestamps or reasons.
+        result = {"registration": await self.db.pending_registrations()}
+        for kind in ("create", "delete", "reset", "sync"):
+            prefix = f"user_{kind}_pending:"
+            result[kind] = sorted(
+                key.removeprefix(prefix) for key in await self.db.list_metadata(prefix)
+            )
+        return result
+
     @user_mutation
     async def clear_rollback_failure(
         self,
