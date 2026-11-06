@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import discord
 from bots.discord.composition import AdminFeatureMixin
+from bots.list_messages import list_messages
 from errors import CommittedAuditError
 
 __all__ = ["AdminCodesMixin"]
@@ -14,8 +15,10 @@ class AdminCodesMixin(AdminFeatureMixin):
         if not raw:
             await self._respond(interaction, "Список кодов пуст.", view=self.codes_menu_view())
             return
-        text = "🎟 **Список кодов:**\n\n" + "\n".join(f"- `{c}`" for c in raw)
-        await self._respond(interaction, text, view=self.codes_menu_view())
+        for text in list_messages(
+            "🎟 **Список кодов:**\n\n", ((code, None) for code in raw), limit=2000
+        ):
+            await self._respond(interaction, text, view=self.codes_menu_view())
 
     async def handle_info_code_modal(self, interaction: discord.Interaction) -> None:
         code = self.modal_values(interaction).get("code", "").strip()

@@ -119,3 +119,98 @@ async def test_discord_online_list_uses_bounded_followups(guild_id: int | None) 
         assert isinstance(message["view"], discord.ui.View)
         assert message.get("ephemeral", False) == (guild_id is not None)
     assert rows == [f"- `{name}`, логин: {login}" for name, login in entries.items()]
+
+
+def assert_codes_menu(message: dict[str, object]) -> None:
+    view = message["view"]
+    assert isinstance(view, discord.ui.View)
+    assert {item.custom_id for item in view.children if isinstance(item, discord.ui.Button)} == {
+        "admin:add_code",
+        "admin:del_code",
+        "admin:list_codes",
+        "admin:info_code",
+        "admin:cancel",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("guild_id", [None, 123])
+async def test_discord_codes_list_many_long_unicode_names(guild_id: int | None) -> None:
+    _, bot, _, sub = make_bots()
+    entries = [f"код{i:03d}" + "界😀" * 100 for i in range(70)]
+    sub.code_svc.list_code.return_value = entries
+    fake = FakeInteraction(guild_id=guild_id)
+
+    await bot._cb_list_codes(cast(discord.Interaction, fake))
+
+    assert fake.response.deferred
+    assert len(fake.response.messages) > 1
+    rows: list[str] = []
+    for message in fake.response.messages:
+        text = str(message["content"])
+        assert len(text.encode("utf-16-le")) // 2 <= 2000
+        assert text.startswith("🎟 **Список кодов:**\n\n")
+        rows.extend(text.split("\n\n", 1)[1].splitlines())
+        assert_codes_menu(message)
+        assert message.get("ephemeral", False) == (guild_id is not None)
+    assert rows == [f"- `{name}`" for name in entries]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("size", [1999, 2000, 2001])
+async def test_discord_codes_list_exact_utf16_boundaries(size: int) -> None:
+    _, bot, _, sub = make_bots()
+    header = "🎟 **Список кодов:**\n\n"
+    overhead = len((header + "- ``").encode("utf-16-le")) // 2
+    name = "😀" + "я" * (size - overhead - 2)
+    sub.code_svc.list_code.return_value = [name]
+    fake = FakeInteraction()
+
+    await bot._cb_list_codes(cast(discord.Interaction, fake))
+
+    assert len(fake.response.messages) == (1 if size <= 2000 else 2)
+    parts: list[str] = []
+    for message in fake.response.messages:
+        text = str(message["content"])
+        assert text.startswith(header)
+        assert len(text.encode("utf-16-le")) // 2 <= 2000
+        parts.extend(text.split("`")[1::2])
+        assert_codes_menu(message)
+    assert "".join(parts) == name
+    if size <= 2000:
+        assert len(str(fake.response.messages[0]["content"]).encode("utf-16-le")) // 2 == size
+
+
+@pytest.mark.asyncio
+async def test_discord_codes_list_oversized_individual_name() -> None:
+    _, bot, _, sub = make_bots()
+    name = "😀界" * 3000
+    sub.code_svc.list_code.return_value = [name, "последний"]
+    fake = FakeInteraction()
+
+    await bot._cb_list_codes(cast(discord.Interaction, fake))
+
+    assert len(fake.response.messages) > 2
+    parts: list[str] = []
+    for message in fake.response.messages:
+        text = str(message["content"])
+        assert text.startswith("🎟 **Список кодов:**\n\n")
+        assert len(text.encode("utf-16-le")) // 2 <= 2000
+        parts.extend(text.split("`")[1::2])
+        assert_codes_menu(message)
+    assert parts[-1] == "последний"
+    assert "".join(parts[:-1]) == name
+
+
+@pytest.mark.asyncio
+async def test_discord_codes_list_empty() -> None:
+    _, bot, _, sub = make_bots()
+    sub.code_svc.list_code.return_value = []
+    fake = FakeInteraction()
+
+    await bot._cb_list_codes(cast(discord.Interaction, fake))
+
+    assert fake.response.deferred
+    assert len(fake.response.messages) == 1
+    assert fake.response.messages[0]["content"] == "Список кодов пуст."
+    assert_codes_menu(fake.response.messages[0])
