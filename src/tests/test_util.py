@@ -11,11 +11,17 @@ from quart import Quart
 
 from errors import ValidationError
 from sysutil import SysUtil
-from util import err, ok, sanitize
+from util import err, fmt_bytes, format_usage, ok, sanitize
 
 if TYPE_CHECKING:
     from pathlib import Path
     from typing import Literal
+
+
+@pytest.mark.parametrize("used", [0, 2_000_000_000])
+@pytest.mark.parametrize("unlimited", ["Безлимит", "unlimited"])
+def test_format_usage_unlimited(used: int, unlimited: str) -> None:
+    assert format_usage(used, 0, unlimited) == (fmt_bytes(used), unlimited, "N/A")
 
 
 @pytest.mark.asyncio

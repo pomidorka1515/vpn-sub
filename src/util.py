@@ -212,9 +212,9 @@ def fmt_time(seconds: int, lang: str = "ru") -> str:
 
 def format_usage(used: float, limit: float, unlimited: str = "Безлимит") -> tuple[str, str, str]:
     """Format used bytes, a GB limit, and the corresponding percentage."""
-    if limit == 0:
-        return unlimited, unlimited, "N/A"
     used_text = fmt_bytes(used)
+    if limit == 0:
+        return used_text, unlimited, "N/A"
     limit_text = f"{limit} GB"
     percent = f"{int((used / (limit * 10**9)) * 100)}%" if used > 0 else "0%"
     return used_text, limit_text, percent
