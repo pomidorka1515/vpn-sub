@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, TypedDict, cast
 
 from constants import SESSION_MAX_AGE
 from custom_types import BandwidthSnapshotPayload
+from notify import Kind, Scope, split_key
 
 from .common import ConnectionMixin
 
@@ -13,6 +14,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from config.constants import JsonDict
+
+    from .common import Connection
 
 
 class StateSnapshot(TypedDict):
@@ -22,6 +25,36 @@ class StateSnapshot(TypedDict):
 
 
 class StateMixin(ConnectionMixin):
+    @staticmethod
+    async def _reset_monthly_notifications(conn: Connection) -> None:
+        # Monthly buckets expire; delivered outages and recovery acknowledgements
+        # belong to episodes, which can outlive the accounting period.
+        thresholds = {kind.kind_id for kind in Kind if kind.scope is Scope.THRESHOLD}
+        for row in await conn.rows("SELECT kind FROM notification_state WHERE telegram_id = ''"):
+            parsed = split_key(str(row[0]))
+            if parsed is not None and parsed[1].partition(":")[0] in thresholds:
+                await conn.execute(
+                    "DELETE FROM notification_state WHERE kind = ? AND telegram_id = ''", (row[0],)
+                )
+        # Reset counters make unsent exhaustion news obsolete, even if cancellation
+        # lets the quota job run before recovery. Keep expiry and recovery intent;
+        # recovery will atomically replace intent with the re-enable transition.
+        obsolete = {Kind.TRAFFIC_EXHAUSTED.name, Kind.WHITELIST_EXHAUSTED.name}
+        for row in await conn.rows(
+            "SELECT key, value FROM app_metadata WHERE key GLOB 'user_notifications_pending:*'"
+        ):
+            saved = json.loads(str(row[1]))
+            notices = saved["notices"]
+            saved["notices"] = [item for item in notices if item["kind"] not in obsolete]
+            if saved["notices"] == notices:
+                continue
+            if saved["notices"]:
+                await conn.execute(
+                    "UPDATE app_metadata SET value = ? WHERE key = ?", (json.dumps(saved), row[0])
+                )
+            else:
+                await conn.execute("DELETE FROM app_metadata WHERE key = ?", (row[0],))
+
     async def increment_usage(self, username: str, *, regular: int = 0, whitelist: int = 0) -> None:
         await self.increment_usages({username: (regular, whitelist)})
 
@@ -48,7 +81,7 @@ class StateMixin(ConnectionMixin):
                         # On upgrade, preserve usage when no period was recorded.
                         if row is not None:
                             await conn.execute("UPDATE users SET bw_used = 0, wl_used = 0")
-                            await conn.execute("DELETE FROM notification_state")
+                            await self._reset_monthly_notifications(conn)
                         await conn.executemany(
                             "INSERT INTO app_metadata(key, value) VALUES (?, ?) "
                             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -75,7 +108,7 @@ class StateMixin(ConnectionMixin):
                 "INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [("last_reset", today), ("last_reset_month", month)],
             )
-            await conn.execute("DELETE FROM notification_state")
+            await self._reset_monthly_notifications(conn)
             return True
 
     async def clear_notifications(self) -> None:

@@ -322,11 +322,49 @@ async def test_usage_and_baselines_roll_back_together(repository: Database) -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("poll", [False, True])
+async def test_monthly_reset_preserves_episodes_and_pending_recovery(
+    repository: Database, poll: bool
+) -> None:
+    await repository.reset_monthly("2026-09", "2026-09-01")
+    kept = {
+        "alice:expired:1",
+        "alice:traffic_exhausted:1",
+        "alice:whitelist_exhausted:1",
+        "alic:restored",
+        "alic:whitelist_restored",
+    }
+    thresholds = {"alice:expiry_soon:1", "alice:traffic_soon:80", "alic:whitelist_soon:95"}
+    await repository.sync_notifications(set(), kept | thresholds)
+    intent = (
+        '{"uuid":"alice","notices":[{"kind":"EXPIRED"},{"kind":"RESTORED"},'
+        '{"kind":"WHITELIST_RESTORED"},{"kind":"TRAFFIC_EXHAUSTED"},'
+        '{"kind":"WHITELIST_EXHAUSTED"}]}'
+    )
+    await repository.set_metadata("user_notifications_pending:alice", intent)
+    if poll:
+        await repository.increment_usages({}, period=("2026-10", "2026-10-01"))
+    else:
+        assert await repository.reset_monthly("2026-10", "2026-10-01")
+    assert await repository.notification_markers() == kept
+    pending = await repository.get_metadata("user_notifications_pending:alice")
+    assert pending is not None
+    assert '"EXPIRED"' in pending
+    assert '"RESTORED"' in pending
+    assert '"WHITELIST_RESTORED"' in pending
+    assert "EXHAUSTED" not in pending
+
+
+@pytest.mark.asyncio
 async def test_month_rollover_rolls_back_with_baselines(repository: Database) -> None:
     await create_user(repository)
     await repository.reset_monthly("2026-09", "2026-09-01")
     await repository.increment_usages({"alice": (50, 60)}, baselines="old")
     await repository.mark_notification("legacy", 12)
+    markers = {"alice:traffic_soon:80", "alice:traffic_exhausted:1"}
+    await repository.sync_notifications(set(), markers)
+    intent = '{"uuid":"alice","notices":[{"kind":"TRAFFIC_EXHAUSTED"}]}'
+    await repository.set_metadata("user_notifications_pending:alice", intent)
     async with repository.transaction(immediate=True) as conn:
         await conn.execute(
             "CREATE TRIGGER reject_rollover BEFORE INSERT ON app_metadata "
@@ -344,6 +382,8 @@ async def test_month_rollover_rolls_back_with_baselines(repository: Database) ->
     assert await repository.get_metadata("last_reset_month") == "2026-09"
     assert await repository.get_metadata("watcher_usage_baselines") == "old"
     assert await repository.notification_seen("legacy", 12)
+    assert await repository.notification_markers() == markers
+    assert await repository.get_metadata("user_notifications_pending:alice") == intent
 
 
 @pytest.mark.asyncio
@@ -402,7 +442,7 @@ async def test_bonus_usage_notifications_and_snapshots(repository: Database) -> 
     user = await db.get_user("alice")
     assert user is not None
     assert user["bw_used"] == user["wl_used"] == 0
-    assert await db.notification_markers() == set()
+    assert await db.notification_markers() == {"new"}
     await db.set_metadata("prefix_%", "value")
     assert await db.list_metadata("prefix_") == {"prefix_%": "value"}
     await db.delete_metadata("prefix_%")

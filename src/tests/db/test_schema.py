@@ -388,8 +388,8 @@ async def test_notifications_monthly_reset_and_snapshots(database: Database) -> 
     user = await database.get_user("alice")
     assert user is not None
     assert (user["bw_used"], user["wl_used"]) == (0, 0)
-    assert not (await database.notification_seen("regular", 123))
-    assert (await database.notification_markers()) == set()
+    assert await database.notification_seen("regular", 123)
+    assert await database.notification_markers() == {"alice:restored"}
 
     (await database.add_bandwidth_snapshot("alice", 10, 1, 2, 3, 4))
     (await database.add_bandwidth_snapshot("alice", 10, 5, 6, 7, 8))
