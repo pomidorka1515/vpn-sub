@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
 
 from custom_types import BandwidthInfo
-from tests.support.panels import FakePanel, make_panel_client
+from errors import PanelUnavailableError
+from tests.support.panels import FakePanel, make_client, make_panel_client
 from tests.support.subscriptions import make_subscription
-from tests.support.users import create_alice
+from tests.support.users import USER_UUID, create_alice
 
 if TYPE_CHECKING:
+    from custom_types import ClientTraffic
     from db import Database
+    from session.client import XUiSession
+
+
+NEW_UUID = "ffffffff-ffff-4fff-8fff-ffffffffffff"
 
 
 @pytest.mark.asyncio
@@ -63,6 +70,129 @@ async def test_traffic_is_one_shared_row_not_summed_over_inbounds(database: Data
     (await create_alice(database))
 
     assert (await subscription.bandwidth_svc.bandwidth("alice")) == BandwidthInfo(5, 6, 11)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("whitelist", [False, True])
+async def test_individual_traffic_omits_foreign_and_missing_rows(
+    database: Database,
+    whitelist: bool,
+) -> None:
+    owned = FakePanel(name="owned", clients=[make_panel_client("alice", [1], up=5, down=6)])
+    foreign = FakePanel(
+        name="foreign", clients=[make_panel_client("alice", [1], up=900, down=800, uuid=NEW_UUID)]
+    )
+    missing = FakePanel(name="missing")
+    if whitelist:
+        subscription = await make_subscription(
+            database, panels=[owned, missing], whitelist_panel=foreign
+        )
+    else:
+        subscription = await make_subscription(database, panels=[owned, foreign, missing])
+    await create_alice(database)
+
+    assert await subscription.bandwidth_svc.bandwidth("alice") == BandwidthInfo(5, 6, 11)
+    if whitelist:
+        assert await subscription.bandwidth_svc.bandwidth("alice", whitelist=True) == BandwidthInfo(
+            0, 0, 0
+        )
+
+
+@pytest.mark.asyncio
+async def test_individual_traffic_omits_wrong_email(database: Database) -> None:
+    client = make_panel_client("alice", [1], up=5, down=6)
+    assert client.traffic is not None
+    panel = FakePanel(clients=[replace(client, traffic=replace(client.traffic, email="bob"))])
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+
+    assert await subscription.bandwidth_svc.bandwidth("alice") == BandwidthInfo(0, 0, 0)
+
+
+@pytest.mark.asyncio
+async def test_individual_traffic_propagates_panel_failure(database: Database) -> None:
+    owned = FakePanel(name="owned", clients=[make_panel_client("alice", [1], up=5, down=6)])
+    offline = FakePanel(name="offline", clients=[make_panel_client("alice", [1])], get_status=503)
+    subscription = await make_subscription(database, panels=[owned, offline])
+    await create_alice(database)
+
+    with pytest.raises(PanelUnavailableError):
+        await subscription.bandwidth_svc.bandwidth("alice")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("row_uuid", [USER_UUID, NEW_UUID])
+async def test_individual_traffic_uses_identity_after_concurrent_uuid_change(
+    database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+    row_uuid: str,
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1], up=5, down=6)])
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed_traffic(panel: XUiSession, email: str) -> ClientTraffic:
+        assert email == "alice"
+        started.set()
+        await release.wait()
+        return make_client(row_uuid, 5, 6)
+
+    monkeypatch.setattr(subscription.panel_svc, "client_traffic", delayed_traffic)
+    pending = asyncio.create_task(subscription.bandwidth_svc.bandwidth("alice"))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        await asyncio.wait_for(subscription.business_svc.update_uuid("alice", NEW_UUID), timeout=5)
+    finally:
+        release.set()
+    expected = BandwidthInfo(5, 6, 11) if row_uuid == NEW_UUID else BandwidthInfo(0, 0, 0)
+    assert await asyncio.wait_for(pending, timeout=5) == expected
+
+
+@pytest.mark.asyncio
+async def test_individual_traffic_omits_rows_after_concurrent_deletion(
+    database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subscription = await make_subscription(database)
+    await create_alice(database)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed_traffic(panel: XUiSession, email: str) -> ClientTraffic:
+        started.set()
+        await release.wait()
+        return make_client(USER_UUID, 5, 6)
+
+    monkeypatch.setattr(subscription.panel_svc, "client_traffic", delayed_traffic)
+    pending = asyncio.create_task(subscription.bandwidth_svc.bandwidth("alice"))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        await database.delete_user("alice")
+    finally:
+        release.set()
+    assert await asyncio.wait_for(pending, timeout=5) == BandwidthInfo(0, 0, 0)
+
+
+@pytest.mark.asyncio
+async def test_individual_traffic_does_not_deadlock_under_user_mutation_lock(
+    database: Database,
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1], up=5, down=6)])
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+
+    async def locked_info() -> BandwidthInfo:
+        info = await subscription.business_svc.get_info("alice")
+        return BandwidthInfo(
+            info.bandwidth.total.upload, info.bandwidth.total.download, info.bandwidth.total.total
+        )
+
+    result = await asyncio.wait_for(
+        subscription.res.coordinator.run(["alice"], locked_info, name="test:locked-info"), timeout=5
+    )
+    assert result == BandwidthInfo(5, 6, 11)
 
 
 @pytest.mark.asyncio
@@ -134,8 +264,6 @@ async def test_all_traffic_raises_when_no_panel_queryable(database: Database) ->
     subscription = await make_subscription(database, panels=[one, two])
     (await create_alice(database))
 
-    from errors import PanelUnavailableError
-
     with pytest.raises(PanelUnavailableError):
         (await subscription.bandwidth_svc.all_traffic())
 
@@ -146,8 +274,6 @@ async def test_all_traffic_rejects_partial_when_one_panel_fails(database: Databa
     two = FakePanel(name="two", clients=[make_panel_client("alice", [2], up=7, down=8)])
     subscription = await make_subscription(database, panels=[one, two])
     (await create_alice(database))
-
-    from errors import PanelUnavailableError
 
     with pytest.raises(PanelUnavailableError):
         await subscription.bandwidth_svc.all_traffic()

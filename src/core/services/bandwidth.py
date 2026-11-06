@@ -44,6 +44,11 @@ class BandwidthService(BaseService):
         *,
         work: WorkClass = "foreground",
     ) -> BandwidthInfo:
+        """Omit missing traffic and rows whose email or UUID no longer matches the user.
+
+        Identity is sampled after panel I/O, without taking a user mutation lock:
+        callers may already hold that lock while gathering this read in child tasks.
+        """
         self.require_panels()
         await self.user_svc.user(username)
         rows = await self.panel_svc.map_panels(
@@ -51,8 +56,17 @@ class BandwidthService(BaseService):
             lambda panel: self.panel_svc.client_traffic(panel, username),
             work=work,
         )
-        up = sum(row.up for row in rows if row is not None)
-        down = sum(row.down for row in rows if row is not None)
+        user = await self.db.get_user(username)
+        owned = [
+            row
+            for row in rows
+            if user is not None
+            and row is not None
+            and row.email == username
+            and row.uuid == user["uuid"]
+        ]
+        up = sum(row.up for row in owned)
+        down = sum(row.down for row in owned)
         return BandwidthInfo(up, down, up + down)
 
     async def all_traffic(
