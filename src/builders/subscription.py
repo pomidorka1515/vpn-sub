@@ -16,6 +16,12 @@ if TYPE_CHECKING:
     from core import Subscription
 
 
+def _private_response(response: Response, status: int) -> tuple[Response, int]:
+    # Token-bearing URLs serve personalized, user-agent-dependent representations.
+    response.headers["Cache-Control"] = "private, no-store"
+    return response, status
+
+
 async def get_subscription(
     obj: Subscription,
     /,
@@ -36,7 +42,7 @@ async def get_subscription(
     import builders
 
     if not token:
-        return err("Invalid token.", 401)
+        return _private_response(*err("Invalid token.", 401))
     username = await obj.user_svc.usertotoken(token)
     await obj.audit_svc.audit(
         name="sub_hit",
@@ -44,16 +50,16 @@ async def get_subscription(
     )
 
     if not username:
-        return err("Invalid token.", 401)
+        return _private_response(*err("Invalid token.", 401))
     if lang not in {"ru", "en"}:
-        return err("Language can be either 'ru' or 'en'", 400)
+        return _private_response(*err("Language can be either 'ru' or 'en'", 400))
 
     if builders.isbrowser(ua=ua):
         html = await builders.render_template("browser.html", **_browser_strings(obj, lang))
         cfg = obj.res.cfg.view()
         prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
         html = await obj.res.offloads.files.run(builders.embed_font_faces, html, prefix)
-        return Response(html, mimetype="text/html"), 403
+        return _private_response(Response(html, mimetype="text/html"), 403)
 
     bandwidths = await obj.bandwidth_svc.bandwidth(username)
 
@@ -139,35 +145,41 @@ async def get_subscription(
 
     if is_happ or force_json == "1":
         headers["Content-Type"] = "application/json"
-        return Response(
-            response=json.dumps(
-                builders.build_json(
-                    cfg=cfg,
-                    user_uuid=user_uuid,
-                    lang=lang,
-                    fingerprint=str(user["fingerprint"]),
-                    status=status,
-                    statusWl=statusWl,
+        return _private_response(
+            Response(
+                response=json.dumps(
+                    builders.build_json(
+                        cfg=cfg,
+                        user_uuid=user_uuid,
+                        lang=lang,
+                        fingerprint=str(user["fingerprint"]),
+                        status=status,
+                        statusWl=statusWl,
+                    ),
+                    ensure_ascii=False,
                 ),
-                ensure_ascii=False,
+                mimetype="application/json; charset=utf-8",
+                headers=headers,
             ),
-            mimetype="application/json; charset=utf-8",
-            headers=headers,
-        ), 200
+            200,
+        )
 
-    return Response(
-        builders.build_link_array(
-            cfg=cfg,
-            status=status,
-            statusWl=statusWl,
-            lang=lang,
-            bandwidths=bandwidths,
-            user_uuid=user_uuid,
-            is_happ=is_happ,
-            need_dummy_link=need_dummy_link,
-            fingerprint=str(user["fingerprint"]),
-            lang_cfg=lang_cfg,
+    return _private_response(
+        Response(
+            builders.build_link_array(
+                cfg=cfg,
+                status=status,
+                statusWl=statusWl,
+                lang=lang,
+                bandwidths=bandwidths,
+                user_uuid=user_uuid,
+                is_happ=is_happ,
+                need_dummy_link=need_dummy_link,
+                fingerprint=str(user["fingerprint"]),
+                lang_cfg=lang_cfg,
+            ),
+            mimetype="text/plain",
+            headers=headers,
         ),
-        mimetype="text/plain",
-        headers=headers,
-    ), 200
+        200,
+    )

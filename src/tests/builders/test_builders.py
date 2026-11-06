@@ -528,6 +528,7 @@ async def test_subscription_json_respects_profile_eligibility(
     )
     assert status == 200
     assert response.mimetype == "application/json"
+    assert response.headers["Cache-Control"] == "private, no-store"
     profiles = cast(list[ProfileTemplate], json.loads(await response.get_data(as_text=True)))
     assert [profile["remarks"] for profile in profiles] == expected_names
     for built_profile in profiles:
@@ -544,6 +545,7 @@ async def test_subscription_json_respects_profile_eligibility(
         force_json="",
     )
     assert link_status == 200
+    assert link_response.headers["Cache-Control"] == "private, no-store"
     links = base64.b64decode(await link_response.get_data()).decode("utf-8").splitlines()
     assert [link.rsplit("#", 1)[1] for link in links] == expected_names
 
@@ -564,6 +566,7 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             force_json="",
         )
         assert status == 401
+        assert response.headers["Cache-Control"] == "private, no-store"
 
         subscription.user_svc.usertotoken.return_value = ""
         response, status = await get_subscription(
@@ -575,6 +578,7 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             force_json="",
         )
         assert status == 401
+        assert response.headers["Cache-Control"] == "private, no-store"
         subscription.audit_svc.audit.assert_called()
 
         subscription = _subscription()
@@ -587,6 +591,7 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             force_json="",
         )
         assert status == 400
+        assert response.headers["Cache-Control"] == "private, no-store"
 
         def is_browser(ua: str) -> bool:
             del ua
@@ -616,6 +621,8 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             force_json="",
         )
         assert status == 403
+        assert response.mimetype == "text/html"
+        assert response.headers["Cache-Control"] == "private, no-store"
         assert await response.get_data(as_text=True) == "/sub|browser.html:No browser"
 
 
@@ -651,6 +658,7 @@ async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.Monke
         force_json="",
     )
     assert status == 200
+    assert response.headers["Cache-Control"] == "private, no-store"
     assert await response.get_data(as_text=True) == "links"
     assert response.headers["Profile-Title"] == "VPN"
     assert "total=" in response.headers["Subscription-Userinfo"]
@@ -674,6 +682,7 @@ async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.Monke
     )
     assert status == 200
     assert response.mimetype == "application/json"
+    assert response.headers["Cache-Control"] == "private, no-store"
     assert json.loads(await response.get_data(as_text=True)) == [{"remarks": "ru"}]
     assert response.headers["providerid"] == "provider"
     assert "force_json=1" in response.headers["fallback-url"]
