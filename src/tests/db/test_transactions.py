@@ -523,6 +523,156 @@ async def test_cancelled_transaction_rolls_back_before_next_writer(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("exit_mode", ["normal", "exception", "os_error", "cancel"])
+async def test_reader_lease_clears_snapshot_on_exit(tmp_path: Path, exit_mode: str) -> None:
+    db = Database(path=tmp_path / "reader.sqlite3", read_connections=1, start_backup=False)
+    await db.start()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def borrow() -> None:
+        async with db.connection() as conn:
+            await conn.execute("BEGIN")
+            assert await conn.row("SELECT value FROM app_metadata WHERE key = 'snapshot'") is None
+            entered.set()
+            await release.wait()
+            if exit_mode == "exception":
+                raise ValueError("borrower failed")
+            if exit_mode == "os_error":
+                raise OSError("borrower failed")
+
+    try:
+        original = db._readers[0]
+        task = asyncio.create_task(borrow())
+        await entered.wait()
+        await db.set_metadata("snapshot", "fresh")
+        if exit_mode == "cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            release.set()
+            if exit_mode == "exception":
+                with pytest.raises(ValueError, match="borrower failed"):
+                    await task
+            elif exit_mode == "os_error":
+                with pytest.raises(OSError, match="borrower failed"):
+                    await task
+            else:
+                await task
+        assert not original.in_transaction
+        assert db._readers[0] is original
+        assert await db.get_metadata("snapshot") == "fresh"
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_reader_rollback_failure_replaces_connection(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    db = Database(path=tmp_path / "reader.sqlite3", read_connections=1, start_backup=False)
+    await db.start()
+    original_execute = Connection._execute
+    old_reader = db._readers[0]
+
+    async def broken(self: Connection, sql: str, parameters: Parameters) -> int:
+        if sql == "ROLLBACK":
+            raise sqlite3.OperationalError("injected rollback failure")
+        return await original_execute(self, sql, parameters)
+
+    monkeypatch.setattr(Connection, "_execute", broken)
+    try:
+        async with db.connection() as conn:
+            await conn.execute("BEGIN")
+            await conn.row("SELECT * FROM app_metadata")
+        assert db._readers[0] is not old_reader
+        assert db._read_slots.qsize() == 1
+        await db.set_metadata("later", "fresh")
+        assert await db.get_metadata("later") == "fresh"
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_reader_replacement_failure_stops_admission(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    db = Database(path=tmp_path / "reader.sqlite3", read_connections=1, start_backup=False)
+    await db.start()
+    original_execute = Connection._execute
+
+    async def broken(self: Connection, sql: str, parameters: Parameters) -> int:
+        if sql == "ROLLBACK":
+            raise sqlite3.OperationalError("injected rollback failure")
+        return await original_execute(self, sql, parameters)
+
+    async def fail_open(*, reader: bool = False) -> None:
+        raise sqlite3.OperationalError("injected reopen failure")
+
+    monkeypatch.setattr(Connection, "_execute", broken)
+    monkeypatch.setattr(db, "_open", fail_open)
+
+    async def borrow() -> None:
+        async with db.connection() as conn:
+            await conn.execute("BEGIN")
+            await conn.row("SELECT * FROM app_metadata")
+
+    try:
+        with pytest.raises(DatabaseError, match="injected reopen failure"):
+            await borrow()
+        with pytest.raises(DatabaseError, match="not accepting"):
+            async with db.connection():
+                pass
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_reader_cleanup_finishes_before_shutdown(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    db = Database(path=tmp_path / "reader.sqlite3", read_connections=1, start_backup=False)
+    await db.start()
+    entered, release = asyncio.Event(), asyncio.Event()
+    original_execute = Connection._execute
+
+    async def gated(self: Connection, sql: str, parameters: Parameters) -> int:
+        if sql == "ROLLBACK":
+            entered.set()
+            await release.wait()
+        return await original_execute(self, sql, parameters)
+
+    monkeypatch.setattr(Connection, "_execute", gated)
+
+    async def borrow() -> None:
+        async with db.connection() as conn:
+            await conn.execute("BEGIN")
+            await conn.row("SELECT * FROM app_metadata")
+
+    task = asyncio.create_task(borrow())
+    try:
+        await entered.wait()
+        task.cancel()
+        task.cancel()
+        closing = asyncio.create_task(db.close())
+        await asyncio.sleep(0)
+        assert not task.done()
+        assert not closing.done()
+        assert db._read_slots.empty()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await closing
+        assert not db._readers
+    finally:
+        release.set()
+        await db.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("commit", [False, True])
 async def test_cancellation_during_queued_sql_settles(
     repository: Database,

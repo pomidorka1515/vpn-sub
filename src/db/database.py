@@ -173,22 +173,41 @@ class Database(
                 conn = self._readers[index]
                 try:
                     yield Connection(conn)
-                except sqlite3.Error as exc:
-                    try:
-                        await settle(self._replace_reader(index))
-                    except (sqlite3.Error, OSError) as recovery_error:
-                        raise _database_error(recovery_error) from recovery_error
-                    raise _database_error(exc) from exc
+                except BaseException as exc:
+                    await self._finish_reader(index, discard=isinstance(exc, sqlite3.Error))
+                    if isinstance(exc, sqlite3.Error):
+                        raise _database_error(exc) from exc
+                    raise
+                else:
+                    await self._finish_reader(index)
                 finally:
                     self._owners.discard(task)
         finally:
             self._read_slots.put_nowait(index)
 
-    async def _replace_reader(self, index: int) -> None:
-        await settle(self._readers[index].close())
+    async def _finish_reader(self, index: int, *, discard: bool = False) -> None:
         try:
-            self._readers[index] = await settle(self._open(reader=True))
+            await settle(self._recover_reader(index, discard=discard))
+        except (sqlite3.Error, OSError) as exc:
+            raise _database_error(exc) from exc
+
+    async def _recover_reader(self, index: int, *, discard: bool = False) -> None:
+        conn = self._readers[index]
+        try:
+            if conn.in_transaction:
+                await Connection(conn).execute("ROLLBACK")
+            if conn.in_transaction:
+                raise DatabaseError("rollback left an active transaction")
         except Exception:
+            discard = True
+        if discard:
+            await self._replace_reader(index)
+
+    async def _replace_reader(self, index: int) -> None:
+        try:
+            await self._readers[index].close()
+            self._readers[index] = await self._open(reader=True)
+        except BaseException:
             self._ready = False
             raise
 
