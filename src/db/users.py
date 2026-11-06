@@ -9,6 +9,7 @@ from custom_types import UserRecord
 from errors import DatabaseError, DuplicateError
 
 from .common import ConnectionMixin
+from .notification_episodes import clear_notification_episodes
 from .telegram import set_telegram_mapping
 
 if TYPE_CHECKING:
@@ -106,6 +107,7 @@ class UsersMixin(ConnectionMixin):
                         int(not enabled_wl),
                     ),
                 )
+                await clear_notification_episodes(conn, username, sides=set(), identity=True)
                 if pending_sync:
                     await conn.execute(
                         "INSERT INTO app_metadata(key, value) VALUES (?, ?)",
@@ -149,6 +151,7 @@ class UsersMixin(ConnectionMixin):
         try:
             async with self.transaction(immediate=True) as conn:
                 if updates:
+                    previous = await conn.row("SELECT * FROM users WHERE username = ?", (username,))
                     if "uuid" in updates:
                         await check_uuid_available(conn, str(updates["uuid"]), username)
                     assignments = ", ".join(f"{key} = ?" for key in updates)
@@ -156,6 +159,29 @@ class UsersMixin(ConnectionMixin):
                         f"UPDATE users SET {assignments} WHERE username = ?",
                         (*updates.values(), username),
                     )
+                    if previous is not None:
+                        identity = "uuid" in updates and updates["uuid"] != previous["uuid"]
+                        sides = {
+                            side
+                            for side, columns in (
+                                ("traffic", ("bw_limit_gb", "bw_used")),
+                                ("whitelist", ("wl_limit_gb", "wl_used")),
+                                ("expiry", ("expires_at",)),
+                            )
+                            if any(
+                                column in updates and updates[column] != previous[column]
+                                for column in columns
+                            )
+                        }
+                        if identity:
+                            sides.update(("traffic", "whitelist", "expiry"))
+                        if sides:
+                            await clear_notification_episodes(
+                                conn,
+                                username,
+                                sides=sides,
+                                new_uuid=str(updates["uuid"]) if identity else None,
+                            )
                 if "tgid" in fields:
                     telegram_id = fields["tgid"]
                     await set_telegram_mapping(
@@ -212,6 +238,10 @@ class UsersMixin(ConnectionMixin):
             )
             if count != 1:
                 raise DatabaseError("UUID update identity changed")
+            if uuid != expected_uuid:
+                await clear_notification_episodes(
+                    conn, username, sides={"traffic", "whitelist", "expiry"}, new_uuid=uuid
+                )
             await conn.execute(
                 "DELETE FROM app_metadata WHERE key = ? AND value = ?",
                 (f"uuid_reservation:{uuid}", username),
@@ -313,6 +343,7 @@ class UsersMixin(ConnectionMixin):
     async def delete_user(self, username: str) -> None:
         async with self.transaction(immediate=True) as conn:
             await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            await clear_notification_episodes(conn, username, sides=set(), identity=True)
 
     async def token_to_user(self, token: str) -> str | None:
         async with self.connection() as conn:

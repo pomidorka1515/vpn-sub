@@ -8,6 +8,7 @@ from custom_types import CodeRecord
 from errors import CodeError, DatabaseError, DuplicateError
 
 from .common import ConnectionMixin
+from .notification_episodes import clear_notification_episodes
 from .users import check_uuid_available
 
 if TYPE_CHECKING:
@@ -182,6 +183,7 @@ class CodesMixin(ConnectionMixin):
                         int(time.time()),
                     ),
                 )
+                await clear_notification_episodes(conn, username, sides=set(), identity=True)
                 await conn.execute(
                     "INSERT INTO pending_registration_sync(username, code, permanent) VALUES (?, ?, ?)",
                     (username, code, int(row["permanent"])),
@@ -233,6 +235,17 @@ class CodesMixin(ConnectionMixin):
                 "UPDATE users SET expires_at = ?, bw_limit_gb = ?, wl_limit_gb = ? WHERE username = ?",
                 (new_time, limit, wl_limit, username),
             )
+            sides = {
+                side
+                for side, changed in (
+                    ("expiry", new_time != current),
+                    ("traffic", limit != int(user["bw_limit_gb"])),
+                    ("whitelist", wl_limit != int(user["wl_limit_gb"])),
+                )
+                if changed
+            }
+            if sides:
+                await clear_notification_episodes(conn, username, sides=sides)
             return {
                 "days": days,
                 "gb": int(row["gb"]),

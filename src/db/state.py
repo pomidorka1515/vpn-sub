@@ -39,7 +39,12 @@ class StateMixin(ConnectionMixin):
         # Reset counters make unsent exhaustion news obsolete, even if cancellation
         # lets the quota job run before recovery. Keep expiry and recovery intent;
         # recovery will atomically replace intent with the re-enable transition.
-        obsolete = {Kind.TRAFFIC_EXHAUSTED.name, Kind.WHITELIST_EXHAUSTED.name}
+        obsolete = {
+            Kind.TRAFFIC_EXHAUSTED.name,
+            Kind.WHITELIST_EXHAUSTED.name,
+            Kind.TRAFFIC_SOON.name,
+            Kind.WHITELIST_SOON.name,
+        }
         for row in await conn.rows(
             "SELECT key, value FROM app_metadata WHERE key GLOB 'user_notifications_pending:*'"
         ):

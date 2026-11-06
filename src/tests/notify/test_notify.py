@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING, Unpack
+from unittest.mock import Mock
 
 import pytest
 
@@ -190,6 +192,138 @@ async def test_missing_key_and_bad_format_are_not_sent() -> None:
     assert sink.sent == []
     assert seen == {"alice:expired:1"}
     assert again == {"alice:expired:1"}
+
+
+@pytest.mark.asyncio
+async def test_partial_language_falls_back_per_key_and_selected_wins() -> None:
+    sink = _Sink()
+    notifier = _notifier(sink, "ru")
+    assert await notifier.deliver("alice", 7, Notice(Kind.EXPIRED, "1", {}), set())
+    assert await notifier.deliver(
+        "bob",
+        8,
+        Notice(
+            Kind.TRAFFIC_SOON,
+            "80",
+            {
+                "used_gb": 8,
+                "limit_gb": 10,
+                "percent": 80,
+            },
+        ),
+        set(),
+    )
+    assert sink.sent == [(7, "истекла"), (8, "8/10 80")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("recovery", "terminal", "threshold", "unrelated"),
+    [
+        (restored(main=True)[0], "traffic_exhausted", "traffic_soon", "expired"),
+        (restored(time=True)[0], "expired", "expiry_soon", "traffic_exhausted"),
+        (restored(whitelist=True)[0], "whitelist_exhausted", "whitelist_soon", "traffic_exhausted"),
+    ],
+)
+async def test_recovery_requires_matching_terminal(
+    recovery: Notice, terminal: str, threshold: str, unrelated: str
+) -> None:
+    sink = _Sink()
+    notifier = _notifier(sink)
+    seen = {f"alice:{threshold}:80", f"alice:{unrelated}:1"}
+    assert not await notifier.deliver("alice", 7, recovery, seen)
+    seen.add(f"alice:{terminal}:1")
+    assert await notifier.deliver("alice", 7, recovery, seen)
+    assert f"alice:{terminal}:1" not in seen
+    assert f"alice:{threshold}:80" not in seen
+    assert f"alice:{unrelated}:1" in seen
+
+
+@pytest.mark.asyncio
+async def test_template_diagnostics_are_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    warning = Mock()
+    monkeypatch.setattr("notify.notifier._diagnostics.warning", warning)
+    sink = _Sink()
+    notifier = Notifier(texts={}, send=sink, language=lambda _tgid: _language("en"))
+    notice = Notice(Kind.EXPIRED, "1", {})
+    seen: set[str] = set()
+    assert not await notifier.deliver("alice", 7, notice, seen)
+    assert not await notifier.deliver("alice", 7, notice, seen)
+    assert warning.call_count == 1
+    assert not seen
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stall", ["language", "send"])
+async def test_other_accounts_progress_and_timeout_does_not_mark(stall: str) -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+    sent: list[int] = []
+
+    async def wait() -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    async def language(tgid: int) -> str:
+        if tgid == 1 and stall == "language":
+            await wait()
+        return "en"
+
+    async def send(tgid: int, _text: str) -> None:
+        if tgid == 1 and stall == "send":
+            await wait()
+        sent.append(tgid)
+
+    notifier = Notifier(texts=TEXTS, send=send, language=language, timeout=0.1)
+    notice = Notice(Kind.EXPIRED, "1", {})
+    seen: set[str] = set()
+    async with asyncio.TaskGroup() as group:
+        alice = group.create_task(notifier.deliver("alice", 1, notice, seen))
+        await started.wait()
+        assert await notifier.deliver("bob", 2, notice, seen)
+    assert not alice.result()
+    assert cancelled.is_set()
+    assert seen == {"bob:expired:1"}
+    assert sent == [2]
+
+
+@pytest.mark.asyncio
+async def test_delivery_concurrency_is_bounded_and_cancellation_releases_slot() -> None:
+    active = 0
+    peak = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def send(_tgid: int, _text: str) -> None:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        started.set()
+        try:
+            await release.wait()
+        finally:
+            active -= 1
+
+    notifier = Notifier(texts=TEXTS, send=send, language=lambda _: _language("en"), concurrency=2)
+    notice = Notice(Kind.EXPIRED, "1", {})
+    seen: set[str] = set()
+    async with asyncio.TaskGroup() as group:
+        first = group.create_task(notifier.deliver("alice", 1, notice, seen))
+        await started.wait()
+        group.create_task(notifier.deliver("bob", 2, notice, seen))
+        await asyncio.sleep(0.01)
+        group.create_task(notifier.deliver("carol", 3, notice, seen))
+        await asyncio.sleep(0.01)
+        assert peak == 2
+        first.cancel()
+        await asyncio.sleep(0.01)
+        assert active == 2
+        release.set()
+    assert first.cancelled()
+    assert seen == {"bob:expired:1", "carol:expired:1"}
 
 
 @pytest.mark.asyncio
