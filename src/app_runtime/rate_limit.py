@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import secrets
-import time
 from typing import TYPE_CHECKING, Protocol, cast
 
 from loggers import Logger
@@ -39,20 +38,28 @@ return -1
 """
 _RATE_LIMIT_SCRIPT = """
 local key = KEYS[1]
-local now = tonumber(ARGV[1])
+local clock = redis.call('TIME')
+local now = tonumber(clock[1]) + tonumber(clock[2]) / 1000000
 local window = tonumber(ARGV[2])
 local member = ARGV[3]
 local limit = tonumber(ARGV[4])
 local ttl = tonumber(ARGV[5])
-redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+local now_score = string.format('%.6f', now)
+-- A backward Redis clock step must not leave entries indefinitely in the future.
+-- Preserve their count, but restart their window from the observed clock time.
+local future = redis.call('ZRANGEBYSCORE', key, '(' .. now_score, '+inf')
+for _, entry in ipairs(future) do
+  redis.call('ZADD', key, now_score, entry)
+end
+if #future > 0 then
+  redis.call('EXPIRE', key, ttl)
+end
+redis.call('ZREMRANGEBYSCORE', key, '-inf', string.format('%.6f', now - window))
 local count = redis.call('ZCARD', key)
 if count < limit then
-  redis.call('ZADD', key, now, member)
+  redis.call('ZADD', key, now_score, member)
   redis.call('EXPIRE', key, ttl)
   return 1
-end
-if count > 0 then
-  redis.call('EXPIRE', key, ttl)
 end
 return 0
 """
@@ -144,17 +151,21 @@ class AsyncRateLimiter:
         )
 
     async def allow(self, scope: str, key: str, max_requests: int) -> bool:
+        """Use Redis wall time: forward jumps age entries; backward jumps restart future entries.
+
+        Denials do not refresh expiry, except when rebasing after a backward jump.
+        Redis key expiry itself also follows its wall clock.
+        """
         if self._script is None:
             raise RuntimeError("Redis limiter has not started")
-        now = time.time()
         return (
             int(
                 await self._script(
                     keys=(f"ratelimit:{scope}:{key}",),
                     args=(
-                        now,
+                        0.0,
                         _RATE_LIMIT_WINDOW,
-                        f"{now}:{time.time_ns()}",
+                        secrets.token_hex(16),
                         max_requests,
                         int(_RATE_LIMIT_WINDOW),
                     ),

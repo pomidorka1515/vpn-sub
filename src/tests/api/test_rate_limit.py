@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -21,6 +20,7 @@ class RedisStore:
         self.events: dict[str, list[float]] = {}
         self.closed = False
         self.failed = False
+        self.now = 100.0
 
     def register_script(self, script: str) -> RateLimitScript:
         assert "ZREMRANGEBYSCORE" in script
@@ -31,10 +31,11 @@ class RedisStore:
                 return 0 if args[2] == "valid" else -1
             if self.failed:
                 raise OSError("Redis down")
-            now, window, _, limit, ttl = args
+            _, window, _, limit, ttl = args
+            now = self.now
             assert ttl == 60
             events = self.events.setdefault(keys[0], [])
-            events[:] = [stamp for stamp in events if stamp > now - window]
+            events[:] = [min(stamp, now) for stamp in events if stamp > now - window]
             if len(events) >= limit:
                 return 0
             events.append(now)
@@ -50,20 +51,19 @@ class RedisStore:
 
 
 @pytest.mark.asyncio
-async def test_shared_windows_scope_ip_and_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_shared_windows_scope_ip_and_expiry() -> None:
     store = RedisStore()
     first = AsyncRateLimiter("redis://test", client=store)
     second = AsyncRateLimiter("redis://test", client=store)
     await first.start()
     await second.start()
-    monkeypatch.setattr(time, "time", lambda: 100)
     assert await first.allow("route", "ip", 1)
     assert not await second.allow("route", "ip", 1)
     assert await second.allow("other", "ip", 1)
     assert await second.allow("route", "other-ip", 1)
-    monkeypatch.setattr(time, "time", lambda: 159.999)
+    store.now = 159.999
     assert not await second.allow("route", "ip", 1)
-    monkeypatch.setattr(time, "time", lambda: 160)
+    store.now = 160
     assert await second.allow("route", "ip", 1)
     await first.close()
     await second.close()
@@ -157,7 +157,6 @@ async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPa
 
     builder = AsyncMock(side_effect=build)
     monkeypatch.setattr("api.subscription.get_subscription", builder)
-    monkeypatch.setattr(time, "time", lambda: 100)
     store = RedisStore()
     limiter = AsyncRateLimiter("redis://test", client=store)
     await limiter.start()
@@ -172,7 +171,7 @@ async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPa
         assert (
             await client.get("/sub", scope_base={"client": ("other-ip", 1234)})
         ).status_code == 200
-        monkeypatch.setattr(time, "time", lambda: 160)
+        store.now = 160
         assert (await client.get("/sub")).status_code == 200
         store.failed = True
         assert (await client.get("/sub")).status_code == 429
