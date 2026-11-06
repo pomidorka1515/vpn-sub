@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import math
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -76,9 +77,11 @@ def ellipsis(face: ImageFont.FreeTypeFont, text: str, max_width: int) -> str:
 
 
 def nice_ticks(max_value: float, count: int = 4) -> list[float]:
-    """Return 0 plus 1/2/5-scaled steps that cover max_value."""
+    """Return 0 plus 1/2/5-scaled byte steps, with a minimum step of 1 B."""
     if max_value <= 0:
         return [0.0]
+    if max_value <= count:
+        return [float(i) for i in range(math.ceil(max_value) + 1)]
     raw = max_value / count
     exp = 0
     probe = raw
