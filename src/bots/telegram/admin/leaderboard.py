@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import operator
+from html import escape
 from secrets import token_hex
 from typing import Literal, cast
 
@@ -152,17 +153,17 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         )
 
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-        lines: list[str] = []
+        text = "<b>Список лидеров по трафику:</b>\n\n"
         for rank, (user, score) in enumerate(sorted_items, start=1):
             prefix = medals.get(rank, f"{rank}.")
-            lines.append(f"{prefix} <b>{user}</b> - {fmt_bytes(score)}")
-        text = "<b>Список лидеров по трафику:</b>\n\n" + "\n".join(lines)
-
-        b = text.encode("utf-8")
-        if len(b) > 1024:
-            b = b[:1021]
-            while b and (b[-1] & 0x80):  # back up from a continuation byte
-                b = b[:-1]
-            text = b.decode("utf-8", errors="ignore") + "..."
+            separator = "\n" if rank > 1 else ""
+            row = f"{separator}{prefix} <b>{escape(user, quote=False)}</b> - {fmt_bytes(score)}"
+            remaining = len(sorted_items) - rank
+            notice = f"\n... Пропущено записей: {remaining}" if remaining else ""
+            # Bounding the serialized UTF-8 also bounds Telegram's parsed UTF-16 length.
+            if len((text + row + notice).encode("utf-8")) > 1024:
+                text += f"\n... Пропущено записей: {remaining + 1}"
+                break
+            text += row
 
         await self.bot.send_photo(chat_id, chart, text, parse_mode="HTML")
