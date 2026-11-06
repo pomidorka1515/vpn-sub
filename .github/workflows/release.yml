@@ -605,7 +605,8 @@ jobs:
           env -u LD_LIBRARY_PATH python scripts/smoke_crypto_release.py --binary build/dist/vpn-sub --openssl-prefix "$RUNNER_TEMP/openssl-small"
           # Run away from the checkout with a temporary DB/config, private Redis,
           # and loopback panel fake; exercise resources, DB, Lua limiter and lifespan.
-          python scripts/smoke_async_release.py --binary build/dist/vpn-sub --report build/dist/vpn-sub-report.xml
+          # Isolate all subprocesses from non-loopback networking, not just the update check.
+          sudo unshare --net bash -c 'ip link set lo up; exec "$@"' -- "$(command -v python)" scripts/smoke_async_release.py --binary build/dist/vpn-sub --report build/dist/vpn-sub-report.xml
 
       - name: record binary sizes
         run: |

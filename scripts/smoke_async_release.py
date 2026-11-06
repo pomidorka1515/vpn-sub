@@ -155,7 +155,12 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
             if not key.startswith(("PATH_", "DIR_", "GUNICORN_", "LOGLEVEL", "PYTHON"))
             and key not in {"APP_BIND", "REQUIRE_PROXY", "VERBOSE_LOGGING_OVERRIDES"}
         }
-        env.update(DIR_DATA=str(data), APP_BIND=f"127.0.0.1:{http_port}", REQUIRE_PROXY="0")
+        env.update(
+            DIR_DATA=str(data),
+            APP_BIND=f"127.0.0.1:{http_port}",
+            REQUIRE_PROXY="0",
+            VPN_SUB_DISABLE_UPDATE_NOTICE="1",
+        )
         if checkout:
             env["PYTHONPATH"] = str(ROOT / "src")
         log_path = directory / "service.log"

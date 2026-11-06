@@ -338,7 +338,9 @@ compiled binary, and only in a terminal. The command asks before it downloads.
 If either service is running, it asks you to stop both and continues only after
 they are gone. It does not stop or start them. A checkout (`python -m main`)
 refuses. At boot a compiled binary logs an update notice when a newer release exists. It
-does not download anything and it does not prompt.
+does not download anything and it does not prompt. Set `VPN_SUB_DISABLE_UPDATE_NOTICE=1`
+in the service environment to disable this startup network check; explicit
+`--update` commands are unaffected.
 
 > # !! WARNING !! PRERELEASES ARE NOT STABLE  
 > `--update` includes GitHub RC, beta, alpha and other prereleases. The updater  

@@ -165,6 +165,17 @@ def test_notice_does_nothing_outside_a_binary(
     assert called is False
 
 
+def test_notice_can_be_disabled_in_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    _compiled(monkeypatch)
+    monkeypatch.setenv("VPN_SUB_DISABLE_UPDATE_NOTICE", "1")
+
+    def fail(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("network")
+
+    monkeypatch.setattr(updater, "_get", fail)
+    notice()
+
+
 def test_update_refuses_outside_a_binary(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

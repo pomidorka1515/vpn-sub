@@ -94,7 +94,7 @@ def notice() -> None:
     A timeout or a bad response is not an error. Boot must not wait on GitHub
     and must not ask a question: a systemd unit has no TTY to answer it.
     """
-    if not compiled():
+    if os.getenv("VPN_SUB_DISABLE_UPDATE_NOTICE") == "1" or not compiled():
         return
     try:
         release = _latest(NOTICE_TIMEOUT)
