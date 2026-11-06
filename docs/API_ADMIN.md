@@ -955,6 +955,7 @@ Patch rules:
 - A patch that does not change the document does not write, back up, or audit.  
 Semantic checks, beyond the schema: every `profiles.*.node` must be a key of `nodes`. The document must also be one this process can boot: non-empty `3xui`, non-empty `api_token`, and non-empty `api_admin_ui_auth` entries. `bot` and `publicbot` may be omitted. A present object with an empty `token` is valid and does not start that bot. The schema is not tightened for that.  
 A successful write is audited as `config_update`. `info.keys` is the changed key names, never the values.  
+If the config commits but the audit append fails, the response is HTTP 202 with `success: true`, `obj.committed: true`, and `obj.audit_pending: true`. `obj.base` and `obj.restart` still describe this exact committed edit, even if another edit has since committed. Do not retry the patch to repair its audit; see [pending audit repair](AUDIT.md#pending-audit-repair).  
 `restart` lists the keys from the table below whose value actually changed. Empty means nothing to restart. The process is not restarted. Restart is an operator action (`systemctl restart`, graceful-timeout 30).  
   
 | Key | Why a restart is required |  

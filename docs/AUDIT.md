@@ -13,6 +13,12 @@ The base format is:
 }  
 ```  
   
+## Pending audit repair
+
+For committed mutations, HTTP 202 with `committed: true` and `audit_pending: true` means the mutation succeeded but its audit append failed. This is not a durable pending-audit queue and there is no automatic replay or repair endpoint. Do not repeat the mutation to recreate its audit entry.
+
+For config edits, retain the request's changed key names and the response's committed revision (`base`) and restart list in an operator incident record, without retaining secret values. Restore the audit destination, inspect the JSONL log for a possibly written entry, and manually reconcile the missing `config_update` record using the documented format and verified change details. Record any uncertainty about the original timestamp or outcome separately; the current config may already include later edits. Restart requirements still apply despite the audit failure.
+
 ## Action list  
 - `sub_hit`  
 - `user_refresh`  

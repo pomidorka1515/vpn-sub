@@ -82,9 +82,10 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
                 await self.cfg.backup_now()
             except Exception:
                 self.log.exception("config backup failed after commit")
-            await self.sub.audit_svc.audit(
+            await self.sub.audit_svc.audit_committed(
                 name="config_update",
                 info={"keys": changed},
+                result={"base": new_hash, "restart": restart},
             )
         return ok(
             "Updated" if status == "updated" else "Unchanged",

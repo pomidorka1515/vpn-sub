@@ -13,6 +13,7 @@ from config import AppConfig, Config
 from config.store import AsyncConfig
 from config.validation import check_config_document
 from core.services.audit import AuditService
+from errors import ValidationError
 from tests.support.api import api_app, make_subscription, make_watch
 from tests.support.paths import REPO_ROOT
 
@@ -161,9 +162,11 @@ async def test_config_commit_and_conflict(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("audit_failure", [False, True])
 async def test_config_response_retains_own_revision_during_concurrent_edit(
     config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
     monkeypatch: pytest.MonkeyPatch,
+    audit_failure: bool,
 ) -> None:
     app, cfg, path, audit = config_api
     committed = asyncio.Event()
@@ -177,6 +180,15 @@ async def test_config_response_retains_own_revision_during_concurrent_edit(
         await backup_now()
 
     monkeypatch.setattr(cfg, "backup_now", pause_first_backup)
+    if audit_failure:
+        append = audit.append
+
+        async def fail_first_audit(record: dict[str, JsonValue]) -> None:
+            if record["info"] == {"keys": ["sub_name"]}:
+                raise OSError("audit unavailable")
+            await append(record)
+
+        monkeypatch.setattr(audit, "append", fail_first_audit)
     async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
         first = tasks.create_task(set_config(app, base_for(path), {"sub_name": "first"}))
         await committed.wait()
@@ -193,9 +205,13 @@ async def test_config_response_retains_own_revision_during_concurrent_edit(
         resume.set()
 
     first_response = first.result()
-    assert first_response.status_code == 200
+    assert first_response.status_code == (202 if audit_failure else 200)
     first_payload = await first_response.get_json()
-    assert first_payload["obj"] == {"base": first_base, "restart": []}
+    assert first_payload["obj"] == {
+        "base": first_base,
+        "restart": [],
+        **({"committed": True, "audit_pending": True} if audit_failure else {}),
+    }
 
     before = path.read_bytes()
     records = list(audit.records)
@@ -320,6 +336,39 @@ async def test_unchanged_patch_does_not_write(
     assert payload["msg"] == "Unchanged"
     assert payload["obj"]["restart"] == []
     assert (path.read_bytes(), path.stat().st_mtime_ns) == before
+    assert not audit.records
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [OSError("audit unavailable"), ValidationError("audit failed")])
+async def test_config_audit_failure_preserves_committed_result(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+) -> None:
+    app, cfg, path, audit = config_api
+    expected = json.loads(path.read_bytes())
+    expected.update(sub_name="after", **{"3xui": {}})
+
+    async def fail_append(record: dict[str, JsonValue]) -> None:
+        assert record["action"] == "config_update"
+        assert record["info"] == {"keys": ["3xui", "sub_name"]}
+        raise failure
+
+    monkeypatch.setattr(audit, "append", fail_append)
+    response = await set_config(app, base_for(path), {"sub_name": "after", "3xui": {}})
+    assert response.status_code == 202
+    payload = await response.get_json()
+    assert payload["success"] is True
+    assert "Do not retry" in payload["msg"]
+    assert payload["obj"] == {
+        "base": config_etag(expected),
+        "restart": ["3xui"],
+        "committed": True,
+        "audit_pending": True,
+    }
+    assert json.loads(path.read_bytes()) == expected
+    assert cfg.view() == expected
     assert not audit.records
 
 
