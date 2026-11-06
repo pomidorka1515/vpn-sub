@@ -47,6 +47,149 @@ async def test_panel_alerts_respect_configured_cooldown(
     assert alert.await_count == expected_alerts
 
 
+def panel_status(*, cpu: int = 0) -> MagicMock:
+    status = MagicMock()
+    status.obj.xray.state = "running"
+    status.obj.cpu = cpu
+    status.obj.mem.total = 0
+    status.obj.disk.total = 0
+    return status
+
+
+@pytest.mark.asyncio
+async def test_panel_health_unknown_dead_and_recovery(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    watch.cfg = config_mock(subscription_config(panel_alert_cooldown=3600))
+    panel = watch.sub.panels[0]
+    healthy = panel_status()
+    statuses = AsyncMock(return_value=[healthy])
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", statuses)
+    alert = AsyncMock()
+    watch.alert = alert
+    now = 100.0
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
+
+    await watch.panel_health_check()
+    alert.assert_not_awaited()
+    assert watch._panel_alerts == {}
+
+    statuses.return_value = [None]
+    await watch.panel_health_check()
+    assert "Unknown: panel status could not be read" in alert.call_args.args[0]
+    assert watch._panel_alerts == {panel.name: now}
+
+    panel.dead = True
+    statuses.reset_mock()
+    now += 1
+    await watch.panel_health_check()
+    statuses.assert_not_awaited()
+    assert alert.await_count == 1
+    assert watch._panel_alerts == {panel.name: 100.0}
+
+    now += 3600
+    await watch.panel_health_check()
+    statuses.assert_not_awaited()
+    assert alert.await_count == 2
+    assert "Unavailable: panel session is down" in alert.call_args.args[0]
+
+    # A live session alone is not recovery: metrics must also be readable.
+    panel.dead = False
+    await watch.panel_health_check()
+    assert watch._panel_alerts == {panel.name: now}
+    statuses.return_value = [healthy]
+    await watch.panel_health_check()
+    assert watch._panel_alerts == {}
+    assert alert.await_count == 2  # Recovery is silent.
+
+    statuses.return_value = [None]
+    await watch.panel_health_check()
+    assert alert.await_count == 3  # A new outage is not suppressed by old cooldown.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dead", [False, True])
+async def test_panel_outage_reminders_share_per_panel_cooldown(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    dead: bool,
+) -> None:
+    watch.cfg = config_mock(subscription_config(panel_alert_cooldown=60))
+    panel = watch.sub.panels[0]
+    panel.dead = dead
+    statuses = AsyncMock(return_value=[None])
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", statuses)
+    alert = AsyncMock()
+    watch.alert = alert
+    now = 100.0
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
+
+    for elapsed in (0, 1, 59, 60, 61, 62):
+        now = 100.0 + elapsed
+        await watch.panel_health_check()
+
+    assert alert.await_count == 2
+    assert watch._panel_alerts == {panel.name: 161.0}
+    if dead:
+        statuses.assert_not_awaited()
+        assert "Unavailable" in alert.call_args.args[0]
+    else:
+        assert "Unknown" in alert.call_args.args[0]
+        statuses.assert_awaited_with([panel], work="background")
+
+
+@pytest.mark.asyncio
+async def test_unknown_status_does_not_clear_existing_metric_alert(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statuses = AsyncMock(return_value=[panel_status(cpu=95)])
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", statuses)
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: 100.0))
+    alert = AsyncMock()
+    watch.alert = alert
+
+    await watch.panel_health_check()
+    statuses.return_value = [None]
+    await watch.panel_health_check()
+    assert watch._panel_alerts == {watch.sub.panels[0].name: 100.0}
+    statuses.return_value = [panel_status(cpu=95)]
+    await watch.panel_health_check()
+    alert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mark_dead", [False, True])
+async def test_panel_status_read_failure_is_alerted(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    mark_dead: bool,
+) -> None:
+    panel = watch.sub.panels[0]
+
+    async def unreadable(_url: str) -> None:
+        panel.dead = mark_dead
+        raise ValueError("unreadable status response")
+
+    get = AsyncMock(side_effect=unreadable)
+    monkeypatch.setattr(panel, "get", get)
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: 100.0))
+    alert = AsyncMock()
+    watch.alert = alert
+
+    # Exercise the real status service's exception -> None contract, including
+    # a session that becomes dead during the read rather than before it.
+    await watch.panel_health_check()
+    alert.assert_awaited_once()
+    assert ("Unavailable" if mark_dead else "Unknown") in alert.call_args.args[0]
+    assert watch._panel_alerts == {panel.name: 100.0}
+    get.assert_awaited_once_with("panel/api/server/status")
+    await watch.panel_health_check()
+    assert get.await_count == (1 if mark_dead else 2)
+    alert.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("message", "expected"),

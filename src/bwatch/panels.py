@@ -21,24 +21,33 @@ class PanelJobs(WatchJobs):
     async def panel_health_check(self) -> None:
         async def operation() -> None:
             live = [p for p in self.sub.panels if not p.dead]
-            for panel, status in zip(
-                live,
-                await self.sub.panel_svc.statuses(live, work="background"),
-                strict=True,
-            ):
-                if status is None:
-                    continue
-                obj = status.obj
-                obj.format()
+            statuses = dict(
+                zip(
+                    (panel.name for panel in live),
+                    await self.sub.panel_svc.statuses(live, work="background") if live else [],
+                    strict=True,
+                ),
+            )
+            for panel in self.sub.panels:
+                status = statuses.get(panel.name)
                 problems: list[str] = []
-                if obj.xray.state != "running":
-                    problems.append(f"Xray: {obj.xray.state} - {obj.xray.errorMsg}")
-                if obj.cpu > 90:
-                    problems.append(f"CPU: {obj.cpu}%")
-                for label, value in (("RAM", obj.mem), ("Disk", obj.disk)):
-                    if value.total and value.current / value.total > 0.9:
-                        problems.append(f"{label}: {value.current / value.total * 100:.0f}%")
+                if panel.dead:
+                    problems.append("Unavailable: panel session is down")
+                elif status is None:
+                    problems.append("Unknown: panel status could not be read")
+                else:
+                    obj = status.obj
+                    obj.format()
+                    if obj.xray.state != "running":
+                        problems.append(f"Xray: {obj.xray.state} - {obj.xray.errorMsg}")
+                    if obj.cpu > 90:
+                        problems.append(f"CPU: {obj.cpu}%")
+                    for label, value in (("RAM", obj.mem), ("Disk", obj.disk)):
+                        if value.total and value.current / value.total > 0.9:
+                            problems.append(f"{label}: {value.current / value.total * 100:.0f}%")
                 if not problems:
+                    # Only confirmed healthy metrics end an alert episode. Recovery
+                    # is silent and re-arms the next fault, even within cooldown.
                     self._panel_alerts.pop(panel.name, None)
                 elif (
                     time.monotonic() - self._panel_alerts.get(panel.name, float("-inf"))
