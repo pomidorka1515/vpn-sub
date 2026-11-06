@@ -130,6 +130,63 @@ def test_description_fills_active_and_disabled_slots() -> None:
     )
 
 
+@pytest.mark.parametrize("time_enabled", [True, False], ids=["disabled", "expired"])
+@pytest.mark.parametrize(
+    ("limit", "used", "exhausted"),
+    [
+        (0, 3_000_000_000, False),
+        (2, 0, False),
+        (2, 1_000_000_000, False),
+        (2, 1_999_999_999, False),
+        (2, 2_000_000_000, True),
+        (2, 2_000_000_001, True),
+    ],
+    ids=["unlimited", "unused", "below-quota", "just-below-quota", "at-quota", "above-quota"],
+)
+def test_disabled_description_reports_only_exhausted_quota(
+    monkeypatch: pytest.MonkeyPatch,
+    time_enabled: bool,
+    limit: int,
+    used: int,
+    exhausted: bool,
+) -> None:
+    monkeypatch.setattr("builders.description.time.time", lambda: 1_700_086_400)
+    language = _lang(
+        {
+            "en": {
+                **DESC["en"],
+                "main_exceeded": "{username} exceeded {used}/{limit} up {up} down {down}{slot_time}",
+            },
+        },
+    )
+    description = build_description(
+        language,
+        "Alice",
+        "en",
+        _bandwidth(),
+        status=False,
+        statusTime=time_enabled,
+        ts=1_700_000_000,
+        bw_limit=limit,
+        bw_used=used,
+        wl_limit=1,
+        wl_used=500_000_000,
+    )
+
+    if exhausted:
+        assert description.startswith("Alice exceeded 2.00 GB/2GB")
+    else:
+        assert description.startswith("Alice up")
+        assert "exceeded" not in description
+    assert "up 1.50 GB down 500.00 MB" in description
+    if time_enabled:
+        assert "expired" not in description
+    else:
+        assert description.endswith(" expired 14.11.23 22:13 (UTC) (1d ago)")
+    assert "{" not in description
+    assert "}" not in description
+
+
 def _link_config() -> AppConfig:
     config = subscription_config()
     config.update(

@@ -68,7 +68,7 @@ def build_description(
             desc = format(desc, slot_wl_bw="")
 
     else:
-        if bw_limit == 0:
+        if bw_limit == 0 or bw_used < bw_limit * 10**9:
             desc = descTable["main"]
 
             desc = format(
