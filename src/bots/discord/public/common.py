@@ -190,21 +190,21 @@ class PublicCommonMixin(DiscordIOMixin, PublicFeatureMixin):
         )
         return view
 
-    def confirm_view(self, lang: str, action: str) -> discord.ui.View:
+    def confirm_view(self, lang: str, action: str, nonce: str) -> discord.ui.View:
         t = self.TEXTS[lang]
         view = discord.ui.View(timeout=None)
         confirm_label = t.get("btn_confirm", "✅")
         view.add_item(
             discord.ui.Button(
                 label=confirm_label,
-                custom_id=f"confirm_{action}",
+                custom_id=f"confirm_{action}:{nonce}",
                 style=discord.ButtonStyle.danger,
             ),
         )
         view.add_item(
             discord.ui.Button(
                 label=t["btn_cancel"],
-                custom_id="confirm_cancel",
+                custom_id=f"confirm_cancel:{nonce}",
                 style=discord.ButtonStyle.secondary,
             ),
         )

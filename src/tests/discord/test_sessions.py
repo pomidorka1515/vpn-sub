@@ -57,6 +57,21 @@ async def test_session_access_and_clear_preserves_language(
 
 
 @pytest.mark.asyncio
+async def test_session_generation_changes_only_with_token_updates(
+    session_store: DatabaseSessionStore,
+) -> None:
+    session_store.set_token(123, "token")
+    generation = session_store.get(123).generation
+    session_store.set_lang(123, "en")
+    assert session_store.get(123).generation is generation
+    session_store.set_token(123, "token")
+    assert session_store.get(123).generation is not generation
+    generation = session_store.get(123).generation
+    session_store.clear_token(123)
+    assert session_store.get(123).generation is not generation
+
+
+@pytest.mark.asyncio
 async def test_language_updates_preserve_token_and_ignore_invalid_language(
     session_store: DatabaseSessionStore,
 ) -> None:

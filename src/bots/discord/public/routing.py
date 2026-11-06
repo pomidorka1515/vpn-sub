@@ -124,6 +124,15 @@ class PublicRoutingMixin(PublicFeatureMixin):
         custom_id = self._custom_id(interaction)
         if not custom_id:
             return
+        for action in ("reset", "logout"):
+            prefix = f"confirm_{action}:"
+            if custom_id.startswith(prefix):
+                await self.confirm_operation(interaction, action, custom_id.removeprefix(prefix))
+                return
+        if custom_id.startswith("confirm_cancel:"):
+            self.cancel_confirmation(interaction.user.id, custom_id.removeprefix("confirm_cancel:"))
+            await self._cancel(interaction)
+            return
         if self._requires_auth(custom_id) and not await self.require_login(interaction):
             return
         if custom_id.startswith("lang_"):
@@ -204,7 +213,5 @@ _EXACT_HANDLERS: dict[str, str] = {
     "set_pass": "open_pass_modal",
     "fp_select": "_dispatch_fp_select",
     "chart_select": "_dispatch_chart_select",
-    "confirm_logout": "confirm_logout",
-    "confirm_reset": "confirm_reset",
     "confirm_cancel": "_cancel",
 }

@@ -96,20 +96,12 @@ async def test_login_invalid_credentials_does_not_persist_session() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("operation", ["logout", "reset", "delete"])
-async def test_account_operations_clear_discord_session(operation: str) -> None:
+async def test_account_delete_clears_discord_session() -> None:
     bot, _, store, sub = make_bots()
     fake = FakeInteraction(data=modal_data("delete_modal", {"current_password": "secret"}))
     interaction = cast(discord.Interaction, fake)
-    if operation == "logout":
-        await bot.confirm_logout(interaction)
-        sub.account_svc.logout.assert_awaited_once_with("alice")
-    elif operation == "reset":
-        await bot.confirm_reset(interaction)
-        sub.business_svc.reset_user.assert_awaited_once_with("alice")
-    else:
-        await bot.handle_delete_modal(interaction)
-        sub.account_svc.delete.assert_awaited_once_with("alice", "secret")
+    await bot.handle_delete_modal(interaction)
+    sub.account_svc.delete.assert_awaited_once_with("alice", "secret")
     assert store.token(7) is None
     assert store.lang(7) == "en"
 

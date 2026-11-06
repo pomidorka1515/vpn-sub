@@ -192,6 +192,8 @@ def interaction_limit(operation: str) -> tuple[str, int]:
     if operation.startswith("admin:"):
         parts = operation.split(":")
         return ":".join(parts[:3] if parts[1] in {"modal", "edit"} else parts[:2]), 20
+    if operation.startswith(("confirm_reset:", "confirm_logout:", "confirm_cancel:")):
+        operation = operation.split(":", 1)[0]
     aliases = {
         "login_modal": "login",
         "register_modal": "register",

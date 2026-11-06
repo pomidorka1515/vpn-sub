@@ -130,7 +130,7 @@ class MemorySessionStore:
     def set_lang(self, user_id: int | str, lang: str) -> None:
         if lang in {"en", "ru"}:
             old = self.get(user_id)
-            self.records[old.user_id] = SessionRecord(old.user_id, old.token, lang)
+            self.records[old.user_id] = SessionRecord(old.user_id, old.token, lang, old.generation)
 
     def set_token(self, user_id: int | str, token: str) -> None:
         old = self.get(user_id)

@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from core.common import Snapshot
     from discord import Client, Interaction, app_commands
 
+    from .account import PendingConfirmation
+
 __all__ = ["DiscordPublicBot"]
 
 type Coro[T = None] = Coroutine[Any, Any, T]
@@ -66,6 +68,8 @@ class DiscordPublicBot(
             self.TEXTS = language["public"]
             self._chart_locks: dict[int, asyncio.Lock] = {}
             self._chart_busy: set[int] = set()
+            self._pending_confirmations: dict[int, PendingConfirmation] = {}
+            self._confirmation_busy: set[int] = set()
             self._wire_commands()
 
     def _wire_commands(self) -> None:

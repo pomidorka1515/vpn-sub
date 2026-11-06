@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, cast
 
 from app_runtime.tasks import TaskRegistry
@@ -21,6 +21,9 @@ class SessionRecord:
     user_id: str
     token: str
     lang: str | None
+    # Process-local identity: each token assignment starts a new session, even
+    # when it reuses the same token. Language changes retain this identity.
+    generation: object = field(default_factory=object, compare=False, repr=False)
 
 
 class SessionStore(Protocol):
@@ -114,7 +117,7 @@ class DatabaseSessionStore:
     def set_lang(self, user_id: int | str, lang: str) -> None:
         if lang in {"ru", "en"}:
             old = self.get(user_id)
-            self._save(SessionRecord(old.user_id, old.token, lang))
+            self._save(SessionRecord(old.user_id, old.token, lang, old.generation))
 
     def set_token(self, user_id: int | str, token: str) -> None:
         old = self.get(user_id)
