@@ -147,6 +147,16 @@ def test_cpu_since_last_samples_under_lock(monkeypatch: pytest.MonkeyPatch) -> N
     assert SysUtil.cpu_since_last() == 0.0
 
 
+@pytest.mark.parametrize("name", ["worker process", "worker ) process"])
+def test_app_uptime_parses_process_name(name: str) -> None:
+    stat = f"123 ({name}) S " + "0 " * 18 + "5000 0\n"
+    with (
+        patch("pathlib.Path.read_text", side_effect=["1000.0 0", stat]),
+        patch("sysutil.util.os.sysconf", return_value=100),
+    ):
+        assert SysUtil.app_uptime() == 950.0
+
+
 def test_app_memory_returns_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Mem:
         rss = 20 * 1024 * 1024
