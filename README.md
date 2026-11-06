@@ -75,7 +75,7 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
 - Linux, glibc at least as new as Ubuntu 22.04 (`>= 2.35`)
 - Local Redis on the same box; the app pings it at startup and exits if it is down
 - 3x-ui v3 panels with admin-scoped API tokens
-- Python 3.14 only for development; release binaries need no Python on the host
+- Release binaries need no Python on the host; development and the v6 profile migration require Python 3.14
 
 ## Setup
 
@@ -287,14 +287,19 @@ and does not touch the file. Stop the service first — a running v5 process
 reloads on file change and will misread the new objects.
 
 ```bash
-# IMPORTANT: install `fastjsonschema`
-python -m pip install fastjsonschema
-python scripts/migrate_profiles.py            # dry-run
-python scripts/migrate_profiles.py --apply    # rewrite config.json
+# From the binary installation directory; downloads scripts and the packed schema.
+./vpn-sub --load-scripts
+# Install Python 3.14 with venv and pip using your distribution's packages first.
+python3.14 -m venv .migration-venv
+.migration-venv/bin/python -m pip install 'fastjsonschema>=2.21,<3'
+.migration-venv/bin/python scripts/migrate_profiles.py            # dry-run
+.migration-venv/bin/python scripts/migrate_profiles.py --apply    # rewrite config.json
 ```
 
-The original is copied to `config.json.pre-v6` beside the file. A second  
-`--apply` leaves that backup alone.
+The original is preserved as `config.json.pre-v6` beside the file. A second
+`--apply` leaves that backup alone. The replacement preserves the original file's
+owner, group and mode, and fails if those cannot be preserved. Set `DIR_DATA`,
+`PATH_CONFIG`, or pass `--config` if the config is not at `data/config.json`.
 
 ### SQLite schema 6 on upgrade
 
@@ -306,7 +311,7 @@ unknown.
 ### Scripts
 
 To load scripts for migration (3x-ui, config, etc), run `./vpn-sub --load-scripts`.
-Pure migration scripts use stdlib.
+Migration scripts may require Python dependencies; see the instructions for each script.
 
 ## Binaries
 
