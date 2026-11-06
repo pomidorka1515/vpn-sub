@@ -168,15 +168,17 @@ async function applyBonus() {
   });
 }
 
-let svt;
+let svt, settingsValidationGen = 0;
 function validateSettingsUsername() {
   clearTimeout(svt);
+  const gen = ++settingsValidationGen;
   const v = document.getElementById('setUser').value.trim();
   const h = document.getElementById('setUserHint');
   if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
   svt = setTimeout(async () => {
     try {
       const res = await api('GET', `/validate?username=${encodeURIComponent(v)}`);
+      if (gen !== settingsValidationGen || document.getElementById('setUser').value.trim() !== v) return;
       if (!res) return;
       if (res.success && res.obj) {
         if (!res.obj.valid) { h.textContent = t('hint_invalid') + res.obj.sanitized; h.className = 'username-hint bad'; }
@@ -217,6 +219,8 @@ async function saveSettings() {
       if (document.getElementById('setFp').value === fp) dirtySettings.fp = false;
       msg.textContent = t('saved'); msg.className = 'settings-msg ok';
       document.getElementById('setUser').value = '';
+      ++settingsValidationGen;
+      clearTimeout(svt);
       document.getElementById('setPass').value = '';
       document.getElementById('setCurPass').value = '';
       document.getElementById('setUserHint').textContent = '';

@@ -120,15 +120,17 @@ async function doLogin() {
   btn.disabled = false;
 }
 
-let vt;
+let vt, validationGen = 0;
 function validateUsername() {
   clearTimeout(vt);
+  const gen = ++validationGen;
   const v = document.getElementById('regUser').value;
   const h = document.getElementById('usernameHint');
   if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
   vt = setTimeout(async () => {
     try {
       const res = await api('GET', `/validate?username=${encodeURIComponent(v)}`);
+      if (gen !== validationGen || document.getElementById('regUser').value !== v) return;
       if (res.success && res.obj) {
         if (!res.obj.valid) { h.textContent = t('hint_invalid') + res.obj.sanitized; h.className = 'username-hint bad'; }
         else if (res.obj.taken) { h.textContent = t('hint_taken'); h.className = 'username-hint bad'; }
