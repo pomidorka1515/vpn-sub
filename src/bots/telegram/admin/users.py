@@ -87,8 +87,9 @@ class AdminUsersMixin(AdminFeatureMixin):
 
     async def _cb_refresh(self, chat_id: int) -> None:
         failures: list[str] = []
+        successes = 0
         users = await self.sub.user_svc.list_users()
-        for cc in users:
+        for index, cc in enumerate(users):
             try:
                 await self.sub.business_svc.add_users(cc)
             except PanelUnavailableError:
@@ -98,11 +99,14 @@ class AdminUsersMixin(AdminFeatureMixin):
                 self.log.critical("bulk user refresh aborted for %s", cc, exc_info=True)
                 await self._send_message(
                     chat_id,
-                    f"❌ Обновление прервано. Успешно: {len(users) - len(failures)}; "
-                    f"панель недоступна: {len(failures)}; всего: {len(users)}.",
+                    f"❌ Обновление прервано. Успешно: {successes}; "
+                    f"панель недоступна: {len(failures)}; другая ошибка: 1; "
+                    f"не обработано: {len(users) - index - 1}; всего: {len(users)}.",
                     reply_markup=self.get_main_menu(),
                 )
                 return
+            else:
+                successes += 1
         if failures:
             await self._send_message(
                 chat_id,
