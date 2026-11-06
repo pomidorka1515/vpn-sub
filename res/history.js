@@ -12,8 +12,12 @@ function goBack() {
 
 function handleChartJsError() {
   toast(t('chart_load_err'), 'error');
-  document.getElementById('regWrap').innerHTML = '<div class="chart-empty">' + t('chart_load_err') + '</div>';
-  document.getElementById('wlWrap').innerHTML = '<div class="chart-empty">' + t('chart_load_err') + '</div>';
+  for (const prefix of ['reg', 'wl']) {
+    document.getElementById(prefix + 'Wrap').style.display = 'none';
+    const empty = document.getElementById(prefix + 'Empty');
+    empty.textContent = t('chart_load_err');
+    empty.style.display = '';
+  }
 }
 
 let chartJsPromise = null;
@@ -24,7 +28,12 @@ function ensureChartJs() {
     const script = document.createElement('script');
     script.src = window.CHART_JS;
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => {
+      if (typeof Chart === 'undefined') {
+        chartJsPromise = null;
+        reject(new Error('Chart.js not loaded'));
+      } else resolve();
+    };
     script.onerror = () => {
       chartJsPromise = null;
       reject(new Error('Chart.js not loaded'));
