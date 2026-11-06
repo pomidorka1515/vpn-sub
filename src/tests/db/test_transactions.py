@@ -251,12 +251,60 @@ async def test_atomic_registration_race_and_refund(repository: Database) -> None
     assert sum(isinstance(result, CodeError) for result in results) == 1
     winner = (await db.list_users())[0]
     assert await db.get_code("once") is None
-    await db.rollback_registration_sync(winner)
+    await db.rollback_registration_sync(winner, (winner, "once", False))
     assert await db.list_users() == []
     assert (await db.get_code("once")) is not None
     await register("carol")
     await db.confirm_registration_sync("carol")
     assert await db.all_codes() == []
+
+
+@pytest.mark.asyncio
+async def test_registration_rollback_rejects_stale_identity(repository: Database) -> None:
+    db = repository
+    await db.add_code("invite", "register", uses=2)
+    await db.register_with_code(
+        code="invite",
+        username="alice",
+        uuid="first",
+        token="first",
+        fingerprint="chrome",
+        displayname="Alice",
+        ext_username="alice",
+        ext_password_hash="hash",
+    )
+    expected = ("first", "invite", False)
+    await db.rollback_registration_sync("alice", ("other", "invite", False))
+    await db.rollback_registration_sync("alice", ("first", "other", False))
+    await db.rollback_registration_sync("alice", ("first", "invite", True))
+    assert await db.registration_identity("alice") == expected
+    code = await db.get_code("invite")
+    assert code is not None
+    assert code["uses"] == 1
+    await db.confirm_registration_sync("alice")
+    await db.set_metadata("uuid_reservation:target", "alice")
+    await db.rollback_registration_sync("alice", expected)
+    assert await db.user_exists("alice")
+    assert await db.get_metadata("uuid_reservation:target") == "alice"
+    code = await db.get_code("invite")
+    assert code is not None
+    assert code["uses"] == 1
+
+    await db.delete_user("alice")
+    await db.register_with_code(
+        code="invite",
+        username="alice",
+        uuid="second",
+        token="second",
+        fingerprint="chrome",
+        displayname="Alice",
+        ext_username="alice",
+        ext_password_hash="hash",
+    )
+    await db.rollback_registration_sync("alice", expected)
+    assert await db.registration_identity("alice") == ("second", "invite", False)
+    assert await db.get_code("invite") is None
+    assert await db.get_metadata("uuid_reservation:target") == "alice"
 
 
 @pytest.mark.asyncio
@@ -292,7 +340,7 @@ async def test_shared_code_confirmation_preserves_pending_registration(
         assert row["uses"] == 0
 
     if rollback_second:
-        await db.rollback_registration_sync("bob")
+        await db.rollback_registration_sync("bob", ("bob", "shared", False))
         restored = await db.get_code("shared")
         assert restored is not None
         assert restored["uses"] == 1

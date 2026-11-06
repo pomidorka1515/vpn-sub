@@ -22,7 +22,7 @@ from tests.support.subscriptions import close_subscription, make_subscription
 from tests.support.users import USER_UUID
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
+    from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Mapping, Sequence
     from pathlib import Path
 
     from config import JsonValue
@@ -104,6 +104,133 @@ async def test_recovery_rechecks_create_marker_after_waiting_for_ownership(
         assert len(panel.clients) == 1
         assert panel.clients[0].uuid == NEW_UUID
         assert await async_db.get_metadata(key) == replacement
+    finally:
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_registration_recovery_does_not_rollback_confirmed_registration(
+    async_db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panel = FakePanel(inbounds=[make_inbound(1)])
+    sub = await make_subscription(async_db, tmp_path, [panel])
+    confirmation_ready = asyncio.Event()
+    recovery_waiting = asyncio.Event()
+    confirm = async_db.confirm_registration_sync
+    run = sub.res.coordinator.run
+
+    async def delayed_confirm(username: str) -> None:
+        confirmation_ready.set()
+        await recovery_waiting.wait()
+        await confirm(username)
+
+    async def observe_run[T](
+        users: Sequence[str], operation: Callable[[], Coroutine[object, object, T]], *, name: str
+    ) -> T:
+        if name == "core:_rollback_registered_user":
+            recovery_waiting.set()
+        return await run(users, operation, name=name)
+
+    monkeypatch.setattr(async_db, "confirm_registration_sync", delayed_confirm)
+    monkeypatch.setattr(sub.res.coordinator, "run", observe_run)
+    try:
+        await sub.code_svc.add_code("invite", "register")
+        async with asyncio.TaskGroup() as group:
+            registration = group.create_task(
+                sub.business_code_svc.register_with_code(
+                    code="invite",
+                    username="alice",
+                    displayname="Alice",
+                    ext_username="alice",
+                    ext_password="secret",
+                ),
+            )
+            await confirmation_ready.wait()
+            group.create_task(sub.business_code_svc.recover_rollback_failures())
+        created = registration.result()
+        user = await async_db.get_user("alice")
+        assert user is not None
+        assert user["uuid"] == created.uuid
+        assert len(panel.clients) == 1
+        assert panel.clients[0].uuid == created.uuid
+        assert await async_db.pending_registrations() == []
+        assert await async_db.get_code("invite") is None
+        assert await async_db.get_metadata("registration_rollback_failed:alice") is None
+    finally:
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_registration_recovery_skips_replaced_pending_identity(
+    async_db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panel = FakePanel(inbounds=[make_inbound(1)], clients=[make_panel_client("alice", [1])])
+    sub = await make_subscription(async_db, tmp_path, [panel])
+    recovery_waiting = asyncio.Event()
+    run = sub.res.coordinator.run
+
+    async def observe_run[T](
+        users: Sequence[str], operation: Callable[[], Coroutine[object, object, T]], *, name: str
+    ) -> T:
+        if name == "core:_rollback_registered_user":
+            recovery_waiting.set()
+        return await run(users, operation, name=name)
+
+    async def register(uuid: str, code: str) -> None:
+        await async_db.register_with_code(
+            code=code,
+            username="alice",
+            uuid=uuid,
+            token=uuid,
+            fingerprint="chrome",
+            displayname="Alice",
+            ext_username="alice",
+            ext_password_hash="hash",
+        )
+
+    monkeypatch.setattr(sub.res.coordinator, "run", observe_run)
+    try:
+        await async_db.add_code("first", "register")
+        await async_db.add_code("second", "register")
+
+        async def replace_and_release() -> asyncio.Task[None]:
+            await register(NEW_UUID, "first")
+            recovery = asyncio.create_task(sub.business_code_svc.recover_rollback_failures())
+            await recovery_waiting.wait()
+            await async_db.rollback_registration_sync("alice", (NEW_UUID, "first", False))
+            await register(USER_UUID, "second")
+            return recovery
+
+        recovery = await run(["alice"], replace_and_release, name="test:replace-registration")
+        await recovery
+        assert await async_db.registration_identity("alice") == (USER_UUID, "second", False)
+        assert len(panel.clients) == 1
+        assert panel.clients[0].uuid == USER_UUID
+        assert await async_db.get_code("second") is None
+        assert await async_db.get_metadata("registration_rollback_failed:alice") is None
+    finally:
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_registration_recovery_preserves_marker_without_pending_identity(
+    async_db: Database,
+    tmp_path: Path,
+) -> None:
+    panel = FakePanel(inbounds=[make_inbound(1)])
+    sub = await make_subscription(async_db, tmp_path, [panel])
+    try:
+        await sub.business_svc.add_new_user("alice", "Alice", userid=NEW_UUID)
+        await async_db.set_metadata("registration_rollback_failed:alice", "123")
+        await sub.business_code_svc.recover_rollback_failures()
+        assert await async_db.user_exists("alice")
+        assert len(panel.clients) == 1
+        assert panel.clients[0].uuid == NEW_UUID
+        assert await async_db.get_metadata("registration_rollback_failed:alice") == "123"
     finally:
         await close_subscription(sub)
 

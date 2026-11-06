@@ -14,7 +14,30 @@ if TYPE_CHECKING:
     from custom_types import BonusResult, RegisterCodeResult
 
 
+type RegistrationIdentity = tuple[str, str, bool]  # UUID, code, permanent
+
+
 class CodesMixin(ConnectionMixin):
+    async def registration_identities(self) -> dict[str, RegistrationIdentity]:
+        async with self.connection() as conn:
+            rows = await conn.rows(
+                """SELECT p.username, u.uuid, p.code, p.permanent
+                FROM pending_registration_sync AS p JOIN users AS u ON u.username = p.username""",
+            )
+            return {
+                str(row["username"]): (str(row["uuid"]), str(row["code"]), bool(row["permanent"]))
+                for row in rows
+            }
+
+    async def registration_identity(self, username: str) -> RegistrationIdentity | None:
+        async with self.connection() as conn:
+            row = await conn.row(
+                """SELECT u.uuid, p.code, p.permanent FROM pending_registration_sync AS p
+                JOIN users AS u ON u.username = p.username WHERE p.username = ?""",
+                (username,),
+            )
+            return (str(row[0]), str(row[1]), bool(row[2])) if row is not None else None
+
     async def pending_registrations(self) -> list[str]:
         async with self.connection() as conn:
             return [
@@ -240,18 +263,25 @@ class CodesMixin(ConnectionMixin):
                     (str(row["code"]),),
                 )
 
-    async def rollback_registration_sync(self, username: str) -> None:
+    async def rollback_registration_sync(
+        self, username: str, expected: RegistrationIdentity
+    ) -> None:
         async with self.transaction(immediate=True) as conn:
             row = await conn.row(
-                "SELECT code, permanent FROM pending_registration_sync WHERE username = ?",
+                """SELECT u.uuid, p.code, p.permanent FROM pending_registration_sync AS p
+                JOIN users AS u ON u.username = p.username WHERE p.username = ?""",
                 (username,),
             )
-            if row is not None and not bool(row["permanent"]):
+            if row is None or (str(row[0]), str(row[1]), bool(row[2])) != expected:
+                return
+            if not bool(row["permanent"]):
                 await conn.execute(
                     "UPDATE codes SET uses = uses + 1 WHERE code = ? AND action = 'register' AND permanent = 0",
                     (str(row["code"]),),
                 )
-            await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            await conn.execute(
+                "DELETE FROM users WHERE username = ? AND uuid = ?", (username, expected[0])
+            )
             await conn.executemany(
                 "DELETE FROM app_metadata WHERE key = ?",
                 [(f"registration_rollback_failed:{username}",), (f"user_sync_pending:{username}",)],

@@ -16,6 +16,8 @@ from ..coordination import panel_mutation, user_mutation
 # pyright: reportUnnecessaryIsInstance=false
 
 if TYPE_CHECKING:
+    from db.codes import RegistrationIdentity
+
     from ..common import SharedCoreResources
     from .audit import AuditService
     from .password import PasswordService
@@ -137,16 +139,17 @@ class BusinessCodeService(BaseService):
         self.user_svc = user_svc
 
     @panel_mutation
-    async def _rollback_registered_user(self, *, username: str) -> None:
+    async def _rollback_registered_user(
+        self, *, username: str, expected: RegistrationIdentity
+    ) -> None:
         self.require_panels()
+        if await self.db.registration_identity(username) != expected:
+            return
         key = f"registration_rollback_failed:{username}"
         await self.db.set_metadata(key, str(int(time.time())))
-        user = await self.db.get_user(username)
-        if user is not None:
-            await self.user_svc.rollback_panel_clients(username, expected_uuid=user["uuid"])
+        await self.user_svc.rollback_panel_clients(username, expected_uuid=expected[0])
         # Never refund or erase pending identity until every panel is clean.
-        await self.db.rollback_registration_sync(username)
-        await self.db.delete_metadata(key)
+        await self.db.rollback_registration_sync(username, expected)
 
     @panel_mutation
     async def register_with_code(
@@ -203,7 +206,9 @@ class BusinessCodeService(BaseService):
             await self.db.confirm_registration_sync(username)
         except Exception:
             try:
-                await self._rollback_registered_user(username=username)
+                await self._rollback_registered_user(
+                    username=username, expected=(uid, code, data["perma"])
+                )
             except Exception:
                 self.log.critical(
                     "registration panel rollback failed for %s; pending identity retained",
@@ -239,14 +244,10 @@ class BusinessCodeService(BaseService):
         if not self.panels:
             return
         # Pending rows cover a crash before a failure marker could be written.
-        users = set(await self.db.pending_registrations())
-        users.update(
-            key.removeprefix("registration_rollback_failed:")
-            for key in await self.db.list_metadata("registration_rollback_failed:")
-        )
-        for username in sorted(users):
+        identities = await self.db.registration_identities()
+        for username, expected in sorted(identities.items()):
             try:
-                await self._rollback_registered_user(username=username)
+                await self._rollback_registered_user(username=username, expected=expected)
             except Exception:
                 self.log.critical(
                     "registration rollback recovery failed for %s; marker retained",

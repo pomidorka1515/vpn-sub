@@ -350,11 +350,12 @@ async def test_metadata_prefix_listing_and_deletion(database: Database) -> None:
 @pytest.mark.asyncio
 async def test_registration_sync_rollback_refunds_finite_code(database: Database) -> None:
     (await database.add_code("invite", "register", uses=1))
+    user_uuid = str(uuid.uuid4())
     (
         await database.register_with_code(
             code="invite",
             username="alice",
-            uuid=str(uuid.uuid4()),
+            uuid=user_uuid,
             token="a" * 40,
             fingerprint="chrome",
             displayname="Alice",
@@ -363,7 +364,7 @@ async def test_registration_sync_rollback_refunds_finite_code(database: Database
         )
     )
     assert (await database.get_code("invite")) is None
-    (await database.rollback_registration_sync("alice"))
+    (await database.rollback_registration_sync("alice", (user_uuid, "invite", False)))
     assert not (await database.user_exists("alice"))
     restored = await database.get_code("invite")
     assert restored is not None
