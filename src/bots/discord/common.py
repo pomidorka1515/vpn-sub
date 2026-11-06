@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
 from bots.discord.composition import PublicFeatureMixin
+from bots.discord.exceptions import SessionExpiredError
 
 if TYPE_CHECKING:
     import discord
@@ -107,11 +108,13 @@ class DiscordIOMixin(PublicFeatureMixin):
         return out
 
     async def username(self, interaction: discord.Interaction) -> str:
-        from bots.discord.exceptions import SessionExpiredError
-
-        token = self.sessions.token(interaction.user.id)
-        username = await self.sub.user_svc.auth_token_to_user(token) if token else None
+        user_id = interaction.user.id
+        session = self.sessions.get(user_id)
+        username = (
+            await self.sub.user_svc.auth_token_to_user(session.token) if session.token else None
+        )
         if username is None:
-            self.sessions.clear_token(interaction.user.id)
+            if session.token and self.sessions.get(user_id).generation is session.generation:
+                self.sessions.clear_token(user_id)
             raise SessionExpiredError
         return username
