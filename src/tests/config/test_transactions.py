@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import threading
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -117,6 +120,59 @@ def test_nested_transactions_are_rejected(cfg: Config) -> None:
         with pytest.raises(RuntimeError, match="Nested"):
             with cfg.edit() as inner:
                 inner["x"] = 2
+
+
+@pytest.mark.parametrize("outer_style", ["edit", "context"])
+@pytest.mark.parametrize("inner_style", ["edit", "context", "same"])
+@pytest.mark.parametrize("rollback", [False, True])
+def test_nested_rejection_preserves_outer_transaction(
+    cfg: Config, outer_style: str, inner_style: str, rollback: bool
+) -> None:
+    cfg["x"] = 0
+    outer = cfg.edit() if outer_style == "edit" else cfg
+
+    with pytest.raises(ValueError, match="abort") if rollback else nullcontext():
+        with outer as tx:
+            tx["x"] = 1
+            inner = cfg.edit() if inner_style == "edit" else cfg if inner_style == "context" else tx
+            with pytest.raises(RuntimeError, match="Nested"):
+                with inner:
+                    pytest.fail("nested transaction unexpectedly entered")
+
+            # Check ownership first, so a broken guard cannot deadlock on the file lock.
+            assert cfg.active_transaction is tx
+            assert tx.owner_thread_id == threading.get_ident()
+            if outer_style == "context":
+                assert cfg.context_transaction is tx
+            with pytest.raises(RuntimeError, match="transaction"):
+                _ = cfg["x"]
+            with pytest.raises(RuntimeError, match="Nested"):
+                cfg["x"] = 3
+            tx["x"] = 2
+            if rollback:
+                raise ValueError("abort")
+
+    acquired = threading.Event()
+
+    def check_thread_lock() -> None:
+        if cfg.lock.acquire(timeout=1):
+            acquired.set()
+            cfg.lock.release()
+
+    thread = threading.Thread(target=check_thread_lock, daemon=True)
+    thread.start()
+    thread.join(timeout=2)
+    assert acquired.is_set(), "config lock was not released"
+    with Path(cfg.lockfile_path).open("a+b") as lock_fp:
+        fcntl.flock(lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(lock_fp, fcntl.LOCK_UN)
+
+    expected = 0 if rollback else 2
+    assert cfg["x"] == expected
+    assert json.loads(Path(cfg.path).read_text(encoding="utf-8"))["x"] == expected
+    with cfg.edit() as tx:
+        tx["x"] = 3
+    assert cfg["x"] == 3
 
 
 def test_transaction_view_is_active_and_commits_nested_edits(app_cfg: Config[AppConfig]) -> None:

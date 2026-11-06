@@ -316,12 +316,9 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def __enter__(self) -> ConfigTransaction[Doc]:
         self.raise_if_read_only()
         tx = self.edit()
+        tx.__enter__()
         self.context_transaction = tx
-        try:
-            return tx.__enter__()
-        except Exception:
-            self.context_transaction = None
-            raise
+        return tx
 
     def __exit__(
         self,

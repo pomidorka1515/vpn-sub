@@ -42,13 +42,13 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
     def __enter__(self) -> Self:
         cfg: Config[Doc] = self._config
         cfg.lock.acquire()
+        if cfg.active_transaction is not None:
+            cfg.lock.release()
+            raise RuntimeError("Nested batch edits are not supported.")
         self._cfg_lock_acquired = True
         lock_fp: io.BufferedRandom | None = None
 
         try:
-            if cfg.active_transaction is not None:
-                raise RuntimeError("Nested batch edits are not supported.")
-
             ensure_parent_dir(cfg.path)
             ensure_parent_dir(cfg.lockfile_path)
             lock_fp = Path(cfg.lockfile_path).open("a+b")
@@ -97,8 +97,10 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 self.data = None
                 self.original = None
                 self.owner_thread_id = None
-                cfg.active_transaction = None
+                if cfg.active_transaction is self:
+                    cfg.active_transaction = None
                 cfg.lock.release()
+                self._cfg_lock_acquired = False
             raise
 
     def __exit__(
@@ -143,8 +145,10 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 self.data = None
                 self.original = None
                 self.owner_thread_id = None
-                cfg.active_transaction = None
-                cfg.context_transaction = None
+                if cfg.active_transaction is self:
+                    cfg.active_transaction = None
+                if cfg.context_transaction is self:
+                    cfg.context_transaction = None
                 cfg.lock.release()
                 self._cfg_lock_acquired = False
 
