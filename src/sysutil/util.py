@@ -82,8 +82,8 @@ class SysUtil:
         Later calls use the jiffies elapsed since that baseline, which is
         the interval the poller actually waited.
         """
-        current = SysUtil._cpu_sample()
         with SysUtil._cpu_lock:
+            current = SysUtil._cpu_sample()
             previous = SysUtil._cpu_prev
             SysUtil._cpu_prev = current
         if previous is None:

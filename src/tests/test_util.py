@@ -137,6 +137,16 @@ def test_cpu_since_last_does_not_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     assert SysUtil.cpu_since_last() == 50.0
 
 
+def test_cpu_since_last_samples_under_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    def sample() -> tuple[int, int]:
+        assert SysUtil._cpu_lock.locked()
+        return (100, 50)
+
+    monkeypatch.setattr(SysUtil, "_cpu_sample", staticmethod(sample))
+    monkeypatch.setattr(SysUtil, "_cpu_prev", None)
+    assert SysUtil.cpu_since_last() == 0.0
+
+
 def test_app_memory_returns_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Mem:
         rss = 20 * 1024 * 1024
