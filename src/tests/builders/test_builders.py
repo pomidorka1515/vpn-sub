@@ -130,6 +130,33 @@ def test_description_fills_active_and_disabled_slots() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("used", "expected_whitelist"),
+    [
+        (999_999_999, " wl 1000.00 MB/1GB"),
+        (1_000_000_000, " wl exceeded 1.00 GB/1GB"),
+        (1_000_000_001, " wl exceeded 1.00 GB/1GB"),
+    ],
+    ids=["just-below-quota", "at-quota", "just-above-quota"],
+)
+def test_description_whitelist_quota_boundary(used: int, expected_whitelist: str) -> None:
+    description = build_description(
+        _lang(),
+        "Alice",
+        "en",
+        _bandwidth(),
+        status=True,
+        statusTime=True,
+        ts=0,
+        bw_limit=0,
+        bw_used=0,
+        wl_limit=1,
+        wl_used=used,
+    )
+
+    assert description == f"Alice up 1.50 GB down 500.00 MB{expected_whitelist}"
+
+
 @pytest.mark.parametrize("time_enabled", [True, False], ids=["disabled", "expired"])
 @pytest.mark.parametrize(
     ("limit", "used", "exhausted"),
