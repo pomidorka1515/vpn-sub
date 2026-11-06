@@ -31,6 +31,7 @@ dev = [
     "pyright",
     "pytest>=8.0",
     "pytest-asyncio>=1.4,<2",
+    "pytest-xdist>=3.8,<4",
     "types-psutil",
     "types-qrcode",
     "types-requests>=2.31",
@@ -449,7 +450,9 @@ required-environments = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["src/tests"]
-addopts = "--import-mode=importlib --strict-markers"
+# Two workers overlap I/O without oversubscribing a small VPS. Work stealing
+# balances parametrized cases; use `pytest -n 0` for serial runs/debugging.
+addopts = "--import-mode=importlib --strict-markers -n 2 --dist=worksteal"
 markers = [
     "integration: exercises a real external service or transport",
     "redis: requires a local redis-server executable",
