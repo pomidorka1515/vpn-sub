@@ -278,7 +278,7 @@ def test_json_profiles_fill_transport_hosts() -> None:
             "nodes": {"edge": "edge.example"},
         },
     )
-    built = build_json(cfg, "user-uuid", "en", "chrome")
+    built = build_json(cfg, "user-uuid", "en", "chrome", status=True, statusWl=True)
     tls = built[0]["outbounds"]
     assert isinstance(tls, list)
     stream = cast(ProfileOutbound, tls[0])["streamSettings"]
@@ -350,6 +350,73 @@ def _subscription(
     language["web"] = {"shared": {"en": {"forbidden_title": "No browser"}}}
     subscription.res.lang_cfg = config_mock(language)
     return subscription
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("ua", "force_json"),
+    [("Happ/1.0", ""), ("v2ray", "1")],
+    ids=["happ", "force-json"],
+)
+@pytest.mark.parametrize(
+    ("enabled", "enabled_wl", "expected_names"),
+    [
+        (0, 1, []),
+        (0, 0, []),
+        (1, 0, ["Fast"]),
+        (1, 1, ["Fast", "WL"]),
+    ],
+    ids=["main-disabled", "both-disabled", "whitelist-disabled", "both-enabled"],
+)
+async def test_subscription_json_respects_profile_eligibility(
+    ua: str,
+    force_json: str,
+    enabled: int,
+    enabled_wl: int,
+    expected_names: list[str],
+) -> None:
+    cfg = _link_config()
+    cfg["json_template"] = _json_template()
+    for profile in cfg["profiles"].values():
+        profile["json"] = _profile({"tlsSettings": {"serverName": "", "fingerprint": ""}})
+        profile["flag"] = ""
+    subscription = _subscription(
+        user={"enabled": enabled, "enabled_wl": enabled_wl},
+        cfg={
+            "profiles": cfg["profiles"],
+            "nodes": cfg["nodes"],
+            "json_template": cfg["json_template"],
+        },
+    )
+
+    response, status = await get_subscription(
+        subscription,
+        token="tok",
+        lang="en",
+        ua=ua,
+        ip="192.0.2.1",
+        force_json=force_json,
+    )
+    assert status == 200
+    assert response.mimetype == "application/json"
+    profiles = cast(list[ProfileTemplate], json.loads(await response.get_data(as_text=True)))
+    assert [profile["remarks"] for profile in profiles] == expected_names
+    for built_profile in profiles:
+        outbound = built_profile["outbounds"][0]
+        assert outbound["settings"]["vnext"][0]["users"][0]["id"] == "user-uuid"
+        assert outbound["settings"]["vnext"][0]["address"] in {"edge.example", "wl.example"}
+
+    link_response, link_status = await get_subscription(
+        subscription,
+        token="tok",
+        lang="en",
+        ua="v2ray",
+        ip="192.0.2.1",
+        force_json="",
+    )
+    assert link_status == 200
+    links = base64.b64decode(await link_response.get_data()).decode("utf-8").splitlines()
+    assert [link.rsplit("#", 1)[1] for link in links] == expected_names
 
 
 @pytest.mark.asyncio

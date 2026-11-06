@@ -146,6 +146,8 @@ async def get_subscription(
                     user_uuid=user_uuid,
                     lang=lang,
                     fingerprint=str(user["fingerprint"]),
+                    status=status,
+                    statusWl=statusWl,
                 ),
                 ensure_ascii=False,
             ),

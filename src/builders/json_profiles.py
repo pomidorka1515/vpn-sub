@@ -14,6 +14,8 @@ def build_json(
     user_uuid: str,
     lang: str,
     fingerprint: str,
+    status: bool = True,
+    statusWl: bool = True,  # ruff: ignore[invalid-argument-name]
 ) -> list[dict[str, object]]:
     """Build an array of profiles for Happ.
 
@@ -24,6 +26,10 @@ def build_json(
     profiles: list[dict[str, object]] = []
 
     for profile in cfg["profiles"].values():
+        if profile["whitelist"] and not statusWl:
+            continue
+        if not status:
+            break
         node = profile["node"]
         domain = cfg["nodes"][node]
         outbound = profile["json"]
