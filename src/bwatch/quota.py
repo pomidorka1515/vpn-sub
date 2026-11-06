@@ -16,18 +16,18 @@ if TYPE_CHECKING:
 
 
 class QuotaJobs(WatchJobs):
-    """Quota transitions and durable notification delivery."""
+    """Quota transitions and durable, at-least-once notification delivery.
 
-    async def _deliver(self, state: UserRecord, notices: tuple[Notice, ...]) -> None:
-        if self.notifier is None:
-            return
-        # The account coordinator covers read/send/persist, including cancellation.
+    State and transition intent commit together. Delivery waits for panel sync;
+    interruption after remote acceptance but before marker commit can duplicate
+    a send. Newer transitions supersede undelivered news about the old state.
+    """
+
+    async def _pending_notices(
+        self, state: UserRecord, notices: tuple[Notice, ...], seen: set[str]
+    ) -> dict[str, Notice]:
         storage_key = f"user_notifications_pending:{state['username']}"
         raw = await self.db.get_metadata(storage_key)
-        if raw is None and not notices:
-            return
-        seen = await self.db.notification_markers()
-        before = set(seen)
         pending: dict[str, Notice] = {}
         if raw is not None:
             saved = json.loads(raw)
@@ -50,25 +50,46 @@ class QuotaJobs(WatchJobs):
             }
             if notice.kind.scope is not Scope.THRESHOLD:
                 pending[notice.marker] = notice
-        pending = {
+        return {
             key: notice
             for key, notice in pending.items()
-            if self.notifier.pending(state["username"], notice, seen)
+            if self.notifier is not None and self.notifier.pending(state["username"], notice, seen)
         }
+
+    @staticmethod
+    def _serialize_intent(state: UserRecord, pending: dict[str, Notice]) -> str:
+        return json.dumps(
+            {
+                "uuid": state["uuid"],
+                "notices": [{**asdict(notice), "kind": notice.kind.name} for notice in pending.values()],
+            }
+        )
+
+    async def _transition_intent(self, state: UserRecord, notices: tuple[Notice, ...]) -> str | None:
+        if self.notifier is None:
+            return None
+        seen = await self.db.notification_markers()
+        return self._serialize_intent(state, await self._pending_notices(state, notices, seen))
+
+    async def _deliver(self, state: UserRecord, notices: tuple[Notice, ...]) -> None:
+        if self.notifier is None:
+            return
+        # Do not announce a transition until every desired panel write is repaired.
+        if await self.db.get_metadata(f"user_sync_pending:{state['username']}") is not None:
+            return
+        # The account coordinator covers read/send/persist, including cancellation.
+        storage_key = f"user_notifications_pending:{state['username']}"
+        if not notices and await self.db.get_metadata(storage_key) is None:
+            return
+        seen = await self.db.notification_markers()
+        before = set(seen)
+        pending = await self._pending_notices(state, notices, seen)
 
         async def persist() -> None:
             if pending:
                 await self.db.set_metadata(
                     storage_key,
-                    json.dumps(
-                        {
-                            "uuid": state["uuid"],
-                            "notices": [
-                                {**asdict(notice), "kind": notice.kind.name}
-                                for notice in pending.values()
-                            ],
-                        }
-                    ),
+                    self._serialize_intent(state, pending),
                 )
             else:
                 await self.db.delete_metadata(storage_key)
@@ -115,6 +136,9 @@ class QuotaJobs(WatchJobs):
                 )
                 if timing is not None and main is None:
                     main = main_ok and not state["admin_disabled"]
+                notices = restored(
+                    main=restored_main, whitelist=whitelist is True, time=timing is True
+                )
                 if main is not None or whitelist is not None:
                     await self.sub.business_svc.update_user(
                         username,
@@ -123,11 +147,11 @@ class QuotaJobs(WatchJobs):
                         wl_enable=whitelist,
                         quota=True,
                         work="background",
+                        notification_intent=await self._transition_intent(state, notices),
                     )
-                await self._deliver(
-                    state,
-                    restored(main=restored_main, whitelist=whitelist is True, time=timing is True),
-                )
+                elif await self.db.get_metadata(f"user_sync_pending:{username}") is not None:
+                    await self.sub.business_svc.reconcile_user(username)
+                await self._deliver(state, notices)
             else:
                 notices = classify(state, now)
                 terminal = {notice.kind for notice in notices if notice.kind.scope is Scope.EPISODE}
@@ -143,6 +167,7 @@ class QuotaJobs(WatchJobs):
                             wl_enable=False if Kind.WHITELIST_EXHAUSTED in terminal else None,
                             quota=True,
                             work="background",
+                            notification_intent=await self._transition_intent(state, notices),
                         )
                     elif await self.db.get_metadata(f"user_sync_pending:{username}") is not None:
                         # Failed panel writes leave SQLite disabled, so classification

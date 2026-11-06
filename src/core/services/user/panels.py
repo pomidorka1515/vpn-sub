@@ -160,6 +160,7 @@ class UserPanelService(UserIdentityService):
         *,
         quota: bool = False,
         work: WorkClass = "foreground",
+        notification_intent: str | None = None,
     ) -> None:
         """Set explicit intent unless this is a quota-derived status change."""
         self.require_panels()
@@ -179,6 +180,7 @@ class UserPanelService(UserIdentityService):
             enabled_time=timee,
             enabled_wl=wl_enable,
             quota=quota,
+            notification_intent=notification_intent,
         )
         if pending_sync:
             # The previous intent may cover other panels or unfinished client

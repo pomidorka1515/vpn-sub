@@ -169,8 +169,9 @@ class UsersMixin(ConnectionMixin):
         enabled_time: bool | None,
         enabled_wl: bool | None,
         quota: bool = False,
+        notification_intent: str | None = None,
     ) -> None:
-        """Atomically publish flags, administrative intent, and retry identity."""
+        """Atomically publish flags, retry identity, and optional notification outbox."""
         async with self.transaction(immediate=True) as conn:
             if not quota:
                 for column, value in (
@@ -204,6 +205,11 @@ class UsersMixin(ConnectionMixin):
                 "INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?)",
                 (f"user_sync_pending:{username}", "enabled"),
             )
+            if notification_intent is not None:
+                await conn.execute(
+                    "INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?)",
+                    (f"user_notifications_pending:{username}", notification_intent),
+                )
 
     async def rollback_created_user(self, username: str, expected_uuid: str) -> None:
         async with self.transaction(immediate=True) as conn:
