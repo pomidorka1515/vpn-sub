@@ -22,6 +22,13 @@ Domain errors are handled at the Discord interaction boundary. Redis rate limits
 use the runtime-owned limiter with explicit Discord user IDs. QR images and charts  
 use the shared rendering pool; subscription stats are fetched fresh each time.  
   
+In `/admin`, editing a user's expiry replaces the existing expiry with the entered  
+number of days from the current time, not an extension of the previous expiry.  
+This applies equally to future, expired, and unlimited accounts; a future expiry  
+can therefore become earlier, and an unlimited account can become time-limited.  
+Enter `0` to replace the expiry with unlimited. Successful timed edits display the  
+resulting expiration date in UTC.  
+  
 Sessions and language preferences are stored in SQLite. Existing  
 `data/discord-sessions.json` is imported once when Discord first starts; the  
 original is retained. Login, logout and account reset keep the WebAPI's shared  

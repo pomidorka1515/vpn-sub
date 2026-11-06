@@ -352,10 +352,13 @@ class AdminUsersMixin(AdminFeatureMixin):
     async def _cb_edit_time(self, interaction: discord.Interaction, username: str) -> None:
         del username
         generation = self._pending_edits[interaction.user.id]["generation"]
-        modal = discord.ui.Modal(title="Срок", custom_id=f"admin:modal:edit_time:{generation}")
+        modal = discord.ui.Modal(
+            title="Замена срока", custom_id=f"admin:modal:edit_time:{generation}"
+        )
         modal.add_item(
             discord.ui.TextInput(
-                label="Дней (0 = безлимит)",
+                label="Дней от текущего момента (0 = безлимит)",
+                placeholder="Текущий срок будет заменён",
                 custom_id="days",
                 min_length=1,
                 max_length=8,
@@ -496,13 +499,13 @@ class AdminUsersMixin(AdminFeatureMixin):
             new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             await self._respond(
                 interaction,
-                f"✅ Срок продлён на `{days}` дней, новая дата: `{new_date}`",
+                f"✅ Срок заменён: `{days}` дней от текущего момента, дата окончания: `{new_date}`",
                 view=self.main_menu_view(),
             )
             return
         await self._respond(
             interaction,
-            "✅ Срок установлен в безлимит.",
+            "✅ Срок заменён на безлимит.",
             view=self.main_menu_view(),
         )
 

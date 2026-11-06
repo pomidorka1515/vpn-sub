@@ -177,13 +177,54 @@ async def test_edit_rechecks_generation_after_defer(
 
 
 @pytest.mark.asyncio
-async def test_expiry_days_still_set_timestamp_from_now(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_expiry_modal_explains_replacement() -> None:
+    _, bot, _, _ = make_bots()
+    bot._pending_edits[7] = {"username": "alice", "generation": "current"}
+    interaction = FakeInteraction()
+    await bot._cb_edit_time(cast(discord.Interaction, interaction), "alice")
+    modal = cast(discord.ui.Modal, interaction.response.modals[0])
+    assert modal.title == "Замена срока"
+    assert modal.custom_id == "admin:modal:edit_time:current"
+    field = cast(discord.ui.TextInput[discord.ui.Modal], modal.children[0])
+    assert field.label == "Дней от текущего момента (0 = безлимит)"
+    assert field.placeholder == "Текущий срок будет заменён"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "original_expiry", [1_800_000_000, 1_600_000_000, 0], ids=["future", "expired", "unlimited"]
+)
+async def test_expiry_days_replace_existing_timestamp_from_now(
+    original_expiry: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _, bot, _, sub = make_bots()
     bot._pending_edits[7] = {"username": "alice", "generation": "current"}
     monkeypatch.setattr("bots.discord.admin.users.time.time", lambda: 1_700_000_000)
+    state = {"expiry": original_expiry}
+
+    async def update(*, username: str, timee: int) -> None:
+        assert username == "alice"
+        state["expiry"] = timee
+
+    sub.business_svc.update_params.side_effect = update
     interaction = interaction_for("time", "current", "2")
     await dispatch(bot, "time", interaction)
     sub.business_svc.update_params.assert_awaited_once_with(
         username="alice", timee=1_700_000_000 + 2 * 86400
     )
-    assert "Срок продлён" in str(interaction.response.messages[-1]["content"])
+    assert state["expiry"] == 1_700_000_000 + 2 * 86400
+    message = str(interaction.response.messages[-1]["content"])
+    assert "Срок заменён" in message
+    assert "`2` дней от текущего момента" in message
+    assert "16.11.23 22:13 (UTC)" in message
+    assert "продл" not in message
+
+
+@pytest.mark.asyncio
+async def test_zero_expiry_replaces_existing_timestamp_with_unlimited() -> None:
+    _, bot, _, sub = make_bots()
+    bot._pending_edits[7] = {"username": "alice", "generation": "current"}
+    interaction = interaction_for("time", "current", "0")
+    await dispatch(bot, "time", interaction)
+    sub.business_svc.update_params.assert_awaited_once_with(username="alice", timee=0)
+    assert "Срок заменён на безлимит" in str(interaction.response.messages[-1]["content"])
