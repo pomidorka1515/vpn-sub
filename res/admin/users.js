@@ -1,5 +1,7 @@
 import { state } from './state.js';
 
+let userDetailGen = 0;
+
 export async function loadUsers() {
   const wrap = document.getElementById('usersTableWrap');
   const current = loadGen('users');
@@ -53,12 +55,12 @@ export function bindUsersTable() {
 }
 
 export async function viewUser(username, btn) {
-  await withBusy(btn, () => viewUserRequest(username));
+  await withBusy(btn, () => viewUserRequest(username, ++userDetailGen));
 }
 
-async function viewUserRequest(username) {
+async function viewUserRequest(username, gen) {
   const res = await api('GET', `/api/user/info?user=${encodeURIComponent(username)}`);
-  if (!res || !res.success) return;
+  if (gen !== userDetailGen || !res || !res.success) return;
   state.selectedUser = username;
   const s = res.obj;
   document.getElementById('userDetailCard').style.display = 'block';
@@ -79,15 +81,18 @@ async function viewUserRequest(username) {
 }
 
 export function hideUserDetail() {
+  ++userDetailGen;
   document.getElementById('userDetailCard').style.display = 'none';
   state.selectedUser = null;
 }
 
 export async function doResetUser() {
-  if (!state.selectedUser) return;
-  if (!await confirmDialog(t('confirm_reset_user'), t('confirm'), confirmOpts())) return;
+  const username = state.selectedUser;
+  if (!username) return;
+  if (!await confirmDialog(t('confirm_reset_user') + '\n' + username, t('confirm'), confirmOpts())) return;
   await withBusy(document.getElementById('btnDoReset'), async () => {
-    const res = await api('POST', '/api/user/reset', { user: state.selectedUser });
+    const res = await api('POST', '/api/user/reset', { user: username });
+    if (state.selectedUser !== username) return;
     const result = document.getElementById('userDetailResult');
     if (res && res.success) {
       result.innerHTML = `<div class="result-title ok">${t('ok')}</div>
