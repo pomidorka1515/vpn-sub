@@ -45,13 +45,13 @@ class TelegramService(BaseService):
         return await self.db.tgid_to_user(tgid) is not None
 
     async def set_telegram_user(self, tgid: int | str, username: str | None) -> None:
-        # SQL mapping updates are atomic. Serialize the Telegram identity too,
-        # so clearing a mapping cannot erase a concurrent relink.
+        # Serialize each Telegram identity; conditional deletion also protects
+        # a newer mapping of the same username to a different identity.
         async def update() -> None:
             if username is None:
                 existing = await self.db.tgid_to_user(tgid)
                 if existing is not None:
-                    await self.db.set_telegram(existing, None)
+                    await self.db.unlink_telegram(existing, tgid)
             else:
                 await self.db.set_telegram(username, str(tgid))
 

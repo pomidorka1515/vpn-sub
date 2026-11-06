@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
@@ -36,6 +37,52 @@ async def test_telegram_bind_unbind_and_reverse_lookup(
     (await subscription.telegram_svc.set_telegram_user(123, None))
     assert not (await subscription.telegram_svc.is_registered(123))
     assert (await subscription.telegram_svc.get_username_telegram(123)) is None
+    assert (await subscription.telegram_svc.get_username_telegram("alice", reverse=True)) is None
+
+
+@pytest.mark.asyncio
+async def test_unlink_missing_telegram_mapping_is_noop(
+    database: Database,
+    subscription: Subscription,
+) -> None:
+    await create_alice(database)
+    await subscription.telegram_svc.set_telegram_user(456, "alice")
+
+    await subscription.telegram_svc.set_telegram_user(123, None)
+    assert await subscription.telegram_svc.get_username_telegram(456) == "alice"
+
+
+@pytest.mark.asyncio
+async def test_unlink_preserves_concurrent_telegram_relink(
+    database: Database,
+    subscription: Subscription,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await create_alice(database)
+    await subscription.telegram_svc.set_telegram_user(123, "alice")
+    looked_up, release = asyncio.Event(), asyncio.Event()
+    original = database.tgid_to_user
+
+    async def pause_after_lookup(tgid: str | int) -> str | None:
+        username = await original(tgid)
+        if str(tgid) == "123":
+            looked_up.set()
+            await release.wait()
+        return username
+
+    monkeypatch.setattr(database, "tgid_to_user", pause_after_lookup)
+    unlink = asyncio.create_task(subscription.telegram_svc.set_telegram_user(123, None))
+    try:
+        await asyncio.wait_for(looked_up.wait(), timeout=5)
+        await asyncio.wait_for(subscription.telegram_svc.set_telegram_user(456, "alice"), timeout=5)
+        release.set()
+        await asyncio.wait_for(unlink, timeout=5)
+        assert await original(123) is None
+        assert await original(456) == "alice"
+        assert await database.user_to_tgid("alice") == "456"
+    finally:
+        release.set()
+        await asyncio.gather(unlink, return_exceptions=True)
 
 
 @pytest.mark.asyncio

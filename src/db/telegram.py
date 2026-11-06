@@ -31,6 +31,13 @@ class TelegramMixin(ConnectionMixin):
         async with self.transaction(immediate=True) as conn:
             await set_telegram_mapping(conn, username, telegram_id)
 
+    async def unlink_telegram(self, username: str, telegram_id: str | int) -> None:
+        async with self.transaction(immediate=True) as conn:
+            await conn.execute(
+                "DELETE FROM telegram_mappings WHERE username = ? AND telegram_id = ?",
+                (username, str(telegram_id)),
+            )
+
     async def tgid_to_user(self, tgid: str | int) -> str | None:
         async with self.connection() as conn:
             row = await conn.row(
