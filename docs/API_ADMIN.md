@@ -1,7 +1,7 @@
 # Admin API Documentation  
   
 ## Introduction  
-Authentication: `Authorization` header with the admin API token.  
+Authentication: `Authorization` header with the independent machine token (`api_token`) or a revocable browser token from `/admin/token`. Cookies alone never authorize admin API calls. These explicit, non-simple request headers protect browser API calls against CSRF; do not enable cross-origin credential sharing.  
 `api_token` must contain at least 20 characters; use a randomly generated token. Existing shorter tokens must be replaced before loading or saving configuration.  
 Missing or incorrect tokens count toward a shared per-client-IP limit across all admin API routes: 10 failures within 5 minutes trigger a 15-minute lockout. Failures return `401`; the triggering attempt and subsequent attempts (including valid tokens) return `429` with `Retry-After` seconds. Blocked requests do not extend the lockout. Successful authentication clears pending failures. Redis stores the counters and lockouts; authentication returns `503` if that store is unavailable. Client IPs use the configured trusted-proxy handling.  
 On failure, returns HTTP 401.  
@@ -380,7 +380,9 @@ Response (error):
   
 ## Admin UI  
 
-Pages are mounted on the service URI, not under the admin API prefix. The UI uses a login form (no Register tab) against `api_admin_ui_auth`. There is one admin account. A successful login replaces the stored session and sets an HttpOnly `admin_ui` cookie on `/{uri}/admin`; the API token is never stored in `localStorage`. Logout clears that session, which also signs out any other browser still using it.  
+Pages are mounted on the service URI, not under the admin API prefix. The UI uses a login form (no Register tab) against `api_admin_ui_auth`. There is one admin account. A successful login replaces the stored session and sets an HttpOnly `admin_ui` cookie on `/{uri}/admin`. The browser receives only a session-bound bearer token, kept in memory, never the machine token or a token in `localStorage`. Logout, a replacement login, session expiry, UI credential changes, and process restart invalidate both the UI cookie and its browser API authority. The browser token has no independent lifetime beyond the server-side session.  
+
+Machine credentials are intentionally independent: logout and changes to `api_admin_ui_auth` do not revoke `api_token`. If a machine token was previously disclosed (including to browsers by older releases), replace `api_token` and restart the service to revoke it. Saving a replacement alone leaves the boot-captured machine token active until restart. Browser config reads omit `api_token`; the UI field is write-only, and leaving it blank preserves the stored value.  
 
 ### GET /{uri}/admin  
 Description: Admin HTML UI.  
@@ -404,12 +406,12 @@ Response (error): HTTP 401 `{"success": false, "msg": "Invalid credentials.", "o
 
 ### POST /{uri}/admin/logout  
 Description: Clear the stored admin UI session and expire the cookie.  
-Authentication: none (the stored session is cleared either way)  
+Authentication: valid `admin_ui` cookie plus `X-Admin-CSRF` containing its browser token from `/admin/token`. Rate-limited. Invalid cookies return 401; missing or incorrect CSRF tokens return 403 without clearing the session.  
 Body: none  
 Response (success): HTTP 200 and `Set-Cookie: admin_ui=; Max-Age=0; Path=/{uri}/admin`.  
 
 ### GET /{uri}/admin/token  
-Description: Bootstrap the admin UI. Returns the admin API token and the already-computed API root so the page does not guess paths. Token and `api_root` stay in memory only.  
+Description: Bootstrap the admin UI. Returns a revocable, session-bound browser bearer token (not `api_token`) and the already-computed API root so the page does not guess paths. Token and `api_root` stay in memory only. API authorization checks the stored session and current UI credentials on every call.  
 Authentication: `admin_ui` cookie  
 Body: none  
 Response (success):  
@@ -419,7 +421,7 @@ Response (success):
 	"success": true,  
 	"msg": null,  
 	"obj": {  
-		"token": "admin-api-token",  
+		"token": "ui.<session-bound-credential>",  
 		"api_root": "/sub/privapi" // or "/sub" when api_uri is empty  
 	}  
 }  
@@ -917,7 +919,7 @@ Response (success):
 ---  
   
 ### GET /api/config/get  
-Description: Return the on-disk config object, including `$schema` and secrets. The caller already holds `api_token`. Do not log the body.  
+Description: Return the on-disk config object, including `$schema` and secrets. Machine-authenticated callers receive the complete object; browser-authenticated callers receive it without `api_token`. The ETag still describes the complete revision and must be treated as opaque by browsers. Do not log the body.  
 Authentication: header  
 Body: none  
 `obj` is the config itself, not a wrapper. The content revision is the `ETag` response header, a quoted SHA-256 hex of the canonical config, not a field of `obj`. The same algorithm is used by `POST /api/config/set`. `base` accepts the quoted header or the bare hex. A whitespace-only edit is not a new revision.  
@@ -971,7 +973,7 @@ If the config commits but the audit append fails, the response is HTTP 202 with 
 | `panel_alert_cooldown` | Stored on the bandwidth watcher at init. |  
 | `salt` | Copied to the legacy salt. Argon2id passwords ignore it. After restart, leftover SHA256 hashes stop matching. |  
   
-Live on the next request, no restart: `profiles`, `nodes`, `json_template`, `domain`, `fallback_domain`, `ping_check_url`, `provider_id`, `sub_name`, `bypass_packages`, `funny_strings`, `fingerprints`, and `api_admin_ui_auth` for the next login. The current admin UI cookie stays valid.  
+Live on the next request, no restart: `profiles`, `nodes`, `json_template`, `domain`, `fallback_domain`, `ping_check_url`, `provider_id`, `sub_name`, `bypass_packages`, `funny_strings`, `fingerprints`, and `api_admin_ui_auth`. Changing UI credentials revokes the stored UI session and its browser token, including the session making the edit; sign in again. Machine authentication is unaffected.  
 Response (success):  
 ```jsonc  
 // HTTP 200  

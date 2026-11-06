@@ -125,7 +125,17 @@ export async function saveConfig() {
         else if (String(res.msg || '').includes('3xui')) showConfigSection('panels');
         return;
       }
+      if (Object.hasOwn(values, 'api_token')) {
+        delete snapshot.api_token;
+        delete editor.draft.api_token;
+        document.getElementById('cfg-api_token').value = '';
+      }
       adoptSaved(res.obj?.base, snapshot);
+      if (Object.hasOwn(values, 'api_admin_ui_auth')) {
+        window.removeEventListener('beforeunload', onBeforeUnload);
+        window.location.href = location.pathname.replace(/\/+$/, '') + '/login';
+        return;
+      }
       showResult(res.msg === 'Unchanged' ? t('config_unchanged') : t('config_saved_state'), 'ok');
       if (res.msg === 'Unchanged') setRestartLine([]);
       else setRestartLine(Array.isArray(res.obj?.restart) ? res.obj.restart : []);

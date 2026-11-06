@@ -90,8 +90,21 @@ window.apiConfig = {
 
 async function doLogout() {
   try {
-    await fetch(adminPath('/logout'), { method: 'POST', credentials: 'same-origin' });
-  } catch {}
+    // Logout can be clicked before bootstrap completes.
+    let token = state.apiToken;
+    if (!token) {
+      const res = await fetch(adminPath('/token'), { credentials: 'same-origin' });
+      token = (await res.json()).obj?.token;
+    }
+    const res = await fetch(adminPath('/logout'), {
+      method: 'POST', credentials: 'same-origin', headers: { 'X-Admin-CSRF': token || '' },
+    });
+    if (!res.ok && res.status !== 401) throw new Error('Logout failed');
+  } catch {
+    toast(t('network_err'), 'error');
+    return;
+  }
+  state.apiToken = '';
   window.location.href = adminPath('/login');
 }
 

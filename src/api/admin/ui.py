@@ -9,7 +9,9 @@ from api.common import asset_version, web_lang_tables
 from api.decorators.auth import (
     ADMIN_UI_COOKIE,
     ADMIN_UI_SESSION_LEN,
+    admin_browser_token,
     new_admin_ui_session,
+    valid_admin_ui_session,
 )
 from api.decorators.rate_limit import rate_limit
 from constants import SESSION_MAX_AGE
@@ -63,7 +65,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             return err("Unauthorized", 401)
         return ok(
             obj={
-                "token": self.token,
+                "token": admin_browser_token(self, request.cookies[ADMIN_UI_COOKIE]),
                 "api_root": self.uri,
                 "panels_configured": bool(self.sub.panels),
             },
@@ -85,7 +87,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             return err("Invalid credentials.", 401)
         if not self._admin_credentials_ok(username, password):
             return err("Invalid credentials.", 401)
-        session = new_admin_ui_session()
+        session = new_admin_ui_session(self)
         await self.sub.res.db.set_admin_ui_session(session)
         response, code = ok(msg="Successful login")
         response.set_cookie(
@@ -102,6 +104,9 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
     async def admin_logout(self) -> ResponseType:
         if not await self._admin_cookie_ok():
             return err("Unauthorized", 401)
+        expected = admin_browser_token(self, request.cookies[ADMIN_UI_COOKIE])
+        if not compare(request.headers.get("X-Admin-CSRF", ""), expected):
+            return err("Invalid CSRF token", 403)
         await self.sub.res.db.set_admin_ui_session(None)
         response, code = ok(msg="Logged out")
         response.set_cookie(
@@ -139,7 +144,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         cookie = request.cookies.get(ADMIN_UI_COOKIE)
         if not cookie or len(cookie) != ADMIN_UI_SESSION_LEN:
             return False
-        stored = await self.sub.res.db.admin_ui_session()
+        stored = await valid_admin_ui_session(self)
         if not stored or len(stored) != ADMIN_UI_SESSION_LEN:
             return False
         return compare(cookie, stored)

@@ -14,7 +14,9 @@ export function createMainEditor(markDirty) {
       const raw = readText('cfg-panel_alert_cooldown').trim();
       editor.draft.panel_alert_cooldown = INTEGER_RE.test(raw) ? new ConfigNumber(raw) : raw;
     } else if (['uri', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt'].includes(key)) {
-      editor.draft[key] = readText('cfg-' + key);
+      const value = readText('cfg-' + key);
+      if (key === 'api_token' && value === '') delete editor.draft[key];
+      else editor.draft[key] = value;
     } else if (key === 'api_admin_ui_auth') {
       editor.draft.api_admin_ui_auth = [readText('cfg-auth-0'), readText('cfg-auth-1')];
     } else if (key === 'redis') {

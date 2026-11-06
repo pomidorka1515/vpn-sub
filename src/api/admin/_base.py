@@ -23,5 +23,6 @@ class AsyncAdminApiMixin:
     uri: str
     log: Logger
     token: str
+    ui_session_key: bytes
     limiter: AsyncRateLimiter
     audit_cfg: AsyncLinesConfig

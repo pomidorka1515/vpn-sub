@@ -30,6 +30,16 @@ async def sign_in(client: TestClientProtocol) -> None:
         assert part in response.headers["Set-Cookie"]
 
 
+async def browser_token(client: TestClientProtocol) -> str:
+    response = await client.get("/sub/admin/token")
+    assert response.status_code == 200
+    token = (await response.get_json())["obj"]["token"]
+    assert isinstance(token, str)
+    assert token.startswith("ui.")
+    assert token != "secret"
+    return token
+
+
 async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) -> None:
     client = admin_api[0].test_client()
     response = await client.get("/sub/admin")
@@ -101,7 +111,7 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
         assert part not in body
     response = await client.get("/sub/admin/token")
     assert (await response.get_json())["obj"] == {
-        "token": "secret",
+        "token": await browser_token(client),
         "api_root": "/sub/api",
         "panels_configured": True,
     }
@@ -132,13 +142,57 @@ async def test_admin_relogin_and_logout(admin_api: tuple[Quart, Subscription]) -
     client.set_cookie("localhost", "admin_ui", first, path="/sub/admin")
     assert (await client.get("/sub/admin")).status_code == 302
     await sign_in(client)
-    response = await client.post("/sub/admin/logout")
+    response = await client.post(
+        "/sub/admin/logout",
+        headers={"X-Admin-CSRF": await browser_token(client)},
+    )
     assert response.status_code == 200
     assert "Path=/sub/admin" in response.headers["Set-Cookie"]
     assert "Max-Age=0" in response.headers["Set-Cookie"]
     assert await sub.res.db.admin_ui_session() is None
     assert (await client.get("/sub/admin")).status_code == 302
     assert (await client.get("/sub/admin/token")).status_code == 401
+
+
+@pytest.mark.parametrize("revoke", ["logout", "relogin", "expiry"])
+async def test_browser_api_authority_is_session_bound(
+    admin_api: tuple[Quart, Subscription],
+    revoke: str,
+) -> None:
+    app, sub = admin_api
+    client = app.test_client()
+    await sign_in(client)
+    cookie = await sub.res.db.admin_ui_session()
+    assert cookie is not None
+    token = await browser_token(client)
+    headers = {"Authorization": token}
+    # Bearer auth needs an explicit non-simple header, never just ambient cookies.
+    assert (await client.get("/sub/api/api/config/get")).status_code == 401
+    response = await client.get("/sub/api/api/config/get", headers=headers)
+    assert response.status_code == 200
+    assert "api_token" not in (await response.get_json())["obj"]
+    assert (
+        await app.test_client().get("/sub/api/api/config/get", headers=headers)
+    ).status_code == 200
+    if revoke == "logout":
+        for csrf in ({}, {"X-Admin-CSRF": "wrong"}):
+            assert (await client.post("/sub/admin/logout", headers=csrf)).status_code == 403
+        assert (
+            await client.post(
+                "/sub/admin/logout",
+                headers={"X-Admin-CSRF": token},
+            )
+        ).status_code == 200
+    elif revoke == "relogin":
+        await sign_in(client)
+    else:
+        await sub.res.db.set_metadata("admin_ui_session_expires_at", "1")
+    client.set_cookie("localhost", "admin_ui", cookie, path="/sub/admin")
+    assert (await client.get("/sub/admin/token")).status_code == 401
+    assert (await client.get("/sub/api/api/config/get", headers=headers)).status_code == 401
+    response = await client.get("/sub/api/api/config/get", headers={"Authorization": "secret"})
+    assert response.status_code == 200
+    assert (await response.get_json())["obj"]["api_token"] == "secret"
 
 
 @pytest.mark.parametrize("cookie", [None, "invalid", "x" * 100, "stale"])
@@ -223,8 +277,10 @@ async def test_admin_empty_uri_contract(
         assert response.status_code == 200
         payload = await response.get_json()
         assert payload["success"] is True
-        assert payload["obj"] == {"token": "secret", "api_root": root, "panels_configured": True}
-        response = await client.post(f"{panel}/logout")
+        token = payload["obj"]["token"]
+        assert token.startswith("ui.")
+        assert payload["obj"] == {"token": token, "api_root": root, "panels_configured": True}
+        response = await client.post(f"{panel}/logout", headers={"X-Admin-CSRF": token})
         assert response.status_code == 200
         assert f"Path={panel}" in response.headers["Set-Cookie"]
         assert "Max-Age=0" in response.headers["Set-Cookie"]

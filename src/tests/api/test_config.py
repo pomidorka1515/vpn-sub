@@ -18,7 +18,7 @@ from tests.support.api import api_app, make_subscription, make_watch
 from tests.support.paths import REPO_ROOT
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, MutableMapping
     from pathlib import Path
 
     from quart import Quart
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
     from config import JsonValue
     from config.store import AsyncLinesConfig
+    from core import Subscription
     from db import Database
 
 ROOT = REPO_ROOT
@@ -131,6 +132,127 @@ async def test_config_get_contract(
     assert body.index('"obj":') < body.index('"$schema":')
     assert first.headers["ETag"] == second.headers["ETag"] == f'"{base_for(path)}"'
     assert first.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("browser_rotation", [False, True])
+async def test_ui_credential_rotation_revokes_browser_not_machine_auth(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+    browser_rotation: bool,
+) -> None:
+    app, cfg, path, _ = config_api
+    client = app.test_client()
+    username, password = cfg.view()["api_admin_ui_auth"]
+    assert (
+        await client.post(
+            "/sub/admin/session",
+            json={"username": username, "password": password},
+        )
+    ).status_code == 200
+    token = (await (await client.get("/sub/admin/token")).get_json())["obj"]["token"]
+    headers = {"Authorization": token}
+    get_url = "/sub/privapi/api/config/get"
+    assert (await client.get(get_url, headers=headers)).status_code == 200
+    assert (
+        await set_config(
+            app,
+            base_for(path),
+            {
+                "api_admin_ui_auth": [username, password],
+            },
+        )
+    ).status_code == 200
+    assert (
+        await set_config(
+            app,
+            base_for(path),
+            {
+                "api_admin_ui_auth": [username, ""],
+            },
+        )
+    ).status_code == 400
+    assert (await client.get(get_url, headers=headers)).status_code == 200
+    response = await client.post(
+        "/sub/privapi/api/config/set",
+        headers=headers if browser_rotation else HEADERS,
+        json={"base": base_for(path), "values": {"api_admin_ui_auth": [username, "new-secret"]}},
+    )
+    assert response.status_code == 200
+    assert (await client.get("/sub/admin/token")).status_code == 401
+    assert (await client.get("/sub/admin")).status_code == 302
+    assert (await client.get(get_url, headers=headers)).status_code == 401
+    assert (await client.get(get_url, headers=HEADERS)).status_code == 200
+    # Reverting the config must not resurrect the original stored UI cookie.
+    assert (
+        await set_config(app, base_for(path), {"api_admin_ui_auth": [username, password]})
+    ).status_code == 200
+    assert (await client.get("/sub/admin/token")).status_code == 401
+    assert (
+        await client.post(
+            "/sub/admin/session",
+            json={"username": username, "password": password},
+        )
+    ).status_code == 200
+    fresh = (await (await client.get("/sub/admin/token")).get_json())["obj"]["token"]
+    assert fresh != token
+    # Machine token rotation retains the boot-captured token until restart.
+    new_machine = "replacement-machine-token-12345"
+    response = await set_config(app, base_for(path), {"api_token": new_machine})
+    assert (await response.get_json())["obj"]["restart"] == ["api_token"]
+    assert (await client.get(get_url, headers=HEADERS)).status_code == 200
+    assert (await client.get(get_url, headers={"Authorization": new_machine})).status_code == 401
+    visible = await client.get(get_url, headers={"Authorization": fresh})
+    assert visible.status_code == 200
+    assert "api_token" not in (await visible.get_json())["obj"]
+
+    # Reconstructing the API models a serving-process restart: the configured
+    # machine token becomes active, while process-bound browser authority dies.
+    async with api_app() as restarted:
+        sub = cast("Subscription", app.extensions["subscriptions"][0])
+        AsyncApi(
+            app=restarted,
+            cfg=cfg,
+            audit_cfg=cast("AsyncLinesConfig", config_api[3]),
+            sub=sub,
+            bw=make_watch(sub.res.db, sub),
+            limiter=restarted.extensions["limiter"],
+        )
+        new_client = restarted.test_client()
+        assert client.cookie_jar is not None
+        cookie = next(cookie for cookie in client.cookie_jar if cookie.name == "admin_ui")
+        assert cookie.value is not None
+        new_client.set_cookie("localhost", "admin_ui", cookie.value, path="/sub/admin")
+        assert (await new_client.get("/sub/admin/token")).status_code == 401
+        assert (await new_client.get(get_url, headers={"Authorization": fresh})).status_code == 401
+        assert (await new_client.get(get_url, headers=HEADERS)).status_code == 401
+        assert (
+            await new_client.get(get_url, headers={"Authorization": new_machine})
+        ).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_browser_auth_checks_live_credentials_without_waiting_for_session_clear(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
+    app, cfg, _, _ = config_api
+    client = app.test_client()
+    username, password = cfg.view()["api_admin_ui_auth"]
+    await client.post("/sub/admin/session", json={"username": username, "password": password})
+    token = (await (await client.get("/sub/admin/token")).get_json())["obj"]["token"]
+
+    def rotate(tx: MutableMapping[str, JsonValue]) -> None:
+        tx["api_admin_ui_auth"] = [username, "rotated-secret"]
+
+    # No route-level session deletion: credentials must invalidate signatures
+    # immediately on publication, including the commit-to-deletion await gap.
+    await cfg.mutate(rotate)
+    assert (await client.get("/sub/admin/token")).status_code == 401
+    assert (
+        await client.get(
+            "/sub/privapi/api/config/get",
+            headers={"Authorization": token},
+        )
+    ).status_code == 401
 
 
 @pytest.mark.asyncio

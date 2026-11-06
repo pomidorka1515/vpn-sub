@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import TYPE_CHECKING, ClassVar
 
 from api.common import AsyncBaseApi
@@ -65,6 +66,7 @@ class AsyncApi(
             p.strip("/ ") for p in (conf["uri"], conf.get("api_uri", "")) if p and p.strip("/ ")
         )
         self.token = conf["api_token"]
+        self.ui_session_key = secrets.token_bytes(32)
         self.audit_cfg = audit_cfg
         super().__init__(app, cfg, sub, bw, uri, limiter)
         self.live_state = LiveState(self._polling_sample)

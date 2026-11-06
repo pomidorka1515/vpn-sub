@@ -30,7 +30,10 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
     @requires_admin_auth
     async def config_get(self) -> ResponseType:
         data = self.cfg.view()
-        response, code = ok(obj=cast("JsonifyValue", data))
+        visible = dict(data)
+        if g.admin_browser_auth:
+            visible.pop("api_token", None)
+        response, code = ok(obj=cast("JsonifyValue", visible))
         response.headers["ETag"] = f'"{config_etag(cast("dict[str, JsonValue]", data))}"'
         response.headers["Cache-Control"] = "no-store"
         return response, code
@@ -76,6 +79,8 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
 
         status = statuses[0]
         if status == "updated":
+            if "api_admin_ui_auth" in changed:
+                await self.sub.res.db.set_admin_ui_session(None)
             # The file is already replaced. A backup failure must not turn a
             # committed edit into a 500, and must not skip the audit.
             try:

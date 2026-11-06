@@ -21,6 +21,8 @@ export function validateDraft(draft) {
     if (!KNOWN_KEYS.includes(key)) issues.push(issue(key, t('config_err_unknown')));
   });
   REQUIRED_KEYS.forEach(key => {
+    // Browser config reads omit the independent machine credential (write-only).
+    if (key === 'api_token') return;
     if (!Object.prototype.hasOwnProperty.call(draft, key)) issues.push(issue(key, t('config_err_required')));
   });
   if (editor.loaded && Object.prototype.hasOwnProperty.call(draft, '$schema') && !jsonEqual(draft.$schema, editor.loaded.$schema)) {
