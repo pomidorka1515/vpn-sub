@@ -144,13 +144,15 @@ async def test_add_user_calls_business_service() -> None:
 async def test_permanent_code_uses_shared_service() -> None:
     _, bot, _, sub = make_bots()
     bot._pending_codes[7] = {
+        "generation": "test",
+        "stage": "perma",
         "name": "WELCOME",
         "type": "register",
         "days": 30,
         "gb": 10,
         "wl_gb": 5,
     }
-    fake = FakeInteraction(data={"custom_id": "admin:code_perma:yes"})
+    fake = FakeInteraction(data={"custom_id": "admin:code_perma:yes:test"})
     await bot.dispatch_component(cast(discord.Interaction, fake))
     sub.code_svc.add_code.assert_awaited_once_with(
         "WELCOME",

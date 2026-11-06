@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from collections.abc import Awaitable, Callable, Mapping
 from typing import ClassVar, cast
 
@@ -34,6 +35,8 @@ class AdminRoutingMixin(AdminFeatureMixin):
         ("admin:status_panels", "_handle_panel_status", False),
         ("admin:codetype:", "_handle_code_type", True),
         ("admin:code_perma:", "_handle_code_perma", True),
+        ("admin:code_cancel:", "_handle_code_cancel", True),
+        ("admin:code_retry:", "_handle_code_retry", True),
         ("admin:chart", "_handle_chart", False),
         ("admin:leaderboard", "_handle_leaderboard", False),
         ("admin:edit_user:", "_handle_edit_user", True),
@@ -90,7 +93,16 @@ class AdminRoutingMixin(AdminFeatureMixin):
             return
         custom_id = self._custom_id(interaction)
         route = (
-            custom_id.rsplit(":", 1)[0] if custom_id.startswith("admin:modal:edit_") else custom_id
+            custom_id.rsplit(":", 1)[0]
+            if custom_id.startswith(
+                (
+                    "admin:modal:edit_",
+                    "admin:modal:add_code:",
+                    "admin:modal:code_days:",
+                    "admin:modal:code_uses:",
+                )
+            )
+            else custom_id
         )
         handler_name = self.MODALS.get(route)
         if handler_name is None:
@@ -281,75 +293,92 @@ class AdminRoutingMixin(AdminFeatureMixin):
 
     async def _handle_add_code(self, data: str, interaction: discord.Interaction) -> None:
         del data
-        modal = discord.ui.Modal(title="Добавить код", custom_id="admin:modal:add_code")
-        modal.add_item(
-            discord.ui.TextInput(
-                label="Название кода",
-                custom_id="code",
-                min_length=1,
-                max_length=64,
-            ),
-        )
-        await self._send_modal(interaction, modal)
+        generation = secrets.token_urlsafe(24)
+        pending: dict[str, str | int | bool] = {"generation": generation, "stage": "name"}
+        self._pending_codes[interaction.user.id] = pending
+        try:
+            await self._send_code_modal(interaction, generation, "name")
+        except BaseException:
+            if self._pending_codes.get(interaction.user.id) is pending:
+                self._pending_codes.pop(interaction.user.id, None)
+            raise
 
     async def _handle_panel_status(self, data: str, interaction: discord.Interaction) -> None:
         del data
         await self._cb_all_panels_status(interaction)
 
     async def _handle_code_type(self, data: str, interaction: discord.Interaction) -> None:
-        pending = self._pending_codes.get(interaction.user.id)
-        if not pending:
+        code_type, _, generation = data.removeprefix("admin:codetype:").partition(":")
+        pending = await self._code_pending(interaction, generation, "type")
+        if pending is None:
+            return
+        if code_type not in {"register", "bonus"}:
             await self._respond(
-                interaction,
-                "❌ Сессия истекла, начните заново.",
-                view=self.codes_menu_view(),
+                interaction, "❌ Неизвестный тип кода.", view=self.codes_menu_view()
             )
             return
-        code_type = data.split("admin:codetype:", 1)[1]
-        pending["type"] = code_type
-        self._pending_codes[interaction.user.id] = pending
-        modal = discord.ui.Modal(title="Параметры кода", custom_id="admin:modal:code_days")
-        modal.add_item(
-            discord.ui.TextInput(label="Дней", custom_id="days", min_length=1, max_length=8),
-        )
-        modal.add_item(
-            discord.ui.TextInput(label="Гигабайты", custom_id="gb", min_length=1, max_length=8),
-        )
-        modal.add_item(
-            discord.ui.TextInput(
-                label="ВЛ гигабайты",
-                custom_id="wl_gb",
-                min_length=1,
-                max_length=8,
-            ),
-        )
-        await self._send_modal(interaction, modal)
+        pending.update(type=code_type, stage="days")
+        try:
+            await self._send_code_modal(interaction, generation, "days")
+        except BaseException:
+            if (
+                self._pending_codes.get(interaction.user.id) is pending
+                and pending.get("stage") == "days"
+            ):
+                pending["stage"] = "type"
+            raise
 
     async def _handle_code_perma(self, data: str, interaction: discord.Interaction) -> None:
-        pending = self._pending_codes.get(interaction.user.id)
-        if not pending:
+        selection, _, generation = data.removeprefix("admin:code_perma:").partition(":")
+        pending = await self._code_pending(interaction, generation, "perma")
+        if pending is None:
+            return
+        if selection not in {"yes", "no"}:
             await self._respond(
-                interaction,
-                "❌ Сессия истекла, начните заново.",
-                view=self.codes_menu_view(),
+                interaction, "❌ Неизвестный выбор.", view=self._code_perma_view(generation)
             )
             return
-        perma = data.endswith(":yes")
+        perma = selection == "yes"
         pending["perma"] = perma
         if perma:
             pending["uses"] = -1
             await self._finish_add_code(interaction)
             return
-        modal = discord.ui.Modal(title="Использования кода", custom_id="admin:modal:code_uses")
-        modal.add_item(
-            discord.ui.TextInput(
-                label="Кол-во использований (>= 1)",
-                custom_id="uses",
-                min_length=1,
-                max_length=8,
-            ),
-        )
-        await self._send_modal(interaction, modal)
+        pending["stage"] = "uses"
+        try:
+            await self._send_code_modal(interaction, generation, "uses")
+        except BaseException:
+            if (
+                self._pending_codes.get(interaction.user.id) is pending
+                and pending.get("stage") == "uses"
+            ):
+                pending["stage"] = "perma"
+            raise
+
+    async def _handle_code_cancel(self, data: str, interaction: discord.Interaction) -> None:
+        stage, _, generation = data.removeprefix("admin:code_cancel:").partition(":")
+        if stage not in {"name", "type", "days", "perma", "uses"}:
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view()
+            )
+            return
+        pending = await self._code_pending(interaction, generation, stage)
+        if pending is None:
+            return
+        self._pending_codes.pop(interaction.user.id, None)
+        await self._respond(interaction, "Действие отменено.", view=self.codes_menu_view())
+
+    async def _handle_code_retry(self, data: str, interaction: discord.Interaction) -> None:
+        stage, _, generation = data.removeprefix("admin:code_retry:").partition(":")
+        if stage not in {"name", "days", "uses"}:
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните заново.", view=self.codes_menu_view()
+            )
+            return
+        pending = await self._code_pending(interaction, generation, stage)
+        if pending is None:
+            return
+        await self._send_code_modal(interaction, generation, stage)
 
     async def _handle_chart(self, data: str, interaction: discord.Interaction) -> None:
         del data
