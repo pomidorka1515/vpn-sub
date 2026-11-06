@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import operator
+from secrets import token_hex
 from typing import Literal, cast
 
 from telebot import types
@@ -19,13 +20,17 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
     """Leaderboard selection and rendering workflows."""
 
     async def _cb_leaderboard_type(self, chat_id: int) -> None:
+        generation = token_hex(8)
+        self._pending_leaderboard[chat_id] = {"generation": generation, "stage": "type"}
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-            types.InlineKeyboardButton("📊 Общий (total)", callback_data="lbt_total"),
-            types.InlineKeyboardButton("📅 Месячный (monthly)", callback_data="lbt_monthly"),
+            types.InlineKeyboardButton("📊 Общий (total)", callback_data=f"lbt_total:{generation}"),
+            types.InlineKeyboardButton(
+                "📅 Месячный (monthly)", callback_data=f"lbt_monthly:{generation}"
+            ),
             types.InlineKeyboardButton(
                 "🛡 Белый список (wl_monthly)",
-                callback_data="lbt_wl_monthly",
+                callback_data=f"lbt_wl_monthly:{generation}",
             ),
         )
         await self.bot.send_message(
@@ -36,10 +41,18 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         )
 
     async def _cb_leaderboard_order(self, chat_id: int) -> None:
+        pending = self._pending_leaderboard.get(chat_id)
+        if not pending or pending.get("stage") != "order":
+            return
+        generation = pending["generation"]
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-            types.InlineKeyboardButton("🔽 По убыванию (1st = most)", callback_data="lbo_desc"),
-            types.InlineKeyboardButton("🔼 По возрастанию (1st = least)", callback_data="lbo_asc"),
+            types.InlineKeyboardButton(
+                "🔽 По убыванию (1st = most)", callback_data=f"lbo_desc:{generation}"
+            ),
+            types.InlineKeyboardButton(
+                "🔼 По возрастанию (1st = least)", callback_data=f"lbo_asc:{generation}"
+            ),
         )
         await self.bot.send_message(
             chat_id,
@@ -49,15 +62,31 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         )
 
     async def _cb_leaderboard_window(self, chat_id: int) -> None:
+        pending = self._pending_leaderboard.get(chat_id)
+        if not pending or pending.get("stage") != "window":
+            return
         msg = await self.bot.send_message(
             chat_id,
             "🔢 <b>Количество записей</b>\n\nВведите число (0 = все пользователи, >= 0):",
             parse_mode="HTML",
         )
-        self._expect(msg, self._step_leaderboard_window)  # pyright: ignore[reportUnknownMemberType]
+        if self._pending_leaderboard.get(chat_id) is pending:
+            self._expect(msg, self._step_leaderboard_window, pending["generation"])  # pyright: ignore[reportUnknownMemberType]
 
-    async def _step_leaderboard_window(self, message: types.Message) -> None:
+    async def _step_leaderboard_window(self, message: types.Message, generation: str) -> None:
         chat_id = message.chat.id
+        pending = self._pending_leaderboard.get(chat_id)
+        if (
+            not pending
+            or pending.get("generation") != generation
+            or pending.get("stage") != "window"
+        ):
+            await self.bot.send_message(
+                chat_id,
+                "❌ Сессия истекла, начните заново.",
+                reply_markup=self.get_main_menu(),
+            )
+            return
         if message.text is None:
             await self.bot.send_message(
                 chat_id,

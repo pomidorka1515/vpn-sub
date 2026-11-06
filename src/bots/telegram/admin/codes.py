@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from html import escape
+from secrets import token_hex
 from typing import cast
 
 from telebot import types
@@ -118,12 +119,15 @@ class AdminCodesMixin(AdminFeatureMixin):
         if text.startswith("/"):
             return
         code_name = text.strip()
-        self._pending_codes[message.chat.id] = code_name
+        generation = token_hex(8)
+        self._pending_codes[message.chat.id] = f"{generation}:{code_name}"
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(  # pyright: ignore[reportUnknownMemberType]
-            types.InlineKeyboardButton("📝 register", callback_data="codetype_register"),
-            types.InlineKeyboardButton("🎁 bonus", callback_data="codetype_bonus"),
-            types.InlineKeyboardButton("🔙 Отмена", callback_data="codes_menu"),
+            types.InlineKeyboardButton(
+                "📝 register", callback_data=f"codetype_register:{generation}"
+            ),
+            types.InlineKeyboardButton("🎁 bonus", callback_data=f"codetype_bonus:{generation}"),
+            types.InlineKeyboardButton("🔙 Отмена", callback_data=f"codecancel:{generation}"),
         )
         await self.bot.send_message(
             message.chat.id,

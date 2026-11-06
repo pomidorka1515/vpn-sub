@@ -143,7 +143,7 @@ async def test_code_names_are_escaped_only_in_html(
     assert sent.call_args.kwargs["parse_mode"] == "HTML"
 
     await mixin._step_add_code_name(_message(name))
-    assert mixin._pending_codes[7] == name
+    assert mixin._pending_codes[7].split(":", 1)[1] == name
     assert telegram.send_message.call_args.args[1] == f"Код: <b>{escaped}</b>\nВыберите тип:"
     assert telegram.send_message.call_args.kwargs["parse_mode"] == "HTML"
 
@@ -190,13 +190,19 @@ async def test_delete_code_and_type_prompt(
     await mixin._step_add_code_name(_message("/start"))
     assert mixin._pending_codes == {}
     await mixin._step_add_code_name(_message(" WELCOME "))
-    assert mixin._pending_codes[7] == "WELCOME"
+    generation, name = mixin._pending_codes[7].split(":", 1)
+    assert name == "WELCOME"
     buttons = [
         button.callback_data
         for row in telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard
         for button in row
     ]
-    assert buttons == ["codetype_register", "codetype_bonus", "codes_menu"]
+    assert buttons == [
+        f"codetype_register:{generation}",
+        f"codetype_bonus:{generation}",
+        f"codecancel:{generation}",
+    ]
+    assert all(len(button.encode()) <= 64 for button in buttons)
 
 
 @pytest.mark.asyncio

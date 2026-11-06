@@ -207,8 +207,8 @@ async def test_code_type_and_edit_sessions_expire(
     await bot.handle_callbacks(_callback("codetype_bonus"))
     assert "истекла" in telegram.send_message.call_args.args[1]
 
-    bot._pending_codes[7] = "WELCOME"
-    await bot.handle_callbacks(_callback("codetype_bonus"))
+    bot._pending_codes[7] = "test:WELCOME"
+    await bot.handle_callbacks(_callback("codetype_bonus:test"))
     assert 7 not in bot._pending_codes
     assert bot._step_add_code_days in cast(MagicMock, bot._expect).call_args.args
     assert cast(MagicMock, bot._expect).call_args.args[2:] == ("bonus", "WELCOME")
@@ -248,13 +248,101 @@ async def test_fingerprint_save_and_leaderboard_order(
     )
     assert "firefox" in cast(MagicMock, bot._send_message).call_args.args[1]
 
+    await bot.handle_callbacks(_callback("leaderboard"))
+    generation = bot._pending_leaderboard[7]["generation"]
     with patch.object(TelegramAdminBot, "_cb_leaderboard_order") as order:
-        await bot.handle_callbacks(_callback("lbt_monthly"))
-    assert bot._pending_leaderboard[7] == {"type": "monthly"}
+        await bot.handle_callbacks(_callback(f"lbt_monthly:{generation}"))
+    assert bot._pending_leaderboard[7]["type"] == "monthly"
     order.assert_called_once_with(7)
 
     with patch.object(TelegramAdminBot, "_cb_leaderboard_window") as window:
-        await bot.handle_callbacks(_callback("lbo_asc"))
-        await bot.handle_callbacks(_callback("lbo_desc"))
-    assert bot._pending_leaderboard[7]["order"] == "desc"
-    assert window.call_count == 2
+        await bot.handle_callbacks(_callback(f"lbo_asc:{generation}"))
+        await bot.handle_callbacks(_callback(f"lbo_desc:{generation}"))
+    assert bot._pending_leaderboard[7]["order"] == "asc"
+    assert window.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_code_type_and_cancel_cannot_consume_new_wizard(
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
+) -> None:
+    bot, telegram, _subscription = admin
+    message = cast(types.Message, SimpleNamespace(text="FIRST", chat=SimpleNamespace(id=7)))
+    await bot._step_add_code_name(message)
+    old_buttons = [
+        button.callback_data
+        for row in telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard
+        for button in row
+    ]
+    await bot.handle_callbacks(_callback("add_code"))
+    assert 7 not in bot._pending_codes
+    message.text = "NEW:CODE"
+    await bot._step_add_code_name(message)
+    current = bot._pending_codes[7]
+    new_buttons = [
+        button.callback_data
+        for row in telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard
+        for button in row
+    ]
+    assert old_buttons != new_buttons
+    for stale in [*old_buttons, "codetype_bonus", "codetype_bad:" + current.split(":", 1)[0]]:
+        await bot.handle_callbacks(_callback(stale))
+        assert "истекла" in telegram.send_message.call_args.args[1]
+        assert bot._pending_codes[7] == current
+    await bot.handle_callbacks(_callback(new_buttons[1]))
+    assert 7 not in bot._pending_codes
+    assert cast(MagicMock, bot._expect).call_args.args[2:] == ("bonus", "NEW:CODE")
+    await bot.handle_callbacks(_callback(new_buttons[0]))
+    assert "истекла" in telegram.send_message.call_args.args[1]
+    await bot._step_add_code_name(message)
+    cancel_button = telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard[1][0]
+    await bot.handle_callbacks(_callback(cancel_button.callback_data))
+    assert 7 not in bot._pending_codes
+    telegram.edit_message_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_selections_are_bound_to_generation_and_stage(
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock],
+) -> None:
+    bot, telegram, _subscription = admin
+    await bot.handle_callbacks(_callback("leaderboard"))
+    old_type = (
+        telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard[0][0].callback_data
+    )
+    await bot.handle_callbacks(_callback(old_type))
+    old_order = (
+        telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard[0][0].callback_data
+    )
+    await bot.handle_callbacks(_callback("leaderboard"))
+    new_type = (
+        telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard[1][0].callback_data
+    )
+    current = bot._pending_leaderboard[7]
+    for stale in (old_type, old_order, "lbt_total", "lbo_desc"):
+        await bot.handle_callbacks(_callback(stale))
+        assert "истекла" in telegram.send_message.call_args.args[1]
+        assert current == {"generation": new_type.split(":")[1], "stage": "type"}
+    await bot.handle_callbacks(_callback(new_type))
+    new_order = (
+        telegram.send_message.call_args.kwargs["reply_markup"].inline_keyboard[1][0].callback_data
+    )
+    assert len(new_order.encode()) <= 64
+    await bot.handle_callbacks(_callback(old_order))
+    assert current["stage"] == "order"
+    await bot.handle_callbacks(_callback(new_type))
+    assert current["stage"] == "order"
+    await bot.handle_callbacks(_callback(new_order))
+    assert current["stage"] == "window"
+    assert current["type"] == "monthly"
+    assert current["order"] == "asc"
+    await bot.handle_callbacks(_callback(new_order))
+    assert current["stage"] == "window"
+
+    old_generation = cast(str, current["generation"])
+    await bot.handle_callbacks(_callback("leaderboard"))
+    latest = bot._pending_leaderboard[7]
+    message = cast(types.Message, SimpleNamespace(text="3", chat=SimpleNamespace(id=7)))
+    await bot._step_leaderboard_window(message, old_generation)
+    assert "истекла" in telegram.send_message.call_args.args[1]
+    assert bot._pending_leaderboard[7] is latest

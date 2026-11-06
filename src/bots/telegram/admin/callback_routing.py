@@ -40,6 +40,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         ("add_code", "_handle_add_code", False),
         ("status_panels", "_handle_panel_status", False),
         ("codetype_", "_handle_code_type", True),
+        ("codecancel:", "_handle_code_cancel", True),
         ("chart", "_handle_chart", False),
         ("leaderboard", "_handle_leaderboard", False),
         ("edit_user_", "_handle_edit_user", True),
@@ -228,6 +229,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     async def _handle_add_code(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
+        self._pending_codes.pop(chat_id, None)
         msg = await self.bot.send_message(chat_id, "Введите название кода (или /start для отмены):")
         self._expect(msg, self._step_add_code_name)  # pyright: ignore[reportUnknownMemberType]
 
@@ -237,17 +239,36 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
 
     async def _handle_code_type(self, data: str, chat_id: int, message: types.Message) -> None:
         del message
-        code_name = self._pending_codes.pop(chat_id, None)
-        if not code_name:
+        action, _, generation = data.partition(":")
+        pending = self._pending_codes.get(chat_id, "")
+        current_generation, separator, code_name = pending.partition(":")
+        code_type = action.removeprefix("codetype_")
+        if (
+            not separator
+            or not generation
+            or not code_name
+            or generation != current_generation
+            or code_type not in {"register", "bonus"}
+        ):
             await self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
             return
-        code_type = data.split("codetype_", 1)[1]
+        self._pending_codes.pop(chat_id, None)
         msg = await self.bot.send_message(
             chat_id,
             f"Тип: <b>{code_type}</b>\nВведите количество дней:",
             parse_mode="HTML",
         )
         self._expect(msg, self._step_add_code_days, code_type, code_name)  # pyright: ignore[reportUnknownMemberType]
+
+    async def _handle_code_cancel(self, data: str, chat_id: int, message: types.Message) -> None:
+        generation = data.removeprefix("codecancel:")
+        pending = self._pending_codes.get(chat_id, "")
+        current_generation, separator, _ = pending.partition(":")
+        if not separator or not generation or generation != current_generation:
+            await self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
+            return
+        self._pending_codes.pop(chat_id, None)
+        await self._handle_codes_menu("codes_menu", chat_id, message)
 
     async def _handle_chart(self, data: str, chat_id: int, message: types.Message) -> None:
         del data, message
@@ -331,7 +352,20 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         message: types.Message,
     ) -> None:
         del message
-        self._pending_leaderboard[chat_id] = {"type": data.split("lbt_", 1)[1]}
+        action, _, generation = data.partition(":")
+        pending = self._pending_leaderboard.get(chat_id)
+        bw_type = action.removeprefix("lbt_")
+        if (
+            not pending
+            or not generation
+            or pending.get("generation") != generation
+            or pending.get("stage") != "type"
+            or bw_type not in {"total", "monthly", "wl_monthly"}
+        ):
+            await self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
+            return
+        pending["type"] = bw_type
+        pending["stage"] = "order"
         await self._cb_leaderboard_order(chat_id)
 
     async def _handle_leaderboard_order(
@@ -341,6 +375,18 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         message: types.Message,
     ) -> None:
         del message
-        if chat_id in self._pending_leaderboard:
-            self._pending_leaderboard[chat_id]["order"] = data.split("lbo_", 1)[1]
+        action, _, generation = data.partition(":")
+        pending = self._pending_leaderboard.get(chat_id)
+        order = action.removeprefix("lbo_")
+        if (
+            not pending
+            or not generation
+            or pending.get("generation") != generation
+            or pending.get("stage") != "order"
+            or order not in {"asc", "desc"}
+        ):
+            await self.bot.send_message(chat_id, "❌ Сессия истекла, начните заново.")
+            return
+        pending["order"] = order
+        pending["stage"] = "window"
         await self._cb_leaderboard_window(chat_id)

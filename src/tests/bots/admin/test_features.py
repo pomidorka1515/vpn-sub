@@ -199,10 +199,13 @@ async def test_leaderboard_prompts_and_window(
 ) -> None:
     mixin, telegram, subscription = leaderboard
     await mixin._cb_leaderboard_type(7)
+    generation = cast(str, mixin._pending_leaderboard[7]["generation"])
+    mixin._pending_leaderboard[7]["stage"] = "order"
     await mixin._cb_leaderboard_order(7)
     cast(MagicMock, mixin._cb_leaderboard_window).assert_not_called()
     cast(MagicMock, mixin._expect).side_effect = None
     mixin._cb_leaderboard_window = AdminLeaderboardMixin._cb_leaderboard_window.__get__(mixin)  # type: ignore[method-assign]
+    mixin._pending_leaderboard[7]["stage"] = "window"
     await mixin._cb_leaderboard_window(7)
     registered = cast(MagicMock, mixin._expect).call_args.args[1]
     assert (
@@ -210,17 +213,17 @@ async def test_leaderboard_prompts_and_window(
         is AdminLeaderboardMixin._step_leaderboard_window
     )
 
-    await mixin._step_leaderboard_window(_message(None))
-    await mixin._step_leaderboard_window(_message("-1"))
-    await mixin._step_leaderboard_window(_message("nope"))
+    await mixin._step_leaderboard_window(_message(None), generation)
+    await mixin._step_leaderboard_window(_message("-1"), generation)
+    await mixin._step_leaderboard_window(_message("nope"), generation)
     assert "неотрицательное" in telegram.send_message.call_args.args[1]
 
-    await mixin._step_leaderboard_window(_message("5"))
+    await mixin._step_leaderboard_window(_message("5"), "stale")
     assert "истекла" in telegram.send_message.call_args.args[1]
 
-    mixin._pending_leaderboard[7] = {"type": "monthly", "order": "asc"}
+    mixin._pending_leaderboard[7].update({"type": "monthly", "order": "asc"})
     with patch.object(AdminLeaderboardMixin, "_handle_leaderboard_result") as result:
-        await mixin._step_leaderboard_window(_message("3"))
+        await mixin._step_leaderboard_window(_message("3"), generation)
     result.assert_called_once_with(7, "monthly", "asc", 3)
     assert 7 not in mixin._pending_leaderboard
     subscription.leaderboard_svc.leaderboard.assert_not_called()
