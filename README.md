@@ -142,13 +142,8 @@ Each panel in `3xui.*` authenticates with an **admin-scoped API token**
    and update the config; there is no auto-recovery.
 
 This service targets the 3x-ui **v3 clients-first API** (`/panel/api/clients/*`,
-one client per user with `email == username`). Upgrading the panel from 2.x?
-After the panel upgrade, run the one-time reconciliation (service stopped):
-
-```bash
-venv/bin/python scripts/reconcile_clients.py          # dry-run report
-venv/bin/python scripts/reconcile_clients.py --apply  # merge legacy clients
-```
+one client per user with `email == username`). There is no automatic update
+path from 3x-ui 2.x: you need a clients-first panel already.
 
 ### Systemd service
 
@@ -311,7 +306,7 @@ unknown.
 ### Scripts
 
 To load scripts for migration (3x-ui, config, etc), run `./vpn-sub --load-scripts`.
-Pure migration scripts use stdlib; `reconcile_clients.py` requires the checkout's project venv and dependencies.
+Pure migration scripts use stdlib.
 
 ## Binaries
 
@@ -377,7 +372,7 @@ Discord starts and stops with the main systemd unit.
 - Not highly available. Panel, database, and bots all live on the same box. A
   dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`).
-  2.x needs the one-time reconcile above. No other panel software.
+  Earlier panel versions are not supported. No other panel software.
 - Personal project. Untagged `main` is rolling development.
 - Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure
   belong on the reverse proxy. Application rate limits live in Redis.

@@ -2,7 +2,7 @@
   
 ## Dependencies and retirement  
   
-`requirements.txt` and `pyproject.toml` declare the same runtime requirements. Quart and Hypercorn are the active direct framework/server dependencies; aiohttp, aiosqlite, redis.asyncio and pyTelegramBotAPI >=4.37,<5 provide runtime I/O. Requests remains for CLI downloads and the staged reconcile script. pytest-asyncio is development-only.  
+`requirements.txt` and `pyproject.toml` declare the same runtime requirements. Quart and Hypercorn are the active direct framework/server dependencies; aiohttp, aiosqlite, redis.asyncio and pyTelegramBotAPI >=4.37,<5 provide runtime I/O. Requests remains for CLI downloads. pytest-asyncio is development-only.  
   
 The explicit Flask, Gunicorn and types-gunicorn requirements have been removed during step 12 cleanup, along with the superseded server/repository/panel/core implementations and temporary environment aliases. Quart retains its upstream Flask dependency. Configure serving with `APP_BIND` and `LOGLEVEL_HTTP`.  
   

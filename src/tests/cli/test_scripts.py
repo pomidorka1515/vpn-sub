@@ -106,7 +106,7 @@ def test_writes_schema_and_scripts(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     (install / "config.schema.json").write_bytes(b"old\n")
     files = {
         "migrate_profiles.py": b"print('migrate')\n",
-        "reconcile_clients.py": b"print('reconcile')\n",
+        "smoke_async_release.py": b"print('smoke')\n",
     }
     monkeypatch.setattr(scripts_load, "VERSION", "6.0.0")
     monkeypatch.setattr(scripts_load, "program_dir", lambda: install)
@@ -117,8 +117,8 @@ def test_writes_schema_and_scripts(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert (install / "scripts" / "migrate_profiles.py").read_bytes() == files[
         "migrate_profiles.py"
     ]
-    assert (install / "scripts" / "reconcile_clients.py").read_bytes() == files[
-        "reconcile_clients.py"
+    assert (install / "scripts" / "smoke_async_release.py").read_bytes() == files[
+        "smoke_async_release.py"
     ]
     assert not list(install.glob(".*.part"))
 
@@ -143,7 +143,7 @@ def test_digest_mismatch_does_not_write_the_script(
         if name == "scripts":
             payload: object = [
                 {"name": "migrate_profiles.py", "type": "file", "sha": "a" * 40},
-                {"name": "reconcile_clients.py", "type": "dir"},
+                {"name": "nested", "type": "dir"},
                 {"name": "../escape.py", "type": "file"},
             ]
         else:
