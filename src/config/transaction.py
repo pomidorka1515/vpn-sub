@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
 from .atomic import atomic_write_json, ensure_parent_dir, file_signature
 from .constants import MISSING, JsonDict, JsonValue
+from .equality import json_equal
 
 if TYPE_CHECKING:
     import io
@@ -113,7 +114,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
                 if self.data is None or self.original is None:
                     raise RuntimeError("Transaction is not active.")
 
-                if self.data != self.original:
+                if not json_equal(self.data, self.original):
                     cfg.validate_schema(self.data)
                     cfg.atomic_write(self.data)
 

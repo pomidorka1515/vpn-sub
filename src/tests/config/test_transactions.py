@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from config import Config
 from config.transaction import ConfigTransaction
+from errors import SchemaValidationError
 
 if TYPE_CHECKING:
     from config import AppConfig, JsonDict, JsonValue
@@ -20,6 +21,38 @@ def test_transaction_commit_writes_nested_changes(cfg: Config) -> None:
         assert isinstance(panel, dict)
         panel["port"] = 2053
     assert cfg["panel"] == {"name": "local", "port": 2053}
+
+
+@pytest.mark.parametrize(("before", "after"), [(1, True), (True, 1), (1, 1.0), (1.0, 1)])
+def test_transaction_commits_nested_type_only_changes(
+    cfg: Config, before: float | bool, after: float | bool
+) -> None:
+    cfg["nested"] = {"values": [{"value": before}]}
+    with cfg.edit() as tx:
+        nested = tx["nested"]
+        assert isinstance(nested, dict)
+        values = nested["values"]
+        assert isinstance(values, list)
+        item = values[0]
+        assert isinstance(item, dict)
+        item["value"] = after
+
+    live = cast(dict[str, list[dict[str, float | bool]]], cfg.view()["nested"])
+    disk = json.loads(Path(cfg.path).read_text(encoding="utf-8"))["nested"]
+    for document in (live, disk):
+        value = document["values"][0]["value"]
+        assert type(value) is type(after)
+        assert value == after
+
+
+def test_transaction_validates_nested_type_only_changes(app_cfg: Config[AppConfig]) -> None:
+    before = Path(app_cfg.path).read_bytes()
+    with pytest.raises(SchemaValidationError), app_cfg.edit() as tx:
+        tx.view()["3xui"]["local"]["inbounds_list"][0] = True
+    assert Path(app_cfg.path).read_bytes() == before
+    value = app_cfg.view()["3xui"]["local"]["inbounds_list"][0]
+    assert type(value) is int
+    assert value == 1
 
 
 def test_transaction_exception_does_not_persist(cfg: Config) -> None:

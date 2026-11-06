@@ -284,6 +284,42 @@ async def test_config_commit_and_conflict(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("before", "after"), [(1, True), (True, 1), (1, 1.0), (1.0, 1)])
+async def test_config_commits_nested_type_only_changes(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+    before: float | bool,
+    after: float | bool,
+) -> None:
+    app, cfg, path, audit = config_api
+    template = json.loads(path.read_bytes())["json_template"]
+    template["meta"] = {"values": [{"value": before}]}
+    assert (await set_config(app, base_for(path), {"json_template": template})).status_code == 200
+    old_base = base_for(path)
+    audit.records.clear()
+
+    template["meta"]["values"][0]["value"] = after
+    response = await set_config(app, old_base, {"json_template": template})
+    assert response.status_code == 200
+    payload = await response.get_json()
+    assert payload["msg"] == "Updated"
+    assert payload["obj"] == {"base": base_for(path), "restart": []}
+    assert payload["obj"]["base"] != old_base
+    live_template = cast(
+        dict[str, dict[str, list[dict[str, float | bool]]]], cfg.view()["json_template"]
+    )
+    disk_template = json.loads(path.read_bytes())["json_template"]
+    for document in (disk_template, live_template):
+        value = document["meta"]["values"][0]["value"]
+        assert type(value) is type(after)
+        assert value == after
+    assert audit.records[-1]["info"] == {"keys": ["json_template"]}
+
+    unchanged = await set_config(app, base_for(path), {"json_template": template})
+    assert (await unchanged.get_json())["msg"] == "Unchanged"
+    assert len(audit.records) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("audit_failure", [False, True])
 async def test_config_response_retains_own_revision_during_concurrent_edit(
     config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],

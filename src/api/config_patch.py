@@ -6,6 +6,7 @@ import math
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal, cast
 
+from config.equality import json_equal
 from config.validation import check_config_document
 from errors import ValidationError
 
@@ -112,15 +113,15 @@ def apply_config_patch(
             raise ValidationError(f"{key} is not a JSON value")
         working[key] = cast("JsonValue", value)
     check_config_document(working)
-    if _json_equal(dict(working), preimage):
+    if json_equal(dict(working), preimage):
         return "unchanged", [], []
 
     changed = [
         key
         for key in values
-        if key not in preimage or not _json_equal(working.get(key), preimage[key])
+        if key not in preimage or not json_equal(working.get(key), preimage[key])
     ]
-    restart = [key for key in RESTART_KEYS if not _json_equal(working.get(key), before[key])]
+    restart = [key for key in RESTART_KEYS if not json_equal(working.get(key), before[key])]
     return "updated", changed, restart
 
 
@@ -137,20 +138,3 @@ def _is_json_value(value: object) -> bool:
     if isinstance(value, list):
         return all(_is_json_value(item) for item in cast("list[object]", value))
     return False
-
-
-def _json_equal(left: object, right: object) -> bool:
-    """Value equality that does not treat 1 and 1.0 as the same config value."""
-    if type(left) is not type(right):
-        return False
-    if isinstance(left, Mapping) and isinstance(right, Mapping):
-        left, right = cast("Mapping[object, object]", left), cast("Mapping[object, object]", right)
-        if left.keys() != right.keys():
-            return False
-        return all(_json_equal(left[key], right[key]) for key in left)
-    if isinstance(left, list) and isinstance(right, list):
-        left, right = cast("list[object]", left), cast("list[object]", right)
-        if len(left) != len(right):
-            return False
-        return all(map(_json_equal, left, right, strict=True))
-    return left == right
