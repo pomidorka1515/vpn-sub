@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import stat
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -199,6 +201,38 @@ def test_apply_joins_maps_and_preserves_key_order(tmp_path: Path) -> None:
     backup = path.with_name("config.json.pre-v6")
     assert backup.read_text(encoding="utf-8") == original
     assert path.read_text(encoding="utf-8").endswith("\n")
+
+
+def test_apply_preserves_config_ownership_and_mode(tmp_path: Path) -> None:
+    path = _write(tmp_path, _legacy())
+    if os.geteuid() == 0:
+        os.chown(path, 65534, 65534)
+    path.chmod(0o640)
+    original = path.stat()
+
+    assert mp.main(["--config", str(path), "--apply"]) == 0
+
+    result = path.stat()
+    assert (result.st_uid, result.st_gid) == (original.st_uid, original.st_gid)
+    assert stat.S_IMODE(result.st_mode) == 0o640
+
+
+def test_metadata_failure_does_not_replace_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = _write(tmp_path, _legacy())
+    original = path.read_bytes()
+
+    def fail(*_args: object) -> None:
+        raise PermissionError("cannot preserve mode")
+
+    monkeypatch.setattr(mp.os, "fchmod", fail)
+    with pytest.raises(PermissionError, match="cannot preserve mode"):
+        mp.main(["--config", str(path), "--apply"])
+    assert path.read_bytes() == original
+    assert not path.with_name("config.json.pre-v6").exists()
+    assert not list(tmp_path.glob(".tmp_*.json"))
 
 
 def test_missing_xhttp_extra_becomes_empty_object(tmp_path: Path) -> None:

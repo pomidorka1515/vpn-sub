@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -247,6 +248,7 @@ def _write(path: Path, data: Mapping[str, JsonValue]) -> None:
     # A second --apply on a still-legacy file may proceed. The first backup
     # is the original and must not be replaced.
     keep_backup = backup.exists()
+    original = path.stat()
     fd, temp_name = tempfile.mkstemp(dir=directory, prefix=".tmp_", suffix=".json")
     temp_path = Path(temp_name)
     try:
@@ -254,6 +256,10 @@ def _write(path: Path, data: Mapping[str, JsonValue]) -> None:
             json.dump(data, handle, indent=4, ensure_ascii=False)
             handle.write("\n")
             handle.flush()
+            staged = os.fstat(handle.fileno())
+            if (staged.st_uid, staged.st_gid) != (original.st_uid, original.st_gid):
+                os.fchown(handle.fileno(), original.st_uid, original.st_gid)
+            os.fchmod(handle.fileno(), stat.S_IMODE(original.st_mode))
             os.fsync(handle.fileno())
         if not keep_backup:
             # Preserve the original inode without removing the live config.
