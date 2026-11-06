@@ -6,6 +6,8 @@ from typing import cast
 
 from telebot import types
 
+from loggers.delivery import DeliveryResult
+
 from ..common import AdminStateMixin, TelegramIOMixin
 from ..composition import AdminFeatureMixin
 from ..conversations import ConversationMixin
@@ -48,6 +50,25 @@ class AdminCommonMixin(
                 accepted = False
                 self.log.exception("failed to send message to admin ID %s", uid)
         return accepted
+
+    async def send_log_alert(
+        self, text: str, recipients: tuple[int, ...] | None = None
+    ) -> DeliveryResult:
+        """Send a log record and report only recipients needing another attempt.
+
+        Transport exceptions are deliberately not logged: they may contain
+        credentials, and logging them here could recursively generate alerts.
+        """
+        recipients = tuple(dict.fromkeys(self.admin_uids)) if recipients is None else recipients
+        if not recipients:
+            return DeliveryResult(no_recipients=True)
+        failed: list[int] = []
+        for uid in recipients:
+            try:
+                await self.bot.send_message(uid, text, parse_mode="HTML")
+            except Exception:
+                failed.append(uid)
+        return DeliveryResult(failed_recipients=tuple(failed))
 
     def get_main_menu(self) -> types.InlineKeyboardMarkup:
         return types.InlineKeyboardMarkup(row_width=2).add(  # pyright: ignore[reportUnknownMemberType]

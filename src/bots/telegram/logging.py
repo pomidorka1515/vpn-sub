@@ -14,7 +14,13 @@ if TYPE_CHECKING:
 
 class AsyncBotLogging:
     def __init__(self, bot: TelegramAdminBot) -> None:
-        self.delivery = LogDelivery(bot.msg, name="logs:Telegram")
+        # Older bot stubs only expose msg; real admin bots report recipients.
+        if callable(getattr(type(bot), "send_log_alert", None)):
+            self.delivery = LogDelivery(
+                bot.send_log_alert, name="logs:Telegram", retry=bot.send_log_alert
+            )
+        else:
+            self.delivery = LogDelivery(bot.msg, name="logs:Telegram")
         self.handler = AsyncTelegramLogger(self.delivery)
         self.handler.setLevel(logging.WARNING)
         self.handler.setFormatter(logging.Formatter("%(levelname)s [%(name)s] %(message)s"))

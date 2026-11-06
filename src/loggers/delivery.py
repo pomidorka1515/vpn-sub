@@ -7,6 +7,7 @@ import queue
 import sys
 import threading
 from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from weakref import WeakSet
 
@@ -23,31 +24,51 @@ def stderr_fallback(message: str) -> None:
     sys.stderr.write(message + "\n")
 
 
+@dataclass(frozen=True, slots=True)
+class DeliveryResult:
+    """Recipient failures from one transport attempt, or an empty destination."""
+
+    failed_recipients: tuple[int, ...] = ()
+    no_recipients: bool = False
+
+    @property
+    def succeeded(self) -> bool:
+        return not self.failed_recipients and not self.no_recipients
+
+
 class LogDelivery[T]:
     """Bounded thread-to-loop delivery with one owned, serial consumer.
 
     Drop newest on overflow; ERROR+ falls back synchronously to stderr.
     Delivery errors also go directly to stderr, never through alert logging.
+    Recipient-aware results can be retried serially, up to max_retries times;
+    failed counts records still undelivered after retries, not failed attempts.
     A failed shutdown deadline raises and leaves the consumer owned/alive;
     callers must keep its dependencies open and may await close again.
     """
 
     def __init__(
         self,
-        deliver: Callable[[T], Awaitable[None]],
+        deliver: Callable[[T], Awaitable[DeliveryResult | None]],
         *,
         name: str,
         capacity: int = 256,
         drain_timeout: float = 5,
         fallback: Callable[[str], None] = stderr_fallback,
+        retry: Callable[[T, tuple[int, ...]], Awaitable[DeliveryResult]] | None = None,
+        max_retries: int = 2,
     ) -> None:
-        if capacity < 1 or drain_timeout <= 0:
-            raise ValueError("capacity and drain_timeout must be positive")
+        if capacity < 1 or drain_timeout <= 0 or max_retries < 0:
+            raise ValueError(
+                "capacity and drain_timeout must be positive and max_retries nonnegative"
+            )
         self._deliver = deliver
         self._name = name
         self._queue: queue.Queue[T] = queue.Queue(maxsize=capacity)
         self._drain_timeout = drain_timeout
         self._fallback = fallback
+        self._retry = retry
+        self._max_retries = max_retries
         self._lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._wake = asyncio.Event()
@@ -94,7 +115,16 @@ class LogDelivery[T]:
                 try:
                     token = _IN_LOG_DELIVERY.set(True)
                     try:
-                        await self._deliver(value)
+                        result = await self._deliver(value)
+                        for _ in range(self._max_retries):
+                            if (
+                                result is None
+                                or result.succeeded
+                                or not result.failed_recipients
+                                or self._retry is None
+                            ):
+                                break
+                            result = await self._retry(value, result.failed_recipients)
                     finally:
                         _IN_LOG_DELIVERY.reset(token)
                 except Exception:
@@ -102,6 +132,10 @@ class LogDelivery[T]:
                     # Do not print exception strings: transport errors can
                     # contain bot tokens or credential-bearing URLs.
                     self._fallback(f"{self._name}: log delivery failed")
+                else:
+                    if result is not None and not result.succeeded:
+                        self.failed += 1
+                        self._fallback(f"{self._name}: log delivery failed")
                 finally:
                     self._queue.task_done()
             with self._lock:
