@@ -21,6 +21,7 @@ function getBwColor(pct) {
 }
 
 let currentStats = null;
+const dirtySettings = { name: false, fp: false };
 
 async function loadStats() {
   const btn = document.getElementById('btnRefresh');
@@ -110,21 +111,22 @@ function renderStats(s) {
   document.getElementById('infoFp').textContent = s.fingerprint || '—';
   document.getElementById('infoToken').textContent = s.token || '—';
 
-  document.getElementById('setName').value = s.displayname || '';
-  document.getElementById('setFp').value = s.fingerprint || '';
+  if (!dirtySettings.name) document.getElementById('setName').value = s.displayname || '';
+  if (!dirtySettings.fp) document.getElementById('setFp').value = s.fingerprint || '';
 }
 
 async function loadFingerprints() {
   const res = await api('GET', '/fingerprints');
   if (!res || !res.success) return;
   const sel = document.getElementById('setFp');
+  const previous = sel.value;
   sel.innerHTML = '';
   (res.obj || []).forEach(fp => {
     const o = document.createElement('option');
     o.value = fp; o.textContent = fp;
     sel.appendChild(o);
   });
-  sel.value = currentStats?.fingerprint || '';
+  sel.value = dirtySettings.fp ? previous : (currentStats?.fingerprint || '');
 }
 
 function copyLink() {
@@ -205,6 +207,8 @@ async function saveSettings() {
     const res = await api('POST', '/settings', body, { allow401: res => res.msg === 'Invalid current password' });
     if (!res) return;
     if (res.success) {
+      if (document.getElementById('setName').value.trim() === name) dirtySettings.name = false;
+      if (document.getElementById('setFp').value === fp) dirtySettings.fp = false;
       msg.textContent = t('saved'); msg.className = 'settings-msg ok';
       document.getElementById('setUser').value = '';
       document.getElementById('setPass').value = '';
@@ -349,6 +353,8 @@ async function showProfiles() {
 }
 
 applyTheme();
+document.getElementById('setName').addEventListener('input', () => { dirtySettings.name = true; });
+document.getElementById('setFp').addEventListener('change', () => { dirtySettings.fp = true; });
 initPassToggles();
 initLang();
 renderLang();
