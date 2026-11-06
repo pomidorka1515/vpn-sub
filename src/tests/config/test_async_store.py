@@ -12,7 +12,7 @@ from app_runtime.offload import BoundedOffload
 from config import Config, LinesConfig
 from config.store import AsyncConfig, AsyncLinesConfig, FileSchedules
 from core.services.audit import AuditService
-from errors import FileCorruptionError
+from errors import FileCorruptionError, SchemaValidationError
 from loggers.delivery import AsyncTelegramLogger, LogDelivery
 from threadutil import named_to_thread
 
@@ -23,6 +23,31 @@ if TYPE_CHECKING:
     from config import JsonValue
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize("number", [float("nan"), float("inf"), -float("inf")])
+async def test_nonfinite_reload_and_commit_preserve_snapshot(tmp_path: Path, number: float) -> None:
+    path = tmp_path / "config.json"
+    path.write_text('{"valid": 1}')
+    files = BoundedOffload(capacity=2, name="test-files")
+    store = AsyncConfig(lambda: Config(path=path, start_backup=False), files=files)
+    await store.start()
+    try:
+        original = path.read_bytes()
+        with pytest.raises(SchemaValidationError, match="non-finite"):
+            await store.mutate(lambda tx: tx.__setitem__("extension", [{"value": number}]))
+        assert store.view() == {"valid": 1}
+        assert path.read_bytes() == original
+
+        invalid = json.dumps({"extension": number})
+        path.write_text(invalid)
+        with pytest.raises(FileCorruptionError):
+            await store.reload()
+        assert store.view() == {"valid": 1}
+        assert path.read_text() == invalid
+    finally:
+        await store.close()
+        await files.close()
 
 
 async def test_snapshots_reload_failure_and_atomic_commit(

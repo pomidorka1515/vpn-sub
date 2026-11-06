@@ -120,9 +120,12 @@ def atomic_write_json(
 
         with Path(temp_path).open("w", encoding="utf-8") as handle:
             if minify:
-                json.dump(data, handle, indent=None, separators=(",", ":"), ensure_ascii=False)
+                json.dump(
+                    data, handle, indent=None, separators=(",", ":"), ensure_ascii=False,
+                    allow_nan=False,
+                )
             else:
-                json.dump(data, handle, indent=indent, ensure_ascii=False)
+                json.dump(data, handle, indent=indent, ensure_ascii=False, allow_nan=False)
             handle.write("\n")
 
             if sync_mode != "none":

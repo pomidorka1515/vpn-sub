@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -13,11 +15,28 @@ from .constants import JsonValue
 from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
 
     from .core import Config
 
 from errors import ConfigError, FileCorruptionError, SchemaValidationError
+
+
+def reject_nonfinite_constant(value: str) -> object:
+    raise ValueError(f"Non-finite JSON number: {value}")
+
+
+def validate_finite_numbers(value: object) -> None:
+    """Reject non-finite numbers even in schema-free or extension data."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise SchemaValidationError("Config contains a non-finite number.")
+    if isinstance(value, Mapping):
+        for key, item in cast(Mapping[object, object], value).items():
+            validate_finite_numbers(key)
+            validate_finite_numbers(item)
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        for item in cast(Sequence[object], value):
+            validate_finite_numbers(item)
 
 
 def compile_schema(schema: Mapping[str, JsonValue]) -> Callable[[object], object]:
@@ -38,10 +57,10 @@ def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
         if cfg.read_only_jsonc:
             content = strip_jsonc_comments(content)
             content = strip_jsonc_trailing_commas(content)
-        data = json.loads(content)
+        data = json.loads(content, parse_constant=reject_nonfinite_constant)
     except FileNotFoundError:
         raise
-    except json.JSONDecodeError as exc:
+    except ValueError as exc:
         raise FileCorruptionError(f"Config file '{cfg.path}' is not valid JSON: {exc}") from exc
 
     if not isinstance(data, dict):
@@ -104,6 +123,7 @@ def load_schema[Doc](
 
 
 def validate_schema[Doc](cfg: Config[Doc], data: dict[str, JsonValue]) -> None:
+    validate_finite_numbers(data)
     schema = load_schema(cfg, data)
     if schema is None:
         return
