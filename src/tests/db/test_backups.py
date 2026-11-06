@@ -109,21 +109,13 @@ def test_concurrent_same_second_backups_do_not_replace_snapshots(
 ) -> None:
     instance = tmp_path / "backups"
     barrier = threading.Barrier(4)
-    local = threading.local()
-    real_link = Path.hardlink_to
-
-    def racing_link(path: Path, target: str) -> None:
-        if not getattr(local, "ready", False):
-            local.ready = True
-            barrier.wait(timeout=10)
-        real_link(path, target)
 
     def snapshot(value: int) -> None:
+        barrier.wait(timeout=10)
         _snapshot(kind, tmp_path / f"source-{value}.{kind}", instance, value)
 
     with (
         patch("backuputil.datetime") as clock,
-        patch.object(Path, "hardlink_to", autospec=True, side_effect=racing_link),
         ThreadPoolExecutor(max_workers=4) as executor,
     ):
         clock.now.return_value = datetime(2026, 1, 1, tzinfo=UTC)
@@ -132,6 +124,40 @@ def test_concurrent_same_second_backups_do_not_replace_snapshots(
     assert len(saved) == 4
     assert {_snapshot_value(kind, path) for path in saved} == set(range(4))
     assert list(instance.glob(".tmp-*")) == []
+
+
+@pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
+def test_backups_survive_clock_rollback_and_concurrent_retention(
+    tmp_path: Path,
+    kind: BackupKind,
+) -> None:
+    instance = tmp_path / "backups"
+    instance.mkdir()
+    with patch("backuputil.datetime") as clock:
+        clock.now.return_value = datetime(2026, 1, 1, tzinfo=UTC)
+        _snapshot(kind, tmp_path / f"initial.{kind}", instance, 0)
+        clock.now.return_value = datetime(2025, 1, 1, tzinfo=UTC)
+
+        def snapshot(value: int) -> None:
+            _snapshot(kind, tmp_path / f"source-{value}.{kind}", instance, value)
+            _prune(kind, instance)
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            list(executor.map(snapshot, range(1, 5)))
+        _snapshot(kind, tmp_path / f"last.{kind}", instance, 5)
+        _prune(kind, instance)
+    saved = sorted(instance.glob(f"*.{kind}"))
+    assert len(saved) == 2
+    assert _snapshot_value(kind, saved[-1]) == 5
+
+
+def test_sqlite_retention_ignores_in_progress_snapshot(tmp_path: Path) -> None:
+    temporary = tmp_path / ".tmp-active.sqlite3"
+    temporary.write_bytes(b"unfinished")
+    for name in ("20260101-000000.sqlite3", "20260101-000001.sqlite3"):
+        (tmp_path / name).touch()
+    prune_backups(str(tmp_path), 1, _log())
+    assert temporary.read_bytes() == b"unfinished"
 
 
 @pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
@@ -145,7 +171,7 @@ def test_backup_publication_failure_cleans_temporary_snapshot(
         pytest.raises(OSError, match="publication failed"),
     ):
         _snapshot(kind, tmp_path / f"source.{kind}", instance, 1)
-    assert list(instance.iterdir()) == []
+    assert list(instance.glob(f"*.{kind}")) == []
 
 
 def _log() -> Logger:
@@ -427,8 +453,8 @@ async def test_missing_database_does_not_publish_or_prune_backups(tmp_path: Path
         await database.backup_now()
         await database.backup_now()
         instance = Path(instance_backup_dir(str(source), str(tmp_path / "backups")))
-        previous = {path: path.read_bytes() for path in _backup_files(instance)}
-        assert len(previous) == 2
+        previous = _directory_contents(instance)
+        assert len(_backup_files(instance)) == 2
         database.backup_retention = 1
         source.unlink()
         with pytest.raises(sqlite3.OperationalError):

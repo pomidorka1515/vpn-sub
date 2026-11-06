@@ -100,7 +100,9 @@ def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None
 
 def prune_backups(instance_dir: str, retention: int, log: Logger) -> None:
     """Keep only the N most recent database backups."""
-    files = sorted(Path(instance_dir).glob("*.sqlite3"))
+    files = sorted(
+        path for path in Path(instance_dir).glob("*.sqlite3") if not path.name.startswith(".tmp-")
+    )
     to_delete = files[:-retention]
     for path in to_delete:
         try:
