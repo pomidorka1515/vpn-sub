@@ -155,12 +155,15 @@ async function doRegister() {
       name: document.getElementById('regName').value
     });
     if (res.success) {
-      const login = await api('POST', '/login', {
-        username,
-        password: pass
-      });
-      if (login.success) window.location.href = DASHBOARD;
-      else switchTab('login');
+      let failure;
+      try {
+        const login = await api('POST', '/login', { username, password: pass });
+        if (login?.success) { window.location.href = DASHBOARD; return; }
+        failure = login?.msg || t('network_err');
+      } catch { failure = t('network_err'); }
+      switchTab('login');
+      document.getElementById('loginUser').value = username;
+      showError((window.lang === 'ru' ? 'Аккаунт создан. Войдите вручную: ' : 'Account created. Please sign in manually: ') + failure);
     } else showError(res.msg || t('network_err'));
   } catch { showError(t('network_err')); }
   btn.disabled = false;
