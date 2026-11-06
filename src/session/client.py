@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING, Literal, Unpack
 from urllib.parse import urlsplit
 
 import aiohttp
+from dacite import from_dict
 from multidict import CIMultiDict
 
 from app_runtime.tasks import TaskRegistry
+from custom_types import Inbound
 from loggers import Logger, color_status
 
 from .transport import AiohttpPanelTransport, PanelResponse
@@ -207,8 +209,21 @@ class XUiSession:
         except json.JSONDecodeError, UnicodeDecodeError:
             self._mark_dead("invalid health response")
             return
-        if not isinstance(payload, dict) or not payload.get("success"):
+        if not isinstance(payload, dict) or payload.get("success") is not True:
             self._mark_dead("unsuccessful health response")
+            return
+        rows = payload.get("obj")
+        if not isinstance(rows, list):
+            self._mark_dead("invalid health response")
+            return
+        try:
+            for row in rows:
+                if not isinstance(row, dict):
+                    self._mark_dead("invalid health response")
+                    return
+                from_dict(Inbound, row)
+        except Exception:
+            self._mark_dead("invalid health response")
             return
         was_dead = self.dead
         self.dead = False

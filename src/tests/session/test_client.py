@@ -22,6 +22,7 @@ from session import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from config import JsonValue
     from session.transport import RequestKwargs, XUiPanelTransport
 
 
@@ -137,7 +138,7 @@ async def test_unavailable_recovery_and_redaction(
 ) -> None:
     transport = FakePanelTransport(
         error,
-        PanelResponse.from_json({"success": True}),
+        PanelResponse.from_json({"success": True, "obj": []}),
         PanelResponse.from_json({"success": True}),
     )
     panel = client(transport, verbose=True)
@@ -182,6 +183,82 @@ async def test_invalid_health_response_marks_dead(response: PanelResponse) -> No
     try:
         await panel.check_health()
         assert panel.dead
+    finally:
+        await panel.close()
+
+
+def inbound_row() -> dict[str, JsonValue]:
+    return {
+        "id": 1,
+        "up": 0,
+        "down": 0,
+        "total": 0,
+        "remark": "test",
+        "enable": True,
+        "expiryTime": 0,
+        "trafficReset": "",
+        "lastTrafficResetTime": 0,
+        "clientStats": [],
+        "listen": "",
+        "port": 443,
+        "protocol": "vless",
+        "settings": {},
+        "streamSettings": {"network": "tcp"},
+        "tag": "",
+        "sniffing": {},
+    }
+
+
+INVALID_HEALTH_PAYLOADS: list[JsonValue] = [
+    {"success": True},
+    {"success": True, "obj": None},
+    {"success": True, "obj": {}},
+    {"success": True, "obj": ""},
+    {"success": True, "obj": [None]},
+    {"success": True, "obj": [{}]},
+    {"success": True, "obj": [inbound_row(), {"id": 2}]},
+    {"success": True, "obj": [inbound_row() | {"port": "443"}]},
+    {"success": True, "obj": [inbound_row() | {"clientStats": [{}]}]},
+    {"success": 1, "obj": []},
+    {"success": "true", "obj": []},
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", INVALID_HEALTH_PAYLOADS)
+async def test_invalid_inbound_health_does_not_recover(payload: JsonValue) -> None:
+    transport = FakePanelTransport(
+        TimeoutError(),
+        PanelResponse.from_json(payload),
+        PanelResponse.from_json({"success": True, "obj": []}),
+    )
+    panel = client(transport)
+    await panel.start()
+    try:
+        assert (await panel.get("panel/api/server/status")).status_code == 503
+        assert panel.dead
+        await panel.check_health()
+        assert panel.dead
+        assert (await panel.get("panel/api/server/status")).status_code == 503
+        assert len(transport.calls) == 2
+        await panel.check_health()
+        assert not panel.dead
+    finally:
+        await panel.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rows", [[], [inbound_row()]])
+async def test_valid_inbound_health_recovers(rows: list[JsonValue]) -> None:
+    panel = client(
+        FakePanelTransport(TimeoutError(), PanelResponse.from_json({"success": True, "obj": rows})),
+    )
+    await panel.start()
+    try:
+        await panel.get("panel/api/server/status")
+        assert panel.dead
+        await panel.check_health()
+        assert not panel.dead
     finally:
         await panel.close()
 
