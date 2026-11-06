@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,7 +16,12 @@ from config import Config, LangConfig
 from errors import AppError, NotFoundError
 from tests.support.config import config_mock, language_config, profile_config, subscription_config
 from tests.support.paths import REPO_ROOT
+from tests.support.subscriptions import make_subscription
 from tests.support.telegram import subscription_mock, telegram_mock
+from tests.support.users import create_alice
+
+if TYPE_CHECKING:
+    from db import Database
 
 TEXTS = {
     "en": {
@@ -267,9 +272,59 @@ async def test_fingerprint_and_settings_steps(
     subscription.business_svc.update_params.assert_called_with(
         username="alice",
         ext_username="bob",
-        ext_password="secret",
+        ext_password=" secret ",
     )
     assert "pass ok" in telegram.send_message.call_args.args[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "password",
+    [" secret", "secret ", " secret ", "\tsecret\t", " ", "\t \n", "x", " " + "é" * 126 + " "],
+)
+async def test_password_change_preserves_text_for_login(
+    database: Database,
+    settings: tuple[PublicSettingsMixin, MagicMock, MagicMock],
+    login: tuple[PublicLoginMixin, MagicMock, MagicMock],
+    password: str,
+) -> None:
+    sub = await make_subscription(database)
+    await create_alice(database, ext_username="alice-login")
+    await sub.telegram_svc.set_telegram_user(42, "alice")
+    settings_mixin, settings_bot, _ = settings
+    login_mixin, login_bot, _ = login
+    settings_mixin.sub = sub
+    login_mixin.sub = sub
+
+    await settings_mixin.step_settings_pass(_message(password))
+
+    assert settings_bot.send_message.call_args.args[1] == "pass ok"
+    if password.strip() != password:
+        await login_mixin.step_login_pass(_message(password.strip()), "alice-login")
+        assert login_bot.send_message.call_args.args[1] == "out"
+    await login_mixin.step_login_pass(_message(password), "alice-login")
+    assert login_bot.send_message.call_args.args[1] == "in"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("password", ["", "x" * 129, " " + "x" * 127 + " "])
+async def test_password_change_uses_shared_length_validation(
+    database: Database,
+    settings: tuple[PublicSettingsMixin, MagicMock, MagicMock],
+    password: str,
+) -> None:
+    sub = await make_subscription(database)
+    old_hash = await sub.password_svc.hash("old password")
+    await create_alice(database, ext_username="alice-login", ext_password_hash=old_hash)
+    await sub.telegram_svc.set_telegram_user(42, "alice")
+    mixin, telegram, _ = settings
+    mixin.sub = sub
+
+    await mixin.step_settings_pass(_message(password))
+
+    assert "1-128 characters" in telegram.send_message.call_args.args[1]
+    assert await sub.password_svc.validate_credentials("alice-login", "old password") == "alice"
+    assert await database.ext_password("alice-login") == old_hash
 
 
 @pytest.fixture

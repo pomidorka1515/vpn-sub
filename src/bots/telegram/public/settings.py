@@ -186,8 +186,6 @@ class PublicSettingsMixin(PublicFeatureMixin):
                 reply_markup=await self.get_menu(uid),
             )
             return None
-        new_pass = text.strip()
-
         # Need current ext_username to update password (update_params requires both)
         ext_username = await self.sub.user_svc.get_external_username(username)
         if not ext_username:
@@ -202,7 +200,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
             await self.sub.business_svc.update_params(
                 username=username,
                 ext_username=ext_username,
-                ext_password=new_pass,
+                ext_password=text,
             )
         except AppError as error:
             await self.bot.send_message(
