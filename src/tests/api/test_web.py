@@ -8,6 +8,7 @@ import pytest_asyncio
 from argon2 import PasswordHasher
 
 from api import AsyncWebApi
+from fonts import FONT_FILES, font_version
 from tests.support.api import api_app, config_snapshot, make_subscription, make_watch
 from tests.support.config import subscription_config
 
@@ -247,7 +248,7 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None
 @pytest.mark.parametrize(
     ("path", "mimetype", "fragment"),
     [
-        ("common.css", "text/css", b"url('/custom/fonts/outfit-latin.woff2')"),
+        ("common.css", "text/css", b"url('/custom/fonts/outfit-latin.woff2?v="),
         ("fonts/outfit-latin.woff2", "font/woff2", b"wOF2"),
         ("dashboard.js", "text/javascript", b"function loadStats"),
         ("history.js", "text/javascript", b"function loadHistory"),
@@ -274,7 +275,7 @@ async def test_prefixed_static_assets(
     assert isinstance(body, bytes)
     assert fragment in body
     extras = {
-        "common.css": (b"--accent:", b"url('/custom/fonts/jetbrains-mono-cyrillic.woff2')"),
+        "common.css": (b"--accent:",),
         "admin/charts.js": (b"from './charts/render.js?v=",),
         "admin/charts/render.js": (b"from './theme.js?v=",),
         "admin/config.js": (b"function saveConfig", b"from './json-editor.js?v="),
@@ -282,7 +283,20 @@ async def test_prefixed_static_assets(
     for part in extras.get(path, ()):
         assert part in body
     if path == "common.css":
-        for part in (b"fonts.googleapis", b"fonts.gstatic", b"__FONT_BASE__", b"/* __FONTS__ */"):
+        for name in FONT_FILES:
+            url = f"/custom/fonts/{name}?v={font_version()}"
+            assert f"url('{url}')".encode() in body
+            font = await web_api[0].test_client().get(url)
+            assert font.status_code == 200
+            assert (await font.get_data())[:4] == b"wOF2"
+            assert "immutable" in font.headers["Cache-Control"]
+        for part in (
+            b"fonts.googleapis",
+            b"fonts.gstatic",
+            b"__FONT_BASE__",
+            b"__FONT_VERSION__",
+            b"/* __FONTS__ */",
+        ):
             assert part not in body
     if path.endswith(".woff2"):
         assert body[:4] == b"wOF2"

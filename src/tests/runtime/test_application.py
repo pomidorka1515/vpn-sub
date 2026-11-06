@@ -13,6 +13,7 @@ from app_runtime.lifecycle import RuntimeState
 from app_runtime.rate_limit import AsyncRateLimiter
 from bots.discord.host import SharedDiscordClient
 from errors import SchemaValidationError, ValidationError
+from fonts import FONT_FILES, font_version
 from tests.support.api import OpenRedis
 from tests.support.paths import REPO_ROOT
 
@@ -164,8 +165,15 @@ async def test_factory_schema_verbose_and_browser_assets(
         assert response.mimetype == "text/html"
         body = await response.get_data()
         assert isinstance(body, bytes)
-        assert b"url('/sub/fonts/outfit-latin.woff2')" in body
-        for part in (b"fonts.googleapis", b"fonts.gstatic", b"__FONT_BASE__", b"/* __FONTS__ */"):
+        for name in FONT_FILES:
+            assert f"url('/sub/fonts/{name}?v={font_version()}')".encode() in body
+        for part in (
+            b"fonts.googleapis",
+            b"fonts.gstatic",
+            b"__FONT_BASE__",
+            b"__FONT_VERSION__",
+            b"/* __FONTS__ */",
+        ):
             assert part not in body
     finally:
         await runtime.stop()
