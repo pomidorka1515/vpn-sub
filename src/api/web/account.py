@@ -48,7 +48,7 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
             return err("Invalid request", 400)
 
         response = await make_response(await send_file(buf, mimetype="image/png"))
-        response.headers["Cache-Control"] = "private, max-age=300"
+        response.headers["Cache-Control"] = "no-store"
         return response
 
     @requires_webapi_auth

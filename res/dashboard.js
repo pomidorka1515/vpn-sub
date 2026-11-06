@@ -34,6 +34,12 @@ async function loadStats() {
       if (!current()) return;
       if (!res) return;
       if (!res.success) { toast(res.msg || t('network_err'), 'error'); return; }
+      if (currentStats && currentStats.link !== res.obj.link) {
+        ++qrGen;
+        document.getElementById('qrSection').style.display = 'none';
+        const canvas = document.getElementById('qrCanvas');
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      }
       currentStats = res.obj;
       renderStats(res.obj);
     });
@@ -272,7 +278,7 @@ async function showQrCode() {
   await withBusy(document.getElementById('btnQr'), async () => {
     let objectUrl;
     try {
-      const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
+      const res = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
       if (gen !== qrGen) return;
       if (!res.ok) throw new Error(t('qr_failed'));
       const blob = await res.blob();
