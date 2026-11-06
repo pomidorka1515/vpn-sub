@@ -251,19 +251,9 @@ class LinesConfig:
                     return 0
 
     def clear(self) -> None:
-        """Truncate the file. Thread-safe.
-
-        Uses 'r+' mode to acquire only the shared lock needed for truncation,
-        avoiding a deadlock hazard where the lockfile's exclusive lock would
-        block on a process mid-append/compact/clear that holds it.
-        """
+        """Truncate the file under the exclusive lockfile lock. Thread-safe."""
         with self._lock:
-            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
-                # 'r+' acquires a shared (advisory) lock on the data fd.
-                # This is the minimum lock level needed for truncation —
-                # unlike 'w' mode, it won't deadlock if another process is
-                # mid-append/compact/clear and holds the lockfile's exclusive
-                # lock while holding the data file's shared lock.
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 with Path(self._path).open("r+", encoding="utf-8") as f:
                     f.truncate(0)
                     if self._sync_mode != "none":
