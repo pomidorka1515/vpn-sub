@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock
 
 import pytest
 
+from core.services.refresh import RefreshResult
 from errors import AppError, PanelUnavailableError
 
 if TYPE_CHECKING:
@@ -13,6 +15,32 @@ if TYPE_CHECKING:
     from core import Subscription
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_user_refresh_requires_post(
+    admin_api: tuple[Quart, Subscription],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, sub = admin_api
+    refresh = AsyncMock(return_value=RefreshResult([], None, 1, 1))
+    monkeypatch.setattr(sub.refresh_svc, "refresh", refresh)
+    client = app.test_client()
+    for send in (client.get, client.head):
+        response = await send(
+            "/sub/api/api/user/refresh",
+            headers={"Authorization": "secret"},
+        )
+        assert response.status_code == 405
+        refresh.assert_not_called()
+
+    response = await client.post(
+        "/sub/api/api/user/refresh",
+        headers={"Authorization": "secret"},
+    )
+    assert response.status_code == 200
+    assert (await response.get_json())["msg"] == "Refreshed all users."
+    refresh.assert_called_once_with()
+    refresh.assert_awaited_once_with()
 
 
 async def test_user_refresh_aborts_on_non_panel_error(
@@ -38,7 +66,7 @@ async def test_user_refresh_aborts_on_non_panel_error(
             raise AppError("panel rejected")
 
     sub.business_svc.add_users = add_users  # type: ignore[method-assign]
-    response = await app.test_client().get(
+    response = await app.test_client().post(
         "/sub/api/api/user/refresh",
         headers={"Authorization": "secret"},
     )
@@ -80,7 +108,7 @@ async def test_user_refresh_uses_bounded_workers(
     monkeypatch.setattr(sub.user_svc, "list_users", list_users)
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
     refresh = asyncio.create_task(
-        app.test_client().get(
+        app.test_client().post(
             "/sub/api/api/user/refresh",
             headers={"Authorization": "secret"},
         ),
@@ -131,7 +159,7 @@ async def test_user_refresh_reports_panel_failures_in_user_order(
     monkeypatch.setattr(sub.user_svc, "list_users", list_users)
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
     async with asyncio.timeout(5):
-        response = await app.test_client().get(
+        response = await app.test_client().post(
             "/sub/api/api/user/refresh",
             headers={"Authorization": "secret"},
         )
@@ -178,7 +206,7 @@ async def test_user_refresh_abort_drains_in_flight_and_stops_new_users(
     monkeypatch.setattr(sub.user_svc, "list_users", list_users)
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
     refresh = asyncio.create_task(
-        app.test_client().get(
+        app.test_client().post(
             "/sub/api/api/user/refresh",
             headers={"Authorization": "secret"},
         ),

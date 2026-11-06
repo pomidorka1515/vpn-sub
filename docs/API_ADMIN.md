@@ -169,8 +169,9 @@ Response (error):
   
 ---  
   
-### GET /api/user/refresh  
+### POST /api/user/refresh  
 Description: Re-sync all users to all panels. **This can take a lot of time.**  
+GET and HEAD return HTTP 405 without starting a refresh.  
 Authentication: header  
 Body: none  
 Response (success):  

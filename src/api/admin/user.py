@@ -23,7 +23,7 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
         Route("GET", "/api/user/info", "user_info"),
         Route("POST", "/api/user/add", "user_add"),
         Route("POST", "/api/user/delete", "user_delete"),
-        Route("GET", "/api/user/refresh", "user_refresh"),
+        Route("POST", "/api/user/refresh", "user_refresh"),
         Route("GET", "/api/user/onlines", "user_onlines"),
         Route("POST", "/api/user/reset", "user_reset"),
         Route("POST", "/api/user/update", "user_update"),

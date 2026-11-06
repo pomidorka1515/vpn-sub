@@ -134,7 +134,7 @@ export async function doRefreshUsers() {
 }
 
 async function doRefreshUsersRequest(result, current) {
-  const res = await api('GET', '/api/user/refresh');
+  const res = await api('POST', '/api/user/refresh');
   if (!current()) return;
   if (res && res.success) {
     result.innerHTML = `<div class="result-title ok">${t('refreshed')}</div><div class="result-msg">${escapeHtml(res.msg || '')}</div>`;
