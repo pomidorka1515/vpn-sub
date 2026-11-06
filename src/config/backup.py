@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, cast
 from backuputil import publish_backup
 from loggers import Logger
 
+from .atomic import locked_file
 from .constants import JsonValue
 from .jsonc import strip_jsonc_comments, strip_jsonc_trailing_commas
 
@@ -33,6 +34,7 @@ def do_backup(
     raw: bool = False,
     jsonc: bool = False,
     data: dict[str, JsonValue] | None = None,
+    lockfile_path: str | None = None,
 ) -> None:
     """Take a snapshot and write it to a per-instance subdirectory.
 
@@ -45,6 +47,7 @@ def do_backup(
                writing the normalized backup.
         data: When set, snapshot this document instead of reading path. The
               scheduled thread leaves it unset so a backup still matches disk.
+        lockfile_path: Advisory lock used while copying a raw source file.
 
     """
     Path(instance_dir).mkdir(parents=True, exist_ok=True)
@@ -53,7 +56,8 @@ def do_backup(
         fd, tmp = tempfile.mkstemp(dir=instance_dir, prefix=".tmp-", suffix=".tmp")
         os.close(fd)
         try:
-            shutil.copy2(path, tmp)
+            with locked_file(path, lockfile_path=lockfile_path, exclusive=False):
+                shutil.copy2(path, tmp)
             backup_path = publish_backup(tmp, instance_dir, ".jsonl")
         except FileNotFoundError:
             with contextlib.suppress(FileNotFoundError):
@@ -127,6 +131,7 @@ def make_backup_thread(
     config_type: CONFIG_TYPES,
     raw: bool = False,
     jsonc: bool = False,
+    lockfile_path: str | None = None,
 ) -> threading.Thread:
     """
     Args:
@@ -137,6 +142,7 @@ def make_backup_thread(
         stop_event: Threading event to use.
         raw: see do_backup raw kwarg.
         jsonc: see do_backup jsonc kwarg.
+        lockfile_path: see do_backup lockfile_path kwarg.
 
     """
 
@@ -155,7 +161,15 @@ def make_backup_thread(
         failures = 0
         while not stop_event.wait(backup_interval):
             try:
-                do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
+                do_backup(
+                    path,
+                    indent,
+                    instance_dir,
+                    log,
+                    raw=raw,
+                    jsonc=jsonc,
+                    lockfile_path=lockfile_path,
+                )
                 prune_backups(instance_dir, backup_retention, log, config_type=config_type)
                 log.info("backup successful")
                 failures = 0
@@ -168,7 +182,15 @@ def make_backup_thread(
             if stop_event.wait(retry_interval):
                 break
             try:
-                do_backup(path, indent, instance_dir, log, raw=raw, jsonc=jsonc)
+                do_backup(
+                    path,
+                    indent,
+                    instance_dir,
+                    log,
+                    raw=raw,
+                    jsonc=jsonc,
+                    lockfile_path=lockfile_path,
+                )
                 prune_backups(instance_dir, backup_retention, log, config_type=config_type)
                 log.info("backup retry successful")
                 failures = 0

@@ -102,6 +102,7 @@ class LinesConfig:
                     stop_event=self._backup_stop,
                     config_type="jsonl",
                     raw=True,
+                    lockfile_path=self._lockfile_path,
                 )
                 self._backup_t.start()
             else:
@@ -318,7 +319,9 @@ class LinesConfig:
         if self._backup_dir is None:
             raise ConfigError("backup_now() requires a backup_dir to be configured.")
         instance_dir = instance_backup_dir(self._path, self._backup_dir)
-        do_backup(self._path, 4, instance_dir, self.log, raw=True)
+        do_backup(
+            self._path, 4, instance_dir, self.log, raw=True, lockfile_path=self._lockfile_path
+        )
         prune_backups(instance_dir, self._backup_retention, self.log, config_type="jsonl")
 
     def close(self) -> None:
