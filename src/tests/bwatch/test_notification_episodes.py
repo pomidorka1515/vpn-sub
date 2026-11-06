@@ -47,6 +47,7 @@ async def test_warning_bucket_reopens_after_entitlement_change(
         elif change.startswith("wl"):
             await database.increment_usage("alice", whitelist=810_000_000)
         await watch._quota("alice", recover=False)
+        await watch.drain_notifications()
         assert send.await_count == 1
         if change == "main_topup":
             await database.update_user("alice", bw_limit=2)
@@ -65,6 +66,7 @@ async def test_warning_bucket_reopens_after_entitlement_change(
         await watch.close()
         watch = BWatch(sub.res.cfg, database, sub, notifier=notifier, scheduled=False)
         await watch._quota("alice", recover=False)
+        await watch.drain_notifications()
         assert send.await_count == 2
         assert send.await_args_list[0].args[1] == send.await_args_list[1].args[1]
     finally:

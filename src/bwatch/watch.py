@@ -73,6 +73,7 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
         self._snap_reset_mem: Counters = {}
         self._snap_reset_wl_mem: Counters = {}
         self._tasks = TaskRegistry()
+        self._init_notifications()
         self._jobs: dict[str, asyncio.Lock] = {}
         self._started = False
         self._closed = False
@@ -91,6 +92,7 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
         if self._closed:
             raise RuntimeError("watcher is closed")
         self._failure = await self._load_failure()
+        await self._scan_notifications()
         states = await self.sub.user_svc.list_user_states()
         await self._load_usage_baselines(states)
         has_snapshot_baselines = await self._load_snapshot_baselines(states)
@@ -121,6 +123,7 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
     async def close(self) -> None:
         self._closed = True
         await self._tasks.drain(cancel=True)
+        await self._close_notifications()
 
     async def stop(self) -> None:
         await self.close()

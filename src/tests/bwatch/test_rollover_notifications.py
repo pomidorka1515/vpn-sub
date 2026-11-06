@@ -21,7 +21,9 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reason", ["traffic", "whitelist", "combined", "expiry", "expiry_whitelist"])
+@pytest.mark.parametrize(
+    "reason", ["traffic", "whitelist", "combined", "expiry", "expiry_whitelist"]
+)
 @pytest.mark.parametrize("delivered", [False, True])
 @pytest.mark.parametrize("boundary", ["before_reset", "after_reset", "after_reenable"])
 async def test_month_rollover_preserves_notification_episodes(
@@ -75,6 +77,7 @@ async def test_month_rollover_preserves_notification_episodes(
         if not delivered:
             send.side_effect = RuntimeError("Telegram offline")
         await watch.check()
+        await watch.drain_notifications()
         assert bool(await db.notification_markers()) is delivered
         send.side_effect = None
         send.reset_mock()
@@ -116,7 +119,9 @@ async def test_month_rollover_preserves_notification_episodes(
         if boundary != "before_reset":
             # A quota check can win the race against the next recovery poll.
             await watch.check()
+            await watch.drain_notifications()
         await watch.bandwidth_check()
+        await watch.drain_notifications()
         state = await db.get_user("alice")
         assert state is not None
         assert bool(state["enabled"]) is not expired
@@ -137,9 +142,11 @@ async def test_month_rollover_preserves_notification_episodes(
             assert "alice:expired:1" in await db.notification_markers()
             await db.update_user("alice", expiry_time=0)
             await watch.bandwidth_check()
+            await watch.drain_notifications()
             expected.append("restored")
         await watch.check()
         await watch.bandwidth_check()
+        await watch.drain_notifications()
         assert sorted(call.args[1] for call in send.await_args_list) == sorted(expected)
         assert await db.get_metadata("user_notifications_pending:alice") is None
     finally:

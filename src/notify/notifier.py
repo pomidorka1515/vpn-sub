@@ -71,6 +71,8 @@ class Notifier:
         telegram_id: int | None,
         notice: Notice,
         seen: set[str],
+        *,
+        validate: Callable[[], Awaitable[bool]] | None = None,
     ) -> bool:
         async with self._delivery_locks.setdefault(username, asyncio.Lock()), self._delivery_slots:
             key = account_key(username, notice.marker)
@@ -89,7 +91,10 @@ class Notifier:
                 except ValueError, KeyError, IndexError, AttributeError, TypeError:
                     self._template_error(notice.kind.text_key, "invalid")
                     return False
-                await asyncio.wait_for(self._async_send(telegram_id, text), self._timeout)
+                if validate is not None and not await validate():
+                    return False
+                async with asyncio.timeout(self._timeout):
+                    await self._async_send(telegram_id, text)
             except Exception:
                 self._log.exception("failed to send %s to %s", notice.kind.kind_id, username)
                 return False

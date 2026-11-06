@@ -28,7 +28,14 @@ if TYPE_CHECKING:
 @pytest.mark.parametrize("recover", [False, True])
 @pytest.mark.parametrize(
     "boundary",
-    ["before_intent", "after_intent", "database_failure", "after_commit", "panel_failure", "after_sync"],
+    [
+        "before_intent",
+        "after_intent",
+        "database_failure",
+        "after_commit",
+        "panel_failure",
+        "after_sync",
+    ],
 )
 async def test_transition_intent_survives_interruption_and_restart(
     tmp_path: Path,
@@ -82,6 +89,7 @@ async def test_transition_intent_survives_interruption_and_restart(
         )
         if recover:
             await watch._quota("alice", recover=False)
+            await watch.drain_notifications()
             await db.update_user("alice", expiry_time=0, bw_used=0, wl_bw_used=0)
             send.reset_mock()
         before = await db.get_user("alice")
@@ -138,6 +146,7 @@ async def test_transition_intent_survives_interruption_and_restart(
         sub = await make_subscription(db, tmp_path, panels=[main], whitelist_panel=whitelist)
         watch = BWatch(sub.res.cfg, db, sub, notifier=notifier, scheduled=False)
         await watch._quota("alice", recover=recover)
+        await watch.drain_notifications()
         assert {call.args[1] for call in send.await_args_list} == expected
         assert send.await_count == len(expected)
         assert await db.get_metadata("user_sync_pending:alice") is None
@@ -145,6 +154,7 @@ async def test_transition_intent_survives_interruption_and_restart(
         assert main.clients[0].enable is (recover or not (expired or exhausted))
         assert whitelist.clients[0].enable is (recover or not wl_exhausted)
         await watch._quota("alice", recover=recover)
+        await watch.drain_notifications()
         assert send.await_count == len(expected)
     finally:
         await watch.close()
@@ -184,6 +194,7 @@ async def test_transition_send_is_at_least_once(
         await db.increment_usage("alice", regular=10**9)
         if recover:
             await watch._quota("alice", recover=False)
+            await watch.drain_notifications()
             await db.update_user("alice", bw_used=0)
             send.reset_mock()
         with monkeypatch.context() as patch:
@@ -199,14 +210,17 @@ async def test_transition_send_is_at_least_once(
 
                 patch.setattr(db, "delete_metadata", cleanup)
             else:
-                patch.setattr(db, "sync_notifications", AsyncMock(side_effect=asyncio.CancelledError))
-            with pytest.raises(asyncio.CancelledError):
-                await watch._quota("alice", recover=recover)
+                patch.setattr(
+                    db, "sync_notifications", AsyncMock(side_effect=asyncio.CancelledError)
+                )
+            await watch._quota("alice", recover=recover)
+            await watch.drain_notifications()
         assert send.await_count == 1
         assert await db.get_metadata("user_notifications_pending:alice") is not None
         await watch.close()
         watch = BWatch(sub.res.cfg, db, sub, notifier=notifier, scheduled=False)
         await watch._quota("alice", recover=recover)
+        await watch.drain_notifications()
         assert send.await_count == (1 if marker_committed else 2)
         assert await db.get_metadata("user_notifications_pending:alice") is None
     finally:
@@ -256,6 +270,7 @@ async def test_terminal_and_recovery_notifications_retry(
             whitelist=10**9 if wl_exhausted else 0,
         )
         await watch.check()
+        await watch.drain_notifications()
         assert send.await_count == terminal_count
         assert not await db.notification_markers()
         state = await db.get_user("alice")
@@ -265,9 +280,11 @@ async def test_terminal_and_recovery_notifications_retry(
             await watch.close()
             watch = BWatch(sub.res.cfg, db, sub, notifier=notifier, scheduled=False)
         await watch.check()
+        await watch.drain_notifications()
         assert send.await_count == 2 * terminal_count
         send.side_effect = None
         await asyncio.gather(watch.check(), watch.check())
+        await watch.drain_notifications()
         assert send.await_count == 3 * terminal_count
         assert len(await db.notification_markers()) == terminal_count
         assert await db.get_metadata("user_notifications_pending:alice") is None
@@ -276,6 +293,7 @@ async def test_terminal_and_recovery_notifications_retry(
         send.reset_mock()
         send.side_effect = RuntimeError("Telegram offline")
         await watch.bandwidth_check()
+        await watch.drain_notifications()
         assert send.await_count == recovery_count
         state = await db.get_user("alice")
         assert state is not None
@@ -286,11 +304,13 @@ async def test_terminal_and_recovery_notifications_retry(
             await watch.close()
             watch = BWatch(sub.res.cfg, db, sub, notifier=notifier, scheduled=False)
         await watch.bandwidth_check()
+        await watch.drain_notifications()
         assert send.await_count == 2 * recovery_count
         send.side_effect = None
         await watch.check()
         await watch.bandwidth_check()
         await watch.check()
+        await watch.drain_notifications()
         assert send.await_count == 3 * recovery_count
         assert await db.get_metadata("user_notifications_pending:alice") is None
         markers = await db.notification_markers()

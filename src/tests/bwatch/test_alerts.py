@@ -460,12 +460,14 @@ async def test_terminal_alert_uses_pre_disable_state_at_quota_boundary(
 
         db.user_tgids = mappings  # type: ignore[method-assign]
         await watch.check()
+        await watch.drain_notifications()
         result = await db.get_user("alice")
         assert result is not None
         assert bool(result["enabled_wl" if whitelist else "enabled"]) is not disabled
         assert sent == ["warning"]
         assert f"alice:{notice.marker}" in await db.notification_markers()
         await watch.check()
+        await watch.drain_notifications()
         assert sent == ["warning"]
     finally:
         await watch.close()
