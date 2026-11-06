@@ -50,9 +50,9 @@ class SysUtil:
         """Total and idle jiffies from the aggregate `/proc/stat` line."""
         with Path("/proc/stat").open(encoding="utf-8") as f:
             cpu_line = f.readline()
-        # user, nice, system, idle, iowait, irq, softirq, steal
+        # Guest time is already included in user/nice; iowait counts as busy.
         parts = cpu_line.split()
-        return sum(map(int, parts[1:])), int(parts[4])
+        return sum(map(int, parts[1:9])), int(parts[4])
 
     @staticmethod
     def _cpu_percent(previous: tuple[int, int], current: tuple[int, int]) -> float:

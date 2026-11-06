@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
+from unittest.mock import mock_open, patch
 
 import psutil
 import pytest
@@ -113,6 +114,13 @@ def test_ipaddr_returns_none_when_only_loopback(
     ips = SysUtil.ipaddr()
     assert ips.ipv4 is None
     assert ips.ipv6 is None
+
+
+def test_cpu_sample_excludes_guest_and_counts_iowait_as_busy() -> None:
+    with patch("pathlib.Path.open", mock_open(read_data="cpu 150 0 0 150 20 0 0 0 50 0\n")):
+        sample = SysUtil._cpu_sample()
+    assert sample == (320, 150)
+    assert SysUtil._cpu_percent((200, 100), sample) == 58.3
 
 
 def test_cpu_since_last_does_not_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
