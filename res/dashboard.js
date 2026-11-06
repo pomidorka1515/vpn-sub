@@ -312,7 +312,10 @@ async function showQrCode() {
 }
 
 function hideQrCode() {
+  ++qrGen;
   document.getElementById('qrSection').style.display = 'none';
+  const canvas = document.getElementById('qrCanvas');
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
 }
 
 let qrMode = 'link';
