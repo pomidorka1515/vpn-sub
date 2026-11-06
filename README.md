@@ -292,6 +292,8 @@ and does not touch the file. Stop the service first — a running v5 process
 reloads on file change and will misread the new objects.
 
 ```bash
+# IMPORTANT: install `fastjsonschema`
+python -m pip install fastjsonschema
 python scripts/migrate_profiles.py            # dry-run
 python scripts/migrate_profiles.py --apply    # rewrite config.json
 ```
