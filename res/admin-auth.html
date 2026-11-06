@@ -60,6 +60,7 @@ function showError(msg) {
 
 async function doLogin() {
   const btn = document.getElementById('loginBtn');
+  if (btn.disabled) return;
   btn.disabled = true;
   try {
     const res = await fetch(SESSION, {

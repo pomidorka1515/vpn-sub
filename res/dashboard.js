@@ -138,6 +138,7 @@ function copyLink() {
 }
 
 async function applyBonus() {
+  if (document.getElementById('btnApply').disabled) return;
   const code = document.getElementById('bonusInput').value.trim();
   if (!code) return;
   const msg = document.getElementById('bonusMsg');

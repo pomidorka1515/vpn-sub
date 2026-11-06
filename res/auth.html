@@ -107,6 +107,7 @@ function showError(msg) {
 
 async function doLogin() {
   const btn = document.getElementById('loginBtn');
+  if (btn.disabled) return;
   btn.disabled = true;
   try {
     const res = await api('POST', '/login', {
@@ -138,12 +139,13 @@ function validateUsername() {
 }
 
 async function doRegister() {
+  const btn = document.getElementById('regBtn');
+  if (btn.disabled) return;
   const username = document.getElementById('regUser').value;
   const pass = document.getElementById('regPass').value;
   const pass2 = document.getElementById('regPass2').value;
   if (pass !== pass2) { showError(t('passwords_not_match')); return; }
 
-  const btn = document.getElementById('regBtn');
   btn.disabled = true;
   try {
     const res = await api('POST', '/register', {
