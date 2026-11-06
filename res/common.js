@@ -47,6 +47,19 @@
     el.setAttribute('role', 'alert'); el.setAttribute('aria-live', 'polite'); el.onclick = () => el.remove(); document.body.appendChild(el);
     setTimeout(() => el.remove(), 2500);
   };
+  w.logoutWarning = function () {
+    let el = document.getElementById('logoutWarning');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'logoutWarning';
+      el.className = 'result-box error';
+      el.setAttribute('role', 'alert');
+      document.body.prepend(el);
+    }
+    el.textContent = w.lang === 'ru'
+      ? 'Не удалось подтвердить выход. Сеанс может оставаться активным; повторите попытку.'
+      : 'Could not confirm logout. Your session may still be active; please retry.';
+  };
   w.api = async function (method, path, body, options = {}) {
     const cfg = w.apiConfig || {};
     const str = (v) => (typeof v === 'function' ? v() : v);

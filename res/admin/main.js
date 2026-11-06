@@ -89,23 +89,32 @@ window.apiConfig = {
 };
 
 async function doLogout() {
-  try {
+  await withBusy(document.getElementById('btnLogout'), async () => {
+   try {
     // Logout can be clicked before bootstrap completes.
     let token = state.apiToken;
     if (!token) {
       const res = await fetch(adminPath('/token'), { credentials: 'same-origin' });
-      token = (await res.json()).obj?.token;
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.obj?.token) throw new Error('Token unavailable');
+      token = data.obj.token;
     }
     const res = await fetch(adminPath('/logout'), {
       method: 'POST', credentials: 'same-origin', headers: { 'X-Admin-CSRF': token || '' },
     });
-    if (!res.ok && res.status !== 401) throw new Error('Logout failed');
-  } catch {
-    toast(t('network_err'), 'error');
-    return;
-  }
-  state.apiToken = '';
-  window.location.href = adminPath('/login');
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) throw new Error('Logout failed');
+   } catch {
+    try {
+      const probe = await fetch(adminPath('/token'), { credentials: 'same-origin', cache: 'no-store' });
+      if (probe.status !== 401) { logoutWarning(); return; }
+    } catch { logoutWarning(); return; }
+   }
+   state.apiToken = '';
+   state.baseUrl = '';
+   state.authBlocked = true;
+   window.location.href = adminPath('/login');
+  });
 }
 
 let leaving = false;

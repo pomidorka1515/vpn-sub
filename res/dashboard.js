@@ -242,8 +242,18 @@ async function doDelete() {
 }
 
 async function doLogout() {
-  try { await api('POST', '/logout'); } catch {}
-  window.location.href = window.AUTH_PAGE;
+  await withBusy(document.getElementById('btnLogout'), async () => {
+    try {
+      const res = await fetch(window.API + '/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) { window.location.href = window.AUTH_PAGE; return; }
+    } catch {}
+    try {
+      const probe = await fetch(window.API + '/stats', { credentials: 'same-origin', cache: 'no-store' });
+      if (probe.status === 401) { window.location.href = window.AUTH_PAGE; return; }
+    } catch {}
+    logoutWarning();
+  });
 }
 
 async function showQrCode() {
