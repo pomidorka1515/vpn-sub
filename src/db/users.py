@@ -14,6 +14,17 @@ from .telegram import set_telegram_mapping
 if TYPE_CHECKING:
     from custom_types import UserFields
 
+    from .common import Connection
+
+
+async def check_uuid_available(conn: Connection, uuid: str, owner: str | None = None) -> None:
+    row = await conn.row("SELECT username FROM users WHERE uuid = ?", (uuid,))
+    claim = await conn.row(
+        "SELECT value FROM app_metadata WHERE key = ?", (f"uuid_reservation:{uuid}",)
+    )
+    if (row is not None and row[0] != owner) or (claim is not None and claim[0] != owner):
+        raise DuplicateError("UUID already exists or is reserved")
+
 
 class UsersMixin(ConnectionMixin):
     async def get_user(self, username: str) -> UserRecord | None:
@@ -69,6 +80,7 @@ class UsersMixin(ConnectionMixin):
     ) -> None:
         try:
             async with self.transaction(immediate=True) as conn:
+                await check_uuid_available(conn, uuid)
                 await conn.execute(
                     """INSERT INTO users
                     (username, uuid, token, fingerprint, displayname, enabled,
@@ -137,6 +149,8 @@ class UsersMixin(ConnectionMixin):
         try:
             async with self.transaction(immediate=True) as conn:
                 if updates:
+                    if "uuid" in updates:
+                        await check_uuid_available(conn, str(updates["uuid"]), username)
                     assignments = ", ".join(f"{key} = ?" for key in updates)
                     await conn.execute(
                         f"UPDATE users SET {assignments} WHERE username = ?",
@@ -160,6 +174,66 @@ class UsersMixin(ConnectionMixin):
 
     async def update_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         await self.set_user(username, **fields)
+
+    async def reserve_uuid(
+        self, username: str, expected_uuid: str, uuid: str, marker: str, *, reset: str | None = None
+    ) -> None:
+        """Reserve the target and publish the recovery marker in one transaction."""
+        async with self.transaction(immediate=True) as conn:
+            user = await conn.row("SELECT uuid FROM users WHERE username = ?", (username,))
+            if user is None or user[0] != expected_uuid:
+                raise DatabaseError("UUID update identity changed")
+            await check_uuid_available(conn, uuid, username)
+            await conn.execute(
+                "INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
+                (f"uuid_reservation:{uuid}", username),
+            )
+            await conn.execute(
+                "INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?)",
+                (f"uuid_rollback_failed:{username}", marker),
+            )
+            if reset is not None:
+                await conn.execute(
+                    "INSERT INTO app_metadata(key, value) VALUES (?, ?)",
+                    (f"user_reset_pending:{username}", reset),
+                )
+
+    async def finalize_uuid(self, username: str, expected_uuid: str, uuid: str) -> None:
+        """Commit the UUID and release only this operation's claim and marker."""
+        async with self.transaction(immediate=True) as conn:
+            claim = await conn.row(
+                "SELECT value FROM app_metadata WHERE key = ?", (f"uuid_reservation:{uuid}",)
+            )
+            if claim is None or claim[0] != username:
+                raise DatabaseError("UUID reservation ownership changed")
+            count = await conn.execute(
+                "UPDATE users SET uuid = ? WHERE username = ? AND uuid = ?",
+                (uuid, username, expected_uuid),
+            )
+            if count != 1:
+                raise DatabaseError("UUID update identity changed")
+            await conn.execute(
+                "DELETE FROM app_metadata WHERE key = ? AND value = ?",
+                (f"uuid_reservation:{uuid}", username),
+            )
+            await conn.execute(
+                "DELETE FROM app_metadata WHERE key = ?", (f"uuid_rollback_failed:{username}",)
+            )
+
+    async def clear_uuid_failure(self, username: str) -> None:
+        """Release standalone claims only after an operator clears the failure."""
+        async with self.transaction(immediate=True) as conn:
+            pending = await conn.row(
+                "SELECT 1 FROM app_metadata WHERE key = ?", (f"user_reset_pending:{username}",)
+            )
+            if pending is None:
+                await conn.execute(
+                    "DELETE FROM app_metadata WHERE substr(key, 1, 17) = 'uuid_reservation:' AND value = ?",
+                    (username,),
+                )
+            await conn.execute(
+                "DELETE FROM app_metadata WHERE key = ?", (f"uuid_rollback_failed:{username}",)
+            )
 
     async def set_enabled_pending(
         self,

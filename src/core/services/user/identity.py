@@ -137,9 +137,13 @@ class UserIdentityService(BusinessUserBase):
                 raise ConflictError("Reset recovery identity changed")
             # Only a durable reset intent proves ownership of both identities.
             expected_uuids.update((old_uuid, uid))
-        # Persist before writing: crash or forced runtime cancellation retains
-        # the same manual-repair marker used by the existing service.
-        await self.db.set_metadata(key, f"{int(time.time())}:UUID update in progress")
+        # The claim and recovery marker must commit before any external write.
+        try:
+            await self.db.reserve_uuid(
+                username, user["uuid"], uid, f"{int(time.time())}:UUID update in progress"
+            )
+        except DuplicateError as exc:
+            raise ConflictError("UUID exists") from exc
 
         async def write(panel: XUiSession) -> None:
             current = await self.panel_svc.get_client(panel, username)
@@ -169,12 +173,7 @@ class UserIdentityService(BusinessUserBase):
                 )
                 await self.db.set_metadata(key, f"{int(time.time())}:{outcome.panel}: {reason}")
                 raise outcome.error
-        try:
-            await self.db.update_user(username, uuid=uid)
-        except DuplicateError as exc:
-            await self.db.set_metadata(key, f"{int(time.time())}:db duplicate uuid")
-            raise ConflictError("UUID exists") from exc
-        await self.db.delete_metadata(key)
+        await self.db.finalize_uuid(username, user["uuid"], uid)
         await self._drop_cache()
         await self.audit_svc.audit_committed(
             name="user_update_uuid",
@@ -188,10 +187,16 @@ class UserIdentityService(BusinessUserBase):
         await self.require_recovered(username)
         user = await self.user_svc.user(username)
         uid, token = str(uuid.uuid4()), generate_token("sub")
-        await self.db.set_metadata(
-            f"user_reset_pending:{username}",
-            json.dumps({"uuid": uid, "token": token, "old_uuid": user["uuid"]}),
-        )
+        try:
+            await self.db.reserve_uuid(
+                username,
+                user["uuid"],
+                uid,
+                f"{int(time.time())}:UUID update in progress",
+                reset=json.dumps({"uuid": uid, "token": token, "old_uuid": user["uuid"]}),
+            )
+        except DuplicateError as exc:
+            raise ConflictError("UUID exists") from exc
         uuid_audit_error: CommittedAuditError | None = None
         try:
             await self.update_uuid(username, uid, _resetting=True)

@@ -282,4 +282,7 @@ class BusinessCodeService(BaseService):
     ) -> None:
         if kind not in {"uuid", "registration"}:
             raise ValidationError("Invalid rollback marker kind")
-        await self.db.delete_metadata(f"{kind}_rollback_failed:{username}")
+        if kind == "uuid":
+            await self.db.clear_uuid_failure(username)
+        else:
+            await self.db.delete_metadata(f"{kind}_rollback_failed:{username}")

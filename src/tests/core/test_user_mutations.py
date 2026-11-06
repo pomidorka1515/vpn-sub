@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import uuid
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from errors import PanelRejectedError, ValidationError
+from errors import ConflictError, DatabaseError, DuplicateError, PanelRejectedError, ValidationError
 from tests.support.panels import FakePanel, make_inbound, make_panel_client
 from tests.support.subscriptions import make_subscription
 from tests.support.users import USER_UUID, create_alice
@@ -485,7 +487,7 @@ async def test_rejected_uuid_update_marks_failure_without_compensation(
 
 
 @pytest.mark.asyncio
-async def test_uuid_db_conflict_marks_failure(database: Database) -> None:
+async def test_uuid_db_conflict_does_not_touch_panels(database: Database) -> None:
     panel = FakePanel(
         name="panel",
         inbounds=[make_inbound(1)],
@@ -503,14 +505,156 @@ async def test_uuid_db_conflict_marks_failure(database: Database) -> None:
         )
     )
 
-    from errors import ConflictError, DuplicateError
-
     with pytest.raises(ConflictError) as conflict:
         (await subscription.business_svc.update_uuid("alice", NEW_UUID))
 
     assert isinstance(conflict.value.__cause__, DuplicateError)
-    failures = await subscription.business_code_svc.get_rollback_failures()
-    assert failures["uuid"]["alice"]["reason"] == "db duplicate uuid"
+    assert panel.posts == []
+    assert panel.clients[0].uuid == USER_UUID
+    alice = await database.get_user("alice")
+    assert alice is not None
+    assert alice["uuid"] == USER_UUID
+    assert await database.get_metadata("uuid_rollback_failed:alice") is None
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_uuid_claims_and_creation_are_serialized(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bob_uuid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    panel = FakePanel(
+        clients=[make_panel_client("alice", [1]), make_panel_client("bob", [1], uuid=bob_uuid)]
+    )
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+    await database.create_user(
+        username="bob", uuid=bob_uuid, token="b" * 40, fingerprint="chrome", displayname="Bob"
+    )
+    await database.add_code("invite", "register", uses=1)
+    reserved, release = asyncio.Event(), asyncio.Event()
+    reserve = database.reserve_uuid
+
+    async def hold_claim(
+        username: str, expected_uuid: str, uuid: str, marker: str, *, reset: str | None = None
+    ) -> None:
+        await reserve(username, expected_uuid, uuid, marker, reset=reset)
+        if username == "alice":
+            reserved.set()
+            await release.wait()
+
+    monkeypatch.setattr(database, "reserve_uuid", hold_claim)
+    task = asyncio.create_task(subscription.business_svc.update_uuid("alice", NEW_UUID))
+    try:
+        await asyncio.wait_for(reserved.wait(), 5)
+        with pytest.raises(ConflictError, match="UUID exists"):
+            await subscription.business_svc.update_uuid("bob", NEW_UUID)
+        with pytest.raises(DuplicateError):
+            await database.create_user(
+                username="carol",
+                uuid=NEW_UUID,
+                token="c" * 40,
+                fingerprint="chrome",
+                displayname="Carol",
+            )
+        with pytest.raises(DuplicateError):
+            await database.update_user("bob", uuid=NEW_UUID)
+        with pytest.raises(DuplicateError):
+            await database.register_with_code(
+                code="invite",
+                username="dave",
+                uuid=NEW_UUID,
+                token="d" * 40,
+                fingerprint="chrome",
+                displayname="Dave",
+                ext_username="dave",
+                ext_password_hash="hash",
+            )
+        code = await database.get_code("invite")
+        assert code is not None
+        assert code["uses"] == 1
+        assert panel.posts == []
+        assert await database.get_metadata("uuid_rollback_failed:bob") is None
+    finally:
+        release.set()
+        await task
+    assert [url for url, _ in panel.posts] == ["panel/api/clients/update/alice"]
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") is None
+
+
+@pytest.mark.asyncio
+async def test_uuid_failure_reservation_survives_recovery_until_manual_clear(
+    database: Database,
+) -> None:
+    panel = FakePanel(
+        clients=[make_panel_client("alice", [1])],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+    with pytest.raises(PanelRejectedError):
+        await subscription.business_svc.update_uuid("alice", NEW_UUID)
+    await subscription.business_svc.recover_pending()
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") == "alice"
+    with pytest.raises(DuplicateError):
+        await database.create_user(
+            username="bob", uuid=NEW_UUID, token="b" * 40, fingerprint="chrome", displayname="Bob"
+        )
+    # Clearing an unrelated failure cannot release Alice's claim.
+    await subscription.business_code_svc.clear_rollback_failure("uuid", "bob")
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") == "alice"
+    await subscription.business_code_svc.clear_rollback_failure("uuid", "alice")
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") is None
+    assert await database.get_metadata("uuid_rollback_failed:alice") is None
+
+
+@pytest.mark.asyncio
+async def test_reset_reservation_survives_manual_clear_and_releases_after_replay(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel = FakePanel(
+        clients=[make_panel_client("alice", [1])],
+        post_payload={"success": False, "msg": "rejected", "obj": None},
+    )
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+    monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID(NEW_UUID))
+    with pytest.raises(PanelRejectedError):
+        await subscription.business_svc.reset_user("alice")
+    await subscription.business_code_svc.clear_rollback_failure("uuid", "alice")
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") == "alice"
+    with pytest.raises(DuplicateError):
+        await database.create_user(
+            username="bob", uuid=NEW_UUID, token="b" * 40, fingerprint="chrome", displayname="Bob"
+        )
+    panel._post_payload = None
+    await subscription.business_svc.recover_pending()
+    alice = await database.get_user("alice")
+    assert alice is not None
+    assert alice["uuid"] == NEW_UUID
+    assert panel.clients[0].uuid == NEW_UUID
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") is None
+    assert await database.get_metadata("user_reset_pending:alice") is None
+
+
+@pytest.mark.asyncio
+async def test_interrupted_claim_and_finalization_preserve_ownership(database: Database) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1])])
+    subscription = await make_subscription(database, panels=[panel])
+    await create_alice(database)
+    await database.reserve_uuid("alice", USER_UUID, NEW_UUID, "123:interrupted")
+    await subscription.business_svc.recover_pending()
+    assert panel.posts == []
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") == "alice"
+    with pytest.raises(DatabaseError, match="identity changed"):
+        await database.finalize_uuid("alice", NEW_UUID, NEW_UUID)
+    assert await database.get_metadata("uuid_rollback_failed:alice") == "123:interrupted"
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") == "alice"
+    with pytest.raises(DatabaseError, match="ownership changed"):
+        await database.finalize_uuid("bob", USER_UUID, NEW_UUID)
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") == "alice"
+    await subscription.business_code_svc.clear_rollback_failure("uuid", "alice")
+    assert await database.get_metadata(f"uuid_reservation:{NEW_UUID}") is None
 
 
 @pytest.mark.asyncio

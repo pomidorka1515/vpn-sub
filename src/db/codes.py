@@ -8,6 +8,7 @@ from custom_types import CodeRecord
 from errors import CodeError, DatabaseError, DuplicateError
 
 from .common import ConnectionMixin
+from .users import check_uuid_available
 
 if TYPE_CHECKING:
     from custom_types import BonusResult, RegisterCodeResult
@@ -135,6 +136,7 @@ class CodesMixin(ConnectionMixin):
                 )
                 if row is None or (not row["permanent"] and int(row["uses"]) < 1):
                     raise CodeError("invalid code")
+                await check_uuid_available(conn, uuid)
                 remaining = -1 if row["permanent"] else int(row["uses"]) - 1
                 await conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
                 expires_at = int(time.time() + int(row["days"]) * 86400) if int(row["days"]) else 0
