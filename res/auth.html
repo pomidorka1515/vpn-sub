@@ -165,7 +165,7 @@ async function doRegister() {
       } catch { failure = t('network_err'); }
       switchTab('login');
       document.getElementById('loginUser').value = username;
-      showError((window.lang === 'ru' ? 'Аккаунт создан. Войдите вручную: ' : 'Account created. Please sign in manually: ') + failure);
+      showError(t('account_created_login_failed') + failure);
     } else showError(res.msg || t('network_err'));
   } catch { showError(t('network_err')); }
   btn.disabled = false;

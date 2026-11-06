@@ -56,9 +56,7 @@
       el.setAttribute('role', 'alert');
       document.body.prepend(el);
     }
-    el.textContent = w.lang === 'ru'
-      ? 'Не удалось подтвердить выход. Сеанс может оставаться активным; повторите попытку.'
-      : 'Could not confirm logout. Your session may still be active; please retry.';
+    el.textContent = w.t('logout_unconfirmed');
   };
   w.api = async function (method, path, body, options = {}) {
     const cfg = w.apiConfig || {};
