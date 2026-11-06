@@ -42,7 +42,7 @@ async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 6
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 7
             )
             assert (
                 conn.execute(
@@ -107,6 +107,7 @@ async def test_session_expiry_migration_revokes_legacy_sessions(
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled")
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
         conn.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session_expires_at'")
+        conn.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
         conn.execute("UPDATE schema_version SET version = 4")
     db = Database(path=db_path)
     await db.start()
@@ -164,6 +165,7 @@ async def test_migration_repairs_negative_bandwidth_snapshot_values(
             wl_limit_gb, wl_used, ext_username, ext_password_hash, created_at
         FROM old_users;
         DROP TABLE old_users;
+        ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts;
         UPDATE schema_version SET version = 1;""",
     )
     connection.execute(
@@ -218,6 +220,7 @@ async def test_auth_token_migration_and_lookup(database: Database, db_path: Path
             wl_limit_gb, wl_used, ext_username, ext_password_hash, created_at
         FROM old_users;
         DROP TABLE old_users;
+        ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts;
         UPDATE schema_version SET version = 2;""",
     )
     connection.close()
@@ -247,6 +250,7 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
     connection.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
     connection.execute("ALTER TABLE users DROP COLUMN admin_disabled")
     connection.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
+    connection.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
     connection.execute("UPDATE schema_version SET version = 3")
     connection.commit()
     connection.close()
@@ -257,7 +261,7 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 6
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 7
             )
             assert (
                 conn.execute(
@@ -286,6 +290,7 @@ async def test_disable_intent_migration_preserves_legacy_flags(
     with sqlite3.connect(db_path) as conn:
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled")
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
+        conn.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
         conn.execute("UPDATE schema_version SET version = 5")
     for _ in range(2):
         db = Database(path=db_path, start_backup=False)
@@ -420,3 +425,36 @@ async def test_bandwidth_snapshot_preserves_named_integer_fields(database: Datab
         {"ts": 100, "up": 1, "down": 2, "wl_up": 3, "wl_down": 4},
     ]
     assert (await database.get_bandwidth_snapshots("snapshot", 101)) == []
+
+
+@pytest.mark.asyncio
+async def test_bandwidth_interval_migration_and_end_filtered_history(
+    database: Database,
+    db_path: Path,
+) -> None:
+    await create_user(database)
+    await database.add_bandwidth_snapshot("alice", 100, 1, 2, 3, 4)
+    await database.close()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
+        conn.execute("UPDATE schema_version SET version = 6")
+    db = Database(path=db_path, start_backup=False)
+    await db.start()
+    try:
+        legacy = await db.get_bandwidth_snapshots("alice", 0)
+        assert legacy[0].get("start_ts") is None
+        await db.add_bandwidth_snapshots([("alice", 200, 10, 20, 30, 40)], starts={"alice": 50})
+        # The interval crosses the cutoff: retain its true start, not the cutoff.
+        rows = await db.get_bandwidth_snapshots("alice", 150)
+        assert len(rows) == 1
+        assert rows[0].get("start_ts") == 50
+        await db.prune_bandwidth_snapshots(150)
+        assert (await db.get_bandwidth_snapshots("alice", 0))[0].get("start_ts") == 50
+        # A repeated same-second sample adds deltas but preserves the encompassing start.
+        await db.add_bandwidth_snapshots([("alice", 200, 1, 2, 3, 4)], starts={"alice": 200})
+        assert (await db.get_bandwidth_snapshots("alice", 0))[0].get("start_ts") == 50
+        # A legacy/unknown contribution makes the merged start unknown again.
+        await db.add_bandwidth_snapshot("alice", 200, 1, 2, 3, 4)
+        assert (await db.get_bandwidth_snapshots("alice", 0))[0].get("start_ts") is None
+    finally:
+        await db.close()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypedDict
+from typing import TYPE_CHECKING, Literal, NamedTuple, NotRequired, Protocol, TypedDict
 
 # Dacite does not resolve PEP 695 recursive aliases when checking fields.
 # Keep JSON checking for callers while its runtime check accepts raw objects.
@@ -161,6 +161,7 @@ class UserFields(TypedDict, total=False):
 
 class BandwidthSnapshotPayload(TypedDict):
     ts: int
+    start_ts: NotRequired[int]
     up: int
     down: int
     wl_up: int
@@ -511,3 +512,5 @@ class BandwidthSnapshot:
     down: int = 0
     wl_up: int = 0
     wl_down: int = 0
+    # None includes legacy records and aggregates with incompatible baselines.
+    start_ts: int | None = None

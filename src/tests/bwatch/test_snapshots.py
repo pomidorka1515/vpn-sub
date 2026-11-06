@@ -21,6 +21,56 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("uncertainty", ["legacy", "missing", "reset"])
+async def test_snapshot_does_not_guess_incompatible_or_unknown_starts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    uncertainty: str,
+) -> None:
+    db = Database(path=tmp_path / "state.db", start_backup=False)
+    await db.start()
+    panel = FakePanel(name="panel")
+    sub = await make_subscription(db, tmp_path, panels=[panel])
+    watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
+    now = int(time.time())
+    monkeypatch.setattr("bwatch.snapshots.time.time", lambda: now)
+
+    async def sample(value: int | None) -> None:
+        nonlocal now
+        now += 60
+        panel.clients = [] if value is None else [make_panel_client("alice", [1], up=value)]
+        await watch.record_daily_snapshot()
+
+    try:
+        await db.create_user(
+            username="alice",
+            uuid=USER_UUID,
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+            bw_limit_gb=1,
+        )
+        await sample(100)
+        await sample(150)
+        assert (await db.get_bandwidth_snapshots("alice", 0))[0].get("start_ts") == now - 60
+        if uncertainty == "legacy":
+            saved = json.loads(await db.get_metadata("watcher_snapshot_baselines") or "{}")
+            saved.pop("sample_times")
+            await db.set_metadata("watcher_snapshot_baselines", json.dumps(saved))
+        await sample(None if uncertainty == "missing" else 10 if uncertainty == "reset" else 200)
+        assert (await db.get_bandwidth_snapshots("alice", 0))[0].get("start_ts") is None
+        await sample(20 if uncertainty == "reset" else 250)
+        if uncertainty == "reset":
+            assert (await db.get_bandwidth_snapshots("alice", 0))[0].get("start_ts") is None
+        await sample(30 if uncertainty == "reset" else 300)
+        assert (await db.get_bandwidth_snapshots("alice", 0))[0].get("start_ts") == now - 60
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+        await db.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("outage", ["one", "main", "whitelist", "all"])
 @pytest.mark.parametrize("restart", [False, True])
 async def test_daily_snapshot_outage_retries_complete_sample(
@@ -107,6 +157,10 @@ async def test_daily_snapshot_outage_retries_complete_sample(
         assert await db.get_metadata("daily_bw_snapshot_failures") is None
         rows = await db.get_bandwidth_snapshots("alice", 0)
         assert [row["ts"] for row in rows] == [now, first]
+        assert rows[0].get("start_ts") == first
+        history = await sub.bandwidth_svc.get_bw_history("alice")
+        assert history[0].start_ts == first
+        assert history[-1].start_ts is None
         assert (rows[0]["up"], rows[0]["down"], rows[0]["wl_up"], rows[0]["wl_down"]) == (
             120,
             240,
@@ -126,6 +180,7 @@ async def test_daily_snapshot_outage_retries_complete_sample(
         assert sum(row["down"] for row in rows) == 240
         assert sum(row["wl_up"] for row in rows) == 60
         assert sum(row["wl_down"] for row in rows) == 120
+        assert rows[0].get("start_ts") == now - 60
     finally:
         await watch.close()
         await close_subscription(sub)
@@ -251,9 +306,10 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
         rows: list[tuple[str, int, int, int, int, int]],
         *,
         baselines: str | None = None,
+        starts: dict[str, int | None] | None = None,
     ) -> None:
         if committed:
-            await save(rows, baselines=baselines)
+            await save(rows, baselines=baselines, starts=starts)
         raise asyncio.CancelledError
 
     try:

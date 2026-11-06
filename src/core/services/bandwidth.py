@@ -113,6 +113,11 @@ class BandwidthService(BaseService):
         return result
 
     async def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:
+        """Return end-filtered interval deltas, not exact rolling-period totals.
+
+        Starts may precede the cutoff or be unknown for retained legacy records
+        and aggregates whose independent counters have incompatible baselines.
+        """
         return [
             BandwidthSnapshot(**row)
             for row in await self.db.get_bandwidth_snapshots(

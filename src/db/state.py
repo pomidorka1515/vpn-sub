@@ -230,15 +230,18 @@ class StateMixin(ConnectionMixin):
         rows: list[tuple[str, int, int, int, int, int]],
         *,
         baselines: str | None = None,
+        starts: dict[str, int | None] | None = None,
     ) -> None:
         if rows or baselines is not None:
             async with self.transaction(immediate=True) as conn:
                 await conn.executemany(
-                    """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down)
-                VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(username, ts) DO UPDATE SET
+                    """INSERT INTO bandwidth_snapshots(username, ts, up, down, wl_up, wl_down, start_ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(username, ts) DO UPDATE SET
                 up=up + excluded.up, down=down + excluded.down,
-                wl_up=wl_up + excluded.wl_up, wl_down=wl_down + excluded.wl_down""",
-                    rows,
+                wl_up=wl_up + excluded.wl_up, wl_down=wl_down + excluded.wl_down,
+                start_ts=CASE WHEN start_ts IS NOT NULL AND excluded.start_ts IS NOT NULL
+                    THEN min(start_ts, excluded.start_ts) ELSE NULL END""",
+                    [(*row, (starts or {}).get(row[0])) for row in rows],
                 )
                 if baselines is not None:
                     await conn.execute(
@@ -253,19 +256,22 @@ class StateMixin(ConnectionMixin):
         cutoff: int,
     ) -> list[BandwidthSnapshotPayload]:
         async with self.connection() as conn:
-            return [
-                BandwidthSnapshotPayload(
+            result: list[BandwidthSnapshotPayload] = []
+            for row in await conn.rows(
+                "SELECT ts, start_ts, up, down, wl_up, wl_down FROM bandwidth_snapshots WHERE username = ? AND ts >= ? ORDER BY ts DESC",
+                (username, cutoff),
+            ):
+                payload = BandwidthSnapshotPayload(
                     ts=int(row["ts"]),
                     up=int(row["up"]),
                     down=int(row["down"]),
                     wl_up=int(row["wl_up"]),
                     wl_down=int(row["wl_down"]),
                 )
-                for row in await conn.rows(
-                    "SELECT ts, up, down, wl_up, wl_down FROM bandwidth_snapshots WHERE username = ? AND ts >= ? ORDER BY ts DESC",
-                    (username, cutoff),
-                )
-            ]
+                if row["start_ts"] is not None:
+                    payload["start_ts"] = int(row["start_ts"])
+                result.append(payload)
+            return result
 
     async def prune_bandwidth_snapshots(self, cutoff: int) -> int:
         async with self.transaction(immediate=True) as conn:

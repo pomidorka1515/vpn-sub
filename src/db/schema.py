@@ -66,6 +66,7 @@ SCHEMA_STATEMENTS = (
     """CREATE TABLE bandwidth_snapshots (
         username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
         ts INTEGER NOT NULL,
+        start_ts INTEGER,
         up INTEGER NOT NULL DEFAULT 0,
         down INTEGER NOT NULL DEFAULT 0,
         wl_up INTEGER NOT NULL DEFAULT 0,
@@ -81,7 +82,7 @@ SCHEMA_STATEMENTS = (
 
 
 class SchemaMixin(ConnectionMixin):
-    SCHEMA_VERSION = 6
+    SCHEMA_VERSION = 7
 
     async def initialize(self) -> None:
         async with self.transaction(immediate=True) as conn:
@@ -155,6 +156,9 @@ class SchemaMixin(ConnectionMixin):
                 await conn.execute(
                     "UPDATE users SET admin_disabled = NOT enabled, admin_disabled_wl = NOT enabled_wl",
                 )
+                version = 6
+            if version == 6:
+                await conn.execute("ALTER TABLE bandwidth_snapshots ADD COLUMN start_ts INTEGER")
             await conn.execute(
                 "UPDATE schema_version SET version = ? WHERE id = 1",
                 (self.SCHEMA_VERSION,),

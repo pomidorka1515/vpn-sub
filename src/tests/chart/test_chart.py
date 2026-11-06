@@ -52,18 +52,18 @@ def test_bandwidth_chart_returns_png() -> None:
         )
         for i in range(3)
     ]
-    image = _png(bandwidth_chart(snaps, label="Алиса", lang=_LANG), (1400, 980))
+    image = _png(bandwidth_chart(snaps, label="Алиса", lang=_LANG), (1400, 1090 + 24 * len(snaps)))
     assert image.mode == "RGB"
 
 
 def test_bandwidth_chart_all_zero_still_renders() -> None:
     snaps = [BandwidthSnapshot(ts=1_700_000_000)]
-    _png(bandwidth_chart(snaps, lang=_LANG), (1400, 980))
+    _png(bandwidth_chart(snaps, lang=_LANG), (1400, 1090 + 24 * len(snaps)))
 
 
 def test_bandwidth_chart_bar_width_override() -> None:
     snaps = [BandwidthSnapshot(ts=1_700_000_000, up=10, down=20)]
-    _png(bandwidth_chart(snaps, lang=_LANG, bar_width=0.5), (1400, 980))
+    _png(bandwidth_chart(snaps, lang=_LANG, bar_width=0.5), (1400, 1090 + 24 * len(snaps)))
 
 
 def test_bandwidth_chart_many_days() -> None:
@@ -71,7 +71,7 @@ def test_bandwidth_chart_many_days() -> None:
         BandwidthSnapshot(ts=1_700_000_000 + i * 86_400, down=1_000_000 * (i + 1))
         for i in range(40)
     ]
-    _png(bandwidth_chart(snaps, lang=_LANG), (1400, 980))
+    _png(bandwidth_chart(snaps, lang=_LANG), (1400, 1090 + 24 * len(snaps)))
 
 
 def test_leaderboard_chart_empty_returns_none() -> None:

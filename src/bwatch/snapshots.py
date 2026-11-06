@@ -137,9 +137,20 @@ class SnapshotJobs(WatchJobs):
                 current_states = await self.sub.user_svc.list_user_states()
                 # SQLite may have committed even if the previous call was cancelled.
                 await self._load_snapshot_baselines(current_states)
+                raw = await self.db.get_metadata("watcher_snapshot_baselines")
+                saved = json.loads(raw or "{}")
+                # Timestamp each independent counter, not merely the last job:
+                # missing clients and unconfirmed resets retain older baselines.
+                times = {
+                    tuple(record[:4]): int(record[4])
+                    for record in cast(
+                        list[tuple[str, str, str, str, int]], saved.get("sample_times", [])
+                    )
+                }
                 next_main, next_wl = dict(self.snap_mem), dict(self.snap_wl_mem)
                 reset_main, reset_wl = dict(self._snap_reset_mem), dict(self._snap_reset_wl_mem)
                 rows: list[tuple[str, int, int, int, int, int]] = []
+                starts: dict[str, int | None] = {}
                 for old in states:
                     if not await self.sub.user_svc.isuser(old["username"]):
                         continue
@@ -148,19 +159,44 @@ class SnapshotJobs(WatchJobs):
                         continue
                     name = state["username"]
                     deltas: list[int] = []
-                    for limit, values, baseline_values, resets in (
-                        (state["bw_limit_gb"] and old["bw_limit_gb"], main, next_main, reset_main),
-                        (state["wl_limit_gb"] and old["wl_limit_gb"], wl, next_wl, reset_wl),
+                    interval_starts: set[int | None] = set()
+                    for kind, limit, values, baseline_values, resets in (
+                        (
+                            "main",
+                            state["bw_limit_gb"] and old["bw_limit_gb"],
+                            main,
+                            next_main,
+                            reset_main,
+                        ),
+                        (
+                            "whitelist",
+                            state["wl_limit_gb"] and old["wl_limit_gb"],
+                            wl,
+                            next_wl,
+                            reset_wl,
+                        ),
                     ):
                         up = down = 0
                         keys = {
                             key for key in baseline_values.keys() | resets.keys() if key[1] == name
                         } | {(panel, name, state["uuid"]) for panel in values}
                         for key in keys:
+                            time_key = (kind, *key)
                             if not limit or key[2] != state["uuid"]:
                                 baseline_values.pop(key, None)
                                 resets.pop(key, None)
+                                times.pop(time_key, None)
                                 continue
+                            current = values.get(key[0], {}).get(name)
+                            previous = baseline_values.get(key)
+                            uncertain = (
+                                current is None
+                                or previous is None
+                                or key in resets
+                                or current.upload < previous.upload
+                                or current.download < previous.download
+                            )
+                            interval_starts.add(None if uncertain else times.get(time_key))
                             delta_up, delta_down, baseline, pending = self._daily_snapshot_delta(
                                 values.get(key[0], {}).get(name),
                                 baseline_values.get(key),
@@ -172,6 +208,7 @@ class SnapshotJobs(WatchJobs):
                             # low readings, just like monthly accounting.
                             if baseline is not None:
                                 baseline_values[key] = baseline
+                                times[time_key] = sampled_at
                             if pending is None:
                                 resets.pop(key, None)
                             else:
@@ -180,10 +217,17 @@ class SnapshotJobs(WatchJobs):
                     # These are deltas since the previous successful reading, not
                     # calendar-day totals. Never backdate startup/retry samples.
                     rows.append((name, sampled_at, deltas[0], deltas[1], deltas[2], deltas[3]))
+                    start = next(iter(interval_starts)) if len(interval_starts) == 1 else None
+                    starts[name] = start if start is not None and start <= sampled_at else None
                 identities = {state["username"]: state["uuid"] for state in current_states}
                 baselines = json.dumps(
                     {
                         "version": 2,
+                        "sample_times": [
+                            [*key, ts]
+                            for key, ts in times.items()
+                            if identities.get(key[2]) == key[3]
+                        ],
                         "counters": {
                             kind: [
                                 [*key, int(value.upload), int(value.download), int(value.total)]
@@ -199,7 +243,7 @@ class SnapshotJobs(WatchJobs):
                         },
                     },
                 )
-                await self.db.add_bandwidth_snapshots(rows, baselines=baselines)
+                await self.db.add_bandwidth_snapshots(rows, baselines=baselines, starts=starts)
                 self.snap_mem, self.snap_wl_mem = next_main, next_wl
                 self._snap_reset_mem, self._snap_reset_wl_mem = reset_main, reset_wl
                 await self.db.delete_metadata("daily_bw_snapshot_failures")

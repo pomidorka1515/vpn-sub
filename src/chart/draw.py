@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from PIL import ImageFont
@@ -120,6 +121,7 @@ def draw_stacked(
     legend: tuple[str, str],
     empty_label: str | None,
     fonts: Mapping[str, ImageFont.FreeTypeFont],
+    intervals: list[tuple[int | None, int]] | None = None,
 ) -> None:
     left, top, right, bottom = plot
     draw.rectangle((left, top, right, bottom), fill=PANEL)
@@ -144,23 +146,63 @@ def draw_stacked(
     slot = (right - left) / n
     bar_w = max(1, int(slot * bar_frac))
     step = max(1, n // 10) if n > 15 else 1
+    time_min = (
+        min((start if start is not None else end) for start, end in intervals) if intervals else 0
+    )
+    time_max = max(end for _, end in intervals) if intervals else 1
+    time_span = max(time_max - time_min, 1)
+
+    def time_x(ts: float) -> float:
+        return left + (ts - time_min) / time_span * (right - left)
 
     for i, (label, down, up) in enumerate(zip(labels, bottoms, tops, strict=True)):
         cx = left + slot * (i + 0.5)
         x0 = int(cx - bar_w / 2)
         x1 = x0 + bar_w
+        if intervals is not None:
+            start, end = intervals[i]
+            # Unknown starts are endpoint markers, never guessed from neighbours.
+            x0 = int(time_x(start if start is not None else end))
+            x1 = int(time_x(end))
+            cx = (x0 + x1) / 2
+            if start is None:
+                draw_text(
+                    draw, (min(x1, right - 10), bottom + 30), "?", font=fonts["tick"], fill=TEXT
+                )
+            else:
+                # Coverage remains visible even for a measured zero-byte interval.
+                draw.line(
+                    (x0, bottom + 30, x0, bottom + 34, x1, bottom + 34, x1, bottom + 30),
+                    fill=TEXT_DIM,
+                    width=1,
+                )
         down_h = int((down / scale_max) * plot_h)
         up_h = int((up / scale_max) * plot_h)
         if down_h:
             draw.rectangle((x0, bottom - down_h, x1, bottom), fill=bottom_color)
         if up_h:
             draw.rectangle((x0, bottom - down_h - up_h, x1, bottom - down_h), fill=top_color)
-        if i % step == 0:
+        if intervals is None and i % step == 0:
             tw, _ = text_size(fonts["tick"], label)
             draw_text(
                 draw,
                 (int(cx - tw / 2), bottom + 8),
                 label,
+                font=fonts["tick"],
+                fill=TEXT_DIM,
+            )
+
+    if intervals is not None:
+        for i in range(5):
+            ts = time_min + (time_max - time_min) * i / 4
+            tick_label = datetime.fromtimestamp(ts, tz=UTC).strftime("%m/%d %H:%M")
+            tw, _ = text_size(fonts["tick"], tick_label)
+            x = time_x(ts)
+            draw.line((x, bottom, x, bottom + 5), fill=BORDER)
+            draw_text(
+                draw,
+                (min(max(left, x - tw / 2), right - tw), bottom + 8),
+                tick_label,
                 font=fonts["tick"],
                 fill=TEXT_DIM,
             )

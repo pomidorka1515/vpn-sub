@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from PIL import Image, ImageDraw
 
+from util import fmt_bytes
+
 from .draw import (
     BG,
     BW_SIZE,
@@ -16,7 +18,6 @@ from .draw import (
     TEXT_DIM,
     WL_DOWN,
     WL_UP,
-    calc_bar_width,
     draw_stacked,
     draw_text,
     load_font,
@@ -42,11 +43,10 @@ def bandwidth_chart(
     """Render two stacked bar charts (regular + whitelist) into a single PNG.
 
     Args:
-        snapshots: daily bandwidth records, will be sorted ascending by ts
+        snapshots: interval deltas, sorted ascending by interval end (ts).
         label: optional, included in the suptitle if provided
         lang: language table, usually taken from `lang_cfg`.
-        bar_width: optional, bar width override. Defaults to auto-calculated
-            based on number of data points to maintain good visual density.
+        bar_width: retained for caller compatibility; time bounds determine widths.
 
     Returns:
         BytesIO containing PNG bytes, positioned at start. None if no data.
@@ -54,15 +54,20 @@ def bandwidth_chart(
     """
     if not snapshots:
         return None
+    _ = bar_width  # Interval widths must not be overridden by categorical spacing.
 
     snaps = sorted(snapshots, key=lambda s: s.ts)
-    labels = [datetime.fromtimestamp(s.ts, tz=UTC).strftime("%m/%d") for s in snaps]
+    intervals = [
+        (s.start_ts if s.start_ts is not None and s.start_ts <= s.ts else None, s.ts) for s in snaps
+    ]
+    labels = [str(i + 1) for i in range(len(snaps))]
     reg_up = [s.up for s in snaps]
     reg_down = [s.down for s in snaps]
     wl_up = [s.wl_up for s in snaps]
     wl_down = [s.wl_down for s in snaps]
 
     width, height = BW_SIZE
+    height += 110 + 24 * len(snaps)
     image = Image.new("RGB", (width, height), BG)
     draw = ImageDraw.Draw(image)
     fonts: dict[str, ImageFont.FreeTypeFont] = {
@@ -74,12 +79,15 @@ def bandwidth_chart(
     }
 
     header = f"{lang['bandwidth']} — {label}" if label else lang["bandwidth"]
-    period = f"{len(snaps)} {lang['day']}" if len(snaps) == 1 else f"{len(snaps)} {lang['days']}"
+
+    def stamp(ts: int) -> str:
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+    first = min(start if start is not None else end for start, end in intervals)
+    period = f"UTC {stamp(first)} — {stamp(snaps[-1].ts)}"
     draw_text(draw, (40, 18), header, font=fonts["header"], fill=TEXT)
     draw_text(draw, (40, 48), period, font=fonts["sub"], fill=TEXT_DIM)
 
-    n = len(labels)
-    bar_frac = calc_bar_width(n) if bar_width is None else bar_width
     legend = (lang["download"], lang["upload"])
     margin_l, margin_r = 110, 36
     panels = (
@@ -96,10 +104,30 @@ def bandwidth_chart(
             tops=tops,
             bottom_color=bottom_color,
             top_color=top_color,
-            bar_frac=bar_frac,
+            bar_frac=1.0,
             title=title,
             legend=legend,
             empty_label=empty,
             fonts=fonts,
+            intervals=intervals,
         )
+    notes = (
+        "UTC intervals: height = total bytes, width = elapsed time (not a rate).",
+        "Brackets = known coverage; ? / blank spans = unknown coverage, not zero. End-filtered samples; not an exact rolling total.",
+        "Interval [start, end]                                          Duration / type                 Regular / whitelist totals",
+    )
+    for i, note in enumerate(notes):
+        draw_text(draw, (40, 978 + i * 24), note, font=fonts["tick"], fill=TEXT_DIM)
+    for i, (snap, (start, end)) in enumerate(zip(snaps, intervals, strict=True)):
+        if start is None:
+            duration = "unknown"
+        else:
+            seconds = end - start
+            kind = "multi-day" if seconds > 86400 else "partial" if seconds < 86400 else "24h"
+            duration = f"{seconds // 3600}h {seconds % 3600 // 60}m {seconds % 60}s / {kind}"
+        text = (
+            f"{stamp(start) if start is not None else '?'} → {stamp(end)}"
+            f"     {duration}     {fmt_bytes(snap.up + snap.down)} / {fmt_bytes(snap.wl_up + snap.wl_down)}"
+        )
+        draw_text(draw, (40, 1054 + i * 24), text, font=fonts["tick"], fill=TEXT)
     return save(image)
