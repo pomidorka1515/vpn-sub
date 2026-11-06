@@ -20,16 +20,31 @@ from config.backup import (
 from config.backup import (
     prune_backups as config_prune_backups,
 )
+from db import Database
 from db.backup import do_backup, prune_backups
+from db.schema import SCHEMA_STATEMENTS, SchemaMixin
 from loggers import Logger
 
 type BackupKind = Literal["json", "jsonl", "sqlite3"]
+
+
+def _initialize_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS schema_version (id INTEGER PRIMARY KEY, version INTEGER NOT NULL)"
+    )
+    if connection.execute("SELECT 1 FROM schema_version").fetchone() is None:
+        connection.execute(
+            "INSERT INTO schema_version VALUES (1, ?)", (SchemaMixin.SCHEMA_VERSION,)
+        )
+        for statement in SCHEMA_STATEMENTS:
+            connection.execute(statement)
 
 
 def _snapshot(kind: BackupKind, source: Path, instance: Path, value: int) -> None:
     if kind == "sqlite3":
         connection = sqlite3.connect(source)
         try:
+            _initialize_schema(connection)
             connection.execute("CREATE TABLE IF NOT EXISTS items (value INTEGER)")
             connection.execute("DELETE FROM items")
             connection.execute("INSERT INTO items VALUES (?)", (value,))
@@ -293,6 +308,7 @@ def test_config_backup_thread_logs_repeated_failures(tmp_path: Path) -> None:
 def test_database_backup_roundtrip_and_prune(tmp_path: Path) -> None:
     source = tmp_path / "state.sqlite3"
     connection = sqlite3.connect(source)
+    _initialize_schema(connection)
     connection.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)")
     connection.execute("INSERT INTO items (name) VALUES ('alice')")
     connection.commit()
@@ -330,3 +346,98 @@ def test_database_backup_closes_connections_on_failure(tmp_path: Path) -> None:
     with pytest.raises(sqlite3.OperationalError):
         do_backup(str(source), 0.1, str(instance), _log())
     assert list(instance.glob(".tmp-*")) == []
+
+
+@pytest.mark.asyncio
+async def test_missing_database_does_not_publish_or_prune_backups(tmp_path: Path) -> None:
+    source = tmp_path / "state.sqlite3"
+    database = Database(
+        path=source, backup_dir=tmp_path / "backups", backup_retention=2, start_backup=False
+    )
+    await database.start()
+    try:
+        await database.set_metadata("saved", "value")
+        await database.backup_now()
+        await database.backup_now()
+        instance = tmp_path / "backups" / "state"
+        previous = {path: path.read_bytes() for path in instance.glob("*.sqlite3")}
+        assert len(previous) == 2
+        database.backup_retention = 1
+        source.unlink()
+        with pytest.raises(sqlite3.OperationalError):
+            await database.backup_now()
+        assert not source.exists()
+        assert {path: path.read_bytes() for path in instance.iterdir()} == previous
+    finally:
+        await database.close()
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    ["empty", "unrelated", "missing_table", "missing_column", "version", "integrity", "corrupt"],
+)
+def test_invalid_database_is_not_published(tmp_path: Path, invalid: str) -> None:
+    source = tmp_path / "source.sqlite3"
+    if invalid == "corrupt":
+        source.write_bytes(b"not a database")
+    else:
+        with sqlite3.connect(source) as connection:
+            if invalid == "unrelated":
+                connection.execute("CREATE TABLE other (id INTEGER)")
+            elif invalid != "empty":
+                _initialize_schema(connection)
+                if invalid == "missing_table":
+                    connection.execute("DROP TABLE codes")
+                elif invalid == "missing_column":
+                    connection.execute("ALTER TABLE users DROP COLUMN displayname")
+                elif invalid == "version":
+                    connection.execute("UPDATE schema_version SET version = 0")
+                elif invalid == "integrity":
+                    connection.execute("PRAGMA ignore_check_constraints = ON")
+                    connection.execute(
+                        "INSERT INTO codes(code, action, uses) VALUES ('bad', 'invalid', 1)"
+                    )
+    instance = tmp_path / "backups"
+    with pytest.raises(sqlite3.DatabaseError):
+        do_backup(str(source), 1, str(instance), _log())
+    assert list(instance.iterdir()) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", range(1, 8))
+async def test_supported_schema_snapshot_can_be_restored(tmp_path: Path, version: int) -> None:
+    source = tmp_path / "source ?#% ü.sqlite3"
+    database = Database(path=source, start_backup=False)
+    await database.start()
+    await database.set_metadata("saved", "value")
+    await database.close()
+    with sqlite3.connect(source) as connection:
+        if version < 7:
+            connection.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
+        if version < 6:
+            connection.execute("ALTER TABLE users DROP COLUMN admin_disabled")
+            connection.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
+        if version < 5:
+            connection.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
+        if version < 3:
+            connection.execute("DROP TABLE users")
+            statement = SCHEMA_STATEMENTS[0].replace("        auth_token TEXT UNIQUE,\n", "")
+            statement = statement.replace("        auth_token_expires_at INTEGER,\n", "")
+            statement = statement.replace(
+                "        admin_disabled INTEGER NOT NULL DEFAULT 0 CHECK (admin_disabled IN (0, 1)),\n",
+                "",
+            )
+            statement = statement.replace(
+                "        admin_disabled_wl INTEGER NOT NULL DEFAULT 0 CHECK (admin_disabled_wl IN (0, 1)),\n",
+                "",
+            )
+            connection.execute(statement)
+        connection.execute("UPDATE schema_version SET version = ?", (version,))
+    instance = tmp_path / "backups"
+    do_backup(str(source), 1, str(instance), _log())
+    restored = Database(path=next(instance.glob("*.sqlite3")), start_backup=False)
+    await restored.start()
+    try:
+        assert await restored.get_metadata("saved") == "value"
+    finally:
+        await restored.close()
