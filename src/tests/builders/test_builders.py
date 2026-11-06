@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import threading
+import urllib.parse
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -266,7 +267,7 @@ def test_link_array_filters_profiles_and_encodes_extra() -> None:
     assert "user-uuid@edge.example" in lines[1]
     assert "fp=chrome" in lines[1]
     assert "%7B%22path%22%3A%22/x%22%7D" in lines[1]
-    assert "⚡Быстрый" in lines[1]
+    assert urllib.parse.unquote(lines[1].split("#", 1)[1]) == "⚡Быстрый"
     assert len(lines) == 2
 
     disabled = build_link_array(
@@ -301,6 +302,50 @@ def test_link_array_filters_profiles_and_encodes_extra() -> None:
     assert "extra=" not in text
     assert "WL" in text
     assert "🛡" not in text
+
+
+@pytest.mark.parametrize("is_happ", [False, True], ids=["plain", "happ-flag"])
+@pytest.mark.parametrize("lang", ["en", "ru"])
+@pytest.mark.parametrize(
+    ("name", "escaped"),
+    [
+        ("Two words\t", "Two%20words%09"),
+        ("First\r\nSecond", "First%0D%0ASecond"),
+        ("100%20", "100%2520"),
+        ("Быстрый", "%D0%91%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9"),
+        ("path/name?#", "path%2Fname%3F%23"),
+    ],
+    ids=["whitespace", "newlines", "percent", "non-ascii", "reserved"],
+)
+def test_link_array_encodes_profile_fragment(
+    name: str,
+    escaped: str,
+    lang: str,
+    is_happ: bool,
+) -> None:
+    config = _link_config()
+    profile = config["profiles"]["fast"]
+    profile["name"] = [name, "unused"] if lang == "en" else ["unused", name]
+    profile["flag"] = "🇩🇪 \n%/"
+    encoded = build_link_array(
+        config,
+        status=True,
+        statusWl=False,
+        lang=lang,
+        is_happ=is_happ,
+        user_uuid="user-uuid",
+        bandwidths=_bandwidth(),
+        need_dummy_link=False,
+        fingerprint="chrome",
+        lang_cfg=_lang(),
+    )
+
+    lines = base64.b64decode(encoded).decode("utf-8").splitlines()
+    assert len(lines) == 1
+    fragment = urllib.parse.urlsplit(lines[0]).fragment
+    escaped_flag = "%F0%9F%87%A9%F0%9F%87%AA%20%0A%25%2F" if is_happ else ""
+    assert fragment == escaped_flag + escaped
+    assert urllib.parse.unquote(fragment) == (profile["flag"] if is_happ else "") + name
 
 
 def _json_template() -> ProfileTemplate:

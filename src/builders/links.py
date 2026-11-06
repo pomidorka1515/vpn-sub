@@ -43,7 +43,7 @@ def build_link_array(
         link = link.replace("DOMAIN", domain)
         link = link.replace("FINGERPRINT", fingerprint)
         link = link.replace("UUID", user_uuid)
-        link = link.replace("NAME", name)
+        link = link.replace("NAME", urllib.parse.quote(name, safe=""))
         if "EXTRA" in link:
             extra_data = profile["xhttpExtra"]
             if extra_data:
