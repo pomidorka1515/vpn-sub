@@ -236,7 +236,7 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | :---            | :---                     | :---                                                                    |
 | `DIR_DATA`      | `./data/`                | Base directory for runtime data (DB, logs, config)                      |
 | `DIR_RUNTIME`   | `<DIR_DATA>/run/`        | Local directory for the primary lock, config locks, and inbound stamps. |
-| `DIR_BACKUPS`   | `<DIR_DATA>/backup/`     | Directory where scheduled config backups are stored                     |
+| `DIR_BACKUPS`   | `<DIR_DATA>/backup/`     | Directory where scheduled config and database backups are stored        |
 | `PATH_CONFIG`   | `<DIR_DATA>/config.json` | Path to the main application configuration                              |
 | `PATH_DB`       | `<DIR_DATA>/state.sqlite3` | Path to the SQLite database                                           |
 | `PATH_AUDIT`    | `<DIR_DATA>/audit.jsonl` | Path to audit trail logs (JSONL)                                        |
@@ -245,6 +245,11 @@ All path variables are **optional**. If omitted, runtime data defaults to the
 | `APP_BIND`      | `127.0.0.1:5550`         | Shared Hypercorn listener. |
 | `LOGLEVEL`      | `DEBUG`                  | Threshold for application `Logger()` instances. |
 | `VERBOSE_LOGGING_OVERRIDES` | *(unset)*   | Comma-separated components to start with verbose traces.                |
+
+Database backups use a `db-<sha256>` directory under the backup root, keyed by
+the resolved absolute database path. Equivalent paths share a directory; moving
+the database creates a new one. Older stem-only directories (such as `state/`)
+remain untouched and are not included in automatic discovery or retention.
 
 `LOGLEVEL` accepts a level name or an integer. Names
 are case-insensitive: `TRACE`, `DEBUG`, `INFO`, `WARN` / `WARNING`, `ERROR`,

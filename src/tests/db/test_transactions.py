@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -9,12 +10,12 @@ import pytest_asyncio
 
 from api.application import create_api_application
 from db import Database
+from db.backup import instance_backup_dir
 from db.common import Connection
 from errors import CodeError, DatabaseError, DuplicateError, MigrationError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-    from pathlib import Path
 
     from _pytest.monkeypatch import MonkeyPatch
 
@@ -45,6 +46,10 @@ async def create_user(db: Database, name: str = "alice") -> None:
         ext_username=f"{name}@test",
         ext_password_hash="hash",
     )
+
+
+def _database_backup(instance: Path) -> Path:
+    return next(instance.glob("*.sqlite3"))
 
 
 @pytest.mark.asyncio
@@ -727,7 +732,9 @@ async def test_backup_restores_and_close_is_repeatable(
 ) -> None:
     await create_user(repository)
     await repository.backup_now()
-    backup = next((tmp_path / "backups" / "state").glob("*.sqlite3"))
+    backup_dir = tmp_path / "backups"
+    instance = Path(instance_backup_dir(repository.path, str(backup_dir)))
+    backup = _database_backup(instance)
     restored = Database(path=backup, start_backup=False)
     await restored.start()
     try:

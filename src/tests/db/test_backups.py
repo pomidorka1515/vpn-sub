@@ -21,7 +21,7 @@ from config.backup import (
     prune_backups as config_prune_backups,
 )
 from db import Database
-from db.backup import do_backup, prune_backups
+from db.backup import do_backup, instance_backup_dir, prune_backups
 from db.schema import SCHEMA_STATEMENTS, SchemaMixin
 from loggers import Logger
 
@@ -150,6 +150,14 @@ def test_backup_publication_failure_cleans_temporary_snapshot(
 
 def _log() -> Logger:
     return Logger("test-backup")
+
+
+def _backup_files(instance: Path) -> list[Path]:
+    return sorted(instance.glob("*.sqlite3"))
+
+
+def _directory_contents(instance: Path) -> dict[Path, bytes]:
+    return {path: path.read_bytes() for path in instance.iterdir()}
 
 
 def test_config_backup_normalizes_json_and_jsonc(tmp_path: Path) -> None:
@@ -340,6 +348,65 @@ def test_database_backup_roundtrip_and_prune(tmp_path: Path) -> None:
     assert len(list(instance.glob("*.sqlite3"))) == 2
 
 
+def test_database_backup_directory_normalizes_source_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "data" / "state.sqlite3"
+    source.parent.mkdir()
+    source.touch()
+    alias = tmp_path / "alias.sqlite3"
+    alias.symlink_to(source)
+    monkeypatch.chdir(tmp_path)
+    root = str(tmp_path / "backups")
+    expected = instance_backup_dir(str(source), root)
+    assert instance_backup_dir("data/../data/state.sqlite3", root) == expected
+    assert instance_backup_dir(str(alias), root) == expected
+    assert instance_backup_dir(str(tmp_path / "other" / "state.sqlite3"), root) != expected
+
+
+@pytest.mark.asyncio
+async def test_same_stem_database_backups_are_isolated(tmp_path: Path) -> None:
+    root = tmp_path / "backups"
+    legacy = root / "state" / "old.sqlite3"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"legacy")
+    first_path = tmp_path / "first" / "state.sqlite3"
+    second_path = tmp_path / "second" / "state.sqlite3"
+    first = Database(path=first_path, backup_dir=root, backup_retention=1, start_backup=False)
+    second = Database(path=second_path, backup_dir=root, backup_retention=2, start_backup=False)
+    try:
+        await first.start()
+        await second.start()
+        for value in ("one", "two"):
+            await first.set_metadata("source", f"first-{value}")
+            await first.backup_now()
+            await second.set_metadata("source", f"second-{value}")
+            await second.backup_now()
+
+        first_dir = Path(instance_backup_dir(str(first_path), str(root)))
+        second_dir = Path(instance_backup_dir(str(second_path), str(root)))
+        assert first_dir != second_dir
+        first_snapshots = _backup_files(first_dir)
+        second_snapshots = _backup_files(second_dir)
+        assert len(first_snapshots) == 1
+        assert len(second_snapshots) == 2
+        for snapshot, expected in zip(
+            [*first_snapshots, *second_snapshots],
+            ["first-two", "second-one", "second-two"],
+            strict=True,
+        ):
+            restored = Database(path=snapshot, start_backup=False)
+            await restored.start()
+            try:
+                assert await restored.get_metadata("source") == expected
+            finally:
+                await restored.close()
+        assert legacy.read_bytes() == b"legacy"
+    finally:
+        await first.close()
+        await second.close()
+
+
 def test_database_backup_closes_connections_on_failure(tmp_path: Path) -> None:
     source = tmp_path / "missing-dir" / "state.sqlite3"
     instance = tmp_path / "failed"
@@ -359,15 +426,15 @@ async def test_missing_database_does_not_publish_or_prune_backups(tmp_path: Path
         await database.set_metadata("saved", "value")
         await database.backup_now()
         await database.backup_now()
-        instance = tmp_path / "backups" / "state"
-        previous = {path: path.read_bytes() for path in instance.glob("*.sqlite3")}
+        instance = Path(instance_backup_dir(str(source), str(tmp_path / "backups")))
+        previous = {path: path.read_bytes() for path in _backup_files(instance)}
         assert len(previous) == 2
         database.backup_retention = 1
         source.unlink()
         with pytest.raises(sqlite3.OperationalError):
             await database.backup_now()
         assert not source.exists()
-        assert {path: path.read_bytes() for path in instance.iterdir()} == previous
+        assert _directory_contents(instance) == previous
     finally:
         await database.close()
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import os
 import sqlite3
 import tempfile
@@ -16,7 +17,9 @@ if TYPE_CHECKING:
 
 
 def instance_backup_dir(path: str, backup_dir: str) -> str:
-    return str(Path(backup_dir) / Path(path).stem)
+    source = Path(path).resolve()
+    identity = hashlib.sha256(os.fsencode(source)).hexdigest()
+    return str(Path(backup_dir) / f"db-{identity}")
 
 
 def _validate_snapshot(snapshot: sqlite3.Connection) -> None:
