@@ -43,21 +43,22 @@ class PublicLoginMixin(PublicFeatureMixin):
         t = self.TEXTS[lang]
         email = text.strip()
 
-        msg = await self.bot.send_message(message.chat.id, t["enter_pass"])
+        msg = await self.bot.send_message(
+            message.chat.id, t["enter_pass"] + "\n/cancel — cancel / отмена"
+        )
         self._expect(msg, self.step_login_pass, email)  # pyright: ignore[reportUnknownMemberType]
         return None
 
     async def step_login_pass(self, message: types.Message, email: str) -> None:
         text = cast(str, message.text)
-        if text.startswith("/"):
+        await self._delete_message(message.chat.id, message.message_id, secret=True)
+        if text == "/cancel":
             return await self.cmd_start(message)
 
         uid = cast(types.User, message.from_user).id
         lang = await self.get_lang(uid)
         t = self.TEXTS[lang]
         password = text
-
-        await self._delete_message(message.chat.id, message.message_id, secret=True)
 
         try:
             allowed = await self.limiter.allow("telegram:login", str(uid), 10)

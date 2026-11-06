@@ -142,6 +142,85 @@ async def test_expiry_commands_and_menu_do_not_consume_password_step() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("workflow", ["login", "settings"])
+@pytest.mark.parametrize("text", ["/start", "/menu", "/password", "Back", "Вход"])
+async def test_password_steps_consume_command_and_localized_menu_text(
+    workflow: str, text: str
+) -> None:
+    bot = public_bot()
+    bot.TEXTS = {
+        "en": {"btn_main_back": "Back", "login_fail": "failed", "settings_pass_success": "ok"},
+        "ru": {"btn_login": "Вход"},
+    }
+    bot.limiter = MagicMock(allow=AsyncMock(return_value=True))
+    setattr(bot, "get_lang", AsyncMock(return_value="en"))
+    setattr(bot, "get_menu", AsyncMock())
+    cast(AsyncMock, bot.sub.password_svc.validate_credentials).return_value = ""
+    cast(AsyncMock, bot.sub.telegram_svc.get_username_telegram).return_value = "alice"
+    cast(AsyncMock, bot.sub.user_svc.get_external_username).return_value = "alice-login"
+    if workflow == "login":
+        bot._conversations.expect((7, 42), bot.step_login_pass, "alice@example.test")
+    else:
+        bot._conversations.expect((7, 42), bot.step_settings_pass)
+
+    await bot._message_entry(message(text))
+
+    cast(AsyncMock, bot.bot.delete_message).assert_awaited_once_with(7, 1)
+    cast(AsyncMock, bot.cmd_start).assert_not_awaited()
+    cast(AsyncMock, bot.handle_text).assert_not_awaited()
+    if workflow == "login":
+        cast(AsyncMock, bot.sub.password_svc.validate_credentials).assert_awaited_once_with(
+            "alice@example.test", text
+        )
+    else:
+        cast(AsyncMock, bot.sub.business_svc.update_params).assert_awaited_once_with(
+            username="alice", ext_username="alice-login", ext_password=text
+        )
+    await bot.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workflow", ["login", "settings"])
+async def test_password_cancel_is_deleted_before_returning_to_start(workflow: str) -> None:
+    bot = public_bot()
+    if workflow == "login":
+        bot._conversations.expect((7, 42), bot.step_login_pass, "alice@example.test")
+    else:
+        bot._conversations.expect((7, 42), bot.step_settings_pass)
+    submitted = message("/cancel")
+
+    async def start_after_delete(value: types.Message) -> None:
+        cast(AsyncMock, bot.bot.delete_message).assert_awaited_once_with(7, 1)
+        assert value is submitted
+
+    setattr(bot, "cmd_start", AsyncMock(side_effect=start_after_delete))
+    await bot._message_entry(submitted)
+
+    cast(AsyncMock, bot.cmd_start).assert_awaited_once_with(submitted)
+    cast(AsyncMock, bot.sub.password_svc.validate_credentials).assert_not_awaited()
+    cast(AsyncMock, bot.sub.telegram_svc.get_username_telegram).assert_not_awaited()
+    await bot.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workflow", ["login", "settings"])
+async def test_password_deletion_failure_warns_even_on_cancel(workflow: str) -> None:
+    bot = public_bot()
+    cast(AsyncMock, bot.bot.delete_message).side_effect = RuntimeError("delete failed")
+    if workflow == "login":
+        bot._conversations.expect((7, 42), bot.step_login_pass, "alice@example.test")
+    else:
+        bot._conversations.expect((7, 42), bot.step_settings_pass)
+
+    await bot._message_entry(message("/cancel"))
+
+    cast(AsyncMock, bot.bot.send_message).assert_awaited_once()
+    assert "секрет" in cast(AsyncMock, bot.bot.send_message).call_args.args[1]
+    cast(AsyncMock, bot.cmd_start).assert_awaited_once()
+    await bot.close()
+
+
+@pytest.mark.asyncio
 async def test_admin_authorization_is_rechecked_at_transition() -> None:
     bot = TelegramAdminBot.__new__(TelegramAdminBot)
     bot.bot = telegram_mock()

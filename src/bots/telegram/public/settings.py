@@ -62,7 +62,7 @@ class PublicSettingsMixin(PublicFeatureMixin):
         elif action == "set_pass":
             msg = await self.bot.send_message(
                 message.chat.id,
-                t["settings_pass_prompt"],
+                t["settings_pass_prompt"] + "\n/cancel — cancel / отмена",
                 reply_markup=types.ReplyKeyboardRemove(),
             )
             self._expect(msg, self.step_settings_pass)  # pyright: ignore[reportUnknownMemberType]
@@ -170,7 +170,8 @@ class PublicSettingsMixin(PublicFeatureMixin):
 
     async def step_settings_pass(self, message: types.Message) -> None:
         text = cast(str, message.text)
-        if text.startswith("/"):
+        await self._delete_message(message.chat.id, message.message_id, secret=True)
+        if text == "/cancel":
             return await self.cmd_start(message)
         uid = cast(types.User, message.from_user).id
         lang = await self.get_lang(uid)
@@ -186,7 +187,6 @@ class PublicSettingsMixin(PublicFeatureMixin):
             )
             return None
         new_pass = text.strip()
-        await self._delete_message(message.chat.id, message.message_id, secret=True)
 
         # Need current ext_username to update password (update_params requires both)
         ext_username = await self.sub.user_svc.get_external_username(username)

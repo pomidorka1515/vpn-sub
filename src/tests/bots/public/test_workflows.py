@@ -187,6 +187,8 @@ async def test_settings_callback_requires_registration_and_dispatches(
             cast(MagicMock, mixin._expect).call_args.args[1],
         )
         assert getattr(registered, "__func__", registered) is getattr(step, "__func__", step)
+        if action == "set_pass":
+            assert "/cancel" in telegram.send_message.call_args.args[1]
 
 
 @pytest.mark.asyncio
@@ -367,6 +369,7 @@ async def test_login_flow(
     cast(MagicMock, mixin.cmd_start).assert_called()
     await mixin.step_login_email(_message(" bob@example.test "))
     assert cast(MagicMock, mixin._expect).call_args.args[2] == "bob@example.test"
+    assert "/cancel" in telegram.send_message.call_args.args[1]
 
     await mixin.step_login_pass(_message("/start"), "bob@example.test")
     subscription.password_svc.validate_credentials.return_value = ""
@@ -379,6 +382,61 @@ async def test_login_flow(
     subscription.telegram_svc.set_telegram_user.assert_called_with(42, "bob")
     cast(MagicMock, mixin.send_info).assert_called_with(7, 42, "en")
     assert "in" in telegram.send_message.call_args.args[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["unlinked", "no_login", "username_error", "login_error"])
+async def test_password_change_deletes_before_account_lookup_failures(
+    settings: tuple[PublicSettingsMixin, MagicMock, MagicMock], failure: str
+) -> None:
+    mixin, _, subscription = settings
+    delete = cast(AsyncMock, mixin._delete_message)
+
+    async def username_lookup(uid: int) -> str | None:
+        delete.assert_awaited_once_with(7, 5, secret=True)
+        if failure == "username_error":
+            raise RuntimeError("lookup failed")
+        return None if failure == "unlinked" else "alice"
+
+    async def external_lookup(username: str) -> str:
+        delete.assert_awaited_once_with(7, 5, secret=True)
+        if failure == "login_error":
+            raise RuntimeError("lookup failed")
+        return "" if failure == "no_login" else "bob"
+
+    subscription.telegram_svc.get_username_telegram.side_effect = username_lookup
+    subscription.user_svc.get_external_username.side_effect = external_lookup
+    if failure.endswith("error"):
+        with pytest.raises(RuntimeError, match="lookup failed"):
+            await mixin.step_settings_pass(_message("secret"))
+    else:
+        await mixin.step_settings_pass(_message("secret"))
+    delete.assert_awaited_once_with(7, 5, secret=True)
+    subscription.business_svc.update_params.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workflow", ["login", "settings"])
+async def test_password_is_deleted_before_language_lookup_error(
+    login: tuple[PublicLoginMixin, MagicMock, MagicMock],
+    settings: tuple[PublicSettingsMixin, MagicMock, MagicMock],
+    workflow: str,
+) -> None:
+    mixin = login[0] if workflow == "login" else settings[0]
+    delete = cast(AsyncMock, mixin._delete_message)
+
+    async def fail_language_lookup(uid: int) -> str:
+        delete.assert_awaited_once_with(7, 5, secret=True)
+        raise RuntimeError("lookup failed")
+
+    cast(AsyncMock, mixin.get_lang).side_effect = fail_language_lookup
+    if isinstance(mixin, PublicLoginMixin):
+        with pytest.raises(RuntimeError, match="lookup failed"):
+            await mixin.step_login_pass(_message("secret"), "alice@example.test")
+    else:
+        with pytest.raises(RuntimeError, match="lookup failed"):
+            await mixin.step_settings_pass(_message("secret"))
+    delete.assert_awaited_once_with(7, 5, secret=True)
 
 
 @pytest.mark.asyncio

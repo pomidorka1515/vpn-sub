@@ -57,6 +57,16 @@ class ConversationMixin:
                     self._conversations.clear(key)
                     return
                 text = message.text or ""
+                # Password steps must consume even command-like and menu-like text.
+                # Inspect the router's live state so expired prompts retain normal routing.
+                self._conversations.prune()
+                state = self._conversations._states.get(key)  # ruff: ignore[private-member-access] # pyright: ignore[reportPrivateUsage] router has no public peek API
+                if state is not None and state.step in {
+                    getattr(self, "step_login_pass", None),
+                    getattr(self, "step_settings_pass", None),
+                }:
+                    await self._conversations.dispatch(key, message)
+                    return
                 if text.startswith("/") or self._menu_message(text):
                     self._conversations.clear(key)
                     self._clear_pending(key[0])
