@@ -172,8 +172,12 @@ class LinesConfig:
                     return
 
     def tail(self, n: int = 100) -> Iterator[JsonDict]:
-        """Iterate over the last n lines. Thread-safe at read-time."""
-        raw_lines: bytes = b""
+        """Iterate over the last n lines, skipping blank lines. Thread-safe at read-time."""
+        if n == 0:
+            return
+        chunks: list[bytes] = []
+        newline_count = 0
+        truncated = False
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
                 try:
@@ -187,11 +191,20 @@ class LinesConfig:
                             f.seek(max(0, remaining - chunk_size))
                             chunk = f.read(chunk_size)
                             remaining -= chunk_size
-                            raw_lines = chunk + raw_lines
+                            chunks.append(chunk)
+                            newline_count += chunk.count(b"\n")
+                            # One extra delimiter handles both terminated and unterminated
+                            # final lines and provides a safe UTF-8 starting boundary.
+                            if n > 0 and newline_count > n:
+                                truncated = remaining > 0
+                                break
                 except OSError:
-                    if not raw_lines:
+                    if not chunks:
                         return
 
+        raw_lines = b"".join(reversed(chunks))
+        if truncated:
+            raw_lines = raw_lines[raw_lines.index(b"\n") + 1 :]
         lines = raw_lines.decode("utf-8").splitlines()
         for line in lines[-n:]:
             line = line.strip()
