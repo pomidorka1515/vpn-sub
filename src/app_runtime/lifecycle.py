@@ -60,6 +60,12 @@ class Runtime[DependenciesT]:
             raise AdmissionClosedError("runtime is not ready")
         return self.dependencies
 
+    def adopt_resource(self, resource: OwnedResource) -> None:
+        """Own a resource before composition starts it, including partial starts."""
+        if self.state is not RuntimeState.NEW or self.stopping.is_set():
+            raise AdmissionClosedError("runtime cannot adopt resources")
+        self._opened.append(resource)
+
     async def start(self) -> None:
         async with self._lifecycle_lock:
             if self.ready:
@@ -74,7 +80,7 @@ class Runtime[DependenciesT]:
                     await resource.resource.start()
                 self.state = RuntimeState.READY
             except Exception, asyncio.CancelledError:
-                self._begin_stop()
+                self.begin_stop()
                 # Retain cleanup ownership even if startup is cancelled again.
                 if self._stop_task is None:
                     self._stop_task = asyncio.create_task(
@@ -84,7 +90,7 @@ class Runtime[DependenciesT]:
                     await asyncio.shield(self._stop_task)
                 raise
 
-    def _begin_stop(self) -> None:
+    def begin_stop(self) -> None:
         self.stopping.set()
         self.state = RuntimeState.STOPPING
         self.tasks.stop_admission()
@@ -93,8 +99,8 @@ class Runtime[DependenciesT]:
         # their compensation until they have settled.
 
     async def stop(self) -> None:
-        if self._stop_task is None:
-            self._begin_stop()
+        if self._stop_task is None or self._stop_task.cancelled():
+            self.begin_stop()
             self._stop_task = asyncio.create_task(self._stop(), name="runtime:stop")
         await asyncio.shield(self._stop_task)
 
@@ -103,27 +109,49 @@ class Runtime[DependenciesT]:
             await self._shutdown()
 
     async def _shutdown(self) -> None:
-        errors: list[Exception] = []
+        errors: list[BaseException] = []
         # Stop producers/settle their handlers before draining mutations, while
         # transports, audit writers and offload services are still available.
         for resource in reversed(self._opened):
             if resource.quiesce is not None:
                 try:
                     await resource.quiesce()
-                except Exception as error:
+                except (Exception, asyncio.CancelledError) as error:
+                    task = asyncio.current_task()
+                    if isinstance(error, asyncio.CancelledError) and task and task.cancelling():
+                        raise
                     error.add_note(f"quiescing runtime resource: {resource.name}")
                     errors.append(error)
         await self.tasks.drain(cancel=True)
         await self.mutations.drain()
+        offloads_closed = False
         while self._opened:
-            resource = self._opened.pop()
+            if len(self._opened) == 1 and self._opened[0].name == "primary lock":
+                await self._close_offloads(errors)
+                offloads_closed = True
+            resource = self._opened[-1]
             try:
                 await resource.resource.close()
-            except Exception as error:
+            except (Exception, asyncio.CancelledError) as error:
+                task = asyncio.current_task()
+                if isinstance(error, asyncio.CancelledError) and task and task.cancelling():
+                    raise
                 error.add_note(f"closing runtime resource: {resource.name}")
                 errors.append(error)
-        self.offloads.stop_admission()
-        await self.offloads.close()
+            self._opened.pop()
+        if not offloads_closed:
+            await self._close_offloads(errors)
         self.state = RuntimeState.STOPPED
         if errors:
-            raise ExceptionGroup("runtime cleanup failed", errors)
+            raise BaseExceptionGroup("runtime cleanup failed", errors)
+
+    async def _close_offloads(self, errors: list[BaseException]) -> None:
+        self.offloads.stop_admission()
+        try:
+            await self.offloads.close()
+        except (Exception, asyncio.CancelledError) as error:
+            task = asyncio.current_task()
+            if isinstance(error, asyncio.CancelledError) and task and task.cancelling():
+                raise
+            error.add_note("closing runtime offloads")
+            errors.append(error)

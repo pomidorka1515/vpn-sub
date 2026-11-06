@@ -173,6 +173,112 @@ async def test_producers_quiesce_before_mutations_and_connections_close() -> Non
 
 
 @pytest.mark.asyncio
+async def test_resource_cancellations_are_collected_after_safe_shutdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app_runtime.offload import OffloadServices
+
+    events: list[str] = []
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    quiesced = asyncio.Event()
+    close_offloads = OffloadServices.close
+
+    async def quiesce() -> None:
+        events.append("quiesce")
+        quiesced.set()
+        raise asyncio.CancelledError("quiesce cancelled")
+
+    class CancelledResource(FakeResource):
+        async def close(self) -> None:
+            events.append("close:producer")
+            raise asyncio.CancelledError("close cancelled")
+
+    async def failing_offloads(offloads: OffloadServices) -> None:
+        await close_offloads(offloads)
+        events.append("offloads")
+        raise ValueError("offloads failed")
+
+    monkeypatch.setattr(OffloadServices, "close", failing_offloads)
+    runtime = Runtime(
+        None,
+        resources=(
+            OwnedResource("primary lock", FakeResource("lock", events)),
+            OwnedResource("database", FakeResource("database", events)),
+            OwnedResource("producer", CancelledResource("producer", events), quiesce=quiesce),
+        ),
+    )
+    await runtime.start()
+
+    async def mutation() -> None:
+        entered.set()
+        await release.wait()
+        events.append("mutation")
+
+    caller = asyncio.create_task(runtime.mutations.run(mutation, name="active"))
+    await entered.wait()
+    stopping = asyncio.create_task(runtime.stop())
+    await quiesced.wait()
+    assert events[-1] == "quiesce"
+    assert not stopping.done()
+    release.set()
+    with pytest.raises(BaseExceptionGroup, match="runtime cleanup failed") as caught:
+        await stopping
+    await caller
+    assert [type(error) for error in caught.value.exceptions] == [
+        asyncio.CancelledError,
+        asyncio.CancelledError,
+        ValueError,
+    ]
+    assert events == [
+        "start:lock",
+        "start:database",
+        "start:producer",
+        "quiesce",
+        "mutation",
+        "close:producer",
+        "close:database",
+        "offloads",
+        "close:lock",
+    ]
+    assert runtime.state is RuntimeState.STOPPED
+    with pytest.raises(BaseExceptionGroup, match="runtime cleanup failed"):
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_owning_shutdown_cancellation_keeps_dependencies_open_and_can_retry() -> None:
+    events: list[str] = []
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def quiesce() -> None:
+        entered.set()
+        await release.wait()
+
+    runtime = Runtime(
+        None,
+        resources=(
+            OwnedResource("database", FakeResource("database", events)),
+            OwnedResource("producer", FakeResource("producer", events), quiesce=quiesce),
+        ),
+    )
+    await runtime.start()
+    stopping = asyncio.create_task(runtime.stop())
+    await entered.wait()
+    assert runtime._stop_task is not None
+    runtime._stop_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stopping
+    assert runtime.state is RuntimeState.STOPPING
+    assert events == ["start:database", "start:producer"]
+    release.set()
+    await runtime.stop()
+    assert events[-2:] == ["close:producer", "close:database"]
+    assert runtime.state.name == "STOPPED"
+
+
+@pytest.mark.asyncio
 async def test_mutation_admission_is_bounded_and_pre_cancel_does_not_run() -> None:
     mutations = MutationRegistry(capacity=1)
     started = asyncio.Event()

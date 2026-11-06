@@ -403,7 +403,7 @@ async def test_factory_cleanup_continues_after_close_failures(
     monkeypatch.setattr(OffloadServices, "close", broken_offloads_close)
     limiter = AsyncRateLimiter("redis://test", client=BrokenRedis())
     limiter._owned = True
-    with pytest.raises(BaseExceptionGroup, match="application startup cleanup failed") as caught:
+    with pytest.raises(BaseExceptionGroup, match="runtime cleanup failed") as caught:
         await create_application(
             paths,
             AppOptions(
@@ -415,8 +415,8 @@ async def test_factory_cleanup_continues_after_close_failures(
     errors = caught.value.exceptions
     assert len(errors) == 2
     assert isinstance(errors[0], asyncio.CancelledError if cancel_close else ValueError)
-    assert errors[0].__notes__ == ["closing startup resource: Redis"]
-    assert errors[1].__notes__ == ["closing startup offloads"]
+    assert errors[0].__notes__ == ["closing runtime resource: Redis"]
+    assert errors[1].__notes__ == ["closing runtime offloads"]
     assert isinstance(caught.value.__context__, OSError)
     lock = PrimaryLock(paths.primary_lock)
     await lock.start()
@@ -497,6 +497,120 @@ async def test_factory_retains_cleanup_after_repeated_cancellation(
             *application._startup_cleanup_tasks._tasks,
             return_exceptions=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_factory_failed_producer_drains_mutations_despite_unwind_cancellation(
+    paths: AppPaths,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app as application
+    from app_runtime.composition import PrimaryLock
+    from app_runtime.tasks import AdmissionClosedError
+    from bwatch.watch import BWatch
+    from core import Subscription
+    from db import Database
+
+    document = json.loads(paths.config.read_text())
+    document["3xui"] = {}
+    document["discord"] = {"token": "token", "whitelist": [7]}
+    paths.config.write_text(json.dumps(document))
+    events: list[str] = []
+    entered = asyncio.Event()
+    quiesced = asyncio.Event()
+    release = asyncio.Event()
+    callers: list[asyncio.Task[None]] = []
+    watchers: list[BWatch] = []
+    close_watcher = BWatch.close
+    close_subscription = Subscription.close
+    close_db = Database.close
+    close_lock = PrimaryLock.close
+
+    async def start_watcher(watcher: BWatch) -> None:
+        watchers.append(watcher)
+
+        async def mutation() -> None:
+            entered.set()
+            await release.wait()
+            await watcher.db.list_users()
+            events.append("mutation")
+
+        callers.append(
+            asyncio.create_task(watcher.sub.res.coordinator.run([], mutation, name="test"))
+        )
+        await entered.wait()
+
+    async def stop_watcher(watcher: BWatch) -> None:
+        events.append("watcher")
+        await close_watcher(watcher)
+        quiesced.set()
+
+    async def stop_subscription(subscription: Subscription) -> None:
+        events.append("subscription")
+        await close_subscription(subscription)
+
+    async def stop_db(db: Database) -> None:
+        events.append("database")
+        await close_db(db)
+
+    async def stop_lock(lock: PrimaryLock) -> None:
+        events.append("lock")
+        await close_lock(lock)
+
+    class BrokenDiscord:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def start(self) -> None:
+            raise ValueError("Discord startup failed")
+
+        async def close(self) -> None:
+            events.append("discord")
+
+    monkeypatch.setattr(BWatch, "start", start_watcher)
+    monkeypatch.setattr(BWatch, "close", stop_watcher)
+    monkeypatch.setattr(Subscription, "close", stop_subscription)
+    monkeypatch.setattr(Database, "close", stop_db)
+    monkeypatch.setattr(PrimaryLock, "close", stop_lock)
+    monkeypatch.setattr(application, "DiscordApplication", BrokenDiscord)
+    caller = asyncio.create_task(
+        create_application(
+            paths,
+            AppOptions(
+                start_background=False,
+                limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+            ),
+        ),
+    )
+    try:
+        await asyncio.wait_for(quiesced.wait(), 5)
+        assert events == ["discord", "watcher"]
+        with pytest.raises(AdmissionClosedError):
+            await watchers[0].sub.res.coordinator.run([], lambda: asyncio.sleep(0), name="late")
+        caller.cancel()
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+        cleanup = tuple(application._startup_cleanup_tasks._tasks)
+        assert len(cleanup) == 1
+        assert not cleanup[0].done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*cleanup), 5)
+        await asyncio.gather(*callers)
+        assert events == [
+            "discord",
+            "watcher",
+            "mutation",
+            "discord",
+            "watcher",
+            "subscription",
+            "database",
+            "lock",
+        ]
+    finally:
+        release.set()
+        await asyncio.gather(caller, *callers, return_exceptions=True)
+        await asyncio.gather(*application._startup_cleanup_tasks._tasks, return_exceptions=True)
 
 
 @pytest.mark.asyncio

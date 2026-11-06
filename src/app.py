@@ -48,24 +48,6 @@ __all__ = [
 _startup_cleanup_tasks = TaskRegistry()
 
 
-async def _cleanup_startup(opened: list[OwnedResource], offloads: OffloadServices) -> None:
-    errors: list[BaseException] = []
-    while opened:
-        resource = opened.pop()
-        try:
-            await resource.resource.close()
-        except (Exception, asyncio.CancelledError) as error:
-            error.add_note(f"closing startup resource: {resource.name}")
-            errors.append(error)
-    try:
-        await offloads.close()
-    except (Exception, asyncio.CancelledError) as error:
-        error.add_note("closing startup offloads")
-        errors.append(error)
-    if errors:
-        raise BaseExceptionGroup("application startup cleanup failed", errors)
-
-
 @dataclass(slots=True)
 class ApplicationDependencies:
     app: Quart
@@ -99,10 +81,14 @@ async def create_application(
     paths = paths or AppPaths.from_env()
     options = options or AppOptions()
     offloads = OffloadServices()
+    mutations = MutationRegistry()
+    owner = Runtime(None, offloads=offloads, mutations=mutations)
+    runtime: Application | None = None
     opened: list[OwnedResource] = []
 
     async def open_resource(resource: OwnedResource, log: Logger | None = None) -> None:
         opened.append(resource)
+        owner.adopt_resource(resource)
         with log.loading() if log is not None else nullcontext():
             await resource.resource.start()
 
@@ -156,7 +142,6 @@ async def create_application(
         panels, whitelist = build_panels(cfg, paths, options, verbose="panels" in overrides)
         for panel in [*panels, *([whitelist] if whitelist else [])]:
             await open_resource(OwnedResource(f"panel:{panel.name}", panel), panel.log)
-        mutations = MutationRegistry()
         sub = Subscription(
             cfg=cfg,
             lang_cfg=lang,
@@ -255,10 +240,13 @@ async def create_application(
         app.extensions["runtime"] = runtime
         return runtime
     except Exception, asyncio.CancelledError:
+        cleanup_owner = runtime if runtime is not None else owner
+        if not cleanup_owner.stopping.is_set():
+            cleanup_owner.begin_stop()
         # The registry retains cleanup and observes failures if the caller is
         # cancelled again while shielded cleanup is still running.
         cleanup = _startup_cleanup_tasks.create(
-            lambda: _cleanup_startup(opened, offloads),
+            cleanup_owner.stop,
             name="application:startup-unwind",
         )
         await asyncio.shield(cleanup)
