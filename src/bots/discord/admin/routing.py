@@ -434,9 +434,13 @@ class AdminRoutingMixin(AdminFeatureMixin):
                 view=self.main_menu_view(),
             )
             return
-        await self.sub.business_svc.update_params(username=pending["username"], fingerprint=fp)
-        if self._pending_edits.get(interaction.user.id) is pending:
-            self._pending_edits.pop(interaction.user.id, None)
+        if fp not in self.cfg.view()["fingerprints"]:
+            await self._respond(
+                interaction, "❌ Неизвестный отпечаток.", view=self.main_menu_view()
+            )
+            return
+        if not await self._update_edit_params(interaction, pending, fingerprint=fp):
+            return
         await self._respond(
             interaction,
             f"✅ fingerprint обновлён: `{fp}`",

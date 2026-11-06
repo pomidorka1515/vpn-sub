@@ -3,15 +3,79 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 from secrets import token_hex
+from typing import TypedDict
 
 import discord
 from bots.discord.composition import AdminFeatureMixin
 from bots.list_messages import list_messages
+from errors import CommittedAuditError
 
 __all__ = ["AdminUsersMixin"]
 
 
+class EditParams(TypedDict, total=False):
+    limit: int
+    wl_limit: int
+    timee: int
+    displayname: str
+    fingerprint: str
+
+
 class AdminUsersMixin(AdminFeatureMixin):
+    async def _update_edit_params(
+        self,
+        interaction: discord.Interaction,
+        pending: dict[str, str],
+        *,
+        limit: int | None = None,
+        wl_limit: int | None = None,
+        timee: int | None = None,
+        displayname: str | None = None,
+        fingerprint: str | None = None,
+    ) -> bool:
+        await self._defer(interaction)
+        if not interaction.response.is_done():
+            return False
+        if self._pending_edits.get(interaction.user.id) is not pending:
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+            )
+            return False
+        params: EditParams = {}
+        if limit is not None:
+            params["limit"] = limit
+        if wl_limit is not None:
+            params["wl_limit"] = wl_limit
+        if timee is not None:
+            params["timee"] = timee
+        if displayname is not None:
+            params["displayname"] = displayname
+        if fingerprint is not None:
+            params["fingerprint"] = fingerprint
+        try:
+            await self.sub.business_svc.update_params(username=pending["username"], **params)
+        except CommittedAuditError:
+            self.log.exception("user edit committed but audit failed")
+            if self._pending_edits.get(interaction.user.id) is pending:
+                self._pending_edits.pop(interaction.user.id, None)
+            await self._respond(
+                interaction,
+                "⚠️ Изменение сохранено, но запись аудита не удалась. Не повторяйте изменение.",
+                view=self.main_menu_view(),
+            )
+            return False
+        except Exception:
+            self.log.exception("user edit failed")
+            await self._respond(
+                interaction,
+                "⚠️ Ошибка изменения пользователя. Проверьте текущее состояние перед повтором.",
+                view=self.main_menu_view(),
+            )
+            return False
+        if self._pending_edits.get(interaction.user.id) is pending:
+            self._pending_edits.pop(interaction.user.id, None)
+        return True
+
     async def _cb_list_users(self, interaction: discord.Interaction, page: int = 0) -> None:
         await self._defer(interaction)
         users = await self.sub.user_svc.list_users()
@@ -375,9 +439,8 @@ class AdminUsersMixin(AdminFeatureMixin):
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
-        await self.sub.business_svc.update_params(username=pending["username"], limit=limit)
-        if self._pending_edits.get(interaction.user.id) is pending:
-            self._pending_edits.pop(interaction.user.id, None)
+        if not await self._update_edit_params(interaction, pending, limit=limit):
+            return
         await self._respond(
             interaction,
             f"✅ Месячный лимит обновлён: `{limit}` GB",
@@ -401,9 +464,8 @@ class AdminUsersMixin(AdminFeatureMixin):
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
-        await self.sub.business_svc.update_params(username=pending["username"], wl_limit=wl_limit)
-        if self._pending_edits.get(interaction.user.id) is pending:
-            self._pending_edits.pop(interaction.user.id, None)
+        if not await self._update_edit_params(interaction, pending, wl_limit=wl_limit):
+            return
         await self._respond(
             interaction,
             f"✅ Лимит обновлён: `{wl_limit}` GB",
@@ -428,9 +490,8 @@ class AdminUsersMixin(AdminFeatureMixin):
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
         timee = int(time.time() + (days * 86400)) if days else 0
-        await self.sub.business_svc.update_params(username=pending["username"], timee=timee)
-        if self._pending_edits.get(interaction.user.id) is pending:
-            self._pending_edits.pop(interaction.user.id, None)
+        if not await self._update_edit_params(interaction, pending, timee=timee):
+            return
         if days:
             new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
             await self._respond(
@@ -463,12 +524,8 @@ class AdminUsersMixin(AdminFeatureMixin):
                 view=self.main_menu_view(),
             )
             return
-        await self.sub.business_svc.update_params(
-            username=pending["username"],
-            displayname=new_name,
-        )
-        if self._pending_edits.get(interaction.user.id) is pending:
-            self._pending_edits.pop(interaction.user.id, None)
+        if not await self._update_edit_params(interaction, pending, displayname=new_name):
+            return
         await self._respond(
             interaction,
             f"✅ Имя обновлено: `{new_name}`",
