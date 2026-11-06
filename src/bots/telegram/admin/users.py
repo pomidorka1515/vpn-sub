@@ -39,8 +39,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         end_idx = min(start_idx + self.USERS_PER_PAGE, total_users)
         page_users = all_users[start_idx:end_idx]
 
-        text = f"👥 <b>Список пользователей</b> ({total_users} всего)\n\n"
-        text += "\n".join([f"- <code>{u}</code>" for u in page_users])
+        header = f"👥 <b>Список пользователей</b> ({total_users} всего)\n\n"
 
         markup = types.InlineKeyboardMarkup(row_width=2)
         nav_buttons: list[types.InlineKeyboardButton] = []
@@ -59,7 +58,10 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
 
         markup.add(types.InlineKeyboardButton("🔙 В меню", callback_data="cancel"))  # pyright: ignore[reportUnknownMemberType]
-        await self._send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+        for text in list_messages(
+            header, ((username, None) for username in page_users), limit=4096, html=True
+        ):
+            await self._send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
     async def _cb_online_users(self, chat_id: int) -> None:
         online_users = await self.sub.panel_svc.get_online_users(new=True)
