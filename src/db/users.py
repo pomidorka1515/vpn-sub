@@ -320,7 +320,9 @@ class UsersMixin(ConnectionMixin):
             row = await conn.row("SELECT uuid FROM users WHERE username = ?", (username,))
             if row is not None and row[0] != expected_uuid:
                 raise DatabaseError("created-user recovery identity changed")
-            await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            deleted = await conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            if deleted:
+                await clear_notification_episodes(conn, username, sides=set(), identity=True)
             await conn.executemany(
                 "DELETE FROM app_metadata WHERE key = ?",
                 [(f"user_create_pending:{username}",), (f"user_sync_pending:{username}",)],

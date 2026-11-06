@@ -295,6 +295,7 @@ class CodesMixin(ConnectionMixin):
             await conn.execute(
                 "DELETE FROM users WHERE username = ? AND uuid = ?", (username, expected[0])
             )
+            await clear_notification_episodes(conn, username, sides=set(), identity=True)
             await conn.executemany(
                 "DELETE FROM app_metadata WHERE key = ?",
                 [(f"registration_rollback_failed:{username}",), (f"user_sync_pending:{username}",)],

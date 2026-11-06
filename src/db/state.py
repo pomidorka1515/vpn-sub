@@ -9,6 +9,7 @@ from custom_types import BandwidthSnapshotPayload
 from notify import Kind, Scope, split_key
 
 from .common import ConnectionMixin
+from .notification_episodes import clear_notification_episodes
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -96,6 +97,18 @@ class StateMixin(ConnectionMixin):
                     "UPDATE users SET bw_used = bw_used + ?, wl_used = wl_used + ? WHERE username = ?",
                     rows,
                 )
+                # Normal positive usage must not reopen warning buckets, but a
+                # correction that decreases usage starts a new threshold episode.
+                for regular, whitelist, username in rows:
+                    if regular >= 0 and whitelist >= 0:
+                        continue
+                    sides = {
+                        side
+                        for side, delta in (("traffic", regular), ("whitelist", whitelist))
+                        if delta < 0
+                    }
+                    if await conn.row("SELECT 1 FROM users WHERE username = ?", (username,)):
+                        await clear_notification_episodes(conn, username, sides=sides)
                 if baselines is not None:
                     await conn.execute(
                         "INSERT INTO app_metadata(key, value) VALUES ('watcher_usage_baselines', ?) "
