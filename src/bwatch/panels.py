@@ -49,13 +49,31 @@ class PanelJobs(WatchJobs):
                     # Only confirmed healthy metrics end an alert episode. Recovery
                     # is silent and re-arms the next fault, even within cooldown.
                     self._panel_alerts.pop(panel.name, None)
+                    self._panel_alert_retries.pop(panel.name, None)
                 elif (
                     time.monotonic() - self._panel_alerts.get(panel.name, float("-inf"))
                     > (self.cfg.view()["panel_alert_cooldown"])
                 ):
-                    await self._alert_admin(
-                        f"⚠️ Panel {panel.name}:\n" + "\n".join(f"- {p}" for p in problems),
-                    )
-                    self._panel_alerts[panel.name] = time.monotonic()
+                    failures, due = self._panel_alert_retries.get(panel.name, (0, 0.0))
+                    if time.monotonic() < due:
+                        continue
+                    # Cancellation also retains a retry delay, never a success
+                    # cooldown. Cap both state and delay; retries run on
+                    # subsequent health checks, not separate tasks.
+                    failures = min(failures + 1, 4)
+                    accepted = False
+                    try:
+                        accepted = await self._alert_admin(
+                            f"⚠️ Panel {panel.name}:\n" + "\n".join(f"- {p}" for p in problems),
+                        )
+                    finally:
+                        if not accepted:
+                            self._panel_alert_retries[panel.name] = (
+                                failures,
+                                time.monotonic() + min(60 * 2 ** (failures - 1), 300),
+                            )
+                    if accepted:
+                        self._panel_alerts[panel.name] = time.monotonic()
+                        self._panel_alert_retries.pop(panel.name, None)
 
         await self._job("health", operation)

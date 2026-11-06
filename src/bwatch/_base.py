@@ -37,11 +37,12 @@ class WatchJobs:
     _snap_reset_wl_mem: Counters
     _failure: dict[str, int] | None
     _panel_alerts: dict[str, float]
+    _panel_alert_retries: dict[str, tuple[int, float]]
 
     async def _job(self, name: str, operation: Callable[[], Awaitable[None]]) -> None:
         raise NotImplementedError
 
-    async def _alert_admin(self, message: str) -> None:
+    async def _alert_admin(self, message: str) -> bool:
         raise NotImplementedError
 
     async def _quota(self, username: str, *, recover: bool) -> None:

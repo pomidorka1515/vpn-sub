@@ -55,7 +55,7 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
         sub: Subscription,
         *,
         notifier: Notifier | None = None,
-        alert: Callable[[str], Awaitable[object]] | None = None,
+        alert: Callable[[str], Awaitable[bool]] | None = None,
         scheduled: bool = True,
         verbose: bool = False,
     ) -> None:
@@ -83,6 +83,7 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
         }
         self._failure: dict[str, int] | None = None
         self._panel_alerts: dict[str, float] = {}
+        self._panel_alert_retries: dict[str, tuple[int, float]] = {}
 
     async def start(self) -> None:
         if self._started:
@@ -147,13 +148,14 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
                 except Exception:
                     self.log.exception("%s crashed", label)
 
-    async def _alert_admin(self, message: str) -> None:
+    async def _alert_admin(self, message: str) -> bool:
         if self.alert is not None:
             try:
                 # Watcher alerts are plain text; the admin sender uses HTML parsing.
-                await self.alert(escape(message))
+                return await self.alert(escape(message)) is True
             except Exception:
                 self.log.exception("watcher alert failed")
+        return False
 
     async def _run_due_daily_snapshots(self, now: float) -> None:
         for kind in self._snapshot_due_at:

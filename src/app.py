@@ -200,7 +200,7 @@ async def create_application(
             db,
             sub,
             notifier=notifier,
-            alert=admin_bot.msg if admin_bot is not None else None,
+            alert=admin_bot.send_alert if admin_bot is not None else None,
             scheduled=options.start_background,
             verbose="bwatch" in overrides,
         )

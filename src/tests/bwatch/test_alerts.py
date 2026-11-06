@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
@@ -34,7 +35,7 @@ async def test_panel_alerts_respect_configured_cooldown(
     status.obj.mem.total = 0
     status.obj.disk.total = 0
     monkeypatch.setattr(watch.sub.panel_svc, "statuses", AsyncMock(return_value=[status]))
-    alert = AsyncMock()
+    alert = AsyncMock(return_value=True)
     watch.alert = alert
     now = 100.0
     monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
@@ -66,7 +67,7 @@ async def test_panel_health_unknown_dead_and_recovery(
     healthy = panel_status()
     statuses = AsyncMock(return_value=[healthy])
     monkeypatch.setattr(watch.sub.panel_svc, "statuses", statuses)
-    alert = AsyncMock()
+    alert = AsyncMock(return_value=True)
     watch.alert = alert
     now = 100.0
     monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
@@ -120,7 +121,7 @@ async def test_panel_outage_reminders_share_per_panel_cooldown(
     panel.dead = dead
     statuses = AsyncMock(return_value=[None])
     monkeypatch.setattr(watch.sub.panel_svc, "statuses", statuses)
-    alert = AsyncMock()
+    alert = AsyncMock(return_value=True)
     watch.alert = alert
     now = 100.0
     monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
@@ -147,7 +148,7 @@ async def test_unknown_status_does_not_clear_existing_metric_alert(
     statuses = AsyncMock(return_value=[panel_status(cpu=95)])
     monkeypatch.setattr(watch.sub.panel_svc, "statuses", statuses)
     monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: 100.0))
-    alert = AsyncMock()
+    alert = AsyncMock(return_value=True)
     watch.alert = alert
 
     await watch.panel_health_check()
@@ -175,7 +176,7 @@ async def test_panel_status_read_failure_is_alerted(
     get = AsyncMock(side_effect=unreadable)
     monkeypatch.setattr(panel, "get", get)
     monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: 100.0))
-    alert = AsyncMock()
+    alert = AsyncMock(return_value=True)
     watch.alert = alert
 
     # Exercise the real status service's exception -> None contract, including
@@ -212,13 +213,198 @@ async def test_admin_alerts_escape_plain_text_for_telegram(
     bot.bot = telegram
     bot.admin_uids = [42, 43]
     bot.log = MagicMock()
-    watch.alert = bot.msg
+    watch.alert = bot.send_alert
 
-    await watch._alert_admin(message)
+    assert await watch._alert_admin(message) is True
 
     assert telegram.send_message.await_count == 2
     telegram.send_message.assert_any_await(42, expected, parse_mode="HTML")
     telegram.send_message.assert_any_await(43, expected, parse_mode="HTML")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["exception", "absent", "rejected", "no_outcome"])
+async def test_failed_panel_alert_retries_before_success_cooldown(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    watch.cfg = config_mock(subscription_config(panel_alert_cooldown=3600))
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", AsyncMock(return_value=[None]))
+    now = 100.0
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
+    alert = AsyncMock(return_value=None if failure == "no_outcome" else False)
+    if failure == "exception":
+        alert.side_effect = RuntimeError("sender unavailable")
+    watch.alert = None if failure == "absent" else alert
+
+    await watch.panel_health_check()
+    assert watch._panel_alerts == {}
+    panel = watch.sub.panels[0].name
+    assert watch._panel_alert_retries == {panel: (1, 160.0)}
+
+    recovered = AsyncMock(return_value=True)
+    watch.alert = recovered
+    now = 159.0
+    await watch.panel_health_check()
+    recovered.assert_not_awaited()
+    now = 160.0
+    await watch.panel_health_check()
+    recovered.assert_awaited_once()
+    assert watch._panel_alerts == {panel: now}
+    assert watch._panel_alert_retries == {}
+    now += 300
+    await watch.panel_health_check()
+    recovered.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_panel_reminder_preserves_last_acceptance_time(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    watch.cfg = config_mock(subscription_config(panel_alert_cooldown=3600))
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", AsyncMock(return_value=[None]))
+    now = 100.0
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
+    alert = AsyncMock(return_value=True)
+    watch.alert = alert
+    panel = watch.sub.panels[0].name
+    await watch.panel_health_check()
+
+    now += 3601
+    alert.return_value = False
+    await watch.panel_health_check()
+    assert watch._panel_alerts == {panel: 100.0}
+    assert watch._panel_alert_retries == {panel: (1, now + 60)}
+
+    async def accept(_text: str) -> bool:
+        nonlocal now
+        now += 5  # Acceptance, not attempt start, anchors the success cooldown.
+        return True
+
+    alert.side_effect = accept
+    now += 60
+    await watch.panel_health_check()
+    assert alert.await_count == 3
+    assert watch._panel_alerts == {panel: now}
+    assert watch._panel_alert_retries == {}
+
+
+@pytest.mark.asyncio
+async def test_panel_alert_failure_backoff_is_capped_and_cleared_by_health(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statuses = AsyncMock(return_value=[None])
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", statuses)
+    now = 100.0
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
+    alert = AsyncMock(return_value=False)
+    watch.alert = alert
+    panel = watch.sub.panels[0].name
+
+    for attempt, delay in enumerate((60, 120, 240, 300, 300, 300), 1):
+        await watch.panel_health_check()
+        assert alert.await_count == attempt
+        assert watch._panel_alerts == {}
+        assert watch._panel_alert_retries == {panel: (min(attempt, 4), now + delay)}
+        now += delay - 1
+        await watch.panel_health_check()
+        assert alert.await_count == attempt
+        now += 1
+
+    statuses.return_value = [panel_status()]
+    await watch.panel_health_check()
+    assert watch._panel_alert_retries == {}
+    # A healthy read ends the failed episode and re-arms immediately.
+    statuses.return_value = [None]
+    await watch.panel_health_check()
+    assert watch._panel_alert_retries == {panel: (1, now + 60)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_uids", [[], [42], [42, 43]])
+async def test_panel_alert_uses_all_recipient_acceptance(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_uids: list[int],
+) -> None:
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", AsyncMock(return_value=[None]))
+    now = 100.0
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
+    bot = TelegramAdminBot.__new__(TelegramAdminBot)
+    bot.bot = telegram_mock()
+    bot.admin_uids = [42, 43]
+    bot.log = MagicMock()
+    watch.alert = bot.send_alert
+
+    async def send(uid: int, _text: str, *, parse_mode: str) -> None:
+        if uid in failed_uids:
+            raise RuntimeError("recipient unavailable")
+
+    bot.bot.send_message = AsyncMock(side_effect=send)
+    await watch.panel_health_check()
+    assert bot.bot.send_message.await_count == 2  # One failure never skips other admins.
+    assert bool(watch._panel_alerts) is (not failed_uids)
+    assert bool(watch._panel_alert_retries) is bool(failed_uids)
+    if failed_uids:
+        failed_uids.clear()
+        now += 60
+        await watch.panel_health_check()
+        assert bot.bot.send_message.await_count == 4
+        assert watch._panel_alerts == {watch.sub.panels[0].name: now}
+        assert watch._panel_alert_retries == {}
+
+
+@pytest.mark.asyncio
+async def test_empty_admin_recipients_do_not_accept_alert(watch: BWatch) -> None:
+    bot = TelegramAdminBot.__new__(TelegramAdminBot)
+    bot.bot = telegram_mock()
+    bot.admin_uids = []
+    watch.alert = bot.send_alert
+
+    assert await watch._alert_admin("alert") is False
+    bot.bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_uid", [42, 43])
+async def test_cancelled_panel_alert_retries_without_success_cooldown(
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    cancel_uid: int,
+) -> None:
+    monkeypatch.setattr(watch.sub.panel_svc, "statuses", AsyncMock(return_value=[None]))
+    now = 100.0
+    monkeypatch.setattr("bwatch.panels.time", SimpleNamespace(monotonic=lambda: now))
+    bot = TelegramAdminBot.__new__(TelegramAdminBot)
+    bot.bot = telegram_mock()
+    bot.admin_uids = [42, 43]
+    bot.log = MagicMock()
+    watch.alert = bot.send_alert
+
+    async def send(uid: int, _text: str, *, parse_mode: str) -> None:
+        if uid == cancel_uid:
+            raise asyncio.CancelledError
+
+    bot.bot.send_message = AsyncMock(side_effect=send)
+    with pytest.raises(asyncio.CancelledError):
+        await watch.panel_health_check()
+    assert watch._panel_alerts == {}
+    panel = watch.sub.panels[0].name
+    assert watch._panel_alert_retries == {panel: (1, 160.0)}
+    bot.log.exception.assert_not_called()
+
+    bot.bot.send_message = AsyncMock()
+    now += 1
+    await watch.panel_health_check()
+    bot.bot.send_message.assert_not_awaited()
+    now = 160.0
+    await watch.panel_health_check()
+    assert bot.bot.send_message.await_count == 2
+    assert watch._panel_alerts == {panel: now}
+    assert watch._panel_alert_retries == {}
 
 
 @pytest.mark.asyncio

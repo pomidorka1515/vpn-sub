@@ -32,11 +32,22 @@ class AdminCommonMixin(
         return user_id in self.admin_uids
 
     async def msg(self, text: str, parse_mode: str = "HTML") -> None:
+        await self.send_alert(text, parse_mode=parse_mode)
+
+    async def send_alert(self, text: str, parse_mode: str = "HTML") -> bool:
+        """Report acceptance by every configured admin; empty/partial sends fail.
+
+        Acceptance is Telegram API success, not proof that a human read the alert.
+        Cancellation propagates, including after partial delivery.
+        """
+        accepted = bool(self.admin_uids)
         for uid in self.admin_uids:
             try:
                 await self.bot.send_message(uid, text, parse_mode=parse_mode)
             except Exception:
+                accepted = False
                 self.log.exception("failed to send message to admin ID %s", uid)
+        return accepted
 
     def get_main_menu(self) -> types.InlineKeyboardMarkup:
         return types.InlineKeyboardMarkup(row_width=2).add(  # pyright: ignore[reportUnknownMemberType]
