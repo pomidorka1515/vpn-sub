@@ -13,6 +13,12 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.fixture
+def database_read_connections() -> int:
+    # These request-validation cases do not exercise concurrent readers.
+    return 1
+
+
 @pytest.mark.parametrize("operation", ["add", "update"])
 @pytest.mark.parametrize("field", ["limit", "wl_limit", "time"])
 @pytest.mark.parametrize(

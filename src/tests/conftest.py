@@ -105,6 +105,11 @@ def db_path(tmp_path: Path) -> Path:
     return tmp_path / "state.sqlite3"
 
 
+@pytest.fixture
+def database_read_connections() -> int:
+    return 2
+
+
 @pytest.fixture(scope="session")
 def database_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Build the empty schema once; never share live connections or test data."""
@@ -120,11 +125,20 @@ def database_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest_asyncio.fixture
-async def database(db_path: Path, database_template: Path) -> AsyncIterator[Database]:
+async def database(
+    db_path: Path,
+    database_template: Path,
+    database_read_connections: int,
+) -> AsyncIterator[Database]:
     # Closing the template checkpoints its WAL. Each test gets a private file
     # and real startup on its own loop; migration tests using db_path stay fresh.
     await named_to_thread("test-database-copy", shutil.copyfile, database_template, db_path)
-    db = Database(path=db_path, timeout=2, start_backup=False)
+    db = Database(
+        path=db_path,
+        timeout=2,
+        read_connections=database_read_connections,
+        start_backup=False,
+    )
     await db.start()
     try:
         async with subscription_scope():

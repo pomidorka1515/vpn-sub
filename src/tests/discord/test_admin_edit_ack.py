@@ -186,7 +186,7 @@ async def test_expiry_modal_explains_replacement() -> None:
     assert modal.title == "Замена срока"
     assert modal.custom_id == "admin:modal:edit_time:current"
     field = cast(discord.ui.TextInput[discord.ui.Modal], modal.children[0])
-    assert field.label == "Дней от текущего момента (0 = безлимит)"
+    assert field.to_component_dict()["label"] == "Дней от текущего момента (0 = безлимит)"
     assert field.placeholder == "Текущий срок будет заменён"
 
 
