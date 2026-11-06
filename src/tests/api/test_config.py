@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING, cast
 
@@ -157,6 +158,53 @@ async def test_config_commit_and_conflict(
     assert response.status_code == 409
     assert (await response.get_json())["obj"]["base"] == base_for(path)
     assert path.read_bytes() == before
+
+
+@pytest.mark.asyncio
+async def test_config_response_retains_own_revision_during_concurrent_edit(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, cfg, path, audit = config_api
+    committed = asyncio.Event()
+    resume = asyncio.Event()
+    backup_now = cfg.backup_now
+
+    async def pause_first_backup() -> None:
+        if not committed.is_set():
+            committed.set()
+            await resume.wait()
+        await backup_now()
+
+    monkeypatch.setattr(cfg, "backup_now", pause_first_backup)
+    async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
+        first = tasks.create_task(set_config(app, base_for(path), {"sub_name": "first"}))
+        await committed.wait()
+        first_base = base_for(path)
+        assert cfg.view()["sub_name"] == "first"
+        assert not first.done()
+
+        second = await set_config(app, first_base, {"sub_name": "second", "3xui": {}})
+        assert second.status_code == 200
+        second_payload = await second.get_json()
+        second_base = base_for(path)
+        assert second_base != first_base
+        assert second_payload["obj"] == {"base": second_base, "restart": ["3xui"]}
+        resume.set()
+
+    first_response = first.result()
+    assert first_response.status_code == 200
+    first_payload = await first_response.get_json()
+    assert first_payload["obj"] == {"base": first_base, "restart": []}
+
+    before = path.read_bytes()
+    records = list(audit.records)
+    stale = await set_config(app, first_payload["obj"]["base"], {"sub_name": "lost"})
+    assert stale.status_code == 409
+    assert (await stale.get_json())["obj"]["base"] == second_base
+    assert path.read_bytes() == before
+    assert cfg.view()["sub_name"] == "second"
+    assert audit.records == records
 
 
 @pytest.mark.asyncio

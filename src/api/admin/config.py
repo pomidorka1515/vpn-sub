@@ -53,17 +53,18 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
         changed: list[str] = []
         restart: list[str] = []
 
-        def patch(tx: MutableMapping[str, JsonValue]) -> None:
+        def patch(tx: MutableMapping[str, JsonValue]) -> str:
             nonlocal conflict, changed, restart
             current_hash = config_etag(dict(tx))
             if current_hash != base:
                 conflict = current_hash
-                return
+                return current_hash
             status, changed, restart = apply_config_patch(tx, values)
             statuses[0] = status
+            return config_etag(dict(tx))
 
         try:
-            await self.cfg.mutate(patch)
+            new_hash = await self.cfg.mutate(patch)
         except ValidationError as exc:
             return err(exc.message)
         except SchemaValidationError as exc:
@@ -85,7 +86,6 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
                 name="config_update",
                 info={"keys": changed},
             )
-        new_hash = config_etag(cast("dict[str, JsonValue]", self.cfg.view()))
         return ok(
             "Updated" if status == "updated" else "Unchanged",
             obj={"base": new_hash, "restart": restart},
