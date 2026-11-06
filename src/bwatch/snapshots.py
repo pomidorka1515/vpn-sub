@@ -89,13 +89,19 @@ class SnapshotJobs(WatchJobs):
         self,
         states: list[UserRecord],
     ) -> tuple[dict[str, dict[str, BandwidthInfo]], dict[str, dict[str, BandwidthInfo]]]:
+        # Daily samples are all-or-nothing across both traffic classes. A failed
+        # read must leave rows and baselines untouched for the scheduled retry.
         main = (
-            await self.sub.bandwidth_svc.panel_traffic(work="background")
+            await self.sub.bandwidth_svc.panel_traffic(work="background", require_complete=True)
             if any(s["bw_limit_gb"] for s in states)
             else {}
         )
         wl = (
-            await self.sub.bandwidth_svc.panel_traffic(whitelist=True, work="background")
+            await self.sub.bandwidth_svc.panel_traffic(
+                whitelist=True,
+                work="background",
+                require_complete=True,
+            )
             if any(s["wl_limit_gb"] for s in states)
             else {}
         )
