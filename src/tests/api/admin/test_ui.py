@@ -26,6 +26,7 @@ async def sign_in(client: TestClientProtocol) -> None:
         json={"username": "admin", "password": "panel-secret"},
     )
     assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
     for part in ("admin_ui=", "Path=/sub/admin", "HttpOnly", "Secure", "SameSite=Lax"):
         assert part in response.headers["Set-Cookie"]
 
@@ -33,6 +34,7 @@ async def sign_in(client: TestClientProtocol) -> None:
 async def browser_token(client: TestClientProtocol) -> str:
     response = await client.get("/sub/admin/token")
     assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
     token = (await response.get_json())["obj"]["token"]
     assert isinstance(token, str)
     assert token.startswith("ui.")
@@ -45,7 +47,9 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
     response = await client.get("/sub/admin")
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/sub/admin/login")
-    assert (await client.get("/sub/admin/token")).status_code == 401
+    response = await client.get("/sub/admin/token")
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
     response = await client.get("/sub/admin/login")
     body = await response.get_data()
     assert isinstance(body, bytes)
@@ -73,21 +77,21 @@ async def test_admin_session_rejects_invalid_login(
     admin_api: tuple[Quart, Subscription],
     body: dict[str, str],
 ) -> None:
-    assert (
-        await admin_api[0].test_client().post("/sub/admin/session", json=body)
-    ).status_code == 401
+    response = await admin_api[0].test_client().post("/sub/admin/session", json=body)
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription]) -> None:
     app, sub = admin_api
     client = app.test_client()
-    assert (
-        await client.post(
-            "/sub/admin/session",
-            data="username=admin",
-            headers={"Content-Type": "text/plain"},
-        )
-    ).status_code == 400
+    response = await client.post(
+        "/sub/admin/session",
+        data="username=admin",
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 400
+    assert response.headers["Cache-Control"] == "no-store"
     await sign_in(client)
     session = await sub.res.db.admin_ui_session()
     assert session is not None
@@ -147,6 +151,7 @@ async def test_admin_relogin_and_logout(admin_api: tuple[Quart, Subscription]) -
         headers={"X-Admin-CSRF": await browser_token(client)},
     )
     assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
     assert "Path=/sub/admin" in response.headers["Set-Cookie"]
     assert "Max-Age=0" in response.headers["Set-Cookie"]
     assert await sub.res.db.admin_ui_session() is None
@@ -176,19 +181,20 @@ async def test_browser_api_authority_is_session_bound(
     ).status_code == 200
     if revoke == "logout":
         for csrf in ({}, {"X-Admin-CSRF": "wrong"}):
-            assert (await client.post("/sub/admin/logout", headers=csrf)).status_code == 403
-        assert (
-            await client.post(
-                "/sub/admin/logout",
-                headers={"X-Admin-CSRF": token},
-            )
-        ).status_code == 200
+            response = await client.post("/sub/admin/logout", headers=csrf)
+            assert response.status_code == 403
+            assert response.headers["Cache-Control"] == "no-store"
+        response = await client.post("/sub/admin/logout", headers={"X-Admin-CSRF": token})
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
     elif revoke == "relogin":
         await sign_in(client)
     else:
         await sub.res.db.set_metadata("admin_ui_session_expires_at", "1")
     client.set_cookie("localhost", "admin_ui", cookie, path="/sub/admin")
-    assert (await client.get("/sub/admin/token")).status_code == 401
+    response = await client.get("/sub/admin/token")
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
     assert (await client.get("/sub/api/api/config/get", headers=headers)).status_code == 401
     response = await client.get("/sub/api/api/config/get", headers={"Authorization": "secret"})
     assert response.status_code == 200
@@ -214,6 +220,7 @@ async def test_admin_logout_rejects_unauthenticated_callers(
     response = await attacker.post("/sub/admin/logout")
 
     assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
     assert "Set-Cookie" not in response.headers
     assert await sub.res.db.admin_ui_session() == session
     assert (await admin.get("/sub/admin/token")).status_code == 200
@@ -232,13 +239,75 @@ async def test_admin_logout_is_rate_limited(
     attacker = app.test_client()
     for _ in range(10):
         assert (await attacker.post("/sub/admin/logout")).status_code == 401
-    assert (await attacker.post("/sub/admin/logout")).status_code == 429
+    response = await attacker.post("/sub/admin/logout")
+    assert response.status_code == 429
+    assert response.headers["Cache-Control"] == "no-store"
     assert allow.await_count == 11
     for call in allow.await_args_list:
         assert call.args[0].endswith("AsyncUiRoutes.admin_logout:10")
         assert call.args[2] == 10
     assert await sub.res.db.admin_ui_session() == session
     assert (await admin.get("/sub/admin/token")).status_code == 200
+
+
+@pytest.mark.parametrize("endpoint", ["session", "logout"])
+@pytest.mark.parametrize("store_failed", [False, True])
+async def test_admin_auth_rate_limit_responses_are_not_stored(
+    admin_api: tuple[Quart, Subscription],
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint: str,
+    store_failed: bool,
+) -> None:
+    app, _ = admin_api
+    allow = AsyncMock(return_value=False, side_effect=RuntimeError() if store_failed else None)
+    monkeypatch.setattr(app.extensions["limiter"], "allow", allow)
+
+    response = await app.test_client().post(f"/sub/admin/{endpoint}")
+
+    assert response.status_code == 429
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize("endpoint", ["token", "session", "logout"])
+async def test_admin_auth_storage_errors_are_not_stored(
+    admin_api: tuple[Quart, Subscription],
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint: str,
+) -> None:
+    app, sub = admin_api
+    client = app.test_client()
+    await sign_in(client)
+    token = await browser_token(client)
+    operation = "admin_ui_session" if endpoint == "token" else "set_admin_ui_session"
+    monkeypatch.setattr(sub.res.db, operation, AsyncMock(side_effect=RuntimeError()))
+
+    if endpoint == "token":
+        response = await client.get("/sub/admin/token")
+    else:
+        response = await client.post(
+            f"/sub/admin/{endpoint}",
+            json={"username": "admin", "password": "panel-secret"},
+            headers={"X-Admin-CSRF": token},
+        )
+
+    assert response.status_code == 500
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "Set-Cookie" not in response.headers
+
+
+@pytest.mark.parametrize("authenticated", [False, True])
+async def test_admin_token_head_is_not_stored(
+    admin_api: tuple[Quart, Subscription],
+    authenticated: bool,
+) -> None:
+    client = admin_api[0].test_client()
+    if authenticated:
+        await sign_in(client)
+
+    response = await client.head("/sub/admin/token")
+
+    assert response.status_code == (200 if authenticated else 401)
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.parametrize(("uri", "api_uri", "root"), [("", "api", "/api"), ("sub", "", "/sub")])

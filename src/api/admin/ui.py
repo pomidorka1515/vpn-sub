@@ -25,6 +25,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
     """Admin HTML pages and cookie session."""
 
     def reg_handles(self) -> None:
+        self.app.after_request(self._admin_auth_no_store)
         conf = self.cfg.view()
         prefix = "/" + "/".join(p.strip("/ ") for p in (conf["uri"],) if p and p.strip("/ "))
         for path, handler in (
@@ -41,6 +42,12 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
                 func = rate_limit(10)(func)
             func = func.__get__(self, type(self))
             self.app.add_url_rule(url, handler, func, methods=methods, strict_slashes=False)
+
+    async def _admin_auth_no_store(self, response: Response) -> Response:
+        # Apply after error handling too, including rate-limit and storage failures.
+        if request.endpoint in {"admin_token", "admin_session", "admin_logout"}:
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     async def admin_ui(self) -> ResponseType:
         if not await self._admin_cookie_ok():
