@@ -6,12 +6,12 @@ data/
 !.github/**
 !.git-blame-ignore-revs
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 venv/
 out/
 bin/
 build/
+node_modules/
 *.log
 *.swp
 *.md
