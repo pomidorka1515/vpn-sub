@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from abc import ABC
 from collections.abc import Mapping
 from functools import lru_cache
@@ -10,9 +9,8 @@ from typing import TYPE_CHECKING, ClassVar, NamedTuple, Protocol, cast
 from quart import Response, request
 from werkzeug.wrappers import Response as WerkzeugResponse
 
-from fonts import FONT_FILES
 from loggers import Logger
-from paths import bundled_root
+from paths import frontend_root
 
 if TYPE_CHECKING:
     from quart import Quart
@@ -26,65 +24,22 @@ if TYPE_CHECKING:
 
 type ResponseType = tuple[Response, int] | Response | WerkzeugResponse
 
-RES_DIR = bundled_root() / "res"
+RES_DIR = frontend_root()
 
 
 class SnapshotStatus(Protocol):
     def get_daily_snapshot_failure(self) -> JsonifyValue: ...
 
 
-_ASSET_FILES: tuple[str, ...] = (
-    "common.js",
-    "common.css",
-    "fonts.css",
-    "auth.css",
-    "dashboard.css",
-    "history.css",
-    "admin.css",
-    "charts.css",
-    "dashboard.js",
-    "history.js",
-    "vendor/chart.umd.min.js",
-    "vendor/codemirror-5.65.16.min.js",
-    "vendor/codemirror-5.65.16.min.css",
-    *(f"fonts/{name}" for name in sorted(FONT_FILES)),
-)
-
-_ADMIN_MODULE_RE = re.compile(r"^[a-z0-9_-]+$")
-
-
-def admin_module_names() -> tuple[str, ...]:
-    """Relative stems of res/admin/**/*.js, used as static routes and cache-bust inputs.
-
-    Basenames must be unique. A nested file is served at /admin/<relative>.js
-    and imported by that same relative path, so charts/spec.js stays charts/spec.js.
-    """
-    folder = RES_DIR / "admin"
-    if not folder.is_dir():
-        return ()
-    names: list[str] = []
-    stems: set[str] = set()
-    for path in sorted(folder.rglob("*.js")):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(folder).with_suffix("")
-        if not all(_ADMIN_MODULE_RE.fullmatch(part) for part in relative.parts):
-            continue
-        if path.stem in stems:
-            raise ValueError(f"duplicate admin module basename: {path.stem}")
-        stems.add(path.stem)
-        names.append(relative.as_posix())
-    return tuple(names)
-
-
 @lru_cache(maxsize=1)
 def asset_version() -> str:
     """Cache-busting version for static assets, derived from shared frontend files."""
     digest = sha1(usedforsecurity=False)
-    for name in (*_ASSET_FILES, "browser.html"):
-        digest.update((RES_DIR / name).read_bytes())
-    for name in admin_module_names():
-        digest.update((RES_DIR / "admin" / f"{name}.js").read_bytes())
+    for path in sorted(RES_DIR.rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(RES_DIR).as_posix().encode())
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
     return digest.hexdigest()[:12]
 
 

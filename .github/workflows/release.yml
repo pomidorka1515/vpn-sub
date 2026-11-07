@@ -31,7 +31,7 @@ jobs:
               --include-module=paths
               --include-module=version
               --include-package=cli
-              --include-data-dir=res=res
+              --include-data-dir=frontend/dist=frontend/dist
               --include-data-files=lang.jsonc=lang.jsonc
               --include-data-files=config.schema.json=config.schema.json
               --include-module=discord
@@ -39,6 +39,17 @@ jobs:
               --include-data-files=src/discord/lang.jsonc=discord.lang.jsonc
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: build runtime resources
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run build
 
       - uses: actions/setup-python@v5
         with:
@@ -125,7 +136,7 @@ jobs:
               if features.check(feature):
                   raise SystemExit(f"Pillow retained unwanted feature: {feature}")
           image = Image.new("RGB", (240, 80), "white")
-          font = ImageFont.truetype(str(next(Path("res/fonts").glob("*.ttf"))), 16)
+          font = ImageFont.truetype(str(next(Path("frontend/dist/fonts").glob("*.ttf"))), 16)
           ImageDraw.Draw(image).text((5, 5), "VPN тест", font=font, fill="black")
           for image in (image, qrcode.make("https://example.com/sub")):
               buffer = BytesIO()
@@ -540,6 +551,18 @@ jobs:
               for path in dist.rglob("*"):
                   if "zstandard" in path.parts or path.name.startswith(forbidden):
                       raise SystemExit(f"Unwanted codec in payload: {path}")
+              expected = {
+                  path.relative_to("frontend"): path.read_bytes()
+                  for path in Path("frontend/dist").rglob("*") if path.is_file()
+              }
+              actual = {
+                  path.relative_to(dist / "frontend"): path.read_bytes()
+                  for path in (dist / "frontend").rglob("*") if path.is_file()
+              }
+              if actual != expected:
+                  raise SystemExit(f"Frontend payload differs from built resources: {dist}")
+              if any(path.suffix in {".map", ".ts"} or "node_modules" in path.parts for path in actual):
+                  raise SystemExit(f"Development frontend files in payload: {dist}")
           report = ET.parse("build/dist/${{ matrix.name }}-report.xml")
           excluded_modules = (
               "zstandard", "aioquic", "trio", "uvloop",
@@ -597,7 +620,7 @@ jobs:
         if: matrix.name == 'vpn-sub'
         run: |
           set -euo pipefail
-          # --probe imports the async HTTP/runtime stack and checks res/, lang.jsonc, and
+          # --probe imports the async HTTP/runtime stack and checks frontend/dist/, lang.jsonc, and
           # config.schema.json were packed. It does not boot the service: a
           # missing config or Redis must not look like a bad binary, and a
           # crash must not look like success. Exit 0 is the only pass.

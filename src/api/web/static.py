@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, ClassVar
 
 from quart import Response, make_response, redirect, render_template, request, send_file  # pyright: ignore[reportUnknownVariableType]  # Upstream PathLike lacks a type argument.
@@ -8,7 +7,6 @@ from quart import Response, make_response, redirect, render_template, request, s
 from api.common import (
     RES_DIR,
     Route,
-    admin_module_names,
     asset_version,
     web_lang_tables,
 )
@@ -26,23 +24,9 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
     """Pages, CSS/JS, fonts, and the redirect interstitial."""
 
     async def admin_module_js(self, name: str) -> ResponseType:
-        if name not in admin_module_names():
+        if name != "main":
             return err("Not found", 404)
-        version = await self.sub.res.offloads.files.run(asset_version)
-        source = await self.sub.res.offloads.files.run(
-            lambda: (RES_DIR / "admin" / f"{name}.js").read_text(encoding="utf-8"),
-        )
-        # Version import specifiers only. A quote-suffix replace missed
-        # "./charts/spec.js" because nested modules do not end in .js'.
-        body = re.sub(
-            r"""(?P<lead>from\s+)(?P<quote>['"])(?P<path>\.{1,2}/[^'"]+\.js)(?P=quote)""",
-            lambda match: (
-                f"{match.group('lead')}{match.group('quote')}"
-                f"{match.group('path')}?v={version}{match.group('quote')}"
-            ),
-            source,
-        )
-        return await self._static(f"admin/{name}.js", "text/javascript", body.encode("utf-8"))
+        return await self._static("admin/main.js", "text/javascript")
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
         Route("GET", "/redirect", "redirect_page"),
@@ -71,14 +55,17 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
             return err("Invalid prefix", 400)
         if len(prefix) > 512:
             return err("Prefix too long", 400)
-        return await make_response(await send_file(RES_DIR / "redirect.html", add_etags=False))
+        return await make_response(
+            await send_file(RES_DIR / "templates" / "redirect.html", add_etags=False),
+        )
 
     async def _static(self, name: str, mimetype: str, body: bytes | None = None) -> ResponseType:
         # url is versioned via ?v= (asset_version), so long caching is safe
         if body is None:
             response = await make_response(
                 await send_file(
-                    RES_DIR / name,
+                    RES_DIR
+                    / (name if name.startswith(("fonts/", "vendor/")) else f"assets/{name}"),
                     mimetype=mimetype,
                     add_etags=True,
                     cache_timeout=31536000,
@@ -98,7 +85,7 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
     async def common_css(self) -> ResponseType:
         body = await self.sub.res.offloads.files.run(
             lambda: embed_font_faces(
-                (RES_DIR / "common.css").read_text(encoding="utf-8"),
+                (RES_DIR / "assets" / "common.css").read_text(encoding="utf-8"),
                 self.prefix,
             ).encode("utf-8"),
         )

@@ -25,7 +25,7 @@ function dashboard(message) {
     }),
   });
   context.window = context;
-  const source = file => fs.readFileSync(path.join(__dirname, '../res', file), 'utf8');
+  const source = file => fs.readFileSync(path.join(__dirname, '../frontend/src/legacy', file), 'utf8');
   vm.runInContext(source('common.js'), context);
   // Load dashboard handlers without starting page initialization/network requests.
   vm.runInContext(source('dashboard.js').split('\napplyTheme();')[0], context);

@@ -14,24 +14,20 @@ if (process.argv.slice(2).some((arg) => arg !== "--watch")) {
   throw new Error("Usage: node build.mjs [--watch]");
 }
 
-// Register page entries explicitly as they are migrated; never bundle all modules.
-const entryPoints = {};
+// Transitional JavaScript entries retain their current script loading model.
+// Replace these paths with typed entries as pages migrate, not directory globs.
+const classicEntries = {
+  common: "src/legacy/common.js",
+  dashboard: "src/legacy/dashboard.js",
+  history: "src/legacy/history.js",
+};
+const moduleEntries = { "admin/main": "src/legacy/admin/main.js" };
 const copies = [
   ["templates", "templates"],
-  ["styles", "assets/styles"],
+  ["styles", "assets"],
   ["fonts", "fonts"],
   ["vendor", "vendor"],
 ];
-
-async function exists(path) {
-  try {
-    await stat(path);
-    return true;
-  } catch (error) {
-    if (error.code === "ENOENT") return false;
-    throw error;
-  }
-}
 
 async function size(path) {
   let files = 0;
@@ -51,10 +47,10 @@ async function size(path) {
 }
 
 async function rebuild() {
-  // Only this generated directory is build-owned. Never clean res/ or src/.
+  // Only this generated directory is build-owned. Never clean source files.
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
-  if (Object.keys(entryPoints).length) {
+  for (const entryPoints of [classicEntries, moduleEntries]) {
     await build({
       absWorkingDir: root,
       entryPoints,
@@ -64,17 +60,18 @@ async function rebuild() {
       format: "esm",
       platform: "browser",
       target: "es2020",
-      minify: true,
+      // Classic pages still call top-level functions from inline handlers.
+      // ESM output without imports/exports is also valid as a classic script;
+      // do not wrap, shake or rename those globals before their typed migration.
+      treeShaking: false,
+      minify: false,
       sourcemap: false,
       legalComments: "eof",
       logLevel: "info",
     });
   }
   for (const [from, to] of copies) {
-    const path = join(source, from);
-    if (await exists(path)) {
-      await cp(path, join(output, to), { recursive: true });
-    }
+    await cp(join(source, from), join(output, to), { recursive: true });
   }
   const { files, bytes } = await size(output);
   console.log(`Built frontend/dist: ${files} files, ${bytes} bytes`);

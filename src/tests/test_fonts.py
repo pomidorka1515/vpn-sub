@@ -18,7 +18,8 @@ def test_embedded_font_versions_follow_bytes(
     name: str,
 ) -> None:
     (tmp_path / "fonts").mkdir()
-    (tmp_path / "fonts.css").write_bytes((RES_DIR / "fonts.css").read_bytes())
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "fonts.css").write_bytes((RES_DIR / "assets" / "fonts.css").read_bytes())
     for filename in FONT_FILES:
         (tmp_path / "fonts" / filename).write_bytes(b"original font")
     monkeypatch.setattr("fonts.RES_DIR", tmp_path)

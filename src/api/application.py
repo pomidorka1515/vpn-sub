@@ -22,7 +22,7 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
     app = Quart(__name__)
     app.json = DefaultJSONProvider(app)
     app.json.sort_keys = False
-    app.jinja_env.loader = FileSystemLoader(str(RES_DIR))
+    app.jinja_env.loader = FileSystemLoader(str(RES_DIR / "templates"))
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
     app.asgi_app = ProxyMiddleware(app.asgi_app, hops=proxy_hops, require_proxy=require_proxy)  # type: ignore[method-assign]
 

@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-__all__ = ["bundled_root", "compiled", "program_dir", "runtime_dir"]
+__all__ = ["bundled_root", "compiled", "frontend_root", "program_dir", "runtime_dir"]
 
 
 def program_dir() -> Path:
@@ -67,7 +67,7 @@ def bundled_root() -> Path:
     whose ``__file__`` is inside the payload rather than the checkout. Walk
     up from this module until a shipped marker is found.
 
-    The main binary ships both ``res/`` and ``lang.jsonc``. The Discord binary
+    The main binary ships both ``frontend/dist/`` and ``lang.jsonc``. The Discord binary
     ships only its own ``lang.jsonc``, so either marker is enough. Requiring
     both would miss the Discord payload and fall through to a parent of the
     unpack tree.
@@ -77,9 +77,22 @@ def bundled_root() -> Path:
     """
     here = Path(__file__).resolve()
     for parent in here.parents:
-        if (parent / "lang.jsonc").is_file() or (parent / "res").is_dir():
+        if (parent / "lang.jsonc").is_file() or (parent / "frontend" / "dist").is_dir():
             return parent
     return here.parents[1]
+
+
+def frontend_root() -> Path:
+    """Locate built resources without executing build tools at runtime."""
+    root = bundled_root() / "frontend" / "dist"
+    for name in ("templates/admin.html", "assets/admin/main.js", "fonts/DejaVuSans.ttf"):
+        if not (root / name).is_file():
+            raise RuntimeError(
+                f"Frontend build missing or incomplete at {root}. "
+                "Run `npm --prefix frontend ci` and `npm --prefix frontend run build` "
+                "before starting Python; binary releases must include frontend/dist."
+            )
+    return root
 
 
 def runtime_dir(data: Path | None = None) -> Path:

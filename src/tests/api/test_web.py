@@ -253,11 +253,7 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None
         ("dashboard.js", "text/javascript", b"function loadStats"),
         ("history.js", "text/javascript", b"function loadHistory"),
         ("chart.umd.min.js", "text/javascript", b"Chart.js v4.4.1"),
-        ("admin/main.js", "text/javascript", b"from './state.js?v="),
-        ("admin/charts.js", "text/javascript", b"from './charts/spec.js?v="),
-        ("admin/charts/render.js", "text/javascript", b"from './series.js?v="),
-        ("admin/config.js", "text/javascript", b"from './config/config-main.js?v="),
-        ("admin/json-editor.js", "text/javascript", b"codemirror-5.65.16.min.js"),
+        ("admin/main.js", "text/javascript", b"codemirror-5.65.16.min.js"),
         ("vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
         ("vendor/codemirror-5.65.16.min.css", "text/css", b"CodeMirror"),
     ],
@@ -276,9 +272,7 @@ async def test_prefixed_static_assets(
     assert fragment in body
     extras = {
         "common.css": (b"--accent:",),
-        "admin/charts.js": (b"from './charts/render.js?v=",),
-        "admin/charts/render.js": (b"from './theme.js?v=",),
-        "admin/config.js": (b"function saveConfig", b"from './json-editor.js?v="),
+        "admin/main.js": (b"function saveConfig", b"function bootstrap", b"import.meta.url"),
     }
     for part in extras.get(path, ()):
         assert part in body
@@ -307,16 +301,11 @@ async def test_prefixed_static_assets(
     "module",
     ["state", "json", "controls", "main", "cards", "validation", "dialog"],
 )
-async def test_nested_config_modules(web_api: tuple[Quart, Database], module: str) -> None:
+async def test_nested_config_sources_are_not_served(
+    web_api: tuple[Quart, Database], module: str
+) -> None:
     response = await web_api[0].test_client().get(f"/custom/admin/config/config-{module}.js")
-    assert response.status_code == 200
-    assert response.mimetype == "text/javascript"
-    assert "immutable" in response.headers["Cache-Control"]
-    if module == "controls":
-        body = await response.get_data()
-        assert isinstance(body, bytes)
-        assert b"from '../json-editor.js?v=" in body
-        assert b"from './config-json.js?v=" in body
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -327,6 +316,12 @@ async def test_nested_config_modules(web_api: tuple[Quart, Database], module: st
         "admin/not-a-module.js",
         "admin/config/not-a-module.js",
         "admin/../dashboard.js",
+        "admin/charts.js",
+        "admin/json-editor.js",
+        "assets/admin/main.js.map",
+        "frontend/src/legacy/admin/main.js",
+        "frontend/package.json",
+        "vendor/LICENSE_CODEMIRROR",
     ],
 )
 async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> None:

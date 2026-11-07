@@ -5,9 +5,9 @@ from __future__ import annotations
 from functools import lru_cache
 from hashlib import sha1
 
-from paths import bundled_root
+from paths import frontend_root
 
-RES_DIR = bundled_root() / "res"
+RES_DIR = frontend_root()
 
 FONT_FILES: frozenset[str] = frozenset(
     {
@@ -38,7 +38,7 @@ def embed_font_faces(source: str, prefix: str) -> str:
     """
     if FONTS_MARKER not in source:
         raise ValueError("fonts marker is missing")
-    css = (RES_DIR / "fonts.css").read_text(encoding="utf-8")
+    css = (RES_DIR / "assets" / "fonts.css").read_text(encoding="utf-8")
     if _FONT_PLACEHOLDER not in css:
         raise ValueError("fonts.css is missing the font base placeholder")
     if _VERSION_PLACEHOLDER not in css:

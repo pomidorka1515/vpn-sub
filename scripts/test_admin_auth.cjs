@@ -5,7 +5,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const source = file => fs.readFileSync(path.join(__dirname, '../res', file), 'utf8');
+const source = file => fs.readFileSync(path.join(__dirname, '../frontend/src/legacy', file), 'utf8');
 
 for (const bootstrapped of [true, false]) {
   test(`logout sends session-bound CSRF credential (bootstrapped=${bootstrapped})`, async () => {

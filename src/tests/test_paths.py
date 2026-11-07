@@ -4,12 +4,13 @@ import sys
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING
 
+import pytest
+
+import paths
 from paths import program_dir
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 def _compiled_main(monkeypatch: pytest.MonkeyPatch, compiled: object) -> None:
@@ -74,3 +75,30 @@ def test_compiled_reads_the_entry_module(monkeypatch: pytest.MonkeyPatch) -> Non
 
     _compiled_main(monkeypatch, SimpleNamespace())
     assert compiled() is True
+
+
+def test_bundled_root_recognizes_frontend_payload_without_language(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "frontend" / "dist").mkdir(parents=True)
+    monkeypatch.setattr(paths, "__file__", str(tmp_path / "modules" / "paths.py"))
+    assert paths.bundled_root() == tmp_path
+
+
+def test_missing_frontend_build_has_actionable_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(paths, "bundled_root", lambda: tmp_path)
+    with pytest.raises(RuntimeError, match="npm --prefix frontend run build"):
+        paths.frontend_root()
+
+
+def test_frontend_root_is_independent_of_working_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    expected = paths.frontend_root()
+    monkeypatch.chdir(tmp_path)
+    assert paths.frontend_root() == expected

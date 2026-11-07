@@ -31,7 +31,7 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
   JSON profile for Happ and `force_json=1`. Language is `ru` or `en`. Per-user
   uTLS fingerprint. Browsers get an HTML page instead of a profile. QR is a
   separate WebAPI route.
-- **Public web UI.** `res/` dashboard, history, and charts. WebAPI: register,
+- **Public web UI.** `frontend/` dashboard, history, and charts. WebAPI: register,
   login, bonus, stats, history, settings, logout, account delete. Cookie
   `auth_token`.
 - **Admin UI and API.** Browser admin at `/{uri}/admin` (username/password
@@ -261,7 +261,7 @@ Unknown names are ignored. Unset or empty leaves every component quiet.
 
 ### Path resolution for shipped files
 
-Shipped files (`res/`, `lang.jsonc`) are found by walking up from the module
+Shipped files (`frontend/dist/`, `lang.jsonc`) are found by walking up from the module
 until one of those markers exists. In a checkout that is the repository root. In
 a Nuitka payload it is the unpack directory, next to the compiled entry, not
 next to the binary. `DIR_DATA` and the `PATH_*` variables still override runtime
@@ -269,6 +269,17 @@ files. When `DIR_DATA` is unset, a checkout uses `./data` in the working
 directory. A frozen binary uses `data/` next to the executable (`sys.argv[0]`),
 because the working directory is not the install directory and `__file__` is
 inside the payload.
+
+Checkout runs require an explicit frontend build first (Node 24.22.2):
+
+```sh
+npm --prefix frontend ci
+npm --prefix frontend run build
+```
+
+Sources live in `frontend/src/`; only ignored `frontend/dist/` is consumed by
+Python and included in frozen releases. Node is not needed at runtime. See
+[frontend tooling](frontend/README.md) for type checking and watch mode.
 
 A compiled binary ignores `$schema` and validates `config.json` against the
 packed `config.schema.json`. A checkout still resolves `$schema` relative to the
@@ -324,7 +335,7 @@ A tag `v*` builds one `vpn-sub` binary including Discord on `ubuntu-22.04` with 
 (GIL build, empty `sys.abiflags`) and attaches it to the GitHub release.
 
 `vpn-sub --probe` imports the HTTP and Discord runtime stack and checks the packed  
-`lang.jsonc`, `discord.lang.jsonc`, `config.schema.json` and `res/` can be
+`lang.jsonc`, `discord.lang.jsonc`, `config.schema.json` and `frontend/dist/` can be
 opened. They do not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.  
 Release CI also verifies the Nuitka module report and runs the main binary from an unrelated working directory against disposable loopback Redis/panel dependencies, renders bundled templates, checks SQLite integrity, sends SIGTERM and restarts against the same state. No production credentials are required. See [packaging checks](docs/ASYNC_PACKAGING.md).
@@ -412,7 +423,7 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
   self-service)
 - `src/bots/discord/`: optional Discord client owned by `create_application()`. One token serves public commands and
   `/admin`. See [src/discord/README.md](src/discord/README.md).
-- `res/`: admin and user HTML. `docs/`: [public API](docs/API.md),
+- `frontend/`: frontend sources, tooling and generated runtime resources. `docs/`: [public API](docs/API.md),
   [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
 
 ## Development

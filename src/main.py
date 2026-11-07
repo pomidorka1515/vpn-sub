@@ -37,7 +37,7 @@ def probe() -> None:
     """
     from importlib import import_module
 
-    from paths import bundled_root
+    from paths import bundled_root, frontend_root
 
     for module in (
         "asgi",
@@ -57,11 +57,9 @@ def probe() -> None:
 
     root = bundled_root()
     language = root / "lang.jsonc"
-    fonts = root / "res"
+    frontend_root()
     if not language.is_file():
         raise SystemExit(f"language file not found: {language}")
-    if not fonts.is_dir():
-        raise SystemExit(f"res directory not found: {fonts}")
     if compiled():
         if not (root / "discord.lang.jsonc").is_file():
             raise SystemExit("discord language file not found")

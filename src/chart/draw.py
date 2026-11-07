@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from PIL import ImageFont
 
-from paths import bundled_root
+from paths import frontend_root
 from util import fmt_bytes
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ WL_UP = "#a1a1aa"
 # currency, arrows and common symbols, so chart labels stay covered at ~1/3
 # of the upstream font size. Regenerate with pyftsubset if new ranges are
 # needed (the full family is only used server-side, for chart rendering).
-_FONT_PATH = bundled_root() / "res" / "fonts" / "DejaVuSans.ttf"
+_FONT_PATH = frontend_root() / "fonts" / "DejaVuSans.ttf"
 
 BW_SIZE = (1400, 980)
 LB_SIZE = (1260, 840)
