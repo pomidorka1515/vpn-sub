@@ -178,11 +178,10 @@ Object.assign(window, {
   fetchLeaderboard,
 });
 
-const _applyTheme = applyTheme;
-applyTheme = function () {
-  _applyTheme();
-  chartsRefreshTheme();
-};
+const stopThemeUpdates = onThemeChange(chartsRefreshTheme);
+window.addEventListener('pagehide', event => {
+  if (!event.persisted) stopThemeUpdates();
+});
 applyTheme();
 initLang();
 document.getElementById('bootOverlay').textContent = t('loading');

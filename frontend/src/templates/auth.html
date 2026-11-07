@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="{{ lang }}">
 <head>
+{% include 'shared-bootstrap.html' %}
 <script src="{{ prefix }}/common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -72,13 +73,9 @@
 </div>
 
 <script>
-const BASE = '{{ prefix }}';
+const BASE = window.BASE;
 const API = BASE + '/webapi';
 const DASHBOARD = BASE + '/panel';
-window.LANG = {{ L | tojson }};
-window.LANG_EN = {{ L_en | tojson }};
-window.LANG_CODE = '{{ lang }}';
-window.lang = window.LANG_CODE;
 
 let curTab = 'login';
 

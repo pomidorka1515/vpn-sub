@@ -17,7 +17,6 @@ if (process.argv.slice(2).some((arg) => arg !== "--watch")) {
 // Transitional JavaScript entries retain their current script loading model.
 // Replace these paths with typed entries as pages migrate, not directory globs.
 const classicEntries = {
-  common: "src/legacy/common.js",
   dashboard: "src/legacy/dashboard.js",
   history: "src/legacy/history.js",
 };
@@ -50,6 +49,19 @@ async function rebuild() {
   // Only this generated directory is build-owned. Never clean source files.
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
+  // Isolate shared internals from the classic pages' top-level declarations.
+  await build({
+    absWorkingDir: root,
+    entryPoints: { common: "src/entries/common.ts" },
+    outdir: join(output, "assets"),
+    bundle: true,
+    format: "iife",
+    platform: "browser",
+    target: "es2020",
+    sourcemap: false,
+    legalComments: "eof",
+    logLevel: "info",
+  });
   for (const entryPoints of [classicEntries, moduleEntries]) {
     await build({
       absWorkingDir: root,

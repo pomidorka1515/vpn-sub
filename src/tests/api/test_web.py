@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import uuid
 from typing import TYPE_CHECKING
 
@@ -234,12 +236,25 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None
         assert isinstance(body, bytes)
         assert response.status_code == 200
         assert b"__SUB_URI__" not in body
-        assert b"'/custom'" in body
+        match = re.search(
+            rb'<script id="frontend-bootstrap" type="application/json">(.*?)</script>',
+            body,
+            re.DOTALL,
+        )
+        assert match is not None
+        bootstrap = json.loads(match[1])
+        assert bootstrap["prefix"] == "/custom"
+        assert bootstrap["language"] == "en"
+        assert bootstrap["translations"]
+        assert bootstrap["fallback"] == bootstrap["translations"]
+        assert bootstrap["page"]["debounceMs"] == 1000
+        assert body.index(b'id="frontend-bootstrap"') < body.index(b'src="/custom/common.js')
+        assert body.index(b'src="/custom/common.js') < body.index(b'<link rel="stylesheet"')
         assert b"/sub/" not in body
         assert f"/custom/{asset}?v=".encode() in body
         assert b'href="/custom/common.css?v=' in body
         if page == "history":
-            assert b"window.CHART_JS = '/custom/chart.umd.min.js?v=" in body
+            assert bootstrap["page"]["chartUrl"].startswith("/custom/chart.umd.min.js?v=")
         assert b"fonts.googleapis" not in body
         assert b"fonts.gstatic" not in body
         assert b"jsdelivr" not in body
@@ -366,7 +381,7 @@ async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, Database])
     client.set_cookie("localhost", "lang", "ru")
     response = await client.get("/custom/auth")
     assert response.status_code == 200
-    assert "window.LANG_CODE = 'ru'" in await response.get_data(as_text=True)
+    assert '"language": "ru"' in await response.get_data(as_text=True)
     assert '"sign_in": "\\u0412\\u0445\\u043e\\u0434"' in await response.get_data(as_text=True)
 
 

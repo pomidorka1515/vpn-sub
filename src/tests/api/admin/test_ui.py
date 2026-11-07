@@ -108,7 +108,9 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
         b'type="module"',
         b'src="/sub/admin/main.js?v=',
         b'id="btnLogout"',
-        b"window.CHART_JS = '/sub/chart.umd.min.js?v=",
+        b'"chartUrl": "/sub/chart.umd.min.js?v=',
+        b'id="frontend-bootstrap" type="application/json"',
+        b'"prefix": "/sub"',
     ):
         assert part in body
     for part in (b"fonts.googleapis", b"fonts.gstatic", b"jsdelivr"):

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="{{ lang }}">
 <head>
+{% include 'shared-bootstrap.html' %}
 <script src="{{ prefix }}/common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -63,18 +64,6 @@
   </div>
 </div>
 
-<script>
-window.BASE = '{{ prefix }}';
-window.API = window.BASE + '/webapi';
-window.AUTH_PAGE = window.BASE + '/auth';
-window.DASHBOARD_PAGE = window.BASE + '/panel';
-window.DEBOUNCE_MS = 1000;
-window.LANG = {{ L | tojson }};
-window.LANG_EN = {{ L_en | tojson }};
-window.LANG_CODE = '{{ lang }}';
-window.lang = window.LANG_CODE;
-window.CHART_JS = '{{ prefix }}/chart.umd.min.js?v={{ asset_version }}';
-</script>
 <script src="{{ prefix }}/history.js?v={{ asset_version }}"></script>
 </body>
 </html>

@@ -1,14 +1,48 @@
 from __future__ import annotations
 
+import json
 import os
 from typing import TYPE_CHECKING
 
 import pytest
+from jinja2 import Environment, FileSystemLoader
 
 from api import common
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.mark.parametrize("prefix", ["", "/nested/sub", "</script><script>alert('x')</script>"])
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_shared_bootstrap_is_json_not_executable_script(prefix: str, language: str) -> None:
+    hostile = "</script><script>alert('x')</script>\u2028\u2029&\""
+    template = Environment(
+        loader=FileSystemLoader(common.RES_DIR / "templates"),
+        autoescape=True,
+    ).get_template("shared-bootstrap.html")
+    rendered = template.render(
+        prefix=prefix,
+        lang=language,
+        L={"message": hostile},
+        L_en={"message": "fallback"},
+        asset_version="abc123",
+    )
+    opening = '<script id="frontend-bootstrap" type="application/json">'
+    assert rendered.startswith(opening)
+    assert rendered.count("</script>") == 1
+    assert "<script>alert" not in rendered
+    payload = json.loads(rendered.removeprefix(opening).removesuffix("</script>"))
+    assert payload == {
+        "prefix": prefix,
+        "language": language,
+        "translations": {"message": hostile},
+        "fallback": {"message": "fallback"},
+        "page": {
+            "chartUrl": f"{prefix}/chart.umd.min.js?v=abc123",
+            "debounceMs": 1000,
+        },
+    }
 
 
 @pytest.mark.parametrize(

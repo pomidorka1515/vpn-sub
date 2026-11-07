@@ -34,7 +34,8 @@ Nuitka includes only `frontend/dist/`, not sources or development dependencies.
 | `src/styles/` | `dist/assets/` (byte-preserving, no CSS rewriting) |
 | `src/fonts/` | `dist/fonts/` (including server-only TTF and licenses) |
 | `src/vendor/` | `dist/vendor/` (unchanged distributions and licenses) |
-| `src/legacy/{common,dashboard,history}.js` | `dist/assets/{common,dashboard,history}.js` |
+| `src/entries/common.ts` and `src/shared/*.ts` | `dist/assets/common.js` (blocking, isolated IIFE) |
+| `src/legacy/{dashboard,history}.js` | `dist/assets/{dashboard,history}.js` |
 | `src/legacy/admin/main.js` and its imports | `dist/assets/admin/main.js` |
 
 Entry points are explicit in `build.mjs`; no code splitting, manifest, hashed
@@ -47,7 +48,7 @@ with unchanged vendor bytes; the editor's `import.meta.url` still resolves from
 are bundled and are no longer individually served.
 
 `src/legacy/` is a temporary home for **unconverted first-party JavaScript**, not
-vendor code. Typed shared/page migration belongs to subsequent plan steps. Classic
+vendor code. Shared logic is typed in part 4; page migration belongs to part 6. Classic
 scripts are emitted without wrapping, tree shaking or identifier minification so
 inline handlers keep their globals. The admin entry remains a native module.
 Auth/redirect/error scripts stay in their unchanged templates until page migration;
@@ -145,3 +146,78 @@ locally; visual, theme-paint, interaction/timer cleanup and actual frozen payloa
 execution remain for the subsequent migration verification. Release now compares
 packaged frontend bytes with the built tree and rejects source/maps/tools, while
 retaining its existing outside-checkout binary/lifecycle checks.
+
+## Part 4: typed shared logic
+
+`src/shared/` now owns API transport, bootstrap validation, EN/RU language and
+cookie/storage handling, themes, formatting, escaped text, password visibility,
+busy buttons, keyed stale-response protection, notifications and dialogs. Imports
+do not inspect the DOM, read storage, start timers or issue requests. Factories
+take the document, storage, navigation, fetch, translation or clock dependencies
+they need. Dialogs remove listeners on close/dispose and restore focus; theme
+subscribers receive an unsubscribe function. Admin charts subscribe to theme
+changes instead of replacing the global theme implementation.
+
+`src/templates/shared-bootstrap.html` emits a single `application/json` object
+with Jinja `tojson`: deployment prefix, selected/fallback language tables and
+page configuration. `readBootstrap` validates it before use. No server-provided
+value is interpolated into an executable JavaScript string on these five pages.
+The blocking common entry applies the saved theme in the head, before CSS and
+visible content, including when browser storage is denied.
+
+The **only shared compatibility adapter** is `src/entries/common.ts`: it imports
+typed implementations and exposes their existing names to the not-yet-migrated
+classic pages/inline handlers. This is not a second implementation or a global
+dependency inside shared modules. The typed API configuration has one owner;
+its adapter getter/setter preserves the legacy admin SSE consumer. Remove this
+adapter as part 6 replaces the remaining page consumers with explicit imports.
+The auth/page scripts, inline handlers, 404 and redirect scripts remain in their
+existing page migration scope; no replacement frontend suite/dependency was added.
+
+API responses enter as `unknown`. The common boundary checks object envelopes,
+boolean `success` and string `msg`; page-specific `obj` remains `unknown`, to be
+validated by each typed page as it migrates. Malformed envelopes produce the
+existing invalid-response failure shape. Transport preserves 204, non-enumerable
+`rawJson`, ETags, the `Symbol.for('api.serialize')` hook (including exact large
+integers), authorization guards, network throw/toast policy and action-local 401
+overrides. Raw configuration text is not round-tripped through native JSON.
+
+### Verification (2026-11-07)
+
+- Reproducible `npm ci`, strict typecheck and production build pass. Dependency
+  footprint is unchanged: 3 installed packages, **34 MiB**, no runtime packages.
+- Ruff (including formatting), mypy, Pyright and **2008 backend tests** pass;
+  six new backend cases verify JSON-only bootstrap escaping/round trips for EN/RU,
+  root/nested prefixes and script-breaking strings. Existing page tests verify
+  bootstrap-before-common-before-CSS ordering. The first run caught a corrected
+  page-specific-table assertion; a later run exhausted `/tmp`. The full successful
+  rerun used a private checkout-local temporary directory, subsequently removed.
+- The existing dashboard auth script passes all five checks against generated
+  common output. Both obsolete scripts are preserved for their planned removal.
+- Ad-hoc checks outside the repository verify side-effect-free imports, invalid
+  bootstrap/envelope rejection, raw large integers, serialization hooks, 204,
+  ETags, local versus redirecting 401s, network policies, busy nesting/recovery,
+  keyed stale replies, escaping, formatting, themes, EN/RU fallbacks, language
+  cookies/navigation, dialog Enter/Escape/backdrop, replacement and focus cleanup.
+  Admin logout checks also verify session-bound CSRF, token acquisition before
+  bootstrap, failure warnings and redirect only after confirmed session expiry.
+  These checks are not a committed frontend test suite or a coverage claim.
+- Isolated HTTP checks pass for all five pages, both languages, root and nested
+  prefixes, all existing asset routes, redirect and browser 404. The checkout
+  lifecycle smoke passes, including Redis/SQLite, SIGTERM and restart. No backend
+  runtime path, public route or packaging integration changes were required.
+- Generated output is **31 files / 1,060,434 bytes**. Common is **17,588 bytes**,
+  dashboard **15,312**,
+  history **10,516**, admin **180,560**; the extra file is the Jinja include.
+  Shared logic remains a single common request; CSS/fonts/vendor files and lazy
+  library loading are unchanged.
+
+Sequential same-environment HTTP runs against the previous commit and part 4,
+using isolated data and 30 warm requests per page/language/prefix, gave aggregate
+warm medians (milliseconds): auth **3.027 → 2.990**, admin login **2.756 → 3.766**,
+dashboard **4.666 → 4.914**, history **3.913 → 3.911**, admin **5.814 → 5.832**.
+An initial run concurrent with other verification was much noisier and was not
+used for comparison. These server timings and unchanged static request counts
+do not establish browser startup/interaction parity. No browser or frozen binary
+execution was available: visual theme-paint, real interactions and frozen checks
+remain explicitly unverified, rather than inferred from TypeScript compilation.

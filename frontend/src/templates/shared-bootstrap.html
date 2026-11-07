@@ -1,0 +1,10 @@
+<script id="frontend-bootstrap" type="application/json">{{ {
+  'prefix': prefix,
+  'language': lang,
+  'translations': L,
+  'fallback': L_en,
+  'page': {
+    'chartUrl': prefix ~ '/chart.umd.min.js?v=' ~ asset_version,
+    'debounceMs': 1000
+  }
+} | tojson }}</script>

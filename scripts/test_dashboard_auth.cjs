@@ -10,7 +10,13 @@ function dashboard(message) {
   const context = vm.createContext({
     API: '/api', AUTH_PAGE: '/login', location: { href: '/dashboard' },
     document: {
+      documentElement: { setAttribute() {} },
       getElementById(id) {
+        if (id === 'frontend-bootstrap') return { textContent: JSON.stringify({
+          prefix: '', language: 'en', translations: {}, fallback: {},
+          page: { chartUrl: '/chart.js', debounceMs: 1000 },
+        }) };
+        if (id === 'themeBtn' || id.startsWith('themeIcon')) return null;
         if (!elements.has(id)) elements.set(id, {
           value: '', textContent: '', disabled: false, isConnected: true,
           setAttribute() {}, removeAttribute() {},
@@ -26,7 +32,9 @@ function dashboard(message) {
   });
   context.window = context;
   const source = file => fs.readFileSync(path.join(__dirname, '../frontend/src/legacy', file), 'utf8');
-  vm.runInContext(source('common.js'), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/dist/assets/common.js'), 'utf8'), context);
+  context.API = '/api';
+  context.AUTH_PAGE = '/login';
   // Load dashboard handlers without starting page initialization/network requests.
   vm.runInContext(source('dashboard.js').split('\napplyTheme();')[0], context);
   context.confirmDialog = async () => 'wrong';
