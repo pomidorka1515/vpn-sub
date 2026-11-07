@@ -199,9 +199,9 @@ async def create_application(
             DiscordApplication(
                 sub,
                 cfg,
+                lang,
                 paths.data,
                 db,
-                files=offloads.files,
                 rendering=offloads.rendering,
                 limiter=limiter,
             )

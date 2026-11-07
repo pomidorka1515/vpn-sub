@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 if TYPE_CHECKING:
     from .constants import JsonDict
 
-# Contracts from config.schema.json and src/discord/config.schema.json;
-# lang.jsonc and src/discord/lang.jsonc have no schemas.
+# Contracts from config.schema.json; lang.jsonc has no schema.
 
 
 class ProfileUser(TypedDict):
@@ -152,6 +151,7 @@ class LangConfig(TypedDict):
     chart: dict[str, dict[str, str]]
     publicbot: dict[str, dict[str, str]]
     web: JsonDict
+    discord: NotRequired[DiscordLangConfig]
 
 
 class DiscordLangConfig(TypedDict):

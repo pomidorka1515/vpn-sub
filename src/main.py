@@ -61,8 +61,6 @@ def probe() -> None:
     if not language.is_file():
         raise SystemExit(f"language file not found: {language}")
     if compiled():
-        if not (root / "discord.lang.jsonc").is_file():
-            raise SystemExit("discord language file not found")
         schema = root / "config.schema.json"
         if not schema.is_file():
             raise SystemExit(f"schema file not found: {schema}")

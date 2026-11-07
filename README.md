@@ -45,7 +45,7 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
   alerts are skipped when the matching bot is off.
 - **Discord.** Optional `discord` config section, one token. Public slash commands plus `/admin`
   for a Discord-ID whitelist.
-  See [src/discord/README.md](src/discord/README.md).
+  See [Discord setup](src/bots/discord/README.md).
 - **Bandwidth watcher (`BWatch`).** Polls traffic about every 15s, checks quota
   and expiry about every 2 minutes, panel health about every 5 minutes. Daily
   bandwidth and state snapshots, with retry and admin alerts. Monthly reset
@@ -335,7 +335,7 @@ A tag `v*` builds one `vpn-sub` binary including Discord on `ubuntu-22.04` with 
 (GIL build, empty `sys.abiflags`) and attaches it to the GitHub release.
 
 `vpn-sub --probe` imports the HTTP and Discord runtime stack and checks the packed  
-`lang.jsonc`, `discord.lang.jsonc`, `config.schema.json` and `frontend/dist/` can be
+`lang.jsonc`, `config.schema.json` and `frontend/dist/` can be
 opened. They do not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.  
 Release CI also verifies the Nuitka module report and runs the main binary from an unrelated working directory against disposable loopback Redis/panel dependencies, renders bundled templates, checks SQLite integrity, sends SIGTERM and restarts against the same state. No production credentials are required. See [packaging checks](docs/ASYNC_PACKAGING.md).
@@ -422,7 +422,7 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 - `src/bots/telegram/`: Telegram `TelegramAdminBot` (management), `TelegramPublicBot` (user
   self-service)
 - `src/bots/discord/`: optional Discord client owned by `create_application()`. One token serves public commands and
-  `/admin`. See [src/discord/README.md](src/discord/README.md).
+  `/admin`. See [Discord setup](src/bots/discord/README.md).
 - `frontend/`: frontend sources, tooling and generated runtime resources. `docs/`: [public API](docs/API.md),
   [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
 

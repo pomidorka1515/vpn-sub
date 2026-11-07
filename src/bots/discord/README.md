@@ -44,7 +44,8 @@ schema migration is needed. Discord startup is independent of API route registra
 3. Keep `discord-sessions.json` in `DIR_DATA` for the first start.  
 4. Start the main service. Remove the old config/binary after checking commands.  
   
-`PATH_DISCORD_LANG` optionally overrides Discord's language asset. The checkout  
-uses `src/discord/lang.jsonc`; releases pack it as `discord.lang.jsonc`.  
-Implementation: `src/bots/discord/`. See [public API](../../docs/API.md) and  
-[admin API](../../docs/API_ADMIN.md) for command behavior.  
+Discord language strings live in the `discord` section of `lang.jsonc`.  
+`PATH_LANG` overrides the shared language file, including Discord strings. If you  
+previously used `PATH_DISCORD_LANG`, merge its contents into that section.  
+Implementation: `src/bots/discord/`. See [public API](../../../docs/API.md) and  
+[admin API](../../../docs/API_ADMIN.md) for command behavior.  

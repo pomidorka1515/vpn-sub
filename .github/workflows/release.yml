@@ -36,7 +36,6 @@ jobs:
               --include-data-files=config.schema.json=config.schema.json
               --include-module=discord
               --include-package=bots.discord
-              --include-data-files=src/discord/lang.jsonc=discord.lang.jsonc
     steps:
       - uses: actions/checkout@v4
 

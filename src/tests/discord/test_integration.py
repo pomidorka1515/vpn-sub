@@ -14,7 +14,8 @@ from app_runtime.lifecycle import Runtime
 from app_runtime.offload import BoundedOffload, OffloadServices
 from bots.discord.host import SharedDiscordClient, interaction_limit
 from bots.discord.runtime import DiscordApplication
-from config import Config, DiscordLangConfig
+from config import Config, LangConfig
+from config.store import AsyncConfig
 from db import Database
 from errors import AppError, PanelUnavailableError
 from tests.support.discord import LANG_PATH, FakeInteraction, make_bots
@@ -174,13 +175,12 @@ async def test_discord_startup_and_language_snapshots_without_api_routes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    language = tmp_path / "discord.lang.jsonc"
+    language = tmp_path / "lang.jsonc"
     language.write_bytes(LANG_PATH.read_bytes())
-    monkeypatch.setenv("PATH_DISCORD_LANG", str(language))
     loop_thread = threading.get_ident()
-    original_view = Config[DiscordLangConfig].view
+    original_view = Config[LangConfig].view
 
-    def off_loop_view(self: Config[DiscordLangConfig]) -> DiscordLangConfig:
+    def off_loop_view(self: Config[LangConfig]) -> LangConfig:
         assert threading.get_ident() != loop_thread
         return original_view(self)
 
@@ -190,18 +190,22 @@ async def test_discord_startup_and_language_snapshots_without_api_routes(
     monkeypatch.setattr(SharedDiscordClient, "connect", AsyncMock())
     files = BoundedOffload(capacity=2, name="test-files")
     rendering = BoundedOffload(capacity=2, name="test-rendering")
+    lang = AsyncConfig[LangConfig](
+        lambda: Config[LangConfig](path=language, read_only=True, read_only_jsonc=True),
+        files=files,
+    )
+    await lang.start()
     runtime = DiscordApplication(
         sub,
         public.cfg,
+        lang,
         tmp_path,
         database,
-        files=files,
         rendering=rendering,
         limiter=public.limiter,
     )
     try:
         await runtime.start()
-        assert runtime.lang is not None
         feature = runtime.client._public
         assert feature is not None
         assert feature.sub is sub
@@ -212,11 +216,14 @@ async def test_discord_startup_and_language_snapshots_without_api_routes(
         language.write_text("broken")
         assert runtime.lang.view() == snapshot
         snapshot["chart"]["en"]["title"] = "updated chart"
-        language.write_text(json.dumps(snapshot))
-        await runtime.lang.reload()
+        document = lang.view()
+        document["discord"] = snapshot
+        language.write_text(json.dumps(document))
+        await lang.reload()
         assert feature._chart_lang("en")["title"] == "updated chart"
     finally:
         await runtime.close()
+        await lang.close()
         await files.close()
         await rendering.close()
 

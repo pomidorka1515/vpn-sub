@@ -5,22 +5,24 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
+
 from app_runtime.offload import BoundedOffload
 from app_runtime.rate_limit import AsyncRateLimiter
 from bots.discord.admin import DiscordAdminBot
 from bots.discord.host import SharedDiscordClient
 from bots.discord.public import DiscordPublicBot
+from bots.discord.runtime import DiscordLanguage
 from bots.discord.sessions import SessionRecord
-from config import AppConfig, Config, DiscordLangConfig
+from config import AppConfig, Config, LangConfig
 from core import Subscription
 from custom_types import BandwidthSnapshot, UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
-from tests.support.paths import SRC_ROOT
+from tests.support.paths import REPO_ROOT
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine, Mapping
 
-LANG_PATH = SRC_ROOT / "discord/lang.jsonc"
-LANG = Config[DiscordLangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True)
+LANG_PATH = REPO_ROOT / "lang.jsonc"
+LANG = DiscordLanguage(Config[LangConfig](path=LANG_PATH, read_only=True, read_only_jsonc=True))
 
 
 class FakeUser:
