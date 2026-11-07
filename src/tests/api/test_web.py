@@ -361,7 +361,10 @@ async def test_not_found_uses_html_only_for_browsers(
         assert response.mimetype == "text/html"
         body = await response.get_data(as_text=True)
         assert "Page not found" in body
-        assert "<script src=" not in body
+        assert '<script src="/custom/error.js?v=' in body
+        script = await web_api[0].test_client().get("/custom/error.js")
+        assert script.status_code == 200
+        assert script.mimetype == "text/javascript"
         assert '<link rel="stylesheet"' not in body
     else:
         assert response.mimetype == "application/json"

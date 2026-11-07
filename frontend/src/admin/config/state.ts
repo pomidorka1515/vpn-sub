@@ -1,3 +1,5 @@
+import type { ConfigObject } from './json';
+
 export const RESTART_KEYS = ['uri', 'api_uri', 'api_token', '3xui', 'redis', 'bot', 'publicbot', 'panel_alert_cooldown', 'salt'];
 export const OPTIONAL_KEYS = ['api_uri', 'fallback_domain', 'funny_strings', 'bot', 'publicbot', 'support_text'];
 export const REQUIRED_KEYS = [
@@ -12,7 +14,7 @@ export const PANEL_FIELDS = ['name', 'address', 'port', 'uri', 'token', 'https',
 export const PANEL_OPTIONAL = ['nginx_auth', 'inject_headers'];
 export const INTEGER_RE = /^(0|-?[1-9]\d*)$/;
 
-export const MAIN_SECTIONS = [
+export const MAIN_SECTIONS: Array<[string, string[]]> = [
   ['config_sec_service', ['uri', 'api_uri', 'domain', 'fallback_domain', 'ping_check_url', 'provider_id', 'sub_name']],
   ['config_sec_auth', ['api_token', 'api_admin_ui_auth', 'salt']],
   ['config_sec_lists', ['panel_alert_cooldown', 'fingerprints', 'bypass_packages', 'funny_strings', 'nodes']],
@@ -20,7 +22,24 @@ export const MAIN_SECTIONS = [
   ['config_sec_template', ['json_template', '$schema']],
 ];
 
-export const editor = {
+export interface EditorState {
+  loaded: ConfigObject | null;
+  draft: ConfigObject | null;
+  etag: string;
+  dirty: boolean;
+  conflict: boolean;
+  saving: boolean;
+  loading: boolean;
+  fetched: boolean;
+  open: { inbounds: Set<string>; panels: Set<string> };
+  restartLine: string;
+  dialog: { kind: string; draft: ConfigObject; opener: HTMLElement | null } | null;
+  nodeRows: Array<[string, string]> | null;
+  headerRows: Map<string, Array<[string, string]>>;
+  jsonInputs: Map<string, string>;
+}
+
+export const editor: EditorState = {
   loaded: null,
   draft: null,
   etag: '',
@@ -29,11 +48,11 @@ export const editor = {
   saving: false,
   loading: false,
   fetched: false,
-  open: { inbounds: new Set(), panels: new Set() },
+  open: { inbounds: new Set<string>(), panels: new Set<string>() },
   restartLine: '',
   dialog: null,
   nodeRows: null,
-  headerRows: new Map(),
+  headerRows: new Map<string, Array<[string, string]>>(),
   // Textarea source is separate from parsed values, including JSON strings.
-  jsonInputs: new Map(),
+  jsonInputs: new Map<string, string>(),
 };

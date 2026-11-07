@@ -55,9 +55,7 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
     assert isinstance(body, bytes)
     for part in (
         b'id="loginForm"',
-        b"const SESSION = PANEL + '/session'",
-        b"PANEL + '/token'",
-        b"window.location.href = PANEL;",
+        b'<script type="module" src="/sub/admin-auth.js?v=',
     ):
         assert part in body
     for part in (b'id="tabRegister"', b'id="registerForm"', b"const API", b"PANEL + '/'"):

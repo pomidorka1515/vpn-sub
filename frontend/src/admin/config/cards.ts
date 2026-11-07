@@ -1,28 +1,42 @@
-import { destroyJsonEditors, refreshJsonEditors } from '../json-editor.js';
-import { editor, INTEGER_RE } from './config-state.js';
-import { ConfigNumber, isPlainObject, jsonText, parseJsonField } from './config-json.js';
-import { attr, restartIcon, fieldError, passWrap, readText, enhanceJsonInputs, rowList, readRows, bindRows, bilingual, nodeOptions, cssId, cardRoot } from './config-controls.js';
-import { validateCard, validateAll } from './config-validation.js';
+import { escapeHtml } from '../../shared/dom';
+import type { Translate } from '../../shared/formatting';
+import { initPassToggles } from '../../shared/passwords';
+import { destroyJsonEditors, refreshJsonEditors } from './editor-bridge';
+import { editor, INTEGER_RE } from './state';
+import { ConfigNumber, isPlainObject, jsonText, parseJsonField } from './json';
+import type { ConfigObject, ConfigValue } from './json';
+import { attr, restartIcon, fieldError, passWrap, readText, enhanceJsonInputs, rowList, readRows, bindRows, bilingual, nodeOptions, cssId, cardRoot } from './controls';
+import { validateCard, validateAll } from './validation';
 
-function profileJsonKey(id, field) {
+type Kind = 'inbounds' | 'panels';
+type Pair = [string, string];
+export function createCardEditor({ markDirty, openNew, t, language, confirm }: { markDirty(): void; openNew(kind: Kind): void; t: Translate; language(): string; confirm(message: string, title: string): Promise<boolean | string | null> }) {
+function mapOf(kind: Kind): ConfigObject {
+  const value = kind === 'inbounds' ? editor.draft?.profiles : editor.draft?.['3xui'];
+  return isPlainObject(value) ? value : {};
+}
+function cardData(kind: Kind, id: string): ConfigObject { const value = mapOf(kind)[id]; return isPlainObject(value) ? value : {}; }
+function pairs(rows: Array<string | string[]>): Pair[] { return rows.filter((row): row is string[] => Array.isArray(row)).map(row => [row[0] ?? '', row[1] ?? '']); }
+
+function profileJsonKey(id: string, field: string): string {
   return JSON.stringify([id, field]);
 }
 
-function profileJsonText(id, field, value) {
+function profileJsonText(id: string, field: string, value: ConfigValue | undefined): string {
   return editor.jsonInputs.get(profileJsonKey(id, field)) ?? jsonText(value);
 }
 
-function profileHeader(id, profile) {
-  const lang = window.lang === 'ru' ? 1 : 0;
+function profileHeader(id: string, profile: ConfigObject): string {
+  const lang = language() === 'ru' ? 1 : 0;
   const name = Array.isArray(profile.name) ? (profile.name[lang] || profile.name[0] || '') : '';
   return `${escapeHtml(profile.flag || '')} <span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(name)}</span>`;
 }
 
-function panelHeader(id, panel) {
+function panelHeader(id: string, panel: ConfigObject): string {
   return `<span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(panel.name || '')}</span> <span class="badge config-panel-mode" data-mode="${attr(panel.mode || '')}">${escapeHtml(panel.mode ? panel.mode + ' mode' : '')}</span>`;
 }
 
-function cardShell(kind, id, titleHtml, body, open) {
+function cardShell(kind: Kind, id: string, titleHtml: string, body: string, open: boolean): string {
   const safe = attr(id);
   return `<div class="panel-card${open ? ' open' : ''}" data-kind="${kind}" data-id="${safe}">
     <div class="panel-card-header">
@@ -37,7 +51,7 @@ function cardShell(kind, id, titleHtml, body, open) {
   </div>`;
 }
 
-function inboundBody(id, profile) {
+function inboundBody(id: string, profile: ConfigObject): string {
   const p = profile || {};
   return `<div class="form-grid">
     <div class="form-row"><label>id</label><div class="input-wrap"><input type="text" data-field="id" value="${attr(id)}" spellcheck="false">${fieldError('cfg-in-err-' + cssId(id) + '-id')}</div></div>
@@ -46,17 +60,17 @@ function inboundBody(id, profile) {
     <div class="form-row"><label>description</label><div class="input-wrap">${bilingual('cfg-in-' + cssId(id) + '-description', p.description)}${fieldError('cfg-in-err-' + cssId(id) + '-description')}</div></div>
     <div class="form-row"><label>shortProfileDescription</label><div class="input-wrap">${bilingual('cfg-in-' + cssId(id) + '-short', p.shortProfileDescription)}${fieldError('cfg-in-err-' + cssId(id) + '-shortProfileDescription')}</div></div>
     <div class="form-row"><label>whitelist</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist" ${p.whitelist ? 'checked' : ''}><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
-    <div class="form-row"><label>node</label><div class="input-wrap"><select data-field="node" class="cfg-node-select">${nodeOptions(p.node || '')}</select>${fieldError('cfg-in-err-' + cssId(id) + '-node')}</div></div>
+    <div class="form-row"><label>node</label><div class="input-wrap"><select data-field="node" class="cfg-node-select">${nodeOptions(typeof p.node === 'string' ? p.node : '')}</select>${fieldError('cfg-in-err-' + cssId(id) + '-node')}</div></div>
     <div class="form-row"><label>masterLink</label><div class="input-wrap"><input type="text" data-field="masterLink" value="${attr(p.masterLink ?? '')}" spellcheck="false">${fieldError('cfg-in-err-' + cssId(id) + '-masterLink')}</div></div>
     <div class="form-row"><label>json</label><div class="input-wrap"><textarea class="config-json" data-field="json" spellcheck="false">${escapeHtml(profileJsonText(id, 'json', p.json))}</textarea>${fieldError('cfg-in-err-' + cssId(id) + '-json')}</div></div>
     <div class="form-row"><label>xhttpExtra</label><div class="input-wrap"><textarea class="config-json" data-field="xhttpExtra" spellcheck="false">${escapeHtml(profileJsonText(id, 'xhttpExtra', p.xhttpExtra))}</textarea>${fieldError('cfg-in-err-' + cssId(id) + '-xhttpExtra')}</div></div>
   </div>`;
 }
 
-function panelBody(id, panel) {
+function panelBody(id: string, panel: ConfigObject): string {
   const p = panel || {};
   const auth = Array.isArray(p.nginx_auth) ? p.nginx_auth : null;
-  const headers = isPlainObject(p.inject_headers) ? editor.headerRows.get(id) || Object.entries(p.inject_headers) : null;
+  const headers = isPlainObject(p.inject_headers) ? editor.headerRows.get(id) || Object.entries(p.inject_headers).map(([key, value]) => [key, String(value ?? '')]) : null;
   return `<div class="form-grid">
     <div class="form-row"><label>key</label><div class="input-wrap"><input type="text" data-field="id" value="${attr(id)}" spellcheck="false">${fieldError('cfg-pn-err-' + cssId(id) + '-id')}</div></div>
     <div class="form-row"><label>name</label><div class="input-wrap"><input type="text" data-field="name" value="${attr(p.name ?? '')}">${fieldError('cfg-pn-err-' + cssId(id) + '-name')}</div></div>
@@ -67,47 +81,48 @@ function panelBody(id, panel) {
     <div class="form-row"><label>https</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="https" ${p.https ? 'checked' : ''}><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>whitelist</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist" ${p.whitelist ? 'checked' : ''}><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>mode</label><div class="input-wrap"><select data-field="mode"><option value="blacklist"${p.mode === 'blacklist' ? ' selected' : ''}>blacklist mode</option><option value="whitelist"${p.mode === 'whitelist' ? ' selected' : ''}>whitelist mode</option></select>${fieldError('cfg-pn-err-' + cssId(id) + '-mode')}</div></div>
-    <div class="form-row"><label>inbounds_list</label><div class="input-wrap" id="cfg-pn-inbounds-${cssId(id)}">${rowList('cfg-pn-rows-' + cssId(id), (p.inbounds_list || []).map(String), 'int')}${fieldError('cfg-pn-err-' + cssId(id) + '-inbounds_list')}</div></div>
+    <div class="form-row"><label>inbounds_list</label><div class="input-wrap" id="cfg-pn-inbounds-${cssId(id)}">${rowList('cfg-pn-rows-' + cssId(id), (Array.isArray(p.inbounds_list) ? p.inbounds_list : []).map(String), 'int')}${fieldError('cfg-pn-err-' + cssId(id) + '-inbounds_list')}</div></div>
     <div class="form-row"><label>nginx_auth</label><div class="input-wrap">${auth ? `<div class="config-pair"><input type="text" data-field="nginx0" value="${attr(auth[0] ?? '')}">${passWrap('cfg-pn-nginx-password-' + cssId(id), auth[1] ?? '')}</div><button type="button" class="btn-tiny danger" data-nested-remove="nginx_auth">${escapeHtml(t('config_remove'))}</button>` : `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-nested-add="nginx_auth">${escapeHtml(t('config_add'))}</button></div>`}${fieldError('cfg-pn-err-' + cssId(id) + '-nginx_auth')}</div></div>
     <div class="form-row"><label>inject_headers</label><div class="input-wrap">${headers ? `${rowList('cfg-pn-headers-' + cssId(id), headers, 'pair')}<button type="button" class="btn-tiny danger" data-nested-remove="inject_headers">${escapeHtml(t('config_remove_headers'))}</button>` : `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-nested-add="inject_headers">${escapeHtml(t('config_add'))}</button></div>`}${fieldError('cfg-pn-err-' + cssId(id) + '-inject_headers')}</div></div>
   </div>`;
 }
 
-export function createCardEditor({ markDirty, openNew }) {
-  function renderCards(kind) {
+  function renderCards(kind: Kind): void {
     const pane = document.getElementById('config-pane-' + kind);
+    if (!pane) return;
     destroyJsonEditors(pane);
     // Pending invalid renames and duplicate header rows belong to the draft too.
-    const pendingIds = new Map([...pane.querySelectorAll('.panel-card')].map(card => [card.dataset.id, card.querySelector('[data-field="id"]')?.value]));
-    const map = kind === 'inbounds' ? editor.draft.profiles : editor.draft['3xui'];
+    const pendingIds = new Map([...pane.querySelectorAll<HTMLElement>('.panel-card')].map(card => [card.dataset.id ?? '', card.querySelector<HTMLInputElement>('[data-field="id"]')?.value]));
+    const map = mapOf(kind);
     const subtitle = kind === 'inbounds' ? t('config_inbounds_sub') : t('config_panels_sub');
     const cards = Object.entries(isPlainObject(map) ? map : {}).map(([id, value]) => {
       const open = editor.open[kind].has(id);
-      const title = kind === 'inbounds' ? profileHeader(id, value) : panelHeader(id, value);
-      const body = kind === 'inbounds' ? inboundBody(id, value) : panelBody(id, value);
+      const item = isPlainObject(value) ? value : {};
+      const title = kind === 'inbounds' ? profileHeader(id, item) : panelHeader(id, item);
+      const body = kind === 'inbounds' ? inboundBody(id, item) : panelBody(id, item);
       return cardShell(kind, id, title, body, open);
     }).join('');
     const icon = kind === 'panels' ? restartIcon() : '';
     pane.innerHTML = `<div class="config-subtitle">${icon}<span>${escapeHtml(subtitle)}</span></div>
       <div class="toolbar"><button type="button" class="btn btn-secondary" id="cfg-new-${kind}">${escapeHtml(t('config_new'))}</button></div>
       <div class="panel-cards">${cards}</div>`;
-    document.getElementById('cfg-new-' + kind).onclick = () => openNew(kind);
+    document.getElementById('cfg-new-' + kind)?.addEventListener('click', () => openNew(kind));
     Object.keys(isPlainObject(map) ? map : {}).forEach(id => bindCard(kind, id));
     pendingIds.forEach((raw, id) => {
-      const input = cardRoot(kind, id)?.querySelector('[data-field="id"]');
+      const input = cardRoot(kind, id)?.querySelector<HTMLInputElement>('[data-field="id"]');
       if (input && raw !== undefined) input.value = raw;
     });
-    initPassToggles();
+    initPassToggles(document);
     Object.keys(isPlainObject(map) ? map : {}).forEach(id => validateCard(kind, id));
   }
 
-  function bindCard(kind, id) {
+  function bindCard(kind: Kind, id: string): void {
     const card = cardRoot(kind, id);
     if (!card) return;
     const commit = () => commitCard(kind, id);
-    card.querySelector('.config-card-delete').onclick = event => deleteConfigCard(event, kind, id);
-    card.querySelector('.config-card-toggle').onclick = () => toggleConfigCard(kind, id);
-    card.querySelectorAll('input, textarea, select').forEach(input => {
+    card.querySelector('.config-card-delete')?.addEventListener('click', event => { void deleteConfigCard(event, kind, id); });
+    card.querySelector('.config-card-toggle')?.addEventListener('click', () => toggleConfigCard(kind, id));
+    card.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach(input => {
       if (input.dataset.field === 'id') {
         input.addEventListener('input', () => { validateCard(kind, id); markDirty(); });
         input.addEventListener('blur', () => renameCard(kind, id, input.value));
@@ -119,32 +134,34 @@ export function createCardEditor({ markDirty, openNew }) {
     if (kind === 'inbounds' && card.classList.contains('open')) enhanceJsonInputs(card);
     if (kind === 'panels') {
       bindRows('cfg-pn-rows-' + cssId(id), 'int', (rows, live) => {
-        editor.draft['3xui'][id].inbounds_list = rows.map(row => INTEGER_RE.test(row.trim()) ? new ConfigNumber(row.trim()) : row);
+        cardData('panels', id).inbounds_list = rows.map(row => { const raw = String(row); return INTEGER_RE.test(raw.trim()) ? new ConfigNumber(raw.trim()) : raw; });
         if (!live) renderCards('panels');
         else validateCard('panels', id);
         markDirty();
       });
       bindRows('cfg-pn-headers-' + cssId(id), 'pair', (rows, live) => {
-        editor.headerRows.set(id, rows);
-        const headers = Object.create(null);
-        rows.forEach(([key, value]) => { headers[key] = value; });
-        editor.draft['3xui'][id].inject_headers = headers;
+        const headerRows = pairs(rows);
+        editor.headerRows.set(id, headerRows);
+        const headers: ConfigObject = Object.create(null) as ConfigObject;
+        headerRows.forEach(([key, value]) => { headers[key] = value; });
+        cardData('panels', id).inject_headers = headers;
         if (!live) renderCards('panels');
         else validateCard('panels', id);
         markDirty();
       });
-      card.querySelectorAll('[data-nested-add]').forEach(button => button.addEventListener('click', event => {
-        const which = event.currentTarget.dataset.nestedAdd;
-        if (which === 'nginx_auth') editor.draft['3xui'][id].nginx_auth = ['', ''];
-        else editor.draft['3xui'][id].inject_headers = {};
+      card.querySelectorAll<HTMLElement>('[data-nested-add]').forEach(button => button.addEventListener('click', () => {
+        const which = button.dataset.nestedAdd;
+        if (which === 'nginx_auth') cardData('panels', id).nginx_auth = ['', ''];
+        else cardData('panels', id).inject_headers = {};
         editor.open.panels.add(id);
         renderCards('panels');
         markDirty();
       }));
-      card.querySelectorAll('[data-nested-remove]').forEach(button => button.addEventListener('click', event => {
-        const which = event.currentTarget.dataset.nestedRemove;
+      card.querySelectorAll<HTMLElement>('[data-nested-remove]').forEach(button => button.addEventListener('click', () => {
+        const which = button.dataset.nestedRemove;
+        if (!which) return;
         if (which === 'inject_headers') editor.headerRows.delete(id);
-        delete editor.draft['3xui'][id][which];
+        delete cardData('panels', id)[which];
         editor.open.panels.add(id);
         renderCards('panels');
         markDirty();
@@ -152,44 +169,48 @@ export function createCardEditor({ markDirty, openNew }) {
     }
   }
 
-  function readCard(kind, id) {
+  function readCard(kind: Kind, id: string): ConfigObject | null {
     const card = cardRoot(kind, id);
     if (!card) return null;
-    const value = input => card.querySelector(`[data-field="${input}"]`);
+    const value = (input: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null => card.querySelector(`[data-field="${input}"]`);
     if (kind === 'inbounds') {
-      const current = editor.draft.profiles[id] || {};
-      const next = { ...current };
+      const current = cardData('inbounds', id);
+      const next: ConfigObject = { ...current };
       next.flag = value('flag')?.value ?? '';
-      next.whitelist = !!value('whitelist')?.checked;
+      const whitelist = value('whitelist');
+      next.whitelist = whitelist instanceof HTMLInputElement && whitelist.checked;
       next.node = value('node')?.value ?? '';
       next.masterLink = value('masterLink')?.value ?? '';
-      next.name = [document.getElementById('cfg-in-' + cssId(id) + '-name-0')?.value ?? '', document.getElementById('cfg-in-' + cssId(id) + '-name-1')?.value ?? ''];
-      next.description = [document.getElementById('cfg-in-' + cssId(id) + '-description-0')?.value ?? '', document.getElementById('cfg-in-' + cssId(id) + '-description-1')?.value ?? ''];
-      next.shortProfileDescription = [document.getElementById('cfg-in-' + cssId(id) + '-short-0')?.value ?? '', document.getElementById('cfg-in-' + cssId(id) + '-short-1')?.value ?? ''];
+      next.name = [readText('cfg-in-' + cssId(id) + '-name-0'), readText('cfg-in-' + cssId(id) + '-name-1')];
+      next.description = [readText('cfg-in-' + cssId(id) + '-description-0'), readText('cfg-in-' + cssId(id) + '-description-1')];
+      next.shortProfileDescription = [readText('cfg-in-' + cssId(id) + '-short-0'), readText('cfg-in-' + cssId(id) + '-short-1')];
       for (const field of ['json', 'xhttpExtra']) {
         const raw = value(field)?.value;
         if (raw !== undefined) editor.jsonInputs.set(profileJsonKey(id, field), raw);
-        next[field] = parseJsonField(raw, current[field]);
+        next[field] = parseJsonField(raw, current[field] ?? null);
       }
       return next;
     }
-    const current = editor.draft['3xui'][id] || {};
-    const next = { ...current };
+    const current = cardData('panels', id);
+    const next: ConfigObject = { ...current };
     next.name = value('name')?.value ?? '';
     next.address = value('address')?.value ?? '';
     next.uri = value('uri')?.value ?? '';
     const port = value('port')?.value ?? '';
-    next.port = port === String(current.port) ? current.port : INTEGER_RE.test(port) ? new ConfigNumber(port) : port;
+    next.port = port === String(current.port) ? current.port ?? null : INTEGER_RE.test(port) ? new ConfigNumber(port) : port;
     const token = document.getElementById('cfg-pn-token-' + cssId(id));
-    if (token) next.token = token.value;
-    next.https = !!value('https')?.checked;
-    next.whitelist = !!value('whitelist')?.checked;
+    if (token instanceof HTMLInputElement) next.token = token.value;
+    const https = value('https');
+    const whitelist = value('whitelist');
+    next.https = https instanceof HTMLInputElement && https.checked;
+    next.whitelist = whitelist instanceof HTMLInputElement && whitelist.checked;
     next.mode = value('mode')?.value || 'blacklist';
-    next.inbounds_list = readRows('cfg-pn-rows-' + cssId(id), 'int').map(row => INTEGER_RE.test(row.trim()) ? new ConfigNumber(row.trim()) : row);
-    if (value('nginx0')) next.nginx_auth = [value('nginx0').value, readText('cfg-pn-nginx-password-' + cssId(id))];
+    next.inbounds_list = readRows('cfg-pn-rows-' + cssId(id), 'int').map(row => { const raw = String(row); return INTEGER_RE.test(raw.trim()) ? new ConfigNumber(raw.trim()) : raw; });
+    const nginx = value('nginx0');
+    if (nginx) next.nginx_auth = [nginx.value, readText('cfg-pn-nginx-password-' + cssId(id))];
     if (document.getElementById('cfg-pn-headers-' + cssId(id))) {
-      const headers = Object.create(null);
-      const rows = readRows('cfg-pn-headers-' + cssId(id), 'pair');
+      const headers: ConfigObject = Object.create(null) as ConfigObject;
+      const rows = pairs(readRows('cfg-pn-headers-' + cssId(id), 'pair'));
       editor.headerRows.set(id, rows);
       rows.forEach(([key, item]) => { headers[key] = item; });
       next.inject_headers = headers;
@@ -197,49 +218,51 @@ export function createCardEditor({ markDirty, openNew }) {
     return next;
   }
 
-  function commitCard(kind, id) {
+  function commitCard(kind: Kind, id: string): void {
     const next = readCard(kind, id);
     if (!next) return;
-    if (kind === 'inbounds') editor.draft.profiles[id] = next;
-    else editor.draft['3xui'][id] = next;
+    mapOf(kind)[id] = next;
     validateCard(kind, id);
     refreshCardTitle(kind, id);
     markDirty();
   }
 
-  function refreshCardTitle(kind, id) {
+  function refreshCardTitle(kind: Kind, id: string): void {
     const card = cardRoot(kind, id);
     const title = card?.querySelector('.panel-card-title');
     if (title) title.innerHTML = kind === 'inbounds'
-      ? profileHeader(id, editor.draft.profiles[id] || {})
-      : panelHeader(id, editor.draft['3xui'][id] || {});
+      ? profileHeader(id, cardData(kind, id))
+      : panelHeader(id, cardData(kind, id));
   }
 
-  function renameCard(kind, oldId, raw) {
+  function renameCard(kind: Kind, oldId: string, raw: string): void {
     const nextId = raw.trim();
-    const map = kind === 'inbounds' ? editor.draft.profiles : editor.draft['3xui'];
+    const map = mapOf(kind);
     if (nextId === oldId) return;
     if (!nextId || Object.prototype.hasOwnProperty.call(map, nextId)) {
       validateCard(kind, oldId);
       return;
     }
     const value = readCard(kind, oldId);
-    const ordered = Object.create(null);
-    Object.keys(map).forEach(key => { ordered[key === oldId ? nextId : key] = key === oldId ? value : map[key]; });
+    const ordered: ConfigObject = Object.create(null) as ConfigObject;
+    Object.keys(map).forEach(key => { ordered[key === oldId ? nextId : key] = (key === oldId ? value : map[key]) ?? null; });
+    if (!editor.draft) return;
     if (kind === 'inbounds') editor.draft.profiles = ordered;
     else editor.draft['3xui'] = ordered;
     if (kind === 'inbounds') {
       for (const field of ['json', 'xhttpExtra']) {
         const oldKey = profileJsonKey(oldId, field);
         if (editor.jsonInputs.has(oldKey)) {
-          editor.jsonInputs.set(profileJsonKey(nextId, field), editor.jsonInputs.get(oldKey));
+          const rawValue = editor.jsonInputs.get(oldKey);
+          if (rawValue !== undefined) editor.jsonInputs.set(profileJsonKey(nextId, field), rawValue);
           editor.jsonInputs.delete(oldKey);
         }
       }
     }
     editor.open[kind].delete(oldId);
     if (kind === 'panels' && editor.headerRows.has(oldId)) {
-      editor.headerRows.set(nextId, editor.headerRows.get(oldId));
+      const rows = editor.headerRows.get(oldId);
+      if (rows) editor.headerRows.set(nextId, rows);
       editor.headerRows.delete(oldId);
     }
     editor.open[kind].add(nextId);
@@ -248,11 +271,11 @@ export function createCardEditor({ markDirty, openNew }) {
     markDirty();
   }
 
-  function toggleConfigCard(kind, id) {
+  function toggleConfigCard(kind: Kind, id: string): void {
     const card = cardRoot(kind, id);
     if (!card) return;
     card.classList.toggle('open');
-    card.querySelector('.config-card-toggle').setAttribute('aria-expanded', String(card.classList.contains('open')));
+    card.querySelector('.config-card-toggle')?.setAttribute('aria-expanded', String(card.classList.contains('open')));
     if (card.classList.contains('open')) {
       editor.open[kind].add(id);
       if (kind === 'inbounds') enhanceJsonInputs(card);
@@ -261,18 +284,24 @@ export function createCardEditor({ markDirty, openNew }) {
     else editor.open[kind].delete(id);
   }
 
-  document.addEventListener('click', event => {
-    const header = event.target.closest('#tab-config .panel-card-header');
-    if (!header || event.target.closest('button')) return;
-    const card = header.closest('.panel-card');
-    if (!card) return;
-    toggleConfigCard(card.dataset.kind, card.getAttribute('data-id'));
-  });
+  function init(): () => void {
+    const controller = new AbortController();
+    document.getElementById('tab-config')?.addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return;
+      const header = event.target.closest('#tab-config .panel-card-header');
+      if (!header || event.target.closest('button')) return;
+      const card = header.closest<HTMLElement>('.panel-card');
+      const kind = card?.dataset.kind;
+      const id = card?.getAttribute('data-id');
+      if ((kind === 'inbounds' || kind === 'panels') && id !== null && id !== undefined) toggleConfigCard(kind, id);
+    }, { signal: controller.signal });
+    return () => controller.abort();
+  }
 
-  async function deleteConfigCard(event, kind, id) {
+  async function deleteConfigCard(event: Event, kind: Kind, id: string): Promise<void> {
     event.stopPropagation();
-    const map = kind === 'inbounds' ? editor.draft.profiles : editor.draft['3xui'];
-    const ok = await confirmDialog(t('config_confirm_delete'), t('confirm'));
+    const map = mapOf(kind);
+    const ok = await confirm(t('config_confirm_delete'), t('confirm'));
     if (!ok) return;
     delete map[id];
     if (kind === 'inbounds') {
@@ -285,5 +314,5 @@ export function createCardEditor({ markDirty, openNew }) {
     markDirty();
   }
 
-  return { renderCards, toggleConfigCard, deleteConfigCard };
+  return { init, renderCards, toggleConfigCard, deleteConfigCard };
 }

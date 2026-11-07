@@ -1,10 +1,28 @@
-import { chartsFor } from './charts/spec.js';
-import { destroyCharts, renderGroup, updateGroup } from './charts/render.js';
+import { isRecord } from '../../shared/json';
+import type { AdminContext } from '../context';
+import { chartsFor } from './spec';
+import { createChartRenderer } from './render';
+import type { ChartMap, Live, Row, Scales } from './render';
+
+interface ChartTransport {
+  baseUrl(): string;
+  headers(): Record<string, string>;
+  guard(): boolean;
+  on401(): void;
+}
+export function createCharts(context: AdminContext, config: ChartTransport, chartUrl: string, debounceMs: number, language: string, request: typeof fetch = fetch) {
+const { api, t, toast, doc } = context;
+const { destroyCharts, renderGroup, updateGroup } = createChartRenderer(t, language);
 
 const LIVE_KEEP = 1800;
 const LIVE_WINDOW_S = 90;
 
-const state = {
+const state: {
+  mode: 'snapshot' | 'live'; scope: string; group: string; cutoff: number; delay: number;
+  rows: Row[]; panels: string[]; opened: boolean; timer: number | null; stream: AbortController | null;
+  lastLive: number; inflight: boolean; errorStreak: number; charts: ChartMap; scales: Scales;
+  built: boolean; cutoffTimer: number | null; gen: number; hostCpuDropped: boolean; chartJsFailed: boolean;
+} = {
   mode: 'snapshot',
   scope: 'host',
   group: 'general',
@@ -29,18 +47,18 @@ const state = {
   chartJsFailed: false,
 };
 
-let chartJsPromise = null;
+let chartJsPromise: Promise<void> | null = null;
 
-function $(id) {
-  return document.getElementById(id);
+function $(id: string): HTMLElement | null {
+  return doc.getElementById(id);
 }
 
-function ensureChartJs() {
-  if (typeof Chart !== 'undefined') return Promise.resolve();
+function ensureChartJs(): Promise<void> {
+  if (!chartLibMissing()) return Promise.resolve();
   if (chartJsPromise) return chartJsPromise;
-  chartJsPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = window.CHART_JS;
+  chartJsPromise = new Promise<void>((resolve, reject) => {
+    const script = doc.createElement('script');
+    script.src = chartUrl;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => {
@@ -48,13 +66,13 @@ function ensureChartJs() {
       script.remove();
       reject(new Error('Chart.js not loaded'));
     };
-    document.head.appendChild(script);
+    doc.head.appendChild(script);
   });
   return chartJsPromise;
 }
 
-function chartLibMissing() {
-  return typeof Chart === 'undefined';
+function chartLibMissing(): boolean {
+  return typeof Reflect.get(window, 'Chart') !== 'function';
 }
 
 function failChartLib() {
@@ -64,7 +82,7 @@ function failChartLib() {
   toast(t('chart_load_err'), 'error');
 }
 
-function setStatus(key, kind) {
+function setStatus(key: string | null, kind?: string): void {
   const el = $('chartsStatus');
   if (!el) return;
   if (!key) {
@@ -103,7 +121,7 @@ function liveNow() {
   return latest && Number.isFinite(latest.ts) ? latest.ts : Date.now() / 1000;
 }
 
-function liveOpts() {
+function liveOpts(): Live | undefined {
   if (state.mode !== 'live') return undefined;
   return {
     now: liveNow(),
@@ -125,7 +143,7 @@ function tabActive() {
   return $('tab-charts')?.classList.contains('active') === true;
 }
 
-function press(group, attr, value) {
+function press(group: HTMLElement | null, attr: string, value: string): void {
   group?.querySelectorAll('button').forEach(btn => {
     const on = btn.getAttribute(attr) === value;
     btn.classList.toggle('active', on);
@@ -145,9 +163,9 @@ function syncControls() {
   if (readout) readout.textContent = Number(state.delay).toFixed(1);
 }
 
-function panelNames(rows) {
-  const names = [];
-  const seen = new Set();
+function panelNames(rows: Row[]): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
   for (const row of rows) {
     const panels = row?.panels;
     if (!panels || typeof panels !== 'object') continue;
@@ -160,7 +178,7 @@ function panelNames(rows) {
   return names;
 }
 
-function samePanels(next) {
+function samePanels(next: string[]): boolean {
   return next.length === state.panels.length && next.every((name, i) => name === state.panels[i]);
 }
 
@@ -171,7 +189,7 @@ function renderScope() {
   if (keep) group.replaceChildren(keep);
   else group.replaceChildren();
   for (const name of state.panels) {
-    const btn = document.createElement('button');
+    const btn = doc.createElement('button');
     btn.type = 'button';
     btn.className = 'charts-switch-btn';
     btn.setAttribute('data-scope', name);
@@ -182,7 +200,7 @@ function renderScope() {
   press(group, 'data-scope', state.scope);
 }
 
-function scopeObject(row) {
+function scopeObject(row: Row | undefined): unknown {
   if (!row) return undefined;
   if (state.scope === 'host') return row.host;
   return row.panels ? row.panels[state.scope] : undefined;
@@ -194,8 +212,8 @@ function panelIsDown() {
   return scopeObject(latest) == null;
 }
 
-function dropBaselineCpu(point) {
-  if (state.hostCpuDropped || !point.host || typeof point.host !== 'object') return;
+function dropBaselineCpu(point: Row): void {
+  if (state.hostCpuDropped || !isRecord(point.host)) return;
   if (typeof point.host.cpu !== 'number' || point.host.cpu !== 0) return;
   point.host = Object.assign({}, point.host, { cpu: null });
   state.hostCpuDropped = true;
@@ -251,7 +269,7 @@ async function fetchSnapshots() {
     if (state.rows.length) showCharts();
     return;
   }
-  const rows = Array.isArray(res.obj) ? res.obj.slice().reverse() : [];
+  const rows: Row[] = Array.isArray(res.obj) ? res.obj.filter((row: unknown): row is Row => isRecord(row) && typeof row.ts === 'number' && (row.panels == null || isRecord(row.panels))).slice().reverse() : [];
   state.rows = rows;
   state.panels = panelNames(rows);
   renderScope();
@@ -266,13 +284,12 @@ async function pollLive() {
   if (state.stream) return;
   if (!tabActive()) return;
   if (chartLibMissing()) return;
-  const config = window.apiConfig;
   if (config.guard()) return;
   const controller = new AbortController();
   state.stream = controller;
   const gen = state.gen;
   try {
-    const response = await fetch(config.baseUrl() + '/api/state/polling', {
+    const response = await request(config.baseUrl() + '/api/state/polling', {
       headers: { ...config.headers(), Accept: 'text/event-stream' },
       credentials: 'same-origin',
       signal: controller.signal,
@@ -323,13 +340,13 @@ async function pollLive() {
   }
 }
 
-function receiveLive(res) {
+function receiveLive(res: unknown): void {
   if (state.mode !== 'live' || !tabActive()) return;
   if (chartLibMissing()) {
     failChartLib();
     return;
   }
-  if (!res || !res.success || !res.obj) {
+  if (!isRecord(res) || !res.success || !isRecord(res.obj)) {
     state.errorStreak += 1;
     if (state.errorStreak === 1) toast(t('network_err'), 'error');
     setStatus('network_err', 'err');
@@ -339,10 +356,10 @@ function receiveLive(res) {
   const now = Date.now();
   if (now - state.lastLive < delayMs()) return;
   state.lastLive = now;
-  const point = {
+  const point: Row = {
     ts: now / 1000,
     host: res.obj.host,
-    panels: res.obj.panels || {},
+    panels: isRecord(res.obj.panels) ? res.obj.panels : {},
   };
   dropBaselineCpu(point);
   state.rows.push(point);
@@ -380,7 +397,7 @@ async function startLive() {
   await pollLive();
 }
 
-function setMode(mode) {
+function setMode(mode: string | null): void {
   if (mode !== 'snapshot' && mode !== 'live') return;
   if (mode === state.mode && state.opened) return;
   stopLive();
@@ -400,14 +417,14 @@ function setMode(mode) {
   else fetchSnapshots();
 }
 
-function setScope(scope) {
+function setScope(scope: string | null): void {
   if (!scope || scope === state.scope) return;
   state.scope = scope;
   press($('chartsScope'), 'data-scope', scope);
   rebuild();
 }
 
-function setGroup(group) {
+function setGroup(group: string | null): void {
   if (!group || group === state.group) return;
   state.group = group;
   press($('chartsGroup'), 'data-group', group);
@@ -415,7 +432,7 @@ function setGroup(group) {
 }
 
 function onCutoff() {
-  const raw = $('chartsCutoff')?.value;
+  const raw = doc.querySelector<HTMLInputElement>('#chartsCutoff')?.value ?? '';
   const cutoff = parseInt(raw, 10);
   if (isNaN(cutoff) || cutoff < 1) {
     toast(t('cutoff_invalid'), 'error');
@@ -426,7 +443,7 @@ function onCutoff() {
 }
 
 function onDelay() {
-  const raw = Number($('chartsDelay')?.value);
+  const raw = Number(doc.querySelector<HTMLInputElement>('#chartsDelay')?.value);
   if (!Number.isFinite(raw)) return;
   state.delay = Math.min(10, Math.max(1, raw));
   const readout = $('chartsDelayValue');
@@ -438,45 +455,45 @@ function commitDelay() {
   state.scales.clear();
 }
 
-function bind() {
+function bind(signal: AbortSignal): void {
   $('chartsMode')?.addEventListener('click', event => {
-    const btn = event.target.closest('[data-mode]');
+    const btn = event.target instanceof Element ? event.target.closest('[data-mode]') : null;
     if (btn) setMode(btn.getAttribute('data-mode'));
-  });
+  }, { signal });
   $('chartsScope')?.addEventListener('click', event => {
-    const btn = event.target.closest('[data-scope]');
+    const btn = event.target instanceof Element ? event.target.closest('[data-scope]') : null;
     if (btn) setScope(btn.getAttribute('data-scope'));
-  });
+  }, { signal });
   $('chartsGroup')?.addEventListener('click', event => {
-    const btn = event.target.closest('[data-group]');
+    const btn = event.target instanceof Element ? event.target.closest('[data-group]') : null;
     if (btn) setGroup(btn.getAttribute('data-group'));
-  });
+  }, { signal });
   $('chartsCutoff')?.addEventListener('input', () => {
-    clearTimeout(state.cutoffTimer);
-    state.cutoffTimer = setTimeout(onCutoff, window.DEBOUNCE_MS || 1000);
-  });
+    clearTimeout(state.cutoffTimer ?? undefined);
+    state.cutoffTimer = window.setTimeout(onCutoff, debounceMs || 1000);
+  }, { signal });
   $('chartsCutoff')?.addEventListener('change', () => {
-    clearTimeout(state.cutoffTimer);
+    clearTimeout(state.cutoffTimer ?? undefined);
     state.cutoffTimer = null;
     onCutoff();
-  });
-  $('chartsDelay')?.addEventListener('input', onDelay);
-  $('chartsDelay')?.addEventListener('change', commitDelay);
-  window.addEventListener('pagehide', stopLive);
+  }, { signal });
+  $('chartsDelay')?.addEventListener('input', onDelay, { signal });
+  $('chartsDelay')?.addEventListener('change', commitDelay, { signal });
+  window.addEventListener('pagehide', stopLive, { signal });
   window.addEventListener('pageshow', event => {
     if (!event.persisted || !tabActive() || state.mode !== 'live' || state.chartJsFailed) return;
     if (state.inflight) return;
     scheduleLive();
-  });
+  }, { signal });
 }
 
-export function chartsStop() {
+function chartsStop() {
   stopLive();
   state.gen += 1;
   state.inflight = false;
 }
 
-export function chartsOnTab(name) {
+function chartsOnTab(name: string): void {
   if (name !== 'charts') {
     stopLive();
     return;
@@ -495,26 +512,40 @@ export function chartsOnTab(name) {
   if (state.mode === 'live') {
     if (state.rows.length) showCharts();
     pollLive();
-  } else if (typeof Chart !== 'undefined') showCharts();
+  } else if (!chartLibMissing()) showCharts();
 }
 
-export function chartsRefreshTheme() {
+function chartsRefreshTheme() {
   if (!tabActive()) return;
   if (!state.rows.length || chartLibMissing()) return;
   rebuild();
 }
 
-bind();
-syncControls();
+function initCharts() {
+  const controller = new AbortController();
+  bind(controller.signal);
+  syncControls();
+  let narrowLayout = window.matchMedia('(max-width: 600px)').matches;
+  let resizeTimer: number | undefined;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => {
+      const next = window.matchMedia('(max-width: 600px)').matches;
+      if (next === narrowLayout) return;
+      narrowLayout = next;
+      if (tabActive() && state.rows.length && !chartLibMissing()) rebuild();
+    }, 200);
+  }, { signal: controller.signal });
+  return () => {
+    controller.abort();
+    clearTimeout(resizeTimer);
+    clearTimeout(state.cutoffTimer ?? undefined);
+    state.cutoffTimer = null;
+    chartsStop();
+    destroyCharts(state.charts);
+    state.built = false;
+  };
+}
 
-let narrowLayout = window.matchMedia('(max-width: 600px)').matches;
-let resizeTimer = null;
-window.addEventListener('resize', () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    const next = window.matchMedia('(max-width: 600px)').matches;
-    if (next === narrowLayout) return;
-    narrowLayout = next;
-    if (tabActive() && state.rows.length && typeof Chart !== 'undefined') rebuild();
-  }, 200);
-});
+return { initCharts, chartsStop, chartsOnTab, chartsRefreshTheme };
+}

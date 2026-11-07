@@ -83,7 +83,7 @@ interface BaseOptions {
   windowS?: number;
 }
 interface Tick { value: number }
-interface TooltipItem { parsed: { x: number; y: number }; dataset: { label: string; unit?: string } }
+interface TooltipItem { datasetIndex: number; parsed: { x: number; y: number }; dataset: { label: string; unit?: string } }
 export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit, formatTick, formatTooltip, formatLabel, now, windowS }: BaseOptions) {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const y = {

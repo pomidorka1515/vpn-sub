@@ -19,15 +19,15 @@
     <span class="topbar-name" data-t="page_title">Admin Panel</span>
   </div>
   <div class="topbar-right">
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
+    <button class="theme-btn" id="themeBtn" data-t-title="toggle_theme"></button>
     <div class="lang-toggle" data-t-aria="lang_selection">
-      <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
-      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
+      <button class="lang-btn" data-lang="en" data-t-aria="lang_en">EN</button>
+      <button class="lang-btn" data-lang="ru" data-t-aria="lang_ru">RU</button>
     </div>
-    <button class="btn-sm" onclick="showTab('health')" id="btnHealth" data-t="health" disabled>Health</button>
-    <button class="btn-sm success" onclick="showTab('users')" data-t="users" disabled>Users</button>
-    <button class="btn-sm success" onclick="showTab('codes')" data-t="codes" disabled>Codes</button>
-    <button class="btn-sm danger" onclick="doLogout()" id="btnLogout" data-t="logout">Log out</button>
+    <button class="btn-sm" data-tab="health" id="btnHealth" data-t="health" disabled>Health</button>
+    <button class="btn-sm success" data-tab="users" data-t="users" disabled>Users</button>
+    <button class="btn-sm success" data-tab="codes" data-t="codes" disabled>Codes</button>
+    <button class="btn-sm danger" id="btnLogout" data-t="logout">Log out</button>
   </div>
 </div>
 
@@ -35,23 +35,23 @@
   <div class="boot-overlay" id="bootOverlay"></div>
 
   <div class="tabs">
-    <button class="tab active" onclick="showTab('users')" data-t="users">Users</button>
-    <button class="tab" onclick="showTab('codes')" data-t="codes">Codes</button>
-    <button class="tab" onclick="showTab('logs')" data-t="audit_logs">Audit Logs</button>
-    <button class="tab" onclick="showTab('state')" data-t="state">State</button>
-    <button class="tab" onclick="showTab('snapshots')" data-t="snapshots">Snapshots</button>
-    <button class="tab" onclick="showTab('charts')" data-t="charts">Charts</button>
-    <button class="tab" onclick="showTab('health')" data-t="health">Health</button>
-    <button class="tab" onclick="showTab('leaderboard')" data-t="leaderboard">Leaderboard</button>
-    <button class="tab" onclick="showTab('config')" data-t="config_tab">Config</button>
+    <button class="tab active" data-tab="users" data-t="users">Users</button>
+    <button class="tab" data-tab="codes" data-t="codes">Codes</button>
+    <button class="tab" data-tab="logs" data-t="audit_logs">Audit Logs</button>
+    <button class="tab" data-tab="state" data-t="state">State</button>
+    <button class="tab" data-tab="snapshots" data-t="snapshots">Snapshots</button>
+    <button class="tab" data-tab="charts" data-t="charts">Charts</button>
+    <button class="tab" data-tab="health" data-t="health">Health</button>
+    <button class="tab" data-tab="leaderboard" data-t="leaderboard">Leaderboard</button>
+    <button class="tab" data-tab="config" data-t="config_tab">Config</button>
   </div>
 
   <div id="tab-users" class="tab-content active">
     <div class="card">
       <div class="card-title" data-t="user_list">User List</div>
       <div class="toolbar">
-        <button class="btn-secondary" onclick="loadUsers()" id="btnLoadUsers" data-t="load_users">Load Users</button>
-        <button class="btn-secondary" onclick="showAddUser()" id="btnShowAdd" data-t="add_user_btn">+ Add User</button>
+        <button class="btn-secondary" id="btnLoadUsers" data-t="load_users">Load Users</button>
+        <button class="btn-secondary" id="btnShowAdd" data-t="add_user_btn">+ Add User</button>
       </div>
       <div class="table-wrap" id="usersTableWrap">
         <div class="table-empty" data-t="load_users_hint">Click "Load Users" to fetch user list</div>
@@ -126,8 +126,8 @@
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="doAddUser()" id="btnDoAdd" data-t="create">Create</button>
-          <button class="btn-secondary" onclick="hideAddUser()" id="btnCancelAdd" data-t="cancel">Cancel</button>
+          <button class="btn btn-primary" id="btnDoAdd" data-t="create">Create</button>
+          <button class="btn-secondary" id="btnCancelAdd" data-t="cancel">Cancel</button>
         </div>
         <div class="result-box" id="addUserResult"></div>
       </div>
@@ -137,9 +137,9 @@
       <div class="card-title" data-t="user_details">User Details</div>
       <div class="info-grid" id="userDetailInfo"></div>
       <div class="detail-actions">
-        <button class="btn-danger" onclick="doResetUser()" id="btnDoReset" data-t="reset">Reset</button>
-        <button class="btn-danger" onclick="doDeleteUser()" id="btnDoDelete" data-t="delete">Delete</button>
-        <button class="btn-secondary" onclick="hideUserDetail()" id="btnCloseDetail" data-t="close">Close</button>
+        <button class="btn-danger" id="btnDoReset" data-t="reset">Reset</button>
+        <button class="btn-danger" id="btnDoDelete" data-t="delete">Delete</button>
+        <button class="btn-secondary" id="btnCloseDetail" data-t="close">Close</button>
       </div>
       <div class="result-box" id="userDetailResult"></div>
     </div>
@@ -149,8 +149,8 @@
     <div class="card">
       <div class="card-title" data-t="bonus_codes">Bonus Codes</div>
       <div class="toolbar">
-        <button class="btn-secondary" onclick="loadCodes()" id="btnLoadCodes" data-t="load_codes">Load Codes</button>
-        <button class="btn-secondary" onclick="showAddCode()" id="btnShowAddCode" data-t="add_code_btn">+ Add Code</button>
+        <button class="btn-secondary" id="btnLoadCodes" data-t="load_codes">Load Codes</button>
+        <button class="btn-secondary" id="btnShowAddCode" data-t="add_code_btn">+ Add Code</button>
       </div>
       <div class="code-list" id="codeList">
         <div class="table-empty" data-t="load_codes_hint">Click "Load Codes" to fetch codes</div>
@@ -198,7 +198,7 @@
           <label data-t="reusable">Reusable</label>
           <div class="input-wrap">
             <label class="dark-check">
-              <input type="checkbox" id="addPerma" onchange="toggleUsesRow()">
+              <input type="checkbox" id="addPerma">
               <div class="check-track"><div class="check-thumb"></div></div>
               <span class="check-label" data-t="reusable_label">Unlimited uses</span>
             </label>
@@ -212,8 +212,8 @@
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="doAddCode()" id="btnDoAddCode" data-t="create">Create</button>
-          <button class="btn-secondary" onclick="hideAddCode()" id="btnCancelAddCode" data-t="cancel">Cancel</button>
+          <button class="btn btn-primary" id="btnDoAddCode" data-t="create">Create</button>
+          <button class="btn-secondary" id="btnCancelAddCode" data-t="cancel">Cancel</button>
         </div>
         <div class="result-box" id="addCodeResult" style="display:none"></div>
       </div>
@@ -228,8 +228,8 @@
           <input type="number" id="logCount" value="50" min="1" class="dark-num-input">
           <span style="font-size:0.75rem;color:var(--text2)" data-t="log_count_label">rows</span>
         </div>
-        <button class="btn-secondary" onclick="loadLogs()" id="btnLoadLogs" data-t="load_logs">Load Logs</button>
-        <button class="btn-secondary" onclick="refreshLogs()" id="btnRefreshLogs" data-t="refresh">Refresh</button>
+        <button class="btn-secondary" id="btnLoadLogs" data-t="load_logs">Load Logs</button>
+        <button class="btn-secondary" id="btnRefreshLogs" data-t="refresh">Refresh</button>
       </div>
       <div class="table-wrap" id="logsTableWrap">
         <div class="table-empty" data-t="load_logs_hint">Click "Load Logs" to fetch audit logs</div>
@@ -248,7 +248,7 @@
         </div>
       </div>
       <div style="margin-top:12px">
-        <button class="btn-secondary" onclick="checkPanelStatus()" id="btnPanelStatus" data-t="check_panel_status">Check Panel Status</button>
+        <button class="btn-secondary" id="btnPanelStatus" data-t="check_panel_status">Check Panel Status</button>
       </div>
       <div class="result-box" id="panelStatusResult"></div>
     </div>
@@ -256,7 +256,7 @@
     <div class="card">
       <div class="card-title" data-t="host_system_status">Host System Status</div>
       <div style="margin-top:4px">
-        <button class="btn-secondary" onclick="loadSystemStatus()" id="btnSystemStatus" data-t="load_system_status">Load System Status</button>
+        <button class="btn-secondary" id="btnSystemStatus" data-t="load_system_status">Load System Status</button>
       </div>
       <div class="result-box" id="systemStatusResult"></div>
     </div>
@@ -270,7 +270,7 @@
           <span style="font-size:0.75rem;color:var(--text2)" data-t="cutoff_days">Cutoff (days)</span>
           <input type="number" id="snapCutoff" value="7" min="1" class="dark-num-input">
         </div>
-        <button class="btn-secondary" onclick="loadSnapshots()" id="btnLoadSnapshots" data-t="load_snapshots">Load Snapshots</button>
+        <button class="btn-secondary" id="btnLoadSnapshots" data-t="load_snapshots">Load Snapshots</button>
       </div>
       <div id="snapshotsList">
         <div class="table-empty" data-t="load_snapshots_hint">Configure cutoff and click "Load Snapshots"</div>
@@ -314,7 +314,7 @@
     <div class="card">
       <div class="card-title" data-t="operations_recovery">Operational Recovery</div>
       <div class="toolbar">
-        <button class="btn-secondary" onclick="loadOperationsStatus()" id="btnLoadOperations" data-t="load_operations">Load Status</button>
+        <button class="btn-secondary" id="btnLoadOperations" data-t="load_operations">Load Status</button>
       </div>
       <div class="table-wrap" id="operationsStatusWrap">
         <div class="table-empty" data-t="load_operations_hint">Load status to check recovery markers</div>
@@ -329,16 +329,16 @@
       </div>
       <div id="healthDetails" style="display:none;margin-top:12px"></div>
       <div style="margin-top:20px">
-        <button class="btn-secondary" onclick="runHealthCheck()" id="btnRunHealth" data-t="check_health">Check Health</button>
+        <button class="btn-secondary" id="btnRunHealth" data-t="check_health">Check Health</button>
       </div>
     </div>
 
     <div class="card">
       <div class="card-title" data-t="online_users">Online Users</div>
       <div class="toolbar">
-        <button class="btn-secondary" onclick="loadOnlineUsers()" id="btnLoadOnline" data-t="load_online">Load Online</button>
+        <button class="btn-secondary" id="btnLoadOnline" data-t="load_online">Load Online</button>
         <label class="dark-check">
-          <input type="checkbox" id="onlineKeyed" onchange="loadOnlineUsers()">
+          <input type="checkbox" id="onlineKeyed">
           <div class="check-track"><div class="check-thumb"></div></div>
           <span class="check-label" data-t="keyed">Keyed output</span>
         </label>
@@ -351,7 +351,7 @@
     <div class="card">
       <div class="card-title" data-t="refresh_users">Refresh All Users</div>
       <p style="font-size:0.8125rem;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">This syncs all users to all panels. May take time.</p>
-      <button class="btn-secondary" onclick="doRefreshUsers()" id="btnDoRefresh" data-t="refresh_users_btn">Refresh Users</button>
+      <button class="btn-secondary" id="btnDoRefresh" data-t="refresh_users_btn">Refresh Users</button>
       <div class="result-box" id="refreshResult"></div>
     </div>
 
@@ -363,7 +363,7 @@
         <div class="teapot-sub" data-t="teapot_sub">Spoiler: it cannot.</div>
       </div>
       <div style="text-align:center;margin-top:20px">
-        <button class="btn-secondary" onclick="checkTeapot()" id="btnTeapot" data-t="check_teapot">Check Teapot</button>
+        <button class="btn-secondary" id="btnTeapot" data-t="check_teapot">Check Teapot</button>
       </div>
     </div>
   </div>
@@ -399,7 +399,7 @@
             </label>
           </div>
         </div>
-        <button class="btn btn-primary" style="padding:10px 20px" onclick="fetchLeaderboard()" id="btnFetchLb" data-t="fetch">Fetch</button>
+        <button class="btn btn-primary" style="padding:10px 20px" id="btnFetchLb" data-t="fetch">Fetch</button>
       </div>
       <div class="table-wrap" id="lbTableWrap">
         <div class="table-empty" data-t="lb_hint">Configure options and click "Fetch"</div>
@@ -411,9 +411,9 @@
     <div class="config-banner" data-t="config_restart_banner">Some fields apply only after a restart. Restart is manual. This page does not restart the service.</div>
     <div class="config-banner config-restart-saved" id="configRestartSaved" hidden></div>
     <div class="config-tabs" role="tablist">
-      <button type="button" class="config-tab active" data-section="main" onclick="showConfigSection('main')" data-t="config_main">Main</button>
-      <button type="button" class="config-tab" data-section="inbounds" onclick="showConfigSection('inbounds')" data-t="config_inbounds">Inbounds</button>
-      <button type="button" class="config-tab" data-section="panels" onclick="showConfigSection('panels')"><span data-t="config_panels">Panels</span> <span class="config-restart-wrap"><span class="config-restart-icon" tabindex="0" data-t-aria="config_restart_tip" aria-label="Requires a restart">!</span><span class="config-restart-tooltip" role="tooltip" data-t="config_restart_tip">Requires a restart</span></span></button>
+      <button type="button" class="config-tab active" data-section="main" data-t="config_main">Main</button>
+      <button type="button" class="config-tab" data-section="inbounds" data-t="config_inbounds">Inbounds</button>
+      <button type="button" class="config-tab" data-section="panels"><span data-t="config_panels">Panels</span> <span class="config-restart-wrap"><span class="config-restart-icon" tabindex="0" data-t-aria="config_restart_tip" aria-label="Requires a restart">!</span><span class="config-restart-tooltip" role="tooltip" data-t="config_restart_tip">Requires a restart</span></span></button>
     </div>
     <div id="configLoad" class="config-load" hidden></div>
     <div id="configEditor" hidden>
@@ -423,8 +423,8 @@
       <div class="config-savebar">
         <span class="config-dirty" id="configDirty" data-t="config_saved_state">Saved</span>
         <div class="config-savebar-actions">
-          <button type="button" class="btn btn-primary" id="configSave" onclick="saveConfig()" data-t="config_save" disabled>Save</button>
-          <button type="button" class="btn btn-secondary" id="configReload" onclick="reloadConfig()" data-t="config_reload">Reload</button>
+          <button type="button" class="btn btn-primary" id="configSave" data-t="config_save" disabled>Save</button>
+          <button type="button" class="btn btn-secondary" id="configReload" data-t="config_reload">Reload</button>
         </div>
         <div class="config-result" id="configResult"></div>
       </div>

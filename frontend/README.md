@@ -165,14 +165,11 @@ value is interpolated into an executable JavaScript string on these five pages.
 The blocking common entry applies the saved theme in the head, before CSS and
 visible content, including when browser storage is denied.
 
-The **only shared compatibility adapter** is `src/entries/common.ts`: it imports
-typed implementations and exposes their existing names to the not-yet-migrated
-classic pages/inline handlers. This is not a second implementation or a global
-dependency inside shared modules. The typed API configuration has one owner;
-its adapter getter/setter preserves the legacy admin SSE consumer. Remove this
-adapter as part 6 replaces the remaining page consumers with explicit imports.
-The auth/page scripts, inline handlers, 404 and redirect scripts remain in their
-existing page migration scope; no replacement frontend suite/dependency was added.
+The migrated pages import their shared dependencies explicitly. The blocking
+`src/entries/common.ts` entry only applies the saved theme before paint; it no
+longer publishes a compatibility API on `window`. Page event handlers are bound
+by their TypeScript initializers rather than inline template attributes. No
+replacement frontend suite or dependency was added.
 
 API responses enter as `unknown`. The common boundary checks object envelopes,
 boolean `success` and string `msg`; page-specific `obj` remains `unknown`, to be

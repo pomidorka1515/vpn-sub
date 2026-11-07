@@ -1,14 +1,21 @@
-import { refreshJsonEditors } from '../json-editor.js';
-import { editor, KNOWN_KEYS, REQUIRED_KEYS, TEMPLATE_KEYS, PROFILE_FIELDS, PANEL_FIELDS, PANEL_OPTIONAL } from './config-state.js';
-import { isPlainObject, isInteger, isFiniteNumber, jsonEqual } from './config-json.js';
-import { cardRoot, cssId, readRows, showConfigSection, enhanceJsonInputs } from './config-controls.js';
+import type { Translate } from '../../shared/formatting';
+import { refreshJsonEditors } from './editor-bridge';
+import { editor, KNOWN_KEYS, REQUIRED_KEYS, TEMPLATE_KEYS, PROFILE_FIELDS, PANEL_FIELDS, PANEL_OPTIONAL } from './state';
+import { isPlainObject, isInteger, isFiniteNumber, jsonEqual } from './json';
+import type { ConfigObject } from './json';
+import { cardRoot, cssId, readRows, showConfigSection, enhanceJsonInputs } from './controls';
 
-function issue(path, message) {
+export interface ValidationIssue { path: string; message: string }
+let t: Translate = key => key;
+export function initConfigValidation(translate: Translate): () => void { t = translate; return () => { t = key => key; }; }
+const currentDraft = (): ConfigObject => editor.draft ?? {};
+
+function issue(path: string, message: string): ValidationIssue {
   return { path, message };
 }
 
-export function validateDraft(draft) {
-  const issues = [];
+export function validateDraft(draft: ConfigObject): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
   ['uri', 'api_uri', 'fallback_domain', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt', '$schema'].forEach(key => {
     if (Object.hasOwn(draft, key) && typeof draft[key] !== 'string') issues.push(issue(key, t('config_err_required')));
   });
@@ -39,7 +46,7 @@ export function validateDraft(draft) {
   ['fingerprints', 'bypass_packages'].forEach(key => {
     const list = draft[key];
     if (!Array.isArray(list) || list.some(item => typeof item !== 'string')) issues.push(issue(key, t('config_err_required')));
-    else if (key === 'fingerprints' && (list.length === 0 || list.some(item => !['chrome', 'safari', 'edge', 'ios', 'firefox', 'android', '360', 'qq', 'random', 'randomized'].includes(item)))) issues.push(issue(key, t('config_err_fingerprints')));
+    else if (key === 'fingerprints' && (list.length === 0 || list.some(item => typeof item !== 'string' || !['chrome', 'safari', 'edge', 'ios', 'firefox', 'android', '360', 'qq', 'random', 'randomized'].includes(item)))) issues.push(issue(key, t('config_err_fingerprints')));
     else if (key === 'fingerprints' && new Set(list).size !== list.length) issues.push(issue(key, t('config_err_unique')));
   });
   if (Object.prototype.hasOwnProperty.call(draft, 'funny_strings')) {
@@ -52,7 +59,7 @@ export function validateDraft(draft) {
   if (isPlainObject(draft.redis)) {
     const extra = Object.keys(draft.redis).filter(key => key !== 'url' && key !== 'socket_timeout');
     if (typeof draft.redis.url !== 'string' || draft.redis.url === '') issues.push(issue('redis', t('config_err_required')));
-    if (Object.prototype.hasOwnProperty.call(draft.redis, 'socket_timeout') && !(isFiniteNumber(draft.redis.socket_timeout) && draft.redis.socket_timeout > 0)) {
+    if (Object.prototype.hasOwnProperty.call(draft.redis, 'socket_timeout') && !(isFiniteNumber(draft.redis.socket_timeout) && Number(draft.redis.socket_timeout) > 0)) {
       issues.push(issue('redis', t('config_err_integer')));
     }
     if (extra.length) issues.push(issue('redis', t('config_err_unknown')));
@@ -78,20 +85,22 @@ export function validateDraft(draft) {
   }
   if (typeof draft.json_template === 'string') issues.push(issue('json_template', t('config_err_json')));
   else if (isPlainObject(draft.json_template)) {
-    const missing = TEMPLATE_KEYS.filter(key => !Object.hasOwn(draft.json_template, key));
-    const errors = [];
+    const template = draft.json_template;
+    const missing = TEMPLATE_KEYS.filter(key => !Object.hasOwn(template, key));
+    const errors: string[] = [];
     ['routing', 'servers'].forEach(key => {
-      if (!Object.hasOwn(draft.json_template, key)) return;
-      if (!isPlainObject(draft.json_template[key])) {
+      if (!Object.hasOwn(template, key)) return;
+      const part = template[key];
+      if (!isPlainObject(part)) {
         errors.push(t('config_err_object_field').replace('{field}', key));
         return;
       }
       const required = key === 'routing' ? ['rules', 'domainStrategy'] : ['servers', 'queryStrategy'];
       required.forEach(field => {
-        if (!Object.hasOwn(draft.json_template[key], field)) missing.push(key + '.' + field);
+        if (!Object.hasOwn(part, field)) missing.push(key + '.' + field);
       });
     });
-    const servers = draft.json_template.servers;
+    const servers = template.servers;
     if (isPlainObject(servers)) {
       if (Object.hasOwn(servers, 'servers') && !Array.isArray(servers.servers)) {
         errors.push(t('config_err_array_field').replace('{field}', 'servers.servers'));
@@ -185,29 +194,30 @@ export function validateDraft(draft) {
   return issues;
 }
 
-function fieldOf(path) {
+function fieldOf(path: string): string {
   if (path.startsWith('profiles.') || path.startsWith('3xui.')) return path;
-  return path.split('.')[0];
+  return path.split('.')[0] ?? '';
 }
 
-function sectionOf(path) {
+function sectionOf(path: string): 'inbounds' | 'panels' | 'main' {
   if (path.startsWith('profiles')) return 'inbounds';
   if (path.startsWith('3xui')) return 'panels';
   return 'main';
 }
 
-function issueParts(path) {
+function issueParts(path: string): string[] {
   const section = sectionOf(path);
   if (section === 'main') return [path];
   const root = section === 'inbounds' ? 'profiles' : '3xui';
-  const map = editor.draft[root] || {};
+  const value = currentDraft()[root];
+  const map = isPlainObject(value) ? value : {};
   const id = Object.keys(map).sort((a, b) => b.length - a.length)
     .find(key => path === root + '.' + key || path.startsWith(root + '.' + key + '.'));
   return id === undefined ? [root] : [root, id, path.slice(root.length + id.length + 2) || 'id'];
 }
 
-function showIssues(issues) {
-  document.querySelectorAll('.config-error').forEach(el => { el.hidden = true; el.textContent = ''; });
+function showIssues(issues: ValidationIssue[]): void {
+  document.querySelectorAll<HTMLElement>('.config-error').forEach(el => { el.hidden = true; el.textContent = ''; });
   issues.forEach(item => {
     const parts = issueParts(item.path);
     let id = '';
@@ -222,8 +232,8 @@ function showIssues(issues) {
   });
 }
 
-export function validateField(key) {
-  const issues = validateDraft(editor.draft).filter(item => fieldOf(item.path) === key);
+export function validateField(key: string): void {
+  const issues = validateDraft(currentDraft()).filter(item => fieldOf(item.path) === key);
   if (key === 'nodes') {
     const keys = readRows('cfg-rows-nodes', 'pair').map(row => row[0]);
     if (new Set(keys).size !== keys.length) issues.unshift(issue('nodes', t('config_err_unique')));
@@ -235,12 +245,13 @@ export function validateField(key) {
   }
 }
 
-export function validateCard(kind, id) {
+export function validateCard(kind: string, id: string): void {
   const prefix = kind === 'inbounds' ? 'profiles.' + id : '3xui.' + id;
-  const issues = validateDraft(editor.draft).filter(item => item.path === prefix || item.path.startsWith(prefix + '.'));
+  const issues = validateDraft(currentDraft()).filter(item => item.path === prefix || item.path.startsWith(prefix + '.'));
   const card = cardRoot(kind, id);
-  const rawId = card?.querySelector('[data-field="id"]')?.value.trim();
-  const map = kind === 'inbounds' ? editor.draft.profiles : editor.draft['3xui'];
+  const rawId = card?.querySelector<HTMLInputElement>('[data-field="id"]')?.value.trim();
+  const value = kind === 'inbounds' ? currentDraft().profiles : currentDraft()['3xui'];
+  const map = isPlainObject(value) ? value : {};
   if (rawId !== undefined && (!rawId || (rawId !== id && Object.hasOwn(map, rawId)))) {
     issues.unshift(issue(prefix + '.id', t(rawId ? 'config_err_unique' : 'config_err_required')));
   }
@@ -248,7 +259,7 @@ export function validateCard(kind, id) {
     const headers = readRows('cfg-pn-headers-' + cssId(id), 'pair').map(row => row[0]);
     if (new Set(headers).size !== headers.length) issues.push(issue(prefix + '.inject_headers', t('config_err_unique')));
   }
-  card?.querySelectorAll('.config-error').forEach(el => { el.hidden = true; el.textContent = ''; });
+  card?.querySelectorAll<HTMLElement>('.config-error').forEach(el => { el.hidden = true; el.textContent = ''; });
   issues.forEach(item => {
     const field = issueParts(item.path)[2] || 'id';
     const el = document.getElementById((kind === 'inbounds' ? 'cfg-in-err-' : 'cfg-pn-err-') + cssId(id) + '-' + field);
@@ -259,14 +270,15 @@ export function validateCard(kind, id) {
   });
 }
 
-export function validateAll() {
-  const issues = validateDraft(editor.draft);
+export function validateAll(): ValidationIssue[] {
+  const issues = validateDraft(currentDraft());
   const nodeKeys = readRows('cfg-rows-nodes', 'pair').map(row => row[0]);
   if (new Set(nodeKeys).size !== nodeKeys.length) issues.unshift(issue('nodes', t('config_err_unique')));
   for (const kind of ['inbounds', 'panels']) {
     const root = kind === 'inbounds' ? 'profiles' : '3xui';
-    Object.keys(editor.draft[root] || {}).forEach(id => {
-      const raw = cardRoot(kind, id)?.querySelector('[data-field="id"]')?.value.trim();
+    const value = currentDraft()[root];
+    Object.keys(isPlainObject(value) ? value : {}).forEach(id => {
+      const raw = cardRoot(kind, id)?.querySelector<HTMLInputElement>('[data-field="id"]')?.value.trim();
       if (raw !== undefined && raw !== id) issues.push(issue(root + '.' + id + '.id', t(raw ? 'config_err_unique' : 'config_err_required')));
       if (kind === 'panels') {
         const headers = readRows('cfg-pn-headers-' + cssId(id), 'pair').map(row => row[0]);
@@ -278,18 +290,18 @@ export function validateAll() {
   return issues;
 }
 
-export function focusIssue(item) {
+export function focusIssue(item: ValidationIssue | undefined): void {
   if (!item) return;
   const section = sectionOf(item.path);
   showConfigSection(section);
   const parts = issueParts(item.path);
-  if (parts[1]) {
+  if (parts[1] && section !== 'main') {
     editor.open[section].add(parts[1]);
     const card = cardRoot(section, parts[1]);
     card?.classList.add('open');
     if (card && section === 'inbounds') enhanceJsonInputs(card);
     if (card) refreshJsonEditors(card);
-    card?.querySelector('.config-card-toggle').setAttribute('aria-expanded', 'true');
+    card?.querySelector('.config-card-toggle')?.setAttribute('aria-expanded', 'true');
   }
   const target = document.getElementById(
     parts[0] === 'profiles' ? 'cfg-in-err-' + cssId(parts[1] || '') + '-' + (parts[2] || 'id')

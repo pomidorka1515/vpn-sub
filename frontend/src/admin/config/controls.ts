@@ -1,8 +1,17 @@
-import { mountJsonEditor, refreshJsonEditors } from '../json-editor.js';
-import { editor } from './config-state.js';
-import { isPlainObject, parseConfigJson, stringifyConfig } from './config-json.js';
+import { escapeHtml } from '../../shared/dom';
+import type { Translate } from '../../shared/formatting';
+import { togglePass } from '../../shared/passwords';
+import { mountJsonEditor, refreshJsonEditors } from './editor-bridge';
+import { editor } from './state';
+import { isPlainObject, parseConfigJson, stringifyConfig } from './json';
 
-export function attr(value) {
+let t: Translate = key => key;
+export function initConfigControls(translate: Translate): () => void {
+  t = translate;
+  return () => { t = key => key; };
+}
+
+export function attr(value: unknown): string {
   return escapeHtml(value).replace(/`/g, '&#96;');
 }
 
@@ -10,41 +19,42 @@ export function restartIcon() {
   return `<span class="config-restart-wrap"><button type="button" class="config-restart-icon" aria-label="${attr(t('config_restart_tip'))}">!</button><span class="config-restart-tooltip" role="tooltip">${escapeHtml(t('config_restart_tip'))}</span></span>`;
 }
 
-export function fieldError(id) {
+export function fieldError(id: string): string {
   return `<div class="config-error" id="${id}" hidden></div>`;
 }
 
-export function passWrap(id, value) {
+export function passWrap(id: string, value: unknown): string {
   return `<div class="config-pass">
     <input type="password" id="${id}" autocomplete="new-password" spellcheck="false" value="${attr(value)}">
-    <button type="button" class="pass-toggle" onclick="revealConfigPass('${id}', this)" data-t-aria="toggle_password" aria-label="${attr(t('toggle_password'))}"></button>
+    <button type="button" class="pass-toggle" data-config-pass="${id}" data-t-aria="toggle_password" aria-label="${attr(t('toggle_password'))}"></button>
   </div>`;
 }
 
-export function setError(id, message) {
+export function setError(id: string, message: string): void {
   const el = document.getElementById(id);
   if (!el) return;
   el.hidden = !message;
   el.textContent = message || '';
 }
 
-export function revealConfigPass(id, btn) {
-  togglePass(id, btn);
+export function revealConfigPass(id: string, btn: HTMLElement): void {
+  togglePass(document, id, btn);
 }
 
-export function readText(id) {
-  return document.getElementById(id)?.value ?? '';
+export function readText(id: string): string {
+  const input = document.getElementById(id);
+  return input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement || input instanceof HTMLSelectElement ? input.value : '';
 }
 
-export function enhanceJsonInputs(root) {
-  root.querySelectorAll('textarea.config-json').forEach(textarea => mountJsonEditor(textarea, {
+export function enhanceJsonInputs(root: HTMLElement): void {
+  root.querySelectorAll<HTMLTextAreaElement>('textarea.config-json').forEach(textarea => { void mountJsonEditor(textarea, {
     parse: parseConfigJson,
     format: text => stringifyConfig(parseConfigJson(text), true),
     label: textarea.dataset.field || 'json_template',
-  }));
+  }); });
 }
 
-export function rowList(id, rows, kind) {
+export function rowList(id: string, rows: Array<string | string[]>, kind: string): string {
   const body = rows.map((row, index) => {
     if (kind === 'pair') {
       return `<div class="config-rowline">
@@ -68,11 +78,11 @@ export function rowList(id, rows, kind) {
     <button type="button" class="btn-tiny" data-add="${id}">${escapeHtml(t('config_add'))}</button>`;
 }
 
-export function readRows(id, kind) {
+export function readRows(id: string, kind: string): Array<string | string[]> {
   const root = document.getElementById(id);
   if (!root) return [];
   if (kind === 'pair') {
-    const map = new Map();
+    const map = new Map<string | undefined, string[]>();
     root.querySelectorAll('input').forEach(input => {
       const index = input.dataset.row;
       const current = map.get(index) || ['', ''];
@@ -84,17 +94,17 @@ export function readRows(id, kind) {
   return [...root.querySelectorAll('input')].map(input => input.value);
 }
 
-export function bindRows(id, kind, apply) {
+export function bindRows(id: string, kind: string, apply: (rows: Array<string | string[]>, live?: boolean) => void): void {
   const root = document.getElementById(id);
   if (!root) return;
   const host = root.parentElement;
-  host.querySelector(`[data-add="${id}"]`)?.addEventListener('click', () => {
+  host?.querySelector(`[data-add="${id}"]`)?.addEventListener('click', () => {
     const rows = readRows(id, kind);
     rows.push(kind === 'pair' ? ['', ''] : '');
     apply(rows);
   });
   root.addEventListener('click', event => {
-    const btn = event.target.closest('[data-remove]');
+    const btn = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-remove]') : null;
     if (!btn) return;
     const rows = readRows(id, kind);
     rows.splice(Number(btn.dataset.remove), 1);
@@ -103,7 +113,7 @@ export function bindRows(id, kind, apply) {
   root.addEventListener('input', () => apply(readRows(id, kind), true));
 }
 
-export function bilingual(prefix, pair) {
+export function bilingual(prefix: string, pair: unknown): string {
   const values = Array.isArray(pair) ? pair : ['', ''];
   return `<div class="config-pair">
     <input type="text" id="${prefix}-0" value="${attr(values[0] ?? '')}" data-t-ph="config_en" placeholder="${attr(t('config_en'))}">
@@ -111,24 +121,24 @@ export function bilingual(prefix, pair) {
   </div>`;
 }
 
-export function nodeOptions(selected) {
-  const keys = isPlainObject(editor.draft.nodes) ? Object.keys(editor.draft.nodes) : [];
+export function nodeOptions(selected: string): string {
+  const keys = isPlainObject(editor.draft?.nodes) ? Object.keys(editor.draft.nodes) : [];
   const options = keys.map(key => `<option value="${attr(key)}"${key === selected ? ' selected' : ''}>${escapeHtml(key)}</option>`);
   if (selected && !keys.includes(selected)) options.unshift(`<option value="${attr(selected)}" selected>${escapeHtml(selected)}</option>`);
   if (!selected) options.unshift(`<option value="" selected></option>`);
   return options.join('');
 }
 
-export function cssId(id) {
-  return Array.from(id, char => char.codePointAt(0).toString(16)).join('-');
+export function cssId(id: string): string {
+  return Array.from(id, char => (char.codePointAt(0) ?? 0).toString(16)).join('-');
 }
 
-export function cardRoot(kind, id) {
-  return [...document.querySelectorAll('#tab-config .panel-card')].find(card => card.dataset.kind === kind && card.getAttribute('data-id') === id);
+export function cardRoot(kind: string, id: string): HTMLElement | undefined {
+  return [...document.querySelectorAll<HTMLElement>('#tab-config .panel-card')].find(card => card.dataset.kind === kind && card.getAttribute('data-id') === id);
 }
 
-export function showConfigSection(name) {
-  document.querySelectorAll('.config-tab').forEach(el => el.classList.toggle('active', el.dataset.section === name));
+export function showConfigSection(name: string): void {
+  document.querySelectorAll<HTMLElement>('.config-tab').forEach(el => el.classList.toggle('active', el.dataset.section === name));
   document.querySelectorAll('.config-pane').forEach(el => el.classList.toggle('active', el.id === 'config-pane-' + name));
   refreshJsonEditors(document.getElementById('config-pane-' + name));
 }
