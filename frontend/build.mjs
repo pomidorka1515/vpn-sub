@@ -14,16 +14,20 @@ if (process.argv.slice(2).some((arg) => arg !== "--watch")) {
   throw new Error("Usage: node build.mjs [--watch]");
 }
 
-const pageEntries = {
+const moduleEntries = {
   auth: "src/entries/auth.ts",
   "admin-auth": "src/entries/admin-auth.ts",
-  dashboard: "src/entries/dashboard.ts",
-  history: "src/entries/history.ts",
   "admin/main": "src/entries/admin.ts",
 };
-const optionalEntries = {
+const classicEntries = {
+  dashboard: "src/entries/dashboard.ts",
+  history: "src/entries/history.ts",
+};
+const optionalModuleEntries = {
   browser: "src/entries/browser.ts",
   redirect: "src/entries/redirect.ts",
+};
+const optionalClassicEntries = {
   error: "src/entries/error.ts",
 };
 const copies = [
@@ -68,25 +72,30 @@ async function rebuild() {
     logLevel: "info",
   });
   // Resolve optional entries on every rebuild so watch sees additions/deletions.
-  const entryPoints = { ...pageEntries };
-  for (const [name, path] of Object.entries(optionalEntries)) {
-    if (existsSync(join(root, path))) entryPoints[name] = path;
+  for (const [format, required, optional] of [
+    ["esm", moduleEntries, optionalModuleEntries],
+    ["iife", classicEntries, optionalClassicEntries],
+  ]) {
+    const entryPoints = { ...required };
+    for (const [name, path] of Object.entries(optional)) {
+      if (existsSync(join(root, path))) entryPoints[name] = path;
+    }
+    await build({
+      absWorkingDir: root,
+      entryPoints,
+      outdir: join(output, "assets"),
+      bundle: true,
+      splitting: false,
+      format,
+      platform: "browser",
+      target: "es2020",
+      treeShaking: false,
+      minify: false,
+      sourcemap: false,
+      legalComments: "eof",
+      logLevel: "info",
+    });
   }
-  await build({
-    absWorkingDir: root,
-    entryPoints,
-    outdir: join(output, "assets"),
-    bundle: true,
-    splitting: false,
-    format: "esm",
-    platform: "browser",
-    target: "es2020",
-    treeShaking: false,
-    minify: false,
-    sourcemap: false,
-    legalComments: "eof",
-    logLevel: "info",
-  });
   for (const [from, to] of copies) {
     await cp(join(source, from), join(output, to), { recursive: true });
   }

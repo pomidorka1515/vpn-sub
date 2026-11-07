@@ -50,10 +50,11 @@ are bundled and are no longer individually served.
 
 The five typed page entries are required; the explicitly listed browser, redirect
 and error entries are included only when their source files exist. Watch checks for
-those optional entries on every rebuild. Page bundles retain ESM output without
-tree shaking or identifier minification. The ambient CSS declaration supports
-future imports; there is deliberately no frontend test command or replacement
-suite yet.
+those optional entries on every rebuild. Dashboard, history and error are isolated
+IIFEs for classic script tags; auth, admin auth, admin, browser and redirect use ESM.
+Page bundles omit tree shaking and identifier minification. The ambient CSS
+declaration supports future imports; there is deliberately no frontend test command
+or replacement suite yet.
 
 Only `frontend/dist/` is build-owned and cleaned; never edit or commit it or
 `node_modules/`. All copy inputs are required: a missing resource directory fails
