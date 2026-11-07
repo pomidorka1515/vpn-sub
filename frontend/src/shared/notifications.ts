@@ -1,16 +1,33 @@
 import type { Translate } from './formatting';
 
-export function createNotifications(doc: Document, translate: Translate, schedule: (callback: () => void, delay: number) => unknown) {
+export function createNotifications(
+  doc: Document,
+  translate: Translate,
+  schedule: (callback: () => void, delay: number) => number,
+  cancel: (handle: number) => void,
+) {
+  let active: { element: HTMLElement; timer: number } | undefined;
+  function clearActive(): void {
+    if (!active) return;
+    cancel(active.timer);
+    active.element.remove();
+    active = undefined;
+  }
   function toast(message: string, type = 'success'): void {
+    clearActive();
     doc.querySelector('.toast')?.remove();
     const element = doc.createElement('div');
     element.className = 'toast ' + type;
     element.textContent = message;
     element.setAttribute('role', 'alert');
     element.setAttribute('aria-live', 'polite');
-    element.addEventListener('click', () => element.remove());
+    element.addEventListener('click', clearActive);
     doc.body.appendChild(element);
-    schedule(() => element.remove(), 2500);
+    const timer = schedule(() => {
+      element.remove();
+      if (active?.element === element) active = undefined;
+    }, 2500);
+    active = { element, timer };
   }
   function logoutWarning(): void {
     let element = doc.getElementById('logoutWarning');
@@ -23,5 +40,5 @@ export function createNotifications(doc: Document, translate: Translate, schedul
     }
     element.textContent = translate('logout_unconfirmed');
   }
-  return { toast, logoutWarning };
+  return { toast, logoutWarning, dispose: clearActive };
 }

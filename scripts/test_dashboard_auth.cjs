@@ -24,7 +24,7 @@ function dashboard(message) {
         return elements.get(id);
       },
     },
-    setTimeout() {},
+    setTimeout() {}, clearTimeout() {},
     fetch: async () => ({
       status: 401, headers: { get: () => null },
       text: async () => JSON.stringify({ success: false, msg: message }),

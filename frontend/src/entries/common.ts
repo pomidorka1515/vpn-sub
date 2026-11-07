@@ -21,7 +21,7 @@ const theme = createTheme(document, local);
 // This entry is a blocking head script, before styles or visible content.
 theme.applyTheme();
 const i18n = createI18n(bootstrap, document, local, session, location);
-const notifications = createNotifications(document, i18n.t, setTimeout);
+const notifications = createNotifications(document, i18n.t, setTimeout, clearTimeout);
 const dialogs = createDialogs(document, i18n.t);
 let apiConfig: ApiConfig = {};
 const api = createApi(() => apiConfig, i18n.t, notifications.toast, fetch);
@@ -56,7 +56,8 @@ Object.assign(window, {
   fmtBytes: (bytes: number) => fmtBytes(bytes, i18n.t),
   fmtUptime: (seconds: number | null | undefined) => fmtUptime(seconds, i18n.t),
   fmtTime,
-  ...notifications,
+  toast: notifications.toast,
+  logoutWarning: notifications.logoutWarning,
   confirmDialog: dialogs.confirmDialog,
   togglePass: (id: string, button: HTMLElement) => togglePass(document, id, button),
   initPassToggles: () => initPassToggles(document),
