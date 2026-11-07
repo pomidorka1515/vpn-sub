@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
@@ -26,7 +27,9 @@ async def test_daily_schedule_realigns_to_midnight_after_retry(
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     now = 86400.0 + 12 * 3600
     monotonic = 100.0
-    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    monkeypatch.setattr(
+        "bwatch.watch.time", SimpleNamespace(time=lambda: now, monotonic=time.monotonic)
+    )
     # Keep the event loop's real monotonic clock untouched.
     try:
         watch.record_daily_snapshot = AsyncMock(side_effect=RuntimeError("offline"))  # type: ignore[method-assign]

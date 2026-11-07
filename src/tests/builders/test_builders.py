@@ -178,7 +178,7 @@ def test_disabled_description_reports_only_exhausted_quota(
     used: int,
     exhausted: bool,
 ) -> None:
-    monkeypatch.setattr("builders.description.time.time", lambda: 1_700_086_400)
+    monkeypatch.setattr("builders.description.time", SimpleNamespace(time=lambda: 1_700_086_400))
     language = _lang(
         {
             "en": {

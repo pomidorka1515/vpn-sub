@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
+from app_runtime import rate_limit
 from app_runtime.rate_limit import _RATE_LIMIT_SCRIPT, AsyncRateLimiter
 
 if TYPE_CHECKING:
@@ -61,11 +62,14 @@ async def test_app_clock_jumps_do_not_affect_real_redis_windows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     limiter, client = redis_store
-    monkeypatch.setattr(time, "time", lambda: 100.0)
+    now = 100.0
+    # The limiter needs no app clock. Guard against reintroducing a module-local
+    # wall-clock dependency without changing Redis client's or asyncio's clocks.
+    monkeypatch.setattr(rate_limit, "time", SimpleNamespace(time=lambda: now), raising=False)
     assert await limiter.allow("route", "ip", 1)
-    monkeypatch.setattr(time, "time", lambda: 10_000_000_000.0)
+    now = 10_000_000_000.0
     assert not await limiter.allow("route", "ip", 1)
-    monkeypatch.setattr(time, "time", lambda: 1.0)
+    now = 1.0
     assert not await limiter.allow("route", "ip", 1)
     key = "ratelimit:route:ip"
     await client.expire(key, 5)

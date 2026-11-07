@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
@@ -199,7 +200,9 @@ async def test_expiry_days_replace_existing_timestamp_from_now(
 ) -> None:
     _, bot, _, sub = make_bots()
     bot._pending_edits[7] = {"username": "alice", "generation": "current"}
-    monkeypatch.setattr("bots.discord.admin.users.time.time", lambda: 1_700_000_000)
+    monkeypatch.setattr(
+        "bots.discord.admin.users.time", SimpleNamespace(time=lambda: 1_700_000_000)
+    )
     state = {"expiry": original_expiry}
 
     async def update(*, username: str, timee: int) -> None:

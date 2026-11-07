@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
@@ -33,7 +34,7 @@ async def test_snapshot_does_not_guess_incompatible_or_unknown_starts(
     sub = await make_subscription(db, tmp_path, panels=[panel])
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     now = int(time.time())
-    monkeypatch.setattr("bwatch.snapshots.time.time", lambda: now)
+    monkeypatch.setattr("bwatch.snapshots.time", SimpleNamespace(time=lambda: now))
 
     async def sample(value: int | None) -> None:
         nonlocal now
@@ -87,7 +88,7 @@ async def test_daily_snapshot_outage_retries_complete_sample(
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False, alert=alert)
     now = int(time.time()) // 86400 * 86400 + 3600
     first = now
-    monkeypatch.setattr("bwatch.snapshots.time.time", lambda: now)
+    monkeypatch.setattr("bwatch.snapshots.time", SimpleNamespace(time=lambda: now))
     failed = {
         "one": {"one"},
         "main": {"one", "two"},
@@ -198,7 +199,7 @@ async def test_state_samples_preserve_collection_times_across_restart(
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     now = int(time.time()) // 86400 * 86400 + 3600
     first = now
-    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    monkeypatch.setattr("bwatch.snapshots.time", SimpleNamespace(time=lambda: now))
     try:
         await watch.record_snap_snapshot()
         await watch.close()
@@ -225,7 +226,10 @@ async def test_daily_history_survives_repeated_scheduled_restarts(
     total = 100
     now = int(time.time()) // 86400 * 86400 + 3600
     first = now
-    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    monkeypatch.setattr("bwatch.snapshots.time", SimpleNamespace(time=lambda: now))
+    monkeypatch.setattr(
+        "bwatch.watch.time", SimpleNamespace(time=lambda: now, monotonic=time.monotonic)
+    )
 
     async def traffic(
         whitelist: bool = False,

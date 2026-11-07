@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
@@ -205,7 +206,7 @@ async def test_quota_applies_combined_terminal_state_once(
     whitelist_exhausted: bool,
 ) -> None:
     now = int(time.time())
-    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    monkeypatch.setattr("bwatch.quota.time", SimpleNamespace(time=lambda: now))
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_subscription(db, tmp_path)
@@ -276,7 +277,7 @@ async def test_recovery_only_restores_unexpired_accounts(
     expiry_offset: int | None,
 ) -> None:
     now = int(time.time())
-    monkeypatch.setattr("bwatch.watch.time.time", lambda: now)
+    monkeypatch.setattr("bwatch.quota.time", SimpleNamespace(time=lambda: now))
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
     sub = await make_subscription(db, tmp_path)

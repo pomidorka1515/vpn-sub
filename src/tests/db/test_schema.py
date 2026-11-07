@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import time
 import uuid
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -65,7 +66,9 @@ async def test_sessions_expire_and_stay_expired_after_restart(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = int(time.time())
-    monkeypatch.setattr(time, "time", lambda: now)
+    clock = SimpleNamespace(time=lambda: now)
+    monkeypatch.setattr("db.users.time", clock)
+    monkeypatch.setattr("db.state.time", clock)
     await create_user(database)
     await database.set_auth_token("alice", "web-session")
     await database.set_admin_ui_session("admin-session")
