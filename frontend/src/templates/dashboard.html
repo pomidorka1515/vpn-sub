@@ -18,13 +18,13 @@
   </div>
   <div class="topbar-right">
     <div class="lang-toggle" data-t-aria="lang_selection">
-      <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
-      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
+      <button class="lang-btn" data-lang="en" data-t-aria="lang_en">EN</button>
+      <button class="lang-btn" data-lang="ru" data-t-aria="lang_ru">RU</button>
     </div>
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
-    <button class="btn-sm" onclick="showProfiles()" id="btnProfiles" data-t="profiles"></button>
-    <button class="btn-sm" onclick="loadStats()" id="btnRefresh" data-t="refresh"></button>
-    <button class="btn-sm danger" onclick="doLogout()" id="btnLogout" data-t="logout"></button>
+    <button class="theme-btn" id="themeBtn" data-t-title="toggle_theme"></button>
+    <button class="btn-sm" id="btnProfiles" data-t="profiles"></button>
+    <button class="btn-sm" id="btnRefresh" data-t="refresh"></button>
+    <button class="btn-sm danger" id="btnLogout" data-t="logout"></button>
   </div>
 </div>
 
@@ -40,18 +40,18 @@
     <div class="card-title" data-t="subscription"></div>
     <div class="sub-link-wrap">
       <div class="sub-link-box" id="subLink">—</div>
-      <button class="btn-copy" onclick="copyLink()" id="btnCopy" data-t="copy"></button>
-      <button class="btn-copy" onclick="showQrCode()" id="btnQr" data-t="qr"></button>
+      <button class="btn-copy" id="btnCopy" data-t="copy"></button>
+      <button class="btn-copy" id="btnQr" data-t="qr"></button>
     </div>
     <div class="qr-section" id="qrSection" style="display: none;">
       <div style="display:flex; flex-direction:column; align-items:center; gap:12px; width:100%">
         <div class="lang-toggle">
-          <button class="lang-btn active" id="qrBtnLink" onclick="setQrMode('link')" data-t="qr_link"></button>
-          <button class="lang-btn" id="qrBtnHapp" onclick="setQrMode('happ')" data-t="qr_happ"></button>
+          <button class="lang-btn active" id="qrBtnLink" data-t="qr_link"></button>
+          <button class="lang-btn" id="qrBtnHapp" data-t="qr_happ"></button>
         </div>
         <div class="qr-container">
           <canvas id="qrCanvas" width="200" height="200"></canvas>
-          <button class="btn-close" onclick="hideQrCode()">×</button>
+          <button class="btn-close" id="qrClose">×</button>
         </div>
       </div>
     </div>
@@ -90,7 +90,7 @@
       </div>
     </div>
     <div class="history-link">
-      <button class="btn btn-history" onclick="window.location.href=window.BASE+'/history'" data-t="extra_bw"></button>
+      <button id="btnHistory" class="btn btn-history" data-t="extra_bw"></button>
     </div>
   </div>
 
@@ -98,7 +98,7 @@
     <div class="card-title" data-t="bonus_code"></div>
     <div class="bonus-row">
       <input type="text" class="bonus-input" id="bonusInput" spellcheck="false" maxlength="64" data-t-ph="enter_code">
-      <button class="btn-copy" onclick="applyBonus()" id="btnApply" data-t="apply"></button>
+      <button class="btn-copy" id="btnApply" data-t="apply"></button>
     </div>
     <div class="bonus-msg" id="bonusMsg"></div>
   </div>
@@ -111,25 +111,25 @@
       <div class="settings-row">
         <label data-t="username"></label>
         <div style="flex:1">
-          <input type="text" id="setUser" oninput="validateSettingsUsername()" style="width:100%" maxlength="32" pattern="[A-Za-z0-9_\-]+" data-t-ph="keep_empty">
+          <input type="text" id="setUser" style="width:100%" maxlength="32" pattern="[A-Za-z0-9_\-]+" data-t-ph="keep_empty">
           <div class="username-hint" id="setUserHint"></div>
         </div>
       </div>
       <div class="settings-row"><label data-t="password"></label>
         <div class="pass-wrap">
           <input type="password" id="setPass" autocomplete="new-password" data-t-ph="keep_empty">
-          <button class="pass-toggle" onclick="togglePass('setPass', this)" type="button" data-t-aria="toggle_password"></button>
+          <button class="pass-toggle" data-password="setPass" type="button" data-t-aria="toggle_password"></button>
         </div>
       </div>
       <div class="settings-row"><label data-t="current_password"></label>
         <div class="pass-wrap">
           <input type="password" id="setCurPass" autocomplete="current-password" data-t-ph="keep_empty">
-          <button class="pass-toggle" onclick="togglePass('setCurPass', this)" type="button" data-t-aria="toggle_password"></button>
+          <button class="pass-toggle" data-password="setCurPass" type="button" data-t-aria="toggle_password"></button>
         </div>
       </div>
     </div>
     <div class="settings-actions">
-      <button class="btn btn-primary" style="width:auto;padding:8px 24px" onclick="saveSettings()" id="btnSave" data-t="save"></button>
+      <button class="btn btn-primary" style="width:auto;padding:8px 24px" id="btnSave" data-t="save"></button>
     </div>
     <div class="settings-msg" id="settingsMsg"></div>
   </div>
@@ -146,8 +146,8 @@
   <div class="card danger-zone">
     <div class="card-title" style="color:var(--red)" data-t="danger_zone"></div>
     <div class="danger-actions">
-      <button class="btn-danger" onclick="doReset()" id="btnReset" data-t="reset_uuid"></button>
-      <button class="btn-danger" onclick="doDelete()" id="btnDelete" data-t="delete_account"></button>
+      <button class="btn-danger" id="btnReset" data-t="reset_uuid"></button>
+      <button class="btn-danger" id="btnDelete" data-t="delete_account"></button>
     </div>
   </div>
 </div>
