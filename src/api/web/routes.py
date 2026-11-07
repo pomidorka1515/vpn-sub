@@ -48,3 +48,4 @@ class AsyncWebApi(
         uri = "/" + "/".join(p for p in conf["uri"].split("/") if p)
         super().__init__(app, cfg, sub, bw, uri, limiter)
         self.prefix = self.uri.rstrip("/")
+        app.extensions["frontend_web_api"] = self

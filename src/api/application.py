@@ -8,9 +8,10 @@ from werkzeug.exceptions import HTTPException
 from app_runtime.tasks import CapacityExceededError
 from errors import AppError, CommittedAuditError
 from loggers import Logger
+from threadutil import named_to_thread
 from util import err, isbrowser, ok
 
-from .common import RES_DIR
+from .common import RES_DIR, asset_version
 from .middleware import ProxyMiddleware
 from .web.static import AsyncStaticRoutes
 
@@ -33,7 +34,15 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
             and (request.url_rule is None or request.endpoint in page_endpoints)
             and isbrowser(request.headers.get("User-Agent", ""))
         ):
-            return Response(await render_template("404.html"), status=404, mimetype="text/html")
+            web_api: AsyncStaticRoutes | None = app.extensions.get("frontend_web_api")
+            if web_api is None:
+                prefix = ""
+                version = await named_to_thread("frontend:asset-version", asset_version)
+            else:
+                prefix = web_api.prefix
+                version = await web_api.sub.res.offloads.files.run(asset_version)
+            html = await render_template("404.html", prefix=prefix, asset_version=version)
+            return Response(html, status=404, mimetype="text/html")
         return response
 
     @app.errorhandler(AppError)

@@ -34,6 +34,10 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         Route("GET", "/common.css", "common_css"),
         Route("GET", "/fonts/<name>", "font_file"),
         Route("GET", "/auth.css", "auth_css"),
+        Route("GET", "/auth.js", "auth_js"),
+        Route("GET", "/admin-auth.js", "admin_auth_js"),
+        Route("GET", "/error.js", "error_js"),
+        Route("GET", "/redirect.js", "redirect_js"),
         Route("GET", "/dashboard.css", "dashboard_css"),
         Route("GET", "/history.css", "history_css"),
         Route("GET", "/charts.css", "charts_css"),
@@ -101,6 +105,25 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
 
     async def auth_css(self) -> ResponseType:
         return await self._static("auth.css", "text/css")
+
+    async def auth_js(self) -> ResponseType:
+        return await self._static("auth.js", "text/javascript")
+
+    async def admin_auth_js(self) -> ResponseType:
+        return await self._static("admin-auth.js", "text/javascript")
+
+    async def error_js(self) -> ResponseType:
+        return await self._static("error.js", "text/javascript")
+
+    async def redirect_js(self) -> ResponseType:
+        # redirect.html references this script without a version query.
+        response = await make_response(
+            await send_file(
+                RES_DIR / "assets" / "redirect.js", mimetype="text/javascript", conditional=True
+            ),
+        )
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
     async def dashboard_css(self) -> ResponseType:
         return await self._static("dashboard.css", "text/css")
