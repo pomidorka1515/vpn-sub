@@ -12,6 +12,8 @@ out/
 bin/
 build/
 node_modules/
+/frontend/node_modules/
+/frontend/dist/
 *.log
 *.swp
 *.md
@@ -21,4 +23,5 @@ node_modules/
 !AUDIT.md
 !docs/ASYNC_*
 !src/discord/README.md
+!/frontend/.node-version
 *.egg-info
