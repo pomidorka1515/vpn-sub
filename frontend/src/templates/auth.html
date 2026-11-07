@@ -12,15 +12,15 @@
 <body>
 <div class="auth-page">
 <div class="auth-box">
-  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" data-t-title="toggle_theme"></button>
+  <button class="theme-btn" id="themeBtn" data-t-title="toggle_theme"></button>
   <div class="lang-toggle" data-t-aria="lang_selection">
-    <button class="lang-btn" data-lang="en" onclick="setLang('en')" data-t-aria="lang_en">EN</button>
-    <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" data-t-aria="lang_ru">RU</button>
+    <button class="lang-btn" data-lang="en" data-t-aria="lang_en">EN</button>
+    <button class="lang-btn" data-lang="ru" data-t-aria="lang_ru">RU</button>
   </div>
   <h1 id="authTitle" data-t="sign_in"></h1>
   <div class="auth-tabs">
-    <button class="auth-tab active" onclick="switchTab('login')" id="tabLogin" data-t="login"></button>
-    <button class="auth-tab" onclick="switchTab('register')" id="tabRegister" data-t="register"></button>
+    <button class="auth-tab active" id="tabLogin" data-t="login"></button>
+    <button class="auth-tab" id="tabRegister" data-t="register"></button>
   </div>
   <div class="auth-error" id="authError"></div>
 
@@ -33,10 +33,10 @@
       <label data-t="password"></label>
       <div class="pass-wrap">
         <input type="password" id="loginPass" autocomplete="current-password">
-        <button class="pass-toggle" onclick="togglePass('loginPass', this)" type="button" data-t-aria="toggle_password"></button>
+        <button class="pass-toggle" data-password="loginPass" type="button" data-t-aria="toggle_password"></button>
       </div>
     </div>
-    <button class="btn btn-primary" id="loginBtn" onclick="doLogin()" data-t="sign_in"></button>
+    <button class="btn btn-primary" id="loginBtn" data-t="sign_in"></button>
   </div>
 
   <div id="registerForm" style="display:none">
@@ -46,7 +46,7 @@
     </div>
     <div class="form-group">
       <label data-t="username"></label>
-      <input type="text" id="regUser" autocomplete="off" spellcheck="false" oninput="validateUsername()" maxlength="32" pattern="[A-Za-z0-9_\-]+">
+      <input type="text" id="regUser" autocomplete="off" spellcheck="false" maxlength="32" pattern="[A-Za-z0-9_\-]+">
       <div class="username-hint" id="usernameHint"></div>
     </div>
     <div class="form-group">
@@ -57,131 +57,21 @@
       <label data-t="password"></label>
       <div class="pass-wrap">
         <input type="password" id="regPass" autocomplete="new-password">
-        <button class="pass-toggle" onclick="togglePass('regPass', this)" type="button" data-t-aria="toggle_password"></button>
+        <button class="pass-toggle" data-password="regPass" type="button" data-t-aria="toggle_password"></button>
       </div>
     </div>
     <div class="form-group">
       <label data-t="confirm_password"></label>
       <div class="pass-wrap">
         <input type="password" id="regPass2" autocomplete="new-password">
-        <button class="pass-toggle" onclick="togglePass('regPass2', this)" type="button" data-t-aria="toggle_password"></button>
+        <button class="pass-toggle" data-password="regPass2" type="button" data-t-aria="toggle_password"></button>
       </div>
     </div>
-    <button class="btn btn-primary" id="regBtn" onclick="doRegister()" data-t="create_account"></button>
+    <button class="btn btn-primary" id="regBtn" data-t="create_account"></button>
   </div>
 </div>
 </div>
 
-<script>
-const BASE = window.BASE;
-const API = BASE + '/webapi';
-const DASHBOARD = BASE + '/panel';
-
-let curTab = 'login';
-
-function render() {
-  applyStaticLang();
-  document.getElementById('authTitle').textContent = t(curTab === 'login' ? 'sign_in' : 'create_account');
-  document.title = document.getElementById('authTitle').textContent;
-}
-
-window.apiConfig = { baseUrl: API };
-
-function switchTab(tab) {
-  curTab = tab;
-  document.querySelectorAll('.auth-tab').forEach((t, i) =>
-    t.classList.toggle('active', tab === 'login' ? i === 0 : i === 1));
-  document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
-  document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
-  document.getElementById('authError').classList.remove('show');
-  render();
-}
-
-function showError(msg) {
-  const el = document.getElementById('authError');
-  el.textContent = msg; el.classList.add('show');
-}
-
-async function doLogin() {
-  const btn = document.getElementById('loginBtn');
-  if (btn.disabled) return;
-  btn.disabled = true;
-  try {
-    const res = await api('POST', '/login', {
-      username: document.getElementById('loginUser').value,
-      password: document.getElementById('loginPass').value
-    });
-    if (res.success) window.location.href = DASHBOARD;
-    else showError(res.msg || t('sign_in'));
-  } catch { showError(t('network_err')); }
-  btn.disabled = false;
-}
-
-let vt, validationGen = 0;
-function validateUsername() {
-  clearTimeout(vt);
-  const gen = ++validationGen;
-  const v = document.getElementById('regUser').value;
-  const h = document.getElementById('usernameHint');
-  if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
-  vt = setTimeout(async () => {
-    try {
-      const res = await api('GET', `/validate?username=${encodeURIComponent(v)}`);
-      if (gen !== validationGen || document.getElementById('regUser').value !== v) return;
-      if (res.success && res.obj) {
-        if (!res.obj.valid) { h.textContent = t('hint_invalid') + res.obj.sanitized; h.className = 'username-hint bad'; }
-        else if (res.obj.taken) { h.textContent = t('hint_taken'); h.className = 'username-hint bad'; }
-        else { h.textContent = t('hint_ok'); h.className = 'username-hint ok'; }
-      }
-    } catch {}
-  }, 400);
-}
-
-async function doRegister() {
-  const btn = document.getElementById('regBtn');
-  if (btn.disabled) return;
-  const username = document.getElementById('regUser').value;
-  const pass = document.getElementById('regPass').value;
-  const pass2 = document.getElementById('regPass2').value;
-  if (pass !== pass2) { showError(t('passwords_not_match')); return; }
-
-  btn.disabled = true;
-  try {
-    const res = await api('POST', '/register', {
-      username,
-      password: pass,
-      code: document.getElementById('regCode').value,
-      name: document.getElementById('regName').value
-    });
-    if (res.success) {
-      let failure;
-      try {
-        const login = await api('POST', '/login', { username, password: pass });
-        if (login?.success) { window.location.href = DASHBOARD; return; }
-        failure = login?.msg || t('network_err');
-      } catch { failure = t('network_err'); }
-      switchTab('login');
-      document.getElementById('loginUser').value = username;
-      showError(t('account_created_login_failed') + failure);
-    } else showError(res.msg || t('network_err'));
-  } catch { showError(t('network_err')); }
-  btn.disabled = false;
-}
-
-(async () => {
-  try {
-    const r = await fetch(API + '/stats', { credentials: 'same-origin' });
-    if (r.ok) window.location.href = DASHBOARD;
-  } catch {}
-})();
-
-applyTheme();
-initPassToggles();
-initLang();
-render();
-document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-document.getElementById('regPass').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
-document.getElementById('regPass2').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
-</script>
+<script type="module" src="{{ prefix }}/auth.js?v={{ asset_version }}"></script>
 </body>
 </html>

@@ -6,12 +6,7 @@
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
 <title>404 · Page not found</title>
-<script>
-  // Apply the saved theme before the first paint, even on an unknown route.
-  try {
-    if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light';
-  } catch (_) {}
-</script>
+<script src="{{ prefix | default('') }}/error.js?v={{ asset_version | default('') }}"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -69,25 +64,6 @@
     <span id="backLabel">Go back</span>
   </button>
 </main>
-<script>
-  (() => {
-    const supported = value => value === 'en' || value === 'ru';
-    let lang;
-    try {
-      lang = [localStorage.getItem('lang'), localStorage.getItem('admin_lang')].find(supported);
-    } catch (_) {}
-    if (!lang) lang = (navigator.languages || [navigator.language]).map(value => value.split('-')[0].toLowerCase()).find(supported) || 'en';
-    document.documentElement.lang = lang;
-    if (lang === 'ru') {
-      document.title = '404 · Страница не найдена';
-      document.getElementById('heading').textContent = 'Страница не найдена';
-      document.getElementById('description').textContent = 'Возможно, страница переехала или в ссылке ошибка. Проверьте адрес и попробуйте снова.';
-      document.getElementById('backLabel').textContent = 'Вернуться назад';
-    }
-    const back = document.getElementById('back');
-    if (history.length > 1) back.addEventListener('click', () => history.back());
-    else back.hidden = true;
-  })();
-</script>
+
 </body>
 </html>
