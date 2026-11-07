@@ -35,8 +35,9 @@ Nuitka includes only `frontend/dist/`, not sources or development dependencies.
 | `src/fonts/` | `dist/fonts/` (including server-only TTF and licenses) |
 | `src/vendor/` | `dist/vendor/` (unchanged distributions and licenses) |
 | `src/entries/common.ts` and `src/shared/*.ts` | `dist/assets/common.js` (blocking, isolated IIFE) |
-| `src/legacy/{dashboard,history}.js` | `dist/assets/{dashboard,history}.js` |
-| `src/legacy/admin/main.js` and its imports | `dist/assets/admin/main.js` |
+| `src/entries/{auth,admin-auth,dashboard,history}.ts` | `dist/assets/{auth,admin-auth,dashboard,history}.js` |
+| `src/entries/admin.ts` and its imports | `dist/assets/admin/main.js` |
+| `src/entries/{browser,redirect,error}.ts`, when present | `dist/assets/{browser,redirect,error}.js` |
 
 Entry points are explicit in `build.mjs`; no code splitting, manifest, hashed
 filenames or source maps. Python computes content-derived `?v=` versions over the
@@ -47,14 +48,12 @@ with unchanged vendor bytes; the editor's `import.meta.url` still resolves from
 `/admin/main.js` to `/vendor/`, retaining its version query. Internal admin modules
 are bundled and are no longer individually served.
 
-`src/legacy/` is a temporary home for **unconverted first-party JavaScript**, not
-vendor code. Shared logic is typed in part 4; page migration belongs to part 6. Classic
-scripts are emitted without wrapping, tree shaking or identifier minification so
-inline handlers keep their globals. The admin entry remains a native module.
-Auth/redirect/error scripts stay in their unchanged templates until page migration;
-the scriptless browser template needs no entry. Register typed replacements in the
-same explicit list when ready. The ambient CSS declaration supports future imports;
-there is deliberately no frontend test command or replacement suite yet.
+The five typed page entries are required; the explicitly listed browser, redirect
+and error entries are included only when their source files exist. Watch checks for
+those optional entries on every rebuild. Page bundles retain ESM output without
+tree shaking or identifier minification. The ambient CSS declaration supports
+future imports; there is deliberately no frontend test command or replacement
+suite yet.
 
 Only `frontend/dist/` is build-owned and cleaned; never edit or commit it or
 `node_modules/`. All copy inputs are required: a missing resource directory fails

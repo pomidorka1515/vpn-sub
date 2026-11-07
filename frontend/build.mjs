@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { watch } from "node:fs";
+import { existsSync, watch } from "node:fs";
 import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,13 +14,18 @@ if (process.argv.slice(2).some((arg) => arg !== "--watch")) {
   throw new Error("Usage: node build.mjs [--watch]");
 }
 
-// Transitional JavaScript entries retain their current script loading model.
-// Replace these paths with typed entries as pages migrate, not directory globs.
-const classicEntries = {
-  dashboard: "src/legacy/dashboard.js",
-  history: "src/legacy/history.js",
+const pageEntries = {
+  auth: "src/entries/auth.ts",
+  "admin-auth": "src/entries/admin-auth.ts",
+  dashboard: "src/entries/dashboard.ts",
+  history: "src/entries/history.ts",
+  "admin/main": "src/entries/admin.ts",
 };
-const moduleEntries = { "admin/main": "src/legacy/admin/main.js" };
+const optionalEntries = {
+  browser: "src/entries/browser.ts",
+  redirect: "src/entries/redirect.ts",
+  error: "src/entries/error.ts",
+};
 const copies = [
   ["templates", "templates"],
   ["styles", "assets"],
@@ -49,7 +54,7 @@ async function rebuild() {
   // Only this generated directory is build-owned. Never clean source files.
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
-  // Isolate shared internals from the classic pages' top-level declarations.
+  // Apply the shared theme early, independently of the page bundles.
   await build({
     absWorkingDir: root,
     entryPoints: { common: "src/entries/common.ts" },
@@ -62,26 +67,26 @@ async function rebuild() {
     legalComments: "eof",
     logLevel: "info",
   });
-  for (const entryPoints of [classicEntries, moduleEntries]) {
-    await build({
-      absWorkingDir: root,
-      entryPoints,
-      outdir: join(output, "assets"),
-      bundle: true,
-      splitting: false,
-      format: "esm",
-      platform: "browser",
-      target: "es2020",
-      // Classic pages still call top-level functions from inline handlers.
-      // ESM output without imports/exports is also valid as a classic script;
-      // do not wrap, shake or rename those globals before their typed migration.
-      treeShaking: false,
-      minify: false,
-      sourcemap: false,
-      legalComments: "eof",
-      logLevel: "info",
-    });
+  // Resolve optional entries on every rebuild so watch sees additions/deletions.
+  const entryPoints = { ...pageEntries };
+  for (const [name, path] of Object.entries(optionalEntries)) {
+    if (existsSync(join(root, path))) entryPoints[name] = path;
   }
+  await build({
+    absWorkingDir: root,
+    entryPoints,
+    outdir: join(output, "assets"),
+    bundle: true,
+    splitting: false,
+    format: "esm",
+    platform: "browser",
+    target: "es2020",
+    treeShaking: false,
+    minify: false,
+    sourcemap: false,
+    legalComments: "eof",
+    logLevel: "info",
+  });
   for (const [from, to] of copies) {
     await cp(join(source, from), join(output, to), { recursive: true });
   }
