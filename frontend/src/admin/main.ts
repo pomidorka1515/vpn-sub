@@ -57,6 +57,18 @@ export function initAdmin(): () => void {
   const cleanups = [initUsers(context, state), initCodes(context, navigator.clipboard), initLogs(context), initLeaderboard(context), initHealth(context, i18n.language), panels.init(), system.init(), cleanupCharts];
   let disposed = false;
   let leaving = false;
+  let ready = false;
+  function loadTab(name: string): void {
+    if (!ready) return;
+    const refreshButtons: Record<string, string[]> = {
+      users: ['btnLoadUsers'], codes: ['btnLoadCodes'], logs: ['btnRefreshLogs'],
+      snapshots: ['btnLoadSnapshots'], health: ['btnLoadOperations', 'btnRunHealth', 'btnLoadOnline'],
+    };
+    for (const id of refreshButtons[name] ?? []) {
+      const refresh = button(doc, id);
+      if (!refresh.disabled) refresh.click();
+    }
+  }
   async function showTab(name: string): Promise<void> {
     if (leaving || !doc.getElementById('tab-' + name)) return;
     const current = doc.querySelector<HTMLElement>('.tab-content.active');
@@ -69,6 +81,7 @@ export function initAdmin(): () => void {
       doc.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === 'tab-' + name));
       charts.chartsOnTab(name);
       if (name === 'config') configOnTab();
+      loadTab(name);
     } finally { leaving = false; }
   }
   doc.querySelectorAll<HTMLElement>('[data-tab]').forEach(tab => tab.addEventListener('click', () => {
@@ -97,7 +110,12 @@ export function initAdmin(): () => void {
   element(doc, 'bootOverlay').textContent = i18n.t('loading');
   element(doc, 'healthText').textContent = i18n.t('not_checked');
   element(doc, 'teapotStatus').textContent = i18n.t('teapot_question');
-  void auth.bootstrap();
+  void auth.bootstrap().then(() => {
+    if (disposed || state.authBlocked || !state.apiToken) return;
+    ready = true;
+    const active = doc.querySelector<HTMLElement>('.tab-content.active');
+    if (active) loadTab(active.id.slice('tab-'.length));
+  });
   function dispose(): void {
     if (disposed) return;
     disposed = true;

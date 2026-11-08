@@ -1,5 +1,6 @@
 import { withBusy } from '../shared/busy';
-import { escapeHtml, loadingHtml } from '../shared/dom';
+import { escapeHtml } from '../shared/dom';
+import { renderIfChanged } from '../shared/render';
 import { isRecord } from '../shared/json';
 import type { AdminState } from './bootstrap';
 import { button, element, input } from './context';
@@ -19,13 +20,12 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   async function loadUsers(): Promise<void> {
     const current = loadGen('users');
     await withBusy(button(doc, 'btnLoadUsers'), async () => {
-      wrap.innerHTML = loadingHtml(t);
       const res = await api('GET', '/api/user/list');
       if (disposed || !current()) return;
-      if (!res?.success) { wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`; return; }
+      if (!res?.success) { toast(res?.msg || t('network_err'), 'error'); return; }
       state.currentUsers = Array.isArray(res.obj) ? res.obj.filter((user: unknown): user is string => typeof user === 'string') : [];
-      if (!state.currentUsers.length) { wrap.innerHTML = `<div class="table-empty">${t('no_users')}</div>`; return; }
-      wrap.innerHTML = `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('actions')}</th></tr></thead><tbody>${state.currentUsers.map(user => `<tr><td class="mono">${escapeHtml(user)}</td><td class="actions"><button class="btn-tiny" data-user="${escapeHtml(user)}" data-user-action="view" ${state.panelsConfigured ? '' : 'disabled'}>${t('info')}</button><button class="btn-tiny danger" data-user="${escapeHtml(user)}" data-user-action="delete" ${state.panelsConfigured ? '' : 'disabled'}>${t('delete')}</button></td></tr>`).join('')}</tbody></table>`;
+      if (!state.currentUsers.length) { renderIfChanged(wrap, `<div class="table-empty">${t('no_users')}</div>`); return; }
+      renderIfChanged(wrap, `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('actions')}</th></tr></thead><tbody>${state.currentUsers.map(user => `<tr><td class="mono">${escapeHtml(user)}</td><td class="actions"><button class="btn-tiny" data-user="${escapeHtml(user)}" data-user-action="view" ${state.panelsConfigured ? '' : 'disabled'}>${t('info')}</button><button class="btn-tiny danger" data-user="${escapeHtml(user)}" data-user-action="delete" ${state.panelsConfigured ? '' : 'disabled'}>${t('delete')}</button></td></tr>`).join('')}</tbody></table>`);
     });
   }
   async function viewUser(username: string, trigger: HTMLButtonElement): Promise<void> {

@@ -2,12 +2,14 @@ import { withBusy } from '../shared/busy';
 import { escapeHtml, loadingHtml } from '../shared/dom';
 import { fmtUptime } from '../shared/formatting';
 import { isRecord } from '../shared/json';
+import { renderIfChanged } from '../shared/render';
 import { button, checkbox, element } from './context';
 import type { AdminContext } from './context';
 
 export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContext, language: string): () => void {
   const listeners = new AbortController();
   let disposed = false;
+  let healthStatus = '';
   const date = (value: unknown): string => typeof value === 'number' && Number.isFinite(value)
     ? new Date(value * 1000).toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' ' + t('utc') : t('na');
   const row = (label: string, value: unknown, cls = ''): string => `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value${cls ? ' ' + cls : ''}">${escapeHtml(value)}</span></div>`;
@@ -16,42 +18,46 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
       const res = await api('GET', '/api/health');
       if (disposed) return;
       const obj = isRecord(res?.obj) ? res.obj : null;
+      const status = JSON.stringify([res?.success, obj?.degraded, res?.msg]);
       const dot = element(doc, 'healthDot');
       const text = element(doc, 'healthText');
-      if (res?.success && !obj?.degraded) { dot.className = 'health-dot ok'; text.textContent = t('health_ok'); text.style.color = ''; }
-      else if (res?.success) { dot.className = 'health-dot warn'; text.textContent = t('health_warn'); text.style.color = 'var(--orange)'; }
-      else { dot.className = 'health-dot err'; text.textContent = res?.msg || t('health_err'); text.style.color = 'var(--red)'; }
+      if (status !== healthStatus) {
+        healthStatus = status;
+        if (res?.success && !obj?.degraded) { dot.className = 'health-dot ok'; text.textContent = t('health_ok'); text.style.color = ''; }
+        else if (res?.success) { dot.className = 'health-dot warn'; text.textContent = t('health_warn'); text.style.color = 'var(--orange)'; }
+        else { dot.className = 'health-dot err'; text.textContent = res?.msg || t('health_err'); text.style.color = 'var(--red)'; }
+      }
       if (!obj) return;
       const memory = isRecord(obj.memory) ? obj.memory : {};
       const ram = typeof memory.ram === 'number' && Number.isFinite(memory.ram) ? memory.ram.toFixed(2) + ' ' + t('mb_unit') : t('na');
       const swap = typeof memory.swap === 'number' && Number.isFinite(memory.swap) ? memory.swap.toFixed(2) + ' ' + t('mb_unit') : t('na');
       const details = element(doc, 'healthDetails');
-      details.style.display = '';
-      details.innerHTML = `<div class="panel-grid" style="padding-top:0"><div class="panel-section">${row(t('db'), obj.db ? t('yes') : t('no'), obj.db ? 'ok' : 'err')}${row(t('degraded'), obj.degraded ? t('yes') : t('no'), obj.degraded ? 'warn' : 'ok')}${row(t('app_uptime'), fmtUptime(typeof obj.uptime === 'number' ? obj.uptime : undefined, t))}${row(t('app_mem'), ram)}${row(t('app_swap'), swap)}${row(t('app_threads'), obj.threads ?? t('na'))}</div></div>`;
+      if (details.style.display) details.style.display = '';
+      renderIfChanged(details, `<div class="panel-grid" style="padding-top:0"><div class="panel-section">${row(t('db'), obj.db ? t('yes') : t('no'), obj.db ? 'ok' : 'err')}${row(t('degraded'), obj.degraded ? t('yes') : t('no'), obj.degraded ? 'warn' : 'ok')}${row(t('app_uptime'), fmtUptime(typeof obj.uptime === 'number' ? obj.uptime : undefined, t))}${row(t('app_mem'), ram)}${row(t('app_swap'), swap)}${row(t('app_threads'), obj.threads ?? t('na'))}</div></div>`);
     });
   }
   async function online(): Promise<void> {
     const wrap = element(doc, 'onlineUsersWrap');
     const current = loadGen('online');
     await withBusy(button(doc, 'btnLoadOnline'), async () => {
-      wrap.innerHTML = loadingHtml(t);
       const keyed = checkbox(doc, 'onlineKeyed').checked;
       const res = await api('GET', keyed ? '/api/user/onlines?keyed=1' : '/api/user/onlines');
       if (disposed || !current()) return;
-      if (!res?.success || !isRecord(res.obj)) { wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('error'))}</div>`; return; }
+      if (!res?.success || !isRecord(res.obj)) { renderIfChanged(wrap, `<div class="table-empty">${escapeHtml(res?.msg || t('error'))}</div>`); return; }
       const health = isRecord(res.obj.panel_health) ? res.obj.panel_health : {};
       const unhealthy = Object.entries(health).filter(([, status]) => status !== 'ok').map(([name, status]) => `${name}: ${String(status)}`);
-      wrap.innerHTML = unhealthy.length ? `<div class="table-empty">${t('partial_data').replace('{detail}', unhealthy.map(escapeHtml).join(', ') )}</div>` : '';
+      let html = unhealthy.length ? `<div class="table-empty">${t('partial_data').replace('{detail}', unhealthy.map(escapeHtml).join(', ') )}</div>` : '';
       const users = res.obj.users;
       if (keyed) {
         const entries = isRecord(users) ? Object.entries(users) : [];
-        if (!entries.length) { wrap.innerHTML += `<div class="table-empty">${t('no_online')}</div>`; return; }
-        wrap.innerHTML += `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th style="width:48px;text-align:center"></th><th>${t('ext_username')}</th></tr></thead><tbody>${entries.map(([internal, external]) => `<tr><td class="mono">${escapeHtml(internal)}</td><td style="text-align:center;color:var(--text2);font-size:11px"></td><td class="mono">${escapeHtml(external ?? t('na'))}</td></tr>`).join('')}</tbody></table>`;
+        if (!entries.length) html += `<div class="table-empty">${t('no_online')}</div>`;
+        else html += `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th style="width:48px;text-align:center"></th><th>${t('ext_username')}</th></tr></thead><tbody>${entries.map(([internal, external]) => `<tr><td class="mono">${escapeHtml(internal)}</td><td style="text-align:center;color:var(--text2);font-size:11px"></td><td class="mono">${escapeHtml(external ?? t('na'))}</td></tr>`).join('')}</tbody></table>`;
       } else {
         const entries: unknown[] = Array.isArray(users) ? users : [];
-        if (!entries.length) { wrap.innerHTML += `<div class="table-empty">${t('no_online')}</div>`; return; }
-        wrap.innerHTML += `<table class="data-table"><thead><tr><th>${t('internal_user')}</th></tr></thead><tbody>${entries.map(user => `<tr><td class="mono">${escapeHtml(user)}</td></tr>`).join('')}</tbody></table>`;
+        if (!entries.length) html += `<div class="table-empty">${t('no_online')}</div>`;
+        else html += `<table class="data-table"><thead><tr><th>${t('internal_user')}</th></tr></thead><tbody>${entries.map(user => `<tr><td class="mono">${escapeHtml(user)}</td></tr>`).join('')}</tbody></table>`;
       }
+      renderIfChanged(wrap, html);
     });
   }
   async function refreshUsers(): Promise<void> {
@@ -82,11 +88,10 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
     const wrap = element(doc, 'operationsStatusWrap');
     const current = loadGen('operations');
     await withBusy(button(doc, 'btnLoadOperations'), async () => {
-      wrap.innerHTML = loadingHtml(t);
       const res = await api('GET', '/api/operations/status');
       if (disposed || !current()) return;
-      if (!res?.success) { wrap.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`; return; }
-      wrap.innerHTML = renderOperations(res.obj);
+      if (!res?.success) { renderIfChanged(wrap, `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`); return; }
+      renderIfChanged(wrap, renderOperations(res.obj));
     });
   }
   async function teapot(): Promise<void> {

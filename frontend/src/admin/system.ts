@@ -2,6 +2,7 @@ import { withBusy } from '../shared/busy';
 import { escapeHtml, loadingHtml } from '../shared/dom';
 import { fmtBytes as formatBytes, fmtUptime as formatUptime } from '../shared/formatting';
 import { isRecord } from '../shared/json';
+import { renderIfChanged } from '../shared/render';
 import { button, element, input } from './context';
 import type { AdminContext } from './context';
 
@@ -240,7 +241,6 @@ async function loadSnapshots(): Promise<void> {
   if (isNaN(cutoff) || cutoff <= 0) { toast(t('cutoff_invalid'), 'error'); return; }
   const current = loadGen('snapshots');
   await withBusy(button(doc, 'btnLoadSnapshots'), () => {
-    list.innerHTML = loadingHtml(t);
     return loadSnapshotsRequest(list, cutoff, current);
   });
 }
@@ -249,10 +249,10 @@ async function loadSnapshotsRequest(list: HTMLElement, cutoff: number, current: 
   const res = await api('POST', '/api/state/snapshots', { cutoff });
   if (disposed || !current()) return;
   if (!res || !res.success) {
-    list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`;
+    renderIfChanged(list, `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`);
     return;
   }
-  list.innerHTML = renderSnapshots(res.obj || []);
+  renderIfChanged(list, renderSnapshots(res.obj || []));
 }
 
 function fmtSnapDate(ts: number | undefined): string {

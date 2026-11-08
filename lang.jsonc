@@ -965,6 +965,7 @@
                 "check_panel_status": "Check Panel Status",
                 "online_users": "Online Users",
                 "keyed": "Keyed output",
+                "show_external_username": "Show external username",
                 "no_online": "No online users",
                 "load_online_hint": "Click \"Load Online\" to fetch online users",
 
@@ -1359,6 +1360,7 @@
                 "check_panel_status": "Проверить панели",
                 "online_users": "Онлайн",
                 "keyed": "Ключ",
+                "show_external_username": "Показывать внешний логин",
                 "no_online": "Нет онлайн",
                 "load_online_hint": "Нажмите \"Загрузить\" для списка",
 
