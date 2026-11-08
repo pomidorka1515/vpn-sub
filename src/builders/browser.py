@@ -26,7 +26,9 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
     return {}
 
 
-def _browser_strings(obj: Subscription, lang: str) -> dict[str, str]:
+def _browser_strings(
+    obj: Subscription, lang: str, *, token_required: bool = False
+) -> dict[str, str]:
     language = obj.res.lang_cfg.view()
     raw = cast(object, language.get("web"))
     web: Mapping[str, object] = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
@@ -35,6 +37,16 @@ def _browser_strings(obj: Subscription, lang: str) -> dict[str, str]:
 
     def text(key: str, fallback: str) -> str:
         return strings.get(key, fallback)
+
+    if token_required:
+        return {
+            "forbidden_title": text("forbidden_title", "403 Forbidden"),
+            "use_vpn_client": text("token_required", "valid token required"),
+            "use_vpn_client_hint": text(
+                "token_required_hint",
+                "a valid token is required to retrieve the subscription",
+            ),
+        }
 
     return {
         "forbidden_title": text("forbidden_title", "403 Forbidden"),

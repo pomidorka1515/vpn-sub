@@ -22,6 +22,21 @@ def _private_response(response: Response, status: int) -> tuple[Response, int]:
     return response, status
 
 
+async def _browser_response(
+    obj: Subscription, lang: str, *, token_required: bool = False
+) -> tuple[Response, int]:
+    # Keep the package-level hooks used by subscription response callers.
+    import builders
+
+    html = await builders.render_template(
+        "browser.html", **_browser_strings(obj, lang, token_required=token_required)
+    )
+    cfg = obj.res.cfg.view()
+    prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
+    html = await obj.res.offloads.files.run(builders.embed_font_faces, html, prefix)
+    return _private_response(Response(html, mimetype="text/html"), 403)
+
+
 async def get_subscription(
     obj: Subscription,
     /,
@@ -42,6 +57,8 @@ async def get_subscription(
     import builders
 
     if not token:
+        if builders.isbrowser(ua=ua):
+            return await _browser_response(obj, lang, token_required=True)
         return _private_response(*err("Invalid token.", 401))
     username = await obj.user_svc.usertotoken(token)
     await obj.audit_svc.audit(
@@ -55,11 +72,7 @@ async def get_subscription(
         return _private_response(*err("Language can be either 'ru' or 'en'", 400))
 
     if builders.isbrowser(ua=ua):
-        html = await builders.render_template("browser.html", **_browser_strings(obj, lang))
-        cfg = obj.res.cfg.view()
-        prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
-        html = await obj.res.offloads.files.run(builders.embed_font_faces, html, prefix)
-        return _private_response(Response(html, mimetype="text/html"), 403)
+        return await _browser_response(obj, lang)
 
     bandwidths = await obj.bandwidth_svc.bandwidth(username)
 

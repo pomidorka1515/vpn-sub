@@ -302,6 +302,8 @@
 
                 // browser subscription hit
                 "forbidden_title": "403 Forbidden",
+                "token_required": "valid token required",
+                "token_required_hint": "a valid token is required to retrieve the subscription",
                 "use_vpn_client": "use a VPN client!",
                 "use_vpn_client_hint": "use a VPN client to get the subscription",
 
@@ -379,6 +381,8 @@
 
                 // browser subscription hit
                 "forbidden_title": "403 Forbidden",
+                "token_required": "требуется действительный токен",
+                "token_required_hint": "для получения подписки требуется действительный токен",
                 "use_vpn_client": "используйте ВПН клиент",
                 "use_vpn_client_hint": "используйте ВПН клиент для получения подписки",
 

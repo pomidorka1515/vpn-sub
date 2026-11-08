@@ -175,6 +175,24 @@ async def test_factory_schema_verbose_and_browser_assets(
             b"/* __FONTS__ */",
         ):
             assert part not in body
+        for route, message in (
+            ("/sub", "a valid token is required to retrieve the subscription"),
+            ("/sub/", "a valid token is required to retrieve the subscription"),
+            ("/sub?lang=ru", "для получения подписки требуется действительный токен"),
+            ("/sub?lang=de", "a valid token is required to retrieve the subscription"),
+        ):
+            response = await client.get(
+                route,
+                headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"},
+            )
+            assert response.status_code == 403
+            assert response.mimetype == "text/html"
+            assert response.headers["Cache-Control"] == "private, no-store"
+            body = await response.get_data()
+            assert isinstance(body, bytes)
+            assert message.encode() in body
+            for name in FONT_FILES:
+                assert f"url('/sub/fonts/{name}?v={font_version()}')".encode() in body
     finally:
         await runtime.stop()
 
