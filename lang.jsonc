@@ -1094,6 +1094,10 @@
                 // dynamic labels
                 "no_users": "No users",
                 "no_logs": "No logs",
+                "log_all_actions": "All actions",
+                "log_no_matches": "No logs match this action",
+                "log_details": "Audit log details",
+                "log_empty_info": "No additional information",
                 "uuid": "UUID",
                 "token": "Token",
                 "log_action": "Action",
@@ -1497,6 +1501,10 @@
                 // dynamic labels
                 "no_users": "Нет пользователей",
                 "no_logs": "Нет логов",
+                "log_all_actions": "Все действия",
+                "log_no_matches": "Нет логов с этим действием",
+                "log_details": "Подробности события",
+                "log_empty_info": "Нет дополнительной информации",
                 "uuid": "UUID",
                 "token": "Токен",
                 "log_action": "Действие",

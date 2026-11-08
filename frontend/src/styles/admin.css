@@ -186,6 +186,23 @@
 .logs-table .log-action.auth { color: var(--purple); }
 .logs-table .log-action.admin { color: var(--orange); }
 .logs-table .log-info { font-size: 0.6875rem; color: var(--text2); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logs-table tbody tr { cursor: pointer; }
+.logs-table tbody tr:hover td, .logs-table tbody tr:focus-visible td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.logs-table tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.log-dialog { color: var(--text); max-width: 44rem; max-height: calc(100dvh - 40px); overflow: auto; }
+.log-dialog::backdrop { background: rgba(0,0,0,.65); backdrop-filter: blur(3px); }
+.log-dialog h3 { font-size: 0.8125rem; margin: 20px 0 10px; }
+.log-fields { margin: 0; font-size: 0.8125rem; }
+.log-fields > div { display: grid; grid-template-columns: minmax(6rem, 1fr) minmax(0, 2fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.log-fields dt { color: var(--text2); overflow-wrap: anywhere; }
+.log-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.log-fields .log-fields { padding-left: 12px; border-left: 2px solid var(--border); }
+.log-fields .log-fields > div { grid-template-columns: 1fr; gap: 4px; }
+.log-value { white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-value-list { margin: 0; padding-left: 20px; }
+.log-value-list li + li { margin-top: 8px; }
+.log-detail-info { font-size: 0.8125rem; line-height: 1.6; }
+.log-dialog .modal-actions { margin-top: 20px; }
 .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
 .toolbar-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .detail-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }

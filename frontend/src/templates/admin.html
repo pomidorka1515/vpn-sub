@@ -231,6 +231,10 @@
           <span style="font-size:0.75rem;color:var(--text2)" data-t="log_count_label">{{ L['log_count_label'] }}</span>
         </div>
         <button class="btn-secondary" id="btnRefreshLogs" data-t="refresh">{{ L['refresh'] }}</button>
+        <div class="toolbar-field">
+          <label for="logActionFilter" data-t="log_action">{{ L['log_action'] }}</label>
+          <select id="logActionFilter"><option value="" data-t="log_all_actions">{{ L['log_all_actions'] }}</option></select>
+        </div>
       </div>
       <div class="table-wrap" id="logsTableWrap">
         <div class="table-empty" data-t="loading">{{ L['loading'] }}</div>
