@@ -1,5 +1,5 @@
 import { withBusy } from '../shared/busy';
-import { escapeHtml, loadingHtml } from '../shared/dom';
+import { escapeHtml } from '../shared/dom';
 import { isRecord } from '../shared/json';
 import { button, checkbox, element, input } from './context';
 import type { AdminContext } from './context';
@@ -7,12 +7,20 @@ import type { AdminContext } from './context';
 export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext, clipboard: Pick<Clipboard, 'writeText'>): () => void {
   const listeners = new AbortController();
   const list = element(doc, 'codeList');
+  const entries = new Map<string, { node: HTMLElement; html: string; info: Record<string, unknown> | null }>();
+  let loaded = false;
+  let loading = false;
+  let revision = 0;
   let disposed = false;
   const options = (): { okText: string; cancelText: string } => ({ okText: t('confirm'), cancelText: t('cancel') });
   function toggleUsesRow(): void { element(doc, 'addUsesRow').style.display = checkbox(doc, 'addPerma').checked ? 'none' : 'flex'; }
-  function hideAddCode(): void { element(doc, 'addCodeCard').style.display = 'none'; }
+  function hideAddCode(): void {
+    element(doc, 'addCodeCard').style.display = 'none';
+    button(doc, 'btnShowAddCode').setAttribute('aria-expanded', 'false');
+  }
   function showAddCode(): void {
     element(doc, 'addCodeCard').style.display = 'block';
+    button(doc, 'btnShowAddCode').setAttribute('aria-expanded', 'true');
     for (const [id, value] of [['addCode', ''], ['addAction', 'bonus'], ['addDays', '0'], ['addGb', '0'], ['addWlGb', '0'], ['addUses', '1']] as const) input(doc, id).value = value;
     checkbox(doc, 'addPerma').checked = false;
     toggleUsesRow();
@@ -20,34 +28,72 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
     result.style.display = 'none'; result.innerHTML = '';
     input(doc, 'addCode').focus();
   }
-  async function loadCodes(): Promise<void> {
-    const current = loadGen('codes');
-    await withBusy(button(doc, 'btnLoadCodes'), async () => {
-      list.innerHTML = loadingHtml(t);
-      const res = await api('GET', '/api/code/list');
-      if (disposed || !current()) return;
-      if (!res?.success) { list.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`; return; }
-      const names = Array.isArray(res.obj) ? res.obj.filter((name: unknown): name is string => typeof name === 'string') : [];
-      if (!names.length) { list.innerHTML = `<div class="table-empty">${t('no_codes')}</div>`; return; }
-      const entries: Array<[string, Record<string, unknown> | null]> = [];
-      for (const name of names) {
-        const info = await api('GET', `/api/code/info?code=${encodeURIComponent(name)}`);
-        if (disposed || !current()) return;
-        entries.push([name, info?.success && isRecord(info.obj) ? info.obj : null]);
+  function updateSummary(): void {
+    const count = element(doc, 'codeCount');
+    const value = String(entries.size);
+    if (count.textContent !== value) count.textContent = value;
+    if (count.hidden === loaded) count.hidden = !loaded;
+    if (!entries.size && loaded && !list.querySelector('[data-codes-empty]')) {
+      list.innerHTML = `<div class="code-empty" data-codes-empty><strong>${escapeHtml(t('no_codes'))}</strong><p>${escapeHtml(t('codes_empty_hint'))}</p></div>`;
+    }
+  }
+  function codeHtml(name: string, code: Record<string, unknown> | null): string {
+    const action = code?.action === 'register' ? 'register' : 'bonus';
+    const badges = code ? `<span class="code-type ${action}">${escapeHtml(t(action))}</span><span class="code-usage">${code.perma ? escapeHtml(t('reusable')) : `${escapeHtml(code.uses ?? 1)} ${escapeHtml(t('uses').toLowerCase())}`}</span>` : '';
+    const metrics = code ? [['days', code.days], ['gb', code.gb], ['wl_gb', code.wl_gb]].map(([key, value]) => `<div><dt>${escapeHtml(t(String(key)))}</dt><dd>${escapeHtml(value ?? 0)}</dd></div>`).join('') : '';
+    return `<div class="code-info"><div class="code-heading"><h3 class="code-name">${escapeHtml(name)}</h3><div class="code-badges">${badges}</div></div>${code ? `<dl class="code-metrics">${metrics}</dl>` : `<p class="code-unavailable">${escapeHtml(t('codes_info_unavailable'))}</p>`}</div><div class="code-actions"><button class="btn-tiny" data-code-action="copy" data-code="${escapeHtml(name)}">${escapeHtml(t('copy'))}</button><button class="btn-tiny danger" data-code-action="delete" data-code="${escapeHtml(name)}">${escapeHtml(t('delete'))}</button></div>`;
+  }
+  function reconcile(next: Array<[string, Record<string, unknown> | null]>): void {
+    const names = new Set(next.map(([name]) => name));
+    for (const [name, entry] of entries) {
+      if (!names.has(name)) { entry.node.remove(); entries.delete(name); }
+    }
+    if (next.length && !entries.size) list.replaceChildren();
+    let previous: HTMLElement | null = null;
+    for (const [name, info] of next) {
+      const html = codeHtml(name, info);
+      let entry = entries.get(name);
+      if (!entry) {
+        const node = doc.createElement('article');
+        node.className = 'code-card';
+        node.innerHTML = html;
+        entry = { node, html, info };
+        entries.set(name, entry);
+      } else if (entry.html !== html) {
+        // Keep the action buttons (and keyboard focus) when only details change.
+        const template = doc.createElement('template');
+        template.innerHTML = html;
+        entry.node.querySelector('.code-info')?.replaceWith(template.content.firstElementChild!);
+        entry.html = html;
+        entry.info = info;
       }
-      list.innerHTML = entries.map(([name, code]) => {
-        let badges = '';
-        const meta: string[] = [];
-        if (code) {
-          badges += `<span class="badge ${code.action === 'register' ? 'purple' : 'cyan'}">${escapeHtml(code.action || '—')}</span>`;
-          badges += code.perma ? `<span class="badge green">${t('reusable')}</span>` : `<span class="badge gray">${escapeHtml(code.uses ?? 1)} ${t('uses').toLowerCase()}</span>`;
-          if (code.days) meta.push(`<span>${escapeHtml(code.days)} ${t('days').toLowerCase()}</span>`);
-          if (code.gb) meta.push(`<span>${escapeHtml(code.gb)} ${t('gb')}</span>`);
-          if (code.wl_gb) meta.push(`<span>${escapeHtml(code.wl_gb)} ${t('gb')} ${t('wl')}</span>`);
+      const expected: Element | null = previous ? previous.nextElementSibling : list.firstElementChild;
+      if (expected !== entry.node) list.insertBefore(entry.node, expected);
+      previous = entry.node;
+    }
+    loaded = true;
+    updateSummary();
+  }
+  async function loadCodes(): Promise<void> {
+    if (loading || disposed) return;
+    loading = true;
+    const current = loadGen('codes');
+    const started = revision;
+    try {
+      await withBusy(button(doc, 'btnLoadCodes'), async () => {
+        const res = await api('GET', '/api/code/list');
+        if (disposed || !current() || started !== revision) return;
+        if (!res?.success || !Array.isArray(res.obj)) { toast(res?.msg || t('network_err'), 'error'); return; }
+        const names = [...new Set(res.obj.filter((name: unknown): name is string => typeof name === 'string'))];
+        const next: Array<[string, Record<string, unknown> | null]> = [];
+        for (const name of names) {
+          const info = await api('GET', `/api/code/info?code=${encodeURIComponent(name)}`);
+          if (disposed || !current() || started !== revision) return;
+          next.push([name, info?.success && isRecord(info.obj) ? info.obj : entries.get(name)?.info ?? null]);
         }
-        return `<div class="code-card"><div class="code-info"><div class="code-name">${escapeHtml(name)}</div><div class="code-meta">${badges}${meta.join('')}</div></div><div class="code-actions"><button class="btn-tiny" data-code-action="copy" data-code="${escapeHtml(name)}">${t('copy')}</button><button class="btn-tiny danger" data-code-action="delete" data-code="${escapeHtml(name)}">${t('delete')}</button></div></div>`;
-      }).join('');
-    });
+        reconcile(next);
+      });
+    } finally { loading = false; }
   }
   async function addCode(): Promise<void> {
     const code = input(doc, 'addCode').value.trim();
@@ -67,7 +113,12 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
     await withBusy(button(doc, 'btnDoAddCode'), async () => {
       const res = await api('POST', '/api/code/add', body);
       if (disposed) return;
-      if (res?.success) { toast(t('created'), 'success'); hideAddCode(); void loadCodes(); }
+      if (res?.success) {
+        revision++;
+        const next: Array<[string, Record<string, unknown> | null]> = [...entries].map(([name, entry]) => [name, entry.info]);
+        reconcile([...next.filter(([name]) => name !== code), [code, body]]);
+        toast(t('created'), 'success'); hideAddCode();
+      }
       else {
         const result = element(doc, 'addCodeResult');
         result.style.display = 'block'; result.className = 'result-box error';
@@ -92,7 +143,17 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
         await withBusy(target, async () => {
           const res = await api('POST', '/api/code/delete', { code });
           if (disposed) return;
-          if (res?.success) { toast(t('deleted'), 'success'); void loadCodes(); }
+          if (res?.success) {
+            revision++;
+            const entry = entries.get(code);
+            const focused = entry?.node.contains(doc.activeElement);
+            const neighbor = entry?.node.nextElementSibling ?? entry?.node.previousElementSibling;
+            entry?.node.remove();
+            entries.delete(code);
+            updateSummary();
+            if (focused) (neighbor?.querySelector<HTMLButtonElement>('button') ?? button(doc, 'btnShowAddCode')).focus();
+            toast(t('deleted'), 'success');
+          }
           else toast(res?.msg || t('error'), 'error');
         });
       })();

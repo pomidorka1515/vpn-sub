@@ -146,29 +146,34 @@
   </div>
 
   <div id="tab-codes" class="tab-content">
-    <div class="card">
-      <div class="card-title" data-t="bonus_codes">{{ L['bonus_codes'] }}</div>
-      <div class="toolbar">
-        <button class="btn-secondary" id="btnLoadCodes" data-t="load_codes">{{ L['load_codes'] }}</button>
-        <button class="btn-secondary" id="btnShowAddCode" data-t="add_code_btn">{{ L['add_code_btn'] }}</button>
+    <div class="card codes-library">
+      <div class="codes-header">
+        <div>
+          <div class="codes-title-row"><h2 data-t="bonus_codes">{{ L['bonus_codes'] }}</h2><span class="codes-count" id="codeCount" hidden></span></div>
+          <p class="codes-description" data-t="codes_description">{{ L['codes_description'] }}</p>
+        </div>
+        <div class="codes-toolbar">
+          <button class="btn-secondary" id="btnLoadCodes" data-t="load_codes">{{ L['load_codes'] }}</button>
+          <button class="btn codes-primary" id="btnShowAddCode" aria-expanded="false" aria-controls="addCodeCard" data-t="add_code_btn">{{ L['add_code_btn'] }}</button>
+        </div>
       </div>
       <div class="code-list" id="codeList">
-        <div class="table-empty" data-t="load_codes_hint">{{ L['load_codes_hint'] }}</div>
+        <div class="code-empty"><strong data-t="codes_ready">{{ L['codes_ready'] }}</strong><p data-t="load_codes_hint">{{ L['load_codes_hint'] }}</p></div>
       </div>
     </div>
 
-    <div class="card" id="addCodeCard" style="display:none">
+    <div class="card codes-create" id="addCodeCard" style="display:none">
       <div class="card-title" data-t="add_code">{{ L['add_code'] }}</div>
       <div class="form-grid">
         <div class="form-row">
-          <label data-t="code">{{ L['code'] }}</label>
+          <label for="addCode" data-t="code">{{ L['code'] }}</label>
           <div class="input-wrap">
             <input type="text" id="addCode" maxlength="64" spellcheck="false" autocomplete="off">
             <span class="form-hint" data-t="code_hint">{{ L['code_hint'] }}</span>
           </div>
         </div>
         <div class="form-row">
-          <label data-t="action_type">{{ L['action_type'] }}</label>
+          <label for="addAction" data-t="action_type">{{ L['action_type'] }}</label>
           <div class="input-wrap">
             <select id="addAction">
               <option value="bonus" data-t="bonus">{{ L['bonus'] }}</option>
@@ -177,25 +182,25 @@
           </div>
         </div>
         <div class="form-row">
-          <label data-t="days">{{ L['days'] }}</label>
+          <label for="addDays" data-t="days">{{ L['days'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addDays" value="0" min="0">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="gb">{{ L['gb'] }}</label>
+          <label for="addGb" data-t="gb">{{ L['gb'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addGb" value="0" min="0">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="wl_gb">{{ L['wl_gb'] }}</label>
+          <label for="addWlGb" data-t="wl_gb">{{ L['wl_gb'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addWlGb" value="0" min="0">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="reusable">{{ L['reusable'] }}</label>
+          <label for="addPerma" data-t="reusable">{{ L['reusable'] }}</label>
           <div class="input-wrap">
             <label class="dark-check">
               <input type="checkbox" id="addPerma">
@@ -205,14 +210,14 @@
           </div>
         </div>
         <div class="form-row" id="addUsesRow">
-          <label data-t="uses">{{ L['uses'] }}</label>
+          <label for="addUses" data-t="uses">{{ L['uses'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addUses" value="1" min="1">
             <span class="form-hint" data-t="uses_hint">{{ L['uses_hint'] }}</span>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" id="btnDoAddCode" data-t="create">{{ L['create'] }}</button>
+          <button class="btn codes-primary" id="btnDoAddCode" data-t="create">{{ L['create'] }}</button>
           <button class="btn-secondary" id="btnCancelAddCode" data-t="cancel">{{ L['cancel'] }}</button>
         </div>
         <div class="result-box" id="addCodeResult" style="display:none"></div>
