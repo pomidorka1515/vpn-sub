@@ -270,16 +270,9 @@ directory. A frozen binary uses `data/` next to the executable (`sys.argv[0]`),
 because the working directory is not the install directory and `__file__` is
 inside the payload.
 
-Checkout runs require an explicit frontend build first (Node 24.22.2):
-
-```sh
-npm --prefix frontend ci
-npm --prefix frontend run build
-```
-
 Sources live in `frontend/src/`; only ignored `frontend/dist/` is consumed by
-Python and included in frozen releases. Node is not needed at runtime. See
-[frontend tooling](frontend/README.md) for type checking and watch mode.
+Python and included in frozen releases. Node is not needed at runtime. Checkout
+runs require an explicit build; see [frontend development](#frontend-development).
 
 A compiled binary ignores `$schema` and validates `config.json` against the
 packed `config.schema.json`. A checkout still resolves `$schema` relative to the
@@ -428,7 +421,8 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 
 ## Development
 
-A git checkout is for development. Start Redis first, then:
+A git checkout is for development. Build the frontend as described below before
+running the service or tests. Start Redis first, then:
 
 ```bash
 # Python 3.14 for development
@@ -470,6 +464,29 @@ tests requiring the local Redis executable also use `redis` and skip if absent.
 
 HTTP contracts: [docs/API.md](docs/API.md) (cookie `auth_token`) and
 [docs/API_ADMIN.md](docs/API_ADMIN.md) (`Authorization` header).
+
+### Frontend development
+
+Use Node **24.22.2** and its bundled npm, pinned in `frontend/.node-version`.
+From the repository root:
+
+```sh
+npm --prefix frontend ci
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
+npm --prefix frontend run watch
+```
+
+`typecheck` runs strict TypeScript checks without emitting files. `build` also
+checks types before generating `frontend/dist/`; run it before starting Python
+from a clean checkout or deploying. Do not edit or commit `frontend/dist/` or
+`frontend/node_modules/`. Node and npm are build tools, not runtime dependencies.
+
+`watch` builds initially and rebuilds when frontend sources or resources change,
+but does not reload the browser. It reports type errors while continuing to
+rebuild, so run `build` for release verification. Restart Python after a rebuild
+to refresh cached asset versions and templates; restart watch after changing
+`build.mjs` or installing dependencies.
 
 ### Code quality
 
