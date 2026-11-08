@@ -162,9 +162,13 @@ export async function saveConfig() {
       }
       if (Object.hasOwn(values, 'api_token')) {
         delete snapshot.api_token;
-        delete editor.draft.api_token;
-        const token = document.getElementById('cfg-api_token');
-        if (token instanceof HTMLInputElement) token.value = '';
+        // A replacement entered while this request was in flight is a new edit,
+        // not the credential just saved; retain it for the next save.
+        if (jsonEqual(editor.draft.api_token, values.api_token)) {
+          delete editor.draft.api_token;
+          const token = document.getElementById('cfg-api_token');
+          if (token instanceof HTMLInputElement) token.value = '';
+        }
       }
       const result = isPlainObject(res.obj) ? res.obj : {};
       adoptSaved(typeof result.base === 'string' ? result.base : undefined, snapshot);
