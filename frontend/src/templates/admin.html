@@ -148,13 +148,10 @@
   <div id="tab-codes" class="tab-content">
     <div class="card codes-library">
       <div class="codes-header">
-        <div>
-          <div class="codes-title-row"><h2 data-t="bonus_codes">{{ L['bonus_codes'] }}</h2><span class="codes-count" id="codeCount" hidden></span></div>
-          <p class="codes-description" data-t="codes_description">{{ L['codes_description'] }}</p>
-        </div>
+        <div class="card-title" data-t="bonus_codes">{{ L['bonus_codes'] }}</div>
         <div class="codes-toolbar">
           <button class="btn-secondary" id="btnLoadCodes" data-t="refresh">{{ L['refresh'] }}</button>
-          <button class="btn codes-primary" id="btnShowAddCode" aria-expanded="false" aria-controls="addCodeCard" data-t="add_code_btn">{{ L['add_code_btn'] }}</button>
+          <button class="btn btn-primary codes-add" id="btnShowAddCode" aria-expanded="false" aria-controls="addCodeCard" data-t="add_code_btn">{{ L['add_code_btn'] }}</button>
         </div>
       </div>
       <div class="code-list" id="codeList">

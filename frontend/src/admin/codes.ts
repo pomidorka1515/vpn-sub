@@ -28,11 +28,7 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
     result.style.display = 'none'; result.innerHTML = '';
     input(doc, 'addCode').focus();
   }
-  function updateSummary(): void {
-    const count = element(doc, 'codeCount');
-    const value = String(entries.size);
-    if (count.textContent !== value) count.textContent = value;
-    if (count.hidden === loaded) count.hidden = !loaded;
+  function updateEmptyState(): void {
     if (!entries.size && loaded && !list.querySelector('[data-codes-empty]')) {
       list.innerHTML = `<div class="code-empty" data-codes-empty><strong>${escapeHtml(t('no_codes'))}</strong><p>${escapeHtml(t('codes_empty_hint'))}</p></div>`;
     }
@@ -40,7 +36,7 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
   function codeHtml(name: string, code: Record<string, unknown> | null): string {
     const action = code?.action === 'register' ? 'register' : 'bonus';
     const badges = code ? `<span class="code-type ${action}">${escapeHtml(t(action))}</span><span class="code-usage">${code.perma ? escapeHtml(t('reusable')) : `${escapeHtml(code.uses ?? 1)} ${escapeHtml(t('uses').toLowerCase())}`}</span>` : '';
-    const metrics = code ? [['days', code.days], ['gb', code.gb], ['wl_gb', code.wl_gb]].map(([key, value]) => `<div><dt>${escapeHtml(t(String(key)))}</dt><dd>${escapeHtml(value ?? 0)}</dd></div>`).join('') : '';
+    const metrics = code ? [['days', code.days], ['gb', code.gb], ['wl_gb', code.wl_gb]].map(([key, value]) => `<div><dt>${escapeHtml(t(String(key)))}</dt><dd>${escapeHtml(action === 'register' && value === 0 ? t('codes_unlimited_value') : value ?? 0)}</dd></div>`).join('') : '';
     return `<div class="code-info"><div class="code-heading"><h3 class="code-name">${escapeHtml(name)}</h3><div class="code-badges">${badges}</div></div>${code ? `<dl class="code-metrics">${metrics}</dl>` : `<p class="code-unavailable">${escapeHtml(t('codes_info_unavailable'))}</p>`}</div><div class="code-actions"><button class="btn-tiny" data-code-action="copy" data-code="${escapeHtml(name)}">${escapeHtml(t('copy'))}</button><button class="btn-tiny danger" data-code-action="delete" data-code="${escapeHtml(name)}">${escapeHtml(t('delete'))}</button></div>`;
   }
   function reconcile(next: Array<[string, Record<string, unknown> | null]>): void {
@@ -72,7 +68,7 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
       previous = entry.node;
     }
     loaded = true;
-    updateSummary();
+    updateEmptyState();
   }
   async function loadCodes(): Promise<void> {
     if (loading || disposed) return;
@@ -150,7 +146,7 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
             const neighbor = entry?.node.nextElementSibling ?? entry?.node.previousElementSibling;
             entry?.node.remove();
             entries.delete(code);
-            updateSummary();
+            updateEmptyState();
             if (focused) (neighbor?.querySelector<HTMLButtonElement>('button') ?? button(doc, 'btnShowAddCode')).focus();
             toast(t('deleted'), 'success');
           }

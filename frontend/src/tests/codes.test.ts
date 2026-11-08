@@ -16,7 +16,7 @@ function setup() {
   const toast = vi.fn();
   const confirm = vi.fn<AdminContext['confirm']>().mockResolvedValue(true);
   const clipboard = { writeText: vi.fn<Clipboard['writeText']>().mockResolvedValue() };
-  dispose = initCodes({ doc: document, t: key => key, api, toast, confirm, loadGen: () => () => true }, clipboard);
+  dispose = initCodes({ doc: document, t: key => key === 'codes_unlimited_value' ? '∞' : key, api, toast, confirm, loadGen: () => () => true }, clipboard);
   const list = document.getElementById('codeList')!;
   const click = (id: string) => document.getElementById(id)!.click();
   const cards = () => [...list.querySelectorAll<HTMLElement>('.code-card')];
@@ -30,6 +30,18 @@ function setup() {
 }
 
 describe('admin codes', () => {
+  it.each([
+    { action: 'register', expected: ['∞', '∞', '∞'] },
+    { action: 'bonus', expected: ['0', '0', '0'] },
+  ])('renders zero values according to $action semantics', async ({ action, expected }) => {
+    const { api, click, cards } = setup();
+    api.mockResolvedValueOnce(success(['CODE']));
+    api.mockResolvedValueOnce(success({ ...details, action, days: 0, gb: 0, wl_gb: 0 }));
+    click('btnLoadCodes');
+    await vi.waitFor(() => expect(cards()).toHaveLength(1));
+    expect([...cards()[0]!.querySelectorAll('.code-metrics dd')].map(node => node.textContent)).toEqual(expected);
+  });
+
   it('shows the loaded empty state once and leaves it untouched on refresh', async () => {
     const { load, list } = setup();
     await load([]);
@@ -72,11 +84,9 @@ describe('admin codes', () => {
     await vi.waitFor(() => expect(cards()).toHaveLength(1));
     expect(cards()[0]).toBe(second);
     expect(api).toHaveBeenCalledExactlyOnceWith('POST', '/api/code/delete', { code: 'FIRST' });
-    expect(document.getElementById('codeCount')!.textContent).toBe('1');
     second!.querySelector<HTMLButtonElement>('[data-code-action="delete"]')!.click();
     await vi.waitFor(() => expect(cards()).toHaveLength(0));
     expect(list.querySelector('.code-empty')).not.toBeNull();
-    expect(document.getElementById('codeCount')!.textContent).toBe('0');
   });
 
   it('preserves the list after failed refreshes and failed deletions', async () => {

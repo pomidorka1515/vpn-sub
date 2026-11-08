@@ -891,7 +891,7 @@
 
                 // bonus codes
                 "bonus_codes": "Bonus Codes",
-                "codes_description": "Manage invitations and subscription rewards in one place.",
+                "codes_unlimited_value": "∞",
                 "codes_ready": "Your code library",
                 "codes_empty_hint": "Create a code to offer extra time, traffic, or access.",
                 "codes_info_unavailable": "Code details are temporarily unavailable. Try loading again.",
@@ -907,7 +907,7 @@
                 "uses": "Uses",
                 "uses_hint": "Ignored if reusable",
                 "load_codes": "Load Codes",
-                "add_code_btn": "+ Add Code",
+                "add_code_btn": "Add Code",
                 "create": "Create",
                 "code_hint": "Unique code string",
                 "reusable_label": "Unlimited uses",
@@ -1286,7 +1286,7 @@
 
                 // bonus codes
                 "bonus_codes": "Бонус-коды",
-                "codes_description": "Управляйте приглашениями и бонусами для подписок в одном месте.",
+                "codes_unlimited_value": "∞",
                 "codes_ready": "Ваша библиотека кодов",
                 "codes_empty_hint": "Создайте код, чтобы добавить время, трафик или доступ.",
                 "codes_info_unavailable": "Данные кода временно недоступны. Попробуйте загрузить снова.",
@@ -1302,7 +1302,7 @@
                 "uses": "Использований",
                 "uses_hint": "Игнорируется если многоразовый",
                 "load_codes": "Загрузить",
-                "add_code_btn": "+ Создать код",
+                "add_code_btn": "Создать код",
                 "create": "Создать",
                 "code_hint": "Уникальная строка кода",
                 "reusable_label": "Безлимит. использований",
