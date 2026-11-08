@@ -554,14 +554,30 @@ jobs:
                   path.relative_to("frontend"): path.read_bytes()
                   for path in Path("frontend/dist").rglob("*") if path.is_file()
               }
+              if not expected:
+                  raise SystemExit("Built frontend resources are empty")
               actual = {
                   path.relative_to(dist / "frontend"): path.read_bytes()
                   for path in (dist / "frontend").rglob("*") if path.is_file()
               }
               if actual != expected:
                   raise SystemExit(f"Frontend payload differs from built resources: {dist}")
-              if any(path.suffix in {".map", ".ts"} or "node_modules" in path.parts for path in actual):
-                  raise SystemExit(f"Development frontend files in payload: {dist}")
+              # Only runtime resource types and licenses belong in the payload,
+              # even if a development file was accidentally copied into dist.
+              allowed = {
+                  "assets": {".css", ".js"},
+                  "templates": {".html"},
+                  "fonts": {".ttf", ".woff2", ".txt", ""},
+                  "vendor": {".css", ".js", ".txt", ""},
+              }
+              for path in actual:
+                  if (len(path.parts) < 3 or path.parts[0] != "dist"
+                      or path.parts[1] not in allowed
+                      or path.suffix not in allowed[path.parts[1]]
+                      or {"node_modules", "src", "tests"} & set(path.parts)):
+                      raise SystemExit(f"Unexpected frontend file in payload: {path}")
+              if any(path.is_symlink() for path in (dist / "frontend").rglob("*")):
+                  raise SystemExit(f"Symlink in frontend payload: {dist}")
           report = ET.parse("build/dist/${{ matrix.name }}-report.xml")
           excluded_modules = (
               "zstandard", "aioquic", "trio", "uvloop",
@@ -625,10 +641,25 @@ jobs:
           # crash must not look like success. Exit 0 is the only pass.
           build/dist/vpn-sub --probe
           env -u LD_LIBRARY_PATH python scripts/smoke_crypto_release.py --binary build/dist/vpn-sub --openssl-prefix "$RUNNER_TEMP/openssl-small"
-          # Run away from the checkout with a temporary DB/config, private Redis,
-          # and loopback panel fake; exercise resources, DB, Lua limiter and lifespan.
-          # Isolate all subprocesses from non-loopback networking, not just the update check.
-          sudo unshare --net bash -c 'ip link set lo up; exec "$@"' -- "$(command -v python)" scripts/smoke_async_release.py --binary build/dist/vpn-sub --report build/dist/vpn-sub-report.xml
+          # Copy the harness, binary and fixture outside the checkout. Hide the
+          # checkout in a private mount namespace, remove Node from PATH, and
+          # isolate all subprocesses from non-loopback networking.
+          isolated="$RUNNER_TEMP/frontend-smoke"
+          mkdir -p "$isolated"/{scripts,docs,bin,hidden}
+          cp scripts/smoke_async_release.py "$isolated/scripts/"
+          cp docs/EXAMPLE.config.json "$isolated/docs/"
+          cp build/dist/vpn-sub build/dist/vpn-sub-report.xml "$isolated/"
+          ln -s "$(command -v redis-server)" "$isolated/bin/redis-server"
+          sudo unshare --mount --net bash -c '
+            set -euo pipefail
+            mount --make-rprivate /
+            mount --bind "$1/hidden" "$2"
+            ip link set lo up
+            cd "$1"
+            export PATH="$1/bin"
+            unset LD_LIBRARY_PATH
+            exec "$3" "$1/scripts/smoke_async_release.py" --binary "$1/vpn-sub" --report "$1/vpn-sub-report.xml"
+          ' -- "$isolated" "$GITHUB_WORKSPACE" "$(command -v python)"
 
       - name: record binary sizes
         run: |
