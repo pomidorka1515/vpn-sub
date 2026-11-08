@@ -54,6 +54,10 @@ async function buildJavaScript(options) {
   for (const file of result.outputFiles) {
     const obfuscated = JavaScriptObfuscator.obfuscate(file.text, {
       compact: true,
+      controlFlowFlattening: true,
+      controlFlowFlatteningThreshold: 0.35,
+      deadCodeInjection: true,
+      deadCodeInjectionThreshold: 0.15,
       identifierNamesGenerator: "hexadecimal",
       identifiersPrefix: relative(output, file.path).replace(/[^a-zA-Z0-9]/g, "_"),
       numbersToExpressions: true,
@@ -63,9 +67,13 @@ async function buildJavaScript(options) {
       selfDefending: false,
       debugProtection: false,
       sourceMap: false,
+      splitStrings: true,
+      splitStringsChunkLength: 8,
       stringArray: true,
+      stringArrayCallsTransform: true,
+      stringArrayCallsTransformThreshold: 0.5,
       stringArrayEncoding: ["base64"],
-      stringArrayThreshold: 0.75,
+      stringArrayThreshold: 1,
       target: "browser-no-eval",
     });
     await mkdir(dirname(file.path), { recursive: true });
