@@ -477,7 +477,7 @@ npm --prefix frontend run build
 npm --prefix frontend run watch
 ```
 
-`typecheck` runs strict TypeScript checks without emitting files. `build` also
+`typecheck` checks application and test TypeScript strictly without emitting files. `build` also
 checks types before generating `frontend/dist/`; run it before starting Python
 from a clean checkout or deploying. Do not edit or commit `frontend/dist/` or
 `frontend/node_modules/`. Node and npm are build tools, not runtime dependencies.
@@ -487,6 +487,35 @@ but does not reload the browser. It reports type errors while continuing to
 rebuild, so run `build` for release verification. Restart Python after a rebuild
 to refresh cached asset versions and templates; restart watch after changing
 `build.mjs` or installing dependencies.
+
+#### Frontend tests
+
+From the repository root:
+
+```sh
+npm --prefix frontend test
+npm --prefix frontend run test:watch
+npm --prefix frontend run test:coverage
+npm --prefix frontend test -- src/tests/api.test.ts
+```
+
+`test` typechecks before running Vitest once; `test:watch` runs interactively
+without typechecking. `test:coverage` typechecks and generates text, HTML, and
+LCOV reports in ignored `frontend/coverage/`. CI runs typechecking, tests, and
+the production build.
+
+Write typed tests in `frontend/src/tests/**/*.test.ts`, grouped by subsystem.
+Import source modules directly and import `describe`, `it`, `expect`, and `vi`
+from `vitest`; globals are not enabled. Tests inherit the application's strict
+compiler settings. Use typed mocks such as `vi.fn<typeof fetch>()` instead of
+casting fake implementations or dynamically importing bundled code.
+
+Tests use jsdom with a stable HTTPS origin and Node's native fetch/Response
+APIs. Mock requests rather than requiring a running backend. Mocks, stubbed
+globals/environment variables, timers, DOM content, storage, and history are
+reset between tests; clean up any listeners or other resources you create.
+Pure Node tests can use a `// @vitest-environment node` comment to skip jsdom.
+Test sources are excluded from production bundles and coverage reports.
 
 ### Code quality
 

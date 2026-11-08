@@ -6,12 +6,22 @@
     "node": "24.22.2"
   },
   "scripts": {
-    "typecheck": "tsc --project tsconfig.json",
+    "test": "npm run typecheck:tests && vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "npm run typecheck:tests && vitest run --coverage",
+    "typecheck": "tsc --project tsconfig.json && npm run typecheck:tests",
+    "typecheck:tests": "tsc --project tsconfig.tests.json",
     "build": "node build.mjs",
     "watch": "node build.mjs --watch"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.1.0",
+    "jsdom": "31.0.0",
+    "vitest": "5.1.0"
   }
 }

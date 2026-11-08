@@ -133,7 +133,7 @@ function liveOpts(): Live | undefined {
 function scheduleLive() {
   stopTimer();
   if (state.mode !== 'live' || !tabActive() || state.chartJsFailed) return;
-  state.timer = setTimeout(() => {
+  state.timer = window.setTimeout(() => {
     state.timer = null;
     pollLive();
   }, delayMs());
