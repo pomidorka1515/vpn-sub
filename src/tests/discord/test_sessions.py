@@ -4,10 +4,10 @@ import json
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
+import discord
 import pytest
 import pytest_asyncio
 
-import discord
 from bots.discord.sessions import DatabaseSessionStore, SessionRecord
 from db import Database
 from tests.support.discord import FakeInteraction, make_bots, modal_data

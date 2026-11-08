@@ -6,10 +6,10 @@ import threading
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 import pytest_asyncio
 
-import discord
 from app_runtime.lifecycle import Runtime
 from app_runtime.offload import BoundedOffload, OffloadServices
 from bots.discord.host import SharedDiscordClient, interaction_limit

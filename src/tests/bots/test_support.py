@@ -3,10 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
+import discord
 import pytest
 from telebot import types
 
-import discord
 from bots.telegram.public.text_routing import PublicTextRoutingMixin
 from tests.support.config import config_mock, subscription_config
 from tests.support.discord import FakeInteraction, make_bots

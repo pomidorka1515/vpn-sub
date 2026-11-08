@@ -6,9 +6,9 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 from xml.etree import ElementTree as ET  # ruff: ignore[suspicious-xml-etree-import] - generated test data
 
+import discord
 import pytest
 
-import discord
 from bots.list_messages import list_messages
 from bots.telegram.admin.codes import AdminCodesMixin
 from bots.telegram.admin.users import AdminUsersMixin

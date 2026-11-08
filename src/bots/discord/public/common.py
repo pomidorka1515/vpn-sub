@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import discord
+
 from bots.discord.common import DiscordIOMixin
 from bots.discord.composition import PublicFeatureMixin
 

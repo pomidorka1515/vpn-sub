@@ -7,6 +7,7 @@ from util import fmt_bytes, fmt_time
 
 if TYPE_CHECKING:
     import discord
+
     from custom_types import ServerMetricsResponse
 
 __all__ = ["AdminPanelsMixin"]

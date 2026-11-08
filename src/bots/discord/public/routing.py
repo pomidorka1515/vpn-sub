@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import cast
 
 import discord
+
 from bots.discord.composition import PublicFeatureMixin
 
 __all__ = ["PublicRoutingMixin"]

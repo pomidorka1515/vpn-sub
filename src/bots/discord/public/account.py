@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal, Self
 
 import discord
+
 from bots.discord.composition import PublicFeatureMixin
 from util import compare
 

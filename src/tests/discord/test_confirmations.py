@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, cast
 
+import discord
 import pytest
 
-import discord
 from bots.discord.host import interaction_limit
 from bots.discord.public import account
 from tests.support.discord import FakeInteraction, make_bots

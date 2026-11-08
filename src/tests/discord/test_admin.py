@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import cast
 from unittest.mock import AsyncMock, patch
 
+import discord
 import pytest
 
-import discord
 from core.services.refresh import RefreshResult
 from tests.support.discord import FakeInteraction, make_bots, modal_data
 

@@ -4,9 +4,9 @@ import asyncio
 from typing import cast
 from unittest.mock import AsyncMock, patch
 
+import discord
 import pytest
 
-import discord
 from bots.discord.exceptions import SessionExpiredError
 from errors import AppError
 from tests.support.discord import FakeInteraction, make_bots, modal_data
