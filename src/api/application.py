@@ -7,6 +7,7 @@ from werkzeug.exceptions import HTTPException
 
 from app_runtime.tasks import CapacityExceededError
 from errors import AppError, CommittedAuditError
+from fonts import embed_font_faces
 from loggers import Logger
 from threadutil import named_to_thread
 from util import err, isbrowser, ok
@@ -48,6 +49,10 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
             html = await render_template(
                 "404.html", prefix=prefix, asset_version=version, lang=lang, L=strings
             )
+            if web_api is None:
+                html = await named_to_thread("frontend:error-fonts", embed_font_faces, html, prefix)
+            else:
+                html = await web_api.sub.res.offloads.files.run(embed_font_faces, html, prefix)
             return Response(html, status=404, mimetype="text/html")
         return response
 

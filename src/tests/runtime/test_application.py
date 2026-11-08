@@ -165,6 +165,8 @@ async def test_factory_schema_verbose_and_browser_assets(
         assert response.mimetype == "text/html"
         body = await response.get_data()
         assert isinstance(body, bytes)
+        assert b"Use a VPN client." in body
+        assert b"Use a VPN client to get the subscription." in body
         for name in FONT_FILES:
             assert f"url('/sub/fonts/{name}?v={font_version()}')".encode() in body
         for part in (
@@ -176,10 +178,10 @@ async def test_factory_schema_verbose_and_browser_assets(
         ):
             assert part not in body
         for route, message in (
-            ("/sub", "a valid token is required to retrieve the subscription"),
-            ("/sub/", "a valid token is required to retrieve the subscription"),
-            ("/sub?lang=ru", "для получения подписки требуется действительный токен"),
-            ("/sub?lang=de", "a valid token is required to retrieve the subscription"),
+            ("/sub", "A valid token is required to retrieve the subscription."),
+            ("/sub/", "A valid token is required to retrieve the subscription."),
+            ("/sub?lang=ru", "Для получения подписки требуется действительный токен."),
+            ("/sub?lang=de", "A valid token is required to retrieve the subscription."),
         ):
             response = await client.get(
                 route,

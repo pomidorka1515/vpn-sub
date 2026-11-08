@@ -367,6 +367,13 @@ async def test_not_found_uses_html_only_for_browsers(
         body = await response.get_data(as_text=True)
         assert "Page not found" in body
         assert '<script src="/custom/error.js?v=' in body
+        assert "font-family: 'Outfit', sans-serif" in body
+        assert "url('/custom/fonts/outfit-latin.woff2?v=" in body
+        assert "/* __FONTS__ */" not in body
+        code_style = body.split(".code {", 1)[1].split("}", 1)[0]
+        assert "font-family" not in code_style
+        assert "font-size: 13px" in code_style
+        assert "color: var(--accent)" in code_style
         script = await web_api[0].test_client().get("/custom/error.js")
         assert script.status_code == 200
         assert script.mimetype == "text/javascript"

@@ -41,18 +41,18 @@ def _browser_strings(
     if token_required:
         return {
             "forbidden_title": text("forbidden_title", "403 Forbidden"),
-            "use_vpn_client": text("token_required", "valid token required"),
+            "use_vpn_client": text("token_required", "Valid token required."),
             "use_vpn_client_hint": text(
                 "token_required_hint",
-                "a valid token is required to retrieve the subscription",
+                "A valid token is required to retrieve the subscription.",
             ),
         }
 
     return {
         "forbidden_title": text("forbidden_title", "403 Forbidden"),
-        "use_vpn_client": text("use_vpn_client", "use a VPN client!"),
+        "use_vpn_client": text("use_vpn_client", "Use a VPN client."),
         "use_vpn_client_hint": text(
             "use_vpn_client_hint",
-            "use a VPN client to get the subscription",
+            "Use a VPN client to get the subscription.",
         ),
     }
