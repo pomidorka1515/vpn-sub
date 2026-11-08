@@ -20,7 +20,7 @@ log = Logger("api")
 
 def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) -> Quart:
     page_endpoints = {route.handler for route in AsyncStaticRoutes.ROUTES}
-    app = Quart(__name__)
+    app = Quart(__name__, static_folder=None)
     app.json = DefaultJSONProvider(app)
     app.json.sort_keys = False
     app.jinja_env.loader = FileSystemLoader(str(RES_DIR / "templates"))

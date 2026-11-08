@@ -10,7 +10,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from api import AsyncWebApi, common
 from api.web import static
-from paths import bundled_root
+from fonts import FONT_FILES, font_version
 from tests.support.api import api_app, config_snapshot, make_subscription, make_watch
 from tests.support.config import subscription_config
 
@@ -94,7 +94,7 @@ async def test_page_script_routes_and_error_context(
     language: Config[LangConfig],
     prefix: str,
 ) -> None:
-    templates = bundled_root() / "frontend" / "src" / "templates"
+    templates = common.RES_DIR / "templates"
     shutil.copytree(templates, tmp_path / "templates")
     assets = tmp_path / "assets"
     (assets / "admin").mkdir(parents=True)
@@ -157,3 +157,57 @@ async def test_page_script_routes_and_error_context(
             assert html.index(f"{prefix}/error.js") < html.index("<style>")
     finally:
         common.asset_version.cache_clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["", "/nested/sub"])
+async def test_generated_resources_served_at_configured_prefix(
+    database: Database,
+    language: Config[LangConfig],
+    prefix: str,
+) -> None:
+    async with api_app() as app:
+        sub = await make_subscription(database, app=app, lang_cfg=language, uri=prefix.strip("/"))
+        AsyncWebApi(
+            app=app,
+            cfg=config_snapshot(subscription_config(uri=prefix.strip("/"))),
+            sub=sub,
+            bw=make_watch(database, sub),
+            limiter=app.extensions["limiter"],
+        )
+        client = app.test_client()
+        response = await client.get(f"{prefix}/auth")
+        html = await response.get_data(as_text=True)
+        version = common.asset_version()
+        assert response.status_code == 200
+        for name, content_type in (
+            ("common.js", "text/javascript"),
+            ("auth.js", "text/javascript"),
+            ("common.css", "text/css"),
+            ("auth.css", "text/css"),
+        ):
+            url = f"{prefix}/{name}?v={version}"
+            assert url in html
+            asset = await client.get(url)
+            assert asset.status_code == 200
+            assert asset.mimetype == content_type
+            assert await asset.get_data()
+            assert "immutable" in asset.headers["Cache-Control"]
+
+        css = await (await client.get(f"{prefix}/common.css?v={version}")).get_data(as_text=True)
+        for name in FONT_FILES:
+            url = f"{prefix}/fonts/{name}?v={font_version()}"
+            assert url in css
+            font = await client.get(url)
+            assert font.mimetype == "font/woff2"
+            body = await font.get_data()
+            assert isinstance(body, bytes)
+            assert body.startswith(b"wOF2")
+
+        for url in (
+            f"{prefix}/admin/config/state.js",
+            f"{prefix}/frontend/src/templates/auth.html",
+            f"{prefix}/vendor/LICENSE_CODEMIRROR",
+            "/static/frontend/src/templates/auth.html",
+        ):
+            assert (await client.get(url)).status_code == 404

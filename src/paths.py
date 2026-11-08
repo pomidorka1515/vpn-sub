@@ -82,13 +82,68 @@ def bundled_root() -> Path:
     return here.parents[1]
 
 
+_FRONTEND_FILES = (
+    *(
+        f"templates/{name}.html"
+        for name in (
+            "404",
+            "admin",
+            "admin-auth",
+            "auth",
+            "browser",
+            "dashboard",
+            "history",
+            "redirect",
+            "shared-bootstrap",
+        )
+    ),
+    *(
+        f"assets/{name}"
+        for name in (
+            "admin/main.js",
+            "admin-auth.js",
+            "auth.js",
+            "common.js",
+            "dashboard.js",
+            "error.js",
+            "history.js",
+            "redirect.js",
+            "admin.css",
+            "auth.css",
+            "charts.css",
+            "common.css",
+            "dashboard.css",
+            "fonts.css",
+            "history.css",
+        )
+    ),
+    *(
+        f"fonts/{name}"
+        for name in (
+            "DejaVuSans.ttf",
+            "outfit-latin.woff2",
+            "jetbrains-mono-latin.woff2",
+            "jetbrains-mono-cyrillic.woff2",
+        )
+    ),
+    *(
+        f"vendor/{name}"
+        for name in (
+            "chart.umd.min.js",
+            "codemirror-5.65.16.min.js",
+            "codemirror-5.65.16.min.css",
+        )
+    ),
+)
+
+
 def frontend_root() -> Path:
     """Locate built resources without executing build tools at runtime."""
     root = bundled_root() / "frontend" / "dist"
-    for name in ("templates/admin.html", "assets/admin/main.js", "fonts/DejaVuSans.ttf"):
+    for name in _FRONTEND_FILES:
         if not (root / name).is_file():
             raise RuntimeError(
-                f"Frontend build missing or incomplete at {root}. "
+                f"Frontend build missing or incomplete at {root} (missing {name}). "
                 "Run `npm --prefix frontend ci` and `npm --prefix frontend run build` "
                 "before starting Python; binary releases must include frontend/dist."
             )

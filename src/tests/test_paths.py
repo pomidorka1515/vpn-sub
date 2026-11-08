@@ -95,6 +95,24 @@ def test_missing_frontend_build_has_actionable_error(
         paths.frontend_root()
 
 
+@pytest.mark.parametrize("missing", paths._FRONTEND_FILES)
+def test_incomplete_frontend_reports_missing_resource(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    missing: str,
+) -> None:
+    root = tmp_path / "frontend" / "dist"
+    for name in paths._FRONTEND_FILES:
+        if name != missing:
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+    monkeypatch.setattr(paths, "bundled_root", lambda: tmp_path)
+    with pytest.raises(RuntimeError, match="npm --prefix frontend run build") as error:
+        paths.frontend_root()
+    assert missing in str(error.value)
+
+
 def test_frontend_root_is_independent_of_working_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

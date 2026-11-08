@@ -203,6 +203,24 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                     ) as response:
                         if response.status != 200 or "<html" not in (await response.text()).lower():
                             raise RuntimeError("bundled admin template did not render")
+                    for path, content_type, signature in (
+                        ("/sub/admin/main.js", "text/javascript", b"bootstrap"),
+                        ("/sub/common.css", "text/css", b"@font-face"),
+                        ("/sub/fonts/outfit-latin.woff2", "font/woff2", b"wOF2"),
+                        ("/sub/vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
+                    ):
+                        async with client.get(f"http://127.0.0.1:{http_port}{path}") as response:
+                            if (
+                                response.status != 200
+                                or response.content_type != content_type
+                                or signature not in await response.read()
+                            ):
+                                raise RuntimeError(f"bundled frontend asset failed: {path}")
+                    async with client.get(
+                        f"http://127.0.0.1:{http_port}/sub/frontend/src/templates/admin.html"
+                    ) as response:
+                        if response.status != 404:
+                            raise RuntimeError("frontend source unexpectedly exposed")
                 await stop(service)
                 check_exit(service)
                 with sqlite3.connect(data / "state.sqlite3") as db:
@@ -286,7 +304,7 @@ def main() -> None:
     command = [sys.executable, "-m", "main"] if args.checkout else [str(args.binary.resolve())]
     with TemporaryDirectory(prefix="vpn-sub-smoke-") as temporary:
         asyncio.run(smoke(command, Path(temporary), checkout=args.checkout))
-    print("async release smoke passed: panel/Redis/SQLite/templates, SIGTERM and restart")
+    print("async release smoke passed: panel/Redis/SQLite/frontend, SIGTERM and restart")
 
 
 if __name__ == "__main__":
