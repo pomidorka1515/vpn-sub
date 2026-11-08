@@ -105,7 +105,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       control = `<input type="text" id="cfg-auth-0" value="${attr(auth[0] ?? '')}" spellcheck="false" autocomplete="off">
         ${passWrap('cfg-auth-1', auth[1] ?? '')}`;
     } else if (key === 'panel_alert_cooldown') {
-      control = `<input type="number" id="cfg-panel_alert_cooldown" step="1" value="${attr(data.panel_alert_cooldown ?? '')}">`;
+      control = `<input type="number" id="cfg-panel_alert_cooldown" min="0" step="1" value="${attr(data.panel_alert_cooldown ?? '')}">`;
     } else if (['fingerprints', 'bypass_packages', 'funny_strings'].includes(key)) {
       control = stringRows(key);
     } else if (key === 'nodes') {

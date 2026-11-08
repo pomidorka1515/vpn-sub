@@ -14,10 +14,37 @@ function issue(path: string, message: string): ValidationIssue {
   return { path, message };
 }
 
+const TELEGRAM_TOKEN_RE = /^[1-9][0-9]*:[A-Za-z0-9_-]{35}$/;
+const DISCORD_TOKEN_RE = /^[A-Za-z0-9_-]{23,28}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,38}$/;
+
+function validHttpUrl(value: string, paths: boolean): boolean {
+  // Check the raw input too: URL parsing silently normalizes whitespace and backslashes.
+  if (/[\s\\]/.test(value) || !/^https?:\/\//.test(value)) return false;
+  const authority = value.slice(value.indexOf('://') + 3).split(/[/?#]/)[0] ?? '';
+  if (!paths && !/^https?:\/\/[^/?#]+\/?$/.test(value)) return false;
+  if (!/^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::[0-9]{1,5})?$/.test(authority)) return false;
+  try {
+    const url = new URL(value);
+    return url.hostname.length <= 253 && !url.username && !url.password;
+  } catch { return false; }
+}
+
+function validSnowflake(value: ConfigObject[string]): boolean {
+  if (!isInteger(value) || (typeof value === 'number' && !Number.isSafeInteger(value))) return false;
+  const raw = String(value);
+  return /^[1-9][0-9]{0,19}$/.test(raw) && BigInt(raw) <= 18446744073709551615n;
+}
+
 export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   ['uri', 'api_uri', 'fallback_domain', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt', '$schema'].forEach(key => {
     if (Object.hasOwn(draft, key) && typeof draft[key] !== 'string') issues.push(issue(key, t('config_err_required')));
+  });
+  ['domain', 'fallback_domain', 'ping_check_url'].forEach(key => {
+    const value = draft[key];
+    if (typeof value === 'string' && !validHttpUrl(value, key === 'ping_check_url')) {
+      issues.push(issue(key, t(key === 'ping_check_url' ? 'config_err_http_url' : 'config_err_domain')));
+    }
   });
   ['redis', 'bot', 'publicbot', 'discord', 'support_text'].forEach(key => {
     if (Object.hasOwn(draft, key) && !isPlainObject(draft[key])) issues.push(issue(key, t('config_err_required')));
@@ -40,12 +67,13 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   if (Array.isArray(auth) && (auth.length !== 2 || auth.some(item => typeof item !== 'string' || item === ''))) {
     issues.push(issue('api_admin_ui_auth', t('config_err_required')));
   }
-  if (Object.prototype.hasOwnProperty.call(draft, 'panel_alert_cooldown') && !isInteger(draft.panel_alert_cooldown)) {
-    issues.push(issue('panel_alert_cooldown', t('config_err_integer')));
+  if (Object.prototype.hasOwnProperty.call(draft, 'panel_alert_cooldown') && (!isInteger(draft.panel_alert_cooldown) || Number(draft.panel_alert_cooldown) < 0)) {
+    issues.push(issue('panel_alert_cooldown', t('config_err_positive_integer')));
   }
   ['fingerprints', 'bypass_packages'].forEach(key => {
     const list = draft[key];
     if (!Array.isArray(list) || list.some(item => typeof item !== 'string')) issues.push(issue(key, t('config_err_required')));
+    else if (key === 'bypass_packages' && list.some(item => typeof item !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$/.test(item) || /\s/.test(item))) issues.push(issue(key, t('config_err_package_name')));
     else if (key === 'fingerprints' && (list.length === 0 || list.some(item => typeof item !== 'string' || !['chrome', 'safari', 'edge', 'ios', 'firefox', 'android', '360', 'qq', 'random', 'randomized'].includes(item)))) issues.push(issue(key, t('config_err_fingerprints')));
     else if (key === 'fingerprints' && new Set(list).size !== list.length) issues.push(issue(key, t('config_err_unique')));
   });
@@ -59,6 +87,7 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   if (isPlainObject(draft.redis)) {
     const extra = Object.keys(draft.redis).filter(key => key !== 'url' && key !== 'socket_timeout');
     if (typeof draft.redis.url !== 'string' || draft.redis.url === '') issues.push(issue('redis', t('config_err_required')));
+    else if (!draft.redis.url.startsWith('redis://')) issues.push(issue('redis', t('config_err_redis_url')));
     if (Object.prototype.hasOwnProperty.call(draft.redis, 'socket_timeout') && !(isFiniteNumber(draft.redis.socket_timeout) && Number(draft.redis.socket_timeout) > 0)) {
       issues.push(issue('redis', t('config_err_integer')));
     }
@@ -69,7 +98,8 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     if (!isPlainObject(bot)) return;
     const extra = Object.keys(bot).filter(field => field !== 'token' && field !== 'whitelist');
     if (typeof bot.token !== 'string') issues.push(issue(key, t('config_err_required')));
-    if (!Array.isArray(bot.whitelist) || bot.whitelist.some(item => !isInteger(item) || (key === 'discord' && Number(item) < 1))) issues.push(issue(key, t('config_err_integer')));
+    else if (bot.token !== '' && (/\s/.test(bot.token) || !(key === 'discord' ? DISCORD_TOKEN_RE : TELEGRAM_TOKEN_RE).test(bot.token))) issues.push(issue(key, t(key === 'discord' ? 'config_err_discord_token' : 'config_err_telegram_token')));
+    if (!Array.isArray(bot.whitelist) || bot.whitelist.some(item => key === 'discord' ? !validSnowflake(item) : !isInteger(item) || Number(item) < 0)) issues.push(issue(key, t(key === 'discord' ? 'config_err_snowflake' : 'config_err_positive_integer')));
     if (key === 'discord' && Array.isArray(bot.whitelist) && new Set(bot.whitelist.map(String)).size !== bot.whitelist.length) issues.push(issue(key, t('config_err_unique')));
     if (extra.length) issues.push(issue(key, t('config_err_unknown')));
   });
@@ -77,6 +107,7 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     if (typeof draft.publicbot.token !== 'string' || Object.keys(draft.publicbot).some(key => key !== 'token')) {
       issues.push(issue('publicbot', t('config_err_required')));
     }
+    else if (draft.publicbot.token !== '' && (/\s/.test(draft.publicbot.token) || !TELEGRAM_TOKEN_RE.test(draft.publicbot.token))) issues.push(issue('publicbot', t('config_err_telegram_token')));
   }
   if (isPlainObject(draft.support_text)) {
     Object.entries(draft.support_text).forEach(([platform, pair]) => {
