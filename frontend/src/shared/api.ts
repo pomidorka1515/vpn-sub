@@ -6,7 +6,7 @@ export interface ApiResult {
   [key: string]: unknown;
   status: number;
   success?: boolean;
-  msg?: string;
+  msg?: string | null;
   obj?: unknown;
   readonly rawJson?: string;
   etag?: string;
@@ -30,7 +30,7 @@ function resolve<T>(value: Dynamic<T> | undefined): T | undefined {
 // until its consuming page validates it; no assertion pretends it is a DTO.
 export function parseApiEnvelope(value: unknown): Record<string, unknown> {
   if (!isRecord(value) || (value.success !== undefined && typeof value.success !== 'boolean') ||
-      (value.msg !== undefined && typeof value.msg !== 'string')) {
+      (value.msg !== undefined && value.msg !== null && typeof value.msg !== 'string')) {
     throw new Error('Invalid API response');
   }
   return value;

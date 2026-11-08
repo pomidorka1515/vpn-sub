@@ -77,7 +77,7 @@ function showResult(message: string, kind = ''): void {
   el.hidden = !message;
 }
 
-function safeServerMessage(message: string | undefined): string {
+function safeServerMessage(message: string | null | undefined): string {
   // Schema validation messages can quote values, including whole objects with secrets.
   if (String(message || '').startsWith('Schema validation error:')) return t('config_err_schema');
   return message || t('error');
