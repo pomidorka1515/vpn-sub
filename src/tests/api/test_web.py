@@ -11,6 +11,7 @@ from argon2 import PasswordHasher
 
 from api import AsyncWebApi
 from fonts import FONT_FILES, font_version
+from paths import frontend_root
 from tests.support.api import api_app, config_snapshot, make_subscription, make_watch
 from tests.support.config import subscription_config
 
@@ -265,10 +266,10 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None
     [
         ("common.css", "text/css", b"url('/custom/fonts/outfit-latin.woff2?v="),
         ("fonts/outfit-latin.woff2", "font/woff2", b"wOF2"),
-        ("dashboard.js", "text/javascript", b"function loadStats"),
-        ("history.js", "text/javascript", b"function loadHistory"),
+        ("dashboard.js", "text/javascript", b"_0x"),
+        ("history.js", "text/javascript", b"_0x"),
         ("chart.umd.min.js", "text/javascript", b"Chart.js v4.4.1"),
-        ("admin/main.js", "text/javascript", b"codemirror-5.65.16.min.js"),
+        ("admin/main.js", "text/javascript", b"import.meta.url"),
         ("vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
         ("vendor/codemirror-5.65.16.min.css", "text/css", b"CodeMirror"),
     ],
@@ -287,10 +288,14 @@ async def test_prefixed_static_assets(
     assert fragment in body
     extras = {
         "common.css": (b"--accent:",),
-        "admin/main.js": (b"function saveConfig", b"function bootstrap", b"import.meta.url"),
     }
     for part in extras.get(path, ()):
         assert part in body
+    if path in {"dashboard.js", "history.js", "admin/main.js"}:
+        assert body == (frontend_root() / "assets" / path).read_bytes()
+        assert b"sourceMappingURL" not in body
+        assert b"// src/" not in body
+        assert b"\n" not in body
     if path == "common.css":
         for name in FONT_FILES:
             url = f"/custom/fonts/{name}?v={font_version()}"

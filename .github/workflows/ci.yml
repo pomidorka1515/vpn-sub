@@ -17,7 +17,7 @@ jobs:
       - run: npm --prefix frontend ci
       - run: npm --prefix frontend run typecheck
       - run: npm --prefix frontend test
-      - run: npm --prefix frontend run build
+      - run: npm --prefix frontend run test:build
 
   ci:
     runs-on: ubuntu-latest

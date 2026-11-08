@@ -12,10 +12,12 @@
     "typecheck": "tsc --project tsconfig.json && npm run typecheck:tests",
     "typecheck:tests": "tsc --project tsconfig.tests.json",
     "build": "node build.mjs",
+    "test:build": "npm run build && node --test build.test.mjs",
     "watch": "node build.mjs --watch"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
+    "javascript-obfuscator": "5.10.0",
     "typescript": "5.9.3"
   },
   "dependencies": {

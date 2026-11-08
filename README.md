@@ -482,6 +482,11 @@ checks types before generating `frontend/dist/`; run it before starting Python
 from a clean checkout or deploying. Do not edit or commit `frontend/dist/` or
 `frontend/node_modules/`. Node and npm are build tools, not runtime dependencies.
 
+Generated application JavaScript is minified and locally obfuscated; styles are
+minified too. No source maps or source-path comments are emitted. Vendor assets
+retain their upstream licenses. Obfuscation discourages casual inspection, but
+browser code and API traffic remain inspectable: never put secrets in the frontend.
+
 `watch` builds initially and rebuilds when frontend sources or resources change,
 but does not reload the browser. It reports type errors while continuing to
 rebuild, so run `build` for release verification. Restart Python after a rebuild

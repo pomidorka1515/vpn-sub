@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, watch } from "node:fs";
-import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import JavaScriptObfuscator from "javascript-obfuscator";
 import { esbuildLang } from "./lang-plugin.ts";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -33,10 +34,44 @@ const optionalClassicEntries = {
 };
 const copies = [
   ["templates", "templates"],
-  ["styles", "assets"],
   ["fonts", "fonts"],
   ["vendor", "vendor"],
 ];
+
+async function buildJavaScript(options) {
+  const result = await build({
+    ...options,
+    bundle: true,
+    platform: "browser",
+    target: "es2020",
+    treeShaking: true,
+    minify: true,
+    sourcemap: false,
+    legalComments: "none",
+    write: false,
+    logLevel: "info",
+  });
+  for (const file of result.outputFiles) {
+    const obfuscated = JavaScriptObfuscator.obfuscate(file.text, {
+      compact: true,
+      identifierNamesGenerator: "hexadecimal",
+      identifiersPrefix: relative(output, file.path).replace(/[^a-zA-Z0-9]/g, "_"),
+      numbersToExpressions: true,
+      renameGlobals: false,
+      renameProperties: false,
+      seed: 1,
+      selfDefending: false,
+      debugProtection: false,
+      sourceMap: false,
+      stringArray: true,
+      stringArrayEncoding: ["base64"],
+      stringArrayThreshold: 0.75,
+      target: "browser-no-eval",
+    });
+    await mkdir(dirname(file.path), { recursive: true });
+    await writeFile(file.path, obfuscated.getObfuscatedCode());
+  }
+}
 
 async function size(path) {
   let files = 0;
@@ -60,17 +95,11 @@ async function rebuild() {
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   // Apply the shared theme early, independently of the page bundles.
-  await build({
+  await buildJavaScript({
     absWorkingDir: root,
     entryPoints: { common: "src/entries/common.ts" },
     outdir: join(output, "assets"),
-    bundle: true,
     format: "iife",
-    platform: "browser",
-    target: "es2020",
-    sourcemap: false,
-    legalComments: "eof",
-    logLevel: "info",
   });
   // Resolve optional entries on every rebuild so watch sees additions/deletions.
   for (const [format, required, optional] of [
@@ -81,23 +110,35 @@ async function rebuild() {
     for (const [name, path] of Object.entries(optional)) {
       if (existsSync(join(root, path))) entryPoints[name] = path;
     }
-    await build({
+    await buildJavaScript({
       absWorkingDir: root,
       entryPoints,
       plugins: [esbuildLang],
       outdir: join(output, "assets"),
-      bundle: true,
       splitting: false,
       format,
-      platform: "browser",
-      target: "es2020",
-      treeShaking: false,
-      minify: false,
-      sourcemap: false,
-      legalComments: "eof",
-      logLevel: "info",
     });
   }
+  const styles = await build({
+    absWorkingDir: root,
+    entryPoints: (await readdir(join(source, "styles")))
+      .filter((name) => name.endsWith(".css") && name !== "fonts.css")
+      .map((name) => join(source, "styles", name)),
+    outdir: join(output, "assets"),
+    target: "es2020",
+    minify: true,
+    sourcemap: false,
+    legalComments: "none",
+    write: false,
+    logLevel: "info",
+  });
+  for (const file of styles.outputFiles) {
+    // Python replaces this runtime marker with URI-prefixed font-face rules.
+    const marker = file.path === join(output, "assets", "common.css") ? "/* __FONTS__ */" : "";
+    await writeFile(file.path, marker + file.text);
+  }
+  // This is a server-side template, not a browser stylesheet. Keep its URL placeholders intact.
+  await cp(join(source, "styles", "fonts.css"), join(output, "assets", "fonts.css"));
   for (const [from, to] of copies) {
     await cp(join(source, from), join(output, to), { recursive: true });
   }
