@@ -1,3 +1,5 @@
+import { sharedMessage } from './messages';
+
 export function escapeHtml(value: unknown): string {
   const entities: Record<string, string> = {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -7,7 +9,7 @@ export function escapeHtml(value: unknown): string {
 
 export function requiredElement(doc: Document, id: string): HTMLElement {
   const element = doc.getElementById(id);
-  if (!element) throw new Error(`Missing element #${id}`);
+  if (!element) throw new Error(sharedMessage('missing_element', { id }));
   return element;
 }
 

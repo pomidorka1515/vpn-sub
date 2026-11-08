@@ -371,6 +371,21 @@ async def test_not_found_uses_html_only_for_browsers(
         assert (await response.get_json())["success"] is False
 
 
+async def test_not_found_language_uses_query_then_cookie(web_api: tuple[Quart, Database]) -> None:
+    client = web_api[0].test_client()
+    headers = {"User-Agent": "Mozilla/5.0 Chrome/130.0 Safari/537.36"}
+    client.set_cookie("localhost", "lang", "ru")
+    russian = await client.get("/missing", headers=headers)
+    body = await russian.get_data(as_text=True)
+    assert russian.status_code == 404
+    assert '<html lang="ru">' in body
+    assert "Страница не найдена" in body
+    english = await client.get("/missing?lang=en", headers=headers)
+    body = await english.get_data(as_text=True)
+    assert '<html lang="en">' in body
+    assert "Page not found" in body
+
+
 async def test_page_lang_uses_query_then_cookie(web_api: tuple[Quart, Database]) -> None:
     client = web_api[0].test_client()
     russian = await client.get("/custom/auth?lang=ru")

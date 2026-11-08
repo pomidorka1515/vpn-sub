@@ -11,7 +11,7 @@ from loggers import Logger
 from threadutil import named_to_thread
 from util import err, isbrowser, ok
 
-from .common import RES_DIR, asset_version
+from .common import RES_DIR, asset_version, web_lang_tables
 from .middleware import ProxyMiddleware
 from .web.static import AsyncStaticRoutes
 
@@ -35,13 +35,19 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
             and isbrowser(request.headers.get("User-Agent", ""))
         ):
             web_api: AsyncStaticRoutes | None = app.extensions.get("frontend_web_api")
+            lang = "en"
+            strings: dict[str, str] = {}
             if web_api is None:
                 prefix = ""
                 version = await named_to_thread("frontend:asset-version", asset_version)
             else:
                 prefix = web_api.prefix
                 version = await web_api.sub.res.offloads.files.run(asset_version)
-            html = await render_template("404.html", prefix=prefix, asset_version=version)
+                lang, strings, fallback = web_lang_tables(web_api.sub.res.lang_cfg, "error")
+                strings = fallback | strings
+            html = await render_template(
+                "404.html", prefix=prefix, asset_version=version, lang=lang, L=strings
+            )
             return Response(html, status=404, mimetype="text/html")
         return response
 

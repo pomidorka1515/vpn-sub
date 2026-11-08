@@ -2,10 +2,10 @@ export type Translate = (key: string) => string;
 
 export function fmtBytes(bytes: number, translate: Translate): string {
   if (!Number.isFinite(bytes)) return translate('na');
-  if (bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes <= 0) return '0 ' + translate('byte_unit');
+  const units = ['byte_unit', 'kb_unit', 'mb_unit', 'gb_unit', 'tb_unit'];
   const index = Math.max(0, Math.min(Math.floor(Math.log(bytes) / Math.log(1000)), units.length - 1));
-  return (bytes / Math.pow(1000, index)).toFixed(index > 1 ? 2 : 0) + ' ' + units[index];
+  return (bytes / Math.pow(1000, index)).toFixed(index > 1 ? 2 : 0) + ' ' + translate(units[index] ?? 'byte_unit');
 }
 
 export function fmtUptime(seconds: number | null | undefined, translate: Translate): string {
@@ -15,9 +15,9 @@ export function fmtUptime(seconds: number | null | undefined, translate: Transla
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
-  if (days > 0) return days + 'd ' + hours + 'h ' + minutes + 'm';
-  if (hours > 0) return hours + 'h ' + minutes + 'm ' + rest + 's';
-  return minutes + 'm ' + rest + 's';
+  if (days > 0) return days + translate('day_short') + ' ' + hours + translate('hour_short') + ' ' + minutes + translate('minute_short');
+  if (hours > 0) return hours + translate('hour_short') + ' ' + minutes + translate('minute_short') + ' ' + rest + translate('second_short');
+  return minutes + translate('minute_short') + ' ' + rest + translate('second_short');
 }
 
 export function fmtTime(timestamp: number | null | undefined, translate: Translate = key => key, now: () => number = Date.now): string {

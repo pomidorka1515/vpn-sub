@@ -1,4 +1,6 @@
+import { sharedMessage } from '../../shared/messages';
 import type { Translate } from '../../shared/formatting';
+import { escapeHtml } from '../../shared/dom';
 import { initPassToggles } from '../../shared/passwords';
 import { destroyJsonEditors } from './editor-bridge';
 import { editor, INTEGER_RE } from './state';
@@ -9,7 +11,7 @@ import { validateDraft } from './validation';
 
 let t: Translate = key => key;
 export function initConfigDialog(translate: Translate): () => void { t = translate; return () => { t = key => key; }; }
-const required = (id: string): HTMLElement => { const element = document.getElementById(id); if (!element) throw new Error(`Missing #${id}`); return element; };
+const required = (id: string): HTMLElement => { const element = document.getElementById(id); if (!element) throw new Error(sharedMessage('missing_element', { id })); return element; };
 type Kind = 'inbounds' | 'panels';
 
 export function createConfigDialog({ markDirty, renderCards }: { markDirty(): void; renderCards(kind: Kind): void }) {
@@ -140,34 +142,34 @@ function newPanel() {
 
 function dialogInbound(draft: ReturnType<typeof newInbound>): string {
   return `<div class="form-grid">
-    <div class="form-row"><label>id</label><div class="input-wrap"><input type="text" data-field="id" spellcheck="false"></div></div>
-    <div class="form-row"><label>flag</label><div class="input-wrap"><input type="text" data-field="flag"></div></div>
-    <div class="form-row"><label>name</label><div class="input-wrap">${bilingual('cfg-dlg-name', draft.name)}</div></div>
-    <div class="form-row"><label>description</label><div class="input-wrap">${bilingual('cfg-dlg-description', draft.description)}</div></div>
-    <div class="form-row"><label>shortProfileDescription</label><div class="input-wrap">${bilingual('cfg-dlg-short', draft.shortProfileDescription)}</div></div>
-    <div class="form-row"><label>whitelist</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
-    <div class="form-row"><label>node</label><div class="input-wrap"><select data-field="node">${nodeOptions(draft.node)}</select></div></div>
-    <div class="form-row"><label>masterLink</label><div class="input-wrap"><input type="text" data-field="masterLink" spellcheck="false"></div></div>
-    <div class="form-row"><label>json</label><div class="input-wrap"><textarea class="config-json" data-field="json" spellcheck="false">{}</textarea></div></div>
-    <div class="form-row"><label>xhttpExtra</label><div class="input-wrap"><textarea class="config-json" data-field="xhttpExtra" spellcheck="false">{}</textarea></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_id'))}</label><div class="input-wrap"><input type="text" data-field="id" spellcheck="false"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_flag'))}</label><div class="input-wrap"><input type="text" data-field="flag"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_name'))}</label><div class="input-wrap">${bilingual('cfg-dlg-name', draft.name)}</div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_description'))}</label><div class="input-wrap">${bilingual('cfg-dlg-description', draft.description)}</div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_shortProfileDescription'))}</label><div class="input-wrap">${bilingual('cfg-dlg-short', draft.shortProfileDescription)}</div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_whitelist'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_node'))}</label><div class="input-wrap"><select data-field="node">${nodeOptions(draft.node)}</select></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_masterLink'))}</label><div class="input-wrap"><input type="text" data-field="masterLink" spellcheck="false"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_json'))}</label><div class="input-wrap"><textarea class="config-json" data-field="json" spellcheck="false">{}</textarea></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_xhttpExtra'))}</label><div class="input-wrap"><textarea class="config-json" data-field="xhttpExtra" spellcheck="false">{}</textarea></div></div>
     ${fieldError('cfg-dialog-err')}
   </div>`;
 }
 
 function dialogPanel() {
   return `<div class="form-grid">
-    <div class="form-row"><label>key</label><div class="input-wrap"><input type="text" data-field="id" spellcheck="false"></div></div>
-    <div class="form-row"><label>name</label><div class="input-wrap"><input type="text" data-field="name"></div></div>
-    <div class="form-row"><label>address</label><div class="input-wrap"><input type="text" data-field="address" value="127.0.0.1" spellcheck="false"></div></div>
-    <div class="form-row"><label>uri</label><div class="input-wrap"><input type="text" data-field="uri" spellcheck="false"></div></div>
-    <div class="form-row"><label>port</label><div class="input-wrap"><input type="text" data-field="port" spellcheck="false"></div></div>
-    <div class="form-row"><label>token</label><div class="input-wrap">${passWrap('cfg-dlg-token', '')}</div></div>
-    <div class="form-row"><label>https</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="https"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
-    <div class="form-row"><label>whitelist</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
-    <div class="form-row"><label>mode</label><div class="input-wrap"><select data-field="mode"><option value="blacklist" selected>blacklist mode</option><option value="whitelist">whitelist mode</option></select></div></div>
-    <div class="form-row"><label>inbounds_list</label><div class="input-wrap">${rowList('cfg-dlg-inbounds', [], 'int')}</div></div>
-    <div class="form-row"><label>nginx_auth</label><div class="input-wrap" data-dialog-nested="nginx_auth"></div></div>
-    <div class="form-row"><label>inject_headers</label><div class="input-wrap" data-dialog-nested="inject_headers"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_key'))}</label><div class="input-wrap"><input type="text" data-field="id" spellcheck="false"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_name'))}</label><div class="input-wrap"><input type="text" data-field="name"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_address'))}</label><div class="input-wrap"><input type="text" data-field="address" value="127.0.0.1" spellcheck="false"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_uri'))}</label><div class="input-wrap"><input type="text" data-field="uri" spellcheck="false"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_port'))}</label><div class="input-wrap"><input type="text" data-field="port" spellcheck="false"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_token'))}</label><div class="input-wrap">${passWrap('cfg-dlg-token', '')}</div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_https'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="https"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_whitelist'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_mode'))}</label><div class="input-wrap"><select data-field="mode"><option value="blacklist" selected>${escapeHtml(t('config_blacklist_mode'))}</option><option value="whitelist">${escapeHtml(t('config_whitelist_mode'))}</option></select></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_inbounds_list'))}</label><div class="input-wrap">${rowList('cfg-dlg-inbounds', [], 'int')}</div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_nginx_auth'))}</label><div class="input-wrap" data-dialog-nested="nginx_auth"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_inject_headers'))}</label><div class="input-wrap" data-dialog-nested="inject_headers"></div></div>
     ${fieldError('cfg-dialog-err')}
   </div>`;
 }

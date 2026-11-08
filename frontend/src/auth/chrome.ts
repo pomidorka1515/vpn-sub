@@ -1,3 +1,4 @@
+import { sharedMessage } from '../shared/messages';
 import { readBootstrap } from '../shared/bootstrap';
 import { requiredElement } from '../shared/dom';
 import { createI18n } from '../shared/i18n';
@@ -26,12 +27,12 @@ export function initAuthChrome(doc: Document, location: Location, signal: AbortS
 
 export function input(doc: Document, id: string): HTMLInputElement {
   const element = requiredElement(doc, id);
-  if (!(element instanceof HTMLInputElement)) throw new Error(`Expected input #${id}`);
+  if (!(element instanceof HTMLInputElement)) throw new Error(sharedMessage('missing_element', { id }));
   return element;
 }
 
 export function button(doc: Document, id: string): HTMLButtonElement {
   const element = requiredElement(doc, id);
-  if (!(element instanceof HTMLButtonElement)) throw new Error(`Expected button #${id}`);
+  if (!(element instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id }));
   return element;
 }

@@ -1,3 +1,4 @@
+import { sharedMessage } from '../../shared/messages';
 import { withBusy } from '../../shared/busy';
 import { escapeHtml, loadingHtml as renderLoading } from '../../shared/dom';
 import type { AdminContext } from '../context';
@@ -26,12 +27,12 @@ const confirmDialog = (message: string, title: string) => context.confirm(messag
 export function initConfig(env: AdminContext, language: string): void { context = env; pageLanguage = language; disposed = false; generation++; cleanupCards = initCards(); }
 function required(id: string): HTMLElement {
   const result = document.getElementById(id);
-  if (!result) throw new Error(`Missing configuration element #${id}`);
+  if (!result) throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }
 function configButton(id: string): HTMLButtonElement {
   const result = required(id);
-  if (!(result instanceof HTMLButtonElement)) throw new Error(`Expected button #${id}`);
+  if (!(result instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }
 
@@ -156,8 +157,8 @@ export async function saveConfig() {
       }
       if (res.status !== 200 || res.success !== true) {
         showResult(safeServerMessage(res.msg), 'error');
-        if (String(res.msg || '').includes('profiles')) showConfigSection('inbounds');
-        else if (String(res.msg || '').includes('3xui')) showConfigSection('panels');
+        if (String(res.rawMsg || '').includes('profiles')) showConfigSection('inbounds');
+        else if (String(res.rawMsg || '').includes('3xui')) showConfigSection('panels');
         return;
       }
       if (Object.hasOwn(values, 'api_token')) {
@@ -177,8 +178,8 @@ export async function saveConfig() {
         window.location.href = location.pathname.replace(/\/+$/, '') + '/login';
         return;
       }
-      showResult(res.msg === 'Unchanged' ? t('config_unchanged') : t('config_saved_state'), 'ok');
-      if (res.msg === 'Unchanged') setRestartLine([]);
+      showResult(res.rawMsg === 'Unchanged' ? t('config_unchanged') : t('config_saved_state'), 'ok');
+      if (res.rawMsg === 'Unchanged') setRestartLine([]);
       else setRestartLine(Array.isArray(result.restart) ? result.restart.filter((value): value is string => typeof value === 'string') : []);
     } catch {
       if (!disposed && current === generation) showResult(t('network_err'), 'error');

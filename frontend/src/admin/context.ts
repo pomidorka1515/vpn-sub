@@ -1,3 +1,4 @@
+import { sharedMessage } from '../shared/messages';
 import type { ApiResult } from '../shared/api';
 import type { DialogOptions } from '../shared/dialogs';
 import type { Translate } from '../shared/formatting';
@@ -13,24 +14,24 @@ export interface AdminContext {
 
 export function element(doc: Document, id: string): HTMLElement {
   const result = doc.getElementById(id);
-  if (!result) throw new Error(`Missing admin element #${id}`);
+  if (!result) throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }
 
 export function input(doc: Document, id: string): HTMLInputElement | HTMLSelectElement {
   const result = element(doc, id);
-  if (!(result instanceof HTMLInputElement) && !(result instanceof HTMLSelectElement)) throw new Error(`Expected input #${id}`);
+  if (!(result instanceof HTMLInputElement) && !(result instanceof HTMLSelectElement)) throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }
 
 export function button(doc: Document, id: string): HTMLButtonElement {
   const result = element(doc, id);
-  if (!(result instanceof HTMLButtonElement)) throw new Error(`Expected button #${id}`);
+  if (!(result instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }
 
 export function checkbox(doc: Document, id: string): HTMLInputElement {
   const result = element(doc, id);
-  if (!(result instanceof HTMLInputElement) || result.type !== 'checkbox') throw new Error(`Expected checkbox #${id}`);
+  if (!(result instanceof HTMLInputElement) || result.type !== 'checkbox') throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }

@@ -1,3 +1,4 @@
+import { sharedMessage } from '../../shared/messages';
 import { fmtBytes as formatBytes, fmtUptime as formatUptime } from '../../shared/formatting';
 import type { Translate } from '../../shared/formatting';
 import { readSeries } from './series';
@@ -32,18 +33,18 @@ export function createChartRenderer(t: Translate, language: string) {
 const fmtBytes = (value: number): string => formatBytes(value, t);
 const fmtUptime = (value: number): string => formatUptime(value, t);
 
-const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
+const BYTE_UNITS = ['byte_unit', 'kb_unit', 'mb_unit', 'gb_unit', 'tb_unit'].map(t);
 
 function axisBytes(max: number): AxisScale {
-  if (!Number.isFinite(max) || max <= 0) return { div: 1, unit: 'B' };
+  if (!Number.isFinite(max) || max <= 0) return { div: 1, unit: t('byte_unit') };
   const i = Math.min(Math.floor(Math.log(max) / Math.log(1024)), BYTE_UNITS.length - 1);
-  return { div: 1024 ** i, unit: BYTE_UNITS[i] ?? 'B' };
+  return { div: 1024 ** i, unit: BYTE_UNITS[i] ?? t('byte_unit') };
 }
 
 function formatValue(value: number | null | undefined, unit: string, scale?: AxisScale | null): string {
   if (value == null || Number.isNaN(value)) return t('na');
   if (unit === 'bytes' || unit === 'bytes_per_s') {
-    const suffix = unit === 'bytes_per_s' ? '/s' : '';
+    const suffix = unit === 'bytes_per_s' ? t('per_second') : '';
     if (scale) {
       const scaled = value / scale.div;
       const digits = scale.div === 1 ? 0 : 1;
@@ -230,7 +231,7 @@ function makeChart(canvas: HTMLCanvasElement, chart: ChartSpec, datasets: Datase
     return ' ' + (ds?.label || '') + ': ' + formatValue(item.parsed.y, tipUnit, ds?.scale);
   };
   const constructor: unknown = Reflect.get(window, 'Chart');
-  if (typeof constructor !== 'function') throw new Error('Chart.js not loaded');
+  if (typeof constructor !== 'function') throw new Error(sharedMessage('chart_unavailable'));
   const Chart = constructor as ChartConstructor;
   return new Chart(canvas, {
     type: 'line',

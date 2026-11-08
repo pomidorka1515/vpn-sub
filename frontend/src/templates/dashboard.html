@@ -5,7 +5,7 @@
 <script src="{{ prefix }}/common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title data-t="page_title">Panel</title>
+<title data-t="page_title">{{ L['page_title'] }}</title>
 <link rel="stylesheet" href="{{ prefix }}/common.css?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ prefix }}/dashboard.css?v={{ asset_version }}">
 </head>
@@ -18,8 +18,8 @@
   </div>
   <div class="topbar-right">
     <div class="lang-toggle" data-t-aria="lang_selection">
-      <button class="lang-btn" data-lang="en" data-t-aria="lang_en">EN</button>
-      <button class="lang-btn" data-lang="ru" data-t-aria="lang_ru">RU</button>
+      <button class="lang-btn" data-lang="en" data-t-aria="lang_en" data-t="language_en">{{ L['language_en'] }}</button>
+      <button class="lang-btn" data-lang="ru" data-t-aria="lang_ru" data-t="language_ru">{{ L['language_ru'] }}</button>
     </div>
     <button class="theme-btn" id="themeBtn" data-t-title="toggle_theme"></button>
     <button class="btn-sm" id="btnProfiles" data-t="profiles"></button>

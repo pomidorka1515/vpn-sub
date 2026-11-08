@@ -1,3 +1,4 @@
+import { sharedMessage } from '../shared/messages';
 import { withBusy } from '../shared/busy';
 import { isRecord } from '../shared/json';
 import type { ApiConfig } from '../shared/api';
@@ -88,12 +89,12 @@ export function createAdminBootstrap(state: AdminState, deps: Dependencies) {
         if (!token) {
           const response = await request(path('/token'), { credentials: 'same-origin' });
           const data: unknown = await response.json();
-          if (!response.ok || !isRecord(data) || data.success !== true || !isRecord(data.obj) || typeof data.obj.token !== 'string' || !data.obj.token) throw new Error('Token unavailable');
+          if (!response.ok || !isRecord(data) || data.success !== true || !isRecord(data.obj) || typeof data.obj.token !== 'string' || !data.obj.token) throw new Error(sharedMessage('token_unavailable'));
           token = data.obj.token;
         }
         const response = await request(path('/logout'), { method: 'POST', credentials: 'same-origin', headers: { 'X-Admin-CSRF': token } });
         const data: unknown = await response.json().catch(() => null);
-        if (!response.ok || !isRecord(data) || data.success !== true) throw new Error('Logout failed');
+        if (!response.ok || !isRecord(data) || data.success !== true) throw new Error(sharedMessage('logout_unconfirmed'));
       } catch {
         try {
           const probe = await request(path('/token'), { credentials: 'same-origin', cache: 'no-store' });

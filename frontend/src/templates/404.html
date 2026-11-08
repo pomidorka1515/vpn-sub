@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
-<title>404 · Page not found</title>
+<title>{{ L.get('not_found_title', '') }}</title>
 <script src="{{ prefix | default('') }}/error.js?v={{ asset_version | default('') }}"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -57,11 +57,11 @@
 <body>
 <main>
   <div class="code">404</div>
-  <h1 id="heading">Page not found</h1>
-  <p id="description">This page may have moved, or the link is incorrect. Check the address and try again.</p>
+  <h1 id="heading">{{ L.get('not_found_heading', '') }}</h1>
+  <p id="description">{{ L.get('not_found_description', '') }}</p>
   <button type="button" id="back">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"/></svg>
-    <span id="backLabel">Go back</span>
+    <span id="backLabel">{{ L.get('go_back', '') }}</span>
   </button>
 </main>
 

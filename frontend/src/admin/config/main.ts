@@ -1,3 +1,4 @@
+import { sharedMessage } from '../../shared/messages';
 import { escapeHtml } from '../../shared/dom';
 import type { Translate } from '../../shared/formatting';
 import { initPassToggles } from '../../shared/passwords';
@@ -9,7 +10,7 @@ import { attr, restartIcon, fieldError, passWrap, readText, enhanceJsonInputs, r
 import { validateField, validateCard } from './validation';
 
 export function createMainEditor(markDirty: () => void, t: Translate) {
-  function draft(): ConfigObject { if (!editor.draft) throw new Error('Configuration not loaded'); return editor.draft; }
+  function draft(): ConfigObject { if (!editor.draft) throw new Error(sharedMessage('config_not_loaded')); return editor.draft; }
   function object(key: string): ConfigObject { const value = draft()[key]; return isPlainObject(value) ? value : {}; }
   function commitMainField(key: string): void {
     if (!editor.draft) return;
@@ -90,7 +91,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
     const optional = OPTIONAL_KEYS.includes(key);
     const restart = RESTART_KEYS.includes(key);
     const safeKey = key.replace('$', '');
-    const label = `<div class="config-box-label"><span>${escapeHtml(key)}</span>${restart ? restartIcon() : ''}</div>`;
+    const label = `<div class="config-box-label"><span>${escapeHtml(t('config_field_' + safeKey))}</span>${restart ? restartIcon() : ''}</div>`;
     const hint = `<div class="form-hint">${escapeHtml(t('config_hint_' + safeKey))}</div>`;
     let control = '';
     if (optional && !present) {
@@ -129,7 +130,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       control = ['discord', 'telegram'].map(platform => {
         const enabled = Object.hasOwn(obj, platform);
         const pair = Array.isArray(obj[platform]) ? obj[platform] : ['', ''];
-        return `<label class="config-sub">${platform}</label>
+        return `<label class="config-sub">${escapeHtml(t('config_field_' + platform))}</label>
           ${enabled ? ['en', 'ru'].map((lang, index) => `<label for="cfg-support-${platform}-${index}">${escapeHtml(t('config_' + lang))}</label>
             <textarea id="cfg-support-${platform}-${index}" spellcheck="false">${escapeHtml(pair[index] ?? '')}</textarea>`).join('') : `<div class="config-absent">${escapeHtml(t('config_not_set'))}</div>`}
           <button type="button" class="btn-tiny" data-support-platform="${platform}">${escapeHtml(t(enabled ? 'config_remove' : 'config_add'))}</button>`;
@@ -145,7 +146,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       : '';
     if (key === 'bypass_packages') {
       return `<div class="config-box" id="cfg-box-${safeKey}"><details class="config-box-collapse">
-        <summary class="config-box-label">${escapeHtml(key)}</summary>
+        <summary class="config-box-label">${escapeHtml(t('config_field_' + safeKey))}</summary>
         <div class="config-box-content">${hint}${control}</div>
       </details>${fieldError('cfg-err-' + safeKey)}</div>`;
     }

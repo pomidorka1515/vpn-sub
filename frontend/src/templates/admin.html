@@ -5,7 +5,7 @@
 <script src="{{ prefix }}/common.js?v={{ asset_version }}"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title data-t="page_title">Admin Panel</title>
+<title data-t="page_title">{{ L['page_title'] }}</title>
 <link rel="stylesheet" href="{{ prefix }}/common.css?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ prefix }}/vendor/codemirror-5.65.16.min.css?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ prefix }}/admin.css?v={{ asset_version }}">
@@ -16,18 +16,18 @@
 <div class="topbar">
   <div class="topbar-left">
     <div class="topbar-dot"></div>
-    <span class="topbar-name" data-t="page_title">Admin Panel</span>
+    <span class="topbar-name" data-t="page_title">{{ L['page_title'] }}</span>
   </div>
   <div class="topbar-right">
     <button class="theme-btn" id="themeBtn" data-t-title="toggle_theme"></button>
     <div class="lang-toggle" data-t-aria="lang_selection">
-      <button class="lang-btn" data-lang="en" data-t-aria="lang_en">EN</button>
-      <button class="lang-btn" data-lang="ru" data-t-aria="lang_ru">RU</button>
+      <button class="lang-btn" data-lang="en" data-t-aria="lang_en" data-t="language_en">{{ L['language_en'] }}</button>
+      <button class="lang-btn" data-lang="ru" data-t-aria="lang_ru" data-t="language_ru">{{ L['language_ru'] }}</button>
     </div>
-    <button class="btn-sm" data-tab="health" id="btnHealth" data-t="health" disabled>Health</button>
-    <button class="btn-sm success" data-tab="users" data-t="users" disabled>Users</button>
-    <button class="btn-sm success" data-tab="codes" data-t="codes" disabled>Codes</button>
-    <button class="btn-sm danger" id="btnLogout" data-t="logout">Log out</button>
+    <button class="btn-sm" data-tab="health" id="btnHealth" data-t="health" disabled>{{ L['health'] }}</button>
+    <button class="btn-sm success" data-tab="users" data-t="users" disabled>{{ L['users'] }}</button>
+    <button class="btn-sm success" data-tab="codes" data-t="codes" disabled>{{ L['codes'] }}</button>
+    <button class="btn-sm danger" id="btnLogout" data-t="logout">{{ L['logout'] }}</button>
   </div>
 </div>
 
@@ -35,111 +35,111 @@
   <div class="boot-overlay" id="bootOverlay"></div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="users" data-t="users">Users</button>
-    <button class="tab" data-tab="codes" data-t="codes">Codes</button>
-    <button class="tab" data-tab="logs" data-t="audit_logs">Audit Logs</button>
-    <button class="tab" data-tab="state" data-t="state">State</button>
-    <button class="tab" data-tab="snapshots" data-t="snapshots">Snapshots</button>
-    <button class="tab" data-tab="charts" data-t="charts">Charts</button>
-    <button class="tab" data-tab="health" data-t="health">Health</button>
-    <button class="tab" data-tab="leaderboard" data-t="leaderboard">Leaderboard</button>
-    <button class="tab" data-tab="config" data-t="config_tab">Config</button>
+    <button class="tab active" data-tab="users" data-t="users">{{ L['users'] }}</button>
+    <button class="tab" data-tab="codes" data-t="codes">{{ L['codes'] }}</button>
+    <button class="tab" data-tab="logs" data-t="audit_logs">{{ L['audit_logs'] }}</button>
+    <button class="tab" data-tab="state" data-t="state">{{ L['state'] }}</button>
+    <button class="tab" data-tab="snapshots" data-t="snapshots">{{ L['snapshots'] }}</button>
+    <button class="tab" data-tab="charts" data-t="charts">{{ L['charts'] }}</button>
+    <button class="tab" data-tab="health" data-t="health">{{ L['health'] }}</button>
+    <button class="tab" data-tab="leaderboard" data-t="leaderboard">{{ L['leaderboard'] }}</button>
+    <button class="tab" data-tab="config" data-t="config_tab">{{ L['config_tab'] }}</button>
   </div>
 
   <div id="tab-users" class="tab-content active">
     <div class="card">
-      <div class="card-title" data-t="user_list">User List</div>
+      <div class="card-title" data-t="user_list">{{ L['user_list'] }}</div>
       <div class="toolbar">
-        <button class="btn-secondary" id="btnLoadUsers" data-t="load_users">Load Users</button>
-        <button class="btn-secondary" id="btnShowAdd" data-t="add_user_btn">+ Add User</button>
+        <button class="btn-secondary" id="btnLoadUsers" data-t="load_users">{{ L['load_users'] }}</button>
+        <button class="btn-secondary" id="btnShowAdd" data-t="add_user_btn">{{ L['add_user_btn'] }}</button>
       </div>
       <div class="table-wrap" id="usersTableWrap">
-        <div class="table-empty" data-t="load_users_hint">Click "Load Users" to fetch user list</div>
+        <div class="table-empty" data-t="load_users_hint">{{ L['load_users_hint'] }}</div>
       </div>
     </div>
 
     <div class="card" id="addUserCard" style="display:none">
-      <div class="card-title" data-t="add_user">Add User</div>
+      <div class="card-title" data-t="add_user">{{ L['add_user'] }}</div>
       <div class="form-grid">
         <div class="form-row">
-          <label data-t="internal_user">Internal User</label>
+          <label data-t="internal_user">{{ L['internal_user'] }}</label>
           <div class="input-wrap">
             <input type="text" id="addUser" maxlength="32">
-            <span class="form-hint" data-t="internal_user_hint">Unique internal identifier</span>
+            <span class="form-hint" data-t="internal_user_hint">{{ L['internal_user_hint'] }}</span>
           </div>
         </div>
         <div class="form-row">
-          <label data-t="display_name">Display Name</label>
+          <label data-t="display_name">{{ L['display_name'] }}</label>
           <div class="input-wrap">
             <input type="text" id="addDisplayName" maxlength="32">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="ext_username">Ext Username</label>
+          <label data-t="ext_username">{{ L['ext_username'] }}</label>
           <div class="input-wrap">
             <input type="text" id="addExtUser" maxlength="32">
-            <span class="form-hint" data-t="ext_username_hint">Web UI login (optional)</span>
+            <span class="form-hint" data-t="ext_username_hint">{{ L['ext_username_hint'] }}</span>
           </div>
         </div>
         <div class="form-row">
-          <label data-t="ext_password">Ext Password</label>
+          <label data-t="ext_password">{{ L['ext_password'] }}</label>
           <div class="input-wrap">
             <input type="password" id="addExtPass" autocomplete="new-password">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="fingerprint">Fingerprint</label>
+          <label data-t="fingerprint">{{ L['fingerprint'] }}</label>
           <div class="input-wrap">
-            <input type="text" id="addFp" data-t-ph="fp_placeholder" placeholder="chrome">
+            <input type="text" id="addFp" data-t-ph="fp_placeholder" placeholder="{{ L['fp_placeholder'] }}">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="monthly_limit">Monthly Limit (GB)</label>
+          <label data-t="monthly_limit">{{ L['monthly_limit'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addLimit" value="0" min="0">
-            <span class="form-hint" data-t="limit_hint">0 = unlimited</span>
+            <span class="form-hint" data-t="limit_hint">{{ L['limit_hint'] }}</span>
           </div>
         </div>
         <div class="form-row">
-          <label data-t="wl_limit">WL Limit (GB)</label>
+          <label data-t="wl_limit">{{ L['wl_limit'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addWlLimit" value="5" min="0">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="expires">Expires</label>
+          <label data-t="expires">{{ L['expires'] }}</label>
           <div class="input-wrap">
             <input type="datetime-local" id="addExpiry">
-            <span class="form-hint" data-t="expires_hint">Empty = unlimited</span>
+            <span class="form-hint" data-t="expires_hint">{{ L['expires_hint'] }}</span>
           </div>
         </div>
         <div class="form-row">
-          <label data-t="custom_token">Custom Token</label>
+          <label data-t="custom_token">{{ L['custom_token'] }}</label>
           <div class="input-wrap">
-            <input type="text" id="addToken" data-t-ph="auto" placeholder="auto">
+            <input type="text" id="addToken" data-t-ph="auto" placeholder="{{ L['auto'] }}">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="custom_uuid">Custom UUID</label>
+          <label data-t="custom_uuid">{{ L['custom_uuid'] }}</label>
           <div class="input-wrap">
-            <input type="text" id="addUuid" data-t-ph="auto" placeholder="auto">
+            <input type="text" id="addUuid" data-t-ph="auto" placeholder="{{ L['auto'] }}">
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" id="btnDoAdd" data-t="create">Create</button>
-          <button class="btn-secondary" id="btnCancelAdd" data-t="cancel">Cancel</button>
+          <button class="btn btn-primary" id="btnDoAdd" data-t="create">{{ L['create'] }}</button>
+          <button class="btn-secondary" id="btnCancelAdd" data-t="cancel">{{ L['cancel'] }}</button>
         </div>
         <div class="result-box" id="addUserResult"></div>
       </div>
     </div>
 
     <div class="card" id="userDetailCard" style="display:none">
-      <div class="card-title" data-t="user_details">User Details</div>
+      <div class="card-title" data-t="user_details">{{ L['user_details'] }}</div>
       <div class="info-grid" id="userDetailInfo"></div>
       <div class="detail-actions">
-        <button class="btn-danger" id="btnDoReset" data-t="reset">Reset</button>
-        <button class="btn-danger" id="btnDoDelete" data-t="delete">Delete</button>
-        <button class="btn-secondary" id="btnCloseDetail" data-t="close">Close</button>
+        <button class="btn-danger" id="btnDoReset" data-t="reset">{{ L['reset'] }}</button>
+        <button class="btn-danger" id="btnDoDelete" data-t="delete">{{ L['delete'] }}</button>
+        <button class="btn-secondary" id="btnCloseDetail" data-t="close">{{ L['close'] }}</button>
       </div>
       <div class="result-box" id="userDetailResult"></div>
     </div>
@@ -147,73 +147,73 @@
 
   <div id="tab-codes" class="tab-content">
     <div class="card">
-      <div class="card-title" data-t="bonus_codes">Bonus Codes</div>
+      <div class="card-title" data-t="bonus_codes">{{ L['bonus_codes'] }}</div>
       <div class="toolbar">
-        <button class="btn-secondary" id="btnLoadCodes" data-t="load_codes">Load Codes</button>
-        <button class="btn-secondary" id="btnShowAddCode" data-t="add_code_btn">+ Add Code</button>
+        <button class="btn-secondary" id="btnLoadCodes" data-t="load_codes">{{ L['load_codes'] }}</button>
+        <button class="btn-secondary" id="btnShowAddCode" data-t="add_code_btn">{{ L['add_code_btn'] }}</button>
       </div>
       <div class="code-list" id="codeList">
-        <div class="table-empty" data-t="load_codes_hint">Click "Load Codes" to fetch codes</div>
+        <div class="table-empty" data-t="load_codes_hint">{{ L['load_codes_hint'] }}</div>
       </div>
     </div>
 
     <div class="card" id="addCodeCard" style="display:none">
-      <div class="card-title" data-t="add_code">Add Code</div>
+      <div class="card-title" data-t="add_code">{{ L['add_code'] }}</div>
       <div class="form-grid">
         <div class="form-row">
-          <label data-t="code">Code</label>
+          <label data-t="code">{{ L['code'] }}</label>
           <div class="input-wrap">
             <input type="text" id="addCode" maxlength="64" spellcheck="false" autocomplete="off">
-            <span class="form-hint" data-t="code_hint">Unique code string</span>
+            <span class="form-hint" data-t="code_hint">{{ L['code_hint'] }}</span>
           </div>
         </div>
         <div class="form-row">
-          <label data-t="action_type">Action Type</label>
+          <label data-t="action_type">{{ L['action_type'] }}</label>
           <div class="input-wrap">
             <select id="addAction">
-              <option value="bonus" data-t="bonus">Bonus</option>
-              <option value="register" data-t="register">Register</option>
+              <option value="bonus" data-t="bonus">{{ L['bonus'] }}</option>
+              <option value="register" data-t="register">{{ L['register'] }}</option>
             </select>
           </div>
         </div>
         <div class="form-row">
-          <label data-t="days">Days</label>
+          <label data-t="days">{{ L['days'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addDays" value="0" min="0">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="gb">GB</label>
+          <label data-t="gb">{{ L['gb'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addGb" value="0" min="0">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="wl_gb">WL GB</label>
+          <label data-t="wl_gb">{{ L['wl_gb'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addWlGb" value="0" min="0">
           </div>
         </div>
         <div class="form-row">
-          <label data-t="reusable">Reusable</label>
+          <label data-t="reusable">{{ L['reusable'] }}</label>
           <div class="input-wrap">
             <label class="dark-check">
               <input type="checkbox" id="addPerma">
               <div class="check-track"><div class="check-thumb"></div></div>
-              <span class="check-label" data-t="reusable_label">Unlimited uses</span>
+              <span class="check-label" data-t="reusable_label">{{ L['reusable_label'] }}</span>
             </label>
           </div>
         </div>
         <div class="form-row" id="addUsesRow">
-          <label data-t="uses">Uses</label>
+          <label data-t="uses">{{ L['uses'] }}</label>
           <div class="input-wrap">
             <input type="number" id="addUses" value="1" min="1">
-            <span class="form-hint" data-t="uses_hint">Ignored if reusable</span>
+            <span class="form-hint" data-t="uses_hint">{{ L['uses_hint'] }}</span>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" id="btnDoAddCode" data-t="create">Create</button>
-          <button class="btn-secondary" id="btnCancelAddCode" data-t="cancel">Cancel</button>
+          <button class="btn btn-primary" id="btnDoAddCode" data-t="create">{{ L['create'] }}</button>
+          <button class="btn-secondary" id="btnCancelAddCode" data-t="cancel">{{ L['cancel'] }}</button>
         </div>
         <div class="result-box" id="addCodeResult" style="display:none"></div>
       </div>
@@ -222,41 +222,41 @@
 
   <div id="tab-logs" class="tab-content">
     <div class="card">
-      <div class="card-title" data-t="audit_logs">Audit Logs</div>
+      <div class="card-title" data-t="audit_logs">{{ L['audit_logs'] }}</div>
       <div class="toolbar">
         <div class="toolbar-field">
           <input type="number" id="logCount" value="50" min="1" class="dark-num-input">
-          <span style="font-size:0.75rem;color:var(--text2)" data-t="log_count_label">rows</span>
+          <span style="font-size:0.75rem;color:var(--text2)" data-t="log_count_label">{{ L['log_count_label'] }}</span>
         </div>
-        <button class="btn-secondary" id="btnLoadLogs" data-t="load_logs">Load Logs</button>
-        <button class="btn-secondary" id="btnRefreshLogs" data-t="refresh">Refresh</button>
+        <button class="btn-secondary" id="btnLoadLogs" data-t="load_logs">{{ L['load_logs'] }}</button>
+        <button class="btn-secondary" id="btnRefreshLogs" data-t="refresh">{{ L['refresh'] }}</button>
       </div>
       <div class="table-wrap" id="logsTableWrap">
-        <div class="table-empty" data-t="load_logs_hint">Click "Load Logs" to fetch audit logs</div>
+        <div class="table-empty" data-t="load_logs_hint">{{ L['load_logs_hint'] }}</div>
       </div>
     </div>
   </div>
 
   <div id="tab-state" class="tab-content">
     <div class="card">
-      <div class="card-title" data-t="panel_status">Panel Status</div>
+      <div class="card-title" data-t="panel_status">{{ L['panel_status'] }}</div>
       <div class="form-row">
-        <label data-t="panel_name">Panel Name</label>
+        <label data-t="panel_name">{{ L['panel_name'] }}</label>
         <div class="input-wrap">
-          <input type="text" id="panelName" data-t-ph="optional" placeholder="optional">
-          <span class="form-hint" data-t="panel_name_hint">Leave empty for all panels</span>
+          <input type="text" id="panelName" data-t-ph="optional" placeholder="{{ L['optional'] }}">
+          <span class="form-hint" data-t="panel_name_hint">{{ L['panel_name_hint'] }}</span>
         </div>
       </div>
       <div style="margin-top:12px">
-        <button class="btn-secondary" id="btnPanelStatus" data-t="check_panel_status">Check Panel Status</button>
+        <button class="btn-secondary" id="btnPanelStatus" data-t="check_panel_status">{{ L['check_panel_status'] }}</button>
       </div>
       <div class="result-box" id="panelStatusResult"></div>
     </div>
 
     <div class="card">
-      <div class="card-title" data-t="host_system_status">Host System Status</div>
+      <div class="card-title" data-t="host_system_status">{{ L['host_system_status'] }}</div>
       <div style="margin-top:4px">
-        <button class="btn-secondary" id="btnSystemStatus" data-t="load_system_status">Load System Status</button>
+        <button class="btn-secondary" id="btnSystemStatus" data-t="load_system_status">{{ L['load_system_status'] }}</button>
       </div>
       <div class="result-box" id="systemStatusResult"></div>
     </div>
@@ -264,16 +264,16 @@
 
   <div id="tab-snapshots" class="tab-content">
     <div class="card">
-      <div class="card-title" data-t="snapshots">Snapshots</div>
+      <div class="card-title" data-t="snapshots">{{ L['snapshots'] }}</div>
       <div class="toolbar">
         <div class="toolbar-field">
-          <span style="font-size:0.75rem;color:var(--text2)" data-t="cutoff_days">Cutoff (days)</span>
+          <span style="font-size:0.75rem;color:var(--text2)" data-t="cutoff_days">{{ L['cutoff_days'] }}</span>
           <input type="number" id="snapCutoff" value="7" min="1" class="dark-num-input">
         </div>
-        <button class="btn-secondary" id="btnLoadSnapshots" data-t="load_snapshots">Load Snapshots</button>
+        <button class="btn-secondary" id="btnLoadSnapshots" data-t="load_snapshots">{{ L['load_snapshots'] }}</button>
       </div>
       <div id="snapshotsList">
-        <div class="table-empty" data-t="load_snapshots_hint">Configure cutoff and click "Load Snapshots"</div>
+        <div class="table-empty" data-t="load_snapshots_hint">{{ L['load_snapshots_hint'] }}</div>
       </div>
     </div>
   </div>
@@ -283,26 +283,26 @@
       <div class="charts-controls">
         <div class="charts-switch-row">
           <div class="charts-switch" id="chartsMode" role="group" data-t-aria="chart_mode_aria">
-            <button type="button" class="charts-switch-btn active" data-mode="snapshot" aria-pressed="true" data-t="snapshot_mode">Snapshot</button>
-            <button type="button" class="charts-switch-btn" data-mode="live" aria-pressed="false" data-t="live_mode">Live</button>
+            <button type="button" class="charts-switch-btn active" data-mode="snapshot" aria-pressed="true" data-t="snapshot_mode">{{ L['snapshot_mode'] }}</button>
+            <button type="button" class="charts-switch-btn" data-mode="live" aria-pressed="false" data-t="live_mode">{{ L['live_mode'] }}</button>
           </div>
           <div class="charts-field" id="chartsCutoffField">
-            <label for="chartsCutoff" data-t="cutoff_days">Cutoff (days)</label>
-            <input type="number" id="chartsCutoff" value="7" min="1" step="1" inputmode="numeric" class="dark-num-input" data-t-aria="cutoff_days" data-t-ph="cutoff_days" placeholder="Cutoff (days)">
+            <label for="chartsCutoff" data-t="cutoff_days">{{ L['cutoff_days'] }}</label>
+            <input type="number" id="chartsCutoff" value="7" min="1" step="1" inputmode="numeric" class="dark-num-input" data-t-aria="cutoff_days" data-t-ph="cutoff_days" placeholder="{{ L['cutoff_days'] }}">
           </div>
           <div class="charts-field charts-delay" id="chartsDelayField" hidden>
-            <label for="chartsDelay" data-t="poll_delay">Poll delay</label>
+            <label for="chartsDelay" data-t="poll_delay">{{ L['poll_delay'] }}</label>
             <input type="range" id="chartsDelay" min="1" max="10" step="0.1" value="2" data-t-aria="poll_delay_aria">
-            <span class="charts-readout"><span id="chartsDelayValue">2.0</span><span data-t="seconds_suffix">s</span></span>
+            <span class="charts-readout"><span id="chartsDelayValue">2.0</span><span data-t="seconds_suffix">{{ L['seconds_suffix'] }}</span></span>
           </div>
         </div>
         <div class="charts-switch" id="chartsScope" role="group" data-t-aria="chart_scope_aria">
-          <button type="button" class="charts-switch-btn active" data-scope="host" aria-pressed="true" data-t="main_system">Main system</button>
+          <button type="button" class="charts-switch-btn active" data-scope="host" aria-pressed="true" data-t="main_system">{{ L['main_system'] }}</button>
         </div>
         <div class="charts-switch" id="chartsGroup" role="group" data-t-aria="chart_group_aria">
-          <button type="button" class="charts-switch-btn active" data-group="general" aria-pressed="true" data-t="group_general">General</button>
-          <button type="button" class="charts-switch-btn" data-group="network" aria-pressed="false" data-t="network">Network</button>
-          <button type="button" class="charts-switch-btn" data-group="uptime" aria-pressed="false" data-t="uptime_app">Uptime &amp; App</button>
+          <button type="button" class="charts-switch-btn active" data-group="general" aria-pressed="true" data-t="group_general">{{ L['group_general'] }}</button>
+          <button type="button" class="charts-switch-btn" data-group="network" aria-pressed="false" data-t="network">{{ L['network'] }}</button>
+          <button type="button" class="charts-switch-btn" data-group="uptime" aria-pressed="false" data-t="uptime_app">{{ L['uptime_app'] }}</button>
         </div>
       </div>
       <div class="charts-status" id="chartsStatus" hidden></div>
@@ -312,77 +312,77 @@
 
   <div id="tab-health" class="tab-content">
     <div class="card">
-      <div class="card-title" data-t="operations_recovery">Operational Recovery</div>
+      <div class="card-title" data-t="operations_recovery">{{ L['operations_recovery'] }}</div>
       <div class="toolbar">
-        <button class="btn-secondary" id="btnLoadOperations" data-t="load_operations">Load Status</button>
+        <button class="btn-secondary" id="btnLoadOperations" data-t="load_operations">{{ L['load_operations'] }}</button>
       </div>
       <div class="table-wrap" id="operationsStatusWrap">
-        <div class="table-empty" data-t="load_operations_hint">Load status to check recovery markers</div>
+        <div class="table-empty" data-t="load_operations_hint">{{ L['load_operations_hint'] }}</div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title" data-t="health_status">Health Status</div>
+      <div class="card-title" data-t="health_status">{{ L['health_status'] }}</div>
       <div class="health-indicator" id="healthIndicator">
         <div class="health-dot" id="healthDot"></div>
         <span id="healthText"></span>
       </div>
       <div id="healthDetails" style="display:none;margin-top:12px"></div>
       <div style="margin-top:20px">
-        <button class="btn-secondary" id="btnRunHealth" data-t="check_health">Check Health</button>
+        <button class="btn-secondary" id="btnRunHealth" data-t="check_health">{{ L['check_health'] }}</button>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title" data-t="online_users">Online Users</div>
+      <div class="card-title" data-t="online_users">{{ L['online_users'] }}</div>
       <div class="toolbar">
-        <button class="btn-secondary" id="btnLoadOnline" data-t="load_online">Load Online</button>
+        <button class="btn-secondary" id="btnLoadOnline" data-t="load_online">{{ L['load_online'] }}</button>
         <label class="dark-check">
           <input type="checkbox" id="onlineKeyed">
           <div class="check-track"><div class="check-thumb"></div></div>
-          <span class="check-label" data-t="keyed">Keyed output</span>
+          <span class="check-label" data-t="keyed">{{ L['keyed'] }}</span>
         </label>
       </div>
       <div class="table-wrap" id="onlineUsersWrap">
-        <div class="table-empty" data-t="load_online_hint">Click "Load Online" to fetch online users</div>
+        <div class="table-empty" data-t="load_online_hint">{{ L['load_online_hint'] }}</div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title" data-t="refresh_users">Refresh All Users</div>
-      <p style="font-size:0.8125rem;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">This syncs all users to all panels. May take time.</p>
-      <button class="btn-secondary" id="btnDoRefresh" data-t="refresh_users_btn">Refresh Users</button>
+      <div class="card-title" data-t="refresh_users">{{ L['refresh_users'] }}</div>
+      <p style="font-size:0.8125rem;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">{{ L['refresh_warning'] }}</p>
+      <button class="btn-secondary" id="btnDoRefresh" data-t="refresh_users_btn">{{ L['refresh_users_btn'] }}</button>
       <div class="result-box" id="refreshResult"></div>
     </div>
 
     <div class="card">
-      <div class="card-title" data-t="teapot_title">Teapot Status</div>
+      <div class="card-title" data-t="teapot_title">{{ L['teapot_title'] }}</div>
       <div class="teapot-box">
         <div class="teapot-icon">🍵</div>
         <div class="teapot-text" id="teapotStatus"></div>
-        <div class="teapot-sub" data-t="teapot_sub">Spoiler: it cannot.</div>
+        <div class="teapot-sub" data-t="teapot_sub">{{ L['teapot_sub'] }}</div>
       </div>
       <div style="text-align:center;margin-top:20px">
-        <button class="btn-secondary" id="btnTeapot" data-t="check_teapot">Check Teapot</button>
+        <button class="btn-secondary" id="btnTeapot" data-t="check_teapot">{{ L['check_teapot'] }}</button>
       </div>
     </div>
   </div>
 
   <div id="tab-leaderboard" class="tab-content">
     <div class="card">
-      <div class="card-title" data-t="leaderboard">Leaderboard</div>
+      <div class="card-title" data-t="leaderboard">{{ L['leaderboard'] }}</div>
       <div class="config-bar" style="gap:10px;align-items:flex-end;margin-bottom:16px">
         <div class="config-row lb-type">
-          <label data-t="bw_type">Type</label>
+          <label data-t="bw_type">{{ L['bw_type'] }}</label>
           <select id="lbType">
-            <option value="total" data-t="lb_total">Total (All-time)</option>
-            <option value="monthly" data-t="lb_monthly">Monthly</option>
-            <option value="wl_monthly" data-t="lb_wl_monthly">WL Monthly</option>
+            <option value="total" data-t="lb_total">{{ L['lb_total'] }}</option>
+            <option value="monthly" data-t="lb_monthly">{{ L['lb_monthly'] }}</option>
+            <option value="wl_monthly" data-t="lb_wl_monthly">{{ L['lb_wl_monthly'] }}</option>
           </select>
         </div>
         <div class="config-row lb-cutoff">
-          <label data-t="cutoff">Cutoff</label>
-          <input type="number" id="lbCutoff" data-t-ph="cutoff_all" placeholder="0 = all" min="0">
+          <label data-t="cutoff">{{ L['cutoff'] }}</label>
+          <input type="number" id="lbCutoff" data-t-ph="cutoff_all" placeholder="{{ L['cutoff_all'] }}" min="0">
         </div>
         <div class="config-row lb-flags">
           <label>&nbsp;</label>
@@ -390,30 +390,30 @@
             <label class="dark-check">
               <input type="checkbox" id="lbDisplaynames">
               <div class="check-track"><div class="check-thumb"></div></div>
-              <span class="check-label" data-t="displaynames">Displaynames</span>
+              <span class="check-label" data-t="displaynames">{{ L['displaynames'] }}</span>
             </label>
             <label class="dark-check">
               <input type="checkbox" id="lbFlip">
               <div class="check-track"><div class="check-thumb"></div></div>
-              <span class="check-label" data-t="ascending">Ascending</span>
+              <span class="check-label" data-t="ascending">{{ L['ascending'] }}</span>
             </label>
           </div>
         </div>
-        <button class="btn btn-primary" style="padding:10px 20px" id="btnFetchLb" data-t="fetch">Fetch</button>
+        <button class="btn btn-primary" style="padding:10px 20px" id="btnFetchLb" data-t="fetch">{{ L['fetch'] }}</button>
       </div>
       <div class="table-wrap" id="lbTableWrap">
-        <div class="table-empty" data-t="lb_hint">Configure options and click "Fetch"</div>
+        <div class="table-empty" data-t="lb_hint">{{ L['lb_hint'] }}</div>
       </div>
     </div>
   </div>
 
   <div id="tab-config" class="tab-content">
-    <div class="config-banner" data-t="config_restart_banner">Some fields apply only after a restart. Restart is manual. This page does not restart the service.</div>
+    <div class="config-banner" data-t="config_restart_banner">{{ L['config_restart_banner'] }}</div>
     <div class="config-banner config-restart-saved" id="configRestartSaved" hidden></div>
     <div class="config-tabs" role="tablist">
-      <button type="button" class="config-tab active" data-section="main" data-t="config_main">Main</button>
-      <button type="button" class="config-tab" data-section="inbounds" data-t="config_inbounds">Inbounds</button>
-      <button type="button" class="config-tab" data-section="panels"><span data-t="config_panels">Panels</span> <span class="config-restart-wrap"><span class="config-restart-icon" tabindex="0" data-t-aria="config_restart_tip" aria-label="Requires a restart">!</span><span class="config-restart-tooltip" role="tooltip" data-t="config_restart_tip">Requires a restart</span></span></button>
+      <button type="button" class="config-tab active" data-section="main" data-t="config_main">{{ L['config_main'] }}</button>
+      <button type="button" class="config-tab" data-section="inbounds" data-t="config_inbounds">{{ L['config_inbounds'] }}</button>
+      <button type="button" class="config-tab" data-section="panels"><span data-t="config_panels">{{ L['config_panels'] }}</span> <span class="config-restart-wrap"><span class="config-restart-icon" tabindex="0" data-t-aria="config_restart_tip" aria-label="{{ L['config_restart_tip'] }}">!</span><span class="config-restart-tooltip" role="tooltip" data-t="config_restart_tip">{{ L['config_restart_tip'] }}</span></span></button>
     </div>
     <div id="configLoad" class="config-load" hidden></div>
     <div id="configEditor" hidden>
@@ -421,10 +421,10 @@
       <div id="config-pane-inbounds" class="config-pane"></div>
       <div id="config-pane-panels" class="config-pane"></div>
       <div class="config-savebar">
-        <span class="config-dirty" id="configDirty" data-t="config_saved_state">Saved</span>
+        <span class="config-dirty" id="configDirty" data-t="config_saved_state">{{ L['config_saved_state'] }}</span>
         <div class="config-savebar-actions">
-          <button type="button" class="btn btn-primary" id="configSave" data-t="config_save" disabled>Save</button>
-          <button type="button" class="btn btn-secondary" id="configReload" data-t="config_reload">Reload</button>
+          <button type="button" class="btn btn-primary" id="configSave" data-t="config_save" disabled>{{ L['config_save'] }}</button>
+          <button type="button" class="btn btn-secondary" id="configReload" data-t="config_reload">{{ L['config_reload'] }}</button>
         </div>
         <div class="config-result" id="configResult"></div>
       </div>
@@ -435,12 +435,12 @@
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal danger">
-    <div class="modal-title" id="modalTitle" data-t="confirm">Confirm</div>
+    <div class="modal-title" id="modalTitle" data-t="confirm">{{ L['confirm'] }}</div>
     <div class="modal-msg" id="modalMsg"></div>
     <input type="text" id="modalInput" class="modal-input" style="display:none" autocomplete="off">
     <div class="modal-actions">
-      <button class="modal-btn" id="modalCancel" data-t="cancel">Cancel</button>
-      <button class="modal-btn danger" id="modalOk" data-t="confirm">Confirm</button>
+      <button class="modal-btn" id="modalCancel" data-t="cancel">{{ L['cancel'] }}</button>
+      <button class="modal-btn danger" id="modalOk" data-t="confirm">{{ L['confirm'] }}</button>
     </div>
   </div>
 </div>
@@ -450,8 +450,8 @@
     <div class="modal-title" id="configEditorTitle"></div>
     <div class="config-editor-body" id="configEditorBody"></div>
     <div class="modal-actions">
-      <button type="button" class="modal-btn" id="configEditorCancel" data-t="cancel">Cancel</button>
-      <button type="button" class="modal-btn" id="configEditorOk" data-t="create">Create</button>
+      <button type="button" class="modal-btn" id="configEditorCancel" data-t="cancel">{{ L['cancel'] }}</button>
+      <button type="button" class="modal-btn" id="configEditorOk" data-t="create">{{ L['create'] }}</button>
     </div>
   </div>
 </div>

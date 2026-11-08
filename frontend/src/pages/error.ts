@@ -1,5 +1,6 @@
 import { requiredElement } from '../shared/dom';
 import { safeStorage } from '../shared/storage';
+import { sharedMessage } from '../shared/messages';
 
 export function initError(doc: Document = document, browserHistory: History = history, browserNavigator: Navigator = navigator): () => void {
   const controller = new AbortController();
@@ -9,15 +10,15 @@ export function initError(doc: Document = document, browserHistory: History = hi
   if (storage.getItem('theme') === 'light') doc.documentElement.dataset.theme = 'light';
   function render(): void {
     const supported = (value: string | null): value is 'en' | 'ru' => value === 'en' || value === 'ru';
+    const requested = new URLSearchParams(doc.location?.search).get('lang');
     const stored = [storage.getItem('lang'), storage.getItem('admin_lang')].find(supported);
-    const lang = stored || (browserNavigator.languages || [browserNavigator.language]).map(value => value.split('-')[0]?.toLowerCase() ?? '').find(supported) || 'en';
+    const server = supported(doc.documentElement.lang) ? doc.documentElement.lang : undefined;
+    const lang = (supported(requested) ? requested : undefined) || stored || server || (browserNavigator.languages || [browserNavigator.language]).map(value => value.split('-')[0]?.toLowerCase() ?? '').find(supported) || 'en';
     doc.documentElement.lang = lang;
-    if (lang === 'ru') {
-      doc.title = '404 · Страница не найдена';
-      requiredElement(doc, 'heading').textContent = 'Страница не найдена';
-      requiredElement(doc, 'description').textContent = 'Возможно, страница переехала или в ссылке ошибка. Проверьте адрес и попробуйте снова.';
-      requiredElement(doc, 'backLabel').textContent = 'Вернуться назад';
-    }
+    doc.title = sharedMessage('not_found_title', {}, lang);
+    requiredElement(doc, 'heading').textContent = sharedMessage('not_found_heading', {}, lang);
+    requiredElement(doc, 'description').textContent = sharedMessage('not_found_description', {}, lang);
+    requiredElement(doc, 'backLabel').textContent = sharedMessage('go_back', {}, lang);
     const back = requiredElement(doc, 'back');
     if (browserHistory.length > 1) back.addEventListener('click', () => browserHistory.back(), { signal });
     else back.hidden = true;

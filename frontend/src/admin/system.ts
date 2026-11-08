@@ -85,7 +85,7 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
   const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
   const cpuName = s.cpu_info?.name || t('na');
   const cpuCores = s.cpu_info?.cores ?? t('na');
-  const cpuSpeed = s.cpu_info?.mhz_max ? Math.round(s.cpu_info.mhz_max) + ' MHz' : t('na');
+  const cpuSpeed = s.cpu_info?.mhz_max ? Math.round(s.cpu_info.mhz_max) + ' ' + t('mhz_unit') : t('na');
   const loads = s.loadavg
     ? [s.loadavg.load_1m, s.loadavg.load_5m, s.loadavg.load_15m].map(l => (l ?? 0).toFixed(2)).join(', ')
     : t('na');

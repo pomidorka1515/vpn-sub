@@ -1,3 +1,4 @@
+import { sharedMessage } from '../../shared/messages';
 import { isRecord } from '../../shared/json';
 import type { AdminContext } from '../context';
 import { chartsFor } from './spec';
@@ -64,7 +65,7 @@ function ensureChartJs(): Promise<void> {
     script.onerror = () => {
       chartJsPromise = null;
       script.remove();
-      reject(new Error('Chart.js not loaded'));
+      reject(new Error(sharedMessage('chart_unavailable')));
     };
     doc.head.appendChild(script);
   });
@@ -301,7 +302,7 @@ async function pollLive() {
     }
     if (!response.ok || !response.body ||
         !response.headers.get('Content-Type')?.includes('text/event-stream')) {
-      throw new Error('Live stream unavailable');
+      throw new Error(sharedMessage('stream_unavailable'));
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -309,7 +310,7 @@ async function pollLive() {
     try {
       while (true) {
         const { value, done } = await reader.read();
-        if (done) throw new Error('Live stream closed');
+        if (done) throw new Error(sharedMessage('stream_closed'));
         if (controller !== state.stream || gen !== state.gen) return;
         buffer += decoder.decode(value, { stream: true });
         let end;

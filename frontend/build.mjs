@@ -4,6 +4,7 @@ import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { esbuildLang } from "./lang-plugin.ts";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const source = join(root, "src");
@@ -83,6 +84,7 @@ async function rebuild() {
     await build({
       absWorkingDir: root,
       entryPoints,
+      plugins: [esbuildLang],
       outdir: join(output, "assets"),
       bundle: true,
       splitting: false,
@@ -146,6 +148,7 @@ if (!watching) {
   const watchers = [
     watch(source, { recursive: true }, schedule),
     watch(join(root, "tsconfig.json"), schedule),
+    watch(join(root, "../lang.jsonc"), schedule),
   ];
   function stop(code) {
     clearTimeout(timer);

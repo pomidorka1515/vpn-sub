@@ -1,10 +1,11 @@
+import { sharedMessage } from '../../shared/messages';
 import type { Translate } from '../../shared/formatting';
 import { createJsonEditors } from './json-editor';
 
 let active: ReturnType<typeof createJsonEditors> | undefined;
 
 export function initJsonEditors(doc: Document, url: string, translate: Translate): () => void {
-  if (active) throw new Error('JSON editors already initialized');
+  if (active) throw new Error(sharedMessage('editors_initialized'));
   const editors = createJsonEditors(doc, url, translate);
   active = editors;
   return () => { if (active === editors) active = undefined; editors.dispose(); };

@@ -50,7 +50,7 @@ export function enhanceJsonInputs(root: HTMLElement): void {
   root.querySelectorAll<HTMLTextAreaElement>('textarea.config-json').forEach(textarea => { void mountJsonEditor(textarea, {
     parse: parseConfigJson,
     format: text => stringifyConfig(parseConfigJson(text), true),
-    label: textarea.dataset.field || 'json_template',
+    label: t('config_field_' + (textarea.dataset.field || 'json_template')),
   }); });
 }
 

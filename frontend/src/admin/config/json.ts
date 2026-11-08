@@ -1,3 +1,5 @@
+import { sharedMessage } from '../../shared/messages';
+
 // Preserve Python's integer/float distinction and integers beyond JS's safe range.
 export class ConfigNumber {
   constructor(readonly raw: string) {}
@@ -18,25 +20,25 @@ export function parseConfigJson(text: string): ConfigValue {
     if (text[pos] === '"') {
       pos++;
       while (pos < text.length) {
-        if (text.charCodeAt(pos) < 32) throw new SyntaxError('Invalid JSON string');
+        if (text.charCodeAt(pos) < 32) throw new SyntaxError(sharedMessage('json_string'));
         if (text[pos] === '\\') {
           pos++;
           if (text[pos] === 'u') {
             pos++;
             for (let digit = 0; digit < 4; digit++, pos++) {
-              if (!/[0-9a-fA-F]/.test(text.charAt(pos))) throw new SyntaxError('Invalid JSON escape');
+              if (!/[0-9a-fA-F]/.test(text.charAt(pos))) throw new SyntaxError(sharedMessage('json_escape'));
             }
           } else {
-            if (!['"', '\\', '/', 'b', 'f', 'n', 'r', 't'].includes(text.charAt(pos))) throw new SyntaxError('Invalid JSON escape');
+            if (!['"', '\\', '/', 'b', 'f', 'n', 'r', 't'].includes(text.charAt(pos))) throw new SyntaxError(sharedMessage('json_escape'));
             pos++;
           }
         } else if (text[pos++] === '"') {
           const parsed: unknown = JSON.parse(text.slice(start, pos));
-          if (typeof parsed !== 'string') throw new SyntaxError('Invalid JSON string');
+          if (typeof parsed !== 'string') throw new SyntaxError(sharedMessage('json_string'));
           return parsed;
         }
       }
-      throw new SyntaxError('Invalid JSON');
+      throw new SyntaxError(sharedMessage('json_invalid'));
     }
     if (text[pos] === '{') {
       pos++;
@@ -47,17 +49,17 @@ export function parseConfigJson(text: string): ConfigValue {
       if (text[pos] === '}') { pos++; return result; }
       while (true) {
         whitespace();
-        if (text[pos] !== '"') throw new SyntaxError('Invalid JSON');
+        if (text[pos] !== '"') throw new SyntaxError(sharedMessage('json_invalid'));
         const key = value();
-        if (typeof key !== 'string') throw new SyntaxError('Invalid JSON');
+        if (typeof key !== 'string') throw new SyntaxError(sharedMessage('json_invalid'));
         whitespace();
-        if (text[pos] !== ':') throw new SyntaxError('Invalid JSON');
+        if (text[pos] !== ':') throw new SyntaxError(sharedMessage('json_invalid'));
         pos++;
         if (!Object.hasOwn(result, key)) keys.push(key);
         result[key] = value();
         whitespace();
         if (text[pos] === '}') { pos++; return result; }
-        if (text[pos] !== ',') throw new SyntaxError('Invalid JSON');
+        if (text[pos] !== ',') throw new SyntaxError(sharedMessage('json_invalid'));
         pos++;
       }
     }
@@ -70,7 +72,7 @@ export function parseConfigJson(text: string): ConfigValue {
         result.push(value());
         whitespace();
         if (text[pos] === ']') { pos++; return result; }
-        if (text[pos] !== ',') throw new SyntaxError('Invalid JSON');
+        if (text[pos] !== ',') throw new SyntaxError(sharedMessage('json_invalid'));
         pos++;
       }
     }
@@ -78,15 +80,15 @@ export function parseConfigJson(text: string): ConfigValue {
       if (text.startsWith(token, pos)) { pos += token.length; return result; }
     }
     const number = text.slice(pos).match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/)?.[0];
-    if (!number) throw new SyntaxError('Invalid JSON');
-    if (/[.eE]/.test(number) && !Number.isFinite(Number(number))) throw new SyntaxError('Non-finite JSON number');
+    if (!number) throw new SyntaxError(sharedMessage('json_invalid'));
+    if (/[.eE]/.test(number) && !Number.isFinite(Number(number))) throw new SyntaxError(sharedMessage('json_number'));
     pos += number.length;
     return new ConfigNumber(number);
   };
   try {
     const result = value();
     whitespace();
-    if (pos !== text.length) throw new SyntaxError('Invalid JSON');
+    if (pos !== text.length) throw new SyntaxError(sharedMessage('json_invalid'));
     return result;
   } catch (error) {
     if (error instanceof Error) Object.assign(error, { position: Math.min(pos, text.length) });

@@ -23,8 +23,8 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
       else { dot.className = 'health-dot err'; text.textContent = res?.msg || t('health_err'); text.style.color = 'var(--red)'; }
       if (!obj) return;
       const memory = isRecord(obj.memory) ? obj.memory : {};
-      const ram = typeof memory.ram === 'number' && Number.isFinite(memory.ram) ? memory.ram.toFixed(2) + ' MB' : t('na');
-      const swap = typeof memory.swap === 'number' && Number.isFinite(memory.swap) ? memory.swap.toFixed(2) + ' MB' : t('na');
+      const ram = typeof memory.ram === 'number' && Number.isFinite(memory.ram) ? memory.ram.toFixed(2) + ' ' + t('mb_unit') : t('na');
+      const swap = typeof memory.swap === 'number' && Number.isFinite(memory.swap) ? memory.swap.toFixed(2) + ' ' + t('mb_unit') : t('na');
       const details = element(doc, 'healthDetails');
       details.style.display = '';
       details.innerHTML = `<div class="panel-grid" style="padding-top:0"><div class="panel-section">${row(t('db'), obj.db ? t('yes') : t('no'), obj.db ? 'ok' : 'err')}${row(t('degraded'), obj.degraded ? t('yes') : t('no'), obj.degraded ? 'warn' : 'ok')}${row(t('app_uptime'), fmtUptime(typeof obj.uptime === 'number' ? obj.uptime : undefined, t))}${row(t('app_mem'), ram)}${row(t('app_swap'), swap)}${row(t('app_threads'), obj.threads ?? t('na'))}</div></div>`;
@@ -75,7 +75,7 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
     if (!snapshot && !markerRows.length && !pendingRows.length) return `<div class="table-empty">${t('no_recovery_issues')}</div>`;
     const snapshotHtml = snapshot ? `<div class="panel-section-label">${t('snapshot_failure')}</div><div class="panel-cards"><div class="panel-card open"><div class="panel-card-body">${row(t('timestamp'), date(snapshot.ts))}${row(t('failed'), String(snapshot.failed))}${row(t('cutoff'), String(snapshot.eligible))}</div></div></div>` : '';
     const markersHtml = markerRows.length ? `<div class="panel-section-label">${t('rollback_markers')}</div><table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('marker_type')}</th><th>${t('timestamp')}</th><th>${t('marker_reason')}</th><th style="width:90px;text-align:center">${t('actions')}</th></tr></thead><tbody>${markerRows.map(({ kind, user, marker }) => `<tr><td class="mono">${escapeHtml(user)}</td><td>${escapeHtml(kind)}</td><td class="mono">${marker.ts ? escapeHtml(date(marker.ts)) : t('na')}</td><td>${escapeHtml(marker.reason || '')}</td><td style="text-align:center"><button class="btn-tiny danger" data-rollback-kind="${escapeHtml(kind)}" data-rollback-user="${escapeHtml(user)}">${t('resolve')}</button></td></tr>`).join('')}</tbody></table>` : '';
-    const pendingHtml = pendingRows.length ? `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('marker_type')}</th></tr></thead><tbody>${pendingRows.map(({ kind, user }) => `<tr><td class="mono">${escapeHtml(user)}</td><td>${escapeHtml(kind)} (pending)</td></tr>`).join('')}</tbody></table>` : '';
+    const pendingHtml = pendingRows.length ? `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('marker_type')}</th></tr></thead><tbody>${pendingRows.map(({ kind, user }) => `<tr><td class="mono">${escapeHtml(user)}</td><td>${escapeHtml(t('recovery_' + kind))} (${escapeHtml(t('pending'))})</td></tr>`).join('')}</tbody></table>` : '';
     return snapshotHtml + markersHtml + pendingHtml;
   }
   async function operations(): Promise<void> {

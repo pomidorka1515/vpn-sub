@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApi, parseApiEnvelope } from '../shared/api';
+import { sharedMessage } from '../shared/messages';
 
 const translate = (key: string): string => key;
 
@@ -14,7 +15,7 @@ describe('parseApiEnvelope', () => {
 
   it.each([null, [], { success: 1 }, { msg: false }, { msg: 1 }, { msg: {} }, { msg: [] }])(
     'rejects malformed envelope %j', envelope => {
-      expect(() => parseApiEnvelope(envelope)).toThrow('Invalid API response');
+      expect(() => parseApiEnvelope(envelope)).toThrow(sharedMessage('invalid_response'));
     },
   );
 });

@@ -1,3 +1,4 @@
+import { sharedMessage } from '../shared/messages';
 import { createDialogs } from '../shared/dialogs';
 import { escapeHtml, loadingHtml as loading } from '../shared/dom';
 import { fmtBytes as bytes, fmtTime } from '../shared/formatting';
@@ -38,10 +39,10 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   let disposed = false;
   function schedule(fn: () => void, delay: number): number { const id = win.setTimeout(() => { timers.delete(id); if (!disposed) fn(); }, delay); timers.add(id); return id; }
   function cancelTimer(id: number | undefined): void { if (id !== undefined) { win.clearTimeout(id); timers.delete(id); } }
-  function el(id: string): HTMLElement { const node = doc.getElementById(id); if (!node) throw new Error('Missing element #' + id); return node; }
-  function input(id: string): HTMLInputElement | HTMLSelectElement { const node = el(id); if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLSelectElement)) throw new Error('Missing input #' + id); return node; }
-  function button(id: string): HTMLButtonElement { const node = el(id); if (!(node instanceof HTMLButtonElement)) throw new Error('Missing button #' + id); return node; }
-  function getCanvas(id: string): HTMLCanvasElement { const node = el(id); if (!(node instanceof HTMLCanvasElement)) throw new Error('Missing canvas #' + id); return node; }
+  function el(id: string): HTMLElement { const node = doc.getElementById(id); if (!node) throw new Error(sharedMessage('missing_element', { id })); return node; }
+  function input(id: string): HTMLInputElement | HTMLSelectElement { const node = el(id); if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLSelectElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
+  function button(id: string): HTMLButtonElement { const node = el(id); if (!(node instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
+  function getCanvas(id: string): HTMLCanvasElement { const node = el(id); if (!(node instanceof HTMLCanvasElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
   let currentStats: Stats | null = null;
   const dirtySettings = { name: false, fp: false };
   let statsLoads = 0;
@@ -49,7 +50,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   async function loadStats() {
     const btn = button('btnRefresh');
     const dash = document.querySelector<HTMLElement>('.dash-content');
-    if (!dash) throw new Error('Missing dashboard content');
+    if (!dash) throw new Error(sharedMessage('missing_dashboard'));
     ++statsLoads;
     dash.setAttribute('aria-busy', 'true');
     try {

@@ -1,3 +1,4 @@
+import { sharedMessage } from './messages';
 import { isRecord, stringTable } from './json';
 
 export type Language = 'en' | 'ru';
@@ -14,7 +15,7 @@ export function parseBootstrap(value: unknown): Bootstrap {
       (value.language !== 'en' && value.language !== 'ru') || !isRecord(value.page) ||
       typeof value.page.chartUrl !== 'string' || typeof value.page.debounceMs !== 'number' ||
       !Number.isFinite(value.page.debounceMs) || value.page.debounceMs < 0) {
-    throw new Error('Invalid frontend bootstrap');
+    throw new Error(sharedMessage('invalid_bootstrap'));
   }
   return {
     prefix: value.prefix,
@@ -27,7 +28,7 @@ export function parseBootstrap(value: unknown): Bootstrap {
 
 export function readBootstrap(doc: Document): Bootstrap {
   const source = doc.getElementById('frontend-bootstrap');
-  if (!source?.textContent) throw new Error('Missing frontend bootstrap');
+  if (!source?.textContent) throw new Error(sharedMessage('missing_bootstrap'));
   const value: unknown = JSON.parse(source.textContent);
   return parseBootstrap(value);
 }

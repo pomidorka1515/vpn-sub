@@ -44,7 +44,7 @@ def asset_version() -> str:
 
 
 WEB_LANGS: tuple[str, ...] = ("en", "ru")
-_WEB_PAGES: tuple[str, ...] = ("auth", "dashboard", "history", "admin", "admin_auth")
+_WEB_PAGES: tuple[str, ...] = ("auth", "dashboard", "history", "admin", "admin_auth", "error")
 
 
 def resolve_web_lang() -> str:

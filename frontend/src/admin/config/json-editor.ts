@@ -1,3 +1,4 @@
+import { sharedMessage } from '../../shared/messages';
 import type { Translate } from '../../shared/formatting';
 
 interface Position { line: number; ch: number }
@@ -41,10 +42,10 @@ export function createJsonEditors(doc: Document, url: string, t: Translate) {
       script.src = url;
       script.onload = () => {
         const library: unknown = Reflect.get(doc.defaultView ?? globalThis, 'CodeMirror');
-        if (typeof library !== 'function') { loading = undefined; reject(new Error('Editor unavailable')); return; }
+        if (typeof library !== 'function') { loading = undefined; reject(new Error(sharedMessage('editor_unavailable'))); return; }
         resolve(library as CodeMirrorFactory);
       };
-      script.onerror = () => { script.remove(); loading = undefined; reject(new Error('Editor unavailable')); };
+      script.onerror = () => { script.remove(); loading = undefined; reject(new Error(sharedMessage('editor_unavailable'))); };
       doc.head.append(script);
     });
   }

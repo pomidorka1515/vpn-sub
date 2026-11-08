@@ -1,3 +1,4 @@
+import { sharedMessage } from '../shared/messages';
 import { readBootstrap } from '../shared/bootstrap';
 import { withBusy } from '../shared/busy';
 import { escapeHtml, loadingHtml as loading } from '../shared/dom';
@@ -39,10 +40,10 @@ export function initHistory(doc: Document = document, browser: Window = window):
   let disposed = false;
   function schedule(fn: () => void, delay: number): number { const id = win.setTimeout(() => { timers.delete(id); if (!disposed) fn(); }, delay); timers.add(id); return id; }
   function cancelTimer(id: number | undefined): void { if (id !== undefined) { win.clearTimeout(id); timers.delete(id); } }
-  function el(id: string): HTMLElement { const node = doc.getElementById(id); if (!node) throw new Error('Missing element #' + id); return node; }
-  function input(id: string): HTMLInputElement { const node = el(id); if (!(node instanceof HTMLInputElement)) throw new Error('Missing input #' + id); return node; }
-  function button(id: string): HTMLButtonElement { const node = el(id); if (!(node instanceof HTMLButtonElement)) throw new Error('Missing button #' + id); return node; }
-  function canvas(id: string): HTMLCanvasElement { const node = el(id); if (!(node instanceof HTMLCanvasElement)) throw new Error('Missing canvas #' + id); return node; }
+  function el(id: string): HTMLElement { const node = doc.getElementById(id); if (!node) throw new Error(sharedMessage('missing_element', { id })); return node; }
+  function input(id: string): HTMLInputElement { const node = el(id); if (!(node instanceof HTMLInputElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
+  function button(id: string): HTMLButtonElement { const node = el(id); if (!(node instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
+  function canvas(id: string): HTMLCanvasElement { const node = el(id); if (!(node instanceof HTMLCanvasElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
   function handleChartJsError() {
     toast(t('chart_load_err'), 'error');
     for (const prefix of ['reg', 'wl']) {
@@ -68,21 +69,21 @@ export function initHistory(doc: Document = document, browser: Window = window):
         script.onload = null;
         script.onerror = null;
         script.remove();
-        reject(new Error('Chart.js load cancelled'));
+        reject(new Error(sharedMessage('chart_cancelled')));
       };
       script.onload = () => {
         cancelChartLoad = undefined;
         chartScript = undefined;
         if (typeof win.Chart === 'undefined') {
           chartJsPromise = null;
-          reject(new Error('Chart.js not loaded'));
+          reject(new Error(sharedMessage('chart_unavailable')));
         } else resolve();
       };
       script.onerror = () => {
         cancelChartLoad = undefined;
         chartScript = undefined;
         chartJsPromise = null;
-        reject(new Error('Chart.js not loaded'));
+        reject(new Error(sharedMessage('chart_unavailable')));
       };
       document.head.appendChild(script);
     });
@@ -138,7 +139,7 @@ export function initHistory(doc: Document = document, browser: Window = window):
 
   function makeChart(ctx: CanvasRenderingContext2D | null, data: ChartSample[], downColor: string, upColor: string) {
     if (typeof win.Chart === 'undefined') {
-      throw new Error('Chart.js not loaded');
+      throw new Error(sharedMessage('chart_unavailable'));
     }
     const c = chartColors();
     const narrow = isNarrow();

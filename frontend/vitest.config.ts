@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { viteLang } from './lang-plugin';
 
 export default defineConfig({
+  plugins: [viteLang],
   root: fileURLToPath(new URL('.', import.meta.url)),
   test: {
     include: ['src/tests/**/*.test.ts'],

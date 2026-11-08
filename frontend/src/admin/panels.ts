@@ -84,8 +84,8 @@ function renderPanelCards(data: unknown, idPrefix = ''): string {
         const diskClr = diskPct !== null ? (diskPct > 90 ? 'err' : diskPct > 75 ? 'warn' : 'ok') : 'ok';
 
         const appMem = s ? fmtBytes(s.appStats.mem) : t('na');
-        const netDown = s ? fmtBytes(s.netIO.down) + '/s' : t('na');
-        const netUp = s ? fmtBytes(s.netIO.up) + '/s' : t('na');
+        const netDown = s ? fmtBytes(s.netIO.down) + t('per_second') : t('na');
+        const netUp = s ? fmtBytes(s.netIO.up) + t('per_second') : t('na');
         const netRecv = s ? fmtBytes(s.netTraffic.recv) : t('na');
         const netSent = s ? fmtBytes(s.netTraffic.sent) : t('na');
         const ipv4 = s?.publicIP?.ipv4 || t('na');
@@ -114,7 +114,7 @@ function renderPanelCards(data: unknown, idPrefix = ''): string {
                   <div class="panel-section-label">${t('system')}</div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : t('na')}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${s?.cpuCores ?? t('na')}</span></div>
-                  <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${s?.cpuSpeedMhz ? Math.round(s.cpuSpeedMhz) + ' MHz' : t('na')}</span></div>
+                  <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${s?.cpuSpeedMhz ? Math.round(s.cpuSpeedMhz) + ' ' + t('mhz_unit') : t('na')}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('load_avg')}</span><span class="panel-metric-value">${escapeHtml(loads)}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${escapeHtml(threads)}</span></div>
                 </div>

@@ -1,3 +1,4 @@
+import { sharedMessage, serverMessage } from './messages';
 import { isRecord } from './json';
 import type { Translate } from './formatting';
 
@@ -7,6 +8,7 @@ export interface ApiResult {
   status: number;
   success?: boolean;
   msg?: string | null;
+  rawMsg?: string | null;
   obj?: unknown;
   readonly rawJson?: string;
   etag?: string;
@@ -31,7 +33,7 @@ function resolve<T>(value: Dynamic<T> | undefined): T | undefined {
 export function parseApiEnvelope(value: unknown): Record<string, unknown> {
   if (!isRecord(value) || (value.success !== undefined && typeof value.success !== 'boolean') ||
       (value.msg !== undefined && value.msg !== null && typeof value.msg !== 'string')) {
-    throw new Error('Invalid API response');
+    throw new Error(sharedMessage('invalid_response'));
   }
   return value;
 }
@@ -41,7 +43,7 @@ export function serializeBody(body: unknown): string | undefined {
     const serialize: unknown = Reflect.get(body, Symbol.for('api.serialize'));
     if (typeof serialize === 'function') {
       const result: unknown = Reflect.apply(serialize, body, []);
-      if (typeof result !== 'string') throw new Error('Invalid API serialization');
+      if (typeof result !== 'string') throw new Error(sharedMessage('invalid_serialization'));
       return result;
     }
   }
@@ -81,7 +83,7 @@ export function createApi(getConfig: () => ApiConfig, translate: Translate, toas
       const parsed: unknown = JSON.parse(rawJson);
       data = parseApiEnvelope(parsed);
     } catch {
-      data = { success: false, msg: response.statusText || translate('invalid_response') };
+      data = { success: false, msg: translate('invalid_response') };
     }
     const result: ApiResult = { ...data, status: response.status };
     // Known envelope fields have been checked above; retain arbitrary fields
@@ -92,6 +94,8 @@ export function createApi(getConfig: () => ApiConfig, translate: Translate, toas
       config.on401();
       return null;
     }
+    Object.defineProperty(result, 'rawMsg', { value: result.msg });
+    if (result.msg && result.msg !== translate('invalid_response')) result.msg = serverMessage(result.msg, undefined, result.success === true);
     Object.defineProperty(result, 'rawJson', { value: rawJson });
     const etag = response.headers.get('ETag');
     if (etag) result.etag = etag;
