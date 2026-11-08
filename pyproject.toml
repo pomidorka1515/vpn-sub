@@ -453,6 +453,8 @@ testpaths = ["src/tests"]
 # Two workers overlap I/O without oversubscribing a small VPS. Work stealing
 # balances parametrized cases; use `pytest -n 0` for serial runs/debugging.
 addopts = "--import-mode=importlib --strict-markers -n 2 --dist=worksteal"
+# Do not retain test temporary directories after a run.
+tmp_path_retention_policy = "none"
 markers = [
     "integration: exercises a real external service or transport",
     "redis: requires a local redis-server executable",
