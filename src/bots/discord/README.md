@@ -14,6 +14,9 @@ Add to `data/config.json`:
 Omit the section or leave `token` empty to disable Discord. `whitelist` contains  
 Discord user IDs allowed to use `/admin`; an empty list allows no administrators.  
 Restart after changing the token or whitelist.  
+The admin config editor's Integrations section can add, edit, or remove this  
+optional object. `data/config.json` is the only deployment config; no separate  
+Discord config is loaded.  
   
 Commands call the application's shared `Subscription` services directly, using  
 typed service results and config snapshots. Account workflows are shared with  

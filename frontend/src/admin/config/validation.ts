@@ -19,7 +19,7 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   ['uri', 'api_uri', 'fallback_domain', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt', '$schema'].forEach(key => {
     if (Object.hasOwn(draft, key) && typeof draft[key] !== 'string') issues.push(issue(key, t('config_err_required')));
   });
-  ['redis', 'bot', 'publicbot', 'support_text'].forEach(key => {
+  ['redis', 'bot', 'publicbot', 'discord', 'support_text'].forEach(key => {
     if (Object.hasOwn(draft, key) && !isPlainObject(draft[key])) issues.push(issue(key, t('config_err_required')));
   });
   if (!Array.isArray(draft.api_admin_ui_auth)) issues.push(issue('api_admin_ui_auth', t('config_err_required')));
@@ -64,12 +64,15 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     }
     if (extra.length) issues.push(issue('redis', t('config_err_unknown')));
   }
-  if (Object.prototype.hasOwnProperty.call(draft, 'bot') && isPlainObject(draft.bot)) {
-    const extra = Object.keys(draft.bot).filter(key => key !== 'token' && key !== 'whitelist');
-    if (typeof draft.bot.token !== 'string') issues.push(issue('bot', t('config_err_required')));
-    if (!Array.isArray(draft.bot.whitelist) || draft.bot.whitelist.some(item => !isInteger(item))) issues.push(issue('bot', t('config_err_integer')));
-    if (extra.length) issues.push(issue('bot', t('config_err_unknown')));
-  }
+  ['bot', 'discord'].forEach(key => {
+    const bot = draft[key];
+    if (!isPlainObject(bot)) return;
+    const extra = Object.keys(bot).filter(field => field !== 'token' && field !== 'whitelist');
+    if (typeof bot.token !== 'string') issues.push(issue(key, t('config_err_required')));
+    if (!Array.isArray(bot.whitelist) || bot.whitelist.some(item => !isInteger(item) || (key === 'discord' && Number(item) < 1))) issues.push(issue(key, t('config_err_integer')));
+    if (key === 'discord' && Array.isArray(bot.whitelist) && new Set(bot.whitelist.map(String)).size !== bot.whitelist.length) issues.push(issue(key, t('config_err_unique')));
+    if (extra.length) issues.push(issue(key, t('config_err_unknown')));
+  });
   if (Object.prototype.hasOwnProperty.call(draft, 'publicbot') && isPlainObject(draft.publicbot)) {
     if (typeof draft.publicbot.token !== 'string' || Object.keys(draft.publicbot).some(key => key !== 'token')) {
       issues.push(issue('publicbot', t('config_err_required')));

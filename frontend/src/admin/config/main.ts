@@ -117,12 +117,12 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
         <input type="text" id="cfg-redis-url" value="${attr(redis.url ?? '')}" spellcheck="false">
         <label class="config-sub">${escapeHtml(t('config_redis_timeout'))}</label>
         <input type="number" id="cfg-redis-timeout" min="0" step="any" value="${attr(timeout)}">`;
-    } else if (key === 'bot' || key === 'publicbot') {
+    } else if (key === 'bot' || key === 'publicbot' || key === 'discord') {
       const obj = object(key);
       control = `<label class="config-sub">${escapeHtml(t('token'))}</label>${passWrap('cfg-' + key + '-token', obj.token ?? '')}`;
-      if (key === 'bot') {
+      if (key !== 'publicbot') {
         const rows = Array.isArray(obj.whitelist) ? obj.whitelist.map(item => String(item)) : [];
-        control += `<label class="config-sub">${escapeHtml(t('config_whitelist'))}</label>${rowList('cfg-rows-bot', rows, 'int')}`;
+        control += `<label class="config-sub">${escapeHtml(t('config_whitelist'))}</label>${rowList('cfg-rows-' + key, rows, 'int')}`;
       }
       control += `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`;
     } else if (key === 'support_text') {
@@ -141,7 +141,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
     } else if (key === '$schema') {
       control = `<div class="config-locked">${escapeHtml(data.$schema ?? '')}</div>`;
     }
-    const remove = optional && present && key !== 'bot' && key !== 'publicbot'
+    const remove = optional && present && !['bot', 'publicbot', 'discord'].includes(key)
       ? `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`
       : '';
     if (key === 'bypass_packages') {
@@ -163,17 +163,17 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       bindRows('cfg-rows-' + key, 'string', (rows, live) => applyStringRows(key, rows, live));
     }
     if (key === 'nodes') bindRows('cfg-rows-nodes', 'pair', applyNodeRows);
-    if (key === 'bot') {
-      bindRows('cfg-rows-bot', 'int', (rows, live) => {
+    if (key === 'bot' || key === 'discord') {
+      bindRows('cfg-rows-' + key, 'int', (rows, live) => {
         const ints = rows.map(row => { const value = String(row); return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value; });
-        object('bot').whitelist = ints;
-        if (!live) paintBox('bot');
-        validateField('bot');
+        object(key).whitelist = ints;
+        if (!live) paintBox(key);
+        validateField(key);
         markDirty();
       });
-      document.getElementById('cfg-bot-token')?.addEventListener('input', () => {
-        object('bot').token = readText('cfg-bot-token');
-        validateField('bot');
+      document.getElementById('cfg-' + key + '-token')?.addEventListener('input', () => {
+        object(key).token = readText('cfg-' + key + '-token');
+        validateField(key);
         markDirty();
       });
     }
@@ -230,7 +230,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
   function addOptional(key: string): void {
     if (key === 'api_uri' || key === 'fallback_domain') draft()[key] = '';
     else if (key === 'funny_strings') draft()[key] = [];
-    else if (key === 'bot') draft().bot = { token: '', whitelist: [] };
+    else if (key === 'bot' || key === 'discord') draft()[key] = { token: '', whitelist: [] };
     else if (key === 'publicbot') draft().publicbot = { token: '' };
     else if (key === 'support_text') draft().support_text = {};
     paintBox(key);

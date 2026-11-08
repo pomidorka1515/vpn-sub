@@ -209,6 +209,45 @@ def test_support_text_rejects_invalid_overrides(
     assert "support_text" not in app_cfg.view()
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"token": "", "whitelist": []},
+        {"token": "shared-token", "whitelist": [123456789012345678]},
+    ],
+)
+def test_discord_is_optional_in_central_config(
+    app_cfg: Config[AppConfig], value: JsonValue
+) -> None:
+    assert "discord" not in app_cfg.view()
+    with app_cfg.edit() as tx:
+        tx["discord"] = value
+    app_cfg.reload()
+    assert app_cfg.copy()["discord"] == value
+    with app_cfg.edit() as tx:
+        del tx["discord"]
+    assert "discord" not in app_cfg.view()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        {},
+        {"token": "", "whitelist": [0]},
+        {"token": "", "whitelist": [-1]},
+        {"token": "", "whitelist": ["123"]},
+        {"token": "", "whitelist": [123, 123]},
+        {"token": "", "whitelist": [], "extra": True},
+    ],
+)
+def test_discord_rejects_invalid_config(app_cfg: Config[AppConfig], value: JsonValue) -> None:
+    with pytest.raises(SchemaValidationError):
+        with app_cfg.edit() as tx:
+            tx["discord"] = value
+    assert "discord" not in app_cfg.view()
+
+
 def test_panel_headers_reject_non_string_values(app_cfg: Config[AppConfig]) -> None:
     document = app_cfg.copy()
     panels = cast(JsonDict, document["3xui"])

@@ -52,12 +52,14 @@
 
         "discord": {
             "type": "object",
+            "description": "Optional shared Discord bot for public commands and /admin. Omit the key, or leave token empty, to disable. Token and whitelist changes require a restart.",
             "additionalProperties": false,
             "required": ["token", "whitelist"],
             "properties": {
                 "token": {"type": "string"},
                 "whitelist": {
                     "type": "array",
+                    "description": "Discord user IDs allowed to use /admin. An empty list allows no administrators.",
                     "uniqueItems": true,
                     "items": {"type": "integer", "minimum": 1}
                 }
