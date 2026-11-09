@@ -454,6 +454,15 @@
 .modal-title { letter-spacing: 0; }
 .info-value { max-width: 300px; }
 
+#userDetailInfo, #userDetailInfo .info-row { min-width: 0; }
+#userDetailInfo .info-row { gap: 12px; align-items: flex-start; }
+#userDetailInfo .info-label { min-width: 0; flex-shrink: 1; overflow-wrap: anywhere; }
+#userDetailInfo .info-value {
+  min-width: 0; max-width: none; flex: 1; text-align: right;
+  overflow: visible; text-overflow: unset; white-space: normal; overflow-wrap: anywhere;
+}
+#userDetailResult .result-msg { overflow-wrap: anywhere; }
+
 .config-banner {
   margin-bottom: 12px; padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--orange) 35%, transparent); border-radius: 8px;

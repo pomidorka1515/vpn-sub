@@ -1,5 +1,6 @@
 import { withBusy } from '../shared/busy';
 import { escapeHtml } from '../shared/dom';
+import { fmtBytes } from '../shared/formatting';
 import { renderIfChanged } from '../shared/render';
 import { isRecord } from '../shared/json';
 import type { AdminState } from './bootstrap';
@@ -37,13 +38,20 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       const user = res.obj;
       const bandwidth = isRecord(user['bandwidth']) ? user['bandwidth'] : {};
       const row = (key: string, value: unknown): string => `<div class="info-row"><span class="info-label">${t(key)}</span><span class="info-value">${escapeHtml(value || '—')}</span></div>`;
+      const traffic = (value: unknown): string => {
+        const total = isRecord(value) ? value['total'] : undefined;
+        return fmtBytes(typeof total === 'number' ? total : NaN, t);
+      };
       element(doc, 'userDetailCard').style.display = 'block';
       element(doc, 'userDetailInfo').innerHTML = row('internal_user', username) + row('display_name', user['displayname']) + row('uuid', user['uuid']) + row('token', user['token']) + row('fingerprint', user['fingerprint']) +
+        row('total_traffic', traffic(bandwidth['total'])) + row('wl_total_traffic', traffic(bandwidth['wl_total'])) +
         `<div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${escapeHtml(bandwidth['limit'] || 0)} ${t('gb_unit')}</span></div>` +
         `<div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${escapeHtml(bandwidth['wl_limit'] || 0)} ${t('gb_unit')}</span></div>` +
         row('expires', typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000).toLocaleString() : '∞') +
         `<div class="info-row"><span class="info-label">${t('status')}</span><span class="info-value"><span class="badge ${user['enabled'] ? 'green' : 'red'}">${user['enabled'] ? t('active') : t('disabled')}</span></span></div>`;
-      element(doc, 'userDetailResult').innerHTML = '';
+      const result = element(doc, 'userDetailResult');
+      result.innerHTML = '';
+      result.hidden = true;
     });
   }
   async function deleteUser(username: string, trigger: HTMLButtonElement): Promise<void> {
@@ -69,6 +77,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
         result.className = 'result-box error';
       }
+      result.hidden = false;
     });
   }
   function showAddUser(): void {

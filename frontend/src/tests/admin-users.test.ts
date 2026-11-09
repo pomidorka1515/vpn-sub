@@ -56,6 +56,37 @@ describe('admin user management', () => {
     expect(state.selectedUser).toBeNull();
     expect(required(document.getElementById('userDetailCard')).style.display).toBe('none');
   });
+  it('shows all-time traffic and only displays reset results when available', async () => {
+    const { api, load, click, state } = setup();
+    await load(['alice', 'bob']);
+    const views = document.querySelectorAll<HTMLButtonElement>('[data-user-action="view"]');
+    const result = required(document.getElementById('userDetailResult'));
+    expect(result.hidden).toBe(true);
+    const token = 'long-token'.repeat(100);
+    api.mockResolvedValueOnce(success({ token, bandwidth: { total: { upload: 1e9, download: 2e9, total: 3e9 }, wl_total: { upload: 0, download: 500e6, total: 500e6 } } }));
+    required(views[0]).click();
+    await vi.waitFor(() => { expect(state.selectedUser).toBe('alice'); });
+    const info = required(document.getElementById('userDetailInfo'));
+    expect(info.textContent).toContain(token);
+    expect(info.textContent).toContain('total_traffic3.00 gb_unit');
+    expect(info.textContent).toContain('wl_total_traffic500.00 mb_unit');
+    expect(result.hidden).toBe(true);
+    api.mockResolvedValueOnce(success({ uuid: 'new-uuid', token }));
+    click('btnDoReset');
+    await vi.waitFor(() => { expect(result.hidden).toBe(false); });
+    expect(result.textContent).toContain(token);
+    api.mockResolvedValueOnce(success({ bandwidth: { total: { total: 0 } } }));
+    required(views[1]).click();
+    await vi.waitFor(() => { expect(state.selectedUser).toBe('bob'); });
+    expect(result.hidden).toBe(true);
+    expect(result.textContent).toBe('');
+    expect(info.textContent).toContain('total_traffic0 byte_unit');
+    expect(info.textContent).toContain('wl_total_trafficna');
+    api.mockResolvedValueOnce({ success: false, msg: 'failed', status: 400 });
+    click('btnDoReset');
+    await vi.waitFor(() => { expect(result.hidden).toBe(false); });
+    expect(result.textContent).toContain('failed');
+  });
   it('validates required fields and preserves password whitespace in add requests', async () => {
     const { api, click, input, toast } = setup();
     click('btnShowAdd'); click('btnDoAdd');
