@@ -27,7 +27,7 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
 
 
 def _browser_strings(
-    obj: Subscription, lang: str, *, token_required: bool = False
+    obj: Subscription, lang: str, *, token_required: bool = False, dashboard: bool = False
 ) -> dict[str, str]:
     language = obj.res.lang_cfg.view()
     raw = cast(object, language.get("web"))
@@ -38,8 +38,13 @@ def _browser_strings(
     def text(key: str, fallback: str) -> str:
         return strings.get(key, fallback)
 
+    common = {
+        "back_label": text("back_to_dashboard", "Back to dashboard")
+        if dashboard
+        else text("back_to_login", "Back to login"),
+    }
     if token_required:
-        return {
+        return common | {
             "forbidden_title": text("forbidden_title", "403 Forbidden"),
             "use_vpn_client": text("token_required", "Valid token required."),
             "use_vpn_client_hint": text(
@@ -48,7 +53,7 @@ def _browser_strings(
             ),
         }
 
-    return {
+    return common | {
         "forbidden_title": text("forbidden_title", "403 Forbidden"),
         "use_vpn_client": text("use_vpn_client", "Use a VPN client."),
         "use_vpn_client_hint": text(

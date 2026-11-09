@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -10,7 +10,7 @@
   --bg: #0a0a0b; --surface: #131316;
   --border: #252529;
   --text: #e4e4e7; --text2: #8e8e96;
-  --accent: #a8c9bc;
+  --accent: #a8c9bc; --accent-dim: #97b5a9; --accent-ink: #10261d;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -34,6 +34,15 @@ h1 {
   margin-bottom: 8px;
 }
 p { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.back {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  min-height: 44px; margin-top: 28px; padding: 11px 22px; border: 1px solid transparent; border-radius: 8px;
+  background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 500;
+  text-decoration: none; transition: background .2s;
+}
+.back:hover { background: var(--accent-dim); }
+.back:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.back svg { width: 16px; height: 16px; }
 </style>
 </head>
 <body>
@@ -41,6 +50,10 @@ p { font-size: 13px; color: var(--text2); line-height: 1.5; }
   <div class="code">403</div>
   <h1>{{ use_vpn_client }}</h1>
   <p>{{ use_vpn_client_hint }}</p>
+  <a class="back" href="{{ prefix }}{% if dashboard %}/panel{% else %}/auth{% endif %}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"/></svg>
+    <span>{{ back_label }}</span>
+  </a>
 </div>
 </body>
 </html>

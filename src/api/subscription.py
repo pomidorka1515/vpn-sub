@@ -37,4 +37,5 @@ def register_subscription_route(app: Quart, sub: Subscription, limiter: AsyncRat
             ua=request.headers.get("User-Agent", ""),
             ip=request.remote_addr or "",
             force_json=request.args.get("force_json", "0"),
+            auth_token=request.cookies.get("auth_token", ""),
         )

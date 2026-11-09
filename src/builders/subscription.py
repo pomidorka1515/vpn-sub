@@ -23,16 +23,27 @@ def _private_response(response: Response, status: int) -> tuple[Response, int]:
 
 
 async def _browser_response(
-    obj: Subscription, lang: str, *, token_required: bool = False
+    obj: Subscription,
+    lang: str,
+    *,
+    token_required: bool = False,
+    dashboard: bool = False,
+    auth_token: str = "",
 ) -> tuple[Response, int]:
     # Keep the package-level hooks used by subscription response callers.
     import builders
 
-    html = await builders.render_template(
-        "browser.html", **_browser_strings(obj, lang, token_required=token_required)
-    )
     cfg = obj.res.cfg.view()
     prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
+    if not dashboard and len(auth_token) == 100:
+        dashboard = bool(await obj.user_svc.auth_token_to_user(auth_token))
+    html = await builders.render_template(
+        "browser.html",
+        **_browser_strings(obj, lang, token_required=token_required, dashboard=dashboard),
+        prefix=prefix,
+        dashboard=dashboard,
+        lang=lang if lang in {"en", "ru"} else "en",
+    )
     html = await obj.res.offloads.files.run(builders.embed_font_faces, html, prefix)
     return _private_response(Response(html, mimetype="text/html"), 403)
 
@@ -46,6 +57,7 @@ async def get_subscription(
     ua: str,
     ip: str,
     force_json: str,
+    auth_token: str = "",
 ) -> tuple[Response, int]:
     # ===================================
     # intentionally separate from `Subscription`/`WebApi`:
@@ -58,7 +70,7 @@ async def get_subscription(
 
     if not token:
         if builders.isbrowser(ua=ua):
-            return await _browser_response(obj, lang, token_required=True)
+            return await _browser_response(obj, lang, token_required=True, auth_token=auth_token)
         return _private_response(*err("Invalid token.", 401))
     username = await obj.user_svc.usertotoken(token)
     await obj.audit_svc.audit(
@@ -67,12 +79,13 @@ async def get_subscription(
     )
 
     if not username:
+        if builders.isbrowser(ua=ua):
+            return await _browser_response(obj, lang, token_required=True, auth_token=auth_token)
         return _private_response(*err("Invalid token.", 401))
+    if builders.isbrowser(ua=ua):
+        return await _browser_response(obj, lang, dashboard=True)
     if lang not in {"ru", "en"}:
         return _private_response(*err("Language can be either 'ru' or 'en'", 400))
-
-    if builders.isbrowser(ua=ua):
-        return await _browser_response(obj, lang)
 
     bandwidths = await obj.bandwidth_svc.bandwidth(username)
 

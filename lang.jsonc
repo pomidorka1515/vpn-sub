@@ -306,6 +306,8 @@
                 "token_required_hint": "A valid token is required to retrieve the subscription.",
                 "use_vpn_client": "Use a VPN client.",
                 "use_vpn_client_hint": "Use a VPN client to get the subscription.",
+                "back_to_dashboard": "Back to dashboard",
+                "back_to_login": "Back to login",
 
                 // standalone pages and frontend diagnostics
                 "not_found_title": "404 · Page not found",
@@ -385,6 +387,8 @@
                 "token_required_hint": "Для получения подписки требуется действительный токен.",
                 "use_vpn_client": "Используйте ВПН клиент.",
                 "use_vpn_client_hint": "Используйте ВПН клиент для получения подписки.",
+                "back_to_dashboard": "Вернуться в панель",
+                "back_to_login": "Вернуться ко входу",
 
                 // standalone pages and frontend diagnostics
                 "not_found_title": "404 · Страница не найдена",

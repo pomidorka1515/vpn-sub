@@ -4,6 +4,7 @@ import base64
 import json
 import threading
 import urllib.parse
+from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -11,7 +12,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from quart import Quart
 
+from api.subscription import register_subscription_route
 from app_runtime.offload import OffloadServices
+from app_runtime.rate_limit import AsyncRateLimiter
 from builders import build_description, build_json, build_link_array, get_subscription
 from config.documents import ProfileOutbound, ProfileTemplate
 from core import Subscription
@@ -35,6 +38,7 @@ DESC = {
         "wl_bw_exceeded": " wl exceeded {used}/{limit}",
     },
 }
+TEMPLATE_DIR = Path(__file__).resolve().parents[3] / "frontend/src/templates"
 
 
 def _bandwidth() -> BandwidthInfo:
@@ -624,6 +628,60 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
         assert response.mimetype == "text/html"
         assert response.headers["Cache-Control"] == "private, no-store"
         assert await response.get_data(as_text=True) == "/sub|browser.html:No browser"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("token", "cookie", "valid_session", "lang", "destination", "label"),
+    [
+        ("valid", "", False, "", "/panel", "Back to dashboard"),
+        ("", "a" * 100, True, "en", "/panel", "Back to dashboard"),
+        ("invalid", "a" * 100, True, "en", "/panel", "Back to dashboard"),
+        ("", "", False, "en", "/auth", "Back to login"),
+        ("invalid", "", False, "en", "/auth", "Back to login"),
+        ("invalid", "a" * 100, False, "en", "/auth", "Back to login"),
+        ("", "short", True, "en", "/auth", "Back to login"),
+        ("", "", False, "ru", "/auth", "Вернуться ко входу"),
+    ],
+)
+async def test_browser_subscription_navigation(
+    token: str,
+    cookie: str,
+    valid_session: bool,
+    lang: str,
+    destination: str,
+    label: str,
+) -> None:
+    subscription = _subscription(cfg={"uri": "/nested/sub/"})
+    subscription.user_svc.usertotoken.return_value = "alice" if token == "valid" else ""
+    subscription.user_svc.auth_token_to_user.return_value = "alice" if valid_session else None
+    language = _lang()
+    language["web"] = {
+        "shared": {"en": {}, "ru": {"back_to_login": "Вернуться ко входу"}},
+    }
+    subscription.res.lang_cfg = config_mock(language)
+    app = Quart(
+        __name__,
+        template_folder=str(TEMPLATE_DIR),
+    )
+    limiter = MagicMock(spec=AsyncRateLimiter)
+    limiter.allow = AsyncMock(return_value=True)
+    register_subscription_route(app, subscription, limiter)
+    client = app.test_client()
+    if cookie:
+        client.set_cookie("localhost", "auth_token", cookie)
+    response = await client.get(
+        "/nested/sub",
+        query_string={"token": token, "lang": lang},
+        headers={"User-Agent": "Mozilla/5.0 Firefox/131.0"},
+    )
+    html = await response.get_data(as_text=True)
+    assert response.status_code == 403
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert f'href="/nested/sub{destination}"' in html
+    assert f"<span>{label}</span>" in html
+    assert 'aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"' in html
+    assert f'<html lang="{lang or "en"}">' in html
 
 
 @pytest.mark.asyncio
