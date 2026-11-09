@@ -100,8 +100,7 @@ function panelBody(id: string, panel: ConfigObject): string {
       const body = kind === 'inbounds' ? inboundBody(id, item) : panelBody(id, item);
       return cardShell(kind, id, title, body, open);
     }).join('');
-    const icon = kind === 'panels' ? restartIcon() : '';
-    pane.innerHTML = `<div class="config-subtitle">${icon}<span>${escapeHtml(subtitle)}</span></div>
+    pane.innerHTML = `<div class="config-subtitle"><span>${escapeHtml(subtitle)}</span></div>
       <div class="toolbar"><button type="button" class="btn btn-secondary" id="cfg-new-${kind}">${escapeHtml(t('config_new'))}</button></div>
       <div class="panel-cards">${cards}</div>`;
     document.getElementById('cfg-new-' + kind)?.addEventListener('click', () => { openNew(kind); });
