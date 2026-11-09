@@ -22,4 +22,4 @@ This is a staged API commit, not final production cutover: BWatch and Telegram p
   
 Async API tests cover admin/public authentication, cookies, user/code operations, config edits, malformed/oversized request bodies, subscriptions/builders, proxy guarding/forwarding, redacted access logging, Redis failure and factory startup unwind/repeated stop.  
   
-Checks: `venv/bin/ruff check .`, `venv/bin/mypy`, `venv/bin/pyright`, and `venv/bin/pytest`: **620 passed**, with four aiohttp BasicAuth deprecation warnings. Full compiled release verification remains a later acceptance gate.  
+Checks: `venv/bin/ruff check .`, `venv/bin/mypy`, `venv/bin/pyright`, and `venv/bin/pytest`: **620 passed**. Full compiled release verification remains a later acceptance gate.  

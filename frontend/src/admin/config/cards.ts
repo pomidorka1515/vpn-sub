@@ -69,7 +69,6 @@ function inboundBody(id: string, profile: ConfigObject): string {
 
 function panelBody(id: string, panel: ConfigObject): string {
   const p = panel || {};
-  const auth = Array.isArray(p.nginx_auth) ? p.nginx_auth : null;
   const headers = isPlainObject(p.inject_headers) ? editor.headerRows.get(id) || Object.entries(p.inject_headers).map(([key, value]) => [key, String(value ?? '')]) : null;
   return `<div class="form-grid">
     <div class="form-row"><label>${escapeHtml(t('config_field_key'))}</label><div class="input-wrap"><input type="text" data-field="id" value="${attr(id)}" spellcheck="false">${fieldError('cfg-pn-err-' + cssId(id) + '-id')}</div></div>
@@ -82,7 +81,6 @@ function panelBody(id: string, panel: ConfigObject): string {
     <div class="form-row"><label>${escapeHtml(t('config_field_whitelist'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist" ${p.whitelist ? 'checked' : ''}><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_mode'))}</label><div class="input-wrap"><select data-field="mode"><option value="blacklist"${p.mode === 'blacklist' ? ' selected' : ''}>${escapeHtml(t('config_blacklist_mode'))}</option><option value="whitelist"${p.mode === 'whitelist' ? ' selected' : ''}>${escapeHtml(t('config_whitelist_mode'))}</option></select>${fieldError('cfg-pn-err-' + cssId(id) + '-mode')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_inbounds_list'))}</label><div class="input-wrap" id="cfg-pn-inbounds-${cssId(id)}">${rowList('cfg-pn-rows-' + cssId(id), (Array.isArray(p.inbounds_list) ? p.inbounds_list : []).map(String), 'int')}${fieldError('cfg-pn-err-' + cssId(id) + '-inbounds_list')}</div></div>
-    <div class="form-row"><label>${escapeHtml(t('config_field_nginx_auth'))}</label><div class="input-wrap">${auth ? `<div class="config-pair"><input type="text" data-field="nginx0" value="${attr(auth[0] ?? '')}">${passWrap('cfg-pn-nginx-password-' + cssId(id), auth[1] ?? '')}</div><button type="button" class="btn-tiny danger" data-nested-remove="nginx_auth">${escapeHtml(t('config_remove'))}</button>` : `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-nested-add="nginx_auth">${escapeHtml(t('config_add'))}</button></div>`}${fieldError('cfg-pn-err-' + cssId(id) + '-nginx_auth')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_inject_headers'))}</label><div class="input-wrap">${headers ? `${rowList('cfg-pn-headers-' + cssId(id), headers, 'pair')}<button type="button" class="btn-tiny danger" data-nested-remove="inject_headers">${escapeHtml(t('config_remove_headers'))}</button>` : `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-nested-add="inject_headers">${escapeHtml(t('config_add'))}</button></div>`}${fieldError('cfg-pn-err-' + cssId(id) + '-inject_headers')}</div></div>
   </div>`;
 }
@@ -150,9 +148,7 @@ function panelBody(id: string, panel: ConfigObject): string {
         markDirty();
       });
       card.querySelectorAll<HTMLElement>('[data-nested-add]').forEach(button => button.addEventListener('click', () => {
-        const which = button.dataset.nestedAdd;
-        if (which === 'nginx_auth') cardData('panels', id).nginx_auth = ['', ''];
-        else cardData('panels', id).inject_headers = {};
+        cardData('panels', id).inject_headers = {};
         editor.open.panels.add(id);
         renderCards('panels');
         markDirty();
@@ -206,8 +202,6 @@ function panelBody(id: string, panel: ConfigObject): string {
     next.whitelist = whitelist instanceof HTMLInputElement && whitelist.checked;
     next.mode = value('mode')?.value || 'blacklist';
     next.inbounds_list = readRows('cfg-pn-rows-' + cssId(id), 'int').map(row => { const raw = String(row); return INTEGER_RE.test(raw.trim()) ? new ConfigNumber(raw.trim()) : raw; });
-    const nginx = value('nginx0');
-    if (nginx) next.nginx_auth = [nginx.value, readText('cfg-pn-nginx-password-' + cssId(id))];
     if (document.getElementById('cfg-pn-headers-' + cssId(id))) {
       const headers: ConfigObject = Object.create(null) as ConfigObject;
       const rows = pairs(readRows('cfg-pn-headers-' + cssId(id), 'pair'));

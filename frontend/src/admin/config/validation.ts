@@ -212,12 +212,6 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     if (!Array.isArray(panel.inbounds_list) || panel.inbounds_list.some(item => !isInteger(item))) {
       issues.push(issue('3xui.' + id + '.inbounds_list', t('config_err_integer')));
     }
-    if (Object.prototype.hasOwnProperty.call(panel, 'nginx_auth')) {
-      const pair = panel.nginx_auth;
-      if (!Array.isArray(pair) || pair.length !== 2 || pair.some(item => typeof item !== 'string')) {
-        issues.push(issue('3xui.' + id + '.nginx_auth', t('config_err_required')));
-      }
-    }
     if (Object.prototype.hasOwnProperty.call(panel, 'inject_headers')) {
       const headers = panel.inject_headers;
       if (!isPlainObject(headers) || Object.values(headers).some(item => typeof item !== 'string')) {

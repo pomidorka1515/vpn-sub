@@ -11,7 +11,6 @@ import pytest_asyncio
 from aiohttp import web
 
 from app_runtime.tasks import CapacityExceededError
-from errors import XUiSessionError
 from session import (
     AiohttpPanelTransport,
     FakePanelTransport,
@@ -369,50 +368,21 @@ async def test_real_aiohttp_buffering_auth_and_injected_session_ownership(endpoi
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_real_basic_auth_and_bearer_conflict(endpoint: str) -> None:
-    transport = AiohttpPanelTransport(auth=("user", "password"))
+async def test_real_bearer_auth_and_owned_session_closure(endpoint: str) -> None:
+    transport = AiohttpPanelTransport()
+    headers = {"Authorization": "Bearer token", "X-Test": "header"}
     await transport.start()
     try:
+        response = await transport.request("GET", endpoint, headers=headers)
+        assert response.json() == {"auth": "Bearer token", "header": "header", "body": None}
+        assert headers == {"Authorization": "Bearer token", "X-Test": "header"}
         response = await transport.request("GET", endpoint)
-        payload = response.json()
-        assert isinstance(payload, dict)
-        assert payload["auth"] == "Basic dXNlcjpwYXNzd29yZA=="
-        with pytest.raises(XUiSessionError, match="basic auth alongside"):
-            await transport.request("GET", endpoint, headers={"authorization": "Bearer token"})
+        assert response.json() == {"auth": None, "header": None, "body": None}
     finally:
         await transport.close()
     assert transport._session is not None
     assert transport._session.closed
     await transport.close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_injected_session_authorization_conflict(endpoint: str) -> None:
-    async with aiohttp.ClientSession(headers={"Authorization": "Bearer token"}) as session:
-        transport = AiohttpPanelTransport(session, auth=("user", "password"))
-        await transport.start()
-        try:
-            with pytest.raises(XUiSessionError, match="basic auth alongside"):
-                await transport.request("GET", endpoint)
-        finally:
-            await transport.close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_request_auth_overrides_and_preserves_headers(endpoint: str) -> None:
-    transport = AiohttpPanelTransport(auth=("user", "password"))
-    headers = {"X-Test": "header"}
-    await transport.start()
-    try:
-        response = await transport.request("GET", endpoint, auth=("é", "à"), headers=headers)
-        assert response.json() == {"auth": "Basic 6Trg", "header": "header", "body": None}
-        assert headers == {"X-Test": "header"}
-        response = await transport.request("GET", endpoint, auth=None)
-        assert response.json() == {"auth": None, "header": None, "body": None}
-    finally:
-        await transport.close()
 
 
 @pytest.mark.asyncio

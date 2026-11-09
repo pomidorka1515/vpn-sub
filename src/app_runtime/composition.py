@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import fcntl
-from typing import TYPE_CHECKING, BinaryIO, cast
+from typing import TYPE_CHECKING, BinaryIO
 
 from errors import SchemaValidationError
 from session.client import XUiSession
@@ -63,7 +63,6 @@ def build_panels(
             uri=section["uri"],
             api_token=section["token"],
             https=section["https"],
-            nginx_auth=cast(tuple[str, str] | None, tuple(section.get("nginx_auth", [])) or None),
             inbounds_list=tuple(section["inbounds_list"]),
             mode=section["mode"],
             inject_headers=section.get("inject_headers"),

@@ -59,13 +59,4 @@ def check_config_document(data: Mapping[str, JsonValue]) -> None:
     ):
         raise ValidationError("api_admin_ui_auth entries must not be empty")
 
-    panels = data.get("3xui")
-    if isinstance(panels, Mapping):
-        for panel_id, panel in panels.items():
-            if isinstance(panel, Mapping) and panel.get("nginx_auth"):
-                raise ValidationError(
-                    f"3xui.{panel_id}.nginx_auth is incompatible with panel bearer authentication; "
-                    "remove nginx_auth and disable Basic authentication for the panel API",
-                )
-
     validate_panel_limit(data)

@@ -89,7 +89,6 @@ class PanelConfig(TypedDict):
     whitelist: bool
     inbounds_list: list[int]
     mode: Literal["whitelist", "blacklist"]
-    nginx_auth: NotRequired[list[str]]
     inject_headers: NotRequired[dict[str, str]]
 
 

@@ -155,7 +155,6 @@ class FakePanelOptions(TypedDict, total=False):
 
 class SessionExtras(TypedDict, total=False):
     https: bool
-    nginx_auth: tuple[str, str] | None
     inbounds_list: tuple[int, ...]
     mode: Literal["whitelist", "blacklist"]
     inject_headers: Mapping[str, str | bytes] | None

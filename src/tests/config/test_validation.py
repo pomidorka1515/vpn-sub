@@ -34,7 +34,7 @@ def test_whitelist_panel_limit_on_commit_and_reload(app_cfg: Config[AppConfig]) 
 @pytest.mark.parametrize("boundary", ["load", "reload", "commit", "validate"])
 @pytest.mark.parametrize(
     "invalid",
-    ["profile_node", "removed_node", "username", "password", "nginx_auth"],
+    ["profile_node", "removed_node", "username", "password"],
 )
 def test_business_validation_at_config_boundaries(
     app_cfg: Config[AppConfig],
@@ -65,14 +65,9 @@ def test_business_validation_at_config_boundaries(
         document["profiles"]["profile"]["node"] = "missing"
     elif invalid == "removed_node":
         document["nodes"] = {}
-    elif invalid == "nginx_auth":
-        document["3xui"]["local"]["nginx_auth"] = ["proxy-user", "proxy-password"]
     else:
         document["api_admin_ui_auth"][0 if invalid == "username" else 1] = ""
-    if invalid == "nginx_auth":
-        message = "nginx_auth is incompatible with panel bearer authentication"
-    else:
-        message = "not a key of nodes" if "node" in invalid else "entries must not be empty"
+    message = "not a key of nodes" if "node" in invalid else "entries must not be empty"
     path = Path(app_cfg.path)
     before = path.read_bytes()
 
@@ -102,6 +97,45 @@ def test_business_validation_at_config_boundaries(
         assert path.read_bytes() == before
     else:
         assert json.loads(path.read_bytes()) == document
+
+
+@pytest.mark.parametrize("boundary", ["load", "reload", "commit", "validate"])
+@pytest.mark.parametrize("value", [None, [], ["proxy-user", "proxy-password"]])
+def test_removed_panel_auth_rejected_at_config_boundaries(
+    app_cfg: Config[AppConfig], boundary: str, value: JsonValue
+) -> None:
+    document = app_cfg.copy()
+    panels = cast(JsonDict, document["3xui"])
+    panel = cast(JsonDict, panels["local"])
+    panel["nginx_auth"] = value
+    path = Path(app_cfg.path)
+    before = path.read_bytes()
+    snapshot = app_cfg.copy()
+
+    def exercise_boundary() -> None:
+        if boundary == "load":
+            path.write_text(json.dumps(document), encoding="utf-8")
+            Config[AppConfig](
+                path=path,
+                schema_path=app_cfg.schema_path,
+                validators=(check_config_document,),
+                backup_dir=None,
+                sync_mode="none",
+            )
+        elif boundary == "reload":
+            path.write_text(json.dumps(document), encoding="utf-8")
+            app_cfg.reload()
+        elif boundary == "commit":
+            with app_cfg.edit() as tx:
+                tx.update(document)
+        else:
+            app_cfg.validate_document(document)
+
+    with pytest.raises(SchemaValidationError, match="nginx_auth"):
+        exercise_boundary()
+    assert app_cfg.data == snapshot
+    if boundary in {"commit", "validate"}:
+        assert path.read_bytes() == before
 
 
 @pytest.mark.parametrize("whitelist", [False, True])

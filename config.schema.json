@@ -166,12 +166,6 @@
                     "token": { "type": "string", "minLength": 20, "description": "Admin-scoped 3x-ui API token (panel Settings -> Security -> API Token)." },
                     "https": { "type": "boolean" },
                     "whitelist": { "type": "boolean", "description": "Whether this is the dedicated whitelist traffic panel; at most one panel may be true." },
-                    "nginx_auth": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "minItems": 2,
-                        "maxItems": 2
-                    },
                     "inbounds_list": {
                         "type": "array",
                         "items": { "type": "integer" }

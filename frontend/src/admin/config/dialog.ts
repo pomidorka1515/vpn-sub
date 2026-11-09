@@ -38,16 +38,12 @@ export function createConfigDialog({ markDirty, renderCards }: { markDirty(): vo
       const nested = (which: string): void => {
         const slot = body.querySelector<HTMLElement>(`[data-dialog-nested="${which}"]`);
         if (!slot) return;
-        if (which === 'nginx_auth') slot.innerHTML = `<div class="config-pair"><input type="text" data-field="nginx0">${passWrap('cfg-dlg-nginx-password', '')}</div>`;
-        else {
-          slot.innerHTML = rowList('cfg-dlg-headers', [], 'pair');
-          bindRows('cfg-dlg-headers', 'pair', (rows, live) => { if (!live) repaintRows('cfg-dlg-headers', rows, 'pair'); });
-        }
+        slot.innerHTML = rowList('cfg-dlg-headers', [], 'pair');
+        bindRows('cfg-dlg-headers', 'pair', (rows, live) => { if (!live) repaintRows('cfg-dlg-headers', rows, 'pair'); });
         const remove = document.createElement('button');
         remove.type = 'button'; remove.className = 'btn-tiny'; remove.textContent = t('config_remove');
         remove.addEventListener('click', () => { slot.innerHTML = ''; addNestedButton(slot, which); });
         slot.appendChild(remove);
-        initPassToggles(document);
       };
       const addNestedButton = (slot: HTMLElement | null, which: string): void => {
         if (!slot) return;
@@ -55,7 +51,7 @@ export function createConfigDialog({ markDirty, renderCards }: { markDirty(): vo
         add.type = 'button'; add.className = 'btn-tiny'; add.textContent = t('config_add');
         add.addEventListener('click', () => nested(which)); slot.appendChild(add);
       };
-      ['nginx_auth', 'inject_headers'].forEach(which => addNestedButton(body.querySelector(`[data-dialog-nested="${which}"]`), which));
+      addNestedButton(body.querySelector('[data-dialog-nested="inject_headers"]'), 'inject_headers');
     }
     initPassToggles(document);
     overlay.hidden = false;
@@ -168,7 +164,6 @@ function dialogPanel() {
     <div class="form-row"><label>${escapeHtml(t('config_field_whitelist'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_mode'))}</label><div class="input-wrap"><select data-field="mode"><option value="blacklist" selected>${escapeHtml(t('config_blacklist_mode'))}</option><option value="whitelist">${escapeHtml(t('config_whitelist_mode'))}</option></select></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_inbounds_list'))}</label><div class="input-wrap">${rowList('cfg-dlg-inbounds', [], 'int')}</div></div>
-    <div class="form-row"><label>${escapeHtml(t('config_field_nginx_auth'))}</label><div class="input-wrap" data-dialog-nested="nginx_auth"></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_inject_headers'))}</label><div class="input-wrap" data-dialog-nested="inject_headers"></div></div>
     ${fieldError('cfg-dialog-err')}
   </div>`;
@@ -208,8 +203,6 @@ function readDialogPanel(body: HTMLElement): ConfigObject & { id: string } {
     mode: dialogValue(body, 'mode')?.value || 'blacklist',
     inbounds_list: readRows('cfg-dlg-inbounds', 'int').map(raw => { const value = String(raw); return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value; }),
   };
-  const nginx = dialogValue(body, 'nginx0');
-  if (nginx) result.nginx_auth = [nginx.value, readText('cfg-dlg-nginx-password')];
   if (document.getElementById('cfg-dlg-headers')) result.inject_headers = Object.fromEntries(readRows('cfg-dlg-headers', 'pair').filter((row): row is string[] => Array.isArray(row)).map(row => [row[0] ?? '', row[1] ?? '']));
   return result;
 }

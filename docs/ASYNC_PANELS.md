@@ -10,4 +10,4 @@ Client and transport admission each default to eight active requests and reject 
   
 The client owns its named health task and all admitted request tasks. Closing stops admission, cancels/settles health work, drains admitted requests, and closes the owned transport/session. A cancelled close waiter leaves retained cleanup running; repeated close calls await the same outcome. Raw awaited request exceptions are observed without task traceback logging because HTTP exceptions may contain secrets. Health/request logs omit URL prefixes, query strings, response messages and exception text.  
   
-Verification: Ruff, mypy and pyright pass. The full suite passed 583 tests; after adding explicit periodic-health and injected-client-session ownership checks, all 30 panel/lifecycle tests passed. The installed aiohttp emits deprecation warnings for its supported BasicAuth API.  
+Verification: Ruff, mypy and pyright pass. The full suite passed 583 tests; after adding explicit periodic-health and injected-client-session ownership checks, all 30 panel/lifecycle tests passed.  

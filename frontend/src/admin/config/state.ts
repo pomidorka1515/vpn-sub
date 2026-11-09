@@ -11,7 +11,7 @@ export const KNOWN_KEYS = ['$schema', ...REQUIRED_KEYS, ...OPTIONAL_KEYS.filter(
 export const TEMPLATE_KEYS = ['dns', 'routing', 'inbounds', 'outbounds', 'remarks'];
 export const PROFILE_FIELDS = ['flag', 'name', 'json', 'description', 'whitelist', 'xhttpExtra', 'masterLink', 'node', 'shortProfileDescription'];
 export const PANEL_FIELDS = ['name', 'address', 'port', 'uri', 'token', 'https', 'whitelist', 'inbounds_list', 'mode'];
-export const PANEL_OPTIONAL = ['nginx_auth', 'inject_headers'];
+export const PANEL_OPTIONAL = ['inject_headers'];
 export const INTEGER_RE = /^(0|-?[1-9]\d*)$/;
 
 export const MAIN_SECTIONS: Array<[string, string[]]> = [

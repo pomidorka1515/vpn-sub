@@ -41,7 +41,6 @@ class XUiSession:
         uri: str,
         api_token: str,
         https: bool = False,
-        nginx_auth: tuple[str, str] | None = None,
         inject_headers: Mapping[str, str] | None = None,
         health_check_interval: float = 20.0,
         verbose: bool = False,
@@ -84,7 +83,7 @@ class XUiSession:
         self.dead = False
         self._token_rejected = False
         self._owned_transport = (
-            AiohttpPanelTransport(session, nginx_auth, limit=request_limit, timeout=request_timeout)
+            AiohttpPanelTransport(session, limit=request_limit, timeout=request_timeout)
             if transport is None
             else None
         )

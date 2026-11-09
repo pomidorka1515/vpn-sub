@@ -60,6 +60,18 @@ describe('Discord config', () => {
 describe('strict client config validation', () => {
   const issuesFor = (key: string, value: ConfigValue) => validateDraft({ [key]: value }).filter(issue => issue.path === key);
 
+  it.each([null, [], ['proxy-user', 'proxy-password']])('rejects removed panel authentication: %j', value => {
+    const panel = {
+      name: 'local', address: '127.0.0.1', port: '2053', uri: '', token: 'x'.repeat(20),
+      https: false, whitelist: false, mode: 'blacklist', inbounds_list: [],
+    };
+    const panelIssues = (config: ConfigValue) => validateDraft({ '3xui': { local: config } }).filter(issue => issue.path.startsWith('3xui.'));
+    expect(panelIssues(panel)).toEqual([]);
+    expect(panelIssues({ ...panel, nginx_auth: value })).toEqual([
+      { path: '3xui.local.nginx_auth', message: 'config_err_unknown' },
+    ]);
+  });
+
   it.each(['redis://localhost:6379/0', 'redis://:password@redis:6379/1'])('accepts Redis URL %s', url => {
     expect(issuesFor('redis', { url })).toEqual([]);
   });

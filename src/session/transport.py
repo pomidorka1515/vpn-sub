@@ -12,7 +12,6 @@ import aiohttp
 from multidict import CIMultiDict, CIMultiDictProxy
 
 from app_runtime.tasks import TaskRegistry
-from errors import XUiSessionError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -26,7 +25,6 @@ class RequestKwargs(TypedDict, total=False):
     json: JsonValue
     data: Mapping[str, str] | bytes | str
     timeout: float
-    auth: tuple[str, str] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +55,7 @@ class XUiPanelTransport(Protocol):
 
 
 class AiohttpPanelTransport:
-    """Own a session unless injected; refuse conflicting HTTP auth explicitly.
+    """Own a session unless injected.
 
     Admission rejects saturation rather than queueing unbounded HTTP tasks.
     All admitted requests settle before closing the owned session.
@@ -66,7 +64,6 @@ class AiohttpPanelTransport:
     def __init__(
         self,
         session: aiohttp.ClientSession | None = None,
-        auth: tuple[str, str] | None = None,
         *,
         limit: int = 8,
         timeout: float = 5.0,
@@ -77,7 +74,6 @@ class AiohttpPanelTransport:
             raise ValueError("timeouts must be positive")
         self._session = session
         self._owns_session = session is None
-        self._auth = auth
         self._limit = limit
         self._timeout = timeout
         self._connect_timeout = connect_timeout
@@ -125,20 +121,7 @@ class AiohttpPanelTransport:
         session = self._session
         if session is None:
             raise RuntimeError("transport has not started")
-        auth = kwargs.get("auth", self._auth)
         headers = CIMultiDict(kwargs.get("headers", {}))
-        has_authorization = any(key.lower() == "authorization" for key in headers)
-        session_has_authorization = "Authorization" in session.headers
-        # aiohttp also rejects this combination; check it here for a stable,
-        # credential-free application error instead of a library exception.
-        if (auth is not None or session.auth is not None) and (
-            has_authorization or session_has_authorization
-        ):
-            raise XUiSessionError(
-                "refusing to send basic auth alongside an Authorization header",
-            )
-        if auth is not None:
-            headers["Authorization"] = aiohttp.encode_basic_auth(*auth, encoding="latin1")
         total = kwargs.get("timeout", self._timeout)
         if total <= 0:
             raise ValueError("timeout must be positive")
