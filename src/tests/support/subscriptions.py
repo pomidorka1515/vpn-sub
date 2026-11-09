@@ -10,6 +10,7 @@ from argon2 import PasswordHasher
 
 from app_runtime.offload import OffloadServices
 from app_runtime.tasks import MutationRegistry
+from config.store import AsyncLinesConfig
 from core import Subscription
 from core.coordination import MutationCoordinator
 from core.services.audit import AuditService
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from config import Config, LangConfig
-    from config.store import AsyncLinesConfig
     from db.database import Database
     from tests.support.contracts import AppOverrides
 
@@ -99,7 +99,7 @@ async def make_subscription(
             whitelist_panel=wl,
             offloads=offloads,
             coordinator=MutationCoordinator(MutationRegistry()),
-            audit_svc=AuditService(cast("AsyncLinesConfig | None", audit_cfg)),
+            audit_svc=AuditService(cast(AsyncLinesConfig | None, audit_cfg)),
             password_hasher=PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1),
         )
         cleanup.pop_all()

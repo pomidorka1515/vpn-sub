@@ -51,10 +51,10 @@ def check_config_document(data: Mapping[str, JsonValue]) -> None:
     auth = data.get("api_admin_ui_auth")
     if (
         isinstance(auth, list)
-        and len(cast("list[object]", auth)) == 2
+        and len(cast(list[object], auth)) == 2
         and (
-            not _nonempty_str(cast("list[object]", auth)[0])
-            or not _nonempty_str(cast("list[object]", auth)[1])
+            not _nonempty_str(cast(list[object], auth)[0])
+            or not _nonempty_str(cast(list[object], auth)[1])
         )
     ):
         raise ValidationError("api_admin_ui_auth entries must not be empty")

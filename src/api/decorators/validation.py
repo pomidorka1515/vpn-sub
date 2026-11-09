@@ -5,12 +5,11 @@ from typing import TYPE_CHECKING, cast
 
 from quart import g, request
 
+from custom_types import JsonifyValue
 from util import err
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-
-    from custom_types import JsonifyValue
 
     from ._common import WrappedReturn
 
@@ -33,7 +32,7 @@ def requires_fields[**P, R](
             if missing:
                 return err(f"Missing fields: {', '.join(missing)}", 400)
 
-            content = cast("dict[str, JsonifyValue]", content)  # NOTE: g.json_obj will appear
+            content = cast(dict[str, JsonifyValue], content)  # NOTE: g.json_obj will appear
             # NOTE: as dict[Unknown, Unknown] -> type errors without this
             g.json_obj = content
             return await f(*args, **kwargs)
@@ -60,7 +59,7 @@ def requires_fields_strict[**P, R](
                 return err("Missing JSON data.", 400)
             if not isinstance(content, dict):
                 return err("Body must be a JSON dict.", 400)
-            content = cast("dict[str, object]", content)
+            content = cast(dict[str, object], content)
 
             for field, expected_type in fields:
                 if field not in content:
@@ -73,7 +72,7 @@ def requires_fields_strict[**P, R](
                         f"Field '{field}' must be {expected_type.__name__}, got {type(value).__name__}",
                         400,
                     )
-            content = cast("dict[str, JsonifyValue]", content)
+            content = cast(dict[str, JsonifyValue], content)
             g.json_obj = content
             return await f(*args, **kwargs)
 

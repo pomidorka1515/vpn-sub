@@ -12,11 +12,10 @@ import aiohttp
 from multidict import CIMultiDict, CIMultiDictProxy
 
 from app_runtime.tasks import TaskRegistry
+from config import JsonValue
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-    from config import JsonValue
 
 
 class RequestKwargs(TypedDict, total=False):
@@ -38,7 +37,7 @@ class PanelResponse:
 
     def json(self) -> JsonValue:
         """Decode independently of transport, including malformed-body errors."""
-        return cast("JsonValue", json.loads(self.content))
+        return cast(JsonValue, json.loads(self.content))
 
     @classmethod
     def from_json(cls, payload: JsonValue, status_code: int = 200) -> PanelResponse:

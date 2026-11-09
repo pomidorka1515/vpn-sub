@@ -61,7 +61,7 @@ def _string_map(value: object) -> dict[str, str]:
         return {}
     return {
         key: text
-        for key, text in cast("Mapping[object, object]", value).items()
+        for key, text in cast(Mapping[object, object], value).items()
         if isinstance(key, str) and isinstance(text, str)
     }
 
@@ -69,7 +69,7 @@ def _string_map(value: object) -> dict[str, str]:
 def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
     section = web.get(name)
     if isinstance(section, Mapping):
-        return cast("Mapping[str, object]", section)
+        return cast(Mapping[str, object], section)
     return {}
 
 
@@ -83,10 +83,8 @@ def web_lang_tables(
         raise ValueError(f"unknown web page '{page}'")
     lang = language_code or resolve_web_lang()
     language = lang_cfg.view()
-    raw = cast("object", language.get("web"))
-    web: Mapping[str, object] = (
-        cast("Mapping[str, object]", raw) if isinstance(raw, Mapping) else {}
-    )
+    raw = cast(object, language.get("web"))
+    web: Mapping[str, object] = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
     shared = _section(web, "shared")
     page_table = _section(web, page)
 

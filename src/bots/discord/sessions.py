@@ -67,9 +67,9 @@ class DatabaseSessionStore:
         raw: object = json.loads(payload or "{}")
         if not isinstance(raw, dict):
             raise ValueError("Discord sessions must be an object")
-        for key, value in cast("dict[str, object]", raw).items():
+        for key, value in cast(dict[str, object], raw).items():
             if isinstance(value, dict):
-                value = cast("dict[str, object]", value)
+                value = cast(dict[str, object], value)
                 token, lang = value.get("token"), value.get("lang")
                 self.records[str(key)] = SessionRecord(
                     str(key),

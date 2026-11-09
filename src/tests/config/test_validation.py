@@ -86,9 +86,9 @@ def test_business_validation_at_config_boundaries(
             app_cfg.reload()
         elif boundary == "commit":
             with app_cfg.edit() as tx:
-                tx.update(cast("JsonDict", document))
+                tx.update(cast(JsonDict, document))
         else:
-            app_cfg.validate_document(cast("JsonDict", document))
+            app_cfg.validate_document(cast(JsonDict, document))
 
     with pytest.raises(ValidationError, match=message):
         exercise_boundary()

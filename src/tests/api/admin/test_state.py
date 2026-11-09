@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 import pytest
+from quart.testing.connections import TestHTTPConnection as HTTPTestConnection
 
 from api import AsyncApi
 from config.store import AsyncLinesConfig
@@ -16,7 +17,6 @@ from tests.support.panels import FakePanel
 
 if TYPE_CHECKING:
     from quart import Quart
-    from quart.testing.connections import TestHTTPConnection
 
     from core import Subscription
     from db import Database
@@ -261,7 +261,7 @@ async def test_polling_status_contract(
             method="GET",
             headers={"Authorization": "secret"},
         ) as connection:
-            connection = cast("TestHTTPConnection", connection)
+            connection = cast(HTTPTestConnection, connection)
             async with asyncio.timeout(5):
                 body = b""
                 while b"data: " not in body or not body.endswith(b"\n\n"):

@@ -9,9 +9,10 @@ import pytest_asyncio
 
 from api import AsyncApi
 from api.config_patch import REQUIRED_KEYS, config_etag
-from config import AppConfig, Config
-from config.store import AsyncConfig
+from config import AppConfig, Config, JsonValue
+from config.store import AsyncConfig, AsyncLinesConfig
 from config.validation import check_config_document
+from core import Subscription
 from core.services.audit import AuditService
 from errors import ValidationError
 from tests.support.api import api_app, make_subscription, make_watch
@@ -24,9 +25,6 @@ if TYPE_CHECKING:
     from quart import Quart
     from quart.wrappers import Response
 
-    from config import JsonValue
-    from config.store import AsyncLinesConfig
-    from core import Subscription
     from db import Database
 
 ROOT = REPO_ROOT
@@ -66,11 +64,11 @@ async def config_api(
         )
         await cfg.start()
         audit = RecordingAudit()
-        sub.audit_svc = AuditService(cast("AsyncLinesConfig", audit))
+        sub.audit_svc = AuditService(cast(AsyncLinesConfig, audit))
         AsyncApi(
             app=app,
             cfg=cfg,
-            audit_cfg=cast("AsyncLinesConfig", audit),
+            audit_cfg=cast(AsyncLinesConfig, audit),
             sub=sub,
             bw=make_watch(database, sub),
             limiter=app.extensions["limiter"],
@@ -94,7 +92,7 @@ async def set_config(app: Quart, base: str, values: dict[str, JsonValue]) -> Res
 
 
 def base_for(path: Path) -> str:
-    return config_etag(cast("dict[str, JsonValue]", json.loads(path.read_bytes())))
+    return config_etag(cast(dict[str, JsonValue], json.loads(path.read_bytes())))
 
 
 @pytest.mark.asyncio
@@ -208,11 +206,11 @@ async def test_ui_credential_rotation_revokes_browser_not_machine_auth(
     # Reconstructing the API models a serving-process restart: the configured
     # machine token becomes active, while process-bound browser authority dies.
     async with api_app() as restarted:
-        sub = cast("Subscription", app.extensions["subscriptions"][0])
+        sub = cast(Subscription, app.extensions["subscriptions"][0])
         AsyncApi(
             app=restarted,
             cfg=cfg,
-            audit_cfg=cast("AsyncLinesConfig", config_api[3]),
+            audit_cfg=cast(AsyncLinesConfig, config_api[3]),
             sub=sub,
             bw=make_watch(sub.res.db, sub),
             limiter=restarted.extensions["limiter"],

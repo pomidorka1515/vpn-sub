@@ -229,7 +229,7 @@ class FakePanel:
         if self._post_payload is not None:
             return json_http(self._post_payload, self._post_status)
         raw_body: object = kwargs.get("json")
-        body = dict(cast("dict[str, object]", raw_body)) if isinstance(raw_body, dict) else {}
+        body = dict(cast(dict[str, object], raw_body)) if isinstance(raw_body, dict) else {}
         return self._route_post(url, body)
 
     def _find(self, email: str) -> PanelClient | None:
@@ -240,7 +240,7 @@ class FakePanel:
         raw: object = body.get("client")
         if not isinstance(raw, dict):
             return json_http({"success": False, "msg": "missing client", "obj": None}, 200)
-        client = cast("dict[str, object]", raw)
+        client = cast(dict[str, object], raw)
         email = str(client.get("email", ""))
         if self._find(email) is not None:
             return json_http({"success": False, "msg": "duplicate email", "obj": None}, 200)
@@ -282,7 +282,7 @@ class FakePanel:
         enable = "bulkEnable" in url
         raw_emails = body.get("emails", [])
         assert isinstance(raw_emails, list)
-        emails = [str(e) for e in cast("list[object]", raw_emails)]
+        emails = [str(e) for e in cast(list[object], raw_emails)]
         missing = [e for e in emails if self._find(e) is None]
         if missing:
             return json_http(
@@ -367,7 +367,7 @@ def _integer(value: object) -> int:
 
 def _integer_list(value: object) -> list[int]:
     assert isinstance(value, list)
-    return [_integer(item) for item in cast("list[object]", value)]
+    return [_integer(item) for item in cast(list[object], value)]
 
 
 def _telegram_id(value: object) -> str | int:

@@ -8,6 +8,8 @@ from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
 from api.config_patch import apply_config_patch, config_etag
 from api.decorators import requires_admin_auth, requires_fields_strict
+from config import JsonValue
+from custom_types import JsonifyValue
 from errors import SchemaValidationError, ValidationError
 from util import err, ok
 
@@ -15,8 +17,6 @@ if TYPE_CHECKING:
     from collections.abc import MutableMapping
 
     from api.common import ResponseType
-    from config import JsonValue
-    from custom_types import JsonifyValue
 
 
 class AsyncConfigRoutes(AsyncAdminApiMixin):
@@ -33,21 +33,21 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
         visible = dict(data)
         if g.admin_browser_auth:
             visible.pop("api_token", None)
-        response, code = ok(obj=cast("JsonifyValue", visible))
-        response.headers["ETag"] = f'"{config_etag(cast("dict[str, JsonValue]", data))}"'
+        response, code = ok(obj=cast(JsonifyValue, visible))
+        response.headers["ETag"] = f'"{config_etag(cast(dict[str, JsonValue], data))}"'
         response.headers["Cache-Control"] = "no-store"
         return response, code
 
     @requires_admin_auth
     @requires_fields_strict()
     async def config_set(self) -> ResponseType:
-        body = cast("dict[str, JsonValue]", g.json_obj)
+        body = cast(dict[str, JsonValue], g.json_obj)
         base = body.get("base")
         values = body.get("values")
         if not isinstance(base, str) or not isinstance(values, dict):
             return err("base must be a string and values must be an object")
 
-        if any(not isinstance(key, str) for key in cast("dict[object, object]", values)):
+        if any(not isinstance(key, str) for key in cast(dict[object, object], values)):
             return err("values must be an object")
         base = base.strip().removeprefix("W/").strip().strip('"')
 

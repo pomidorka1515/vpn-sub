@@ -91,21 +91,17 @@ class AsyncCodeRoutes(AsyncAdminApiMixin):
         if data["action"] not in {"register", "bonus"}:
             return err("action must be 'register' or 'bonus'")
 
-        if (
-            cast("int", data["days"]) < 0
-            or cast("int", data["gb"]) < 0
-            or cast("int", data["wl_gb"]) < 0
-        ):
+        if cast(int, data["days"]) < 0 or cast(int, data["gb"]) < 0 or cast(int, data["wl_gb"]) < 0:
             return err("days, gb, and wl_gb must be non-negative")
 
         await self.sub.code_svc.add_code(
-            code=cast("str", data["name"]),
+            code=cast(str, data["name"]),
             action=data["action"],
-            permanent=cast("bool", data["permanent"]),
-            days=cast("int", data["days"]),
-            gb=cast("int", data["gb"]),
-            wl_gb=cast("int", data["wl_gb"]),
-            uses=cast("int", data["uses"]),
+            permanent=cast(bool, data["permanent"]),
+            days=cast(int, data["days"]),
+            gb=cast(int, data["gb"]),
+            wl_gb=cast(int, data["wl_gb"]),
+            uses=cast(int, data["uses"]),
         )
         return ok("Created", 201)
 

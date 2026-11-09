@@ -11,10 +11,12 @@ from quart import g, request
 from loggers import Logger
 from util import compare, err
 
+from ._common import Decorated
+
 if TYPE_CHECKING:
     from ..admin._base import AsyncAdminApiMixin
     from ..web._base import AsyncWebApiMixin
-    from ._common import Decorated, DecoratedInject, WrappedReturn
+    from ._common import DecoratedInject, WrappedReturn
 
 ADMIN_UI_COOKIE = "admin_ui"
 ADMIN_UI_SESSION_LEN = 100
@@ -75,7 +77,7 @@ def requires_admin_auth[API_T: AsyncAdminApiMixin, **P, R](
             return err("Unauthorized", 401)
         return await f(self, *args, **kwargs)
 
-    return cast("Decorated[API_T, P, R]", wrapper)
+    return cast(Decorated[API_T, P, R], wrapper)
 
 
 def requires_webapi_auth[API_T: AsyncWebApiMixin, **P, R](
@@ -92,7 +94,7 @@ def requires_webapi_auth[API_T: AsyncWebApiMixin, **P, R](
             return err("Invalid auth token.", 401)
         return await f(self, username, *args, **kwargs)
 
-    return cast("Decorated[API_T, P, R]", wrapper)
+    return cast(Decorated[API_T, P, R], wrapper)
 
 
 def requires_no_auth[API_T: AsyncWebApiMixin, **P, R](
@@ -107,4 +109,4 @@ def requires_no_auth[API_T: AsyncWebApiMixin, **P, R](
             return err("Must not be authorized.", 403)
         return await f(self, *args, **kwargs)
 
-    return cast("Decorated[API_T, P, R]", wrapper)
+    return cast(Decorated[API_T, P, R], wrapper)

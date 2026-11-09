@@ -6,6 +6,7 @@ import math
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal, cast
 
+from config import JsonValue
 from config.equality import json_equal
 from config.validation import check_config_document
 from errors import ValidationError
@@ -13,7 +14,6 @@ from errors import ValidationError
 if TYPE_CHECKING:
     from collections.abc import MutableMapping
 
-    from config import JsonValue
 
 # pyright: reportUnnecessaryIsInstance=false
 
@@ -111,7 +111,7 @@ def apply_config_patch(
             continue
         if not _is_json_value(value):
             raise ValidationError(f"{key} is not a JSON value")
-        working[key] = cast("JsonValue", value)
+        working[key] = cast(JsonValue, value)
     check_config_document(working)
     if json_equal(dict(working), preimage):
         return "unchanged", [], []
@@ -133,8 +133,8 @@ def _is_json_value(value: object) -> bool:
     if isinstance(value, Mapping):
         return all(
             isinstance(key, str) and _is_json_value(item)
-            for key, item in cast("Mapping[str, object]", value).items()
+            for key, item in cast(Mapping[str, object], value).items()
         )
     if isinstance(value, list):
-        return all(_is_json_value(item) for item in cast("list[object]", value))
+        return all(_is_json_value(item) for item in cast(list[object], value))
     return False

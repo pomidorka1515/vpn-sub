@@ -78,7 +78,7 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
             elif k in {"ext_username", "ext_password", "token", "userid", "fingerprint"}:
                 if v is not None and not isinstance(v, str):
                     return err(f"{k} must be a string or null")
-                data[k] = cast("str", v)
+                data[k] = cast(str, v)
 
             elif k in {"limit", "wl_limit", "time"}:
                 try:
@@ -87,16 +87,16 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
                     return err(str(error), 400)
 
         await self.sub.business_svc.add_new_user(
-            username=cast("str", data["user"]),
-            displayname=cast("str", data["displayname"]),
-            ext_username=cast("str", data["ext_username"]),
-            ext_password=cast("str", data["ext_password"]),
-            token=cast("str", data["token"]),
-            userid=cast("str", data["userid"]),
-            fingerprint=cast("str", data["fingerprint"]),
-            limit=cast("int", data["limit"]),
-            wl_limit=cast("int", data["wl_limit"]),
-            timee=cast("int", data["time"]),
+            username=cast(str, data["user"]),
+            displayname=cast(str, data["displayname"]),
+            ext_username=cast(str, data["ext_username"]),
+            ext_password=cast(str, data["ext_password"]),
+            token=cast(str, data["token"]),
+            userid=cast(str, data["userid"]),
+            fingerprint=cast(str, data["fingerprint"]),
+            limit=cast(int, data["limit"]),
+            wl_limit=cast(int, data["wl_limit"]),
+            timee=cast(int, data["time"]),
         )
         return ok("Created", 201)
 

@@ -8,12 +8,14 @@ from quart import request
 from loggers import Logger
 from util import err
 
+from ._common import DecoratedReturn
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from api.common import AsyncBaseApi
 
-    from ._common import Decorated, DecoratedReturn, WrappedReturn
+    from ._common import Decorated, WrappedReturn
 
 log = Logger("rate_limit")
 
@@ -42,6 +44,6 @@ def rate_limit[API_T: AsyncBaseApi, **P, R](
                 return err("Too many requests.", 429)
             return await f(self, *args, **kwargs)
 
-        return cast("DecoratedReturn[API_T, P, R]", wrapper)
+        return cast(DecoratedReturn[API_T, P, R], wrapper)
 
     return decorator

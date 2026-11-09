@@ -116,7 +116,7 @@ class AsyncRateLimiter:
             from redis.asyncio import Redis
 
             self._client = cast(
-                "RateLimitClient",
+                RateLimitClient,
                 Redis.from_url(  # pyright: ignore[reportUnknownMemberType]  # Upstream kwargs are untyped.
                     self.url,
                     socket_connect_timeout=self.socket_timeout,

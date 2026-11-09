@@ -2,22 +2,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import pytest
 
-from config import AppConfig, Config, JsonDict
+from config import AppConfig, Config, JsonDict, JsonValue
 from errors import SchemaValidationError
-
-if TYPE_CHECKING:
-    from config import JsonValue
 
 
 @pytest.mark.parametrize("boundary", ["load", "reload", "commit", "validate"])
 @pytest.mark.parametrize(
     ("field", "value"),
     cast(
-        "list[tuple[str, JsonValue]]",
+        list[tuple[str, JsonValue]],
         [
             ("profiles.profile.json", {}),
             ("profiles.profile.json.settings", None),

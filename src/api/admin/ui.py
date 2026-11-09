@@ -83,7 +83,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         content = await request.get_json(silent=True)
         if not isinstance(content, dict):
             return err("Body must be a JSON dict.", 400)
-        body = cast("dict[str, object]", content)
+        body = cast(dict[str, object], content)
         username = body.get("username")
         password = body.get("password")
         if (
@@ -142,8 +142,8 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
     def _admin_credentials_ok(self, username: str, password: str) -> bool:
         conf = self.cfg.view()
         configured = conf["api_admin_ui_auth"]
-        expected_user = cast("object", configured[0])
-        expected_password = cast("object", configured[1])
+        expected_user = cast(object, configured[0])
+        expected_password = cast(object, configured[1])
         if not isinstance(expected_user, str) or not isinstance(expected_password, str):
             return False
         return compare(username, expected_user) and compare(password, expected_password)

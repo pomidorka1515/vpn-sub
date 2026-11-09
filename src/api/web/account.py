@@ -110,7 +110,7 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
 
         result = await self.sub.code_svc.apply_bonus_code(
             username=username,
-            code=cast("str", content["code"]),
+            code=cast(str, content["code"]),
         )
         return ok(obj=asdict(result))
 

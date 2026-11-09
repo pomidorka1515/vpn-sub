@@ -7,12 +7,12 @@ import pytest
 from quart import Quart
 
 from app_runtime.rate_limit import AsyncRateLimiter
+from core import Subscription
 
 if TYPE_CHECKING:
     from quart import Response
 
     from app_runtime.rate_limit import RateLimitScript
-    from core import Subscription
 
 
 class RedisStore:
@@ -161,7 +161,7 @@ async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPa
     limiter = AsyncRateLimiter("redis://test", client=store)
     await limiter.start()
     app = Quart(__name__)
-    register_subscription_route(app, cast("Subscription", sub), limiter)
+    register_subscription_route(app, cast(Subscription, sub), limiter)
     client = app.test_client()
     try:
         for index in range(60):

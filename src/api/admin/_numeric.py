@@ -17,7 +17,7 @@ def bounded_int(
     if isinstance(raw, bool) or (isinstance(raw, float) and not raw.is_integer()):
         raise ValueError(f"{name} must be a finite integer")
     try:
-        value = int(cast("str", raw))
+        value = int(cast(str, raw))
     except ValueError, TypeError, OverflowError:
         raise ValueError(f"{name} must be a finite integer") from None
     if not minimum <= value <= maximum:

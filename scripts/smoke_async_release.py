@@ -25,8 +25,6 @@ from aiohttp import web
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from config import JsonDict
-
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "smoke-panel-token-not-a-production-secret"  # ruff: ignore[hardcoded-password-string] - disposable fixture
 
@@ -126,7 +124,9 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                     writer.close()
                     await writer.wait_closed()
                     break
-        config = cast("JsonDict", json.loads((ROOT / "docs/EXAMPLE.config.json").read_text()))
+        config = cast(
+            dict[str, object], json.loads((ROOT / "docs/EXAMPLE.config.json").read_text())
+        )
         config.pop("$schema", None)
         config.pop("bot", None)
         config.pop("publicbot", None)

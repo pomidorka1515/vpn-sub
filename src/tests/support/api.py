@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Unpack, cast
 
 from api.application import create_api_application
 from app_runtime.rate_limit import AsyncRateLimiter
+from config import AppConfig
+from config.store import AsyncConfig
 from tests.support.config import config_mock
 from tests.support.subscriptions import close_subscription
 from tests.support.subscriptions import make_subscription as make_core_subscription
@@ -15,8 +17,7 @@ if TYPE_CHECKING:
     from quart import Quart
 
     from app_runtime.rate_limit import RateLimitScript
-    from config import AppConfig, Config, LangConfig
-    from config.store import AsyncConfig
+    from config import Config, LangConfig
     from core import Subscription
     from db import Database
     from tests.support.contracts import AppOverrides
@@ -55,7 +56,7 @@ class OpenRedis:
 
 
 def config_snapshot(document: AppConfig) -> AsyncConfig[AppConfig]:
-    return cast("AsyncConfig[AppConfig]", cast("object", config_mock(document)))
+    return cast(AsyncConfig[AppConfig], cast(object, config_mock(document)))
 
 
 async def make_subscription(

@@ -7,12 +7,12 @@ import contextlib
 import re
 from typing import TYPE_CHECKING, Any, cast
 
+from aiohttp import ClientSession
 from telebot import asyncio_helper
 
 from app_runtime.tasks import TaskRegistry
 
 if TYPE_CHECKING:
-    from aiohttp import ClientSession
     from telebot.async_telebot import AsyncTeleBot
 
     from loggers import Logger
@@ -57,7 +57,7 @@ class AsyncTelegramSession:
         pass
 
     async def close(self) -> None:
-        session = cast("ClientSession | None", asyncio_helper.session_manager.session)
+        session = cast(ClientSession | None, asyncio_helper.session_manager.session)
         if session is not None and not session.closed:
             await session.close()
 
@@ -111,9 +111,9 @@ class TelegramPollingMixin:
                 delay = _POLLING_RETRY_DELAY
                 result: object = getattr(error, "result_json", None)
                 if isinstance(result, dict):
-                    parameters = cast("dict[str, object]", result).get("parameters")
+                    parameters = cast(dict[str, object], result).get("parameters")
                     retry = (
-                        cast("dict[str, object]", parameters).get("retry_after")
+                        cast(dict[str, object], parameters).get("retry_after")
                         if isinstance(parameters, dict)
                         else None
                     )
