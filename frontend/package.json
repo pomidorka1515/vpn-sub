@@ -6,19 +6,22 @@
     "node": "24.22.2"
   },
   "scripts": {
-    "test": "npm run typecheck:tests && vitest run",
+    "test": "node --test eslint.test.mjs && npm run typecheck:tests && vitest run",
     "test:watch": "vitest",
     "test:coverage": "npm run typecheck:tests && vitest run --coverage",
-    "typecheck": "tsc --project tsconfig.json && npm run typecheck:tests",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "npm run lint && tsc --project tsconfig.json && npm run typecheck:tests",
     "typecheck:tests": "tsc --project tsconfig.tests.json",
-    "build": "node build.mjs",
+    "build": "npm run lint && node build.mjs",
     "test:build": "npm run build && node --test build.test.mjs",
     "watch": "node build.mjs --watch"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
+    "eslint": "10.14.0",
     "javascript-obfuscator": "5.10.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1"
   },
   "dependencies": {
     "@types/node": "24.19.2",
