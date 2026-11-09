@@ -486,6 +486,7 @@
   min-width: 0; max-width: none; flex: 1; text-align: right;
   overflow: visible; text-overflow: unset; white-space: normal; overflow-wrap: anywhere;
 }
+#userDetailInfo .traffic-breakdown { display: block; margin-top: 3px; font-size: 0.625rem; color: var(--text2); }
 #userDetailResult .result-msg { overflow-wrap: anywhere; }
 
 .config-banner {

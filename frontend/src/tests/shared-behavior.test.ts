@@ -43,7 +43,7 @@ describe('busy controls', () => {
 
 describe('dialogs', () => {
   function setup() {
-    document.body.innerHTML = '<button id="origin">origin</button><div id="modalOverlay"><div id="modalTitle"></div><div id="modalMsg"></div><input id="modalInput"><button id="modalOk"></button><button id="modalCancel"></button></div>';
+    document.body.innerHTML = '<button id="origin">origin</button><dialog id="modalOverlay"><div id="modalTitle"></div><div id="modalMsg"></div><input id="modalInput"><button id="modalOk"></button><button id="modalCancel"></button></dialog>';
     const click = (id: string) => { required(document.getElementById(id)).click(); };
     return { ...createDialogs(document, t), click };
   }
@@ -52,6 +52,7 @@ describe('dialogs', () => {
     click('origin');
     required(document.getElementById('origin')).focus();
     const first = confirmDialog('<unsafe>', 'Title', { input: true, inputPlaceholder: 'value' });
+    expect(requiredInstance(document.getElementById('modalOverlay'), HTMLDialogElement).open).toBe(true);
     const input = requiredInstance(document.getElementById('modalInput'), HTMLInputElement);
     expect(required(document.getElementById('modalMsg')).textContent).toBe('<unsafe>');
     expect(required(document.getElementById('modalMsg')).children).toHaveLength(0);
@@ -59,6 +60,7 @@ describe('dialogs', () => {
     input.value = 'answer';
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     expect(await first).toBe('answer');
+    expect(requiredInstance(document.getElementById('modalOverlay'), HTMLDialogElement).open).toBe(false);
     expect(document.activeElement?.id).toBe('origin');
     const second = confirmDialog('', '', { input: true });
     click('modalOk');
@@ -76,6 +78,28 @@ describe('dialogs', () => {
     const third = confirmDialog('third');
     dispose();
     expect(await third).toBe(false);
+  });
+  it('opens confirmations as a modal after an existing modal and preserves it on dismissal', async () => {
+    const { confirmDialog, click } = setup();
+    const detail = document.createElement('dialog');
+    document.body.append(detail);
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+    try {
+      detail.showModal();
+      const confirmation = confirmDialog('reset');
+      const overlay = requiredInstance(document.getElementById('modalOverlay'), HTMLDialogElement);
+      expect(showModal.mock.instances).toEqual([detail, overlay]);
+      expect(detail.open).toBe(true);
+      expect(overlay.open).toBe(true);
+      click('modalCancel');
+      expect(await confirmation).toBe(false);
+      expect(detail.open).toBe(true);
+      expect(overlay.open).toBe(false);
+    } finally {
+      showModal.mockRestore();
+      detail.close();
+      detail.remove();
+    }
   });
 });
 

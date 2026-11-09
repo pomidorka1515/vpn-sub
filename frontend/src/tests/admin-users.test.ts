@@ -70,6 +70,9 @@ describe('admin user management', () => {
     expect(info.textContent).toContain(token);
     expect(info.textContent).toContain('total_traffic3.00 gb_unit');
     expect(info.textContent).toContain('wl_total_traffic500.00 mb_unit');
+    const breakdowns = info.querySelectorAll('.traffic-breakdown');
+    expect(breakdowns[0]?.textContent).toBe('↑ 1.00 gb_unit / ↓ 2.00 gb_unit');
+    expect(breakdowns[1]?.textContent).toBe('↑ 0 byte_unit / ↓ 500.00 mb_unit');
     expect(result.hidden).toBe(true);
     api.mockResolvedValueOnce(success({ uuid: 'new-uuid', token }));
     click('btnDoReset');
@@ -82,6 +85,7 @@ describe('admin user management', () => {
     expect(result.textContent).toBe('');
     expect(info.textContent).toContain('total_traffic0 byte_unit');
     expect(info.textContent).toContain('wl_total_trafficna');
+    expect([...info.querySelectorAll('.traffic-breakdown')].map(item => item.textContent)).toEqual(['↑ na / ↓ na', '↑ na / ↓ na']);
     api.mockResolvedValueOnce({ success: false, msg: 'failed', status: 400 });
     click('btnDoReset');
     await vi.waitFor(() => { expect(result.hidden).toBe(false); });

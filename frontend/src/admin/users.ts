@@ -84,13 +84,14 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         return;
       }
       const row = (key: string, value: unknown): string => `<div class="info-row"><span class="info-label">${t(key)}</span><span class="info-value">${escapeHtml(value || '—')}</span></div>`;
-      const traffic = (value: unknown): string => {
-        const total = isRecord(value) ? value['total'] : undefined;
-        return fmtBytes(typeof total === 'number' ? total : NaN, t);
+      const trafficRow = (key: string, value: unknown): string => {
+        const data = isRecord(value) ? value : {};
+        const format = (part: string): string => escapeHtml(fmtBytes(typeof data[part] === 'number' ? data[part] : NaN, t));
+        return `<div class="info-row"><span class="info-label">${t(key)}</span><span class="info-value">${format('total')}<span class="traffic-breakdown">↑ ${format('upload')} / ↓ ${format('download')}</span></span></div>`;
       };
       const limit = (value: unknown): string => Number(value || 0) === 0 ? '∞' : `${escapeHtml(value)} ${escapeHtml(t('gb_unit'))}`;
       element(doc, 'userDetailInfo').innerHTML = row('internal_user', username) + row('display_name', user['displayname']) + row('uuid', user['uuid']) + row('token', user['token']) + row('fingerprint', user['fingerprint']) +
-        row('total_traffic', traffic(bandwidth['total'])) + row('wl_total_traffic', traffic(bandwidth['wl_total'])) +
+        trafficRow('total_traffic', bandwidth['total']) + trafficRow('wl_total_traffic', bandwidth['wl_total']) +
         `<div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${limit(bandwidth['limit'])}</span></div>` +
         `<div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${limit(bandwidth['wl_limit'])}</span></div>` +
         row('expires', typeof user['time'] === 'number' && user['time'] ? (Number.isFinite(new Date(user['time'] * 1000).getTime()) ? new Date(user['time'] * 1000).toLocaleString() : user['time_exact'] ?? t('na')) : '∞') +

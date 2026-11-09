@@ -12,7 +12,9 @@ export function createDialogs(doc: Document, translate: Translate) {
   let dismissActive: (() => void) | undefined;
   function confirmDialog(message: string, title = '', options: DialogOptions = {}): Promise<boolean | string | null> {
     dismissActive?.();
-    const overlay = requiredElement(doc, 'modalOverlay');
+    const candidateOverlay = requiredElement(doc, 'modalOverlay');
+    if (!(candidateOverlay instanceof HTMLDialogElement)) throw new Error(translate('error'));
+    const overlay = candidateOverlay;
     const ok = requiredElement(doc, 'modalOk');
     const cancel = requiredElement(doc, 'modalCancel');
     const candidate = doc.getElementById('modalInput');
@@ -30,6 +32,7 @@ export function createDialogs(doc: Document, translate: Translate) {
     return new Promise(resolve => {
       function close(value: boolean | string | null): void {
         overlay.classList.remove('show');
+        overlay.close();
         ok.removeEventListener('click', submit);
         cancel.removeEventListener('click', dismiss);
         overlay.removeEventListener('click', outside);
@@ -51,6 +54,7 @@ export function createDialogs(doc: Document, translate: Translate) {
       overlay.addEventListener('click', outside);
       doc.addEventListener('keydown', onKey);
       overlay.classList.add('show');
+      overlay.showModal();
       if (options.input && input) input.focus();
       else cancel.focus();
     });
