@@ -20,8 +20,9 @@
   min-height: 32px;
 }
 .charts-switch-btn:hover { color: var(--text); }
-.charts-switch-btn.active { background: var(--surface2); color: var(--text); }
-.charts-switch-btn[aria-pressed="true"] { background: var(--surface2); color: var(--text); }
+.charts-switch-btn.active, .charts-switch-btn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent);
+}
 .charts-field {
   display: flex; align-items: center; gap: 8px; min-width: 0;
 }

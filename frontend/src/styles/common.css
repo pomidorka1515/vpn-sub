@@ -9,8 +9,8 @@
   --wl: var(--accent); --wl-light: var(--accent-light);
   --grid: rgba(255,255,255,0.04);
   --inset: #0a0a0b;
-  --green: #22c55e; --yellow: #eab308; --orange: #f59e0b; --red: #ef4444; --red-dark: #dc2626;
-  --cyan: var(--accent); --purple: #a855f7;
+  --green: #a8c9bc; --yellow: #d7c58c; --orange: #d9aa80; --red: #d88e8e; --red-dark: #c97474;
+  --cyan: #9bbbc8; --purple: #c2b8dc;
   --radius: 10px;
   color-scheme: dark;
 }
@@ -22,6 +22,8 @@
   --border: #e4e4e7; --border-h: #d4d4d8;
   --text: #18181b; --text2: #3f3f46;
   --accent: #285d49; --accent-dim: #214d3c; --accent-light: #39775e; --accent-ink: #fff;
+  --green: #285d49; --yellow: #80671c; --orange: #985c29; --red: #982e2e; --red-dark: #802424;
+  --cyan: #396877; --purple: #665080;
   --inset: #ffffff;
   --grid: rgba(0,0,0,0.035);
   color-scheme: light;
@@ -68,6 +70,14 @@ button, input[type="button"], input[type="submit"], input[type="reset"] {
   cursor: pointer; transition: all .2s;
 }
 .btn-sm:hover { border-color: var(--border-h); color: var(--text); }
+.topbar .btn-sm:not(.danger) {
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); color: var(--accent);
+}
+.topbar .btn-sm:not(.danger):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
 .btn-sm:disabled { opacity: .5; cursor: not-allowed; }
 .btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
 
@@ -88,11 +98,11 @@ button, input[type="button"], input[type="submit"], input[type="reset"] {
 .btn-primary:hover { background: var(--accent-dim); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .btn-danger {
-  padding: 8px 18px; border: 1px solid rgba(239,68,68,.3); border-radius: 8px;
+  padding: 8px 18px; border: 1px solid color-mix(in srgb, var(--red) 30%, transparent); border-radius: 8px;
   background: none; color: var(--red); font-family: inherit; font-size: 0.8125rem;
   cursor: pointer; transition: all .2s;
 }
-.btn-danger:hover { background: rgba(239,68,68,.1); }
+.btn-danger:hover { background: color-mix(in srgb, var(--red) 10%, transparent); }
 .btn-danger:disabled, .btn-secondary:disabled, .btn-tiny:disabled { opacity: .5; cursor: not-allowed; }
 
 .loading {
@@ -129,8 +139,8 @@ button, input[type="button"], input[type="submit"], input[type="reset"] {
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   font-size: 0.8125rem; z-index: 100; animation: fadeUp .3s ease; pointer-events: none;
 }
-.toast.error { border-color: rgba(239,68,68,.3); color: var(--red); }
-.toast.success { border-color: rgba(34,197,94,.3); color: var(--green); }
+.toast.error { border-color: color-mix(in srgb, var(--red) 30%, transparent); color: var(--red); }
+.toast.success { border-color: color-mix(in srgb, var(--green) 30%, transparent); color: var(--green); }
 
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.65);
@@ -146,7 +156,7 @@ button, input[type="button"], input[type="submit"], input[type="reset"] {
   box-shadow: 0 20px 60px rgba(0,0,0,.5);
   animation: modalIn .25s cubic-bezier(.16,1,.3,1);
 }
-.modal.danger { border-color: rgba(239,68,68,.35); }
+.modal.danger { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
 .modal-title {
   font-size: 0.9375rem; font-weight: 600; margin-bottom: 10px;
   letter-spacing: .3px;
@@ -163,8 +173,8 @@ button, input[type="button"], input[type="submit"], input[type="reset"] {
   font-size: 0.8125rem; cursor: pointer; transition: all .2s;
 }
 .modal-btn:hover { border-color: var(--border-h); color: var(--text); }
-.modal-btn.danger { border-color: rgba(239,68,68,.35); color: var(--red); }
-.modal-btn.danger:hover { background: rgba(239,68,68,.12); border-color: var(--red); }
+.modal-btn.danger { border-color: color-mix(in srgb, var(--red) 35%, transparent); color: var(--red); }
+.modal-btn.danger:hover { background: color-mix(in srgb, var(--red) 12%, transparent); border-color: var(--red); }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalIn {

@@ -1,13 +1,12 @@
-:root { --orange: #f59e0b; }
 .btn-back {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px 6px 8px;
-  border: 1px solid var(--border); border-radius: 6px;
-  background: none; color: var(--text2);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface)); color: var(--accent);
   font-family: inherit; font-size: 0.75rem; cursor: pointer;
   transition: all .2s;
 }
-.btn-back:hover { border-color: var(--border-h); color: var(--text); }
+.btn-back:hover { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 .btn-back .arrow { font-size: 0.875rem; line-height: 1; }
 .topbar-left { min-width: 0; }
 .topbar-right { flex-wrap: wrap; justify-content: flex-end; }

@@ -2,11 +2,11 @@
 // theme toggle cannot reuse a cached palette.
 
 const PALETTE_VARS: ReadonlyArray<readonly [string, string]> = [
-  ['--green', '#22c55e'],
-  ['--orange', '#f59e0b'],
-  ['--cyan', '#a8c9bc'],
-  ['--purple', '#a855f7'],
-  ['--yellow', '#eab308'],
+  ['--green', '#a8c9bc'],
+  ['--orange', '#d9aa80'],
+  ['--cyan', '#9bbbc8'],
+  ['--purple', '#c2b8dc'],
+  ['--yellow', '#d7c58c'],
 ];
 
 function cssVar(name: string, fallback: string): string {
@@ -36,9 +36,9 @@ export function chartColors() {
     grid: cssVar('--grid', 'rgba(255,255,255,0.04)'),
     surface: cssVar('--surface', '#131316'),
     surface2: cssVar('--surface2', '#1a1a1f'),
-    ok: cssVar('--green', '#22c55e'),
-    warn: cssVar('--orange', '#f59e0b'),
-    err: cssVar('--red', '#ef4444'),
+    ok: cssVar('--green', '#a8c9bc'),
+    warn: cssVar('--orange', '#d9aa80'),
+    err: cssVar('--red', '#d88e8e'),
     palette: PALETTE_VARS.map(([name, fallback]) => cssVar(name, fallback)),
   };
 }
@@ -47,7 +47,7 @@ export type ChartColors = ReturnType<typeof chartColors>;
 
 export function seriesColor(index: number, colors?: ChartColors): string {
   const palette = colors?.palette || PALETTE_VARS.map(([, fallback]) => fallback);
-  return palette[index % palette.length] || '#22c55e';
+  return palette[index % palette.length] || '#a8c9bc';
 }
 
 export function seriesFill(color: string): string {

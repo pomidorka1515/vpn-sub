@@ -46,14 +46,22 @@ test("all pages use the soft sage accent instead of the old blue palette", async
   }
 });
 
-test("dashboard uses theme-aware soft status and usage colors", async () => {
-  const css = await readFile(new URL("assets/dashboard.css", output), "utf8");
-  assert.match(css, /--green:\s*var\(--accent\)/);
+test("pages share theme-aware soft status and usage colors", async () => {
+  const css = await readFile(new URL("assets/common.css", output), "utf8");
+  assert.match(css, /--green:\s*#a8c9bc/);
   assert.match(css, /--yellow:\s*#d7c58c/);
   assert.match(css, /--orange:\s*#d9aa80/);
-  assert.match(css, /--red:\s*#e8a6a6/);
-  assert.match(css, /\[data-theme=light\][^{]*\{[^}]*--red:\s*#a83535/);
-  assert.doesNotMatch(css, /rgba\((?:239,68,68|34,197,94),/);
+  assert.match(css, /--red:\s*#d88e8e/);
+  assert.match(css, /\[data-theme=light\][^{]*\{[^}]*--green:\s*#285d49/);
+  assert.match(css, /\[data-theme=light\][^{]*\{[^}]*--red:\s*#982e2e/);
+  const dashboard = await readFile(new URL("assets/dashboard.css", output), "utf8");
+  assert.match(dashboard, /--online:\s*#7ecb95/);
+  assert.match(dashboard, /\[data-theme=light\][^{]*\{[^}]*--online:\s*#287949/);
+  assert.match(dashboard, /\.status-dot\.on\{[^}]*background:var\(--online\)/);
+  for (const file of ["common.css", "admin.css", "auth.css", "dashboard.css", "history.css"]) {
+    const content = await readFile(new URL(`assets/${file}`, output), "utf8");
+    assert.doesNotMatch(content, /rgba\((?:239,68,68|34,197,94|245,158,11|168,85,247),/, file);
+  }
 });
 
 for (const theme of ["dark", "light"]) {

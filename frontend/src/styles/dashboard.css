@@ -1,10 +1,5 @@
-:root {
-  --green: var(--accent); --yellow: #d7c58c; --orange: #d9aa80;
-  --red: #e8a6a6; --red-dark: #d88b8b;
-}
-[data-theme="light"] {
-  --yellow: #80671c; --orange: #985c29; --red: #a83535; --red-dark: #922c2c;
-}
+:root { --online: #7ecb95; }
+[data-theme="light"] { --online: #287949; }
 .dash-content { max-width: 42.5rem; margin: 0 auto; padding: 2rem 1.25rem; }
 .topbar-left { min-width: 0; }
 .topbar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -20,7 +15,7 @@
   margin-bottom: 28px; font-size: 0.8125rem; color: var(--text2);
 }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; }
-.status-dot.on { background: var(--green); box-shadow: 0 0 6px color-mix(in srgb, var(--green) 40%, transparent); }
+.status-dot.on { background: var(--online); box-shadow: 0 0 6px color-mix(in srgb, var(--online) 40%, transparent); }
 .status-dot.off { background: var(--text2); }
 
 .sub-link-wrap { display: flex; gap: 8px; }
@@ -37,12 +32,12 @@
   font-family: inherit; font-size: 0.75rem; font-weight: 500;
   cursor: pointer; transition: all .2s; white-space: nowrap;
 }
-.btn-copy, .btn-history, .topbar .btn-sm:not(.danger) {
+.btn-copy, .btn-history {
   background: color-mix(in srgb, var(--accent) 9%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   color: var(--accent);
 }
-.btn-copy:hover:not(:disabled), .btn-history:hover:not(:disabled), .topbar .btn-sm:not(.danger):hover:not(:disabled) {
+.btn-copy:hover:not(:disabled), .btn-history:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 16%, var(--surface));
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
@@ -135,9 +130,6 @@
 .danger-zone { border-color: color-mix(in srgb, var(--red) 25%, transparent); }
 .danger-actions .btn-danger, .modal-btn.danger { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
 .danger-actions .btn-danger:hover, .modal-btn.danger:hover { background: color-mix(in srgb, var(--red) 10%, transparent); }
-.modal.danger { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
-.toast.error { border-color: color-mix(in srgb, var(--red) 30%, transparent); }
-.toast.success { border-color: color-mix(in srgb, var(--green) 30%, transparent); }
 .danger-actions { display: flex; gap: 8px; }
 .danger-actions .btn-danger { min-width: 0; }
 

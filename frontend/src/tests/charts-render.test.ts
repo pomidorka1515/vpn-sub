@@ -1,6 +1,7 @@
 import { required } from './required';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createChartRenderer } from '../admin/charts/render';
+import { chartColors, seriesColor, seriesFill } from '../admin/charts/theme';
 import type { ChartMap, Scales } from '../admin/charts/render';
 import type { ChartSpec } from '../admin/charts/spec';
 
@@ -33,6 +34,20 @@ function setup() {
 }
 
 describe('chart rendering', () => {
+  it('uses the soft palette and reads theme colors for each render', () => {
+    const root = document.documentElement;
+    try {
+      expect(seriesColor(0)).toBe('#a8c9bc');
+      expect(seriesFill(seriesColor(1))).toBe('rgba(217,170,128,0.16)');
+      root.style.setProperty('--green', '#285d49');
+      root.style.setProperty('--red', '#982e2e');
+      expect(chartColors()).toMatchObject({ ok: '#285d49', err: '#982e2e' });
+      expect(seriesColor(0, chartColors())).toBe('#285d49');
+    } finally {
+      root.style.removeProperty('--green');
+      root.style.removeProperty('--red');
+    }
+  });
   it('renders missing values as gaps, uses the latest valid readout and marks thresholds', () => {
     const { renderGroup, map, scales, mount, destroyCharts } = setup();
     renderGroup(mount, [cpu, memory], [
