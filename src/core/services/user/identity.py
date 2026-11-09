@@ -117,7 +117,7 @@ class UserIdentityService(BusinessUserBase):
                 raise ValidationError("Invalid fingerprint")
             fields["fingerprint"] = fingerprint
         for name, value, maximum in (
-            ("time", timee, 2**31),
+            ("time", timee, 2**63 - 1),
             ("limit", limit, (2**63 - 1) // 10**9),
             ("wl_limit", wl_limit, (2**63 - 1) // 10**9),
         ):

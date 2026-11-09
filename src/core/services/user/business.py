@@ -79,7 +79,7 @@ class BusinessUserService(UserPanelService):
         fingerprint = random.choice(conf["fingerprints"]) if fingerprint is None else fingerprint
         if fingerprint not in conf["fingerprints"]:
             raise ValidationError("Invalid fingerprint")
-        if timee > 2**31:
+        if type(timee) is not int or not 0 <= timee <= 2**63 - 1:
             raise ValidationError("Invalid timestamp")
         token = generate_token("sub") if token is None else token
         if not valid_subscription_token(token):

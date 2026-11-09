@@ -6,6 +6,7 @@ import re
 import secrets
 import uuid
 from collections import UserDict
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal, cast
 
 import qrcode
@@ -22,6 +23,7 @@ __all__ = [
     "fmt_bytes",
     "fmt_bytes_tuple",
     "fmt_time",
+    "fmt_timestamp",
     "format",
     "format_usage",
     "generate_token",
@@ -39,6 +41,14 @@ __all__ = [
 _BROWSER_UA = re.compile(
     r"(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)",
 )
+
+
+def fmt_timestamp(timestamp: int) -> str:
+    """Format a UTC timestamp, retaining its exact value outside datetime's range."""
+    try:
+        return datetime.fromtimestamp(timestamp, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
+    except OverflowError, OSError, ValueError:
+        return str(timestamp)
 
 
 def sanitize(s: str, kind: Literal["external", "display"], /) -> str:

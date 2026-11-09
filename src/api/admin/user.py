@@ -46,6 +46,7 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
         pretty = request.args.get("beautify", "").lower() in {"1", "true", "yes"}
         x = await self.sub.business_svc.get_info(username=username, pretty=pretty)
         info = asdict(x)
+        info["time_exact"] = str(x.time)
         info["ext_username"] = await self.sub.user_svc.get_external_username(username)
         return ok(obj=info)
 
@@ -81,7 +82,7 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
 
             elif k in {"limit", "wl_limit", "time"}:
                 try:
-                    data[k] = bounded_int(k, v, maximum=2**31 if k == "time" else MAX_GB)
+                    data[k] = bounded_int(k, v, maximum=SQLITE_MAX_INT if k == "time" else MAX_GB)
                 except ValueError as error:
                     return err(str(error), 400)
 
@@ -185,7 +186,7 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
                 values[field] = content[field]
         try:
             for field, maximum in (
-                ("time", 2**31),
+                ("time", SQLITE_MAX_INT),
                 ("limit", MAX_GB),
                 ("wl_limit", MAX_GB),
                 ("used", SQLITE_MAX_INT),

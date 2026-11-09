@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import time
 import urllib.parse
-from datetime import UTC, datetime
 
 from telebot import types
 
-from util import fmt_bytes, make_qr
+from util import fmt_bytes, fmt_timestamp, make_qr
 
 from ..composition import PublicFeatureMixin
 
@@ -33,7 +32,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
 
         if info.time:
             days_left = str((info.time - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(info.time, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
+            date_end = fmt_timestamp(info.time)
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t["lifetime"]

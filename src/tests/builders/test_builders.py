@@ -71,6 +71,21 @@ def test_description_fills_active_and_disabled_slots() -> None:
     assert "bw 1.00 GB/5GB" in active
     assert "wl exceeded" in active
 
+    far_future = build_description(
+        _lang(),
+        "Alice",
+        "en",
+        _bandwidth(),
+        status=True,
+        statusTime=True,
+        ts=2**63 - 1,
+        bw_limit=0,
+        bw_used=0,
+        wl_limit=0,
+        wl_used=0,
+    )
+    assert str(2**63 - 1) in far_future
+
     unlimited = build_description(
         _lang(),
         "Alice",
@@ -706,7 +721,9 @@ async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.Monke
     monkeypatch.setattr("builders.build_link_array", links)
     monkeypatch.setattr("builders.build_json", happ_json)
 
-    subscription = _subscription(user={"bw_limit_gb": 2, "bw_used": 1_000_000_000, "enabled": 0})
+    subscription = _subscription(
+        user={"bw_limit_gb": 2, "bw_used": 1_000_000_000, "enabled": 0, "expires_at": 2**63 - 1}
+    )
     response, status = await get_subscription(
         subscription,
         token="tok",
@@ -720,6 +737,7 @@ async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.Monke
     assert await response.get_data(as_text=True) == "links"
     assert response.headers["Profile-Title"] == "VPN"
     assert "total=" in response.headers["Subscription-Userinfo"]
+    assert f"expire={2**63 - 1}" in response.headers["Subscription-Userinfo"]
 
     subscription = _subscription(
         cfg={

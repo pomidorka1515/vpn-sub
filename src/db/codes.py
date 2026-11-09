@@ -5,7 +5,7 @@ import time
 from typing import TYPE_CHECKING, cast
 
 from custom_types import CodeRecord
-from errors import CodeError, DatabaseError, DuplicateError
+from errors import CodeError, DatabaseError, DuplicateError, ValidationError
 
 from .common import ConnectionMixin
 from .notification_episodes import clear_notification_episodes
@@ -163,7 +163,9 @@ class CodesMixin(ConnectionMixin):
                 await check_uuid_available(conn, uuid)
                 remaining = -1 if row["permanent"] else int(row["uses"]) - 1
                 await conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
-                expires_at = int(time.time() + int(row["days"]) * 86400) if int(row["days"]) else 0
+                expires_at = int(time.time()) + int(row["days"]) * 86400 if int(row["days"]) else 0
+                if expires_at > 2**63 - 1:
+                    raise ValidationError("Invalid timestamp")
                 await conn.execute(
                     """INSERT INTO users
                     (username, uuid, token, fingerprint, displayname, expires_at,
@@ -224,6 +226,8 @@ class CodesMixin(ConnectionMixin):
             days = int(row["days"])
             current = int(user["expires_at"])
             new_time = current if current == 0 or days == 0 else max(current, now) + days * 86400
+            if new_time > 2**63 - 1:
+                raise ValidationError("Invalid timestamp")
             # Zero means unlimited independently for each allowance, as in enforcement.
             limit = int(user["bw_limit_gb"])
             wl_limit = int(user["wl_limit_gb"])

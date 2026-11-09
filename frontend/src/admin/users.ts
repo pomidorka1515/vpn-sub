@@ -21,9 +21,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   const detail = getDialog('userDetailCard');
   const edit = getDialog('userEditDialog');
   const localDateTime = (date: Date): string => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-  for (const id of ['addExpiry', 'editExpiry']) input(doc, id).setAttribute('max', localDateTime(new Date(2147483647 * 1000)));
+  for (const id of ['addExpiry', 'editExpiry']) input(doc, id).setAttribute('max', '9999-12-31T23:59');
   let editingUser: string | null = null;
   let original: Record<string, unknown> = {};
+  let originalExpiry = '';
+  let expiryChanged = false;
   let opener: HTMLElement | null = null;
   const actionContent = (key: string, icon: string): string => `${icon}<span class="user-action-label">${escapeHtml(t(key))}</span>`;
   const editButton = button(doc, 'btnEditDetail');
@@ -67,7 +69,17 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         input(doc, 'editLimit').value = String(Number(bandwidth['limit'] ?? 0));
         input(doc, 'editWlLimit').value = String(Number(bandwidth['wl_limit'] ?? 0));
         const expiry = typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000) : null;
-        input(doc, 'editExpiry').value = expiry ? localDateTime(expiry) : '';
+        const expiryField = input(doc, 'editExpiry');
+        const representable = expiry !== null && Number.isFinite(expiry.getTime()) && expiry.getFullYear() <= 9999;
+        expiryField.value = representable ? localDateTime(expiry) : '';
+        const expiryHint = expiry && !representable ? t('expiry_out_of_range') : '';
+        expiryField.setAttribute('placeholder', expiryHint);
+        expiryField.title = expiryHint;
+        const rangeHint = element(doc, 'editExpiryRangeHint');
+        rangeHint.textContent = expiryHint;
+        rangeHint.hidden = !expiryHint;
+        originalExpiry = expiryField.value;
+        expiryChanged = false;
         if (!edit.open) edit.showModal();
         return;
       }
@@ -81,7 +93,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         row('total_traffic', traffic(bandwidth['total'])) + row('wl_total_traffic', traffic(bandwidth['wl_total'])) +
         `<div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${limit(bandwidth['limit'])}</span></div>` +
         `<div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${limit(bandwidth['wl_limit'])}</span></div>` +
-        row('expires', typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000).toLocaleString() : '∞') +
+        row('expires', typeof user['time'] === 'number' && user['time'] ? (Number.isFinite(new Date(user['time'] * 1000).getTime()) ? new Date(user['time'] * 1000).toLocaleString() : user['time_exact'] ?? t('na')) : '∞') +
         `<div class="info-row"><span class="info-label">${t('status')}</span><span class="info-value"><span class="badge ${user['enabled'] ? 'green' : 'red'}">${user['enabled'] ? t('active') : t('disabled')}</span></span></div>`;
       const result = element(doc, 'userDetailResult');
       result.innerHTML = '';
@@ -106,7 +118,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
     const expiry = input(doc, 'editExpiry').value;
     const time = expiry ? Math.floor(new Date(expiry).getTime() / 1000) : 0;
     // datetime-local has minute precision; preserve untouched timestamps.
-    if (Math.floor(time / 60) !== Math.floor(Number(original['time'] || 0) / 60)) body['time'] = time;
+    if (expiry !== originalExpiry || (expiryChanged && !expiry && original['time'])) body['time'] = time;
     await withBusy(button(doc, 'btnSaveUser'), async () => {
       const res = await api('POST', '/api/user/update', body);
       if (disposed) return;
@@ -194,6 +206,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   bind('btnDoReset', () => { void resetUser(); });
   bind('btnEditDetail', () => { if (state.selectedUser) void viewUser(state.selectedUser, editButton, true); });
   bind('btnCancelEdit', () => { edit.close(); });
+  input(doc, 'editExpiry').addEventListener('input', () => { expiryChanged = true; }, { signal: listeners.signal });
   element(doc, 'userEditForm').addEventListener('submit', event => { event.preventDefault(); void saveUser(); }, { signal: listeners.signal });
   for (const dialog of [detail, edit]) {
     dialog.addEventListener('click', event => {

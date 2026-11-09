@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import discord
 
 from bots.discord.composition import PublicFeatureMixin
-from util import fmt_bytes, make_qr
+from util import fmt_bytes, fmt_timestamp, make_qr
 
 if TYPE_CHECKING:
     from custom_types import UserInfo
@@ -31,7 +30,7 @@ class PublicSubscriptionMixin(PublicFeatureMixin):
         expiry_i = obj.time
         if expiry_i:
             days_left = str((expiry_i - int(time.time())) // 86400)
-            date_end = datetime.fromtimestamp(expiry_i, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
+            date_end = fmt_timestamp(expiry_i)
             time_str = f"{days_left} {daystext} ({date_end})"
         else:
             time_str = t.get("lifetime", "Lifetime")

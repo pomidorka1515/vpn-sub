@@ -151,7 +151,7 @@
         <div class="form-row"><label for="editFp" data-t="fingerprint">{{ L['fingerprint'] }}</label><div class="input-wrap"><input id="editFp" type="text"></div></div>
         <div class="form-row"><label for="editLimit" data-t="monthly_limit">{{ L['monthly_limit'] }}</label><div class="input-wrap"><input id="editLimit" type="number" min="0" max="9223372036" required><span class="form-hint" data-t="limit_hint">{{ L['limit_hint'] }}</span></div></div>
         <div class="form-row"><label for="editWlLimit" data-t="wl_limit">{{ L['wl_limit'] }}</label><div class="input-wrap"><input id="editWlLimit" type="number" min="0" max="9223372036" required></div></div>
-        <div class="form-row"><label for="editExpiry" data-t="expires">{{ L['expires'] }}</label><div class="input-wrap"><input id="editExpiry" type="datetime-local"><span class="form-hint" data-t="expires_hint">{{ L['expires_hint'] }}</span></div></div>
+        <div class="form-row"><label for="editExpiry" data-t="expires">{{ L['expires'] }}</label><div class="input-wrap"><input id="editExpiry" type="datetime-local"><span class="form-hint" data-t="expires_hint">{{ L['expires_hint'] }}</span><span id="editExpiryRangeHint" class="form-hint" hidden></span></div></div>
         <div class="form-actions"><button type="submit" class="btn btn-primary" id="btnSaveUser" data-t="save">{{ L['save'] }}</button><button type="button" class="btn-secondary" id="btnCancelEdit" data-t="cancel">{{ L['cancel'] }}</button></div>
       </form>
     </dialog>

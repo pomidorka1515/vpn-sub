@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
 from secrets import token_hex
 from typing import cast
 
@@ -11,6 +10,7 @@ from telebot import types
 
 from bots.list_messages import list_messages
 from errors import AppError, PanelUnavailableError
+from util import fmt_timestamp
 
 from ..composition import AdminFeatureMixin
 from .user_callbacks import user_callback
@@ -143,7 +143,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             fingerprint = info.fingerprint
             if times:
                 days_left = str((times - int(time.time())) // 86400)
-                date = datetime.fromtimestamp(times, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
+                date = fmt_timestamp(times)
             else:
                 days_left = "N/A"
                 date = "N/A"
@@ -386,10 +386,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
             return
         current_time = info.time
-        if current_time:
-            date = datetime.fromtimestamp(current_time, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
-        else:
-            date = "N/A"
+        date = fmt_timestamp(current_time) if current_time else "N/A"
         msg = await self.bot.send_message(
             chat_id,
             f"⏰ Введите новое кол-во дней для <b>{username}</b> (текущая дата: <code>{date}</code>, 0 = безлимит):",
@@ -413,7 +410,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 reply_markup=self.get_main_menu(),
             )
             return
-        timee = int(time.time() + (days * 86400)) if days else 0
+        timee = int(time.time()) + days * 86400 if days else 0
         try:
             await self.sub.business_svc.update_params(username=username, timee=timee)
         except AppError as error:
@@ -426,7 +423,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         if self._pending_edits.get(message.chat.id) is pending:
             self._pending_edits.pop(message.chat.id, None)
         if days:
-            new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
+            new_date = fmt_timestamp(timee)
             await self.bot.send_message(
                 message.chat.id,
                 f"✅ Срок продлён на <code>{days}</code> дней, новая дата: <code>{new_date}</code>",
@@ -595,7 +592,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             )
             return
 
-        timee = int(time.time() + (timee * 86400)) if timee else 0
+        timee = int(time.time()) + timee * 86400 if timee else 0
         try:
             await self.sub.business_svc.add_new_user(
                 username=username,

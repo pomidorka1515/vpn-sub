@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
 from secrets import token_hex
 from typing import TypedDict
 
@@ -10,6 +9,7 @@ import discord
 from bots.discord.composition import AdminFeatureMixin
 from bots.list_messages import list_messages
 from errors import CommittedAuditError
+from util import fmt_timestamp
 
 __all__ = ["AdminUsersMixin"]
 
@@ -187,7 +187,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         times = typed.time
         if times:
             days_left = str((times - int(time.time())) // 86400)
-            date = datetime.fromtimestamp(times, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
+            date = fmt_timestamp(times)
         else:
             days_left = "N/A"
             date = "N/A"
@@ -412,7 +412,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 view=self.main_menu_view(),
             )
             return
-        timee = int(time.time() + (days * 86400)) if days else 0
+        timee = int(time.time()) + days * 86400 if days else 0
         await self._defer(interaction)
         await self.sub.business_svc.add_new_user(
             username=username,
@@ -493,11 +493,11 @@ class AdminUsersMixin(AdminFeatureMixin):
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
-        timee = int(time.time() + (days * 86400)) if days else 0
+        timee = int(time.time()) + days * 86400 if days else 0
         if not await self._update_edit_params(interaction, pending, timee=timee):
             return
         if days:
-            new_date = datetime.fromtimestamp(timee, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)")
+            new_date = fmt_timestamp(timee)
             await self._respond(
                 interaction,
                 f"✅ Срок заменён: `{days}` дней от текущего момента, дата окончания: `{new_date}`",

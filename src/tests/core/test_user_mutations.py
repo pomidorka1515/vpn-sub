@@ -20,6 +20,27 @@ if TYPE_CHECKING:
 NEW_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 
+@pytest.mark.asyncio
+async def test_expiry_signed_64_bit_round_trip(database: Database) -> None:
+    panel = FakePanel(name="panel", inbounds=[make_inbound(1)])
+    subscription = await make_subscription(database, panels=[panel])
+    maximum = 2**63 - 1
+    await subscription.business_svc.add_new_user("alice", "Alice", timee=maximum)
+    user = await database.get_user("alice")
+    assert user is not None
+    assert user["expires_at"] == maximum
+    assert panel.clients[0].expiryTime == 0
+    await subscription.business_svc.update_params("alice", timee=2**31 + 1)
+    await subscription.business_svc.edit_user("alice", timee=maximum)
+    user = await database.get_user("alice")
+    assert user is not None
+    assert user["expires_at"] == maximum
+    with pytest.raises(ValidationError):
+        await subscription.business_svc.update_params("alice", timee=maximum + 1)
+    with pytest.raises(ValidationError):
+        await subscription.business_svc.add_new_user("bob", "Bob", timee=maximum + 1)
+
+
 def _post_bodies(panel: FakePanel, fragment: str) -> list[dict[str, object]]:
     return [
         cast(dict[str, object], kwargs.get("json"))

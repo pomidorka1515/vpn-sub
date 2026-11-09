@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from util import fmt_bytes, format  # ruff: ignore[builtin-import-shadowing]
+from util import fmt_bytes, fmt_timestamp, format  # ruff: ignore[builtin-import-shadowing]
 
 if TYPE_CHECKING:
     from config import LangConfig
@@ -41,7 +40,7 @@ def build_description(
             ts_str = descTable["date"]
             ts_str = format(
                 ts_str,
-                date=datetime.fromtimestamp(ts, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)"),
+                date=fmt_timestamp(ts),
                 days=str((ts - int(time.time())) // 86400),
             )
 
@@ -93,7 +92,7 @@ def build_description(
             time_str = descTable["date_expired"]
             time_str = format(
                 time_str,
-                date=datetime.fromtimestamp(ts, tz=UTC).strftime("%d.%m.%y %H:%M (UTC)"),
+                date=fmt_timestamp(ts),
                 days=str(-(ts - int(time.time())) // 86400),
             )
 

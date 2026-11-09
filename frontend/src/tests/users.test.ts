@@ -8,11 +8,11 @@ import { required, requiredInstance } from './required';
 let cleanup: (() => void) | undefined;
 afterEach(() => cleanup?.());
 
-function setup(external: string | null = null) {
+function setup(external: string | null = null, time = 0, timeExact = String(time)) {
   document.body.innerHTML = readFileSync('src/templates/admin.html', 'utf8');
   vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) { this.open = true; });
   vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')); });
-  const info = { displayname: 'Alice', ext_username: external, fingerprint: 'chrome', time: 0, enabled: true, bandwidth: { limit: 0, wl_limit: 0 } };
+  const info = { displayname: 'Alice', ext_username: external, fingerprint: 'chrome', time, time_exact: timeExact, enabled: true, bandwidth: { limit: 0, wl_limit: 0 } };
   const api = vi.fn<AdminContext['api']>().mockImplementation((_method, path) => Promise.resolve({ success: true, status: 200, obj: path === '/api/user/list' ? ['alice'] : info }));
   const toast = vi.fn();
   cleanup = initUsers({ doc: document, t: key => key, api, toast, confirm: vi.fn(), loadGen: () => () => true }, createAdminState());
@@ -53,25 +53,33 @@ it.each([null, 'alice-login'])('edits with external login %s and sends only chan
   expect(dialog.open).toBe(false);
 });
 
-it('caps both expiry fields at the local 2038 timestamp boundary and rejects later dates', async () => {
+it('accepts dates beyond 2038 in both expiry fields', async () => {
   const { api } = setup();
   await vi.waitFor(() => { expect(document.querySelector('[data-user-action="edit"]')).not.toBeNull(); });
   required(document.querySelector<HTMLElement>('[data-user-action="edit"]')).click();
   await vi.waitFor(() => { expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(true); });
-  const boundary = new Date(2147483647 * 1000);
-  const localMax = new Date(boundary.getTime() - boundary.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   for (const id of ['addExpiry', 'editExpiry']) {
     const field = requiredInstance(document.getElementById(id), HTMLInputElement);
-    expect(field.max).toBe(localMax);
-    field.value = localMax;
-    expect(field.checkValidity()).toBe(true);
-    field.value = '2038-01-20T00:00';
-    expect(field.validity.rangeOverflow).toBe(true);
-    field.value = '';
-    expect(field.checkValidity()).toBe(true);
+    expect(field.max).toBe('9999-12-31T23:59');
     field.value = '2040-01-01T00:00';
+    expect(field.checkValidity()).toBe(true);
   }
   required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-  required(document.getElementById('btnDoAdd')).click();
-  expect(api.mock.calls.some(([method]) => method === 'POST')).toBe(false);
+  await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', time: Math.floor(new Date('2040-01-01T00:00').getTime() / 1000) }); });
+});
+
+it('displays exact out-of-range timestamps and preserves them during unrelated edits', async () => {
+  const { api } = setup(null, Number('9223372036854775807'), '9223372036854775807');
+  await vi.waitFor(() => { expect(document.querySelector('[data-user-action="view"]')).not.toBeNull(); });
+  required(document.querySelector<HTMLElement>('[data-user-action="view"]')).click();
+  await vi.waitFor(() => { expect(required(document.getElementById('userDetailInfo')).textContent).toContain('9223372036854775807'); });
+  required(document.getElementById('btnEditDetail')).click();
+  await vi.waitFor(() => { expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(true); });
+  const expiry = requiredInstance(document.getElementById('editExpiry'), HTMLInputElement);
+  expect(expiry.value).toBe('');
+  expect(expiry.placeholder).toBe('expiry_out_of_range');
+  expect(required(document.getElementById('editExpiryRangeHint')).textContent).toBe('expiry_out_of_range');
+  requiredInstance(document.getElementById('editDisplayName'), HTMLInputElement).value = 'New Alice';
+  required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', displayname: 'New Alice' }); });
 });

@@ -29,7 +29,7 @@ def database_read_connections() -> int:
         float("nan"),
         2**70,
         str(2**70),
-        2**63 - 1,
+        2**63,
         1.9,
         -0.5,
         True,
@@ -78,7 +78,7 @@ async def test_user_numeric_boundary(
         sub.business_svc.add_new_user = mutation  # type: ignore[method-assign]
     else:
         sub.business_svc.edit_user = mutation  # type: ignore[method-assign]
-    maximum = 2**31 if field == "time" else (2**63 - 1) // 10**9
+    maximum = 2**63 - 1 if field == "time" else (2**63 - 1) // 10**9
     for value, status in ((maximum + 1, 400), (maximum, 201 if operation == "add" else 200)):
         response = await app.test_client().post(
             f"/sub/api/api/user/{operation}",

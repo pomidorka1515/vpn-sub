@@ -131,7 +131,7 @@ async def get_subscription(
         # monthly quota is intentionally not separated into upload/download, the split wouldn't be visible either way
         upload = download = (int(user["bw_used"]) * SCALE if status else total) / 2
 
-    userinfo = f"upload={upload:.0f};download={download:.0f};total={total:.0f};expire={times:.0f}"
+    userinfo = f"upload={upload:.0f};download={download:.0f};total={total:.0f};expire={times}"
 
     headers: dict[str, str] = {
         "Profile-Title": sub_name,

@@ -108,6 +108,40 @@ async def test_apply_bonus_code_preserves_unlimited_allowances(
 
 
 @pytest.mark.asyncio
+async def test_bonus_expiry_overflow_rolls_back_code_and_user(
+    database: Database, subscription: Subscription
+) -> None:
+    await create_alice(database, expires_at=2**63 - 1)
+    await subscription.code_svc.add_code("bonus1", "bonus", days=1)
+    with pytest.raises(ValidationError, match="Invalid timestamp"):
+        await subscription.code_svc.apply_bonus_code(username="alice", code="bonus1")
+    user = await database.get_user("alice")
+    assert user is not None
+    assert user["expires_at"] == 2**63 - 1
+    assert (await subscription.code_svc.get_code("bonus1")).uses == 1
+
+
+@pytest.mark.asyncio
+async def test_registration_expiry_overflow_rolls_back_code(database: Database) -> None:
+    await database.add_code("invite", "register", days=2**63 // 86400)
+    with pytest.raises(ValidationError, match="Invalid timestamp"):
+        await database.register_with_code(
+            code="invite",
+            username="alice",
+            uuid="alice",
+            token="alice",
+            fingerprint="chrome",
+            displayname="Alice",
+            ext_username="alice",
+            ext_password_hash="hash",
+        )
+    assert await database.get_user("alice") is None
+    code = await database.get_code("invite")
+    assert code is not None
+    assert code["uses"] == 1
+
+
+@pytest.mark.asyncio
 async def test_apply_bonus_code_restarts_lapsed_expiry(
     database: Database,
     subscription: Subscription,

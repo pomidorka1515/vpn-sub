@@ -24,11 +24,13 @@ async def test_info_exposes_external_login_for_editing(
     admin_api: tuple[Quart, Subscription], database: Database, external: str | None
 ) -> None:
     app, _ = admin_api
-    await create_alice(database, ext_username=external)
+    await create_alice(database, ext_username=external, expires_at=2**63 - 1)
     response = await app.test_client().get("/sub/api/api/user/info?user=alice", headers=HEADERS)
     assert response.status_code == 200
     info = (await response.get_json())["obj"]
     assert info["ext_username"] == external
+    assert info["time"] == 2**63 - 1
+    assert info["time_exact"] == str(2**63 - 1)
     assert "ext_password_hash" not in info
 
 
