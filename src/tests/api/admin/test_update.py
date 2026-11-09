@@ -19,6 +19,19 @@ URL = "/sub/api/api/user/update"
 HEADERS = {"Authorization": "secret"}
 
 
+@pytest.mark.parametrize("external", [None, "alice-login"])
+async def test_info_exposes_external_login_for_editing(
+    admin_api: tuple[Quart, Subscription], database: Database, external: str | None
+) -> None:
+    app, _ = admin_api
+    await create_alice(database, ext_username=external)
+    response = await app.test_client().get("/sub/api/api/user/info?user=alice", headers=HEADERS)
+    assert response.status_code == 200
+    info = (await response.get_json())["obj"]
+    assert info["ext_username"] == external
+    assert "ext_password_hash" not in info
+
+
 async def test_update_every_field_atomically(
     admin_api: tuple[Quart, Subscription], database: Database
 ) -> None:

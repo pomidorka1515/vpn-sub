@@ -41,7 +41,7 @@ it('filters loaded actions locally and keeps the selection on refresh', async ()
 
 it('opens readable, escaped details with nested fields and keyboard access', async () => {
   await setup();
-  const dialog = required(document.querySelector<HTMLDialogElement>('.log-dialog'));
+  const dialog = required(document.querySelector<HTMLDialogElement>('[aria-labelledby="logDetailTitle"]'));
   // jsdom does not implement modal dialog behavior.
   const showModal = vi.fn(() => { dialog.setAttribute('open', ''); });
   dialog.showModal = showModal;
@@ -64,5 +64,5 @@ it('opens readable, escaped details with nested fields and keyboard access', asy
   row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   expect(showModal).toHaveBeenCalledTimes(2);
   cleanup?.();
-  expect(document.querySelector('.log-dialog')).toBeNull();
+  expect(document.querySelector('[aria-labelledby="logDetailTitle"]')).toBeNull();
 });

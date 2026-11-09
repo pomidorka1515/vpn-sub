@@ -3,6 +3,7 @@ import { escapeHtml } from '../shared/dom';
 import { fmtBytes } from '../shared/formatting';
 import { renderIfChanged } from '../shared/render';
 import { isRecord } from '../shared/json';
+import { ICON_DELETE, ICON_EDIT, ICON_INFO } from '../shared/icons';
 import type { AdminState } from './bootstrap';
 import { button, element, input } from './context';
 import type { AdminContext } from './context';
@@ -12,10 +13,23 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   const wrap = element(doc, 'usersTableWrap');
   let disposed = false;
   let detailGeneration = 0;
+  const getDialog = (id: string): HTMLDialogElement => {
+    const dialog = element(doc, id);
+    if (!(dialog instanceof HTMLDialogElement)) throw new Error(t('error'));
+    return dialog;
+  };
+  const detail = getDialog('userDetailCard');
+  const edit = getDialog('userEditDialog');
+  let editingUser: string | null = null;
+  let original: Record<string, unknown> = {};
+  let opener: HTMLElement | null = null;
+  const actionContent = (key: string, icon: string): string => `${icon}<span class="user-action-label">${escapeHtml(t(key))}</span>`;
+  const editButton = button(doc, 'btnEditDetail');
+  editButton.innerHTML = actionContent('edit', ICON_EDIT);
   const options = (): { okText: string; cancelText: string } => ({ okText: t('confirm'), cancelText: t('cancel') });
   function hideDetail(): void {
     detailGeneration++;
-    element(doc, 'userDetailCard').style.display = 'none';
+    if (detail.open) detail.close();
     state.selectedUser = null;
   }
   async function loadUsers(): Promise<void> {
@@ -26,32 +40,77 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       if (!res?.success) { toast(res?.msg || t('network_err'), 'error'); return; }
       state.currentUsers = Array.isArray(res.obj) ? res.obj.filter((user: unknown): user is string => typeof user === 'string') : [];
       if (!state.currentUsers.length) { renderIfChanged(wrap, `<div class="table-empty">${t('no_users')}</div>`); return; }
-      renderIfChanged(wrap, `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('actions')}</th></tr></thead><tbody>${state.currentUsers.map(user => `<tr><td class="mono">${escapeHtml(user)}</td><td class="actions"><button class="btn-tiny" data-user="${escapeHtml(user)}" data-user-action="view" ${state.panelsConfigured ? '' : 'disabled'}>${t('info')}</button><button class="btn-tiny danger" data-user="${escapeHtml(user)}" data-user-action="delete" ${state.panelsConfigured ? '' : 'disabled'}>${t('delete')}</button></td></tr>`).join('')}</tbody></table>`);
+      renderIfChanged(wrap, `<table class="data-table users-table"><thead><tr><th>${t('internal_user')}</th><th>${t('actions')}</th></tr></thead><tbody>${state.currentUsers.map(user => `<tr><td class="mono user-name">${escapeHtml(user)}</td><td><div class="actions">${([['view', 'info', ICON_INFO], ['edit', 'edit', ICON_EDIT], ['delete', 'delete', ICON_DELETE]] as const).map(([action, key, icon]) => `<button class="btn-tiny user-action user-${action}${action === 'delete' ? ' danger' : ''}" data-user="${escapeHtml(user)}" data-user-action="${action}" aria-label="${escapeHtml(t(key))}" title="${escapeHtml(t(key))}" ${state.panelsConfigured ? '' : 'disabled'}>${actionContent(key, icon)}</button>`).join('')}</div></td></tr>`).join('')}</tbody></table>`);
     });
   }
-  async function viewUser(username: string, trigger: HTMLButtonElement): Promise<void> {
+  async function viewUser(username: string, trigger: HTMLButtonElement, editing = false): Promise<void> {
     const generation = ++detailGeneration;
     await withBusy(trigger, async () => {
       const res = await api('GET', `/api/user/info?user=${encodeURIComponent(username)}`);
-      if (disposed || generation !== detailGeneration || !res?.success || !isRecord(res.obj)) return;
+      if (disposed || generation !== detailGeneration) return;
+      if (!res?.success || !isRecord(res.obj)) { toast(res?.msg || t('network_err'), 'error'); return; }
+      if (!detail.open && !edit.open) opener = trigger;
       state.selectedUser = username;
       const user = res.obj;
       const bandwidth = isRecord(user['bandwidth']) ? user['bandwidth'] : {};
+      if (editing) {
+        editingUser = username;
+        original = user;
+        input(doc, 'editDisplayName').value = typeof user['displayname'] === 'string' ? user['displayname'] : '';
+        const external = input(doc, 'editExtUser');
+        external.value = typeof user['ext_username'] === 'string' ? user['ext_username'] : '';
+        external.disabled = !external.value;
+        element(doc, 'editExtHint').hidden = !external.disabled;
+        input(doc, 'editFp').value = typeof user['fingerprint'] === 'string' ? user['fingerprint'] : '';
+        input(doc, 'editLimit').value = String(Number(bandwidth['limit'] ?? 0));
+        input(doc, 'editWlLimit').value = String(Number(bandwidth['wl_limit'] ?? 0));
+        const expiry = typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000) : null;
+        input(doc, 'editExpiry').value = expiry ? new Date(expiry.getTime() - expiry.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+        if (!edit.open) edit.showModal();
+        return;
+      }
       const row = (key: string, value: unknown): string => `<div class="info-row"><span class="info-label">${t(key)}</span><span class="info-value">${escapeHtml(value || '—')}</span></div>`;
       const traffic = (value: unknown): string => {
         const total = isRecord(value) ? value['total'] : undefined;
         return fmtBytes(typeof total === 'number' ? total : NaN, t);
       };
-      element(doc, 'userDetailCard').style.display = 'block';
+      const limit = (value: unknown): string => Number(value || 0) === 0 ? '∞' : `${escapeHtml(value)} ${escapeHtml(t('gb_unit'))}`;
       element(doc, 'userDetailInfo').innerHTML = row('internal_user', username) + row('display_name', user['displayname']) + row('uuid', user['uuid']) + row('token', user['token']) + row('fingerprint', user['fingerprint']) +
         row('total_traffic', traffic(bandwidth['total'])) + row('wl_total_traffic', traffic(bandwidth['wl_total'])) +
-        `<div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${escapeHtml(bandwidth['limit'] || 0)} ${t('gb_unit')}</span></div>` +
-        `<div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${escapeHtml(bandwidth['wl_limit'] || 0)} ${t('gb_unit')}</span></div>` +
+        `<div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${limit(bandwidth['limit'])}</span></div>` +
+        `<div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${limit(bandwidth['wl_limit'])}</span></div>` +
         row('expires', typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000).toLocaleString() : '∞') +
         `<div class="info-row"><span class="info-label">${t('status')}</span><span class="info-value"><span class="badge ${user['enabled'] ? 'green' : 'red'}">${user['enabled'] ? t('active') : t('disabled')}</span></span></div>`;
       const result = element(doc, 'userDetailResult');
       result.innerHTML = '';
       result.hidden = true;
+      if (!detail.open) detail.showModal();
+    });
+  }
+  async function saveUser(): Promise<void> {
+    const username = editingUser;
+    if (!username) return;
+    const bandwidth = isRecord(original['bandwidth']) ? original['bandwidth'] : {};
+    const body: Record<string, string | number> = { username };
+    for (const [id, key, previous] of [['editDisplayName', 'displayname', original['displayname']], ['editExtUser', 'new_username', original['ext_username']], ['editFp', 'fingerprint', original['fingerprint']]] as const) {
+      const field = input(doc, id);
+      if (!field.disabled && field.value.trim() !== previous) body[key] = field.value.trim();
+    }
+    for (const [id, key] of [['editLimit', 'limit'], ['editWlLimit', 'wl_limit']] as const) {
+      const value = Number(input(doc, id).value);
+      if (value !== bandwidth[key]) body[key] = value;
+    }
+    const expiry = input(doc, 'editExpiry').value;
+    const time = expiry ? Math.floor(new Date(expiry).getTime() / 1000) : 0;
+    // datetime-local has minute precision; preserve untouched timestamps.
+    if (Math.floor(time / 60) !== Math.floor(Number(original['time'] || 0) / 60)) body['time'] = time;
+    await withBusy(button(doc, 'btnSaveUser'), async () => {
+      const res = await api('POST', '/api/user/update', body);
+      if (disposed) return;
+      if (!res?.success) { toast(res?.msg || t('error'), 'error'); return; }
+      edit.close();
+      toast(t('user_updated'), 'success');
+      if (detail.open) void viewUser(username, editButton);
     });
   }
   async function deleteUser(username: string, trigger: HTMLButtonElement): Promise<void> {
@@ -119,6 +178,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
     const target = event.target.closest<HTMLButtonElement>('button[data-user-action]');
     if (!target || !wrap.contains(target) || target.dataset['user'] === undefined) return;
     if (target.dataset['userAction'] === 'view') void viewUser(target.dataset['user'], target);
+    else if (target.dataset['userAction'] === 'edit') void viewUser(target.dataset['user'], target, true);
     else if (target.dataset['userAction'] === 'delete') void deleteUser(target.dataset['user'], target);
   }, { signal: listeners.signal });
   const bind = (id: string, handler: () => void): void => { button(doc, id).addEventListener('click', handler, { signal: listeners.signal }); };
@@ -128,6 +188,21 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   bind('btnDoAdd', () => { void addUser(); });
   bind('btnCloseDetail', hideDetail);
   bind('btnDoReset', () => { void resetUser(); });
+  bind('btnEditDetail', () => { if (state.selectedUser) void viewUser(state.selectedUser, editButton, true); });
+  bind('btnCancelEdit', () => { edit.close(); });
+  element(doc, 'userEditForm').addEventListener('submit', event => { event.preventDefault(); void saveUser(); }, { signal: listeners.signal });
+  for (const dialog of [detail, edit]) {
+    dialog.addEventListener('click', event => {
+      if (event.target !== dialog) return;
+      const bounds = dialog.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+    }, { signal: listeners.signal });
+    dialog.addEventListener('close', () => {
+      if (dialog === detail) { detailGeneration++; state.selectedUser = null; }
+      if (dialog === edit) editingUser = null;
+      if (!detail.open && !edit.open && opener?.isConnected) opener.focus();
+    }, { signal: listeners.signal });
+  }
   bind('btnDoDelete', () => { if (state.selectedUser) void deleteUser(state.selectedUser, button(doc, 'btnDoDelete')); });
-  return () => { disposed = true; detailGeneration++; listeners.abort(); };
+  return () => { disposed = true; detailGeneration++; listeners.abort(); if (edit.open) edit.close(); if (detail.open) detail.close(); };
 }

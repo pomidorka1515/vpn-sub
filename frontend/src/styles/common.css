@@ -139,6 +139,7 @@ button, input[type="button"], input[type="submit"], input[type="reset"] {
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   font-size: 0.8125rem; z-index: 100; animation: fadeUp .3s ease; pointer-events: none;
 }
+.toast[popover] { margin: 0; top: auto; left: auto; color: var(--text); }
 .toast.error { border-color: color-mix(in srgb, var(--red) 30%, transparent); color: var(--red); }
 .toast.success { border-color: color-mix(in srgb, var(--green) 30%, transparent); color: var(--green); }
 

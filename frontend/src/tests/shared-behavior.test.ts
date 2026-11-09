@@ -80,6 +80,19 @@ describe('dialogs', () => {
 });
 
 describe('notifications and state helpers', () => {
+  it('shows toasts in the top layer when supported', () => {
+    const show = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'showPopover', { configurable: true, value: show });
+    try {
+      const notifications = createNotifications(document, key => key, () => 1, vi.fn());
+      notifications.toast('saved');
+      expect(show).toHaveBeenCalledOnce();
+      expect(required(document.querySelector('.toast')).getAttribute('popover')).toBe('manual');
+      notifications.dispose();
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'showPopover');
+    }
+  });
   it('replaces and cancels toasts, escapes text, and reuses logout warning', () => {
     const callbacks: (() => void)[] = [];
     const cancel = vi.fn();

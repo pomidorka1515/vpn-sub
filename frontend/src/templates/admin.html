@@ -133,8 +133,8 @@
       </div>
     </div>
 
-    <div class="card" id="userDetailCard" style="display:none">
-      <div class="card-title" data-t="user_details">{{ L['user_details'] }}</div>
+    <dialog class="modal log-dialog user-dialog" id="userDetailCard" aria-labelledby="userDetailTitle">
+      <div class="user-dialog-header"><h2 class="modal-title" id="userDetailTitle" data-t="user_details">{{ L['user_details'] }}</h2><button class="btn-tiny user-action user-edit" id="btnEditDetail"></button></div>
       <div class="info-grid" id="userDetailInfo"></div>
       <div class="detail-actions">
         <button class="btn-danger" id="btnDoReset" data-t="reset">{{ L['reset'] }}</button>
@@ -142,7 +142,19 @@
         <button class="btn-secondary" id="btnCloseDetail" data-t="close">{{ L['close'] }}</button>
       </div>
       <div class="result-box" id="userDetailResult" hidden></div>
-    </div>
+    </dialog>
+    <dialog class="modal log-dialog user-dialog" id="userEditDialog" aria-labelledby="userEditTitle">
+      <h2 class="modal-title" id="userEditTitle" data-t="edit_user">{{ L['edit_user'] }}</h2>
+      <form id="userEditForm" class="form-grid">
+        <div class="form-row"><label for="editDisplayName" data-t="display_name">{{ L['display_name'] }}</label><div class="input-wrap"><input id="editDisplayName" type="text" required></div></div>
+        <div class="form-row"><label for="editExtUser" data-t="ext_username">{{ L['ext_username'] }}</label><div class="input-wrap"><input id="editExtUser" type="text" maxlength="32" required><span class="form-hint" id="editExtHint" data-t="edit_no_web_account">{{ L['edit_no_web_account'] }}</span></div></div>
+        <div class="form-row"><label for="editFp" data-t="fingerprint">{{ L['fingerprint'] }}</label><div class="input-wrap"><input id="editFp" type="text"></div></div>
+        <div class="form-row"><label for="editLimit" data-t="monthly_limit">{{ L['monthly_limit'] }}</label><div class="input-wrap"><input id="editLimit" type="number" min="0" max="9223372036" required><span class="form-hint" data-t="limit_hint">{{ L['limit_hint'] }}</span></div></div>
+        <div class="form-row"><label for="editWlLimit" data-t="wl_limit">{{ L['wl_limit'] }}</label><div class="input-wrap"><input id="editWlLimit" type="number" min="0" max="9223372036" required></div></div>
+        <div class="form-row"><label for="editExpiry" data-t="expires">{{ L['expires'] }}</label><div class="input-wrap"><input id="editExpiry" type="datetime-local"><span class="form-hint" data-t="expires_hint">{{ L['expires_hint'] }}</span></div></div>
+        <div class="form-actions"><button type="submit" class="btn btn-primary" id="btnSaveUser" data-t="save">{{ L['save'] }}</button><button type="button" class="btn-secondary" id="btnCancelEdit" data-t="cancel">{{ L['cancel'] }}</button></div>
+      </form>
+    </dialog>
   </div>
 
   <div id="tab-codes" class="tab-content">

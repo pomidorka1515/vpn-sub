@@ -54,7 +54,7 @@ describe('admin user management', () => {
     required(buttons[0]).click(); click('btnCloseDetail'); resolve(success({ displayname: 'Alice' }));
     await Promise.resolve(); await Promise.resolve();
     expect(state.selectedUser).toBeNull();
-    expect(required(document.getElementById('userDetailCard')).style.display).toBe('none');
+    expect(requiredInstance(document.getElementById('userDetailCard'), HTMLDialogElement).open).toBe(false);
   });
   it('shows all-time traffic and only displays reset results when available', async () => {
     const { api, load, click, state } = setup();

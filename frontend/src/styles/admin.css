@@ -214,6 +214,31 @@
 .toolbar-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .detail-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 
+.users-table { border: 1px solid var(--border); border-radius: 12px; border-spacing: 0; overflow: hidden; }
+.users-table th { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.users-table th:last-child { width: 1%; }
+.users-table td { padding: 16px 18px; }
+.users-table .user-name { color: var(--accent); font-weight: 500; }
+.users-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.user-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; background: var(--bg); color: var(--text2); cursor: pointer; font: inherit; font-size: .75rem; }
+.user-action svg { width: 15px; height: 15px; flex-shrink: 0; }
+.user-action.user-edit { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+.user-action.user-delete { color: var(--red); }
+.user-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.user-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.user-dialog-header .modal-title { margin: 0; }
+.user-dialog input:disabled { opacity: .45; cursor: not-allowed; background: var(--bg); }
+.user-dialog .form-grid { margin-top: 20px; }
+@media (max-width: 600px) {
+  #usersTableWrap .users-table { min-width: 0; width: 100%; table-layout: fixed; }
+  .users-table th:last-child { width: 144px; }
+  .users-table td, .users-table th { padding: 14px 10px; }
+  .users-table td:first-child { padding-right: 20px; }
+  .users-table .actions { gap: 6px; }
+  .users-table .user-action { width: 36px; height: 36px; padding: 0; }
+  .users-table .user-action-label { display: none; }
+}
+
 #tab-codes {
   --codes-accent: var(--accent); --codes-ink: var(--accent-ink);
   --codes-register: var(--purple); --codes-danger: var(--red);

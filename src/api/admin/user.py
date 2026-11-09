@@ -45,7 +45,9 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
         username = request.args["user"]
         pretty = request.args.get("beautify", "").lower() in {"1", "true", "yes"}
         x = await self.sub.business_svc.get_info(username=username, pretty=pretty)
-        return ok(obj=asdict(x))
+        info = asdict(x)
+        info["ext_username"] = await self.sub.user_svc.get_external_username(username)
+        return ok(obj=info)
 
     @requires_admin_auth
     @requires_fields_strict(("user", str), ("displayname", str))

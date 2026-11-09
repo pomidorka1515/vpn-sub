@@ -23,6 +23,11 @@ export function createNotifications(
     element.setAttribute('aria-live', 'polite');
     element.addEventListener('click', clearActive);
     doc.body.appendChild(element);
+    // Native dialogs are above normal stacking contexts, regardless of z-index.
+    if (typeof element.showPopover === 'function') {
+      element.setAttribute('popover', 'manual');
+      element.showPopover();
+    }
     const timer = schedule(() => {
       element.remove();
       if (active?.element === element) active = undefined;
