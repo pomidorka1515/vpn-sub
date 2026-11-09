@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING, ClassVar, cast
 from quart import g, request
 
 from api.admin._base import AsyncAdminApiMixin
-from api.admin._numeric import MAX_GB, bounded_int
+from api.admin._numeric import MAX_GB, SQLITE_MAX_INT, bounded_int
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_args, requires_fields_strict
+from custom_types import UserUpdateFields
 from util import err, ok, parse_bool
 
 if TYPE_CHECKING:
@@ -157,42 +158,47 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
         return ok(obj=asdict(x))
 
     @requires_admin_auth
-    @requires_fields_strict(("user", str))
+    @requires_fields_strict(("username", str))
     async def user_update(self) -> ResponseType:
         content = g.json_obj
-        username: str = content.get("user")
-        fingerprint = content.get("fingerprint")
-        displayname = content.get("displayname")
-        if fingerprint is not None and not isinstance(fingerprint, str):
-            return err("fingerprint must be a string or null")
-        if displayname is not None and not isinstance(displayname, str):
-            return err("displayname must be a string or null")
-
-        def _optional_int(name: str) -> int | None:
-            if name not in content:
-                return None
-            return bounded_int(
-                name,
-                content.get(name),
-                maximum=2**31 if name == "time" else MAX_GB,
-            )
-
+        allowed = {
+            "username",
+            "new_username",
+            "displayname",
+            "fingerprint",
+            "time",
+            "limit",
+            "used",
+            "wl_limit",
+            "wl_used",
+        }
+        unknown = content.keys() - allowed
+        if unknown:
+            return err(f"Unsupported fields: {', '.join(sorted(unknown))}")
+        values: dict[str, str | int] = {}
+        for field in ("new_username", "displayname", "fingerprint"):
+            if field in content:
+                if not isinstance(content[field], str):
+                    return err(f"{field} must be a string")
+                values[field] = content[field]
         try:
-            limit = _optional_int("limit")
-            wl_limit = _optional_int("wl_limit")
-            timee = _optional_int("time")
+            for field, maximum in (
+                ("time", 2**31),
+                ("limit", MAX_GB),
+                ("wl_limit", MAX_GB),
+                ("used", SQLITE_MAX_INT),
+                ("wl_used", SQLITE_MAX_INT),
+            ):
+                if field in content:
+                    values["timee" if field == "time" else field] = bounded_int(
+                        field, content[field], maximum=maximum
+                    )
         except ValueError as error:
             return err(str(error), 400)
-
-        await self.sub.business_svc.update_params(
-            username=username,
-            displayname=displayname,
-            fingerprint=fingerprint,
-            limit=limit,
-            wl_limit=wl_limit,
-            timee=timee,
+        updated = await self.sub.business_svc.update_external_user(
+            username=content["username"], **cast(UserUpdateFields, values)
         )
-        return ok("Updated")
+        return ok("Updated", obj={"updated": updated})
 
     @requires_admin_auth
     @requires_args("user")

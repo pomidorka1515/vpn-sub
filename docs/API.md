@@ -19,6 +19,8 @@ Every response follows this pattern:
 }  
 ```  
 The `_` field is present in success and error responses when `funny_strings` is configured and non-empty; otherwise it is omitted.  
+It does really not serve a purpose.  
+
 Missing authorization:  
 ```jsonc  
 // HTTP 401  

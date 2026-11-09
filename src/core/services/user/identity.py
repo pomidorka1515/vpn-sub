@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 from dataclasses import asdict
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Unpack, cast
 from urllib.parse import quote
 
 from config import JsonValue
@@ -14,6 +14,7 @@ from errors import (
     CommittedAuditError,
     ConflictError,
     DuplicateError,
+    NotFoundError,
     PanelRejectedError,
     ValidationError,
 )
@@ -25,7 +26,7 @@ from .base import BusinessUserBase
 from .common import valid_subscription_token
 
 if TYPE_CHECKING:
-    from custom_types import UserFields
+    from custom_types import UserFields, UserUpdateFields
     from session.client import XUiSession
 
 
@@ -64,6 +65,44 @@ class UserIdentityService(BusinessUserBase):
     ) -> None:
         await self.require_recovered(username)
         user = await self.user_svc.user(username)
+        fields = await self._prepare_params(
+            displayname=displayname,
+            ext_username=ext_username,
+            ext_password=ext_password,
+            token=token,
+            fingerprint=fingerprint,
+            limit=limit,
+            wl_limit=wl_limit,
+            timee=timee,
+        )
+        if ext_password is not None and user["ext_username"] is None and ext_username is None:
+            raise ValidationError("External username required")
+        await self._commit_params(username, fields)
+        audit_fields = cast(dict[str, JsonValue], dict(fields))
+        await self.audit_svc.audit_committed(
+            name="user_update_params",
+            info={
+                "username": username,
+                **{
+                    key: value
+                    for key, value in audit_fields.items()
+                    if key not in {"token", "ext_password"}
+                },
+            },
+        )
+
+    async def _prepare_params(
+        self,
+        *,
+        displayname: str | None = None,
+        ext_username: str | None = None,
+        ext_password: str | None = None,
+        token: str | None = None,
+        fingerprint: str | None = None,
+        limit: int | None = None,
+        wl_limit: int | None = None,
+        timee: int | None = None,
+    ) -> UserFields:
         fields: UserFields = {}
         if displayname is not None:
             if len(displayname) > 16:
@@ -77,9 +116,14 @@ class UserIdentityService(BusinessUserBase):
             if fingerprint not in self.cfg.view()["fingerprints"]:
                 raise ValidationError("Invalid fingerprint")
             fields["fingerprint"] = fingerprint
+        for name, value, maximum in (
+            ("time", timee, 2**31),
+            ("limit", limit, (2**63 - 1) // 10**9),
+            ("wl_limit", wl_limit, (2**63 - 1) // 10**9),
+        ):
+            if value is not None and (type(value) is not int or not 0 <= value <= maximum):
+                raise ValidationError(f"{name} must be an integer in range 0 to {maximum}")
         if timee is not None:
-            if timee > 2**31:
-                raise ValidationError("Invalid time")
             fields["expiry_time"] = timee
         if token is not None:
             if not valid_subscription_token(token):
@@ -94,29 +138,75 @@ class UserIdentityService(BusinessUserBase):
         if ext_password is not None:
             self.password_svc.validate_new_password(ext_password)
             fields["ext_password"] = await self.password_svc.hash(ext_password)
-        if (
-            fields.get("ext_password") is not None
-            and user["ext_username"] is None
-            and ext_username is None
-        ):
-            raise ValidationError("External username required")
+        return fields
+
+    async def _commit_params(self, username: str, fields: UserFields) -> None:
         try:
             await self.db.update_user(username, **fields)
         except DuplicateError as exc:
             raise ConflictError("Ext username exists") from exc
-        audit_fields = cast(dict[str, JsonValue], dict(fields))
         await self._drop_cache()
-        await self.audit_svc.audit_committed(
-            name="user_update_params",
-            info={
-                "username": username,
-                **{
-                    key: value
-                    for key, value in audit_fields.items()
-                    if key not in {"token", "ext_password"}
+
+    async def update_external_user(
+        self, username: str, **changes: Unpack[UserUpdateFields]
+    ) -> list[str]:
+        internal = await self.db.ext_to_user(username)
+        if internal is None:
+            raise NotFoundError("Unknown external username")
+
+        async def update() -> list[str]:
+            await self.require_recovered(internal)
+            user = await self.user_svc.user(internal)
+            # Resolution precedes lock acquisition; a concurrent rename must not
+            # redirect a stale request to an identity it no longer addresses.
+            if user["ext_username"] != username:
+                raise NotFoundError("Unknown external username")
+            fields = await self._prepare_params(
+                ext_username=changes.get("new_username"),
+                displayname=changes.get("displayname"),
+                fingerprint=changes.get("fingerprint"),
+                timee=changes.get("timee"),
+                limit=changes.get("limit"),
+                wl_limit=changes.get("wl_limit"),
+            )
+            for key, column, value in (
+                ("used", "bw_used", changes.get("used")),
+                ("wl_used", "wl_bw_used", changes.get("wl_used")),
+            ):
+                if value is not None:
+                    if type(value) is not int or not 0 <= value <= 2**63 - 1:
+                        raise ValidationError(f"{key} must be an integer in range 0 to {2**63 - 1}")
+                    if column == "bw_used":
+                        fields["bw_used"] = value
+                    else:
+                        fields["wl_bw_used"] = value
+            updated = [
+                public
+                for key, public in (
+                    ("new_username", "username"),
+                    ("displayname", "displayname"),
+                    ("fingerprint", "fingerprint"),
+                    ("timee", "time"),
+                    ("limit", "limit"),
+                    ("used", "used"),
+                    ("wl_limit", "wl_limit"),
+                    ("wl_used", "wl_used"),
+                )
+                if key in changes
+            ]
+            await self._commit_params(internal, fields)
+            await self.audit_svc.audit_committed(
+                name="user_edit",
+                info={
+                    "username": username,
+                    "user": internal,
+                    **cast(dict[str, JsonValue], dict(changes)),
                 },
-            },
-        )
+                result={"updated": cast(list[JsonValue], updated)},
+            )
+            return updated
+
+        return await self.res.coordinator.run([internal], update, name="core:user-edit")
 
     @panel_mutation
     async def update_uuid(self, username: str, uid: str, *, _resetting: bool = False) -> None:

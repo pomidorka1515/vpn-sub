@@ -62,6 +62,7 @@ type AUDIT_VALUES = Literal[
     "user_reset",
     "user_update",
     "user_update_params",
+    "user_edit",
     "user_add",
     "user_update_uuid",
     "user_consume_code",

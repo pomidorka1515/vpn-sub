@@ -22,6 +22,7 @@ Every response follows this pattern:
 }  
 ```  
 The `_` field is present in success and error responses when `funny_strings` is configured and non-empty; otherwise it is omitted.  
+It does not really serve a purpose and is omitted from all examples.  
 Missing/invalid authorization:  
 ```jsonc  
 // HTTP 401  
@@ -298,24 +299,30 @@ Response (error):
 ---  
   
 ### POST /api/user/update  
-Description: Update selected fields for a user. Omitted fields are left unchanged.  
+Description: Atomically update selected fields for an **external** user. Omitted fields are left unchanged, including when renaming and changing every other supported field in one request. The internal username and panel identity do not change.  
 Authentication: header  
 Body:  
 ```jsonc  
 {  
-    "user": "",            // str, internal username (required)  
-    "displayname": "",     // OPTIONAL str  
+    "username": "",        // str, current external username (required)  
+    "new_username": "",    // OPTIONAL str, new external username (max 32 characters)  
+    "displayname": "",     // OPTIONAL str, max 16 characters  
     "fingerprint": "",     // OPTIONAL str, must be in cfg fingerprints  
     "limit": 0,            // OPTIONAL int >= 0, monthly GB limit (0 = unlimited)  
-    "wl_limit": 0,         // OPTIONAL int >= 0, whitelist monthly GB limit  
+    "used": 0,             // OPTIONAL int >= 0, absolute monthly usage in bytes  
+    "wl_limit": 0,         // OPTIONAL int >= 0, whitelist monthly GB limit (0 = unlimited)  
+    "wl_used": 0,          // OPTIONAL int >= 0, absolute whitelist monthly usage in bytes  
     "time": 0              // OPTIONAL int >= 0, expiry unix timestamp (0 = unlimited)  
 }  
 ```  
 Response (success):  
 ```jsonc  
 // HTTP 200  
-{"success": true, "msg": "Updated", "obj": null}  
+{"success": true, "msg": "Updated", "obj": {"updated": ["username", "displayname", "fingerprint", "time", "limit", "used", "wl_limit", "wl_used"]}}  
 ```  
+`updated` lists supplied editable fields in the order shown above; `new_username` is reported as `username`. Supplying the current value still lists the field; no optional fields yields `updated: []`. Strings cannot be null. Names use the same sanitization as user creation; empty names after sanitization are rejected. Limits use decimal GB (1 GB = 1,000,000,000 bytes); usage uses bytes, not GB. Numeric values follow the existing integer semantics (integer strings and integral floats accepted, booleans and fractional values rejected). Limits are bounded by `(2**63 - 1) // 10**9`, usage by `2**63 - 1`, and time by `2**31`.  
+All-time bandwidth and historical snapshots are never changed. Passwords, tokens, UUIDs and all other unsupported fields are rejected; use `/api/user/reset` to rotate token/UUID. Changes are recorded as audit action `user_edit`, with the original external username, internal user and supplied values. Quota enforcement continues through the existing background watcher.  
+Errors: HTTP 400 for missing/invalid fields or unsupported keys; HTTP 404 for an unknown external username; HTTP 409 for a duplicate external username or a user awaiting recovery. Validation and uniqueness failures leave all fields unchanged. HTTP 401 for missing/invalid admin authorization. If the update commits but audit writing fails, HTTP 202 returns `obj: {"committed": true, "audit_pending": true, "updated": [...]}`; do not retry the mutation.  
   
 ---  
   

@@ -140,6 +140,17 @@ class UserRecord(TypedDict):
     created_at: int
 
 
+class UserUpdateFields(TypedDict, total=False):
+    new_username: str
+    displayname: str
+    fingerprint: str
+    timee: int
+    limit: int
+    used: int
+    wl_limit: int
+    wl_used: int
+
+
 class UserFields(TypedDict, total=False):
     userid: str
     uuid: str
