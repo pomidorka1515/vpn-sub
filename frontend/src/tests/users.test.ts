@@ -52,3 +52,26 @@ it.each([null, 'alice-login'])('edits with external login %s and sends only chan
   expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', displayname: 'New Alice', ...(external ? { new_username: 'new-login' } : {}) });
   expect(dialog.open).toBe(false);
 });
+
+it('caps both expiry fields at the local 2038 timestamp boundary and rejects later dates', async () => {
+  const { api } = setup();
+  await vi.waitFor(() => { expect(document.querySelector('[data-user-action="edit"]')).not.toBeNull(); });
+  required(document.querySelector<HTMLElement>('[data-user-action="edit"]')).click();
+  await vi.waitFor(() => { expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(true); });
+  const boundary = new Date(2147483647 * 1000);
+  const localMax = new Date(boundary.getTime() - boundary.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  for (const id of ['addExpiry', 'editExpiry']) {
+    const field = requiredInstance(document.getElementById(id), HTMLInputElement);
+    expect(field.max).toBe(localMax);
+    field.value = localMax;
+    expect(field.checkValidity()).toBe(true);
+    field.value = '2038-01-20T00:00';
+    expect(field.validity.rangeOverflow).toBe(true);
+    field.value = '';
+    expect(field.checkValidity()).toBe(true);
+    field.value = '2040-01-01T00:00';
+  }
+  required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  required(document.getElementById('btnDoAdd')).click();
+  expect(api.mock.calls.some(([method]) => method === 'POST')).toBe(false);
+});

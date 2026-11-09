@@ -20,6 +20,8 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   };
   const detail = getDialog('userDetailCard');
   const edit = getDialog('userEditDialog');
+  const localDateTime = (date: Date): string => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  for (const id of ['addExpiry', 'editExpiry']) input(doc, id).setAttribute('max', localDateTime(new Date(2147483647 * 1000)));
   let editingUser: string | null = null;
   let original: Record<string, unknown> = {};
   let opener: HTMLElement | null = null;
@@ -65,7 +67,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         input(doc, 'editLimit').value = String(Number(bandwidth['limit'] ?? 0));
         input(doc, 'editWlLimit').value = String(Number(bandwidth['wl_limit'] ?? 0));
         const expiry = typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000) : null;
-        input(doc, 'editExpiry').value = expiry ? new Date(expiry.getTime() - expiry.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+        input(doc, 'editExpiry').value = expiry ? localDateTime(expiry) : '';
         if (!edit.open) edit.showModal();
         return;
       }
@@ -88,6 +90,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
     });
   }
   async function saveUser(): Promise<void> {
+    if (!input(doc, 'editExpiry').reportValidity()) return;
     const username = editingUser;
     if (!username) return;
     const bandwidth = isRecord(original['bandwidth']) ? original['bandwidth'] : {};
@@ -146,6 +149,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   }
   function hideAddUser(): void { element(doc, 'addUserCard').style.display = 'none'; }
   async function addUser(): Promise<void> {
+    if (!input(doc, 'addExpiry').reportValidity()) return;
     const user = input(doc, 'addUser').value.trim();
     const displayname = input(doc, 'addDisplayName').value.trim();
     if (!user) { toast(t('internal_user_required'), 'error'); return; }
