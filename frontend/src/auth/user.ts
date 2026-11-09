@@ -101,11 +101,12 @@ export function initAuth(doc: Document = document, request: typeof fetch = fetch
   loginButton.addEventListener('click', () => { void login(); }, { signal });
   registerButton.addEventListener('click', () => { void register(); }, { signal });
   regUser.addEventListener('input', validateUsername, { signal });
+  const stopLanguage = i18n.onChange(render);
   loginPass.addEventListener('keydown', event => { if (event.key === 'Enter') void login(); }, { signal });
   for (const field of [regPass, regPass2]) field.addEventListener('keydown', event => { if (event.key === 'Enter') void register(); }, { signal });
   render();
   void request(bootstrap.prefix + '/webapi/stats', { credentials: 'same-origin' }).then(response => {
     if (!signal.aborted && response.ok) navigate(dashboard);
   }).catch(() => {});
-  return () => { controller.abort(); clearTimeout(timer); validationGen++; };
+  return () => { stopLanguage(); controller.abort(); clearTimeout(timer); validationGen++; };
 }

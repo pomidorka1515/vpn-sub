@@ -185,6 +185,7 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
             lang=lang,
             L=strings,
             L_en=fallback,
+            L_ru=web_lang_tables(self.sub.res.lang_cfg, page, "ru")[1],
         )
         response = Response(html, mimetype="text/html")
         if request.args.get("lang", "").lower() in {"en", "ru"}:

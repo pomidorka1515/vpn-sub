@@ -11,7 +11,7 @@ import { createAdminBootstrap, createAdminState } from './bootstrap';
 import { initCodes } from './codes';
 import { createCharts } from './charts/controller';
 import { initConfigControls } from './config/controls';
-import { configDispose, configOnTab, initConfig, reloadConfig, saveConfig, showConfigSection } from './config/controller';
+import { configDispose, configOnTab, initConfig, reloadConfig, saveConfig, setConfigLanguage, showConfigSection } from './config/controller';
 import { initJsonEditors } from './config/editor-bridge';
 import { initConfigDialog } from './config/dialog';
 import { initConfigValidation } from './config/validation';
@@ -30,6 +30,7 @@ export function initAdmin(): () => void {
   const local = safeStorage(() => localStorage);
   const session = safeStorage(() => sessionStorage);
   const i18n = createI18n(bootstrap, doc, local, session, location);
+  i18n.initLang();
   const theme = createTheme(doc, local);
   const notifications = createNotifications(doc, i18n.t, (callback, delay) => window.setTimeout(callback, delay), handle => { window.clearTimeout(handle); });
   const dialogs = createDialogs(doc, i18n.t);
@@ -44,6 +45,7 @@ export function initAdmin(): () => void {
     on401: () => auth.config.on401?.(),
   }, bootstrap.page.chartUrl, bootstrap.page.debounceMs, i18n.language);
   initConfig(context, i18n.language);
+  const stopLanguage = i18n.onChange(() => { setConfigLanguage(i18n.language); charts.chartsRefreshTheme(); });
   const listeners = new AbortController();
   const cleanupControls = initConfigControls(i18n.t);
   const cleanupValidation = initConfigValidation(i18n.t);
@@ -106,7 +108,6 @@ export function initAdmin(): () => void {
   }
   const stopTheme = theme.onChange(charts.chartsRefreshTheme);
   theme.applyTheme();
-  i18n.initLang();
   element(doc, 'bootOverlay').textContent = i18n.t('loading');
   element(doc, 'healthText').textContent = i18n.t('not_checked');
   element(doc, 'teapotStatus').textContent = i18n.t('teapot_question');
@@ -120,6 +121,7 @@ export function initAdmin(): () => void {
     if (disposed) return;
     disposed = true;
     listeners.abort();
+    stopLanguage();
     auth.dispose();
     cleanups.forEach(cleanup => { cleanup(); });
     stopTheme();

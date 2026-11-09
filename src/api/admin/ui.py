@@ -61,6 +61,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             lang=lang,
             L=strings,
             L_en=fallback,
+            L_ru=web_lang_tables(self.sub.res.lang_cfg, "admin", "ru")[1],
         )
         response = Response(html, mimetype="text/html")
         if request.args.get("lang", "").lower() in {"en", "ru"}:
@@ -166,6 +167,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             lang=lang,
             L=strings,
             L_en=fallback,
+            L_ru=web_lang_tables(self.sub.res.lang_cfg, "admin_auth", "ru")[1],
         )
         response = Response(html, mimetype="text/html")
         if request.args.get("lang", "").lower() in {"en", "ru"}:

@@ -36,12 +36,12 @@ export function createChartRenderer(t: Translate, language: string) {
 const fmtBytes = (value: number): string => formatBytes(value, t);
 const fmtUptime = (value: number): string => formatUptime(value, t);
 
-const BYTE_UNITS = ['byte_unit', 'kb_unit', 'mb_unit', 'gb_unit', 'tb_unit'].map(t);
+const BYTE_UNITS = ['byte_unit', 'kb_unit', 'mb_unit', 'gb_unit', 'tb_unit'];
 
 function axisBytes(max: number): AxisScale {
   if (!Number.isFinite(max) || max <= 0) return { div: 1, unit: t('byte_unit') };
   const i = Math.min(Math.floor(Math.log(max) / Math.log(1024)), BYTE_UNITS.length - 1);
-  return { div: 1024 ** i, unit: BYTE_UNITS[i] ?? t('byte_unit') };
+  return { div: 1024 ** i, unit: t(BYTE_UNITS[i] ?? 'byte_unit') };
 }
 
 function formatValue(value: number | null | undefined, unit: string, scale?: AxisScale | null): string {
@@ -125,11 +125,11 @@ function seriesBounds(spec: ChartSpec, rows: Row[], raw: Array<Array<number | nu
 function labelFor(ts: number, mode: string): string {
   const d = new Date(ts * 1000);
   if (mode === 'snapshot') {
-    return d.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', {
+    return d.toLocaleDateString((document.documentElement.lang || language) === 'ru' ? 'ru-RU' : 'en-US', {
       timeZone: 'UTC', month: 'short', day: 'numeric',
     });
   }
-  return d.toLocaleTimeString(language === 'ru' ? 'ru-RU' : 'en-US', {
+  return d.toLocaleTimeString((document.documentElement.lang || language) === 'ru' ? 'ru-RU' : 'en-US', {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
 }

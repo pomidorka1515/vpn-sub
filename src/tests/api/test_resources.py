@@ -34,6 +34,7 @@ def test_shared_bootstrap_is_json_not_executable_script(prefix: str, language: s
         lang=language,
         L={"message": hostile},
         L_en={"message": "fallback"},
+        L_ru={"message": hostile},
         asset_version="abc123",
     )
     opening = '<script id="frontend-bootstrap" type="application/json">'
@@ -46,6 +47,7 @@ def test_shared_bootstrap_is_json_not_executable_script(prefix: str, language: s
         "language": language,
         "translations": {"message": hostile},
         "fallback": {"message": "fallback"},
+        "languages": {"en": {"message": "fallback"}, "ru": {"message": hostile}},
         "page": {
             "chartUrl": f"{prefix}/chart.umd.min.js?v=abc123",
             "debounceMs": 1000,

@@ -351,7 +351,11 @@ export function initHistory(doc: Document = document, browser: Window = window):
 
   let dbT: number | undefined;
   const range = input('daysRange');
-  range.setAttribute('aria-label', t('days_range_aria'));
+  const updateLanguage = () => {
+    range.setAttribute('aria-label', t('days_range_aria'));
+    if (lastData) { renderCharts(lastData); renderSummaries(lastData); }
+  };
+  const stopLanguage = i18n.onChange(updateLanguage);
   range.addEventListener('input', () => { loadGen('history'); el('daysValue').textContent = range.value; cancelTimer(dbT); dbT = schedule(() => { void loadHistory(); }, bootstrap.page.debounceMs); }, { signal: abort.signal });
   el('btnBack').addEventListener('click', () => { win.location.href = bootstrap.prefix + '/panel'; }, { signal: abort.signal });
   el('btnRefresh').addEventListener('click', () => { void loadHistory(); }, { signal: abort.signal });
@@ -359,6 +363,7 @@ export function initHistory(doc: Document = document, browser: Window = window):
   doc.querySelectorAll<HTMLElement>('[data-lang]').forEach(node => { node.addEventListener('click', () => { i18n.setLang(node.dataset['lang'] ?? ''); }, { signal: abort.signal }); });
   const removeThemeListener = theme.onChange(repaintCharts);
   theme.applyTheme(); i18n.initLang();
+  updateLanguage();
   void loadHistory();
-  return () => { disposed = true; loadGen('history'); abort.abort(); timers.forEach(id => { win.clearTimeout(id); }); cancelChartLoad?.(); chartScript?.remove(); removeThemeListener(); regChart?.destroy(); wlChart?.destroy(); notifications.dispose(); };
+  return () => { disposed = true; stopLanguage(); loadGen('history'); abort.abort(); timers.forEach(id => { win.clearTimeout(id); }); cancelChartLoad?.(); chartScript?.remove(); removeThemeListener(); regChart?.destroy(); wlChart?.destroy(); notifications.dispose(); };
 }

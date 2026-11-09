@@ -7,6 +7,7 @@ export interface Bootstrap {
   language: Language;
   translations: Record<string, string>;
   fallback: Record<string, string>;
+  languages?: Record<Language, Record<string, string>>;
   page: { chartUrl: string; debounceMs: number };
 }
 
@@ -22,6 +23,7 @@ export function parseBootstrap(value: unknown): Bootstrap {
     language: value['language'],
     translations: stringTable(value['translations']),
     fallback: stringTable(value['fallback']),
+    ...(isRecord(value['languages']) ? { languages: { en: stringTable(value['languages']['en']), ru: stringTable(value['languages']['ru']) } } : {}),
     page: { chartUrl: value['page']['chartUrl'], debounceMs: value['page']['debounceMs'] },
   };
 }

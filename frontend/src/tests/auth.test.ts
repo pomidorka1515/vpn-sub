@@ -13,7 +13,7 @@ function setup(admin = false) {
   const bootstrap = document.createElement('script');
   bootstrap.id = 'frontend-bootstrap';
   bootstrap.type = 'application/json';
-  bootstrap.textContent = JSON.stringify({ prefix: '/sub', language: 'en', translations: {}, fallback: {}, page: { chartUrl: '/chart.js', debounceMs: 10 } });
+  bootstrap.textContent = JSON.stringify({ prefix: '/sub', language: 'en', translations: {}, fallback: {}, languages: { en: { create_account: 'Create account' }, ru: { create_account: 'Создать аккаунт' } }, page: { chartUrl: '/chart.js', debounceMs: 10 } });
   document.head.append(bootstrap);
   const navigate = vi.fn();
   const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 401 }));
@@ -24,6 +24,16 @@ function setup(admin = false) {
 }
 
 describe('user authentication', () => {
+  it('changes language without leaving the registration tab or losing input', () => {
+    const { click, field } = setup();
+    click('tabRegister');
+    field('regUser').value = 'alice';
+    required(document.querySelector<HTMLElement>('.lang-btn[data-lang="ru"]')).click();
+    expect(field('regUser').value).toBe('alice');
+    expect(required(document.getElementById('registerForm')).style.display).toBe('block');
+    expect(required(document.getElementById('authTitle')).textContent).toBe('Создать аккаунт');
+    expect(document.title).toBe('Создать аккаунт');
+  });
   it('redirects an existing session and suppresses redirects after disposal', async () => {
     const { request, navigate } = setup();
     await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('/sub/webapi/stats', { credentials: 'same-origin' }); });

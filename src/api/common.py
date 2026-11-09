@@ -76,11 +76,12 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
 def web_lang_tables(
     lang_cfg: Snapshot[LangConfig],
     page: str,
+    language_code: str | None = None,
 ) -> tuple[str, dict[str, str], dict[str, str]]:
     """Active page strings, plus the English table used when a key is missing."""
     if page not in _WEB_PAGES:
         raise ValueError(f"unknown web page '{page}'")
-    lang = resolve_web_lang()
+    lang = language_code or resolve_web_lang()
     language = lang_cfg.view()
     raw = cast("object", language.get("web"))
     web: Mapping[str, object] = (

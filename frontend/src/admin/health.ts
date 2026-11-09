@@ -11,7 +11,7 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
   let disposed = false;
   let healthStatus = '';
   const date = (value: unknown): string => typeof value === 'number' && Number.isFinite(value)
-    ? new Date(value * 1000).toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' ' + t('utc') : t('na');
+    ? new Date(value * 1000).toLocaleString((doc.documentElement.lang || language) === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' ' + t('utc') : t('na');
   const row = (label: string, value: unknown, cls = ''): string => `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value${cls ? ' ' + cls : ''}">${escapeHtml(value)}</span></div>`;
   async function health(): Promise<void> {
     await withBusy(button(doc, 'btnRunHealth'), async () => {

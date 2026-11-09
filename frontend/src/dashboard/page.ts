@@ -403,6 +403,11 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   }
 
   const abort = new AbortController();
+  const stopLanguage = i18n.onChange(() => {
+    if (currentStats) renderStats(currentStats);
+    if (el('qrSection').style.display === 'block' || button('btnQr').disabled) void showQrCode();
+    if (closeProfiles) void showProfiles();
+  });
   const listen = (id: string, fn: () => void) => { el(id).addEventListener('click', fn, { signal: abort.signal }); };
   listen('themeBtn', theme.toggleTheme);
   doc.querySelectorAll<HTMLElement>('[data-lang]').forEach(node => { node.addEventListener('click', () => { i18n.setLang(node.dataset['lang'] ?? ''); }, { signal: abort.signal }); });
@@ -426,5 +431,5 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   doc.querySelectorAll<HTMLElement>('[data-password]').forEach(node => { node.addEventListener('click', () => { togglePass(doc, node.dataset['password'] ?? '', node); }, { signal: abort.signal }); });
   theme.applyTheme(); initPassToggles(doc); i18n.initLang();
   void loadStats(); void loadFingerprints();
-  return () => { disposed = true; abort.abort(); ++qrGen; ++settingsValidationGen; loadGen('stats'); loadGen('profiles'); timers.forEach(id => { win.clearTimeout(id); }); qrUrls.forEach(url => { URL.revokeObjectURL(url); }); qrUrls.clear(); dialogs.dispose(); notifications.dispose(); closeProfiles?.(); };
+  return () => { disposed = true; stopLanguage(); abort.abort(); ++qrGen; ++settingsValidationGen; loadGen('stats'); loadGen('profiles'); timers.forEach(id => { win.clearTimeout(id); }); qrUrls.forEach(url => { URL.revokeObjectURL(url); }); qrUrls.clear(); dialogs.dispose(); notifications.dispose(); closeProfiles?.(); };
 }

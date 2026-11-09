@@ -13,7 +13,7 @@ function setup(request: typeof fetch) {
   const html = readFileSync('src/templates/admin.html', 'utf8');
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'));
   const bootstrap = document.createElement('script'); bootstrap.type = 'application/json'; bootstrap.id = 'frontend-bootstrap';
-  bootstrap.textContent = JSON.stringify({ prefix: '/sub', language: 'en', translations: {}, fallback: {}, page: { chartUrl: '/chart.js', debounceMs: 20 } });
+  bootstrap.textContent = JSON.stringify({ prefix: '/sub', language: 'en', translations: { codes: 'Codes' }, fallback: { codes: 'Codes' }, languages: { en: { codes: 'Codes' }, ru: { codes: 'Коды' } }, page: { chartUrl: '/chart.js', debounceMs: 20 } });
   document.head.append(bootstrap);
   vi.stubGlobal('fetch', request);
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
@@ -44,5 +44,20 @@ describe('admin application integration', () => {
     await Promise.resolve(); await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(1);
     expect(required(document.getElementById('bootOverlay')).hidden).toBe(false);
+  });
+  it('keeps the selected admin tab and unsaved input when switching languages', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(token());
+    setup(request);
+    required(document.querySelector<HTMLElement>('.tab[data-tab="codes"]')).click();
+    await vi.waitFor(() => { expect(required(document.getElementById('tab-codes')).classList.contains('active')).toBe(true); });
+    const field = document.createElement('input');
+    field.value = 'unsaved draft';
+    required(document.getElementById('tab-codes')).append(field);
+    required(document.querySelector<HTMLElement>('.lang-btn[data-lang="ru"]')).click();
+    expect(required(document.getElementById('tab-codes')).classList.contains('active')).toBe(true);
+    expect(field.value).toBe('unsaved draft');
+    expect(field.isConnected).toBe(true);
+    expect(document.documentElement.lang).toBe('ru');
+    expect(required(document.querySelector<HTMLElement>('.tab[data-tab="codes"]')).textContent).toBe('Коды');
   });
 });

@@ -26,6 +26,7 @@ const api = (method: string, path: string, body?: unknown) => context.api(method
 const toast = (message: string, kind: string): void => { context.toast(message, kind); };
 const confirmDialog = (message: string, title: string) => context.confirm(message, title);
 export function initConfig(env: AdminContext, language: string): void { context = env; pageLanguage = language; disposed = false; generation++; cleanupCards = initCards(); }
+export function setConfigLanguage(language: string): void { pageLanguage = language; }
 function required(id: string): HTMLElement {
   const result = document.getElementById(id);
   if (!result) throw new Error(sharedMessage('missing_element', { id }));

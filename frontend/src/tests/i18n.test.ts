@@ -10,6 +10,8 @@ import { serverMessage, sharedMessage } from '../shared/messages';
 import { initError } from '../pages/error';
 import { initRedirect } from '../pages/redirect';
 import { MAIN_SECTIONS } from '../admin/config/state';
+import { createI18n } from '../shared/i18n';
+import { safeStorage } from '../shared/storage';
 
 const parsed = ts.parseConfigFileTextToJson('lang.jsonc', readFileSync('../lang.jsonc', 'utf8'));
 const config: unknown = parsed.config;
@@ -27,6 +29,39 @@ function files(path: string): string[] {
 }
 
 describe('frontend translations', () => {
+  it('switches languages in place, preserves controls, and clears only the language query', () => {
+    window.history.replaceState(null, '', '/panel?lang=en&other=1#section');
+    document.body.innerHTML = '<button class="lang-btn" data-lang="en">EN</button><button class="lang-btn" data-lang="ru">RU</button><span data-t="hello"></span><input value="draft"><div>Ready</div><span class="mono">Ready</span>';
+    const storage = safeStorage(() => localStorage);
+    const i18n = createI18n({ prefix: '', language: 'en', translations: { hello: 'Hello', ready: 'Ready' }, fallback: { hello: 'Hello', ready: 'Ready' }, languages: { en: { hello: 'Hello', ready: 'Ready' }, ru: { hello: 'Привет', ready: 'Готово' } }, page: { chartUrl: '', debounceMs: 0 } }, document, storage, safeStorage(() => sessionStorage), window.location);
+    i18n.initLang();
+    const input = document.querySelector('input');
+    if (!input) throw new Error('missing input');
+    input.value = 'unsaved';
+    i18n.setLang('ru');
+    expect(i18n.language).toBe('ru');
+    expect(i18n.t('hello')).toBe('Привет');
+    expect(document.querySelector('[data-t]')?.textContent).toBe('Привет');
+    expect(document.querySelector('div')?.textContent).toBe('Готово');
+    expect(document.querySelector('.mono')?.textContent).toBe('Ready');
+    expect(document.querySelector('input')).toBe(input);
+    expect(input.value).toBe('unsaved');
+    expect(document.documentElement.lang).toBe('ru');
+    expect(location.search + location.hash).toBe('?other=1#section');
+    expect(localStorage.getItem('lang')).toBe('ru');
+    expect(document.cookie).toContain('lang=ru');
+    i18n.setLang('en');
+    expect(document.querySelector('[data-t]')?.textContent).toBe('Hello');
+  });
+
+  it('synchronizes a stored preference without navigating on startup', () => {
+    localStorage.setItem('lang', 'ru');
+    document.body.innerHTML = '<span data-t="hello"></span>';
+    const i18n = createI18n({ prefix: '', language: 'en', translations: { hello: 'Hello' }, fallback: { hello: 'Hello' }, languages: { en: { hello: 'Hello' }, ru: { hello: 'Привет' } }, page: { chartUrl: '', debounceMs: 0 } }, document, safeStorage(() => localStorage), safeStorage(() => sessionStorage), window.location);
+    i18n.initLang();
+    expect(i18n.language).toBe('ru');
+    expect(document.querySelector('span')?.textContent).toBe('Привет');
+  });
   it('parses the language file and keeps English and Russian keys in sync', () => {
     expect(parsed.error).toBeUndefined();
     for (const section of Object.values(web)) {

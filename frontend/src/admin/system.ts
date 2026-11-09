@@ -257,7 +257,7 @@ async function loadSnapshotsRequest(list: HTMLElement, cutoff: number, current: 
 
 function fmtSnapDate(ts: number | undefined): string {
   if (ts == null || isNaN(ts)) return t('na');
-  return new Date(ts * 1000).toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US', {
+  return new Date(ts * 1000).toLocaleString((doc.documentElement.lang || language) === 'ru' ? 'ru-RU' : 'en-US', {
     timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit'
   }) + ' ' + t('utc');
