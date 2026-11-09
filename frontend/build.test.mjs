@@ -46,6 +46,19 @@ test("all pages use the soft sage accent instead of the old blue palette", async
   }
 });
 
+test("error pages match their dark colors and use the login entrance animation", async () => {
+  const notFound = await readFile(new URL("templates/404.html", output), "utf8");
+  const forbidden = await readFile(new URL("templates/browser.html", output), "utf8");
+  assert.match(notFound, /--box:\s*#131316/);
+  assert.match(forbidden, /--surface:\s*#131316/);
+  for (const [content, selector] of [[notFound, "main"], [forbidden, "\\.box"]]) {
+    assert.match(content, /--accent:\s*#a8c9bc/);
+    assert.match(content, new RegExp(`${selector} \\{[^}]*animation: fadeUp \\.4s ease`));
+    assert.match(content, /@keyframes fadeUp\s*\{\s*from\s*\{\s*opacity:\s*0;\s*transform:\s*translateY\(8px\)/);
+    assert.match(content, new RegExp(`@media \\(prefers-reduced-motion: reduce\\) \\{ ${selector} \\{ animation: none;`));
+  }
+});
+
 test("pages share theme-aware soft status and usage colors", async () => {
   const css = await readFile(new URL("assets/common.css", output), "utf8");
   assert.match(css, /--green:\s*#a8c9bc/);

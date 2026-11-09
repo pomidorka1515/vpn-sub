@@ -12,7 +12,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     color-scheme: dark;
-    --bg: #0a0a0b; --box: #050506; --border: #252529;
+    --bg: #0a0a0b; --box: #131316; --border: #252529;
     --text: #e4e4e7; --muted: #8e8e96;
     --accent: #a8c9bc; --accent-dim: #97b5a9; --accent-ink: #10261d;
   }
@@ -36,8 +36,10 @@
   main {
     width: 100%; max-width: 23.75rem; text-align: center;
     background: var(--box); border: 1px solid var(--border); border-radius: 14px;
-    padding: 36px 32px;
+    padding: 36px 32px; animation: fadeUp .4s ease;
   }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { main { animation: none; } }
   .code {
     font-size: 13px; font-weight: 600; letter-spacing: 1px;
     color: var(--accent); margin-bottom: 10px;
