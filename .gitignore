@@ -24,4 +24,5 @@ frontend/coverage/
 !AUDIT.md
 !docs/ASYNC_*
 !frontend/.node-version
+!frontend/.npmrc
 *.egg-info
