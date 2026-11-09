@@ -37,12 +37,23 @@ test("all pages use the soft sage accent instead of the old blue palette", async
   for (const file of [
     "assets/common.css",
     "assets/admin.css",
+    "assets/dashboard.css",
     "templates/404.html",
     "templates/browser.html",
   ]) {
     const content = await readFile(new URL(file, output), "utf8");
     assert.doesNotMatch(content, /#(?:6366f1|4f46e5|a5b4fc|0ea5e9|7dd3fc|06b6d4|e0f2fe|075985)\b|rgba\(99,102,241,/i, file);
   }
+});
+
+test("dashboard uses theme-aware soft status and usage colors", async () => {
+  const css = await readFile(new URL("assets/dashboard.css", output), "utf8");
+  assert.match(css, /--green:\s*var\(--accent\)/);
+  assert.match(css, /--yellow:\s*#d7c58c/);
+  assert.match(css, /--orange:\s*#d9aa80/);
+  assert.match(css, /--red:\s*#e8a6a6/);
+  assert.match(css, /\[data-theme=light\][^{]*\{[^}]*--red:\s*#a83535/);
+  assert.doesNotMatch(css, /rgba\((?:239,68,68|34,197,94),/);
 });
 
 for (const theme of ["dark", "light"]) {
