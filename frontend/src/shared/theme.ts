@@ -16,7 +16,7 @@ export function createTheme(doc: Document, storage: StorageAccess) {
       dark.style.display = theme === 'dark' ? 'block' : 'none';
       light.style.display = theme === 'light' ? 'block' : 'none';
     }
-    listeners.forEach(listener => listener());
+    listeners.forEach(listener => { listener(); });
   }
   function toggleTheme(): void {
     theme = (theme ?? 'dark') === 'dark' ? 'light' : 'dark';

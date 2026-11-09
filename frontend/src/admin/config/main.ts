@@ -1,5 +1,5 @@
 import { sharedMessage } from '../../shared/messages';
-import { escapeHtml } from '../../shared/dom';
+import { displayValue, escapeHtml } from '../../shared/dom';
 import type { Translate } from '../../shared/formatting';
 import { initPassToggles } from '../../shared/passwords';
 import { destroyJsonEditors } from './editor-bridge';
@@ -19,24 +19,24 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       editor.draft[key] = readText('cfg-' + key);
     } else if (key === 'panel_alert_cooldown') {
       const raw = readText('cfg-panel_alert_cooldown').trim();
-      editor.draft.panel_alert_cooldown = INTEGER_RE.test(raw) ? new ConfigNumber(raw) : raw;
+      editor.draft['panel_alert_cooldown'] = INTEGER_RE.test(raw) ? new ConfigNumber(raw) : raw;
     } else if (['uri', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt'].includes(key)) {
       const value = readText('cfg-' + key);
-      if (key === 'api_token' && value === '') delete editor.draft[key];
+      if (key === 'api_token' && value === '') Reflect.deleteProperty(editor.draft, key);
       else editor.draft[key] = value;
     } else if (key === 'api_admin_ui_auth') {
-      editor.draft.api_admin_ui_auth = [readText('cfg-auth-0'), readText('cfg-auth-1')];
+      editor.draft['api_admin_ui_auth'] = [readText('cfg-auth-0'), readText('cfg-auth-1')];
     } else if (key === 'redis') {
       const timeout = readText('cfg-redis-timeout').trim();
       const redis: ConfigObject = { url: readText('cfg-redis-url') };
       if (timeout !== '') {
-        try { redis.socket_timeout = parseConfigJson(timeout); } catch { redis.socket_timeout = timeout; }
+        try { redis['socket_timeout'] = parseConfigJson(timeout); } catch { redis['socket_timeout'] = timeout; }
       }
-      editor.draft.redis = redis;
+      editor.draft['redis'] = redis;
     } else if (key === 'json_template') {
       const raw = readText('cfg-json_template');
       editor.jsonInputs.set('json_template', raw);
-      try { editor.draft.json_template = parseConfigJson(raw); } catch { editor.draft.json_template = raw; }
+      try { editor.draft['json_template'] = parseConfigJson(raw); } catch { editor.draft['json_template'] = raw; }
     }
     validateField(key);
     markDirty();
@@ -45,7 +45,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
   function stringRows(key: string): string {
     const value = draft()[key];
     const rows = Array.isArray(value) ? value : [];
-    return rowList('cfg-rows-' + key, rows.map(item => String(item ?? '')), 'string');
+    return rowList('cfg-rows-' + key, rows.map(displayValue), 'string');
   }
 
   function applyStringRows(key: string, rows: Array<string | string[]>, live?: boolean): void {
@@ -57,15 +57,16 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
 
   function nodeRows(): string {
     const nodes = object('nodes');
-    return rowList('cfg-rows-nodes', editor.nodeRows || Object.entries(nodes).map(([key, value]) => [key, String(value ?? '')]), 'pair');
+    return rowList('cfg-rows-nodes', editor.nodeRows || Object.entries(nodes).map(([key, value]) => [key, displayValue(value)]), 'pair');
   }
 
   function applyNodeRows(rows: Array<string | string[]>, live?: boolean): void {
     const pairs: Array<[string, string]> = rows.filter((row): row is string[] => Array.isArray(row)).map(row => [row[0] ?? '', row[1] ?? '']);
     editor.nodeRows = pairs;
-    const nodes: ConfigObject = Object.create(null) as ConfigObject;
+    const nodes: ConfigObject = {};
+    Object.setPrototypeOf(nodes, null);
     pairs.forEach(([key, value]) => { nodes[key] = value; });
-    draft().nodes = nodes;
+    draft()['nodes'] = nodes;
     if (!live) paintBox('nodes');
     refreshNodeSelects();
     validateField('nodes');
@@ -101,27 +102,27 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
     } else if (key === 'api_token' || key === 'salt') {
       control = passWrap('cfg-' + key, data[key] ?? '');
     } else if (key === 'api_admin_ui_auth') {
-      const auth = Array.isArray(data.api_admin_ui_auth) ? data.api_admin_ui_auth : ['', ''];
+      const auth = Array.isArray(data['api_admin_ui_auth']) ? data['api_admin_ui_auth'] : ['', ''];
       control = `<input type="text" id="cfg-auth-0" value="${attr(auth[0] ?? '')}" spellcheck="false" autocomplete="off">
         ${passWrap('cfg-auth-1', auth[1] ?? '')}`;
     } else if (key === 'panel_alert_cooldown') {
-      control = `<input type="number" id="cfg-panel_alert_cooldown" min="0" step="1" value="${attr(data.panel_alert_cooldown ?? '')}">`;
+      control = `<input type="number" id="cfg-panel_alert_cooldown" min="0" step="1" value="${attr(data['panel_alert_cooldown'] ?? '')}">`;
     } else if (['fingerprints', 'bypass_packages', 'funny_strings'].includes(key)) {
       control = stringRows(key);
     } else if (key === 'nodes') {
       control = nodeRows();
     } else if (key === 'redis') {
       const redis = object('redis');
-      const timeout = Object.prototype.hasOwnProperty.call(redis, 'socket_timeout') ? redis.socket_timeout : '';
+      const timeout = Object.prototype.hasOwnProperty.call(redis, 'socket_timeout') ? redis['socket_timeout'] : '';
       control = `<label class="config-sub">${escapeHtml(t('config_redis_url'))}</label>
-        <input type="text" id="cfg-redis-url" value="${attr(redis.url ?? '')}" spellcheck="false">
+        <input type="text" id="cfg-redis-url" value="${attr(redis['url'] ?? '')}" spellcheck="false">
         <label class="config-sub">${escapeHtml(t('config_redis_timeout'))}</label>
         <input type="number" id="cfg-redis-timeout" min="0" step="any" value="${attr(timeout)}">`;
     } else if (key === 'bot' || key === 'publicbot' || key === 'discord') {
       const obj = object(key);
-      control = `<label class="config-sub">${escapeHtml(t('token'))}</label>${passWrap('cfg-' + key + '-token', obj.token ?? '')}`;
+      control = `<label class="config-sub">${escapeHtml(t('token'))}</label>${passWrap('cfg-' + key + '-token', obj['token'] ?? '')}`;
       if (key !== 'publicbot') {
-        const rows = Array.isArray(obj.whitelist) ? obj.whitelist.map(item => String(item)) : [];
+        const rows = Array.isArray(obj['whitelist']) ? obj['whitelist'].map(displayValue) : [];
         control += `<label class="config-sub">${escapeHtml(t('config_whitelist'))}</label>${rowList('cfg-rows-' + key, rows, 'int')}`;
       }
       control += `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`;
@@ -131,15 +132,15 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
         const enabled = Object.hasOwn(obj, platform);
         const pair = Array.isArray(obj[platform]) ? obj[platform] : ['', ''];
         return `<label class="config-sub">${escapeHtml(t('config_field_' + platform))}</label>
-          ${enabled ? ['en', 'ru'].map((lang, index) => `<label for="cfg-support-${platform}-${index}">${escapeHtml(t('config_' + lang))}</label>
-            <textarea id="cfg-support-${platform}-${index}" spellcheck="false">${escapeHtml(pair[index] ?? '')}</textarea>`).join('') : `<div class="config-absent">${escapeHtml(t('config_not_set'))}</div>`}
+          ${enabled ? ['en', 'ru'].map((lang, index) => `<label for="cfg-support-${platform}-${String(index)}">${escapeHtml(t('config_' + lang))}</label>
+            <textarea id="cfg-support-${platform}-${String(index)}" spellcheck="false">${escapeHtml(pair[index] ?? '')}</textarea>`).join('') : `<div class="config-absent">${escapeHtml(t('config_not_set'))}</div>`}
           <button type="button" class="btn-tiny" data-support-platform="${platform}">${escapeHtml(t(enabled ? 'config_remove' : 'config_add'))}</button>`;
       }).join('');
     } else if (key === 'json_template') {
-      const value = editor.jsonInputs.get('json_template') ?? jsonText(data.json_template);
+      const value = editor.jsonInputs.get('json_template') ?? jsonText(data['json_template']);
       control = `<textarea id="cfg-json_template" class="config-json" spellcheck="false">${escapeHtml(value)}</textarea>`;
     } else if (key === '$schema') {
-      control = `<div class="config-locked">${escapeHtml(data.$schema ?? '')}</div>`;
+      control = `<div class="config-locked">${escapeHtml(data['$schema'] ?? '')}</div>`;
     }
     const remove = optional && present && !['bot', 'publicbot', 'discord'].includes(key)
       ? `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`
@@ -157,29 +158,29 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
     const slot = document.getElementById('cfg-box-' + key.replace('$', ''));
     if (!slot) return;
     initPassToggles(document);
-    slot.querySelector('[data-optional-add]')?.addEventListener('click', () => addOptional(key));
-    slot.querySelector('[data-optional-remove]')?.addEventListener('click', () => removeOptional(key));
+    slot.querySelector('[data-optional-add]')?.addEventListener('click', () => { addOptional(key); });
+    slot.querySelector('[data-optional-remove]')?.addEventListener('click', () => { removeOptional(key); });
     if (['fingerprints', 'bypass_packages', 'funny_strings'].includes(key)) {
-      bindRows('cfg-rows-' + key, 'string', (rows, live) => applyStringRows(key, rows, live));
+      bindRows('cfg-rows-' + key, 'string', (rows, live) => { applyStringRows(key, rows, live); });
     }
     if (key === 'nodes') bindRows('cfg-rows-nodes', 'pair', applyNodeRows);
     if (key === 'bot' || key === 'discord') {
       bindRows('cfg-rows-' + key, 'int', (rows, live) => {
         const ints = rows.map(row => { const value = String(row); return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value; });
-        object(key).whitelist = ints;
+        object(key)['whitelist'] = ints;
         if (!live) paintBox(key);
         validateField(key);
         markDirty();
       });
       document.getElementById('cfg-' + key + '-token')?.addEventListener('input', () => {
-        object(key).token = readText('cfg-' + key + '-token');
+        object(key)['token'] = readText('cfg-' + key + '-token');
         validateField(key);
         markDirty();
       });
     }
     if (key === 'publicbot') {
       document.getElementById('cfg-publicbot-token')?.addEventListener('input', () => {
-        object('publicbot').token = readText('cfg-publicbot-token');
+        object('publicbot')['token'] = readText('cfg-publicbot-token');
         validateField('publicbot');
         markDirty();
       });
@@ -187,10 +188,10 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
     if (key === 'support_text') {
       slot.querySelectorAll<HTMLElement>('[data-support-platform]').forEach(button => {
         button.addEventListener('click', () => {
-          const platform = button.dataset.supportPlatform;
+          const platform = button.dataset['supportPlatform'];
           if (!platform) return;
           const support = object('support_text');
-          if (Object.hasOwn(support, platform)) delete support[platform];
+          if (Object.hasOwn(support, platform)) Reflect.deleteProperty(support, platform);
           else support[platform] = ['', ''];
           paintBox(key);
           validateField(key);
@@ -199,7 +200,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       });
       ['discord', 'telegram'].forEach(platform => {
         [0, 1].forEach(index => {
-          document.getElementById(`cfg-support-${platform}-${index}`)?.addEventListener('input', event => {
+          document.getElementById(`cfg-support-${platform}-${String(index)}`)?.addEventListener('input', event => {
             const pair = object('support_text')[platform];
             if (Array.isArray(pair) && event.target instanceof HTMLTextAreaElement) pair[index] = event.target.value;
             validateField(key);
@@ -210,13 +211,13 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
     }
     const input = document.getElementById('cfg-' + key);
     if (input && key !== 'json_template') {
-      input.addEventListener('input', () => commitMainField(key));
-      input.addEventListener('blur', () => commitMainField(key));
+      input.addEventListener('input', () => { commitMainField(key); });
+      input.addEventListener('blur', () => { commitMainField(key); });
     }
     const related = key === 'api_admin_ui_auth' ? ['cfg-auth-0', 'cfg-auth-1']
       : key === 'redis' ? ['cfg-redis-url', 'cfg-redis-timeout'] : [];
     related.forEach(id => {
-      document.getElementById(id)?.addEventListener('input', () => commitMainField(key));
+      document.getElementById(id)?.addEventListener('input', () => { commitMainField(key); });
     });
     const template = key === 'json_template' ? document.getElementById('cfg-json_template') : null;
     if (template) {
@@ -231,15 +232,15 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
     if (key === 'api_uri' || key === 'fallback_domain') draft()[key] = '';
     else if (key === 'funny_strings') draft()[key] = [];
     else if (key === 'bot' || key === 'discord') draft()[key] = { token: '', whitelist: [] };
-    else if (key === 'publicbot') draft().publicbot = { token: '' };
-    else if (key === 'support_text') draft().support_text = {};
+    else if (key === 'publicbot') draft()['publicbot'] = { token: '' };
+    else if (key === 'support_text') draft()['support_text'] = {};
     paintBox(key);
     validateField(key);
     markDirty();
   }
 
   function removeOptional(key: string): void {
-    delete draft()[key];
+    Reflect.deleteProperty(draft(), key);
     paintBox(key);
     validateField(key);
     markDirty();
@@ -253,7 +254,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       <div class="section-title">${escapeHtml(t(title))}</div>
       ${keys.map(boxHtml).join('')}
     `).join('');
-    MAIN_SECTIONS.forEach(([, keys]) => keys.forEach(bindBox));
+    MAIN_SECTIONS.forEach(([, keys]) => { keys.forEach(bindBox); });
   }
 
   function refreshNodeSelects(): void {
@@ -261,7 +262,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
       const current = select.value;
       select.innerHTML = nodeOptions(current);
     });
-    Object.keys(object('profiles')).forEach(id => validateCard('inbounds', id));
+    Object.keys(object('profiles')).forEach(id => { validateCard('inbounds', id); });
     validateField('nodes');
   }
 

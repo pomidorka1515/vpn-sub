@@ -25,30 +25,30 @@ function systemStatus(value: unknown): SystemStatus | null {
   const optionalNumbers = (object: Record<string, unknown>, keys: readonly string[]): boolean => keys.every(key => object[key] == null || typeof object[key] === 'number');
   const requiredNumbers = (object: Record<string, unknown>, keys: readonly string[]): boolean => keys.every(key => typeof object[key] === 'number');
   if (!optionalNumbers(value, ['cpu', 'uptime', 'app_uptime', 'app_thread_amount', 'process_count'])) return null;
-  if (isRecord(value.cpu_info) && (!optionalNumbers(value.cpu_info, ['cores', 'mhz_max']) || (value.cpu_info.name != null && typeof value.cpu_info.name !== 'string'))) return null;
-  if (isRecord(value.loadavg) && !optionalNumbers(value.loadavg, ['load_1m', 'load_5m', 'load_15m'])) return null;
-  if (isRecord(value.network) && !requiredNumbers(value.network, ['recv', 'sent'])) return null;
-  if (isRecord(value.app_memory) && !requiredNumbers(value.app_memory, ['ram', 'swap'])) return null;
-  if (isRecord(value.connections) && !optionalNumbers(value.connections, ['tcp', 'udp'])) return null;
-  if (isRecord(value.memory)) {
+  if (isRecord(value['cpu_info']) && (!optionalNumbers(value['cpu_info'], ['cores', 'mhz_max']) || (value['cpu_info']['name'] != null && typeof value['cpu_info']['name'] !== 'string'))) return null;
+  if (isRecord(value['loadavg']) && !optionalNumbers(value['loadavg'], ['load_1m', 'load_5m', 'load_15m'])) return null;
+  if (isRecord(value['network']) && !requiredNumbers(value['network'], ['recv', 'sent'])) return null;
+  if (isRecord(value['app_memory']) && !requiredNumbers(value['app_memory'], ['ram', 'swap'])) return null;
+  if (isRecord(value['connections']) && !optionalNumbers(value['connections'], ['tcp', 'udp'])) return null;
+  if (isRecord(value['memory'])) {
     for (const [key, fields] of [['ram', ['used', 'total', 'available']], ['swap', ['used', 'total']]] as const) {
-      const part = value.memory[key];
+      const part = value['memory'][key];
       if (part != null && (!isRecord(part) || !requiredNumbers(part, fields))) return null;
     }
   }
-  if (isRecord(value.ip)) {
+  if (isRecord(value['ip'])) {
     for (const key of ['ipv4', 'ipv6'] as const) {
-      const list = value.ip[key];
+      const list = value['ip'][key];
       if (list != null && (!Array.isArray(list) || list.some((item: unknown) => typeof item !== 'string'))) return null;
     }
   }
-  if (value.app_threads !== undefined && (!Array.isArray(value.app_threads) || value.app_threads.some((thread: unknown) => {
+  if (value['app_threads'] !== undefined && (!Array.isArray(value['app_threads']) || value['app_threads'].some((thread: unknown) => {
     if (!isRecord(thread) || !optionalNumbers(thread, ['cpu', 'ctx_switches', 'stack'])) return true;
-    if (thread.tid != null && typeof thread.tid !== 'number' && typeof thread.tid !== 'string') return true;
+    if (thread['tid'] != null && typeof thread['tid'] !== 'number' && typeof thread['tid'] !== 'string') return true;
     return ['name', 'state'].some(key => thread[key] != null && typeof thread[key] !== 'string');
   }))) return null;
   // Required and optional presentation fields have been validated above.
-  return value as SystemStatus;
+  return value;
 }
 
 export function createSystem({ doc, t, api, toast, loadGen }: AdminContext, renderPanelCards: (data: unknown, prefix?: string) => string, language: string) {
@@ -86,7 +86,7 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
   const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
   const cpuName = s.cpu_info?.name || t('na');
   const cpuCores = s.cpu_info?.cores ?? t('na');
-  const cpuSpeed = s.cpu_info?.mhz_max ? Math.round(s.cpu_info.mhz_max) + ' ' + t('mhz_unit') : t('na');
+  const cpuSpeed = s.cpu_info?.mhz_max ? String(Math.round(s.cpu_info.mhz_max)) + ' ' + t('mhz_unit') : t('na');
   const loads = s.loadavg
     ? [s.loadavg.load_1m, s.loadavg.load_5m, s.loadavg.load_15m].map(l => (l ?? 0).toFixed(2)).join(', ')
     : t('na');
@@ -117,7 +117,7 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
     const arr = Array.isArray(list) ? list.filter(Boolean) : [];
     if (!arr.length) return `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value">${t('na')}</span></div>`;
     return arr.map((ip, i) => {
-      const lbl = arr.length > 1 ? `${label} ${i + 1}` : label;
+      const lbl = arr.length > 1 ? `${label} ${String(i + 1)}` : label;
       const fs = ip.length > 28 ? '8px' : ip.length > 22 ? '9px' : ip.length > 15 ? '10px' : '11px';
       return `<div class="panel-metric"><span class="panel-metric-label">${lbl}</span><span class="panel-metric-value" style="font-size:${fs}">${escapeHtml(ip)}</span></div>`;
     }).join('');
@@ -127,17 +127,17 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
     <div class="panel-grid" style="padding-top:0">
       <div class="panel-section">
         <div class="panel-section-label">${t('system')}</div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? cpuPct + '%' : t('na')}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('cpu')}</span><span class="panel-metric-value ${cpuClr}">${cpuPct !== null ? String(cpuPct) + '%' : t('na')}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('cpu_model')}</span><span class="panel-metric-value" style="font-size:${cpuName.length > 20 ? '9px' : '11px'}">${escapeHtml(cpuName)}</span></div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${cpuCores}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('cores')}</span><span class="panel-metric-value">${String(cpuCores)}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('speed')}</span><span class="panel-metric-value">${cpuSpeed}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('load_avg')}</span><span class="panel-metric-value">${loads}</span></div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${procs}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('processes')}</span><span class="panel-metric-value">${String(procs)}</span></div>
       </div>
       <div class="panel-section">
         <div class="panel-section-label">${t('memory')}</div>
         <div class="panel-metric"><span class="panel-metric-label">${t('used')}</span><span class="panel-metric-value ${memClr}">${memUsed} <span class="unit">/ ${memTotal}</span></span></div>
-        ${memPct !== null ? `<div class="panel-metric"><span class="panel-metric-label">${t('percent')}</span><span class="panel-metric-value">${memPct}%</span></div>` : ''}
+        ${memPct !== null ? `<div class="panel-metric"><span class="panel-metric-label">${t('percent')}</span><span class="panel-metric-value">${String(memPct)}%</span></div>` : ''}
         <div class="panel-metric"><span class="panel-metric-label">${t('available')}</span><span class="panel-metric-value">${memAvail}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('swap')}</span><span class="panel-metric-value">${swapUsed} <span class="unit">/ ${swapTotal}</span></span></div>
       </div>
@@ -148,8 +148,8 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
       </div>
       <div class="panel-section">
         <div class="panel-section-label">${t('connections')}</div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${s.connections?.tcp ?? t('na')}</span></div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${s.connections?.udp ?? t('na')}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('tcp')}</span><span class="panel-metric-value">${String(s.connections?.tcp ?? t('na'))}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('udp')}</span><span class="panel-metric-value">${String(s.connections?.udp ?? t('na'))}</span></div>
       </div>
       <div class="panel-section">
         <div class="panel-section-label">${t('public_ip')}</div>
@@ -162,7 +162,7 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
         <div class="panel-metric"><span class="panel-metric-label">${t('app_uptime')}</span><span class="panel-metric-value">${appUptime}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('app_mem')}</span><span class="panel-metric-value">${appMem}</span></div>
         <div class="panel-metric"><span class="panel-metric-label">${t('app_swap')}</span><span class="panel-metric-value">${appSwap}</span></div>
-        <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${threads}</span></div>
+        <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${String(threads)}</span></div>
       </div>
     </div>
     ${renderThreadTable(threadRows, threads, keyPrefix || '')}
@@ -171,19 +171,19 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
 
 function threadState(state: string | undefined): string {
   if (!state) return t('na');
-  const key = 'thread_' + String(state).replace(/-/g, '_');
+  const key = 'thread_' + state.replace(/-/g, '_');
   const label = t(key);
   return label === key ? state : label;
 }
 
 function threadCpu(seconds: number | undefined): string {
   if (seconds == null || isNaN(seconds)) return t('na');
-  return Number(seconds).toFixed(1);
+  return seconds.toFixed(1);
 }
 
 function threadStack(bytes: number | undefined): string {
   if (bytes == null || isNaN(bytes)) return t('na');
-  return String(Math.round(Number(bytes) / 1024));
+  return String(Math.round(bytes / 1024));
 }
 
 function renderThreadTable(rows: ThreadInfo[], count: number | string | undefined, keyPrefix: string): string {
@@ -264,18 +264,21 @@ function fmtSnapDate(ts: number | undefined): string {
 }
 
 function renderSnapshots(data: unknown): string {
-  const snaps: Snapshot[] = Array.isArray(data) ? data.filter(isRecord).map(value => ({
-    ...(typeof value.ts === 'number' ? { ts: value.ts } : {}),
-    ...(isRecord(value.panels) ? { panels: value.panels } : {}),
-    ...(systemStatus(value.host) ? { host: systemStatus(value.host) as SystemStatus } : {}),
-  })) : [];
+  const snaps: Snapshot[] = Array.isArray(data) ? data.filter(isRecord).map(value => {
+    const host = systemStatus(value['host']);
+    return {
+      ...(typeof value['ts'] === 'number' ? { ts: value['ts'] } : {}),
+      ...(isRecord(value['panels']) ? { panels: value['panels'] } : {}),
+      ...(host ? { host } : {}),
+    };
+  }) : [];
   if (!Array.isArray(snaps) || !snaps.length) {
     return `<div class="table-empty">${t('no_snapshots')}</div>`;
   }
   return `
     <div class="panel-cards">
       ${snaps.map((snap, snapIndex) => {
-        const key = 'snap-' + snapIndex;
+        const key = 'snap-' + String(snapIndex);
         const panelNames = snap.panels ? Object.keys(snap.panels) : [];
         const wrappedPanels = Object.fromEntries(panelNames.map(n => [n, { obj: snap.panels?.[n] }]));
         return `
@@ -285,7 +288,7 @@ function renderSnapshots(data: unknown): string {
                 <span class="panel-card-name">${escapeHtml(fmtSnapDate(snap.ts))}</span>
               </div>
               <div class="panel-card-meta">
-                <span style="font-size:12px;color:var(--text2)">${panelNames.length} ${t('panels_label')}</span>
+                <span style="font-size:12px;color:var(--text2)">${String(panelNames.length)} ${t('panels_label')}</span>
                 <svg class="panel-card-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="4,6 8,10 12,6"/>
                 </svg>

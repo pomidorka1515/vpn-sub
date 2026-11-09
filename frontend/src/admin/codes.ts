@@ -12,6 +12,7 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
   let loading = false;
   let revision = 0;
   let disposed = false;
+  const isDisposed = (): boolean => disposed;
   const options = (): { okText: string; cancelText: string } => ({ okText: t('confirm'), cancelText: t('cancel') });
   function toggleUsesRow(): void { element(doc, 'addUsesRow').style.display = checkbox(doc, 'addPerma').checked ? 'none' : 'flex'; }
   function hideAddCode(): void {
@@ -34,9 +35,9 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
     }
   }
   function codeHtml(name: string, code: Record<string, unknown> | null): string {
-    const action = code?.action === 'register' ? 'register' : 'bonus';
-    const badges = code ? `<span class="code-type ${action}">${escapeHtml(t(action))}</span><span class="code-usage">${code.perma ? escapeHtml(t('reusable')) : `${escapeHtml(code.uses ?? 1)} ${escapeHtml(t('uses').toLowerCase())}`}</span>` : '';
-    const metrics = code ? [['days', code.days], ['gb', code.gb], ['wl_gb', code.wl_gb]].map(([key, value]) => `<div><dt>${escapeHtml(t(String(key)))}</dt><dd>${escapeHtml(action === 'register' && value === 0 ? t('codes_unlimited_value') : value ?? 0)}</dd></div>`).join('') : '';
+    const action = code?.['action'] === 'register' ? 'register' : 'bonus';
+    const badges = code ? `<span class="code-type ${action}">${escapeHtml(t(action))}</span><span class="code-usage">${code['perma'] ? escapeHtml(t('reusable')) : `${escapeHtml(code['uses'] ?? 1)} ${escapeHtml(t('uses').toLowerCase())}`}</span>` : '';
+    const metrics = code ? [['days', code['days']], ['gb', code['gb']], ['wl_gb', code['wl_gb']]].map(([key, value]) => `<div><dt>${escapeHtml(t(String(key)))}</dt><dd>${escapeHtml(action === 'register' && value === 0 ? t('codes_unlimited_value') : value ?? 0)}</dd></div>`).join('') : '';
     return `<div class="code-info"><div class="code-heading"><h3 class="code-name">${escapeHtml(name)}</h3><div class="code-badges">${badges}</div></div>${code ? `<dl class="code-metrics">${metrics}</dl>` : `<p class="code-unavailable">${escapeHtml(t('codes_info_unavailable'))}</p>`}</div><div class="code-actions"><button class="btn-tiny" data-code-action="copy" data-code="${escapeHtml(name)}">${escapeHtml(t('copy'))}</button><button class="btn-tiny danger" data-code-action="delete" data-code="${escapeHtml(name)}">${escapeHtml(t('delete'))}</button></div>`;
   }
   function reconcile(next: Array<[string, Record<string, unknown> | null]>): void {
@@ -59,7 +60,8 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
         // Keep the action buttons (and keyboard focus) when only details change.
         const template = doc.createElement('template');
         template.innerHTML = html;
-        entry.node.querySelector('.code-info')?.replaceWith(template.content.firstElementChild!);
+        const replacement = template.content.firstElementChild;
+        if (replacement) entry.node.querySelector('.code-info')?.replaceWith(replacement);
         entry.html = html;
         entry.info = info;
       }
@@ -84,7 +86,7 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
         const next: Array<[string, Record<string, unknown> | null]> = [];
         for (const name of names) {
           const info = await api('GET', `/api/code/info?code=${encodeURIComponent(name)}`);
-          if (disposed || !current() || started !== revision) return;
+          if (!current() || started !== revision || isDisposed()) return;
           next.push([name, info?.success && isRecord(info.obj) ? info.obj : entries.get(name)?.info ?? null]);
         }
         reconcile(next);
@@ -126,14 +128,14 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
     if (!(event.target instanceof Element)) return;
     const target = event.target.closest<HTMLButtonElement>('button[data-code-action]');
     if (!target || !list.contains(target)) return;
-    const code = target.dataset.code;
+    const code = target.dataset['code'];
     if (code === undefined) return;
-    if (target.dataset.codeAction === 'copy') {
+    if (target.dataset['codeAction'] === 'copy') {
       void withBusy(target, async () => {
         try { await clipboard.writeText(code); if (!disposed) toast(t('copied'), 'success'); }
         catch { if (!disposed) toast(t('copy_failed'), 'error'); }
       });
-    } else if (target.dataset.codeAction === 'delete') {
+    } else if (target.dataset['codeAction'] === 'delete') {
       void (async () => {
         if (!await confirm(t('confirm_delete_code'), t('confirm'), options()) || disposed) return;
         await withBusy(target, async () => {
@@ -155,7 +157,7 @@ export function initCodes({ doc, t, api, toast, confirm, loadGen }: AdminContext
       })();
     }
   }, { signal: listeners.signal });
-  const bind = (id: string, event: string, handler: () => void): void => element(doc, id).addEventListener(event, handler, { signal: listeners.signal });
+  const bind = (id: string, event: string, handler: () => void): void => { element(doc, id).addEventListener(event, handler, { signal: listeners.signal }); };
   bind('btnLoadCodes', 'click', () => { void loadCodes(); });
   bind('btnShowAddCode', 'click', showAddCode);
   bind('btnCancelAddCode', 'click', hideAddCode);

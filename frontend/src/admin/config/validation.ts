@@ -1,7 +1,7 @@
 import type { Translate } from '../../shared/formatting';
 import { refreshJsonEditors } from './editor-bridge';
 import { editor, KNOWN_KEYS, REQUIRED_KEYS, TEMPLATE_KEYS, PROFILE_FIELDS, PANEL_FIELDS, PANEL_OPTIONAL } from './state';
-import { isPlainObject, isInteger, isFiniteNumber, jsonEqual } from './json';
+import { ConfigNumber, isPlainObject, isInteger, isFiniteNumber, jsonEqual } from './json';
 import type { ConfigObject } from './json';
 import { cardRoot, cssId, readRows, showConfigSection, enhanceJsonInputs } from './controls';
 
@@ -31,6 +31,7 @@ function validHttpUrl(value: string, paths: boolean): boolean {
 
 function validSnowflake(value: ConfigObject[string]): boolean {
   if (!isInteger(value) || (typeof value === 'number' && !Number.isSafeInteger(value))) return false;
+  if (typeof value !== 'number' && !(value instanceof ConfigNumber)) return false;
   const raw = String(value);
   return /^[1-9][0-9]{0,19}$/.test(raw) && BigInt(raw) <= 18446744073709551615n;
 }
@@ -77,7 +78,7 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   ['redis', 'bot', 'publicbot', 'discord', 'support_text'].forEach(key => {
     if (Object.hasOwn(draft, key) && !isPlainObject(draft[key])) issues.push(issue(key, t('config_err_required')));
   });
-  if (!Array.isArray(draft.api_admin_ui_auth)) issues.push(issue('api_admin_ui_auth', t('config_err_required')));
+  if (!Array.isArray(draft['api_admin_ui_auth'])) issues.push(issue('api_admin_ui_auth', t('config_err_required')));
   const keys = Object.keys(draft);
   keys.forEach(key => {
     if (!KNOWN_KEYS.includes(key)) issues.push(issue(key, t('config_err_unknown')));
@@ -87,15 +88,15 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     if (key === 'api_token') return;
     if (!Object.prototype.hasOwnProperty.call(draft, key)) issues.push(issue(key, t('config_err_required')));
   });
-  if (editor.loaded && Object.prototype.hasOwnProperty.call(draft, '$schema') && !jsonEqual(draft.$schema, editor.loaded.$schema)) {
+  if (editor.loaded && Object.prototype.hasOwnProperty.call(draft, '$schema') && !jsonEqual(draft['$schema'], editor.loaded['$schema'])) {
     issues.push(issue('$schema', t('config_schema_locked')));
   }
-  if (typeof draft.api_token === 'string' && draft.api_token === '') issues.push(issue('api_token', t('config_err_required')));
-  const auth = draft.api_admin_ui_auth;
+  if (typeof draft['api_token'] === 'string' && draft['api_token'] === '') issues.push(issue('api_token', t('config_err_required')));
+  const auth = draft['api_admin_ui_auth'];
   if (Array.isArray(auth) && (auth.length !== 2 || auth.some(item => typeof item !== 'string' || item === ''))) {
     issues.push(issue('api_admin_ui_auth', t('config_err_required')));
   }
-  if (Object.prototype.hasOwnProperty.call(draft, 'panel_alert_cooldown') && (!isInteger(draft.panel_alert_cooldown) || Number(draft.panel_alert_cooldown) < 0)) {
+  if (Object.prototype.hasOwnProperty.call(draft, 'panel_alert_cooldown') && (!isInteger(draft['panel_alert_cooldown']) || Number(draft['panel_alert_cooldown']) < 0)) {
     issues.push(issue('panel_alert_cooldown', t('config_err_positive_integer')));
   }
   ['fingerprints', 'bypass_packages'].forEach(key => {
@@ -106,17 +107,17 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     else if (key === 'fingerprints' && new Set(list).size !== list.length) issues.push(issue(key, t('config_err_unique')));
   });
   if (Object.prototype.hasOwnProperty.call(draft, 'funny_strings')) {
-    const list = draft.funny_strings;
+    const list = draft['funny_strings'];
     if (!Array.isArray(list) || list.some(item => typeof item !== 'string')) issues.push(issue('funny_strings', t('config_err_required')));
   }
-  if (!isPlainObject(draft.nodes) || Object.entries(draft.nodes).some(([key, value]) => !key || typeof value !== 'string')) {
+  if (!isPlainObject(draft['nodes']) || Object.entries(draft['nodes']).some(([key, value]) => !key || typeof value !== 'string')) {
     issues.push(issue('nodes', t('config_err_required')));
   }
-  if (isPlainObject(draft.redis)) {
-    const extra = Object.keys(draft.redis).filter(key => key !== 'url' && key !== 'socket_timeout');
-    if (typeof draft.redis.url !== 'string' || draft.redis.url === '') issues.push(issue('redis', t('config_err_required')));
-    else if (!draft.redis.url.startsWith('redis://')) issues.push(issue('redis', t('config_err_redis_url')));
-    if (Object.prototype.hasOwnProperty.call(draft.redis, 'socket_timeout') && !(isFiniteNumber(draft.redis.socket_timeout) && Number(draft.redis.socket_timeout) > 0)) {
+  if (isPlainObject(draft['redis'])) {
+    const extra = Object.keys(draft['redis']).filter(key => key !== 'url' && key !== 'socket_timeout');
+    if (typeof draft['redis']['url'] !== 'string' || draft['redis']['url'] === '') issues.push(issue('redis', t('config_err_required')));
+    else if (!draft['redis']['url'].startsWith('redis://')) issues.push(issue('redis', t('config_err_redis_url')));
+    if (Object.prototype.hasOwnProperty.call(draft['redis'], 'socket_timeout') && !(isFiniteNumber(draft['redis']['socket_timeout']) && Number(draft['redis']['socket_timeout']) > 0)) {
       issues.push(issue('redis', t('config_err_integer')));
     }
     if (extra.length) issues.push(issue('redis', t('config_err_unknown')));
@@ -125,29 +126,29 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     const bot = draft[key];
     if (!isPlainObject(bot)) return;
     const extra = Object.keys(bot).filter(field => field !== 'token' && field !== 'whitelist');
-    if (typeof bot.token !== 'string') issues.push(issue(key, t('config_err_required')));
-    else if (bot.token !== '' && (/\s/.test(bot.token) || !(key === 'discord' ? DISCORD_TOKEN_RE : TELEGRAM_TOKEN_RE).test(bot.token))) issues.push(issue(key, t(key === 'discord' ? 'config_err_discord_token' : 'config_err_telegram_token')));
-    if (!Array.isArray(bot.whitelist) || bot.whitelist.some(item => key === 'discord' ? !validSnowflake(item) : !isInteger(item) || Number(item) < 0)) issues.push(issue(key, t(key === 'discord' ? 'config_err_snowflake' : 'config_err_positive_integer')));
-    if (key === 'discord' && Array.isArray(bot.whitelist) && new Set(bot.whitelist.map(String)).size !== bot.whitelist.length) issues.push(issue(key, t('config_err_unique')));
+    if (typeof bot['token'] !== 'string') issues.push(issue(key, t('config_err_required')));
+    else if (bot['token'] !== '' && (/\s/.test(bot['token']) || !(key === 'discord' ? DISCORD_TOKEN_RE : TELEGRAM_TOKEN_RE).test(bot['token']))) issues.push(issue(key, t(key === 'discord' ? 'config_err_discord_token' : 'config_err_telegram_token')));
+    if (!Array.isArray(bot['whitelist']) || bot['whitelist'].some(item => key === 'discord' ? !validSnowflake(item) : !isInteger(item) || Number(item) < 0)) issues.push(issue(key, t(key === 'discord' ? 'config_err_snowflake' : 'config_err_positive_integer')));
+    if (key === 'discord' && Array.isArray(bot['whitelist']) && new Set(bot['whitelist'].map(String)).size !== bot['whitelist'].length) issues.push(issue(key, t('config_err_unique')));
     if (extra.length) issues.push(issue(key, t('config_err_unknown')));
   });
-  if (Object.prototype.hasOwnProperty.call(draft, 'publicbot') && isPlainObject(draft.publicbot)) {
-    if (typeof draft.publicbot.token !== 'string' || Object.keys(draft.publicbot).some(key => key !== 'token')) {
+  if (Object.prototype.hasOwnProperty.call(draft, 'publicbot') && isPlainObject(draft['publicbot'])) {
+    if (typeof draft['publicbot']['token'] !== 'string' || Object.keys(draft['publicbot']).some(key => key !== 'token')) {
       issues.push(issue('publicbot', t('config_err_required')));
     }
-    else if (draft.publicbot.token !== '' && (/\s/.test(draft.publicbot.token) || !TELEGRAM_TOKEN_RE.test(draft.publicbot.token))) issues.push(issue('publicbot', t('config_err_telegram_token')));
+    else if (draft['publicbot']['token'] !== '' && (/\s/.test(draft['publicbot']['token']) || !TELEGRAM_TOKEN_RE.test(draft['publicbot']['token']))) issues.push(issue('publicbot', t('config_err_telegram_token')));
   }
-  if (isPlainObject(draft.support_text)) {
-    Object.entries(draft.support_text).forEach(([platform, pair]) => {
+  if (isPlainObject(draft['support_text'])) {
+    Object.entries(draft['support_text']).forEach(([platform, pair]) => {
       if (!['discord', 'telegram'].includes(platform)) issues.push(issue('support_text', t('config_err_unknown')));
       else if (!Array.isArray(pair) || pair.length !== 2 || pair.some(item => typeof item !== 'string')) {
         issues.push(issue('support_text', t('config_err_required')));
       }
     });
   }
-  if (typeof draft.json_template === 'string') issues.push(issue('json_template', t('config_err_json')));
-  else if (isPlainObject(draft.json_template)) {
-    const template = draft.json_template;
+  if (typeof draft['json_template'] === 'string') issues.push(issue('json_template', t('config_err_json')));
+  else if (isPlainObject(draft['json_template'])) {
+    const template = draft['json_template'];
     const missing = TEMPLATE_KEYS.filter(key => !Object.hasOwn(template, key));
     const errors: string[] = [];
     ['routing', 'servers'].forEach(key => {
@@ -162,12 +163,12 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
         if (!Object.hasOwn(part, field)) missing.push(key + '.' + field);
       });
     });
-    const servers = template.servers;
+    const servers = template['servers'];
     if (isPlainObject(servers)) {
-      if (Object.hasOwn(servers, 'servers') && !Array.isArray(servers.servers)) {
+      if (Object.hasOwn(servers, 'servers') && !Array.isArray(servers['servers'])) {
         errors.push(t('config_err_array_field').replace('{field}', 'servers.servers'));
       }
-      if (Object.hasOwn(servers, 'queryStrategy') && typeof servers.queryStrategy !== 'string') {
+      if (Object.hasOwn(servers, 'queryStrategy') && typeof servers['queryStrategy'] !== 'string') {
         errors.push(t('config_err_string_field').replace('{field}', 'servers.queryStrategy'));
       }
       Object.keys(servers).filter(key => !['servers', 'queryStrategy'].includes(key)).forEach(key => {
@@ -176,10 +177,10 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     }
     if (missing.length) errors.unshift(t('config_err_missing_fields').replace('{fields}', missing.join(', ')));
     if (errors.length) issues.push(issue('json_template', errors.join('; ')));
-  } else if (draft.json_template !== undefined) issues.push(issue('json_template', t('config_err_json')));
+  } else if (draft['json_template'] !== undefined) issues.push(issue('json_template', t('config_err_json')));
 
-  const nodes = isPlainObject(draft.nodes) ? draft.nodes : {};
-  const profiles = isPlainObject(draft.profiles) ? draft.profiles : null;
+  const nodes = isPlainObject(draft['nodes']) ? draft['nodes'] : {};
+  const profiles = isPlainObject(draft['profiles']) ? draft['profiles'] : null;
   if (!profiles) issues.push(issue('profiles', t('config_err_required')));
   else Object.entries(profiles).forEach(([id, profile]) => {
     if (!id) issues.push(issue('profiles.' + id + '.id', t('config_err_required')));
@@ -199,22 +200,22 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
         issues.push(issue('profiles.' + id + '.' + field, t('config_err_required')));
       }
     });
-    if (typeof profile.flag !== 'string') issues.push(issue('profiles.' + id + '.flag', t('config_err_required')));
-    if (typeof profile.masterLink !== 'string') issues.push(issue('profiles.' + id + '.masterLink', t('config_err_required')));
-    if (typeof profile.whitelist !== 'boolean') issues.push(issue('profiles.' + id + '.whitelist', t('config_err_required')));
+    if (typeof profile['flag'] !== 'string') issues.push(issue('profiles.' + id + '.flag', t('config_err_required')));
+    if (typeof profile['masterLink'] !== 'string') issues.push(issue('profiles.' + id + '.masterLink', t('config_err_required')));
+    if (typeof profile['whitelist'] !== 'boolean') issues.push(issue('profiles.' + id + '.whitelist', t('config_err_required')));
     ['json', 'xhttpExtra'].forEach(field => {
       if (typeof profile[field] === 'string' || (profile[field] !== undefined && !isPlainObject(profile[field]))) {
         issues.push(issue('profiles.' + id + '.' + field, t('config_err_json')));
       }
     });
-    if (typeof profile.node !== 'string' || !Object.prototype.hasOwnProperty.call(nodes, profile.node)) {
+    if (typeof profile['node'] !== 'string' || !Object.prototype.hasOwnProperty.call(nodes, profile['node'])) {
       issues.push(issue('profiles.' + id + '.node', t('config_err_node')));
       issues.push(issue('nodes', t('config_err_node')));
     }
   });
 
   const panels = isPlainObject(draft['3xui']) ? draft['3xui'] : null;
-  const whitelistPanels = panels ? Object.entries(panels).filter(([, panel]) => isPlainObject(panel) && panel.whitelist === true) : [];
+  const whitelistPanels = panels ? Object.entries(panels).filter(([, panel]) => isPlainObject(panel) && panel['whitelist'] === true) : [];
   if (whitelistPanels.length > 1) whitelistPanels.forEach(([id]) => issues.push(issue('3xui.' + id + '.whitelist', t('config_err_whitelist_panel_limit'))));
   if (!panels) issues.push(issue('3xui', t('config_err_required')));
   else Object.entries(panels).forEach(([id, panel]) => {
@@ -232,18 +233,18 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     ['name', 'address', 'uri'].forEach(field => {
       if (typeof panel[field] !== 'string') issues.push(issue('3xui.' + id + '.' + field, t('config_err_required')));
     });
-    if (typeof panel.address === 'string' && !validPanelAddress(panel.address)) issues.push(issue('3xui.' + id + '.address', t('config_err_panel_address')));
-    if (typeof panel.uri === 'string' && !validServicePath(panel.uri)) issues.push(issue('3xui.' + id + '.uri', t('config_err_panel_path')));
-    if (!(typeof panel.port === 'string' ? /^[0-9]+$/.test(panel.port) : isInteger(panel.port)) || Number(panel.port) < 0 || Number(panel.port) > 65535) issues.push(issue('3xui.' + id + '.port', t('config_err_panel_port')));
-    if (typeof panel.token !== 'string' || Array.from(panel.token).length < 20) issues.push(issue('3xui.' + id + '.token', t('config_err_token_len')));
-    if (typeof panel.https !== 'boolean') issues.push(issue('3xui.' + id + '.https', t('config_err_required')));
-    if (typeof panel.whitelist !== 'boolean') issues.push(issue('3xui.' + id + '.whitelist', t('config_err_required')));
-    if (panel.mode !== 'whitelist' && panel.mode !== 'blacklist') issues.push(issue('3xui.' + id + '.mode', t('config_err_required')));
-    if (!Array.isArray(panel.inbounds_list) || panel.inbounds_list.some(item => !isInteger(item) || Number(item) < 0)) {
+    if (typeof panel['address'] === 'string' && !validPanelAddress(panel['address'])) issues.push(issue('3xui.' + id + '.address', t('config_err_panel_address')));
+    if (typeof panel['uri'] === 'string' && !validServicePath(panel['uri'])) issues.push(issue('3xui.' + id + '.uri', t('config_err_panel_path')));
+    if (!(typeof panel['port'] === 'string' ? /^[0-9]+$/.test(panel['port']) : isInteger(panel['port'])) || Number(panel['port']) < 0 || Number(panel['port']) > 65535) issues.push(issue('3xui.' + id + '.port', t('config_err_panel_port')));
+    if (typeof panel['token'] !== 'string' || Array.from(panel['token']).length < 20) issues.push(issue('3xui.' + id + '.token', t('config_err_token_len')));
+    if (typeof panel['https'] !== 'boolean') issues.push(issue('3xui.' + id + '.https', t('config_err_required')));
+    if (typeof panel['whitelist'] !== 'boolean') issues.push(issue('3xui.' + id + '.whitelist', t('config_err_required')));
+    if (panel['mode'] !== 'whitelist' && panel['mode'] !== 'blacklist') issues.push(issue('3xui.' + id + '.mode', t('config_err_required')));
+    if (!Array.isArray(panel['inbounds_list']) || panel['inbounds_list'].some(item => !isInteger(item) || Number(item) < 0)) {
       issues.push(issue('3xui.' + id + '.inbounds_list', t('config_err_positive_integer')));
     }
     if (Object.prototype.hasOwnProperty.call(panel, 'inject_headers')) {
-      const headers = panel.inject_headers;
+      const headers = panel['inject_headers'];
       if (!isPlainObject(headers) || Object.values(headers).some(item => typeof item !== 'string')) {
         issues.push(issue('3xui.' + id + '.inject_headers', t('config_err_required')));
       }
@@ -263,7 +264,7 @@ function sectionOf(path: string): 'inbounds' | 'panels' | 'main' {
   return 'main';
 }
 
-function issueParts(path: string): string[] {
+function issueParts(path: string): [string, ...string[]] {
   const section = sectionOf(path);
   if (section === 'main') return [path];
   const root = section === 'inbounds' ? 'profiles' : '3xui';
@@ -308,7 +309,7 @@ export function validateCard(kind: string, id: string): void {
   const issues = validateDraft(currentDraft()).filter(item => item.path === prefix || item.path.startsWith(prefix + '.'));
   const card = cardRoot(kind, id);
   const rawId = card?.querySelector<HTMLInputElement>('[data-field="id"]')?.value.trim();
-  const value = kind === 'inbounds' ? currentDraft().profiles : currentDraft()['3xui'];
+  const value = kind === 'inbounds' ? currentDraft()['profiles'] : currentDraft()['3xui'];
   const map = isPlainObject(value) ? value : {};
   if (rawId !== undefined && (!rawId || (rawId !== id && Object.hasOwn(map, rawId)))) {
     issues.unshift(issue(prefix + '.id', t(rawId ? 'config_err_unique' : 'config_err_required')));

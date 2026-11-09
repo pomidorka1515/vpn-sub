@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { describe, expect, it, vi } from 'vitest';
 import { busyDepth, withBusy } from '../shared/busy';
 import { createDialogs } from '../shared/dialogs';
@@ -43,17 +44,17 @@ describe('busy controls', () => {
 describe('dialogs', () => {
   function setup() {
     document.body.innerHTML = '<button id="origin">origin</button><div id="modalOverlay"><div id="modalTitle"></div><div id="modalMsg"></div><input id="modalInput"><button id="modalOk"></button><button id="modalCancel"></button></div>';
-    const click = (id: string) => document.getElementById(id)!.click();
+    const click = (id: string) => { required(document.getElementById(id)).click(); };
     return { ...createDialogs(document, t), click };
   }
   it('submits input with Enter, treats empty input as null, and restores focus', async () => {
     const { confirmDialog, click } = setup();
     click('origin');
-    document.getElementById('origin')!.focus();
+    required(document.getElementById('origin')).focus();
     const first = confirmDialog('<unsafe>', 'Title', { input: true, inputPlaceholder: 'value' });
-    const input = document.getElementById('modalInput') as HTMLInputElement;
-    expect(document.getElementById('modalMsg')!.textContent).toBe('<unsafe>');
-    expect(document.getElementById('modalMsg')!.children).toHaveLength(0);
+    const input = requiredInstance(document.getElementById('modalInput'), HTMLInputElement);
+    expect(required(document.getElementById('modalMsg')).textContent).toBe('<unsafe>');
+    expect(required(document.getElementById('modalMsg')).children).toHaveLength(0);
     expect(document.activeElement).toBe(input);
     input.value = 'answer';
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
@@ -68,8 +69,8 @@ describe('dialogs', () => {
     const first = confirmDialog('first');
     const second = confirmDialog('second', '', { input: true });
     expect(await first).toBe(false);
-    document.getElementById('modalMsg')!.click();
-    expect(document.getElementById('modalOverlay')!.classList.contains('show')).toBe(true);
+    required(document.getElementById('modalMsg')).click();
+    expect(required(document.getElementById('modalOverlay')).classList.contains('show')).toBe(true);
     click('modalOverlay');
     expect(await second).toBeNull();
     const third = confirmDialog('third');
@@ -84,17 +85,17 @@ describe('notifications and state helpers', () => {
     const cancel = vi.fn();
     const notifications = createNotifications(document, t, callback => { callbacks.push(callback); return callbacks.length; }, cancel);
     notifications.toast('<b>first</b>');
-    expect(document.querySelector('.toast')!.children).toHaveLength(0);
+    expect(required(document.querySelector('.toast')).children).toHaveLength(0);
     notifications.toast('second', 'error');
     expect(cancel).toHaveBeenCalledWith(1);
-    callbacks[0]!();
-    expect(document.querySelector('.toast')!.textContent).toBe('second');
-    (document.querySelector('.toast') as HTMLElement).click();
+    required(callbacks[0])();
+    expect(required(document.querySelector('.toast')).textContent).toBe('second');
+    required(document.querySelector<HTMLElement>('.toast')).click();
     expect(cancel).toHaveBeenCalledWith(2);
     expect(document.querySelector('.toast')).toBeNull();
     notifications.logoutWarning(); notifications.logoutWarning();
     expect(document.querySelectorAll('#logoutWarning')).toHaveLength(1);
-    expect(document.getElementById('logoutWarning')!.textContent).toBe('logout_unconfirmed');
+    expect(required(document.getElementById('logoutWarning')).textContent).toBe('logout_unconfirmed');
     notifications.dispose();
   });
   it('isolates generation keys and tolerates storage getter and method failures', () => {
@@ -105,10 +106,10 @@ describe('notifications and state helpers', () => {
     expect([old(), other(), current()]).toEqual([false, true, true]);
     const denied = safeStorage(() => { throw new Error('denied'); });
     expect(denied.getItem('x')).toBeNull();
-    expect(() => denied.setItem('x', 'y')).not.toThrow();
-    const broken = safeStorage(() => ({ getItem: () => { throw new Error(); }, setItem: () => { throw new Error(); } }) as unknown as Storage);
+    expect(() => { denied.setItem('x', 'y'); }).not.toThrow();
+    const broken = safeStorage(() => ({ getItem: () => { throw new Error(); }, setItem: () => { throw new Error(); } }));
     expect(broken.getItem('x')).toBeNull();
-    expect(() => broken.setItem('x', 'y')).not.toThrow();
+    expect(() => { broken.setItem('x', 'y'); }).not.toThrow();
   });
   it('persists theme changes and unregisters listeners', () => {
     document.body.innerHTML = '<button id="themeBtn"></button>';
@@ -117,10 +118,10 @@ describe('notifications and state helpers', () => {
     const listener = vi.fn();
     const unsubscribe = theme.onChange(listener);
     theme.applyTheme();
-    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.dataset['theme']).toBe('light');
     theme.toggleTheme();
     expect(localStorage.getItem('theme')).toBe('dark');
-    expect(document.getElementById('themeIconDark')!.style.display).toBe('block');
+    expect(required(document.getElementById('themeIconDark')).style.display).toBe('block');
     unsubscribe(); theme.toggleTheme();
     expect(listener).toHaveBeenCalledTimes(2);
   });

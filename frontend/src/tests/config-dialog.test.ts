@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createConfigDialog } from '../admin/config/dialog';
 import { editor } from '../admin/config/state';
@@ -9,8 +10,8 @@ function setup() {
   editor.draft = { nodes: { node: 'example.com' }, profiles: {}, '3xui': {} };
   const markDirty = vi.fn(); const renderCards = vi.fn();
   const open = createConfigDialog({ markDirty, renderCards });
-  const field = (key: string) => document.querySelector<HTMLInputElement>(`#configEditorBody [data-field="${key}"]`)!;
-  const submit = () => document.getElementById('configEditorOk')!.click();
+  const field = (key: string) => required(document.querySelector<HTMLInputElement>(`#configEditorBody [data-field="${key}"]`));
+  const submit = () => { required(document.getElementById('configEditorOk')).click(); };
   return { open, field, submit, markDirty, renderCards };
 }
 
@@ -18,19 +19,19 @@ describe('new configuration cards', () => {
   it('requires a unique panel id and validates values before mutating the draft', () => {
     const { open, field, submit, markDirty, renderCards } = setup();
     open('panels'); submit();
-    expect(document.getElementById('cfg-dialog-err')!.textContent).toBe('config_err_required');
+    expect(required(document.getElementById('cfg-dialog-err')).textContent).toBe('config_err_required');
     field('id').value = 'panel'; field('port').value = '65536';
-    (document.getElementById('cfg-dlg-token') as HTMLInputElement).value = 'x'.repeat(20);
+    (requiredInstance(document.getElementById('cfg-dlg-token'), HTMLInputElement)).value = 'x'.repeat(20);
     submit();
-    expect(document.getElementById('cfg-dialog-err')!.textContent).toBe('config_err_panel_port');
-    expect(editor.draft!['3xui']).toEqual({});
+    expect(required(document.getElementById('cfg-dialog-err')).textContent).toBe('config_err_panel_port');
+    expect(required(editor.draft)['3xui']).toEqual({});
     field('port').value = '2053'; field('name').value = 'Panel'; submit();
-    expect(stringifyConfig(editor.draft!['3xui']!)).toContain('"port":2053');
+    expect(stringifyConfig(required(required(editor.draft)['3xui']))).toContain('"port":2053');
     expect(markDirty).toHaveBeenCalledOnce();
     expect(renderCards).toHaveBeenCalledWith('panels');
-    expect(document.getElementById('configEditorOverlay')!.hidden).toBe(true);
+    expect(required(document.getElementById('configEditorOverlay')).hidden).toBe(true);
     open('panels'); field('id').value = 'panel'; submit();
-    expect(document.getElementById('cfg-dialog-err')!.textContent).toBe('config_err_unique');
+    expect(required(document.getElementById('cfg-dialog-err')).textContent).toBe('config_err_unique');
     open.dispose();
   });
   it('creates inbound JSON without losing large integers and rejects malformed JSON', () => {
@@ -38,16 +39,16 @@ describe('new configuration cards', () => {
     open('inbounds');
     field('id').value = 'profile'; field('json').value = '{bad';
     submit();
-    expect(document.getElementById('cfg-dialog-err')!.textContent).toBe('config_err_json');
-    expect(editor.draft!.profiles).toEqual({});
+    expect(required(document.getElementById('cfg-dialog-err')).textContent).toBe('config_err_json');
+    expect(required(editor.draft)['profiles']).toEqual({});
     field('json').value = '{"id":9007199254740993}'; submit();
-    expect(stringifyConfig(editor.draft!.profiles!)).toContain('9007199254740993');
+    expect(stringifyConfig(required(required(editor.draft)['profiles']))).toContain('9007199254740993');
     expect(markDirty).toHaveBeenCalledOnce();
   });
   it('restores focus and scroll state on cancellation or replacement', () => {
     const { open } = setup();
     document.body.style.overflow = 'auto';
-    const opener = document.getElementById('cfg-new-panels')!; opener.focus();
+    const opener = required(document.getElementById('cfg-new-panels')); opener.focus();
     open('panels');
     expect(document.body.style.overflow).toBe('hidden');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -56,6 +57,6 @@ describe('new configuration cards', () => {
     expect(editor.dialog).toBeNull();
     open('inbounds'); open('panels'); open.dispose();
     expect(document.body.style.overflow).toBe('auto');
-    expect(document.getElementById('configEditorOverlay')!.hidden).toBe(true);
+    expect(required(document.getElementById('configEditorOverlay')).hidden).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ import { button, initAuthChrome, input } from './chrome';
 export function initAuth(doc: Document = document, request: typeof fetch = fetch, navigate: (url: string) => void = url => { window.location.href = url; }): () => void {
   const controller = new AbortController();
   const { signal } = controller;
+  const isAborted = (): boolean => signal.aborted;
   const { bootstrap, i18n } = initAuthChrome(doc, window.location, signal);
   const api = createApi(() => ({ baseUrl: bootstrap.prefix + '/webapi' }), i18n.t, () => {}, request);
   const dashboard = bootstrap.prefix + '/panel';
@@ -57,18 +58,18 @@ export function initAuth(doc: Document = document, request: typeof fetch = fetch
     const generation = ++validationGen;
     const value = regUser.value;
     if (!value) { hint.textContent = ''; hint.className = 'username-hint'; return; }
-    timer = setTimeout(async () => {
+    timer = setTimeout(() => { void (async () => {
       try {
         const result = await api('GET', `/validate?username=${encodeURIComponent(value)}`);
         if (signal.aborted || generation !== validationGen || regUser.value !== value) return;
         if (result?.success && isRecord(result.obj)) {
           const data = result.obj;
-          if (data.valid === false && typeof data.sanitized === 'string') { hint.textContent = i18n.t('hint_invalid') + data.sanitized; hint.className = 'username-hint bad'; }
-          else if (data.valid === true && data.taken === true) { hint.textContent = i18n.t('hint_taken'); hint.className = 'username-hint bad'; }
-          else if (data.valid === true && data.taken === false) { hint.textContent = i18n.t('hint_ok'); hint.className = 'username-hint ok'; }
+          if (data['valid'] === false && typeof data['sanitized'] === 'string') { hint.textContent = i18n.t('hint_invalid') + data['sanitized']; hint.className = 'username-hint bad'; }
+          else if (data['valid'] === true && data['taken'] === true) { hint.textContent = i18n.t('hint_taken'); hint.className = 'username-hint bad'; }
+          else if (data['valid'] === true && data['taken'] === false) { hint.textContent = i18n.t('hint_ok'); hint.className = 'username-hint ok'; }
         }
       } catch { /* Validation is advisory. */ }
-    }, 400);
+    })(); }, 400);
   }
   async function register(): Promise<void> {
     if (registerButton.disabled) return;
@@ -83,11 +84,11 @@ export function initAuth(doc: Document = document, request: typeof fetch = fetch
         let failure: string;
         try {
           const loginResult = await api('POST', '/login', { username, password });
-          if (signal.aborted) return;
+          if (isAborted()) return;
           if (loginResult?.success) { navigate(dashboard); return; }
           failure = loginResult?.msg || i18n.t('network_err');
         } catch { failure = i18n.t('network_err'); }
-        if (signal.aborted) return;
+        if (isAborted()) return;
         switchTab('login');
         loginUser.value = username;
         showError(i18n.t('account_created_login_failed') + failure);
@@ -95,8 +96,8 @@ export function initAuth(doc: Document = document, request: typeof fetch = fetch
     } catch { showError(i18n.t('network_err')); }
     finally { registerButton.disabled = false; }
   }
-  button(doc, 'tabLogin').addEventListener('click', () => switchTab('login'), { signal });
-  button(doc, 'tabRegister').addEventListener('click', () => switchTab('register'), { signal });
+  button(doc, 'tabLogin').addEventListener('click', () => { switchTab('login'); }, { signal });
+  button(doc, 'tabRegister').addEventListener('click', () => { switchTab('register'); }, { signal });
   loginButton.addEventListener('click', () => { void login(); }, { signal });
   registerButton.addEventListener('click', () => { void register(); }, { signal });
   regUser.addEventListener('input', validateUsername, { signal });

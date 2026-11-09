@@ -37,6 +37,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   const timers = new Set<number>();
   const qrUrls = new Set<string>();
   let disposed = false;
+  const isDisposed = (): boolean => disposed;
   function schedule(fn: () => void, delay: number): number { const id = win.setTimeout(() => { timers.delete(id); if (!disposed) fn(); }, delay); timers.add(id); return id; }
   function cancelTimer(id: number | undefined): void { if (id !== undefined) { win.clearTimeout(id); timers.delete(id); } }
   function el(id: string): HTMLElement { const node = doc.getElementById(id); if (!node) throw new Error(sharedMessage('missing_element', { id })); return node; }
@@ -122,9 +123,9 @@ export function initDashboard(doc: Document = document, win: Window = window): (
 
     if (limitB > 0) {
       const pct = (bw.monthly / limitB) * 100;
-      el('bwMonthlyBar').style.width = Math.min(100, pct) + '%';
+      el('bwMonthlyBar').style.width = String(Math.min(100, pct)) + '%';
       el('bwMonthlyBar').style.background = getBwColor(pct);
-      el('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ' + bw.limit + ' ' + t('gb_unit');
+      el('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ' + String(bw.limit) + ' ' + t('gb_unit');
     } else {
       el('bwMonthlyBar').style.width = '0%';
       el('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ∞';
@@ -132,9 +133,9 @@ export function initDashboard(doc: Document = document, win: Window = window): (
 
     if (wlLimitB > 0) {
       const pct = (bw.wl_monthly / wlLimitB) * 100;
-      el('bwWlBar').style.width = Math.min(100, pct) + '%';
+      el('bwWlBar').style.width = String(Math.min(100, pct)) + '%';
       el('bwWlBar').style.background = getBwColor(pct);
-      el('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ' + bw.wl_limit + ' ' + t('gb_unit');
+      el('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ' + String(bw.wl_limit) + ' ' + t('gb_unit');
     } else {
       el('bwWlBar').style.width = '0%';
       el('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ∞';
@@ -185,14 +186,14 @@ export function initDashboard(doc: Document = document, win: Window = window): (
       if (res.success) {
         const o = isRecord(res.obj) ? res.obj : {};
         const parts: string[] = [];
-        if (o.days) parts.push('+' + o.days + ' ' + t('days'));
-        if (o.gb) parts.push('+' + o.gb + ' ' + t('gb_unit'));
-        if (o.wl_gb) parts.push('+' + o.wl_gb + ' ' + t('gb_wl'));
-        if (o.perma) parts.push(t('bonus_reusable'));
+        if (typeof o['days'] === 'number' && o['days']) parts.push('+' + String(o['days']) + ' ' + t('days'));
+        if (typeof o['gb'] === 'number' && o['gb']) parts.push('+' + String(o['gb']) + ' ' + t('gb_unit'));
+        if (typeof o['wl_gb'] === 'number' && o['wl_gb']) parts.push('+' + String(o['wl_gb']) + ' ' + t('gb_wl'));
+        if (o['perma']) parts.push(t('bonus_reusable'));
         msg.textContent = parts.join(', ') || t('ok');
         msg.className = 'bonus-msg ok';
         input('bonusInput').value = '';
-        loadStats();
+        void loadStats();
       } else { msg.textContent = res.msg || t('error'); msg.className = 'bonus-msg err'; }
     });
   }
@@ -204,18 +205,18 @@ export function initDashboard(doc: Document = document, win: Window = window): (
     const v = input('setUser').value.trim();
     const h = el('setUserHint');
     if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
-    svt = schedule(async () => {
+    svt = schedule(() => { void (async () => {
       try {
         const res = await api('GET', `/validate?username=${encodeURIComponent(v)}`);
         if (disposed || gen !== settingsValidationGen || input('setUser').value.trim() !== v) return;
         if (!res) return;
-        if (res.success && isRecord(res.obj) && typeof res.obj.valid === 'boolean' && typeof res.obj.taken === 'boolean' && typeof res.obj.sanitized === 'string') {
-          if (!res.obj.valid) { h.textContent = t('hint_invalid') + res.obj.sanitized; h.className = 'username-hint bad'; }
-          else if (res.obj.taken) { h.textContent = t('hint_taken'); h.className = 'username-hint bad'; }
+        if (res.success && isRecord(res.obj) && typeof res.obj['valid'] === 'boolean' && typeof res.obj['taken'] === 'boolean' && typeof res.obj['sanitized'] === 'string') {
+          if (!res.obj['valid']) { h.textContent = t('hint_invalid') + res.obj['sanitized']; h.className = 'username-hint bad'; }
+          else if (res.obj['taken']) { h.textContent = t('hint_taken'); h.className = 'username-hint bad'; }
           else { h.textContent = t('hint_ok'); h.className = 'username-hint ok'; }
         }
       } catch {}
-    }, 400);
+    })(); }, 400);
   }
 
   async function saveSettings() {
@@ -225,20 +226,20 @@ export function initDashboard(doc: Document = document, win: Window = window): (
     const user = input('setUser').value.trim();
     const pass = input('setPass').value;
     const curPass = input('setCurPass').value;
-    if (name) body.name = name;
-    if (fp) body.fingerprint = fp;
-    if (user) body.username = user;
-    if (pass) body.password = pass;
+    if (name) body['name'] = name;
+    if (fp) body['fingerprint'] = fp;
+    if (user) body['username'] = user;
+    if (pass) body['password'] = pass;
     if (!Object.keys(body).length) return;
 
     const msg = el('settingsMsg');
-    if (body.username || body.password) {
+    if (body['username'] || body['password']) {
       if (!curPass) {
         msg.textContent = t('current_pw_required'); msg.className = 'settings-msg err';
         schedule(() => { msg.textContent = ''; }, 3000);
         return;
       }
-      body.current_password = curPass;
+      body['current_password'] = curPass;
     }
     await withBusy(button('btnSave'), async () => {
       const res = await api('POST', '/settings', body, { allow401: res => res.msg === 'Invalid current password' });
@@ -254,7 +255,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
         input('setCurPass').value = '';
         el('setUserHint').textContent = '';
         el('setUserHint').className = 'username-hint';
-        loadStats();
+        void loadStats();
       } else { msg.textContent = res.status === 401 ? t('invalid_current_pw') : (res.msg || t('error')); msg.className = 'settings-msg err'; }
       schedule(() => { msg.textContent = ''; }, 3000);
     });
@@ -292,7 +293,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
         const res = await win.fetch(apiBase + '/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
         const data: unknown = await res.json().catch(() => null);
         if (disposed) return;
-        if (res.ok && isRecord(data) && data.success === true) { win.location.href = authPage; return; }
+        if (res.ok && isRecord(data) && data['success'] === true) { win.location.href = authPage; return; }
       } catch {}
       try {
         const probe = await win.fetch(apiBase + '/stats', { credentials: 'same-origin', cache: 'no-store' });
@@ -315,7 +316,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
       let objectUrl: string | undefined;
       try {
         const res = await win.fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
-        if (disposed || gen !== qrGen) return;
+        if (isDisposed() || gen !== qrGen) return;
         if (!res.ok) throw new Error(t('qr_failed'));
         const blob = await res.blob();
         if (disposed || gen !== qrGen) return;
@@ -333,10 +334,10 @@ export function initDashboard(doc: Document = document, win: Window = window): (
             el('qrSection').style.display = 'block';
             resolve();
           };
-          img.onerror = () => reject(new Error(t('qr_failed')));
+          img.onerror = () => { reject(new Error(t('qr_failed'))); };
           img.src = objectUrl ?? '';
         });
-      } catch (err) {
+      } catch  {
         if (!disposed && gen === qrGen) toast(t('qr_failed'), 'error');
       } finally {
         if (objectUrl) { URL.revokeObjectURL(objectUrl); qrUrls.delete(objectUrl); }
@@ -357,7 +358,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
     qrMode = mode;
     el('qrBtnLink').classList.toggle('active', mode === 'link');
     el('qrBtnHapp').classList.toggle('active', mode === 'happ');
-    showQrCode();
+    void showQrCode();
   }
 
   let closeProfiles: (() => void) | undefined;
@@ -404,16 +405,16 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   }
 
   const abort = new AbortController();
-  const listen = (id: string, fn: () => void) => el(id).addEventListener('click', fn, { signal: abort.signal });
+  const listen = (id: string, fn: () => void) => { el(id).addEventListener('click', fn, { signal: abort.signal }); };
   listen('themeBtn', theme.toggleTheme);
-  doc.querySelectorAll<HTMLElement>('[data-lang]').forEach(node => node.addEventListener('click', () => i18n.setLang(node.dataset.lang ?? ''), { signal: abort.signal }));
+  doc.querySelectorAll<HTMLElement>('[data-lang]').forEach(node => { node.addEventListener('click', () => { i18n.setLang(node.dataset['lang'] ?? ''); }, { signal: abort.signal }); });
   listen('btnProfiles', () => { void showProfiles(); });
   listen('btnRefresh', () => { void loadStats(); });
   listen('btnLogout', () => { void doLogout(); });
   listen('btnCopy', copyLink);
   listen('btnQr', () => { void showQrCode(); });
-  listen('qrBtnLink', () => setQrMode('link'));
-  listen('qrBtnHapp', () => setQrMode('happ'));
+  listen('qrBtnLink', () => { setQrMode('link'); });
+  listen('qrBtnHapp', () => { setQrMode('happ'); });
   listen('qrClose', hideQrCode);
   listen('btnHistory', () => { win.location.href = bootstrap.prefix + '/history'; });
   listen('btnApply', () => { void applyBonus(); });
@@ -424,8 +425,8 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   input('setName').addEventListener('input', () => { dirtySettings.name = true; }, { signal: abort.signal });
   input('setFp').addEventListener('change', () => { dirtySettings.fp = true; }, { signal: abort.signal });
   input('bonusInput').addEventListener('keydown', event => { if (event instanceof KeyboardEvent && event.key === 'Enter') void applyBonus(); }, { signal: abort.signal });
-  doc.querySelectorAll<HTMLElement>('[data-password]').forEach(node => node.addEventListener('click', () => togglePass(doc, node.dataset.password ?? '', node), { signal: abort.signal }));
+  doc.querySelectorAll<HTMLElement>('[data-password]').forEach(node => { node.addEventListener('click', () => { togglePass(doc, node.dataset['password'] ?? '', node); }, { signal: abort.signal }); });
   theme.applyTheme(); initPassToggles(doc); i18n.initLang();
   void loadStats(); void loadFingerprints();
-  return () => { disposed = true; abort.abort(); ++qrGen; ++settingsValidationGen; loadGen('stats'); loadGen('profiles'); timers.forEach(id => win.clearTimeout(id)); qrUrls.forEach(url => URL.revokeObjectURL(url)); qrUrls.clear(); dialogs.dispose(); notifications.dispose(); closeProfiles?.(); };
+  return () => { disposed = true; abort.abort(); ++qrGen; ++settingsValidationGen; loadGen('stats'); loadGen('profiles'); timers.forEach(id => { win.clearTimeout(id); }); qrUrls.forEach(url => { URL.revokeObjectURL(url); }); qrUrls.clear(); dialogs.dispose(); notifications.dispose(); closeProfiles?.(); };
 }

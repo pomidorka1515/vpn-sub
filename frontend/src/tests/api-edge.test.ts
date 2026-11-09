@@ -1,3 +1,4 @@
+import { required } from './required';
 import { describe, expect, it, vi } from 'vitest';
 import { createApi, serializeBody } from '../shared/api';
 import { createHistoryService } from '../history/service';
@@ -35,7 +36,7 @@ describe('API transport edge cases', () => {
     expect(malformed?.rawJson).toBe('{bad');
     const allowed = await api('GET', '/', undefined, { allow401: () => true });
     expect(allowed?.etag).toBe('"v1"');
-    expect(Object.keys(allowed!)).not.toContain('rawJson');
+    expect(Object.keys(required(allowed))).not.toContain('rawJson');
     expect(on401).not.toHaveBeenCalled();
   });
 });

@@ -14,10 +14,10 @@ export function initAuthChrome(doc: Document, location: Location, signal: AbortS
   const i18n = createI18n(bootstrap, doc, local, session, location);
   requiredElement(doc, 'themeBtn').addEventListener('click', theme.toggleTheme, { signal });
   doc.querySelectorAll<HTMLElement>('.lang-btn').forEach(button => {
-    button.addEventListener('click', () => i18n.setLang(button.dataset.lang ?? ''), { signal });
+    button.addEventListener('click', () => { i18n.setLang(button.dataset['lang'] ?? ''); }, { signal });
   });
   doc.querySelectorAll<HTMLElement>('.pass-toggle').forEach(button => {
-    button.addEventListener('click', () => togglePass(doc, button.dataset.password ?? '', button), { signal });
+    button.addEventListener('click', () => { togglePass(doc, button.dataset['password'] ?? '', button); }, { signal });
   });
   theme.applyTheme();
   initPassToggles(doc);

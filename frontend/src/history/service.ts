@@ -13,7 +13,7 @@ export function createHistoryService(options: {
     networkMessage: () => options.translate('network_err'),
   }), options.translate, options.toast, options.request);
   async function history(days: number) {
-    const response = await api('GET', '/history?days=' + days);
+    const response = await api('GET', '/history?days=' + String(days));
     return { response, samples: response?.success ? parseSamples(response.obj) : null };
   }
   return { history };

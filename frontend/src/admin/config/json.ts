@@ -42,12 +42,13 @@ export function parseConfigJson(text: string): ConfigValue {
     }
     if (text[pos] === '{') {
       pos++;
-      const result: ConfigObject = Object.create(null) as ConfigObject;
+      const result: ConfigObject = {};
+      Object.setPrototypeOf(result, null);
       const keys: string[] = [];
       keyOrder.set(result, keys);
       whitespace();
       if (text[pos] === '}') { pos++; return result; }
-      while (true) {
+      for (;;) {
         whitespace();
         if (text[pos] !== '"') throw new SyntaxError(sharedMessage('json_invalid'));
         const key = value();
@@ -68,7 +69,7 @@ export function parseConfigJson(text: string): ConfigValue {
       const result: ConfigValue[] = [];
       whitespace();
       if (text[pos] === ']') { pos++; return result; }
-      while (true) {
+      for (;;) {
         result.push(value());
         whitespace();
         if (text[pos] === ']') { pos++; return result; }
@@ -103,14 +104,22 @@ export function stringifyConfig(value: ConfigValue, pretty = false, depth = 0): 
   const entries = array ? value.map(item => stringifyConfig(item, pretty, depth + 1))
     : [...new Set([...(keyOrder.get(value) || []), ...Object.keys(value)])]
       .filter(key => Object.hasOwn(value, key))
-      .map(key => JSON.stringify(key) + (pretty ? ': ' : ':') + stringifyConfig(value[key] as ConfigValue, pretty, depth + 1));
+      .map(key => JSON.stringify(key) + (pretty ? ': ' : ':') + stringifyConfig(value[key] ?? null, pretty, depth + 1));
   const [open, close] = array ? ['[', ']'] : ['{', '}'];
   if (!pretty || !entries.length) return open + entries.join(',') + close;
   return open + '\n' + entries.map(item => '  '.repeat(depth + 1) + item).join(',\n') + '\n' + '  '.repeat(depth) + close;
 }
 
-export function clone<T extends ConfigValue | undefined>(value: T): T {
-  return (value === undefined ? undefined : parseConfigJson(stringifyConfig(value))) as T;
+export function clone(value: ConfigObject): ConfigObject;
+export function clone(value: ConfigObject | null): ConfigObject | null;
+export function clone(value: undefined): undefined;
+export function clone(value: ConfigValue): ConfigValue;
+export function clone(value: ConfigValue | undefined): ConfigValue | undefined;
+export function clone(value: ConfigValue | undefined): ConfigValue | undefined {
+  if (value === undefined) return undefined;
+  const result = parseConfigJson(stringifyConfig(value));
+  if (isPlainObject(value) && !isPlainObject(result)) throw new Error(sharedMessage('json_invalid'));
+  return result;
 }
 
 export function jsonEqual(left: ConfigValue | undefined, right: ConfigValue | undefined): boolean {

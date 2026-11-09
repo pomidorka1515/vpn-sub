@@ -1,5 +1,6 @@
 import { sharedMessage } from '../../shared/messages';
 import type { Translate } from '../../shared/formatting';
+import { isRecord } from '../../shared/json';
 
 interface Position { line: number; ch: number }
 interface Marker { clear(): void }
@@ -31,11 +32,16 @@ type CodeMirrorFactory = (mount: HTMLElement, options: {
 interface Instance { destroy(): void; refresh?(): void }
 interface Options { parse: (text: string) => unknown; format: (text: string) => string; label: string }
 
+function isEditorView(value: unknown): value is CodeMirrorView {
+  return isRecord(value) && ['getValue', 'setValue', 'focus', 'refresh', 'somethingSelected', 'indentSelection', 'replaceSelection', 'posFromIndex', 'markText', 'on'].every(key => typeof value[key] === 'function');
+}
+
 // The editor library stays lazy and optional; a failed load leaves the textarea usable.
 export function createJsonEditors(doc: Document, url: string, t: Translate) {
   const instances = new Map<HTMLTextAreaElement, Instance>();
   let loading: Promise<CodeMirrorFactory> | undefined;
   let disposed = false;
+  const isDisposed = (): boolean => disposed;
   function loadEditor(): Promise<CodeMirrorFactory> {
     return loading ??= new Promise((resolve, reject) => {
       const script = doc.createElement('script');
@@ -43,7 +49,11 @@ export function createJsonEditors(doc: Document, url: string, t: Translate) {
       script.onload = () => {
         const library: unknown = Reflect.get(doc.defaultView ?? globalThis, 'CodeMirror');
         if (typeof library !== 'function') { loading = undefined; reject(new Error(sharedMessage('editor_unavailable'))); return; }
-        resolve(library as CodeMirrorFactory);
+        resolve((mount, options) => {
+          const view: unknown = Reflect.apply(library, undefined, [mount, options]);
+          if (!isEditorView(view)) throw new Error(sharedMessage('editor_unavailable'));
+          return view;
+        });
       };
       script.onerror = () => { script.remove(); loading = undefined; reject(new Error(sharedMessage('editor_unavailable'))); };
       doc.head.append(script);
@@ -68,7 +78,7 @@ export function createJsonEditors(doc: Document, url: string, t: Translate) {
     let factory: CodeMirrorFactory;
     try { factory = await loadEditor(); }
     catch { if (instances.get(textarea) === pending) instances.delete(textarea); return; }
-    if (disposed || !textarea.isConnected || instances.get(textarea) !== pending) return;
+    if (isDisposed() || !textarea.isConnected || instances.get(textarea) !== pending) return;
     const wrapper = doc.createElement('div');
     wrapper.className = 'config-json-editor';
     const toolbar = doc.createElement('div');
@@ -76,7 +86,7 @@ export function createJsonEditors(doc: Document, url: string, t: Translate) {
     const button = doc.createElement('button');
     button.type = 'button';
     button.className = 'btn-tiny';
-    button.dataset.t = 'config_format_json';
+    button.dataset['t'] = 'config_format_json';
     button.textContent = t('config_format_json');
     const status = doc.createElement('span');
     status.className = 'config-json-status';
@@ -84,12 +94,20 @@ export function createJsonEditors(doc: Document, url: string, t: Translate) {
     toolbar.append(button, status);
     wrapper.append(toolbar);
     textarea.after(wrapper);
-    const view = factory(wrapper, {
-      value: textarea.value, mode: { name: 'javascript', json: true },
-      lineNumbers: true, indentUnit: 2, tabSize: 2, indentWithTabs: false,
-      matchBrackets: true, autoCloseBrackets: true, screenReaderLabel: label,
-      extraKeys: { Tab: cm => cm.somethingSelected() ? cm.indentSelection('add') : cm.replaceSelection('  ', 'end') },
-    });
+    let view: CodeMirrorView;
+    try {
+      view = factory(wrapper, {
+        value: textarea.value, mode: { name: 'javascript', json: true },
+        lineNumbers: true, indentUnit: 2, tabSize: 2, indentWithTabs: false,
+        matchBrackets: true, autoCloseBrackets: true, screenReaderLabel: label,
+        extraKeys: { Tab: cm => { if (cm.somethingSelected()) cm.indentSelection('add'); else cm.replaceSelection('  ', 'end'); } },
+      });
+    } catch {
+      wrapper.remove();
+      if (instances.get(textarea) === pending) instances.delete(textarea);
+      loading = undefined;
+      return;
+    }
     let marker: Marker | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const validate = (): void => {
@@ -97,16 +115,16 @@ export function createJsonEditors(doc: Document, url: string, t: Translate) {
       marker = null;
       try {
         parse(view.getValue());
-        status.dataset.t = 'config_json_valid';
+        status.dataset['t'] = 'config_json_valid';
         status.textContent = t('config_json_valid');
         status.classList.remove('error');
         button.disabled = false;
       } catch (error) {
-        delete status.dataset.t;
+        delete status.dataset['t'];
         const position: unknown = error instanceof Error ? Reflect.get(error, 'position') : 0;
         const index = Math.max(0, Math.min(typeof position === 'number' ? position : 0, view.getValue().length));
         const pos = view.posFromIndex(index);
-        status.textContent = `${t('config_err_json')} (${pos.line + 1}:${pos.ch + 1})`;
+        status.textContent = `${t('config_err_json')} (${String(pos.line + 1)}:${String(pos.ch + 1)})`;
         status.classList.add('error');
         button.disabled = true;
         marker = view.markText(pos, view.posFromIndex(index + 1), { className: 'config-json-invalid', title: status.textContent });

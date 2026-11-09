@@ -15,9 +15,9 @@ export function fmtUptime(seconds: number | null | undefined, translate: Transla
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
-  if (days > 0) return days + translate('day_short') + ' ' + hours + translate('hour_short') + ' ' + minutes + translate('minute_short');
-  if (hours > 0) return hours + translate('hour_short') + ' ' + minutes + translate('minute_short') + ' ' + rest + translate('second_short');
-  return minutes + translate('minute_short') + ' ' + rest + translate('second_short');
+  if (days > 0) return String(days) + translate('day_short') + ' ' + String(hours) + translate('hour_short') + ' ' + String(minutes) + translate('minute_short');
+  if (hours > 0) return String(hours) + translate('hour_short') + ' ' + String(minutes) + translate('minute_short') + ' ' + String(rest) + translate('second_short');
+  return String(minutes) + translate('minute_short') + ' ' + String(rest) + translate('second_short');
 }
 
 export function fmtTime(timestamp: number | null | undefined, translate: Translate = key => key, now: () => number = Date.now): string {
@@ -27,6 +27,6 @@ export function fmtTime(timestamp: number | null | undefined, translate: Transla
   if (time < current) return translate('expired');
   const difference = time - current;
   const days = Math.floor(difference / 86400000);
-  if (days > 0) return days + translate('d_left');
-  return Math.floor(difference / 3600000) + translate('h_left');
+  if (days > 0) return String(days) + translate('d_left');
+  return String(Math.floor(difference / 3600000)) + translate('h_left');
 }

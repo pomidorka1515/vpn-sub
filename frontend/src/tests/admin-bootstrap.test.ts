@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { describe, expect, it, vi } from 'vitest';
 import { createAdminBootstrap, createAdminState } from '../admin/bootstrap';
 
@@ -17,22 +18,22 @@ describe('admin bootstrap', () => {
   it('unlocks the UI only after validating credentials and disables panel actions when unconfigured', async () => {
     const { request, state, bootstrap, config, stopCharts } = setup();
     request.mockResolvedValue(token({ token: 'secret', api_root: '/sub/admin', panels_configured: false }));
-    expect(config.guard!()).toBe(true);
+    expect(required(config.guard)()).toBe(true);
     await bootstrap();
     expect(stopCharts).toHaveBeenCalledOnce();
     expect(state).toMatchObject({ apiToken: 'secret', baseUrl: 'https://example.test/sub/admin', panelsConfigured: false });
-    expect(config.guard!()).toBe(false);
-    expect(document.getElementById('bootOverlay')!.hidden).toBe(true);
-    expect((document.getElementById('btnShowAdd') as HTMLButtonElement).disabled).toBe(true);
-    expect(document.querySelector('.admin-content')!.textContent).toContain('no_panels');
+    expect(required(config.guard)()).toBe(false);
+    expect(required(document.getElementById('bootOverlay')).hidden).toBe(true);
+    expect((requiredInstance(document.getElementById('btnShowAdd'), HTMLButtonElement)).disabled).toBe(true);
+    expect(required(document.querySelector('.admin-content')).textContent).toContain('no_panels');
   });
   it.each([null, {}, { token: '', api_root: '/api' }, { token: 'x', api_root: 4 }])('fails closed on invalid token payload %j', async obj => {
     const { request, state, bootstrap, config } = setup();
     request.mockResolvedValue(token(obj));
     await bootstrap();
     expect(state.authBlocked).toBe(true);
-    expect(config.guard!()).toBe(true);
-    expect(document.getElementById('bootOverlay')!.textContent).toBe('reload_reauth');
+    expect(required(config.guard)()).toBe(true);
+    expect(required(document.getElementById('bootOverlay')).textContent).toBe('reload_reauth');
   });
   it('redirects on unauthorized and reports network failure without unlocking', async () => {
     const first = setup();
@@ -43,7 +44,7 @@ describe('admin bootstrap', () => {
     second.request.mockRejectedValue(new Error('offline'));
     await second.bootstrap();
     expect(second.state.authBlocked).toBe(true);
-    expect(document.getElementById('bootOverlay')!.textContent).toBe('network_err');
+    expect(required(document.getElementById('bootOverlay')).textContent).toBe('network_err');
   });
   it('uses the csrf token and clears credentials only after confirmed logout', async () => {
     const { state, request, logout, location } = setup();
@@ -80,6 +81,6 @@ describe('admin bootstrap', () => {
     resolve(token({ token: 'secret', api_root: '/api' }));
     await pending;
     expect(state.apiToken).toBe('');
-    expect(document.getElementById('bootOverlay')!.hidden).toBe(false);
+    expect(required(document.getElementById('bootOverlay')).hidden).toBe(false);
   });
 });

@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AdminContext } from '../admin/context';
@@ -11,7 +12,7 @@ function setup() {
   document.body.innerHTML = readFileSync('src/templates/admin.html', 'utf8');
   const api = vi.fn<AdminContext['api']>();
   const context: AdminContext = { doc: document, t: key => key, api, toast: vi.fn(), confirm: vi.fn(), loadGen: createLoadGeneration() };
-  const click = (id: string) => document.getElementById(id)!.click();
+  const click = (id: string) => { required(document.getElementById(id)).click(); };
   return { api, context, click };
 }
 const success = (obj: unknown) => ({ success: true, obj, status: 200 });
@@ -21,17 +22,17 @@ describe('admin panel status', () => {
   it('encodes filters, renders metrics safely and toggles cards', async () => {
     const { api, context, click } = setup();
     dispose = createPanels(context).init();
-    (document.getElementById('panelName') as HTMLInputElement).value = '  a&b  ';
+    (requiredInstance(document.getElementById('panelName'), HTMLInputElement)).value = '  a&b  ';
     api.mockResolvedValue(success({ '<panel>': { obj: metrics } }));
     click('btnPanelStatus');
-    await vi.waitFor(() => expect(document.querySelector('.panel-card')).not.toBeNull());
+    await vi.waitFor(() => { expect(document.querySelector('.panel-card')).not.toBeNull(); });
     expect(api).toHaveBeenCalledExactlyOnceWith('GET', '/api/panel/status?name=a%26b');
-    const card = document.querySelector<HTMLElement>('.panel-card')!;
+    const card = required(document.querySelector<HTMLElement>('.panel-card'));
     expect(card.textContent).toContain('<panel>');
     expect(card.querySelector('panel')).toBeNull();
     expect(card.textContent).toContain('<error>');
-    expect(card.querySelector('.panel-metric-value.err')!.textContent).toBe('85%');
-    (card.querySelector('.panel-card-header') as HTMLElement).click();
+    expect(required(card.querySelector('.panel-metric-value.err')).textContent).toBe('85%');
+    required(card.querySelector<HTMLElement>('.panel-card-header')).click();
     expect(card.classList.contains('open')).toBe(true);
   });
   it('handles empty, malformed and failed responses without rendering injected HTML', async () => {
@@ -41,11 +42,14 @@ describe('admin panel status', () => {
     const html = panels.renderPanelCards({ broken: { obj: { ...metrics, loads: ['bad'] } } });
     expect(html).toContain('unknown');
     expect(html).not.toContain('85%');
+    const nullable = panels.renderPanelCards({ panel: { obj: { ...metrics, loads: null, xray: null, cpuCores: null, appStats: { mem: 50, threads: null } } } });
+    expect(nullable).toContain('85%');
+    expect(nullable).toContain('na');
     api.mockResolvedValue({ success: false, msg: '<img src=x>', status: 500 });
     click('btnPanelStatus');
-    await vi.waitFor(() => expect(document.getElementById('panelStatusResult')!.classList.contains('error')).toBe(true));
-    expect(document.getElementById('panelStatusResult')!.querySelector('img')).toBeNull();
-    expect(document.getElementById('panelStatusResult')!.textContent).toContain('<img src=x>');
+    await vi.waitFor(() => { expect(required(document.getElementById('panelStatusResult')).classList.contains('error')).toBe(true); });
+    expect(required(document.getElementById('panelStatusResult')).querySelector('img')).toBeNull();
+    expect(required(document.getElementById('panelStatusResult')).textContent).toContain('<img src=x>');
   });
 });
 
@@ -53,22 +57,22 @@ describe('leaderboard', () => {
   it('clamps negative cutoff, filters malformed entries and escapes user names', async () => {
     const { api, context, click } = setup();
     dispose = initLeaderboard(context);
-    (document.getElementById('lbCutoff') as HTMLInputElement).value = '-9';
+    (requiredInstance(document.getElementById('lbCutoff'), HTMLInputElement)).value = '-9';
     api.mockResolvedValue(success([{ place: 1, username: '<img>', amount: 1000 }, null, { place: 2, username: 'bob', amount: 'bad' }]));
     click('btnFetchLb');
-    await vi.waitFor(() => expect(document.querySelectorAll('#lbTableWrap tbody tr')).toHaveLength(2));
+    await vi.waitFor(() => { expect(document.querySelectorAll('#lbTableWrap tbody tr')).toHaveLength(2); });
     expect(api).toHaveBeenCalledWith('POST', '/api/leaderboard', expect.objectContaining({ cutoff: 0 }));
-    expect(document.getElementById('lbTableWrap')!.querySelector('img')).toBeNull();
-    expect(document.getElementById('lbTableWrap')!.textContent).toContain('<img>');
-    expect(document.getElementById('lbTableWrap')!.textContent).toContain('na');
+    expect(required(document.getElementById('lbTableWrap')).querySelector('img')).toBeNull();
+    expect(required(document.getElementById('lbTableWrap')).textContent).toContain('<img>');
+    expect(required(document.getElementById('lbTableWrap')).textContent).toContain('na');
   });
   it('displays empty and escaped failure messages', async () => {
     const { api, context, click } = setup(); dispose = initLeaderboard(context);
     api.mockResolvedValueOnce(success([])).mockResolvedValueOnce({ success: false, msg: '<error>', status: 500 });
     click('btnFetchLb');
-    await vi.waitFor(() => expect(document.getElementById('lbTableWrap')!.textContent).toBe('no_entries'));
+    await vi.waitFor(() => { expect(required(document.getElementById('lbTableWrap')).textContent).toBe('no_entries'); });
     click('btnFetchLb');
-    await vi.waitFor(() => expect(document.getElementById('lbTableWrap')!.textContent).toBe('<error>'));
-    expect(document.getElementById('lbTableWrap')!.querySelector('error')).toBeNull();
+    await vi.waitFor(() => { expect(required(document.getElementById('lbTableWrap')).textContent).toBe('<error>'); });
+    expect(required(document.getElementById('lbTableWrap')).querySelector('error')).toBeNull();
   });
 });

@@ -20,8 +20,11 @@ describe('lossless config JSON', () => {
     try { parseConfigJson(raw); throw new Error('expected a syntax error'); }
     catch (error) {
       expect(error).toBeInstanceOf(SyntaxError);
-      expect((error as SyntaxError & { position: number }).position).toBeGreaterThanOrEqual(0);
-      expect((error as SyntaxError & { position: number }).position).toBeLessThanOrEqual(raw.length);
+      if (!(error instanceof SyntaxError)) throw error;
+      const position: unknown = Reflect.get(error, 'position');
+      if (typeof position !== 'number') throw new Error('missing error position');
+      expect(position).toBeGreaterThanOrEqual(0);
+      expect(position).toBeLessThanOrEqual(raw.length);
     }
   });
 

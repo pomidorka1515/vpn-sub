@@ -1,3 +1,4 @@
+import { required } from './required';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initAdmin } from '../admin/main';
@@ -26,13 +27,13 @@ describe('admin application integration', () => {
     let resolve!: (response: Response) => void;
     const request = vi.fn<typeof fetch>().mockImplementationOnce(() => new Promise(done => { resolve = done; })).mockResolvedValue(Response.json({ success: true, obj: [] }));
     setup(request);
-    document.querySelector<HTMLElement>('[data-tab="users"]')!.click();
+    required(document.querySelector<HTMLElement>('[data-tab="users"]')).click();
     expect(request).toHaveBeenCalledTimes(1);
     resolve(token());
-    await vi.waitFor(() => expect(request).toHaveBeenCalledWith('https://example.test/api/api/user/list', expect.objectContaining({ method: 'GET', headers: { Authorization: 'csrf' } })));
-    expect(document.getElementById('bootOverlay')!.hidden).toBe(true);
-    expect(document.getElementById('tab-users')!.classList.contains('active')).toBe(true);
-    await vi.waitFor(() => expect(document.getElementById('usersTableWrap')!.textContent).toContain('no_users'));
+    await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('https://example.test/api/api/user/list', expect.objectContaining({ method: 'GET', headers: { Authorization: 'csrf' } })); });
+    expect(required(document.getElementById('bootOverlay')).hidden).toBe(true);
+    expect(required(document.getElementById('tab-users')).classList.contains('active')).toBe(true);
+    await vi.waitFor(() => { expect(required(document.getElementById('usersTableWrap')).textContent).toContain('no_users'); });
   });
   it('prevents pending authentication from activating a disposed application', async () => {
     let resolve!: (response: Response) => void;
@@ -42,6 +43,6 @@ describe('admin application integration', () => {
     resolve(token());
     await Promise.resolve(); await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(1);
-    expect(document.getElementById('bootOverlay')!.hidden).toBe(false);
+    expect(required(document.getElementById('bootOverlay')).hidden).toBe(false);
   });
 });

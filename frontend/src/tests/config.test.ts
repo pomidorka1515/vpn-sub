@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMainEditor } from '../admin/config/main';
 import { createCardEditor } from '../admin/config/cards';
@@ -18,9 +19,9 @@ const discordToken = 'A'.repeat(26) + '.' + 'B'.repeat(6) + '.' + 'C'.repeat(38)
 it('describes Master Link placeholders beside the inbound field', () => {
   document.body.innerHTML = '<div id="tab-config"><div id="config-pane-inbounds"></div></div>';
   editor.draft = { profiles: { local: {} } };
-  createCardEditor({ markDirty: vi.fn(), openNew: vi.fn(), t: key => key, language: () => 'en', confirm: async () => true }).renderCards('inbounds');
-  const input = document.querySelector<HTMLInputElement>('[data-field="masterLink"]')!;
-  const help = document.getElementById(input.getAttribute('aria-describedby')!);
+  createCardEditor({ markDirty: vi.fn(), openNew: vi.fn(), t: key => key, language: () => 'en', confirm: () => Promise.resolve(true) }).renderCards('inbounds');
+  const input = required(document.querySelector<HTMLInputElement>('[data-field="masterLink"]'));
+  const help = document.getElementById(required(input.getAttribute('aria-describedby')));
   expect(help?.textContent).toBe('config_master_link_help');
   expect(help?.classList.contains('config-sub')).toBe(true);
 });
@@ -50,19 +51,19 @@ describe('Discord config', () => {
     const dirty = vi.fn();
     createMainEditor(dirty, key => key).renderMain();
     expect(document.querySelector('#cfg-box-discord .config-restart-icon')).not.toBeNull();
-    document.querySelector<HTMLButtonElement>('[data-optional-add="discord"]')!.click();
-    expect(editor.draft.discord).toEqual({ token: '', whitelist: [] });
-    const token = document.getElementById('cfg-discord-token') as HTMLInputElement;
+    required(document.querySelector<HTMLButtonElement>('[data-optional-add="discord"]')).click();
+    expect(editor.draft['discord']).toEqual({ token: '', whitelist: [] });
+    const token = requiredInstance(document.getElementById('cfg-discord-token'), HTMLInputElement);
     expect(token.type).toBe('password');
     token.value = discordToken;
     token.dispatchEvent(new Event('input', { bubbles: true }));
-    document.querySelector<HTMLButtonElement>('[data-add="cfg-rows-discord"]')!.click();
-    const uid = document.querySelector<HTMLInputElement>('#cfg-rows-discord input')!;
+    required(document.querySelector<HTMLButtonElement>('[data-add="cfg-rows-discord"]')).click();
+    const uid = required(document.querySelector<HTMLInputElement>('#cfg-rows-discord input'));
     uid.value = '123456789012345678';
     uid.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(stringifyConfig(editor.draft.discord!)).toBe('{"token":"' + discordToken + '","whitelist":[123456789012345678]}');
-    expect(discordIssues(editor.draft.discord!)).toEqual([]);
-    document.querySelector<HTMLButtonElement>('[data-optional-remove="discord"]')!.click();
+    expect(stringifyConfig(required(editor.draft['discord']))).toBe('{"token":"' + discordToken + '","whitelist":[123456789012345678]}');
+    expect(discordIssues(required(editor.draft['discord']))).toEqual([]);
+    required(document.querySelector<HTMLButtonElement>('[data-optional-remove="discord"]')).click();
     expect(Object.hasOwn(editor.draft, 'discord')).toBe(false);
     expect(dirty).toHaveBeenCalled();
   });
@@ -213,9 +214,9 @@ describe('panel config validation', () => {
   it('shows mode help and updates whitelist errors on all affected panels', () => {
     document.body.innerHTML = '<div id="tab-config"><div id="config-pane-panels"></div></div>';
     editor.draft = { '3xui': { first: { ...panel, whitelist: true }, second: { ...panel } } };
-    createCardEditor({ markDirty: vi.fn(), openNew: vi.fn(), t: key => key, language: () => 'en', confirm: async () => true }).renderCards('panels');
+    createCardEditor({ markDirty: vi.fn(), openNew: vi.fn(), t: key => key, language: () => 'en', confirm: () => Promise.resolve(true) }).renderCards('panels');
     expect(document.querySelectorAll('.config-sub')[0]?.textContent).toBe('config_panel_mode_help');
-    const toggle = document.querySelector<HTMLInputElement>('[data-id="second"] [data-field="whitelist"]')!;
+    const toggle = required(document.querySelector<HTMLInputElement>('[data-id="second"] [data-field="whitelist"]'));
     toggle.checked = true;
     toggle.dispatchEvent(new Event('change', { bubbles: true }));
     const errors = [...document.querySelectorAll<HTMLElement>('[id$="-whitelist"].config-error')];

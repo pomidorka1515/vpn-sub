@@ -24,15 +24,15 @@ export interface ApiConfig {
 }
 export interface ApiOptions { allow401?: (result: ApiResult) => boolean }
 
-function resolve<T>(value: Dynamic<T> | undefined): T | undefined {
-  return typeof value === 'function' ? (value as () => T)() : value;
+function resolve<T extends string | Record<string, string>>(value: Dynamic<T> | undefined): T | undefined {
+  return typeof value === 'function' ? value() : value;
 }
 
 // Validate the common envelope here. Page-specific `obj` data remains unknown
 // until its consuming page validates it; no assertion pretends it is a DTO.
 export function parseApiEnvelope(value: unknown): Record<string, unknown> {
-  if (!isRecord(value) || (value.success !== undefined && typeof value.success !== 'boolean') ||
-      (value.msg !== undefined && value.msg !== null && typeof value.msg !== 'string')) {
+  if (!isRecord(value) || (value['success'] !== undefined && typeof value['success'] !== 'boolean') ||
+      (value['msg'] !== undefined && value['msg'] !== null && typeof value['msg'] !== 'string')) {
     throw new Error(sharedMessage('invalid_response'));
   }
   return value;
@@ -88,8 +88,8 @@ export function createApi(getConfig: () => ApiConfig, translate: Translate, toas
     const result: ApiResult = { ...data, status: response.status };
     // Known envelope fields have been checked above; retain arbitrary fields
     // for existing endpoints without claiming their payload shape is validated.
-    if (typeof data.success === 'boolean') result.success = data.success;
-    if (typeof data.msg === 'string') result.msg = data.msg;
+    if (typeof data['success'] === 'boolean') result.success = data['success'];
+    if (typeof data['msg'] === 'string') result.msg = data['msg'];
     if (response.status === 401 && config.on401 && !options.allow401?.(result)) {
       config.on401();
       return null;

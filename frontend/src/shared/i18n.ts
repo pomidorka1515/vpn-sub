@@ -10,7 +10,7 @@ export function createI18n(bootstrap: Bootstrap, doc: Document, local: StorageAc
   };
   function applyStaticLang(): void {
     doc.querySelectorAll('.lang-btn').forEach(button => {
-      button.classList.toggle('active', (button.getAttribute('data-lang') || button.textContent?.toLowerCase()) === language);
+      button.classList.toggle('active', (button.getAttribute('data-lang') || button.textContent.toLowerCase()) === language);
     });
     for (const [attribute, target] of [['data-t', 'text'], ['data-t-title', 'title'], ['data-t-aria', 'aria-label'], ['data-t-ph', 'placeholder']]) {
       if (!attribute || !target) continue;

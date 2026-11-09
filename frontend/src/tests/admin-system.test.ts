@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AdminContext } from '../admin/context';
@@ -11,7 +12,7 @@ function setup() {
   const api = vi.fn<AdminContext['api']>(); const toast = vi.fn(); const panels = vi.fn(() => '<div>panels</div>');
   const system = createSystem({ doc: document, t: key => key, api, toast, confirm: vi.fn(), loadGen: createLoadGeneration() }, panels, 'en');
   dispose = system.init();
-  const click = (id: string) => document.getElementById(id)!.click();
+  const click = (id: string) => { required(document.getElementById(id)).click(); };
   return { api, toast, panels, click, system };
 }
 const status = { cpu: 90, cpu_info: { name: '<cpu>', cores: 4, mhz_max: 2000 }, loadavg: { load_1m: 1.2 }, memory: { ram: { used: 90, total: 100, available: 10 }, swap: { used: 0, total: 0 } },
@@ -22,14 +23,14 @@ describe('admin system monitoring', () => {
     const { api, click } = setup();
     api.mockResolvedValue({ success: true, obj: status, status: 200 });
     click('btnSystemStatus');
-    await vi.waitFor(() => expect(document.querySelector('#systemStatusResult .thread-card')).not.toBeNull());
-    const result = document.getElementById('systemStatusResult')!;
+    await vi.waitFor(() => { expect(document.querySelector('#systemStatusResult .thread-card')).not.toBeNull(); });
+    const result = required(document.getElementById('systemStatusResult'));
     expect(api).toHaveBeenCalledWith('GET', '/api/state/system');
     expect(result.textContent).toContain('<cpu>');
     expect(result.textContent).toContain('<thread>');
     expect(result.querySelector('cpu, thread, ip')).toBeNull();
-    expect(result.querySelector('.panel-metric-value.err')!.textContent).toBe('90%');
-    expect(result.querySelector('tbody')!.textContent).toContain('1.2');
+    expect(required(result.querySelector('.panel-metric-value.err')).textContent).toBe('90%');
+    expect(required(result.querySelector('tbody')).textContent).toContain('1.2');
   });
   it.each([
     { network: { recv: '1', sent: 2 } }, { app_threads: [{ name: 2 }] }, { ip: { ipv4: ['ok', 3] } },
@@ -40,25 +41,25 @@ describe('admin system monitoring', () => {
   });
   it('validates snapshot cutoff and passes panel data through with unique prefixes', async () => {
     const { api, toast, panels, click } = setup();
-    const cutoff = document.getElementById('snapCutoff') as HTMLInputElement;
+    const cutoff = requiredInstance(document.getElementById('snapCutoff'), HTMLInputElement);
     cutoff.value = '0'; click('btnLoadSnapshots');
     expect(toast).toHaveBeenCalledWith('cutoff_invalid', 'error');
     expect(api).not.toHaveBeenCalled();
     cutoff.value = '7';
     api.mockResolvedValue({ success: true, obj: [null, { ts: 0, host: status, panels: { first: { cpu: 1 } } }, { panels: {} }], status: 200 });
     click('btnLoadSnapshots');
-    await vi.waitFor(() => expect(document.querySelectorAll('#snapshotsList > .panel-cards > .panel-card')).toHaveLength(2));
+    await vi.waitFor(() => { expect(document.querySelectorAll('#snapshotsList > .panel-cards > .panel-card')).toHaveLength(2); });
     expect(api).toHaveBeenCalledWith('POST', '/api/state/snapshots', { cutoff: 7 });
     expect(panels).toHaveBeenNthCalledWith(1, { first: { obj: { cpu: 1 } } }, 'snap-0-');
     expect(panels).toHaveBeenNthCalledWith(2, {}, 'snap-1-');
-    expect(document.getElementById('snapshotsList')!.textContent).toContain('utc');
-    expect(document.getElementById('snapshotsList')!.textContent).toContain('na');
+    expect(required(document.getElementById('snapshotsList')).textContent).toContain('utc');
+    expect(required(document.getElementById('snapshotsList')).textContent).toContain('na');
   });
   it('escapes errors and does not update the page after disposal', async () => {
     const { api, click } = setup();
     api.mockResolvedValueOnce({ success: false, msg: '<error>', status: 500 });
     click('btnSystemStatus');
-    await vi.waitFor(() => expect(document.getElementById('systemStatusResult')!.classList.contains('error')).toBe(true));
+    await vi.waitFor(() => { expect(required(document.getElementById('systemStatusResult')).classList.contains('error')).toBe(true); });
     expect(document.querySelector('#systemStatusResult error')).toBeNull();
     let resolve!: (value: { success: boolean; obj: typeof status; status: number }) => void;
     api.mockImplementationOnce(() => new Promise(done => { resolve = done; }));

@@ -23,7 +23,7 @@ function withAlpha(color: string, alpha: number): string {
     const r = (n >> 16) & 255;
     const g = (n >> 8) & 255;
     const b = n & 255;
-    return `rgba(${r},${g},${b},${alpha})`;
+    return `rgba(${String(r)},${String(g)},${String(b)},${String(alpha)})`;
   }
   return color;
 }
@@ -110,7 +110,7 @@ export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit,
         autoSkip: true,
         maxTicksLimit: narrow() ? 4 : 6,
         callback: function (value: number, index: number, ticks: Tick[]) {
-          const ts = ticks?.[index]?.value ?? value;
+          const ts = ticks[index]?.value ?? value;
           return formatLabel ? formatLabel(ts) : ts;
         },
       },
@@ -134,7 +134,7 @@ export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit,
         color: colors.text2,
         font: tickFont(),
         maxTicksLimit: narrow() ? 3 : 5,
-          callback: (v: number) => v + '%',
+          callback: (v: number) => String(v) + '%',
       },
       border: axisBorder(colors),
     };

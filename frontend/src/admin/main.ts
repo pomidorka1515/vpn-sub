@@ -31,10 +31,10 @@ export function initAdmin(): () => void {
   const session = safeStorage(() => sessionStorage);
   const i18n = createI18n(bootstrap, doc, local, session, location);
   const theme = createTheme(doc, local);
-  const notifications = createNotifications(doc, i18n.t, (callback, delay) => window.setTimeout(callback, delay), handle => window.clearTimeout(handle));
+  const notifications = createNotifications(doc, i18n.t, (callback, delay) => window.setTimeout(callback, delay), handle => { window.clearTimeout(handle); });
   const dialogs = createDialogs(doc, i18n.t);
   const state = createAdminState();
-  const auth = createAdminBootstrap(state, { doc, location, request: fetch, translate: i18n.t, logoutWarning: notifications.logoutWarning, stopCharts: () => charts.chartsStop() });
+  const auth = createAdminBootstrap(state, { doc, location, request: fetch, translate: i18n.t, logoutWarning: notifications.logoutWarning, stopCharts: () => { charts.chartsStop(); } });
   const api = createApi(() => auth.config, i18n.t, notifications.toast, fetch);
   const context: AdminContext = { doc, t: i18n.t, api, toast: notifications.toast, confirm: dialogs.confirmDialog, loadGen: createLoadGeneration() };
   const charts = createCharts(context, {
@@ -84,24 +84,24 @@ export function initAdmin(): () => void {
       loadTab(name);
     } finally { leaving = false; }
   }
-  doc.querySelectorAll<HTMLElement>('[data-tab]').forEach(tab => tab.addEventListener('click', () => {
-    if (tab.dataset.tab) void showTab(tab.dataset.tab);
-  }, { signal: listeners.signal }));
-  doc.querySelectorAll<HTMLElement>('.lang-btn[data-lang]').forEach(tab => tab.addEventListener('click', () => {
-    if (tab.dataset.lang) i18n.setLang(tab.dataset.lang);
-  }, { signal: listeners.signal }));
+  doc.querySelectorAll<HTMLElement>('[data-tab]').forEach(tab => { tab.addEventListener('click', () => {
+    if (tab.dataset['tab']) void showTab(tab.dataset['tab']);
+  }, { signal: listeners.signal }); });
+  doc.querySelectorAll<HTMLElement>('.lang-btn[data-lang]').forEach(tab => { tab.addEventListener('click', () => {
+    if (tab.dataset['lang']) i18n.setLang(tab.dataset['lang']);
+  }, { signal: listeners.signal }); });
   button(doc, 'themeBtn').addEventListener('click', theme.toggleTheme, { signal: listeners.signal });
   button(doc, 'btnLogout').addEventListener('click', () => { void auth.logout(); }, { signal: listeners.signal });
-  doc.querySelectorAll<HTMLElement>('.config-tab[data-section]').forEach(tab => tab.addEventListener('click', () => {
-    if (tab.dataset.section) showConfigSection(tab.dataset.section);
-  }, { signal: listeners.signal }));
+  doc.querySelectorAll<HTMLElement>('.config-tab[data-section]').forEach(tab => { tab.addEventListener('click', () => {
+    if (tab.dataset['section']) showConfigSection(tab.dataset['section']);
+  }, { signal: listeners.signal }); });
   button(doc, 'configSave').addEventListener('click', () => { void saveConfig(); }, { signal: listeners.signal });
   button(doc, 'configReload').addEventListener('click', () => { void reloadConfig(); }, { signal: listeners.signal });
   for (const root of [element(doc, 'tab-config'), element(doc, 'configEditorOverlay')]) {
     root.addEventListener('click', event => {
       if (!(event.target instanceof Element)) return;
       const trigger = event.target.closest<HTMLButtonElement>('button[data-config-pass]');
-      if (trigger?.dataset.configPass && root.contains(trigger)) togglePass(doc, trigger.dataset.configPass, trigger);
+      if (trigger?.dataset['configPass'] && root.contains(trigger)) togglePass(doc, trigger.dataset['configPass'], trigger);
     }, { signal: listeners.signal });
   }
   const stopTheme = theme.onChange(charts.chartsRefreshTheme);
@@ -121,7 +121,7 @@ export function initAdmin(): () => void {
     disposed = true;
     listeners.abort();
     auth.dispose();
-    cleanups.forEach(cleanup => cleanup());
+    cleanups.forEach(cleanup => { cleanup(); });
     stopTheme();
     configDispose();
     cleanupEditors();

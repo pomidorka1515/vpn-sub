@@ -8,7 +8,7 @@ import { createConfigDialog } from './dialog';
 import { destroyJsonEditors, refreshJsonEditors } from './editor-bridge';
 import { editor } from './state';
 import { clone, jsonEqual, isPlainObject, parseConfigJson, stringifyConfig } from './json';
-import type { ConfigObject, ConfigValue } from './json';
+import type { ConfigObject } from './json';
 import { showConfigSection } from './controls';
 import { validateAll, focusIssue } from './validation';
 
@@ -18,11 +18,12 @@ let context: AdminContext;
 let pageLanguage = 'en';
 let cleanupCards: () => void = () => {};
 let disposed = false;
+const isDisposed = (): boolean => disposed;
 let generation = 0;
 const t = (key: string): string => context.t(key);
 const loadingHtml = (): string => renderLoading(t);
 const api = (method: string, path: string, body?: unknown) => context.api(method, path, body);
-const toast = (message: string, kind: string): void => context.toast(message, kind);
+const toast = (message: string, kind: string): void => { context.toast(message, kind); };
 const confirmDialog = (message: string, title: string) => context.confirm(message, title);
 export function initConfig(env: AdminContext, language: string): void { context = env; pageLanguage = language; disposed = false; generation++; cleanupCards = initCards(); }
 function required(id: string): HTMLElement {
@@ -39,7 +40,7 @@ function configButton(id: string): HTMLButtonElement {
 const { renderMain } = createMainEditor(markDirty, t);
 const { init: initCards, renderCards, toggleConfigCard, deleteConfigCard } = createCardEditor({
   markDirty,
-  openNew: kind => { if (kind === 'inbounds' || kind === 'panels') openNew(kind); },
+  openNew: kind => { openNew(kind); },
   t,
   language: () => pageLanguage,
   confirm: confirmDialog,
@@ -54,7 +55,7 @@ function markDirty(): void {
   if (editor.nodeRows && new Set(editor.nodeRows.map(row => row[0])).size !== editor.nodeRows.length) editor.dirty = true;
   editor.headerRows.forEach(rows => { if (new Set(rows.map(row => row[0])).size !== rows.length) editor.dirty = true; });
   document.querySelectorAll<HTMLInputElement>('#tab-config .panel-card [data-field="id"]').forEach(input => {
-    if (input.value.trim() !== input.closest<HTMLElement>('.panel-card')?.dataset.id) editor.dirty = true;
+    if (input.value.trim() !== input.closest<HTMLElement>('.panel-card')?.dataset['id']) editor.dirty = true;
   });
   const label = document.getElementById('configDirty');
   if (label) label.textContent = editor.dirty ? t('config_unsaved') : t('config_saved_state');
@@ -67,7 +68,7 @@ function markDirty(): void {
 function onBeforeUnload(event: BeforeUnloadEvent): void {
   if (!editor.dirty) return;
   event.preventDefault();
-  event.returnValue = '';
+  Reflect.set(event, 'returnValue', '');
 }
 
 function showResult(message: string, kind = ''): void {
@@ -80,12 +81,12 @@ function showResult(message: string, kind = ''): void {
 
 function safeServerMessage(message: string | null | undefined): string {
   // Schema validation messages can quote values, including whole objects with secrets.
-  if (String(message || '').startsWith('Schema validation error:')) return t('config_err_schema');
+  if ((message || '').startsWith('Schema validation error:')) return t('config_err_schema');
   return message || t('error');
 }
 
 function setRestartLine(keys: string[]): void {
-  editor.restartLine = keys && keys.length ? t('config_restart_saved').replace('{keys}', keys.join(', ')) : '';
+  editor.restartLine = keys.length ? t('config_restart_saved').replace('{keys}', keys.join(', ')) : '';
   const el = document.getElementById('configRestartSaved');
   if (!el) return;
   el.textContent = editor.restartLine;
@@ -104,7 +105,7 @@ function diffValues(): ConfigObject {
     const has = Object.prototype.hasOwnProperty.call(draft, key);
     if (!had && !has) return;
     if (had && !has) values[key] = null;
-    else if (draft[key] !== undefined && !jsonEqual(draft[key], had ? loaded[key] : undefined)) values[key] = clone(draft[key] as ConfigValue);
+    else if (draft[key] !== undefined && !jsonEqual(draft[key], had ? loaded[key] : undefined)) values[key] = clone(draft[key]);
   });
   return values;
 }
@@ -157,22 +158,22 @@ export async function saveConfig() {
       }
       if (res.status !== 200 || res.success !== true) {
         showResult(safeServerMessage(res.msg), 'error');
-        if (String(res.rawMsg || '').includes('profiles')) showConfigSection('inbounds');
-        else if (String(res.rawMsg || '').includes('3xui')) showConfigSection('panels');
+        if ((res.rawMsg || '').includes('profiles')) showConfigSection('inbounds');
+        else if ((res.rawMsg || '').includes('3xui')) showConfigSection('panels');
         return;
       }
       if (Object.hasOwn(values, 'api_token')) {
-        delete snapshot.api_token;
+        delete snapshot['api_token'];
         // A replacement entered while this request was in flight is a new edit,
         // not the credential just saved; retain it for the next save.
-        if (jsonEqual(editor.draft.api_token, values.api_token)) {
-          delete editor.draft.api_token;
+        if (jsonEqual(editor.draft['api_token'], values['api_token'])) {
+          delete editor.draft['api_token'];
           const token = document.getElementById('cfg-api_token');
           if (token instanceof HTMLInputElement) token.value = '';
         }
       }
       const result = isPlainObject(res.obj) ? res.obj : {};
-      adoptSaved(typeof result.base === 'string' ? result.base : undefined, snapshot);
+      adoptSaved(typeof result['base'] === 'string' ? result['base'] : undefined, snapshot);
       if (Object.hasOwn(values, 'api_admin_ui_auth')) {
         window.removeEventListener('beforeunload', onBeforeUnload);
         window.location.href = location.pathname.replace(/\/+$/, '') + '/login';
@@ -180,7 +181,7 @@ export async function saveConfig() {
       }
       showResult(res.rawMsg === 'Unchanged' ? t('config_unchanged') : t('config_saved_state'), 'ok');
       if (res.rawMsg === 'Unchanged') setRestartLine([]);
-      else setRestartLine(Array.isArray(result.restart) ? result.restart.filter((value): value is string => typeof value === 'string') : []);
+      else setRestartLine(Array.isArray(result['restart']) ? result['restart'].filter((value): value is string => typeof value === 'string') : []);
     } catch {
       if (!disposed && current === generation) showResult(t('network_err'), 'error');
     } finally {
@@ -188,7 +189,7 @@ export async function saveConfig() {
       if (!disposed && current === generation) { configButton('configReload').disabled = false; markDirty(); }
     }
   });
-  if (!disposed && current === generation) markDirty();
+  if (!isDisposed() && current === generation) markDirty();
 }
 
 function showConflict(): void {
@@ -197,9 +198,9 @@ function showConflict(): void {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn-tiny';
-  button.dataset.discard = '1';
+  button.dataset['discard'] = '1';
   button.textContent = t('config_discard_reload');
-  button.addEventListener('click', () => loadConfig(true));
+  button.addEventListener('click', () => { void loadConfig(true); });
   el.appendChild(button);
 }
 
@@ -207,7 +208,7 @@ export async function reloadConfig() {
   if (disposed || editor.saving || editor.loading) return;
   if (editor.dirty) {
     const ok = await confirmDialog(t('config_leave_confirm'), t('confirm'));
-    if (!ok || disposed) return;
+    if (!ok || isDisposed()) return;
   }
   await loadConfig(true);
 }
@@ -225,14 +226,14 @@ async function loadConfig(force: boolean): Promise<void> {
   try { res = await api('GET', '/api/config/get'); }
   catch { res = null; }
   finally { editor.loading = false; }
-  if (disposed || current !== generation) return;
+  if (isDisposed() || current !== generation) return;
   if (!res || !res.success || !isPlainObject(res.obj) || !res.etag) {
     load.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg ? safeServerMessage(res.msg) : t('config_load_failed'))}</div><button type="button" class="btn-secondary" id="configRetry">${escapeHtml(t('config_retry'))}</button>`;
     required('configRetry').addEventListener('click', () => { void loadConfig(true); });
     return;
   }
   const parsed = res.rawJson ? parseConfigJson(res.rawJson) : null;
-  const configDocument = parsed && isPlainObject(parsed) ? parsed.obj : res.obj;
+  const configDocument = parsed && isPlainObject(parsed) ? parsed['obj'] : res.obj;
   if (!isPlainObject(configDocument)) { load.textContent = t('config_load_failed'); return; }
   editor.loaded = clone(configDocument);
   editor.draft = clone(configDocument);
@@ -262,14 +263,14 @@ export function configOnTab() {
   const active = document.getElementById('tab-config')?.classList.contains('active');
   if (active) refreshJsonEditors(document.getElementById('tab-config'));
   if (!active || editor.fetched) return;
-  loadConfig(false);
+  void loadConfig(false);
 }
 
 configOnTab.leave = async function leave() {
   if (disposed || editor.saving || editor.loading) return false;
   if (!editor.dirty) { editor.fetched = false; return true; }
   const ok = await confirmDialog(t('config_leave_confirm'), t('confirm'));
-  if (!ok || disposed) return false;
+  if (!ok || isDisposed()) return false;
   editor.draft = clone(editor.loaded);
   editor.dirty = false;
   editor.fetched = false;

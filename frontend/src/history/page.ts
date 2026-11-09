@@ -290,7 +290,7 @@ export function initHistory(doc: Document = document, browser: Window = window):
           wl, cssVar('--wl'), cssVar('--wl-light')
         );
       }
-    } catch (e) {
+    } catch  {
       handleChartJsError();
     }
   }
@@ -343,7 +343,6 @@ export function initHistory(doc: Document = document, browser: Window = window):
       }
       if (!samples) { toast(t('invalid_response'), 'error'); setLoading(false); return; }
       const filled = selectSamples(samples, days);
-      if (disposed || !current()) return;
       lastData = filled;
       renderCharts(filled);
       renderSummaries(filled);
@@ -357,9 +356,9 @@ export function initHistory(doc: Document = document, browser: Window = window):
   el('btnBack').addEventListener('click', () => { win.location.href = bootstrap.prefix + '/panel'; }, { signal: abort.signal });
   el('btnRefresh').addEventListener('click', () => { void loadHistory(); }, { signal: abort.signal });
   el('themeBtn').addEventListener('click', theme.toggleTheme, { signal: abort.signal });
-  doc.querySelectorAll<HTMLElement>('[data-lang]').forEach(node => node.addEventListener('click', () => i18n.setLang(node.dataset.lang ?? ''), { signal: abort.signal }));
+  doc.querySelectorAll<HTMLElement>('[data-lang]').forEach(node => { node.addEventListener('click', () => { i18n.setLang(node.dataset['lang'] ?? ''); }, { signal: abort.signal }); });
   const removeThemeListener = theme.onChange(repaintCharts);
   theme.applyTheme(); i18n.initLang();
   void loadHistory();
-  return () => { disposed = true; loadGen('history'); abort.abort(); timers.forEach(id => win.clearTimeout(id)); cancelChartLoad?.(); chartScript?.remove(); removeThemeListener(); regChart?.destroy(); wlChart?.destroy(); notifications.dispose(); };
+  return () => { disposed = true; loadGen('history'); abort.abort(); timers.forEach(id => { win.clearTimeout(id); }); cancelChartLoad?.(); chartScript?.remove(); removeThemeListener(); regChart?.destroy(); wlChart?.destroy(); notifications.dispose(); };
 }

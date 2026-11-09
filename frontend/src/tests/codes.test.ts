@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initCodes } from '../admin/codes';
@@ -17,14 +18,14 @@ function setup() {
   const confirm = vi.fn<AdminContext['confirm']>().mockResolvedValue(true);
   const clipboard = { writeText: vi.fn<Clipboard['writeText']>().mockResolvedValue() };
   dispose = initCodes({ doc: document, t: key => key === 'codes_unlimited_value' ? '∞' : key, api, toast, confirm, loadGen: () => () => true }, clipboard);
-  const list = document.getElementById('codeList')!;
-  const click = (id: string) => document.getElementById(id)!.click();
+  const list = required(document.getElementById('codeList'));
+  const click = (id: string) => { required(document.getElementById(id)).click(); };
   const cards = () => [...list.querySelectorAll<HTMLElement>('.code-card')];
   const load = async (names = ['FIRST', 'SECOND']) => {
     api.mockResolvedValueOnce(success(names));
-    for (const _name of names) api.mockResolvedValueOnce(success(details));
+    names.forEach(() => { api.mockResolvedValueOnce(success(details)); });
     click('btnLoadCodes');
-    await vi.waitFor(() => expect(document.getElementById('btnLoadCodes')!.hasAttribute('aria-busy')).toBe(false));
+    await vi.waitFor(() => { expect(required(document.getElementById('btnLoadCodes')).hasAttribute('aria-busy')).toBe(false); });
   };
   return { api, toast, confirm, clipboard, list, click, cards, load };
 }
@@ -38,15 +39,15 @@ describe('admin codes', () => {
     api.mockResolvedValueOnce(success(['CODE']));
     api.mockResolvedValueOnce(success({ ...details, action, days: 0, gb: 0, wl_gb: 0 }));
     click('btnLoadCodes');
-    await vi.waitFor(() => expect(cards()).toHaveLength(1));
-    expect([...cards()[0]!.querySelectorAll('.code-metrics dd')].map(node => node.textContent)).toEqual(expected);
+    await vi.waitFor(() => { expect(cards()).toHaveLength(1); });
+    expect([...required(cards()[0]).querySelectorAll('.code-metrics dd')].map(node => node.textContent)).toEqual(expected);
   });
 
   it('shows the loaded empty state once and leaves it untouched on refresh', async () => {
     const { load, list } = setup();
     await load([]);
     const empty = list.querySelector('.code-empty');
-    expect(empty!.textContent).toContain('no_codes');
+    expect(required(empty).textContent).toContain('no_codes');
     await load([]);
     expect(list.querySelector('.code-empty')).toBe(empty);
   });
@@ -55,7 +56,7 @@ describe('admin codes', () => {
     const { load, list, cards, api, click } = setup();
     await load();
     const original = cards();
-    const copy = original[0]!.querySelector<HTMLButtonElement>('button')!;
+    const copy = required(required(original[0]).querySelector<HTMLButtonElement>('button'));
     copy.focus();
     const mutations = vi.fn();
     const observer = new MutationObserver(mutations);
@@ -67,7 +68,7 @@ describe('admin codes', () => {
     expect(cards()).toEqual(original);
     expect(list.querySelector('.loading')).toBeNull();
     resolve(success(['FIRST', 'SECOND']));
-    await vi.waitFor(() => expect(document.getElementById('btnLoadCodes')!.hasAttribute('aria-busy')).toBe(false));
+    await vi.waitFor(() => { expect(required(document.getElementById('btnLoadCodes')).hasAttribute('aria-busy')).toBe(false); });
     expect(cards()[0]).toBe(original[0]);
     expect(cards()[1]).toBe(original[1]);
     expect(document.activeElement).toBe(copy);
@@ -80,24 +81,24 @@ describe('admin codes', () => {
     await load();
     const [first, second] = cards();
     api.mockClear().mockResolvedValue(success());
-    first!.querySelector<HTMLButtonElement>('[data-code-action="delete"]')!.click();
-    await vi.waitFor(() => expect(cards()).toHaveLength(1));
+    required(required(first).querySelector<HTMLButtonElement>('[data-code-action="delete"]')).click();
+    await vi.waitFor(() => { expect(cards()).toHaveLength(1); });
     expect(cards()[0]).toBe(second);
     expect(api).toHaveBeenCalledExactlyOnceWith('POST', '/api/code/delete', { code: 'FIRST' });
-    second!.querySelector<HTMLButtonElement>('[data-code-action="delete"]')!.click();
-    await vi.waitFor(() => expect(cards()).toHaveLength(0));
+    required(required(second).querySelector<HTMLButtonElement>('[data-code-action="delete"]')).click();
+    await vi.waitFor(() => { expect(cards()).toHaveLength(0); });
     expect(list.querySelector('.code-empty')).not.toBeNull();
   });
 
   it('preserves the list after failed refreshes and failed deletions', async () => {
     const { load, api, click, cards, toast } = setup();
     await load();
-    const first = cards()[0]!;
+    const first = required(cards()[0]);
     api.mockResolvedValue({ success: false, msg: 'offline', status: 500 });
     click('btnLoadCodes');
-    await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('offline', 'error'));
-    first.querySelector<HTMLButtonElement>('[data-code-action="delete"]')!.click();
-    await vi.waitFor(() => expect(api).toHaveBeenCalledWith('POST', '/api/code/delete', { code: 'FIRST' }));
+    await vi.waitFor(() => { expect(toast).toHaveBeenCalledWith('offline', 'error'); });
+    required(first.querySelector<HTMLButtonElement>('[data-code-action="delete"]')).click();
+    await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/code/delete', { code: 'FIRST' }); });
     expect(cards()[0]).toBe(first);
     expect(cards()).toHaveLength(2);
   });
@@ -106,16 +107,16 @@ describe('admin codes', () => {
     const { load, api, click, cards } = setup();
     await load();
     const [first, second] = cards();
-    const actions = first!.querySelector('.code-actions');
+    const actions = required(first).querySelector('.code-actions');
     api.mockResolvedValueOnce(success(['FIRST', 'SECOND', 'NEW']));
     api.mockResolvedValueOnce(success({ ...details, uses: 7 }));
     api.mockResolvedValue(success(details));
     click('btnLoadCodes');
-    await vi.waitFor(() => expect(cards()).toHaveLength(3));
+    await vi.waitFor(() => { expect(cards()).toHaveLength(3); });
     expect(cards()[0]).toBe(first);
     expect(cards()[1]).toBe(second);
-    expect(first!.querySelector('.code-actions')).toBe(actions);
-    expect(first!.querySelector('.code-usage')!.textContent).toContain('7');
+    expect(required(first).querySelector('.code-actions')).toBe(actions);
+    expect(required(required(first).querySelector('.code-usage')).textContent).toContain('7');
   });
 
   it('does not resurrect a deleted code from an in-flight refresh', async () => {
@@ -125,12 +126,12 @@ describe('admin codes', () => {
     api.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
     api.mockResolvedValue(success());
     click('btnLoadCodes');
-    cards()[0]!.querySelector<HTMLButtonElement>('[data-code-action="delete"]')!.click();
-    await vi.waitFor(() => expect(cards()).toHaveLength(1));
+    required(required(cards()[0]).querySelector<HTMLButtonElement>('[data-code-action="delete"]')).click();
+    await vi.waitFor(() => { expect(cards()).toHaveLength(1); });
     resolve(success(['FIRST', 'SECOND']));
-    await vi.waitFor(() => expect(document.getElementById('btnLoadCodes')!.hasAttribute('aria-busy')).toBe(false));
+    await vi.waitFor(() => { expect(required(document.getElementById('btnLoadCodes')).hasAttribute('aria-busy')).toBe(false); });
     expect(cards()).toHaveLength(1);
-    expect(cards()[0]!.textContent).toContain('SECOND');
+    expect(required(cards()[0]).textContent).toContain('SECOND');
   });
 
   it('adds a code locally and keeps copy working for escaped names', async () => {
@@ -138,13 +139,13 @@ describe('admin codes', () => {
     await load([]);
     click('btnShowAddCode');
     const name = '<gift&"special>';
-    (document.getElementById('addCode') as HTMLInputElement).value = name;
+    (requiredInstance(document.getElementById('addCode'), HTMLInputElement)).value = name;
     api.mockClear().mockResolvedValue(success());
     click('btnDoAddCode');
-    await vi.waitFor(() => expect(cards()).toHaveLength(1));
+    await vi.waitFor(() => { expect(cards()).toHaveLength(1); });
     expect(api).toHaveBeenCalledTimes(1);
-    expect(cards()[0]!.querySelector('.code-name')!.textContent).toBe(name);
-    cards()[0]!.querySelector<HTMLButtonElement>('[data-code-action="copy"]')!.click();
-    await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith(name));
+    expect(required(required(cards()[0]).querySelector('.code-name')).textContent).toBe(name);
+    required(required(cards()[0]).querySelector<HTMLButtonElement>('[data-code-action="copy"]')).click();
+    await vi.waitFor(() => { expect(clipboard.writeText).toHaveBeenCalledWith(name); });
   });
 });

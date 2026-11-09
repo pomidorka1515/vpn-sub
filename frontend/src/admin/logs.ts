@@ -1,5 +1,5 @@
 import { busyDepth, withBusy } from '../shared/busy';
-import { escapeHtml } from '../shared/dom';
+import { displayValue, escapeHtml } from '../shared/dom';
 import { renderIfChanged } from '../shared/render';
 import { isRecord } from '../shared/json';
 import type { Translate } from '../shared/formatting';
@@ -7,7 +7,7 @@ import { button, element, input } from './context';
 import type { AdminContext } from './context';
 
 function logDate(log: Record<string, unknown>): string {
-  return typeof log.date === 'string' && log.date ? log.date : new Date((typeof log.ts === 'number' ? log.ts : 0) * 1000).toLocaleString();
+  return typeof log['date'] === 'string' && log['date'] ? log['date'] : new Date((typeof log['ts'] === 'number' ? log['ts'] : 0) * 1000).toLocaleString();
 }
 
 function infoValue(value: unknown, t: Translate): string {
@@ -15,13 +15,13 @@ function infoValue(value: unknown, t: Translate): string {
   if (isRecord(value)) return Object.keys(value).length ? `<dl class="log-fields">${Object.entries(value).map(([key, item]) => `<div><dt>${escapeHtml(key.replace(/[_-]/g, ' '))}</dt><dd>${infoValue(item, t)}</dd></div>`).join('')}</dl>` : escapeHtml(t('log_empty_info'));
   if (value == null) return escapeHtml(t('na'));
   if (typeof value === 'boolean') return escapeHtml(t(value ? 'yes' : 'no'));
-  return `<span class="log-value">${escapeHtml(String(value))}</span>`;
+  return `<span class="log-value">${escapeHtml(value)}</span>`;
 }
 
 function infoSummary(value: unknown, t: Translate): string {
   if (isRecord(value)) return Object.entries(value).map(([key, item]) => `${key.replace(/[_-]/g, ' ')}: ${infoSummary(item, t)}`).join(' · ') || t('log_empty_info');
   if (Array.isArray(value)) return value.map(item => infoSummary(item, t)).join(', ') || t('log_empty_info');
-  return value == null ? t('na') : typeof value === 'boolean' ? t(value ? 'yes' : 'no') : String(value);
+  return value == null ? t('na') : typeof value === 'boolean' ? t(value ? 'yes' : 'no') : displayValue(value);
 }
 
 export function initLogs({ doc, t, api, loadGen }: AdminContext): () => void {
@@ -37,20 +37,20 @@ export function initLogs({ doc, t, api, loadGen }: AdminContext): () => void {
   let logs: Record<string, unknown>[] = [];
   let disposed = false;
   function render(): void {
-    const visible = logs.map((log, index) => ({ log, index })).filter(({ log }) => !filter.value || log.action === filter.value);
+    const visible = logs.map((log, index) => ({ log, index })).filter(({ log }) => !filter.value || log['action'] === filter.value);
     if (!visible.length) {
       renderIfChanged(wrap, `<div class="table-empty">${escapeHtml(t(logs.length ? 'log_no_matches' : 'no_logs'))}</div>`);
       return;
     }
     renderIfChanged(wrap, `<table class="data-table logs-table"><thead><tr><th>${t('timestamp')}</th><th>${t('log_action')}</th><th>${t('info')}</th></tr></thead><tbody>${visible.map(({ log, index }) =>
-      `<tr data-log-index="${index}" tabindex="0" aria-haspopup="dialog"><td class="log-ts">${escapeHtml(logDate(log))}</td><td><span class="log-action ${escapeHtml(log.action)}">${escapeHtml(log.action)}</span></td><td class="log-info">${escapeHtml(infoSummary(log.info ?? {}, t))}</td></tr>`
+      `<tr data-log-index="${String(index)}" tabindex="0" aria-haspopup="dialog"><td class="log-ts">${escapeHtml(logDate(log))}</td><td><span class="log-action ${escapeHtml(log['action'])}">${escapeHtml(log['action'])}</span></td><td class="log-info">${escapeHtml(infoSummary(log['info'] ?? {}, t))}</td></tr>`
     ).join('')}</tbody></table>`);
   }
   function open(row: HTMLElement): void {
-    const log = logs[Number(row.dataset.logIndex)];
+    const log = logs[Number(row.dataset['logIndex'])];
     if (!log) return;
     opener = row;
-    dialog.innerHTML = `<h2 class="modal-title" id="logDetailTitle">${escapeHtml(t('log_details'))}</h2><dl class="log-fields log-meta"><div><dt>${escapeHtml(t('timestamp'))}</dt><dd>${escapeHtml(logDate(log))}</dd></div><div><dt>${escapeHtml(t('log_action'))}</dt><dd>${escapeHtml(log.action)}</dd></div></dl><h3>${escapeHtml(t('info'))}</h3><div class="log-detail-info">${infoValue(log.info ?? {}, t)}</div><div class="modal-actions"><button type="button" class="modal-btn" data-log-close>${escapeHtml(t('close'))}</button></div>`;
+    dialog.innerHTML = `<h2 class="modal-title" id="logDetailTitle">${escapeHtml(t('log_details'))}</h2><dl class="log-fields log-meta"><div><dt>${escapeHtml(t('timestamp'))}</dt><dd>${escapeHtml(logDate(log))}</dd></div><div><dt>${escapeHtml(t('log_action'))}</dt><dd>${escapeHtml(log['action'])}</dd></div></dl><h3>${escapeHtml(t('info'))}</h3><div class="log-detail-info">${infoValue(log['info'] ?? {}, t)}</div><div class="modal-actions"><button type="button" class="modal-btn" data-log-close>${escapeHtml(t('close'))}</button></div>`;
     dialog.showModal();
   }
   wrap.addEventListener('click', event => {
@@ -84,7 +84,7 @@ export function initLogs({ doc, t, api, loadGen }: AdminContext): () => void {
       }
       logs = Array.isArray(res.obj) ? res.obj.filter(isRecord) : [];
       const selected = filter.value;
-      const actions = [...new Set(logs.map(log => log.action).filter((action): action is string => typeof action === 'string' && !!action))].sort();
+      const actions = [...new Set(logs.map(log => log['action']).filter((action): action is string => typeof action === 'string' && !!action))].sort();
       renderIfChanged(filter, `<option value="">${escapeHtml(t('log_all_actions'))}</option>${actions.map(action => `<option value="${escapeHtml(action)}">${escapeHtml(action)}</option>`).join('')}`);
       filter.value = actions.includes(selected) ? selected : '';
       render();

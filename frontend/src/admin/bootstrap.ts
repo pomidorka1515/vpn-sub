@@ -30,6 +30,7 @@ interface Dependencies {
 export function createAdminBootstrap(state: AdminState, deps: Dependencies) {
   const { doc, location, request, translate: t } = deps;
   let disposed = false;
+  const blocked = (): boolean => disposed || state.authBlocked;
   const path = (suffix: string): string => location.pathname.replace(/\/+$/, '') + suffix;
   const redirect = (): void => { if (!disposed) location.href = path('/login'); };
   const config: ApiConfig = {
@@ -50,18 +51,18 @@ export function createAdminBootstrap(state: AdminState, deps: Dependencies) {
     deps.stopCharts();
     try {
       const response = await request(path('/token'), { credentials: 'same-origin' });
-      if (disposed || state.authBlocked) return;
+      if (blocked()) return;
       if (response.status === 401) { redirect(); return; }
       const data: unknown = await response.json();
-      if (disposed || state.authBlocked) return;
-      if (!response.ok || !isRecord(data) || data.success !== true || !isRecord(data.obj) ||
-          typeof data.obj.token !== 'string' || !data.obj.token ||
-          typeof data.obj.api_root !== 'string' || !data.obj.api_root) {
+      if (blocked()) return;
+      if (!response.ok || !isRecord(data) || data['success'] !== true || !isRecord(data['obj']) ||
+          typeof data['obj']['token'] !== 'string' || !data['obj']['token'] ||
+          typeof data['obj']['api_root'] !== 'string' || !data['obj']['api_root']) {
         fail('reload_reauth'); return;
       }
-      state.apiToken = data.obj.token;
-      state.baseUrl = location.origin + data.obj.api_root;
-      state.panelsConfigured = data.obj.panels_configured !== false;
+      state.apiToken = data['obj']['token'];
+      state.baseUrl = location.origin + data['obj']['api_root'];
+      state.panelsConfigured = data['obj']['panels_configured'] !== false;
       const overlay = doc.getElementById('bootOverlay');
       if (overlay) overlay.hidden = true;
       const content = doc.querySelector<HTMLElement>('.admin-content');
@@ -89,12 +90,12 @@ export function createAdminBootstrap(state: AdminState, deps: Dependencies) {
         if (!token) {
           const response = await request(path('/token'), { credentials: 'same-origin' });
           const data: unknown = await response.json();
-          if (!response.ok || !isRecord(data) || data.success !== true || !isRecord(data.obj) || typeof data.obj.token !== 'string' || !data.obj.token) throw new Error(sharedMessage('token_unavailable'));
-          token = data.obj.token;
+          if (!response.ok || !isRecord(data) || data['success'] !== true || !isRecord(data['obj']) || typeof data['obj']['token'] !== 'string' || !data['obj']['token']) throw new Error(sharedMessage('token_unavailable'));
+          token = data['obj']['token'];
         }
         const response = await request(path('/logout'), { method: 'POST', credentials: 'same-origin', headers: { 'X-Admin-CSRF': token } });
         const data: unknown = await response.json().catch(() => null);
-        if (!response.ok || !isRecord(data) || data.success !== true) throw new Error(sharedMessage('logout_unconfirmed'));
+        if (!response.ok || !isRecord(data) || data['success'] !== true) throw new Error(sharedMessage('logout_unconfirmed'));
       } catch {
         try {
           const probe = await request(path('/token'), { credentials: 'same-origin', cache: 'no-store' });

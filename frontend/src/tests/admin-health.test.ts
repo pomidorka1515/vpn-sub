@@ -1,3 +1,4 @@
+import { required, requiredInstance } from './required';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AdminContext } from '../admin/context';
@@ -13,8 +14,8 @@ function setup(language = 'en') {
   const toast = vi.fn<AdminContext['toast']>();
   const confirm = vi.fn<AdminContext['confirm']>();
   dispose = initHealth({ doc: document, t: key => key, api, toast, confirm, loadGen: createLoadGeneration() }, language);
-  const click = (id: string) => document.getElementById(id)!.click();
-  const el = (id: string) => document.getElementById(id)!;
+  const click = (id: string) => { required(document.getElementById(id)).click(); };
+  const el = (id: string) => required(document.getElementById(id));
   return { api, toast, confirm, click, el };
 }
 
@@ -25,16 +26,16 @@ describe('admin health and recovery', () => {
       .mockResolvedValueOnce({ success: true, status: 200, obj: { degraded: true, memory: null } })
       .mockResolvedValueOnce({ success: false, status: 500, msg: '<failure>' });
     click('btnRunHealth');
-    await vi.waitFor(() => expect(el('healthDot').className).toBe('health-dot ok'));
+    await vi.waitFor(() => { expect(el('healthDot').className).toBe('health-dot ok'); });
     expect(el('healthDetails').textContent).toContain('1.23 mb_unit');
     expect(el('healthDetails').textContent).toContain('<thread>');
     expect(el('healthDetails').querySelector('thread')).toBeNull();
     expect(el('healthDetails').textContent).toContain('na');
     click('btnRunHealth');
-    await vi.waitFor(() => expect(el('healthDot').className).toBe('health-dot warn'));
+    await vi.waitFor(() => { expect(el('healthDot').className).toBe('health-dot warn'); });
     expect(el('healthText').textContent).toBe('health_warn');
     click('btnRunHealth');
-    await vi.waitFor(() => expect(el('healthDot').className).toBe('health-dot err'));
+    await vi.waitFor(() => { expect(el('healthDot').className).toBe('health-dot err'); });
     expect(el('healthText').textContent).toBe('<failure>');
   });
 
@@ -45,17 +46,17 @@ describe('admin health and recovery', () => {
       .mockResolvedValueOnce({ success: true, status: 200, obj: { users: [] } })
       .mockResolvedValueOnce({ success: false, status: 500, msg: '<offline>' });
     click('btnLoadOnline');
-    await vi.waitFor(() => expect(el('onlineUsersWrap').textContent).toContain('<alice>'));
+    await vi.waitFor(() => { expect(el('onlineUsersWrap').textContent).toContain('<alice>'); });
     expect(el('onlineUsersWrap').querySelector('alice, panel')).toBeNull();
-    const keyed = el('onlineKeyed') as HTMLInputElement;
+    const keyed = requiredInstance(el('onlineKeyed'), HTMLInputElement);
     keyed.checked = true; keyed.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(el('onlineUsersWrap').textContent).toContain('<external>'));
+    await vi.waitFor(() => { expect(el('onlineUsersWrap').textContent).toContain('<external>'); });
     expect(api).toHaveBeenLastCalledWith('GET', '/api/user/onlines?keyed=1');
     expect(el('onlineUsersWrap').textContent).toContain('na');
     click('btnLoadOnline');
-    await vi.waitFor(() => expect(el('onlineUsersWrap').textContent).toContain('no_online'));
+    await vi.waitFor(() => { expect(el('onlineUsersWrap').textContent).toContain('no_online'); });
     click('btnLoadOnline');
-    await vi.waitFor(() => expect(el('onlineUsersWrap').textContent).toContain('<offline>'));
+    await vi.waitFor(() => { expect(el('onlineUsersWrap').textContent).toContain('<offline>'); });
     expect(el('onlineUsersWrap').querySelector('offline')).toBeNull();
   });
 
@@ -66,16 +67,16 @@ describe('admin health and recovery', () => {
       .mockResolvedValueOnce({ success: true, status: 200, obj: { teapot: true } })
       .mockResolvedValueOnce(null);
     click('btnDoRefresh');
-    await vi.waitFor(() => expect(el('refreshResult').className).toBe('result-box success'));
+    await vi.waitFor(() => { expect(el('refreshResult').className).toBe('result-box success'); });
     expect(el('refreshResult').textContent).toContain('<done>');
     expect(el('refreshResult').querySelector('done')).toBeNull();
     click('btnDoRefresh');
-    await vi.waitFor(() => expect(el('refreshResult').className).toBe('result-box error'));
+    await vi.waitFor(() => { expect(el('refreshResult').className).toBe('result-box error'); });
     expect(el('refreshResult').textContent).toContain('error');
     click('btnTeapot');
-    await vi.waitFor(() => expect(el('teapotStatus').textContent).toContain('teapot_yes'));
+    await vi.waitFor(() => { expect(el('teapotStatus').textContent).toContain('teapot_yes'); });
     click('btnTeapot');
-    await vi.waitFor(() => expect(el('teapotStatus').textContent).toBe('teapot_no'));
+    await vi.waitFor(() => { expect(el('teapotStatus').textContent).toBe('teapot_no'); });
   });
 
   it('renders recovery issues and resolves only after confirmation', async () => {
@@ -87,18 +88,18 @@ describe('admin health and recovery', () => {
       .mockResolvedValueOnce({ success: true, status: 200, obj: {} });
     confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true).mockResolvedValueOnce(true);
     click('btnLoadOperations');
-    await vi.waitFor(() => expect(el('operationsStatusWrap').textContent).toContain('<reason>'));
+    await vi.waitFor(() => { expect(el('operationsStatusWrap').textContent).toContain('<reason>'); });
     expect(el('operationsStatusWrap').textContent).toContain('<pending>');
     expect(el('operationsStatusWrap').querySelector('reason, user, pending')).toBeNull();
-    const resolve = () => el('operationsStatusWrap').querySelector<HTMLButtonElement>('[data-rollback-kind]')!.click();
+    const resolve = () => { required(el('operationsStatusWrap').querySelector<HTMLButtonElement>('[data-rollback-kind]')).click(); };
     resolve();
-    await vi.waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => { expect(confirm).toHaveBeenCalledTimes(1); });
     expect(api).toHaveBeenCalledTimes(1);
     resolve();
-    await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('failed', 'error'));
+    await vi.waitFor(() => { expect(toast).toHaveBeenCalledWith('failed', 'error'); });
     expect(api).toHaveBeenLastCalledWith('POST', '/api/operations/rollback/resolve', { kind: '<kind>', user: '<user>' });
     resolve();
-    await vi.waitFor(() => expect(el('operationsStatusWrap').textContent).toContain('no_recovery_issues'));
+    await vi.waitFor(() => { expect(el('operationsStatusWrap').textContent).toContain('no_recovery_issues'); });
     expect(toast).toHaveBeenCalledWith('resolved', 'success');
   });
 
@@ -108,8 +109,8 @@ describe('admin health and recovery', () => {
     api.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
       .mockResolvedValueOnce({ success: true, status: 200, obj: { users: ['new'] } });
     click('btnLoadOnline');
-    (el('onlineKeyed') as HTMLInputElement).dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(el('onlineUsersWrap').textContent).toContain('new'));
+    (requiredInstance(el('onlineKeyed'), HTMLInputElement)).dispatchEvent(new Event('change'));
+    await vi.waitFor(() => { expect(el('onlineUsersWrap').textContent).toContain('new'); });
     finish({ success: true, status: 200, obj: { users: ['old'] } });
     await Promise.resolve(); await Promise.resolve();
     expect(el('onlineUsersWrap').textContent).not.toContain('old');

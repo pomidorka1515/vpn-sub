@@ -35,14 +35,14 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       if (disposed || generation !== detailGeneration || !res?.success || !isRecord(res.obj)) return;
       state.selectedUser = username;
       const user = res.obj;
-      const bandwidth = isRecord(user.bandwidth) ? user.bandwidth : {};
+      const bandwidth = isRecord(user['bandwidth']) ? user['bandwidth'] : {};
       const row = (key: string, value: unknown): string => `<div class="info-row"><span class="info-label">${t(key)}</span><span class="info-value">${escapeHtml(value || '—')}</span></div>`;
       element(doc, 'userDetailCard').style.display = 'block';
-      element(doc, 'userDetailInfo').innerHTML = row('internal_user', username) + row('display_name', user.displayname) + row('uuid', user.uuid) + row('token', user.token) + row('fingerprint', user.fingerprint) +
-        `<div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${escapeHtml(bandwidth.limit || 0)} ${t('gb_unit')}</span></div>` +
-        `<div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${escapeHtml(bandwidth.wl_limit || 0)} ${t('gb_unit')}</span></div>` +
-        row('expires', typeof user.time === 'number' && user.time ? new Date(user.time * 1000).toLocaleString() : '∞') +
-        `<div class="info-row"><span class="info-label">${t('status')}</span><span class="info-value"><span class="badge ${user.enabled ? 'green' : 'red'}">${user.enabled ? t('active') : t('disabled')}</span></span></div>`;
+      element(doc, 'userDetailInfo').innerHTML = row('internal_user', username) + row('display_name', user['displayname']) + row('uuid', user['uuid']) + row('token', user['token']) + row('fingerprint', user['fingerprint']) +
+        `<div class="info-row"><span class="info-label">${t('monthly_limit')}</span><span class="info-value">${escapeHtml(bandwidth['limit'] || 0)} ${t('gb_unit')}</span></div>` +
+        `<div class="info-row"><span class="info-label">${t('wl_limit')}</span><span class="info-value">${escapeHtml(bandwidth['wl_limit'] || 0)} ${t('gb_unit')}</span></div>` +
+        row('expires', typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000).toLocaleString() : '∞') +
+        `<div class="info-row"><span class="info-label">${t('status')}</span><span class="info-value"><span class="badge ${user['enabled'] ? 'green' : 'red'}">${user['enabled'] ? t('active') : t('disabled')}</span></span></div>`;
       element(doc, 'userDetailResult').innerHTML = '';
     });
   }
@@ -63,7 +63,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       if (disposed || state.selectedUser !== username) return;
       const result = element(doc, 'userDetailResult');
       if (res?.success && isRecord(res.obj)) {
-        result.innerHTML = `<div class="result-title ok">${t('ok')}</div><div class="result-msg">${t('uuid')}: ${escapeHtml(res.obj.uuid)}<br>${t('token')}: ${escapeHtml(res.obj.token)}</div>`;
+        result.innerHTML = `<div class="result-title ok">${t('ok')}</div><div class="result-msg">${t('uuid')}: ${escapeHtml(res.obj['uuid'])}<br>${t('token')}: ${escapeHtml(res.obj['token'])}</div>`;
         result.className = 'result-box success';
       } else {
         result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
@@ -88,11 +88,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       const value = trim ? raw.trim() : raw;
       if (value) body[key] = value;
     }
-    body.limit = parseInt(input(doc, 'addLimit').value, 10) || 0;
+    body['limit'] = parseInt(input(doc, 'addLimit').value, 10) || 0;
     const wlLimit = parseInt(input(doc, 'addWlLimit').value, 10);
-    body.wl_limit = Number.isNaN(wlLimit) ? 5 : wlLimit;
+    body['wl_limit'] = Number.isNaN(wlLimit) ? 5 : wlLimit;
     const expiry = input(doc, 'addExpiry').value;
-    if (expiry) body.time = Math.floor(new Date(expiry).getTime() / 1000);
+    if (expiry) body['time'] = Math.floor(new Date(expiry).getTime() / 1000);
     await withBusy(button(doc, 'btnDoAdd'), async () => {
       const res = await api('POST', '/api/user/add', body);
       if (disposed) return;
@@ -108,11 +108,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   wrap.addEventListener('click', event => {
     if (!(event.target instanceof Element)) return;
     const target = event.target.closest<HTMLButtonElement>('button[data-user-action]');
-    if (!target || !wrap.contains(target) || target.dataset.user === undefined) return;
-    if (target.dataset.userAction === 'view') void viewUser(target.dataset.user, target);
-    else if (target.dataset.userAction === 'delete') void deleteUser(target.dataset.user, target);
+    if (!target || !wrap.contains(target) || target.dataset['user'] === undefined) return;
+    if (target.dataset['userAction'] === 'view') void viewUser(target.dataset['user'], target);
+    else if (target.dataset['userAction'] === 'delete') void deleteUser(target.dataset['user'], target);
   }, { signal: listeners.signal });
-  const bind = (id: string, handler: () => void): void => button(doc, id).addEventListener('click', handler, { signal: listeners.signal });
+  const bind = (id: string, handler: () => void): void => { button(doc, id).addEventListener('click', handler, { signal: listeners.signal }); };
   bind('btnLoadUsers', () => { void loadUsers(); });
   bind('btnShowAdd', showAddUser);
   bind('btnCancelAdd', hideAddUser);

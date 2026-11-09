@@ -61,7 +61,7 @@ function ensureChartJs(): Promise<void> {
     const script = doc.createElement('script');
     script.src = chartUrl;
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => { resolve(); };
     script.onerror = () => {
       chartJsPromise = null;
       script.remove();
@@ -112,7 +112,7 @@ function stopLive() {
 }
 
 function delayMs() {
-  const n = Number(state.delay);
+  const n = state.delay;
   const seconds = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 2;
   return seconds * 1000;
 }
@@ -136,7 +136,7 @@ function scheduleLive() {
   if (state.mode !== 'live' || !tabActive() || state.chartJsFailed) return;
   state.timer = window.setTimeout(() => {
     state.timer = null;
-    pollLive();
+    void pollLive();
   }, delayMs());
 }
 
@@ -161,14 +161,14 @@ function syncControls() {
   press($('chartsMode'), 'data-mode', state.mode);
   press($('chartsGroup'), 'data-group', state.group);
   const readout = $('chartsDelayValue');
-  if (readout) readout.textContent = Number(state.delay).toFixed(1);
+  if (readout) readout.textContent = state.delay.toFixed(1);
 }
 
 function panelNames(rows: Row[]): string[] {
   const names: string[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
-    const panels = row?.panels;
+    const panels = row.panels;
     if (!panels || typeof panels !== 'object') continue;
     for (const name of Object.keys(panels)) {
       if (seen.has(name)) continue;
@@ -215,7 +215,7 @@ function panelIsDown() {
 
 function dropBaselineCpu(point: Row): void {
   if (state.hostCpuDropped || !isRecord(point.host)) return;
-  if (typeof point.host.cpu !== 'number' || point.host.cpu !== 0) return;
+  if (typeof point.host['cpu'] !== 'number' || point.host['cpu'] !== 0) return;
   point.host = Object.assign({}, point.host, { cpu: null });
   state.hostCpuDropped = true;
 }
@@ -270,7 +270,7 @@ async function fetchSnapshots() {
     if (state.rows.length) showCharts();
     return;
   }
-  const rows: Row[] = Array.isArray(res.obj) ? res.obj.filter((row: unknown): row is Row => isRecord(row) && typeof row.ts === 'number' && (row.panels == null || isRecord(row.panels))).slice().reverse() : [];
+  const rows: Row[] = Array.isArray(res.obj) ? res.obj.filter((row: unknown): row is Row => isRecord(row) && typeof row['ts'] === 'number' && (row['panels'] == null || isRecord(row['panels']))).slice().reverse() : [];
   state.rows = rows;
   state.panels = panelNames(rows);
   renderScope();
@@ -308,7 +308,7 @@ async function pollLive() {
     const decoder = new TextDecoder();
     let buffer = '';
     try {
-      while (true) {
+      for (;;) {
         const { value, done } = await reader.read();
         if (done) throw new Error(sharedMessage('stream_closed'));
         if (controller !== state.stream || gen !== state.gen) return;
@@ -326,7 +326,7 @@ async function pollLive() {
       await reader.cancel().catch(() => {});
       reader.releaseLock();
     }
-  } catch (e) {
+  } catch  {
     if (!controller.signal.aborted && gen === state.gen) {
       state.errorStreak += 1;
       if (state.errorStreak === 1) toast(t('network_err'), 'error');
@@ -347,7 +347,7 @@ function receiveLive(res: unknown): void {
     failChartLib();
     return;
   }
-  if (!isRecord(res) || !res.success || !isRecord(res.obj)) {
+  if (!isRecord(res) || !res['success'] || !isRecord(res['obj'])) {
     state.errorStreak += 1;
     if (state.errorStreak === 1) toast(t('network_err'), 'error');
     setStatus('network_err', 'err');
@@ -359,8 +359,8 @@ function receiveLive(res: unknown): void {
   state.lastLive = now;
   const point: Row = {
     ts: now / 1000,
-    host: res.obj.host,
-    panels: isRecord(res.obj.panels) ? res.obj.panels : {},
+    host: res['obj']['host'],
+    panels: isRecord(res['obj']['panels']) ? res['obj']['panels'] : {},
   };
   dropBaselineCpu(point);
   state.rows.push(point);
@@ -389,7 +389,7 @@ async function startLive() {
   const gen = ++state.gen;
   try {
     await ensureChartJs();
-  } catch (e) {
+  } catch  {
     if (gen !== state.gen) return;
     failChartLib();
     return;
@@ -414,8 +414,8 @@ function setMode(mode: string | null): void {
   $('chartsMount')?.replaceChildren();
   renderScope();
   syncControls();
-  if (mode === 'live') startLive();
-  else fetchSnapshots();
+  if (mode === 'live') void startLive();
+  else void fetchSnapshots();
 }
 
 function setScope(scope: string | null): void {
@@ -440,7 +440,7 @@ function onCutoff() {
     return;
   }
   state.cutoff = cutoff;
-  if (state.mode === 'snapshot' && state.opened) fetchSnapshots();
+  if (state.mode === 'snapshot' && state.opened) void fetchSnapshots();
 }
 
 function onDelay() {
@@ -502,7 +502,7 @@ function chartsOnTab(name: string): void {
   if (!state.opened) {
     state.opened = true;
     syncControls();
-    fetchSnapshots();
+    void fetchSnapshots();
     return;
   }
   syncControls();
@@ -512,7 +512,7 @@ function chartsOnTab(name: string): void {
   }
   if (state.mode === 'live') {
     if (state.rows.length) showCharts();
-    pollLive();
+    void pollLive();
   } else if (!chartLibMissing()) showCharts();
 }
 

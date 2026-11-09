@@ -50,7 +50,7 @@ export function enhanceJsonInputs(root: HTMLElement): void {
   root.querySelectorAll<HTMLTextAreaElement>('textarea.config-json').forEach(textarea => { void mountJsonEditor(textarea, {
     parse: parseConfigJson,
     format: text => stringifyConfig(parseConfigJson(text), true),
-    label: t('config_field_' + (textarea.dataset.field || 'json_template')),
+    label: t('config_field_' + (textarea.dataset['field'] || 'json_template')),
   }); });
 }
 
@@ -58,20 +58,20 @@ export function rowList(id: string, rows: Array<string | string[]>, kind: string
   const body = rows.map((row, index) => {
     if (kind === 'pair') {
       return `<div class="config-rowline">
-        <input type="text" data-row="${index}" data-side="key" value="${attr(row[0])}" spellcheck="false">
-        <input type="text" data-row="${index}" data-side="value" value="${attr(row[1])}" spellcheck="false">
-        <button type="button" class="btn-tiny danger" data-remove="${index}">${escapeHtml(t('config_remove'))}</button>
+        <input type="text" data-row="${String(index)}" data-side="key" value="${attr(row[0])}" spellcheck="false">
+        <input type="text" data-row="${String(index)}" data-side="value" value="${attr(row[1])}" spellcheck="false">
+        <button type="button" class="btn-tiny danger" data-remove="${String(index)}">${escapeHtml(t('config_remove'))}</button>
       </div>`;
     }
     if (kind === 'int') {
       return `<div class="config-rowline">
-        <input type="text" inputmode="numeric" data-row="${index}" value="${attr(row)}" spellcheck="false">
-        <button type="button" class="btn-tiny danger" data-remove="${index}">${escapeHtml(t('config_remove'))}</button>
+        <input type="text" inputmode="numeric" data-row="${String(index)}" value="${attr(row)}" spellcheck="false">
+        <button type="button" class="btn-tiny danger" data-remove="${String(index)}">${escapeHtml(t('config_remove'))}</button>
       </div>`;
     }
     return `<div class="config-rowline">
-      <input type="text" data-row="${index}" value="${attr(row)}" spellcheck="false">
-      <button type="button" class="btn-tiny danger" data-remove="${index}">${escapeHtml(t('config_remove'))}</button>
+      <input type="text" data-row="${String(index)}" value="${attr(row)}" spellcheck="false">
+      <button type="button" class="btn-tiny danger" data-remove="${String(index)}">${escapeHtml(t('config_remove'))}</button>
     </div>`;
   }).join('');
   return `<div class="config-rows" id="${id}">${body}</div>
@@ -84,9 +84,9 @@ export function readRows(id: string, kind: string): Array<string | string[]> {
   if (kind === 'pair') {
     const map = new Map<string | undefined, string[]>();
     root.querySelectorAll('input').forEach(input => {
-      const index = input.dataset.row;
+      const index = input.dataset['row'];
       const current = map.get(index) || ['', ''];
-      current[input.dataset.side === 'value' ? 1 : 0] = input.value;
+      current[input.dataset['side'] === 'value' ? 1 : 0] = input.value;
       map.set(index, current);
     });
     return [...map.values()];
@@ -107,10 +107,10 @@ export function bindRows(id: string, kind: string, apply: (rows: Array<string | 
     const btn = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-remove]') : null;
     if (!btn) return;
     const rows = readRows(id, kind);
-    rows.splice(Number(btn.dataset.remove), 1);
+    rows.splice(Number(btn.dataset['remove']), 1);
     apply(rows);
   });
-  root.addEventListener('input', () => apply(readRows(id, kind), true));
+  root.addEventListener('input', () => { apply(readRows(id, kind), true); });
 }
 
 export function bilingual(prefix: string, pair: unknown): string {
@@ -122,7 +122,7 @@ export function bilingual(prefix: string, pair: unknown): string {
 }
 
 export function nodeOptions(selected: string): string {
-  const keys = isPlainObject(editor.draft?.nodes) ? Object.keys(editor.draft.nodes) : [];
+  const keys = isPlainObject(editor.draft?.['nodes']) ? Object.keys(editor.draft['nodes']) : [];
   const options = keys.map(key => `<option value="${attr(key)}"${key === selected ? ' selected' : ''}>${escapeHtml(key)}</option>`);
   if (selected && !keys.includes(selected)) options.unshift(`<option value="${attr(selected)}" selected>${escapeHtml(selected)}</option>`);
   if (!selected) options.unshift(`<option value="" selected></option>`);
@@ -134,11 +134,11 @@ export function cssId(id: string): string {
 }
 
 export function cardRoot(kind: string, id: string): HTMLElement | undefined {
-  return [...document.querySelectorAll<HTMLElement>('#tab-config .panel-card')].find(card => card.dataset.kind === kind && card.getAttribute('data-id') === id);
+  return [...document.querySelectorAll<HTMLElement>('#tab-config .panel-card')].find(card => card.dataset['kind'] === kind && card.getAttribute('data-id') === id);
 }
 
 export function showConfigSection(name: string): void {
-  document.querySelectorAll<HTMLElement>('.config-tab').forEach(el => el.classList.toggle('active', el.dataset.section === name));
+  document.querySelectorAll<HTMLElement>('.config-tab').forEach(el => el.classList.toggle('active', el.dataset['section'] === name));
   document.querySelectorAll('.config-pane').forEach(el => el.classList.toggle('active', el.id === 'config-pane-' + name));
   refreshJsonEditors(document.getElementById('config-pane-' + name));
 }

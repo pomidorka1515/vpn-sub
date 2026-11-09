@@ -11,18 +11,18 @@ export interface Bootstrap {
 }
 
 export function parseBootstrap(value: unknown): Bootstrap {
-  if (!isRecord(value) || typeof value.prefix !== 'string' ||
-      (value.language !== 'en' && value.language !== 'ru') || !isRecord(value.page) ||
-      typeof value.page.chartUrl !== 'string' || typeof value.page.debounceMs !== 'number' ||
-      !Number.isFinite(value.page.debounceMs) || value.page.debounceMs < 0) {
+  if (!isRecord(value) || typeof value['prefix'] !== 'string' ||
+      (value['language'] !== 'en' && value['language'] !== 'ru') || !isRecord(value['page']) ||
+      typeof value['page']['chartUrl'] !== 'string' || typeof value['page']['debounceMs'] !== 'number' ||
+      !Number.isFinite(value['page']['debounceMs']) || value['page']['debounceMs'] < 0) {
     throw new Error(sharedMessage('invalid_bootstrap'));
   }
   return {
-    prefix: value.prefix,
-    language: value.language,
-    translations: stringTable(value.translations),
-    fallback: stringTable(value.fallback),
-    page: { chartUrl: value.page.chartUrl, debounceMs: value.page.debounceMs },
+    prefix: value['prefix'],
+    language: value['language'],
+    translations: stringTable(value['translations']),
+    fallback: stringTable(value['fallback']),
+    page: { chartUrl: value['page']['chartUrl'], debounceMs: value['page']['debounceMs'] },
   };
 }
 

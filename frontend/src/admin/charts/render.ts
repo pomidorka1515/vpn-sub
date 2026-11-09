@@ -1,6 +1,7 @@
 import { sharedMessage } from '../../shared/messages';
 import { fmtBytes as formatBytes, fmtUptime as formatUptime } from '../../shared/formatting';
 import type { Translate } from '../../shared/formatting';
+import { isRecord } from '../../shared/json';
 import { readSeries } from './series';
 import { axisMax, windowedRange } from './scale';
 import { chartColors, seriesColor, seriesFill, baseOptions, reducedMotion } from './theme';
@@ -25,7 +26,9 @@ interface ChartInstance {
   canvas: HTMLCanvasElement;
   destroy(): void; update(mode?: string): void; resize(): void;
 }
-type ChartConstructor = new (canvas: HTMLCanvasElement, options: object) => ChartInstance;
+function isChartInstance(value: unknown): value is ChartInstance {
+  return isRecord(value) && value['canvas'] instanceof HTMLCanvasElement && isRecord(value['data']) && Array.isArray(value['data']['datasets']) && isRecord(value['options']) && ['destroy', 'update', 'resize'].every(key => typeof value[key] === 'function');
+}
 export type ChartMap = Map<string, ChartInstance>;
 export type Scales = Map<string, number>;
 
@@ -53,7 +56,7 @@ function formatValue(value: number | null | undefined, unit: string, scale?: Axi
     return fmtBytes(value) + suffix;
   }
   if (unit === 'seconds') return fmtUptime(value);
-  if (unit === 'percent') return (Math.round(value * 100) / 100) + '%';
+  if (unit === 'percent') return String((Math.round(value * 100) / 100)) + '%';
   if (unit === 'count') return String(Math.round(value));
   return (Math.round(value * 100) / 100).toString();
 }
@@ -132,7 +135,7 @@ function labelFor(ts: number, mode: string): string {
 }
 
 function chartHasData(datasets: Dataset[]): boolean {
-  return datasets.some(ds => ds.data.some(point => point != null && point.y != null));
+  return datasets.some(ds => ds.data.some(point => point.y != null));
 }
 
 function applyReadout(el: HTMLElement | null, chart: ChartSpec, datasets: Dataset[]): void {
@@ -232,12 +235,13 @@ function makeChart(canvas: HTMLCanvasElement, chart: ChartSpec, datasets: Datase
   };
   const constructor: unknown = Reflect.get(window, 'Chart');
   if (typeof constructor !== 'function') throw new Error(sharedMessage('chart_unavailable'));
-  const Chart = constructor as ChartConstructor;
-  return new Chart(canvas, {
+  const chartInstance: unknown = Reflect.construct(constructor, [canvas, {
     type: 'line',
     data: { datasets },
     options,
-  });
+  }]);
+  if (!isChartInstance(chartInstance)) throw new Error(sharedMessage('chart_unavailable'));
+  return chartInstance;
 }
 
 function scaleKey(scope: string, mode: string, id: string): string {
@@ -250,14 +254,14 @@ function rememberMax(scales: Scales, scope: string, mode: string, id: string, yM
 }
 
 function rememberedMax(scales: Scales, scope: string, mode: string, id: string): number {
-  const held = scales?.get(scaleKey(scope, mode, id));
+  const held = scales.get(scaleKey(scope, mode, id));
   return held !== undefined && Number.isFinite(held) ? held : 0;
 }
 
 function cardFrame(chart: ChartSpec) {
   const card = document.createElement('article');
   card.className = 'charts-card';
-  card.dataset.chartId = chart.id;
+  card.dataset['chartId'] = chart.id;
   const label = document.createElement('div');
   label.className = 'charts-card-label';
   label.textContent = t(chart.titleKey);
@@ -371,7 +375,7 @@ function updateGroup(charts: ChartSpec[], rows: Row[], scope: string, mode: stri
       animation.y.duration = duration;
     }
     instance.update(duration > 0 ? undefined : 'none');
-    const plot = instance.canvas?.parentElement;
+    const plot = instance.canvas.parentElement;
     const empty = plot?.querySelector<HTMLElement>('.charts-empty');
     const hasData = chartHasData(instance.data.datasets);
     const wasHidden = instance.canvas.hidden;
