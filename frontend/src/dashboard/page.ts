@@ -77,8 +77,6 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   }
 
   function renderStats(s: Stats) {
-    el('topName').textContent = s.displayname || '—';
-
     const dot = el('statusDot');
     const stxt = el('statusText');
     if (s.online) { dot.className = 'status-dot on'; stxt.textContent = t('online'); }
@@ -128,7 +126,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
       el('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ' + String(bw.limit) + ' ' + t('gb_unit');
     } else {
       el('bwMonthlyBar').style.width = '0%';
-      el('bwMonthlyText').textContent = fmtBytes(bw.monthly) + ' / ∞';
+      el('bwMonthlyText').textContent = t('bandwidth_unlimited');
     }
 
     if (wlLimitB > 0) {
@@ -138,7 +136,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
       el('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ' + String(bw.wl_limit) + ' ' + t('gb_unit');
     } else {
       el('bwWlBar').style.width = '0%';
-      el('bwWlText').textContent = fmtBytes(bw.wl_monthly) + ' / ∞';
+      el('bwWlText').textContent = t('bandwidth_unlimited');
     }
 
     el('infoUuid').textContent = s.uuid || '—';

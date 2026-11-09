@@ -649,6 +649,7 @@
                 "wl_traffic": "Whitelist traffic",
                 "monthly": "Monthly",
                 "wl_monthly": "Whitelist monthly",
+                "bandwidth_unlimited": "∞",
                 "extra_bw": "Additional bandwidth info",
 
                 // account fields
@@ -733,6 +734,7 @@
                 "wl_traffic": "Трафик WL",
                 "monthly": "За месяц",
                 "wl_monthly": "WL за месяц",
+                "bandwidth_unlimited": "∞",
                 "extra_bw": "Дополнительная информация о трафике",
 
                 // account fields

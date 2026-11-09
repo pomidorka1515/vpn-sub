@@ -13,7 +13,7 @@ function setup() {
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'));
   const bootstrap = document.createElement('script');
   bootstrap.type = 'application/json'; bootstrap.id = 'frontend-bootstrap';
-  bootstrap.textContent = JSON.stringify({ prefix: '/sub', language: 'en', translations: {}, fallback: {}, page: { chartUrl: '/chart.js', debounceMs: 20 } });
+  bootstrap.textContent = JSON.stringify({ prefix: '/sub', language: 'en', translations: { bandwidth_unlimited: '∞' }, fallback: {}, page: { chartUrl: '/chart.js', debounceMs: 20 } });
   document.head.append(bootstrap);
   const request = vi.fn<typeof fetch>().mockImplementation(url => {
     const path = url instanceof Request ? url.url : url.toString();
@@ -27,17 +27,20 @@ function setup() {
   dispose = initDashboard(document, window);
   const click = (id: string) => { required(document.getElementById(id)).click(); };
   const input = (id: string) => requiredInstance(document.getElementById(id), HTMLInputElement);
-  const loaded = () => vi.waitFor(() => { expect(required(document.getElementById('topName')).textContent).toBe('Alice'); });
+  const loaded = () => vi.waitFor(() => { expect(input('setName').value).toBe('Alice'); });
   return { request, clipboard, click, input, loaded };
 }
 
 describe('dashboard page', () => {
   it('renders status and capped quota bars and copies the localized link', async () => {
     const { click, loaded, clipboard } = setup(); await loaded();
+    expect(document.querySelector('.topbar-left')).toBeNull();
     expect(required(document.getElementById('statusText')).textContent).toBe('online');
     expect(required(document.getElementById('statEnabled')).textContent).toBe('activewl_suffix');
     expect(required(document.getElementById('bwMonthlyBar')).style.width).toBe('100%');
-    expect(required(document.getElementById('bwWlText')).textContent).toContain('∞');
+    expect(required(document.getElementById('bwMonthlyText')).textContent).toBe('1.50 gb_unit / 1 gb_unit');
+    expect(required(document.getElementById('bwWlText')).textContent).toBe('∞');
+    expect(required(document.getElementById('bwWlBar')).style.width).toBe('0%');
     click('btnCopy');
     await vi.waitFor(() => { expect(clipboard.writeText).toHaveBeenCalledWith(stats.link + '&lang=en'); });
     expect(required(document.getElementById('btnCopy')).textContent).toBe('copied');
@@ -45,14 +48,15 @@ describe('dashboard page', () => {
   it('does not overwrite a name being edited on refresh and rejects invalid stats', async () => {
     const { request, click, input, loaded } = setup(); await loaded();
     input('setName').value = 'unsaved'; input('setName').dispatchEvent(new Event('input'));
-    request.mockResolvedValueOnce(ok({ ...stats, displayname: 'Updated' }));
+    const updatedLink = 'https://example.test/sub?token=updated';
+    request.mockResolvedValueOnce(ok({ ...stats, displayname: 'Updated', link: updatedLink }));
     click('btnRefresh');
-    await vi.waitFor(() => { expect(required(document.getElementById('topName')).textContent).toBe('Updated'); });
+    await vi.waitFor(() => { expect(required(document.getElementById('subLink')).textContent).toBe(updatedLink + '&lang=en'); });
     expect(input('setName').value).toBe('unsaved');
     request.mockResolvedValueOnce(ok({ ...stats, bandwidth: null }));
     click('btnRefresh');
     await vi.waitFor(() => { expect(required(document.querySelector('.toast')).textContent).toBe('invalid_response'); });
-    expect(required(document.getElementById('topName')).textContent).toBe('Updated');
+    expect(required(document.getElementById('subLink')).textContent).toBe(updatedLink + '&lang=en');
   });
   it('requires the current password for credential changes and sends it without trimming', async () => {
     const { request, click, input, loaded } = setup(); await loaded();
@@ -117,11 +121,13 @@ describe('dashboard page', () => {
     request.mockResolvedValueOnce(ok({ ...stats, displayname: '', online: false, enabled: false, time: 1, bandwidth: { ...stats.bandwidth, limit: 0, wl_limit: 1, wl_monthly: 2e9 } }));
     click('btnRefresh');
     await vi.waitFor(() => { expect(required(document.getElementById('disabledBanner')).textContent).toBe('banner_disabled'); });
-    expect(required(document.getElementById('topName')).textContent).toBe('—');
+    expect(requiredInstance(document.getElementById('setName'), HTMLInputElement).value).toBe('');
     expect(required(document.getElementById('statusText')).textContent).toBe('offline');
     expect(required(document.getElementById('statEnabled')).textContent).toBe('disabled');
-    expect(required(document.getElementById('bwMonthlyText')).textContent).toContain('∞');
+    expect(required(document.getElementById('bwMonthlyText')).textContent).toBe('∞');
+    expect(required(document.getElementById('bwMonthlyBar')).style.width).toBe('0%');
     expect(required(document.getElementById('bwWlBar')).style.width).toBe('100%');
+    expect(required(document.getElementById('bwWlText')).textContent).toBe('2.00 gb_unit / 1 gb_unit');
     request.mockResolvedValueOnce(ok({ ...stats, enabled: true, time: 1 }));
     click('btnRefresh');
     await vi.waitFor(() => { expect(required(document.getElementById('disabledBanner')).textContent).toBe('banner_expired'); });
@@ -157,7 +163,7 @@ describe('dashboard page', () => {
     expect(input('setUser').value).toBe('');
     expect(input('setPass').value).toBe('');
     expect(input('setCurPass').value).toBe('');
-    await vi.waitFor(() => { expect(required(document.getElementById('topName')).textContent).toBe('New Name'); });
+    await vi.waitFor(() => { expect(input('setName').value).toBe('New Name'); });
   });
   it('does not submit blank bonus codes and preserves a failed code', async () => {
     const { request, click, input, loaded } = setup(); await loaded();
