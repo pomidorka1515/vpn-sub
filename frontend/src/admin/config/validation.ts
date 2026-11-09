@@ -35,10 +35,38 @@ function validSnowflake(value: ConfigObject[string]): boolean {
   return /^[1-9][0-9]{0,19}$/.test(raw) && BigInt(raw) <= 18446744073709551615n;
 }
 
+function validPanelAddress(value: string): boolean {
+  if (!value || /[\s\\/?#@%]/.test(value)) return false;
+  if (value.includes(':')) {
+    const host = value.startsWith('[') && value.endsWith(']') ? value : '[' + value + ']';
+    try { return new URL('http://' + host).hostname.startsWith('['); } catch { return false; }
+  }
+  if (/^[0-9.]+$/.test(value)) {
+    return value.split('.').length === 4 && value.split('.').every(part => /^(?:0|[1-9][0-9]{0,2})$/.test(part) && Number(part) <= 255);
+  }
+  const domain = value.endsWith('.') ? value.slice(0, -1) : value;
+  return domain.length <= 253 && domain.split('.').every(part => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(part));
+}
+
+function validServicePath(value: string): boolean {
+  // Root and relative prefixes are supported; leading/trailing slashes are optional.
+  if (!/^(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/]|%[0-9A-Fa-f]{2})*$/.test(value) || value.includes('//') || /^[^/]*:/.test(value)) return false;
+  try {
+    return value.split('/').every(part => {
+      const decoded = decodeURIComponent(part);
+      return decoded !== '.' && decoded !== '..' && !/[\s\\/\u0000-\u001f\u007f]/.test(decoded);
+    });
+  } catch { return false; }
+}
+
 export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   ['uri', 'api_uri', 'fallback_domain', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt', '$schema'].forEach(key => {
     if (Object.hasOwn(draft, key) && typeof draft[key] !== 'string') issues.push(issue(key, t('config_err_required')));
+  });
+  ['uri', 'api_uri'].forEach(key => {
+    const value = draft[key];
+    if (typeof value === 'string' && !validServicePath(value)) issues.push(issue(key, t('config_err_uri_path')));
   });
   ['domain', 'fallback_domain', 'ping_check_url'].forEach(key => {
     const value = draft[key];
@@ -204,13 +232,15 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
     ['name', 'address', 'uri'].forEach(field => {
       if (typeof panel[field] !== 'string') issues.push(issue('3xui.' + id + '.' + field, t('config_err_required')));
     });
-    if (typeof panel.port !== 'string' && !isInteger(panel.port)) issues.push(issue('3xui.' + id + '.port', t('config_err_integer')));
+    if (typeof panel.address === 'string' && !validPanelAddress(panel.address)) issues.push(issue('3xui.' + id + '.address', t('config_err_panel_address')));
+    if (typeof panel.uri === 'string' && !validServicePath(panel.uri)) issues.push(issue('3xui.' + id + '.uri', t('config_err_panel_path')));
+    if (!(typeof panel.port === 'string' ? /^[0-9]+$/.test(panel.port) : isInteger(panel.port)) || Number(panel.port) < 0 || Number(panel.port) > 65535) issues.push(issue('3xui.' + id + '.port', t('config_err_panel_port')));
     if (typeof panel.token !== 'string' || Array.from(panel.token).length < 20) issues.push(issue('3xui.' + id + '.token', t('config_err_token_len')));
     if (typeof panel.https !== 'boolean') issues.push(issue('3xui.' + id + '.https', t('config_err_required')));
     if (typeof panel.whitelist !== 'boolean') issues.push(issue('3xui.' + id + '.whitelist', t('config_err_required')));
     if (panel.mode !== 'whitelist' && panel.mode !== 'blacklist') issues.push(issue('3xui.' + id + '.mode', t('config_err_required')));
-    if (!Array.isArray(panel.inbounds_list) || panel.inbounds_list.some(item => !isInteger(item))) {
-      issues.push(issue('3xui.' + id + '.inbounds_list', t('config_err_integer')));
+    if (!Array.isArray(panel.inbounds_list) || panel.inbounds_list.some(item => !isInteger(item) || Number(item) < 0)) {
+      issues.push(issue('3xui.' + id + '.inbounds_list', t('config_err_positive_integer')));
     }
     if (Object.prototype.hasOwnProperty.call(panel, 'inject_headers')) {
       const headers = panel.inject_headers;

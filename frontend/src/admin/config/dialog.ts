@@ -145,7 +145,7 @@ function dialogInbound(draft: ReturnType<typeof newInbound>): string {
     <div class="form-row"><label>${escapeHtml(t('config_field_shortProfileDescription'))}</label><div class="input-wrap">${bilingual('cfg-dlg-short', draft.shortProfileDescription)}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_whitelist'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_node'))}</label><div class="input-wrap"><select data-field="node">${nodeOptions(draft.node)}</select></div></div>
-    <div class="form-row"><label>${escapeHtml(t('config_field_masterLink'))}</label><div class="input-wrap"><input type="text" data-field="masterLink" spellcheck="false"></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_masterLink'))}</label><div class="input-wrap"><input type="text" data-field="masterLink" spellcheck="false" aria-describedby="cfg-dlg-link-help"><div class="config-sub" id="cfg-dlg-link-help">${escapeHtml(t('config_master_link_help'))}</div></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_json'))}</label><div class="input-wrap"><textarea class="config-json" data-field="json" spellcheck="false">{}</textarea></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_xhttpExtra'))}</label><div class="input-wrap"><textarea class="config-json" data-field="xhttpExtra" spellcheck="false">{}</textarea></div></div>
     ${fieldError('cfg-dialog-err')}
@@ -162,7 +162,7 @@ function dialogPanel() {
     <div class="form-row"><label>${escapeHtml(t('config_field_token'))}</label><div class="input-wrap">${passWrap('cfg-dlg-token', '')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_https'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="https"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_whitelist'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
-    <div class="form-row"><label>${escapeHtml(t('config_field_mode'))}</label><div class="input-wrap"><select data-field="mode"><option value="blacklist" selected>${escapeHtml(t('config_blacklist_mode'))}</option><option value="whitelist">${escapeHtml(t('config_whitelist_mode'))}</option></select></div></div>
+    <div class="form-row"><label>${escapeHtml(t('config_field_mode'))}</label><div class="input-wrap"><select data-field="mode" aria-describedby="cfg-dlg-mode-help"><option value="blacklist" selected>${escapeHtml(t('config_blacklist_mode'))}</option><option value="whitelist">${escapeHtml(t('config_whitelist_mode'))}</option></select><div class="config-sub" id="cfg-dlg-mode-help">${escapeHtml(t('config_panel_mode_help'))}</div></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_inbounds_list'))}</label><div class="input-wrap">${rowList('cfg-dlg-inbounds', [], 'int')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_inject_headers'))}</label><div class="input-wrap" data-dialog-nested="inject_headers"></div></div>
     ${fieldError('cfg-dialog-err')}
