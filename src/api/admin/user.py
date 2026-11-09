@@ -195,7 +195,7 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
                     )
         except ValueError as error:
             return err(str(error), 400)
-        updated = await self.sub.business_svc.update_external_user(
+        updated = await self.sub.business_svc.edit_user(
             username=content["username"], **cast(UserUpdateFields, values)
         )
         return ok("Updated", obj={"updated": updated})

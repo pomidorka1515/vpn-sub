@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from errors import NotFoundError
 from tests.support.users import create_alice
 
 if TYPE_CHECKING:
@@ -41,7 +39,7 @@ async def test_update_every_field_atomically(
             URL,
             headers=HEADERS,
             json={
-                "username": "alice-login",
+                "username": "alice",
                 "new_username": "renamed",
                 "displayname": "Updated",
                 "fingerprint": "firefox",
@@ -121,7 +119,7 @@ async def test_invalid_update_leaves_everything_unchanged(
         URL,
         headers=HEADERS,
         json={
-            "username": "alice-login",
+            "username": "alice",
             "displayname": "Updated",
             "new_username": "renamed",
             **changes,
@@ -143,14 +141,14 @@ async def test_duplicate_rename_rolls_back_other_fields(
     response = await app.test_client().post(
         URL,
         headers=HEADERS,
-        json={"username": "alice-login", "new_username": "bob-login", "used": 123, "limit": 4},
+        json={"username": "alice", "new_username": "bob-login", "used": 123, "limit": 4},
     )
     assert response.status_code == 409
     assert await sub.user_svc.user("alice") == before
 
 
-@pytest.mark.parametrize("username", ["alice", "missing", ""])
-async def test_update_requires_external_username(
+@pytest.mark.parametrize("username", ["alice-login", "missing", ""])
+async def test_update_requires_internal_username(
     admin_api: tuple[Quart, Subscription], database: Database, username: str
 ) -> None:
     await create_alice(database, ext_username="alice-login")
@@ -171,14 +169,14 @@ async def test_noop_and_zero_values(
     )
     await database.update_user("alice", bw_used=100, wl_bw_used=200)
     client = app.test_client()
-    response = await client.post(URL, headers=HEADERS, json={"username": "alice-login"})
+    response = await client.post(URL, headers=HEADERS, json={"username": "alice"})
     assert response.status_code == 200
     assert (await response.get_json())["obj"] == {"updated": []}
     response = await client.post(
         URL,
         headers=HEADERS,
         json={
-            "username": "alice-login",
+            "username": "alice",
             "time": 0,
             "limit": 0,
             "used": 0,
@@ -202,7 +200,7 @@ async def test_audit_failure_preserves_committed_update_result(
         response = await app.test_client().post(
             URL,
             headers=HEADERS,
-            json={"username": "alice-login", "new_username": "renamed", "used": 0},
+            json={"username": "alice", "new_username": "renamed", "used": 0},
         )
     assert response.status_code == 202
     assert (await response.get_json())["obj"] == {
@@ -213,32 +211,35 @@ async def test_audit_failure_preserves_committed_update_result(
     assert await database.ext_to_user("renamed") == "alice"
 
 
-async def test_stale_resolution_cannot_edit_after_rename(
+async def test_update_without_external_account(
     admin_api: tuple[Quart, Subscription], database: Database
 ) -> None:
-    _, sub = admin_api
-    await create_alice(database, ext_username="alice-login")
-    resolved = asyncio.Event()
-    held = asyncio.Event()
-    original = database.ext_to_user
+    app, sub = admin_api
+    await create_alice(database)
+    response = await app.test_client().post(
+        URL, headers=HEADERS, json={"username": "alice", "displayname": "Updated", "used": 99}
+    )
+    assert response.status_code == 200
+    user = await sub.user_svc.user("alice")
+    assert user["bw_used"] == 99
+    assert user["displayname"] == "Updated"
+    assert user["ext_username"] is None
 
-    async def resolve(username: str) -> str | None:
-        internal = await original(username)
-        resolved.set()
-        return internal
 
-    async def rename() -> None:
-        held.set()
-        await resolved.wait()
-        await database.update_user("alice", ext_username="renamed")
-
-    with patch.object(database, "ext_to_user", resolve):
-        owner = asyncio.create_task(sub.res.coordinator.run(["alice"], rename, name="test:rename"))
-        await held.wait()
-        with pytest.raises(NotFoundError):
-            await sub.business_svc.update_external_user("alice-login", used=99)
-        await owner
-    assert (await sub.user_svc.user("alice"))["bw_used"] == 0
+async def test_rename_without_external_account_is_atomic(
+    admin_api: tuple[Quart, Subscription], database: Database
+) -> None:
+    app, sub = admin_api
+    await create_alice(database)
+    before = await sub.user_svc.user("alice")
+    response = await app.test_client().post(
+        URL,
+        headers=HEADERS,
+        json={"username": "alice", "new_username": "renamed", "used": 99},
+    )
+    assert response.status_code == 404
+    assert (await response.get_json())["msg"] == "Unknown external username"
+    assert await sub.user_svc.user("alice") == before
 
 
 @pytest.mark.parametrize("headers", [{}, {"Authorization": "wrong"}])
@@ -248,7 +249,7 @@ async def test_update_requires_admin(
     response = (
         await admin_api[0]
         .test_client()
-        .post(URL, headers=headers, json={"username": "alice-login", "used": 0})
+        .post(URL, headers=headers, json={"username": "alice", "used": 0})
     )
     assert response.status_code == 401
 
@@ -263,7 +264,7 @@ async def test_recovery_blocks_edit(
     response = await app.test_client().post(
         URL,
         headers=HEADERS,
-        json={"username": "alice-login", "new_username": "renamed", "used": 5},
+        json={"username": "alice", "new_username": "renamed", "used": 5},
     )
     assert response.status_code == 409
     assert await sub.user_svc.user("alice") == before

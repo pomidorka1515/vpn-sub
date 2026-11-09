@@ -147,19 +147,11 @@ class UserIdentityService(BusinessUserBase):
             raise ConflictError("Ext username exists") from exc
         await self._drop_cache()
 
-    async def update_external_user(
-        self, username: str, **changes: Unpack[UserUpdateFields]
-    ) -> list[str]:
-        internal = await self.db.ext_to_user(username)
-        if internal is None:
-            raise NotFoundError("Unknown external username")
-
+    async def edit_user(self, username: str, **changes: Unpack[UserUpdateFields]) -> list[str]:
         async def update() -> list[str]:
-            await self.require_recovered(internal)
-            user = await self.user_svc.user(internal)
-            # Resolution precedes lock acquisition; a concurrent rename must not
-            # redirect a stale request to an identity it no longer addresses.
-            if user["ext_username"] != username:
+            await self.require_recovered(username)
+            user = await self.user_svc.user(username)
+            if "new_username" in changes and user["ext_username"] is None:
                 raise NotFoundError("Unknown external username")
             fields = await self._prepare_params(
                 ext_username=changes.get("new_username"),
@@ -194,19 +186,19 @@ class UserIdentityService(BusinessUserBase):
                 )
                 if key in changes
             ]
-            await self._commit_params(internal, fields)
+            await self._commit_params(username, fields)
             await self.audit_svc.audit_committed(
                 name="user_edit",
                 info={
                     "username": username,
-                    "user": internal,
+                    "user": username,
                     **cast(dict[str, JsonValue], dict(changes)),
                 },
                 result={"updated": cast(list[JsonValue], updated)},
             )
             return updated
 
-        return await self.res.coordinator.run([internal], update, name="core:user-edit")
+        return await self.res.coordinator.run([username], update, name="core:user-edit")
 
     @panel_mutation
     async def update_uuid(self, username: str, uid: str, *, _resetting: bool = False) -> None:

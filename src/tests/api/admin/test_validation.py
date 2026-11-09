@@ -47,7 +47,7 @@ async def test_user_numeric_bounds(
     add = AsyncMock()
     update = AsyncMock()
     sub.business_svc.add_new_user = add  # type: ignore[method-assign]
-    sub.business_svc.update_external_user = update  # type: ignore[method-assign]
+    sub.business_svc.edit_user = update  # type: ignore[method-assign]
     response = await app.test_client().post(
         f"/sub/api/api/user/{operation}",
         headers={"Authorization": "secret"},
@@ -77,7 +77,7 @@ async def test_user_numeric_boundary(
     if operation == "add":
         sub.business_svc.add_new_user = mutation  # type: ignore[method-assign]
     else:
-        sub.business_svc.update_external_user = mutation  # type: ignore[method-assign]
+        sub.business_svc.edit_user = mutation  # type: ignore[method-assign]
     maximum = 2**31 if field == "time" else (2**63 - 1) // 10**9
     for value, status in ((maximum + 1, 400), (maximum, 201 if operation == "add" else 200)):
         response = await app.test_client().post(
@@ -159,7 +159,7 @@ async def test_admin_integer_representations(
     update_user = AsyncMock(return_value=[])
     add_code = AsyncMock()
     sub.business_svc.add_new_user = add_user  # type: ignore[method-assign]
-    sub.business_svc.update_external_user = update_user  # type: ignore[method-assign]
+    sub.business_svc.edit_user = update_user  # type: ignore[method-assign]
     sub.code_svc.add_code = add_code  # type: ignore[method-assign]
     for operation, mutation, fields, body, status in (
         (

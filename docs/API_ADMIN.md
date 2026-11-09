@@ -299,13 +299,13 @@ Response (error):
 ---  
   
 ### POST /api/user/update  
-Description: Atomically update selected fields for an **external** user. Omitted fields are left unchanged, including when renaming and changing every other supported field in one request. The internal username and panel identity do not change.  
+Description: Atomically update selected fields for a user identified by their **internal** username, with or without an external account. Omitted fields are left unchanged, including when renaming and changing every other supported field in one request. The internal username and panel identity do not change.  
 Authentication: header  
 Body:  
 ```jsonc  
 {  
-    "username": "",        // str, current external username (required)  
-    "new_username": "",    // OPTIONAL str, new external username (max 32 characters)  
+    "username": "",        // str, internal username (required)  
+    "new_username": "",    // OPTIONAL str, rename existing external username (max 32 characters)  
     "displayname": "",     // OPTIONAL str, max 16 characters  
     "fingerprint": "",     // OPTIONAL str, must be in cfg fingerprints  
     "limit": 0,            // OPTIONAL int >= 0, monthly GB limit (0 = unlimited)  
@@ -321,8 +321,9 @@ Response (success):
 {"success": true, "msg": "Updated", "obj": {"updated": ["username", "displayname", "fingerprint", "time", "limit", "used", "wl_limit", "wl_used"]}}  
 ```  
 `updated` lists supplied editable fields in the order shown above; `new_username` is reported as `username`. Supplying the current value still lists the field; no optional fields yields `updated: []`. Strings cannot be null. Names use the same sanitization as user creation; empty names after sanitization are rejected. Limits use decimal GB (1 GB = 1,000,000,000 bytes); usage uses bytes, not GB. Numeric values follow the existing integer semantics (integer strings and integral floats accepted, booleans and fractional values rejected). Limits are bounded by `(2**63 - 1) // 10**9`, usage by `2**63 - 1`, and time by `2**31`.  
-All-time bandwidth and historical snapshots are never changed. Passwords, tokens, UUIDs and all other unsupported fields are rejected; use `/api/user/reset` to rotate token/UUID. Changes are recorded as audit action `user_edit`, with the original external username, internal user and supplied values. Quota enforcement continues through the existing background watcher.  
-Errors: HTTP 400 for missing/invalid fields or unsupported keys; HTTP 404 for an unknown external username; HTTP 409 for a duplicate external username or a user awaiting recovery. Validation and uniqueness failures leave all fields unchanged. HTTP 401 for missing/invalid admin authorization. If the update commits but audit writing fails, HTTP 202 returns `obj: {"committed": true, "audit_pending": true, "updated": [...]}`; do not retry the mutation.  
+`new_username` only renames an existing external username; it does not create an external account. If the user has no external username, supplying `new_username` fails the entire update with HTTP 404 (`Unknown external username`). Other supported fields can be updated without an external account.  
+All-time bandwidth and historical snapshots are never changed. Passwords, tokens, UUIDs and all other unsupported fields are rejected; use `/api/user/reset` to rotate token/UUID. Changes are recorded as audit action `user_edit`, with the internal username in both `username` and `user`, and supplied values. Quota enforcement continues through the existing background watcher.  
+Errors: HTTP 400 for missing/invalid fields or unsupported keys; HTTP 404 for an unknown internal username or an attempt to rename a nonexistent external username; HTTP 409 for a duplicate external username or a user awaiting recovery. Validation, missing-user and uniqueness failures leave all fields unchanged. HTTP 401 for missing/invalid admin authorization. If the update commits but audit writing fails, HTTP 202 returns `obj: {"committed": true, "audit_pending": true, "updated": [...]}`; do not retry the mutation.  
   
 ---  
   
