@@ -283,6 +283,9 @@
 }
 .result-box.success { border-color: rgba(34,197,94,.3); }
 .result-box.error { border-color: rgba(239,68,68,.3); }
+#panelStatusResult:empty,
+#systemStatusResult:empty,
+#refreshResult:empty { display: none; }
 .result-title { font-size: 0.75rem; font-weight: 600; margin-bottom: 8px; }
 .result-title.ok { color: var(--green); }
 .result-title.err { color: var(--red); }
