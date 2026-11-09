@@ -4,7 +4,7 @@
 const PALETTE_VARS: ReadonlyArray<readonly [string, string]> = [
   ['--green', '#22c55e'],
   ['--orange', '#f59e0b'],
-  ['--cyan', '#06b6d4'],
+  ['--cyan', '#a8c9bc'],
   ['--purple', '#a855f7'],
   ['--yellow', '#eab308'],
 ];

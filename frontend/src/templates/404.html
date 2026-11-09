@@ -13,12 +13,14 @@
   :root {
     color-scheme: dark;
     --bg: #0a0a0b; --box: #050506; --border: #252529;
-    --text: #e4e4e7; --muted: #8e8e96; --accent: #6366f1;
+    --text: #e4e4e7; --muted: #8e8e96;
+    --accent: #a8c9bc; --accent-dim: #97b5a9; --accent-ink: #10261d;
   }
   [data-theme="light"] {
     color-scheme: light;
     --bg: #fff; --box: #f4f4f5; --border: #e4e4e7;
     --text: #18181b; --muted: #3f3f46;
+    --accent: #285d49; --accent-dim: #214d3c; --accent-ink: #fff;
   }
   :root { font-size: 100%; }
   @media (min-width: 1024px) {
@@ -45,10 +47,10 @@
   button {
     display: inline-flex; align-items: center; justify-content: center; gap: 9px;
     min-height: 44px; padding: 11px 22px; border: 1px solid transparent; border-radius: 8px;
-    background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 500;
+    background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 500;
     cursor: pointer; transition: background .2s;
   }
-  button:hover { background: #4f46e5; }
+  button:hover { background: var(--accent-dim); }
   button[hidden] { display: none; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
   button svg { width: 16px; height: 16px; }

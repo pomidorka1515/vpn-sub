@@ -29,6 +29,22 @@ test("release assets are compact, valid JavaScript with no source references", a
   }
 });
 
+test("all pages use the soft sage accent instead of the old blue palette", async () => {
+  const common = await readFile(new URL("assets/common.css", output), "utf8");
+  assert.match(common, /--accent:\s*#a8c9bc/);
+  assert.match(common, /--accent:\s*#285d49/);
+  assert.match(common, /color:var\(--accent-ink\)/);
+  for (const file of [
+    "assets/common.css",
+    "assets/admin.css",
+    "templates/404.html",
+    "templates/browser.html",
+  ]) {
+    const content = await readFile(new URL(file, output), "utf8");
+    assert.doesNotMatch(content, /#(?:6366f1|4f46e5|a5b4fc|0ea5e9|7dd3fc|06b6d4|e0f2fe|075985)\b|rgba\(99,102,241,/i, file);
+  }
+});
+
 for (const theme of ["dark", "light"]) {
   test(`obfuscated blocking script applies the ${theme} theme`, async () => {
     const dom = new JSDOM('<!doctype html><button id="themeBtn"></button>', {

@@ -165,7 +165,7 @@
 .badge.green { background: rgba(34,197,94,.15); color: var(--green); }
 .badge.red { background: rgba(239,68,68,.15); color: var(--red); }
 .badge.orange { background: rgba(245,158,11,.15); color: var(--orange); }
-.badge.cyan { background: rgba(6,180,212,.15); color: var(--cyan); }
+.badge.cyan { background: color-mix(in srgb, var(--cyan) 15%, transparent); color: var(--cyan); }
 .badge.purple { background: rgba(168,85,247,.15); color: var(--purple); }
 .badge.gray { background: var(--surface2); color: var(--text2); }
 .health-indicator {
@@ -210,11 +210,10 @@
 .detail-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 
 #tab-codes {
-  --codes-accent: #a8c9bc; --codes-ink: #10261d;
+  --codes-accent: var(--accent); --codes-ink: var(--accent-ink);
   --codes-register: #c2b8dc; --codes-danger: #e8a6a6;
 }
 [data-theme="light"] #tab-codes {
-  --codes-accent: #285d49; --codes-ink: #fff;
   --codes-register: #665080; --codes-danger: #a83535;
 }
 .codes-library { overflow: hidden; }
@@ -307,7 +306,7 @@
 }
 .modal-input:focus { border-color: var(--accent); }
 
-.toast.info { border-color: rgba(99,102,241,.3); color: var(--accent); }
+.toast.info { border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
 
 
 /* Panel status cards */
@@ -378,7 +377,7 @@
   background: var(--text2); transition: all .2s;
 }
 .dark-check input:checked ~ .check-track .check-thumb {
-  left: 18px; background: #fff;
+  left: 18px; background: var(--accent-ink);
 }
 .dark-check .check-label {
   font-size: 0.8125rem; color: var(--text2); transition: color .2s;
@@ -562,9 +561,8 @@
   padding: 4px 10px; border: 1px solid currentColor; border-radius: 999px;
   font-size: 0.6875rem; font-weight: 700; line-height: 1.4; white-space: nowrap;
 }
-.config-panel-mode[data-mode="whitelist"] { background: rgba(14,165,233,.15); color: var(--wl-light); }
+.config-panel-mode[data-mode="whitelist"] { background: color-mix(in srgb, var(--wl) 15%, transparent); color: var(--wl-light); }
 .config-panel-mode[data-mode="blacklist"] { background: rgba(245,158,11,.15); color: var(--orange); }
-[data-theme="light"] .config-panel-mode[data-mode="whitelist"] { background: #e0f2fe; color: #075985; }
 [data-theme="light"] .config-panel-mode[data-mode="blacklist"] { background: #fef3c7; color: #92400e; }
 .config-savebar {
   position: sticky; bottom: 16px; z-index: 10;
