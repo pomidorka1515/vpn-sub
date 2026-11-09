@@ -108,4 +108,78 @@ describe('dashboard page', () => {
     await vi.waitFor(() => expect(document.getElementById('logoutWarning')!.textContent).toBe('logout_unconfirmed'));
     expect(request).toHaveBeenLastCalledWith('/sub/webapi/stats', { credentials: 'same-origin', cache: 'no-store' });
   });
+  it('renders offline, disabled and expired accounts and both quota limits', async () => {
+    const { request, click, loaded } = setup(); await loaded();
+    request.mockResolvedValueOnce(ok({ ...stats, displayname: '', online: false, enabled: false, time: 1, bandwidth: { ...stats.bandwidth, limit: 0, wl_limit: 1, wl_monthly: 2e9 } }));
+    click('btnRefresh');
+    await vi.waitFor(() => expect(document.getElementById('disabledBanner')!.textContent).toBe('banner_disabled'));
+    expect(document.getElementById('topName')!.textContent).toBe('—');
+    expect(document.getElementById('statusText')!.textContent).toBe('offline');
+    expect(document.getElementById('statEnabled')!.textContent).toBe('disabled');
+    expect(document.getElementById('bwMonthlyText')!.textContent).toContain('∞');
+    expect(document.getElementById('bwWlBar')!.style.width).toBe('100%');
+    request.mockResolvedValueOnce(ok({ ...stats, enabled: true, time: 1 }));
+    click('btnRefresh');
+    await vi.waitFor(() => expect(document.getElementById('disabledBanner')!.textContent).toBe('banner_expired'));
+    expect(document.getElementById('disabledBanner')!.classList.contains('show')).toBe(true);
+  });
+  it('handles profile errors, invalid values, empty lists and closing with Escape', async () => {
+    const { request, click, loaded } = setup(); await loaded();
+    const list = document.getElementById('profilesList')!;
+    request.mockResolvedValueOnce(Response.json({ success: false, msg: '<failure>' }, { status: 500 }))
+      .mockResolvedValueOnce(ok({ profile: 123 }))
+      .mockResolvedValueOnce(ok({}));
+    click('btnProfiles');
+    await vi.waitFor(() => expect(list.textContent).toBe('The request failed. Please retry or contact support.'));
+    expect(list.querySelector('failure')).toBeNull();
+    click('btnProfiles');
+    await vi.waitFor(() => expect(list.textContent).toBe('invalid_response'));
+    click('btnProfiles');
+    await vi.waitFor(() => expect(list.textContent).toBe('no_profiles'));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.getElementById('profilesOverlay')!.classList.contains('show')).toBe(false);
+  });
+  it('saves changed settings, clears credentials and reloads stats', async () => {
+    const { request, click, input, loaded } = setup(); await loaded();
+    input('setName').value = ' New Name ';
+    input('setName').dispatchEvent(new Event('input'));
+    input('setUser').value = ' new-user ';
+    input('setPass').value = ' new-password ';
+    input('setCurPass').value = ' current ';
+    request.mockResolvedValueOnce(ok(null)).mockResolvedValueOnce(ok({ ...stats, displayname: 'New Name' }));
+    click('btnSave');
+    await vi.waitFor(() => expect(document.getElementById('settingsMsg')!.textContent).toBe('saved'));
+    expect(request).toHaveBeenCalledWith('/sub/webapi/settings', expect.objectContaining({ body: JSON.stringify({ name: 'New Name', fingerprint: 'chrome', username: 'new-user', password: ' new-password ', current_password: ' current ' }) }));
+    expect(input('setUser').value).toBe('');
+    expect(input('setPass').value).toBe('');
+    expect(input('setCurPass').value).toBe('');
+    await vi.waitFor(() => expect(document.getElementById('topName')!.textContent).toBe('New Name'));
+  });
+  it('does not submit blank bonus codes and preserves a failed code', async () => {
+    const { request, click, input, loaded } = setup(); await loaded();
+    input('bonusInput').value = '   ';
+    click('btnApply');
+    expect(request).toHaveBeenCalledTimes(2);
+    input('bonusInput').value = ' bad ';
+    request.mockResolvedValueOnce(Response.json({ success: false, msg: 'invalid code' }, { status: 400 }));
+    input('bonusInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await vi.waitFor(() => expect(document.getElementById('bonusMsg')!.textContent).toBe('Invalid or exhausted code'));
+    expect(document.getElementById('bonusMsg')!.className).toBe('bonus-msg err');
+    expect(input('bonusInput').value).toBe(' bad ');
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+  it('debounces username validation and ignores a stale result', async () => {
+    const { request, input, loaded } = setup(); await loaded();
+    let resolve!: (response: Response) => void;
+    request.mockImplementationOnce(() => new Promise(done => { resolve = done; }))
+      .mockResolvedValueOnce(ok({ valid: true, taken: true, sanitized: 'new' }));
+    input('setUser').value = 'old'; input('setUser').dispatchEvent(new Event('input'));
+    await vi.waitFor(() => expect(request).toHaveBeenCalledWith('/sub/webapi/validate?username=old', expect.anything()), { timeout: 1500 });
+    input('setUser').value = 'new'; input('setUser').dispatchEvent(new Event('input'));
+    resolve(ok({ valid: false, taken: false, sanitized: 'old' }));
+    await vi.waitFor(() => expect(document.getElementById('setUserHint')!.textContent).toBe('hint_taken'), { timeout: 1500 });
+    expect(document.getElementById('setUserHint')!.className).toBe('username-hint bad');
+    input('setUser').value = ''; input('setUser').dispatchEvent(new Event('input'));
+    expect(document.getElementById('setUserHint')!.textContent).toBe('');
+  });
 });
