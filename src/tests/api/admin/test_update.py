@@ -113,6 +113,24 @@ async def test_update_every_field_atomically(
     assert audit.await_args.kwargs["name"] == "user_edit"
 
 
+async def test_usage_byte_strings_round_trip_exactly(
+    admin_api: tuple[Quart, Subscription], database: Database
+) -> None:
+    app, sub = admin_api
+    await create_alice(database)
+    client = app.test_client()
+    values = {"used": str(2**63 - 1), "wl_used": "9007199254740993"}
+    response = await client.post(URL, headers=HEADERS, json={"username": "alice", **values})
+    assert response.status_code == 200
+    state = await sub.user_svc.user("alice")
+    assert state["bw_used"] == int(values["used"])
+    assert state["wl_used"] == int(values["wl_used"])
+    response = await client.get("/sub/api/api/user/info?user=alice", headers=HEADERS)
+    bandwidth = (await response.get_json())["obj"]["bandwidth"]
+    assert bandwidth["monthly_exact"] == values["used"]
+    assert bandwidth["wl_monthly_exact"] == values["wl_used"]
+
+
 @pytest.mark.parametrize(
     "changes",
     [

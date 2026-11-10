@@ -221,7 +221,13 @@ class AdminUsersMixin(AdminFeatureMixin):
         markup.add(  # pyright: ignore[reportUnknownMemberType]
             types.InlineKeyboardButton("🔐 Отпечаток", callback_data=f"edit_fp:{generation}"),
             types.InlineKeyboardButton(
+                "📊 Использовано за месяц", callback_data=f"edit_used:{generation}"
+            ),
+            types.InlineKeyboardButton(
                 "📊 Месячный лимит", callback_data=f"edit_limit:{generation}"
+            ),
+            types.InlineKeyboardButton(
+                "🌍 Использовано WL", callback_data=f"edit_wl_used:{generation}"
             ),
             types.InlineKeyboardButton(
                 "🌍 Мес. лимит WL", callback_data=f"edit_wl_limit:{generation}"
@@ -288,6 +294,74 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"🔐 Выберите отпечаток для <b>{username}</b> (текущий: <code>{current}</code>):",
             parse_mode="HTML",
             reply_markup=markup,
+        )
+
+    async def _cb_edit_used(self, chat_id: int, username: str, *, whitelist: bool = False) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
+        try:
+            info = await self.sub.business_svc.get_info(username, pretty=False)
+        except AppError as error:
+            await self.bot.send_message(
+                chat_id, f"❌ {error.message}", reply_markup=self.get_main_menu()
+            )
+            return
+        current = info.bandwidth.wl_monthly if whitelist else info.bandwidth.monthly
+        msg = await self.bot.send_message(
+            chat_id,
+            f"📊 Введите использованный трафик{' WL' if whitelist else ''} в байтах для <b>{username}</b> (текущий: <code>{current}</code>):",
+            parse_mode="HTML",
+        )
+        self._expect(msg, self._step_edit_used, username, generation, whitelist)  # pyright: ignore[reportUnknownMemberType]
+
+    async def _cb_edit_wl_used(self, chat_id: int, username: str) -> None:
+        await self._cb_edit_used(chat_id, username, whitelist=True)
+
+    async def _step_edit_used(
+        self, message: types.Message, username: str, generation: str, whitelist: bool
+    ) -> None:
+        pending = self._pending_edits.get(message.chat.id)
+        if not pending or pending != {"username": username, "generation": generation}:
+            return
+        text = cast(str, message.text).strip()
+        if text.startswith("/"):
+            return
+        try:
+            if not text.isascii() or not text.isdecimal() or not 0 <= int(text) <= 2**63 - 1:
+                raise ValueError
+            used = int(text)
+        except ValueError:
+            await self.bot.send_message(
+                message.chat.id,
+                "❌ Введите целое число байт от 0 до 9223372036854775807.",
+                reply_markup=self.get_main_menu(),
+            )
+            return
+        try:
+            if whitelist:
+                await self.sub.business_svc.edit_user(username=username, wl_used=used)
+            else:
+                await self.sub.business_svc.edit_user(username=username, used=used)
+        except CommittedAuditError:
+            self.log.exception("user edit committed but audit failed")
+            if self._pending_edits.get(message.chat.id) is pending:
+                self._pending_edits.pop(message.chat.id, None)
+            await self.bot.send_message(
+                message.chat.id,
+                "⚠️ Изменение сохранено, но запись аудита не удалась. Не повторяйте изменение.",
+                reply_markup=self.get_main_menu(),
+            )
+            return
+        except AppError as error:
+            await self.bot.send_message(
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+            )
+            return
+        if self._pending_edits.get(message.chat.id) is pending:
+            self._pending_edits.pop(message.chat.id, None)
+        await self.bot.send_message(
+            message.chat.id,
+            f"✅ Использованный трафик обновлён: {used} байт",
+            reply_markup=self.get_main_menu(),
         )
 
     async def _cb_edit_limit(self, chat_id: int, username: str) -> None:

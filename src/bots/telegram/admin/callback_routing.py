@@ -302,6 +302,8 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
         handlers = {
             "fp": self._cb_edit_fingerprint,
             "limit": self._cb_edit_limit,
+            "used": self._cb_edit_used,
+            "wl_used": self._cb_edit_wl_used,
             "wl_limit": self._cb_edit_wl_limit,
             "time": self._cb_edit_time,
             "name": self._cb_edit_name,

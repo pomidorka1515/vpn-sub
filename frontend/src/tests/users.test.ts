@@ -124,3 +124,23 @@ it('displays exact out-of-range timestamps and preserves them during unrelated e
   required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', displayname: 'New Alice' }); });
 });
+
+it('preserves and edits exact usage counters without number rounding', async () => {
+  const { api } = setup();
+  await vi.waitFor(() => { expect(document.querySelector('[data-user-action="edit"]')).not.toBeNull(); });
+  api.mockResolvedValueOnce({ success: true, status: 200, obj: { displayname: 'Alice', fingerprint: 'chrome', time: 0, bandwidth: { limit: 0, wl_limit: 0, monthly_exact: '9223372036854775807', wl_monthly_exact: '9007199254740993' } } });
+  required(document.querySelector<HTMLElement>('[data-user-action="edit"]')).click();
+  await vi.waitFor(() => { expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(true); });
+  const used = requiredInstance(document.getElementById('editUsed'), HTMLInputElement);
+  const wlUsed = requiredInstance(document.getElementById('editWlUsed'), HTMLInputElement);
+  expect(used.value).toBe('9223372036854775807');
+  expect(wlUsed.value).toBe('9007199254740993');
+  used.value = '9223372036854775808';
+  required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  expect(api).not.toHaveBeenCalledWith('POST', '/api/user/update', expect.anything());
+  used.value = '0';
+  used.dispatchEvent(new Event('input'));
+  wlUsed.value = '9007199254740995';
+  required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', used: '0', wl_used: '9007199254740995' }); });
+});

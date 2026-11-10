@@ -63,6 +63,9 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
         x = await self.sub.business_svc.get_info(username=username, pretty=pretty)
         info = asdict(x)
         info["time_exact"] = str(x.time)
+        if not pretty:
+            info["bandwidth"]["monthly_exact"] = str(x.bandwidth.monthly)
+            info["bandwidth"]["wl_monthly_exact"] = str(x.bandwidth.wl_monthly)
         info["ext_username"] = await self.sub.user_svc.get_external_username(username)
         return ok(obj=info)
 

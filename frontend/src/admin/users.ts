@@ -27,6 +27,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   const edit = getDialog('userEditDialog');
   const localDateTime = (date: Date): string => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   for (const id of ['addExpiry', 'editExpiry']) input(doc, id).setAttribute('max', '9999-12-31T23:59');
+  for (const id of ['editUsed', 'editWlUsed']) input(doc, id).addEventListener('input', () => { input(doc, id).setCustomValidity(''); }, { signal: listeners.signal });
+  const usageValue = (bandwidth: Record<string, unknown>, exact: string, key: string): string => {
+    const value = bandwidth[exact] ?? bandwidth[key];
+    return typeof value === 'string' || typeof value === 'number' ? String(value) : '0';
+  };
   let editingUser: string | null = null;
   let original: Record<string, unknown> = {};
   let originalExpiry = '';
@@ -106,6 +111,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         fp.value = currentFp;
         input(doc, 'editLimit').value = String(Number(bandwidth['limit'] ?? 0));
         input(doc, 'editWlLimit').value = String(Number(bandwidth['wl_limit'] ?? 0));
+        for (const [id, exact, key] of [['editUsed', 'monthly_exact', 'monthly'], ['editWlUsed', 'wl_monthly_exact', 'wl_monthly']] as const) {
+          const field = input(doc, id);
+          field.setCustomValidity('');
+          field.value = usageValue(bandwidth, exact, key);
+        }
         const expiry = typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000) : null;
         const expiryField = input(doc, 'editExpiry');
         const representable = expiry !== null && Number.isFinite(expiry.getTime()) && expiry.getFullYear() <= 9999;
@@ -158,6 +168,13 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
     for (const [id, key] of [['editLimit', 'limit'], ['editWlLimit', 'wl_limit']] as const) {
       const value = Number(input(doc, id).value);
       if (value !== bandwidth[key]) body[key] = value;
+    }
+    for (const [id, key, exact, previous] of [['editUsed', 'used', 'monthly_exact', 'monthly'], ['editWlUsed', 'wl_used', 'wl_monthly_exact', 'wl_monthly']] as const) {
+      const field = input(doc, id);
+      const valid = /^[0-9]+$/.test(field.value) && BigInt(field.value) <= 9223372036854775807n;
+      field.setCustomValidity(valid ? '' : t('used_bytes_invalid'));
+      if (!field.reportValidity()) return;
+      if (BigInt(field.value) !== BigInt(usageValue(bandwidth, exact, previous))) body[key] = field.value;
     }
     const expiry = input(doc, 'editExpiry').value;
     const time = expiry ? Math.floor(new Date(expiry).getTime() / 1000) : 0;

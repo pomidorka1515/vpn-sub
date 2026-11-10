@@ -253,6 +253,30 @@ async def test_delete_and_edit_options(
     buttons = _buttons(telegram.send_message.call_args.kwargs["reply_markup"])
     assert f"edit_login:{generation}" in buttons
     assert f"edit_date:{generation}" in buttons
+    assert f"edit_used:{generation}" in buttons
+    assert f"edit_wl_used:{generation}" in buttons
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("whitelist", [False, True])
+async def test_edit_used_validates_and_updates(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock], whitelist: bool
+) -> None:
+    mixin, telegram, subscription = users
+    subscription.business_svc.get_info.return_value = _info()
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._cb_edit_used(7, "alice", whitelist=whitelist)
+    assert "байтах" in telegram.send_message.call_args.args[1]
+    for value in ("-1", "1.5", str(2**63)):
+        await mixin._step_edit_used(_message(value), "alice", "test", whitelist)
+        subscription.business_svc.edit_user.assert_not_awaited()
+    await mixin._step_edit_used(_message("1"), "alice", "stale", whitelist)
+    subscription.business_svc.edit_user.assert_not_awaited()
+    await mixin._step_edit_used(_message(str(2**63 - 1)), "alice", "test", whitelist)
+    subscription.business_svc.edit_user.assert_awaited_once_with(
+        username="alice", **{("wl_used" if whitelist else "used"): 2**63 - 1}
+    )
+    assert 7 not in mixin._pending_edits
 
 
 @pytest.mark.asyncio

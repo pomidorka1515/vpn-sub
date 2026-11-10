@@ -35,6 +35,8 @@ class AdminUsersMixin(AdminFeatureMixin):
         displayname: str | None = None,
         fingerprint: str | None = None,
         new_username: str | None = None,
+        used: int | None = None,
+        wl_used: int | None = None,
     ) -> bool:
         await self._defer(interaction)
         if not interaction.response.is_done():
@@ -60,6 +62,10 @@ class AdminUsersMixin(AdminFeatureMixin):
                 await self.sub.business_svc.edit_user(
                     username=pending["username"], new_username=new_username
                 )
+            elif used is not None:
+                await self.sub.business_svc.edit_user(username=pending["username"], used=used)
+            elif wl_used is not None:
+                await self.sub.business_svc.edit_user(username=pending["username"], wl_used=wl_used)
             else:
                 await self.sub.business_svc.update_params(username=pending["username"], **params)
         except CommittedAuditError:
@@ -265,8 +271,22 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
         view.add_item(
             discord.ui.Button(
+                label="📊 Использовано за месяц",
+                custom_id=f"admin:edit:used:{generation}",
+                style=discord.ButtonStyle.secondary,
+            ),
+        )
+        view.add_item(
+            discord.ui.Button(
                 label="📊 Месячный лимит",
                 custom_id=f"admin:edit:limit:{generation}",
+                style=discord.ButtonStyle.secondary,
+            ),
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="🌍 Использовано WL",
+                custom_id=f"admin:edit:wl_used:{generation}",
                 style=discord.ButtonStyle.secondary,
             ),
         )
@@ -365,6 +385,64 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"🔐 Выберите отпечаток для **{username}** (текущий: `{current}`):",
             view=view,
         )
+
+    async def _cb_edit_used(
+        self, interaction: discord.Interaction, username: str, *, whitelist: bool = False
+    ) -> None:
+        del username
+        generation = self._pending_edits[interaction.user.id]["generation"]
+        field = "wl_used" if whitelist else "used"
+        modal = discord.ui.Modal(
+            title="Использовано WL" if whitelist else "Использовано за месяц",
+            custom_id=f"admin:modal:edit_{field}:{generation}",
+        )
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Использовано (байт)", custom_id=field, min_length=1, max_length=19
+            )
+        )
+        await self._send_modal(interaction, modal)
+
+    async def _cb_edit_wl_used(self, interaction: discord.Interaction, username: str) -> None:
+        await self._cb_edit_used(interaction, username, whitelist=True)
+
+    async def _handle_edit_used_modal(
+        self, interaction: discord.Interaction, *, whitelist: bool = False
+    ) -> None:
+        field = "wl_used" if whitelist else "used"
+        pending = self._pending_edits.get(interaction.user.id)
+        generation = self._custom_id(interaction).removeprefix(f"admin:modal:edit_{field}:")
+        if not pending or not generation or pending.get("generation") != generation:
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+            )
+            return
+        text = self.modal_values(interaction).get(field, "").strip()
+        if not text.isascii() or not text.isdecimal() or not 0 <= int(text) <= 2**63 - 1:
+            await self._respond(
+                interaction,
+                "❌ Введите целое число байт от 0 до 9223372036854775807.",
+                view=self.main_menu_view(),
+            )
+            return
+        if not await self._update_edit_params(
+            interaction,
+            pending,
+            used=None if whitelist else int(text),
+            wl_used=int(text) if whitelist else None,
+        ):
+            return
+        await self._respond(
+            interaction,
+            f"✅ Использованный трафик обновлён: {text} байт",
+            view=self.main_menu_view(),
+        )
+
+    async def handle_edit_used_modal(self, interaction: discord.Interaction) -> None:
+        await self._handle_edit_used_modal(interaction)
+
+    async def handle_edit_wl_used_modal(self, interaction: discord.Interaction) -> None:
+        await self._handle_edit_used_modal(interaction, whitelist=True)
 
     async def _cb_edit_limit(self, interaction: discord.Interaction, username: str) -> None:
         del username

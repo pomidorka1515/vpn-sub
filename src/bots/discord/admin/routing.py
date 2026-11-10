@@ -51,6 +51,8 @@ class AdminRoutingMixin(AdminFeatureMixin):
         "admin:modal:add_user": "handle_add_user_modal",
         "admin:modal:reset_user": "handle_reset_user_modal",
         "admin:modal:edit_limit": "handle_edit_limit_modal",
+        "admin:modal:edit_used": "handle_edit_used_modal",
+        "admin:modal:edit_wl_used": "handle_edit_wl_used_modal",
         "admin:modal:edit_wl_limit": "handle_edit_wl_limit_modal",
         "admin:modal:edit_time": "handle_edit_time_modal",
         "admin:modal:edit_name": "handle_edit_name_modal",
@@ -419,6 +421,8 @@ class AdminRoutingMixin(AdminFeatureMixin):
         handlers = {
             "fp": self._cb_edit_fingerprint,
             "limit": self._cb_edit_limit,
+            "used": self._cb_edit_used,
+            "wl_used": self._cb_edit_wl_used,
             "wl_limit": self._cb_edit_wl_limit,
             "time": self._cb_edit_time,
             "name": self._cb_edit_name,
