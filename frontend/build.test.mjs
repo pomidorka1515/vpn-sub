@@ -6,6 +6,13 @@ import { transform } from "esbuild";
 import { JSDOM } from "jsdom";
 
 const output = new URL("./dist/", import.meta.url);
+const sourceReferences = /sourceMappingURL|sourceURL|\/\/\s*src\/|(?<!\.)\.tsx?\b/;
+
+test("source reference detection does not mistake spread identifiers for paths", () => {
+  assert.doesNotMatch("const values = [...ts[key]]", sourceReferences);
+  assert.match("import './src/admin.ts'", sourceReferences);
+  assert.match("import './src/admin.tsx'", sourceReferences);
+});
 
 test("release assets are compact, valid JavaScript with no source references", async () => {
   const files = await readdir(output, { recursive: true });
@@ -17,7 +24,7 @@ test("release assets are compact, valid JavaScript with no source references", a
     const code = await readFile(new URL(file, output), "utf8");
     await transform(code, { loader: "js", format: "esm", sourcefile: file });
     assert.equal(code.includes("\n"), false, file);
-    assert.doesNotMatch(code, /sourceMappingURL|sourceURL|\/\/\s*src\/|\.tsx?\b/, file);
+    assert.doesNotMatch(code, sourceReferences, file);
     assert.match(code, /_0x[\da-f]+/, file);
   }
   for (const file of files.filter((file) => file.startsWith("assets/") && file.endsWith(".css"))) {
