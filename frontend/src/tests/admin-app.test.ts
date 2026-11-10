@@ -29,12 +29,58 @@ describe('admin application integration', () => {
     await vi.waitFor(() => { expect(required(document.getElementById('tab-users')).classList.contains('active')).toBe(true); });
     await vi.waitFor(() => { expect(request).toHaveBeenCalledTimes(2); });
     const authTab = required(document.querySelector<HTMLButtonElement>('.tab[data-tab="auth"]'));
-    expect(authTab.hidden).toBe(false); expect(authTab.disabled).toBe(true); expect(authTab.title).toBeTruthy();
+    expect(authTab.hidden).toBe(false); expect(authTab.disabled).toBe(false); expect(authTab.title).toBeTruthy();
     const health = required(document.querySelector<HTMLButtonElement>('#btnLoadOperations'));
     health.disabled = false; health.click();
     await Promise.resolve(); await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(2);
     expect(request).not.toHaveBeenCalledWith(expect.stringContaining('/api/auth/list'), expect.anything());
+  });
+  it('opens a restricted tab without issuing requests and returns to an accessible tab', async () => {
+    const request = vi.fn<typeof fetch>().mockImplementationOnce(() => Promise.resolve(Response.json({ success: true, obj: { token: 'scoped', api_root: '/api', permissions: ['user.read'], catalog: [] } }))).mockImplementation(() => Promise.resolve(Response.json({ success: true, obj: [] })));
+    setup(request);
+    await vi.waitFor(() => { expect(request).toHaveBeenCalledTimes(2); });
+    await vi.waitFor(() => { expect(required(document.getElementById('btnLoadUsers')).hasAttribute('aria-busy')).toBe(false); });
+    required(document.querySelector<HTMLButtonElement>('.tab[data-tab="config"]')).click();
+    const pane = required(document.getElementById('tab-config'));
+    expect(pane.classList.contains('active')).toBe(true);
+    expect(pane.classList.contains('permission-restricted')).toBe(true);
+    expect(required(pane.querySelector('.permission-tab-notice')).textContent).toContain('permission_missing');
+    expect(required(pane.querySelector<HTMLElement>('.config-banner')).inert).toBe(true);
+    await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(2);
+    required(document.querySelector<HTMLButtonElement>('.tab[data-tab="users"]')).click();
+    await vi.waitFor(() => { expect(required(document.getElementById('tab-users')).classList.contains('active')).toBe(true); });
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+  it('shows a restricted tab for an account with no permissions', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, obj: { token: 'scoped', api_root: '/api', permissions: [], catalog: [] } }));
+    setup(request);
+    await vi.waitFor(() => { expect(required(document.getElementById('tab-auth')).classList.contains('permission-restricted')).toBe(true); });
+    required(document.querySelector<HTMLButtonElement>('.tab[data-tab="health"]')).click();
+    expect(required(document.getElementById('tab-health')).classList.contains('active')).toBe(true);
+    expect(required(document.querySelector('#tab-health .permission-tab-notice')).textContent).toContain('permission_missing');
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  it('loads only permitted health sections and never requests online users from its selector', async () => {
+    const request = vi.fn<typeof fetch>().mockImplementationOnce(() => Promise.resolve(Response.json({ success: true, obj: { token: 'scoped', api_root: '/api', permissions: ['health.read.status'], catalog: [] } }))).mockResolvedValue(Response.json({ success: true, obj: {} }));
+    setup(request);
+    await vi.waitFor(() => { expect(required(document.getElementById('tab-health')).classList.contains('active')).toBe(true); });
+    await vi.waitFor(() => { expect(request).toHaveBeenCalledTimes(2); });
+    const online = required(document.querySelector<HTMLInputElement>('#onlineKeyed'));
+    expect(online.disabled).toBe(true);
+    expect(required(document.getElementById('onlineUsersWrap')).textContent).toContain('permission_missing');
+    expect(required(document.getElementById('operationsStatusWrap')).textContent).toContain('permission_missing');
+    online.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('shows a denied user-list response instead of leaving the initial loading state', async () => {
+    const request = vi.fn<typeof fetch>().mockImplementationOnce(() => Promise.resolve(Response.json({ success: true, obj: { token: 'scoped', api_root: '/api', permissions: ['user.read'], catalog: [] } }))).mockResolvedValue(Response.json({ success: false, msg: 'Missing user.read permission' }, { status: 403 }));
+    setup(request);
+    await vi.waitFor(() => { expect(required(document.getElementById('usersTableWrap')).childElementCount).toBe(0); });
+    expect(required(document.getElementById('usersTableWrap')).textContent).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(2);
   });
   it('waits for authentication before refreshing the selected tab and attaches authorization', async () => {
     let resolve!: (response: Response) => void;

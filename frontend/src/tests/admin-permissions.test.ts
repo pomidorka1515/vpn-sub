@@ -52,12 +52,46 @@ describe('admin permission model', () => {
     expect(requestPermissions('/api/auth/delete', { kind: 'accounts' })).toEqual(['auth.read.accounts', 'auth.update.accounts']);
     expect(missingPermission(state, '/api/unknown')).toBe('*');
   });
-  it('keeps unavailable tabs visible, disabled and explained', () => {
+  it('keeps unavailable tabs navigable and explains their restricted contents', () => {
     const { state } = setup(['user.read']); applyPermissions(document, state, key => key);
     const users = required(document.querySelector<HTMLButtonElement>('.tab[data-tab="users"]'));
     const auth = required(document.querySelector<HTMLButtonElement>('.tab[data-tab="auth"]'));
-    expect(users.disabled).toBe(false); expect(auth.disabled).toBe(true); expect(auth.hidden).toBe(false);
+    expect(users.disabled).toBe(false); expect(auth.disabled).toBe(false); expect(auth.hidden).toBe(false);
     expect(auth.title).toBeTruthy(); expect(auth.classList.contains('permission-disabled')).toBe(true);
+    const pane = required(document.getElementById('tab-auth'));
+    expect(pane.classList.contains('permission-restricted')).toBe(true);
+    expect(required(pane.querySelector('.permission-tab-notice')).textContent).toBe('permission_missing');
+    expect(required(pane.querySelector<HTMLElement>('.card')).inert).toBe(true);
+    state.permissions = ['*']; applyPermissions(document, state, key => key);
+    expect(pane.classList.contains('permission-restricted')).toBe(false);
+    expect(pane.querySelector('.permission-tab-notice')).toBeNull();
+    expect(required(pane.querySelector<HTMLElement>('.card')).inert).toBe(false);
+  });
+  it('replaces inaccessible loading placeholders and disables the online selector', () => {
+    const { state } = setup(['health.read.status']);
+    applyPermissions(document, state, key => key === 'permission_missing' ? 'Missing {permission}' : key);
+    expect(required(document.getElementById('operationsStatusWrap')).textContent).toBe('Missing health.read.recovery');
+    expect(required(document.getElementById('onlineUsersWrap')).textContent).toBe('Missing health.read.online_users');
+    expect(required(document.querySelector<HTMLInputElement>('#onlineKeyed')).disabled).toBe(true);
+    expect(required(document.getElementById('healthText')).textContent).not.toContain('Missing');
+  });
+  it('updates a restricted tab warning when the language changes', () => {
+    const { state } = setup(['user.read']);
+    applyPermissions(document, state, key => key === 'permission_missing' ? 'Missing {permission}' : key);
+    const notice = required(document.querySelector('#tab-logs .permission-tab-notice'));
+    expect(notice.textContent).toBe('Missing audit.read');
+    applyPermissions(document, state, key => key === 'permission_missing' ? 'Required {permission}' : key);
+    expect(notice.textContent).toBe('Required audit.read');
+    expect(document.querySelectorAll('#tab-logs .permission-tab-notice')).toHaveLength(1);
+  });
+  it('explains why online users cannot load when panels are not configured', () => {
+    const { state } = setup(['health.read.online_users']); state.panelsConfigured = false;
+    applyPermissions(document, state, key => key);
+    expect(required(document.getElementById('onlineUsersWrap')).textContent).toBe('no_panels');
+    const checkbox = required(document.querySelector<HTMLInputElement>('#onlineKeyed'));
+    expect(checkbox.disabled).toBe(true);
+    expect(checkbox.getAttribute('aria-disabled')).toBe('true');
+    expect(checkbox.title).toBe('no_panels');
   });
 });
 describe('admin identity dialogs', () => {
@@ -112,6 +146,13 @@ describe('admin identity dialogs', () => {
     click('btnLoadAuth'); await vi.waitFor(() => { expect(api).toHaveBeenCalledTimes(1); });
     expect(api).toHaveBeenCalledWith('GET', '/api/auth/list?kind=tokens');
     click('btnCreateAccount'); expect(required(document.querySelector<HTMLDialogElement>('#authDialog')).open).toBe(false);
+  });
+  it('replaces the identity loading placeholder on a failed request', async () => {
+    const { api } = setup(['auth.read.accounts']);
+    api.mockResolvedValue({ success: false, status: 403, msg: 'denied' });
+    click('btnLoadAuth');
+    await vi.waitFor(() => { expect(required(document.getElementById('authaccountsTable')).textContent).toBe('denied'); });
+    expect(required(document.getElementById('authtokensTable')).textContent).toBe('permission_missing');
   });
   it('escapes names, reuses three action icons and protects the root row', async () => {
     const { api } = setup();

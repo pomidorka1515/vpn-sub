@@ -63,7 +63,11 @@ function markDirty(): void {
   const label = document.getElementById('configDirty');
   if (label) label.textContent = editor.dirty ? t('config_unsaved') : t('config_saved_state');
   const save = document.querySelector<HTMLButtonElement>('#configSave');
-  if (save && !editor.saving) save.disabled = !editor.dirty || editor.conflict || !['main', 'inbounds', 'panels'].some(section => can('config.write.' + section));
+  if (save && !editor.saving) {
+    const writable = ['main', 'inbounds', 'panels'].some(section => can('config.write.' + section));
+    save.disabled = !editor.dirty || editor.conflict || !writable;
+    save.title = writable ? '' : t('permission_missing').replace('{permission}', 'config.write.*');
+  }
   if (editor.dirty) window.addEventListener('beforeunload', onBeforeUnload);
   else window.removeEventListener('beforeunload', onBeforeUnload);
 }

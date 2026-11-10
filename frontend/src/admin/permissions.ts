@@ -61,20 +61,50 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
 };
 export function applyPermissions(doc: Document, state: AdminState, t: Translate): void {
   const can = (permission: string): boolean => allows(state.permissions, permission);
+  const needsPanels = new Set(['btnShowAdd', 'btnDoReset', 'btnDoDelete', 'btnDoAdd', 'btnDoRefresh', 'btnLoadOnline', 'onlineKeyed']);
   const restrict = (target: HTMLElement, permissions: string[]): void => {
-    const allowed = permissions.some(can);
+    const permitted = permissions.some(can);
+    const noPanels = !state.panelsConfigured && needsPanels.has(target.id);
+    const allowed = permitted && !noPanels;
     target.setAttribute('aria-disabled', String(!allowed));
     target.classList.toggle('permission-disabled', !allowed);
-    if (!allowed) target.title = t('permission_missing').replace('{permission}', permissions.join(' / '));
-    if (!allowed && (target instanceof HTMLButtonElement || target instanceof HTMLOptionElement)) target.disabled = true;
+    if (!allowed) target.title = !permitted ? t('permission_missing').replace('{permission}', permissions.join(' / ')) : t('no_panels');
+    if (!allowed && (target instanceof HTMLButtonElement || target instanceof HTMLInputElement || target instanceof HTMLOptionElement)) target.disabled = true;
   };
-  doc.querySelectorAll<HTMLElement>('[data-tab]').forEach(tab => { restrict(tab, TAB_PERMISSIONS[tab.dataset['tab'] ?? ''] ?? ['*']); });
+  doc.querySelectorAll<HTMLElement>('[data-tab]').forEach(tab => {
+    const permissions = TAB_PERMISSIONS[tab.dataset['tab'] ?? ''] ?? ['*'];
+    const allowed = permissions.some(can);
+    tab.classList.toggle('permission-disabled', !allowed);
+    tab.title = allowed ? '' : t('permission_missing').replace('{permission}', permissions.join(' / '));
+    tab.removeAttribute('aria-disabled');
+  });
+  for (const [name, permissions] of Object.entries(TAB_PERMISSIONS)) {
+    const tab = doc.getElementById('tab-' + name);
+    if (!tab) continue;
+    const restricted = !permissions.some(can);
+    tab.classList.toggle('permission-restricted', restricted);
+    let notice = tab.querySelector<HTMLElement>(':scope > .permission-tab-notice');
+    if (restricted) {
+      if (!notice) {
+        notice = doc.createElement('div');
+        notice.className = 'permission-tab-notice';
+        notice.setAttribute('role', 'status');
+        tab.prepend(notice);
+      }
+      notice.textContent = t('permission_missing').replace('{permission}', permissions.join(' / '));
+    } else notice?.remove();
+    for (const child of tab.children) {
+      if (!(child instanceof HTMLElement) || child === notice) continue;
+      if (restricted && !child.inert) { child.inert = true; child.dataset['permissionInert'] = ''; }
+      else if (!restricted && child.dataset['permissionInert'] !== undefined) { child.inert = false; delete child.dataset['permissionInert']; }
+    }
+  }
   const controls: Record<string, string[]> = {
     btnCreateAccount: ['auth.create.accounts'], btnCreateToken: ['auth.create.tokens'],
     btnLoadUsers: ['user.read'], btnShowAdd: ['user.create'], btnDoAdd: ['user.create'], btnDoDelete: ['user.delete'], btnDoReset: ['user.reset'], btnPasswordReset: ['user.password_reset'],
     btnEditDetail: Object.values(USER_FIELD_PERMISSIONS), btnLoadCodes: ['code.read'], btnShowAddCode: ['code.add.bonus', 'code.add.register'], btnDoAddCode: ['code.add.bonus', 'code.add.register'],
     btnRefreshLogs: ['audit.read'], btnPanelStatus: ['state.read.panels'], btnSystemStatus: ['state.read.host'], btnLoadSnapshots: ['snapshots.read'], btnLoadOperations: ['health.read.recovery'],
-    btnRunHealth: ['health.read.status'], btnLoadOnline: ['health.read.online_users'], btnDoRefresh: ['health.sync'], btnTeapot: ['health.read.teapot'],
+    btnRunHealth: ['health.read.status'], btnLoadOnline: ['health.read.online_users'], onlineKeyed: ['health.read.online_users'], btnDoRefresh: ['health.sync'], btnTeapot: ['health.read.teapot'],
   };
   Object.entries(controls).forEach(([id, permissions]) => { const target = doc.getElementById(id); if (target) restrict(target, permissions); });
   for (const [id, prefix] of [['lbType', 'leaderboard.read.'], ['addAction', 'code.add.']] as const) {
@@ -83,4 +113,13 @@ export function applyPermissions(doc: Document, state: AdminState, t: Translate)
   }
   doc.querySelectorAll<HTMLElement>('.config-tab[data-section]').forEach(tab => { restrict(tab, ['config.read.' + (tab.dataset['section'] ?? '')]); });
   doc.querySelectorAll<HTMLElement>('#chartsMode [data-mode]').forEach(tab => { restrict(tab, [tab.dataset['mode'] === 'live' ? 'state.charts.read' : 'snapshots.read']); });
+  for (const [id, permission] of [
+    ['operationsStatusWrap', 'health.read.recovery'], ['healthText', 'health.read.status'],
+    ['onlineUsersWrap', 'health.read.online_users'], ['teapotStatus', 'health.read.teapot'],
+  ] as const) {
+    const target = doc.getElementById(id);
+    if (!target) continue;
+    if (!can(permission)) target.textContent = t('permission_missing').replace('{permission}', permission);
+    else if (id === 'onlineUsersWrap' && !state.panelsConfigured) target.textContent = t('no_panels');
+  }
 }

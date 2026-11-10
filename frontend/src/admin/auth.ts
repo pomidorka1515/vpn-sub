@@ -18,6 +18,7 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
   const listeners = new AbortController();
   const can = (permission: string): boolean => allows(state.permissions, permission);
   const identities = new Map<Kind, Identity[]>([['accounts', []], ['tokens', []]]);
+  const errors = new Map<Kind, string>();
   const getDialog = (id: string): HTMLDialogElement => { const dialog = element(doc, id); if (!(dialog instanceof HTMLDialogElement)) throw new Error(t('error')); return dialog; };
   const dialog = getDialog('authDialog');
   const secretDialog = getDialog('authSecretDialog');
@@ -36,6 +37,8 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
     const query = input(doc, 'authSearch').value.trim().toLowerCase();
     const items = (identities.get(kind) ?? []).filter(item => item.name.toLowerCase().includes(query));
     if (!can('auth.read.' + kind)) { wrap.textContent = hint('auth.read.' + kind); return; }
+    const error = errors.get(kind);
+    if (error) { wrap.textContent = error; return; }
     if (!items.length) { wrap.innerHTML = `<div class="table-empty">${escapeHtml(t('auth_empty'))}</div>`; return; }
     wrap.innerHTML = `<table class="data-table users-table"><thead><tr><th>${escapeHtml(t('auth_name'))}</th><th>${escapeHtml(t('auth_permissions'))}</th><th>${escapeHtml(t('actions'))}</th></tr></thead><tbody>${items.map(item => `<tr><td class="mono user-name">${escapeHtml(item.name)}${item.root ? `<span class="badge">${escapeHtml(t('auth_root'))}</span>` : ''}</td><td class="mono auth-grants">${escapeHtml(item.permissions.join(', ') || t('auth_no_permissions'))}</td><td><div class="actions">${([['info', ICON_INFO], ['edit', ICON_EDIT], ['delete', ICON_DELETE]] as const).map(([action, icon]) => {
       const allowed = action === 'info' || editable(item) && (action !== 'delete' || !item.root);
@@ -50,7 +53,12 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
         if (!can('auth.read.' + kind)) { render(kind); return; }
         const response = await api('GET', '/api/auth/list?kind=' + kind);
         if (disposed || !generation()) return;
-        if (!response?.success || !isRecord(response.obj) || !Array.isArray(response.obj['items'])) { toast(response?.msg || t('network_err'), 'error'); return; }
+        if (!response?.success || !isRecord(response.obj) || !Array.isArray(response.obj['items'])) {
+          const message = response?.msg || t('network_err');
+          errors.set(kind, message); render(kind);
+          toast(message, 'error'); return;
+        }
+        errors.delete(kind);
         identities.set(kind, response.obj['items'].flatMap((value: unknown) => { const item = parseIdentity(value, kind); return item ? [item] : []; }));
         render(kind);
       }));
@@ -74,6 +82,8 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
       const amount = leaves.filter(entry => selected.has(entry.permission)).length;
       check.checked = amount === leaves.length && leaves.length > 0; check.indeterminate = amount > 0 && amount < leaves.length;
       check.disabled = readonly || !!current?.root || !can(permission);
+      if (!can(permission)) check.title = hint(permission);
+      else if (current?.root) check.title = t('auth_root_protected');
       const text = doc.createElement('span'); text.className = 'mono'; text.textContent = permission;
       label.title = t(prefix ? 'permission_branch_tip' : 'permission_root_tip').replace('{permission}', permission);
       label.append(check, text); tree.append(label);
@@ -84,6 +94,8 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
         if (!leaf) { build(name, depth + 1); continue; }
         const row = doc.createElement('label'); row.className = 'permission-row'; row.style.paddingInlineStart = String((depth + 1) * 6 + 6) + 'px';
         const field = doc.createElement('input'); field.type = 'checkbox'; field.dataset['permission'] = name; field.checked = selected.has(name); field.disabled = readonly || !!current?.root || !can(name);
+        if (!can(name)) field.title = hint(name);
+        else if (current?.root) field.title = t('auth_root_protected');
         const text = doc.createElement('span'); text.className = 'mono'; text.textContent = name;
         row.title = t('permission_' + name.replaceAll('.', '_'));
         row.append(field, text); tree.append(row);

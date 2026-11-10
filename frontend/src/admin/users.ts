@@ -54,7 +54,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen, can = () => tr
     await withBusy(button(doc, 'btnLoadUsers'), async () => {
       const res = await api('GET', '/api/user/list?include_external=1');
       if (disposed || !current()) return;
-      if (!res?.success) { toast(res?.msg || t('network_err'), 'error'); return; }
+      if (!res?.success) {
+        const message = res?.msg || t('network_err');
+        if (!usersLoaded) wrap.textContent = message;
+        toast(message, 'error'); return;
+      }
       externalNames.clear();
       state.currentUsers = Array.isArray(res.obj) ? res.obj.flatMap((user: unknown): string[] => {
         if (typeof user === 'string') return [user];
@@ -73,7 +77,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen, can = () => tr
     if (!users.length) { renderIfChanged(wrap, `<div class="table-empty">${escapeHtml(t(state.currentUsers.length ? 'no_matching_users' : 'no_users'))}</div>`); return; }
     renderIfChanged(wrap, `<table class="data-table users-table"><thead><tr><th>${t(webOnly.checked ? 'ext_username' : 'internal_user')}</th>${webOnly.checked ? '' : `<th class="user-external">${t('ext_username')}</th>`}<th>${t('actions')}</th></tr></thead><tbody>${users.map(user => `<tr><td class="mono user-name">${escapeHtml(webOnly.checked ? externalNames.get(user) : user)}</td>${webOnly.checked ? '' : `<td class="mono user-external">${escapeHtml(externalNames.get(user) || '—')}</td>`}<td><div class="actions">${([['view', 'info', ICON_INFO], ['edit', 'edit', ICON_EDIT], ['delete', 'delete', ICON_DELETE]] as const).map(([action, key, icon]) => {
       const allowed = state.panelsConfigured && (action === 'view' ? can('user.read') : action === 'edit' ? Object.values(USER_FIELD_PERMISSIONS).some(can) : can('user.delete'));
-      const title = allowed ? t(key) : t('permission_missing').replace('{permission}', action === 'edit' ? 'user.edit.*' : 'user.delete');
+      const title = allowed ? t(key) : !state.panelsConfigured ? t('no_panels') : t('permission_missing').replace('{permission}', action === 'view' ? 'user.read' : action === 'edit' ? 'user.edit.*' : 'user.delete');
       return `<button class="btn-tiny user-action user-${action}${action === 'delete' ? ' danger' : ''}" data-user="${escapeHtml(user)}" data-user-action="${action}" aria-label="${escapeHtml(t(key))}" title="${escapeHtml(title)}" ${allowed ? '' : 'disabled'}>${actionContent(key, icon)}</button>`;
     }).join('')}</div></td></tr>`).join('')}</tbody></table>`);
   }

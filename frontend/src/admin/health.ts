@@ -6,7 +6,7 @@ import { renderIfChanged } from '../shared/render';
 import { button, checkbox, element } from './context';
 import type { AdminContext } from './context';
 
-export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContext, language: string): () => void {
+export function initHealth({ doc, t, api, toast, confirm, loadGen, can }: AdminContext, language: string): () => void {
   const listeners = new AbortController();
   let disposed = false;
   let healthStatus = '';
@@ -27,7 +27,7 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
         else if (res?.success) { dot.className = 'health-dot warn'; text.textContent = t('health_warn'); text.style.color = 'var(--orange)'; }
         else { dot.className = 'health-dot err'; text.textContent = res?.msg || t('health_err'); text.style.color = 'var(--red)'; }
       }
-      if (!obj) return;
+      if (!res?.success || !obj) { element(doc, 'healthDetails').style.display = 'none'; return; }
       const memory = isRecord(obj['memory']) ? obj['memory'] : {};
       const ram = typeof memory['ram'] === 'number' && Number.isFinite(memory['ram']) ? memory['ram'].toFixed(2) + ' ' + t('mb_unit') : t('na');
       const swap = typeof memory['swap'] === 'number' && Number.isFinite(memory['swap']) ? memory['swap'].toFixed(2) + ' ' + t('mb_unit') : t('na');
@@ -37,6 +37,7 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
     });
   }
   async function online(): Promise<void> {
+    if (can && !can('health.read.online_users') || checkbox(doc, 'onlineKeyed').disabled) return;
     const wrap = element(doc, 'onlineUsersWrap');
     const current = loadGen('online');
     await withBusy(button(doc, 'btnLoadOnline'), async () => {
@@ -80,7 +81,8 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
     const pendingRows = Object.entries(pending).flatMap(([kind, users]) => Array.isArray(users) ? users.map((user: unknown) => ({ kind, user })) : []);
     if (!snapshot && !markerRows.length && !pendingRows.length) return `<div class="table-empty">${t('no_recovery_issues')}</div>`;
     const snapshotHtml = snapshot ? `<div class="panel-section-label">${t('snapshot_failure')}</div><div class="panel-cards"><div class="panel-card open"><div class="panel-card-body">${row(t('timestamp'), date(snapshot['ts']))}${row(t('failed'), String(snapshot['failed']))}${row(t('cutoff'), String(snapshot['eligible']))}</div></div></div>` : '';
-    const markersHtml = markerRows.length ? `<div class="panel-section-label">${t('rollback_markers')}</div><table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('marker_type')}</th><th>${t('timestamp')}</th><th>${t('marker_reason')}</th><th style="width:90px;text-align:center">${t('actions')}</th></tr></thead><tbody>${markerRows.map(({ kind, user, marker }) => `<tr><td class="mono">${escapeHtml(user)}</td><td>${escapeHtml(kind)}</td><td class="mono">${marker['ts'] ? escapeHtml(date(marker['ts'])) : t('na')}</td><td>${escapeHtml(marker['reason'] || '')}</td><td style="text-align:center"><button class="btn-tiny danger" data-rollback-kind="${escapeHtml(kind)}" data-rollback-user="${escapeHtml(user)}">${t('resolve')}</button></td></tr>`).join('')}</tbody></table>` : '';
+    const canResolve = can?.('*') ?? true;
+    const markersHtml = markerRows.length ? `<div class="panel-section-label">${t('rollback_markers')}</div><table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('marker_type')}</th><th>${t('timestamp')}</th><th>${t('marker_reason')}</th><th style="width:90px;text-align:center">${t('actions')}</th></tr></thead><tbody>${markerRows.map(({ kind, user, marker }) => `<tr><td class="mono">${escapeHtml(user)}</td><td>${escapeHtml(kind)}</td><td class="mono">${marker['ts'] ? escapeHtml(date(marker['ts'])) : t('na')}</td><td>${escapeHtml(marker['reason'] || '')}</td><td style="text-align:center"><button class="btn-tiny danger" data-rollback-kind="${escapeHtml(kind)}" data-rollback-user="${escapeHtml(user)}" ${canResolve ? '' : `disabled title="${escapeHtml(t('permission_missing').replace('{permission}', '*'))}"`}>${t('resolve')}</button></td></tr>`).join('')}</tbody></table>` : '';
     const pendingHtml = pendingRows.length ? `<table class="data-table"><thead><tr><th>${t('internal_user')}</th><th>${t('marker_type')}</th></tr></thead><tbody>${pendingRows.map(({ kind, user }) => `<tr><td class="mono">${escapeHtml(user)}</td><td>${escapeHtml(t('recovery_' + kind))} (${escapeHtml(t('pending'))})</td></tr>`).join('')}</tbody></table>` : '';
     return snapshotHtml + markersHtml + pendingHtml;
   }
@@ -98,8 +100,9 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
     await withBusy(button(doc, 'btnTeapot'), async () => {
       const res = await api('GET', '/api/teapot');
       if (disposed) return;
-      const yes = isRecord(res?.obj) && res.obj['teapot'];
       const status = element(doc, 'teapotStatus');
+      if (!res?.success || !isRecord(res.obj)) { status.textContent = res?.msg || t('network_err'); status.style.color = 'var(--red)'; return; }
+      const yes = res.obj['teapot'];
       status.textContent = yes ? t('teapot_yes') + ' 🍵' : t('teapot_no');
       status.style.color = yes ? 'var(--orange)' : 'var(--green)';
     });
@@ -109,7 +112,7 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen }: AdminContex
     const target = event.target.closest<HTMLButtonElement>('button[data-rollback-kind]');
     const kind = target?.dataset['rollbackKind'];
     const user = target?.dataset['rollbackUser'];
-    if (!target || kind === undefined || user === undefined) return;
+    if (!target || target.disabled || can && !can('*') || kind === undefined || user === undefined) return;
     void (async () => {
       if (!await confirm(t('confirm_resolve_rollback'), t('confirm'), { okText: t('confirm'), cancelText: t('cancel') }) || disposed) return;
       await withBusy(target, async () => {

@@ -76,7 +76,7 @@ describe('admin health and recovery', () => {
     click('btnTeapot');
     await vi.waitFor(() => { expect(el('teapotStatus').textContent).toContain('teapot_yes'); });
     click('btnTeapot');
-    await vi.waitFor(() => { expect(el('teapotStatus').textContent).toBe('teapot_no'); });
+    await vi.waitFor(() => { expect(el('teapotStatus').textContent).toBe('network_err'); });
   });
 
   it('renders recovery issues and resolves only after confirmation', async () => {
@@ -122,5 +122,19 @@ describe('admin health and recovery', () => {
     expect(el('healthDot').className).not.toContain('ok');
     click('btnTeapot');
     expect(api).toHaveBeenCalledTimes(3);
+  });
+
+  it('disables rollback resolution without root permission', async () => {
+    document.body.innerHTML = readFileSync('src/templates/admin.html', 'utf8');
+    const api = vi.fn<AdminContext['api']>().mockResolvedValue({ success: true, status: 200, obj: { rollback_failures: { sync: { alice: { reason: 'failed' } } } } });
+    const confirm = vi.fn<AdminContext['confirm']>();
+    dispose = initHealth({ doc: document, t: key => key, api, toast: vi.fn(), confirm, loadGen: createLoadGeneration(), can: permission => permission === 'health.read.recovery' }, 'en');
+    required(document.getElementById('btnLoadOperations')).click();
+    await vi.waitFor(() => { expect(document.querySelector('[data-rollback-kind]')).not.toBeNull(); });
+    const resolve = required(document.querySelector<HTMLButtonElement>('[data-rollback-kind]'));
+    expect(resolve.disabled).toBe(true);
+    resolve.disabled = false; resolve.click();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(api).toHaveBeenCalledTimes(1);
   });
 });

@@ -25,6 +25,7 @@ import { createSystem } from './system';
 import { initUsers } from './users';
 import { initAuth } from './auth';
 import { allows, applyPermissions, missingPermission, TAB_PERMISSIONS } from './permissions';
+import { initPermissionReasons } from './permission-reasons';
 
 export function initAdmin(): () => void {
   const doc = document;
@@ -53,7 +54,7 @@ export function initAdmin(): () => void {
     on401: () => auth.config.on401?.(),
   }, bootstrap.page.chartUrl, bootstrap.page.debounceMs, i18n.language);
   initConfig(context, i18n.language);
-  const stopLanguage = i18n.onChange(() => { setConfigLanguage(i18n.language); charts.chartsRefreshTheme(); });
+  const stopLanguage = i18n.onChange(() => { setConfigLanguage(i18n.language); charts.chartsRefreshTheme(); permissionReasons.refreshLanguage(); if (ready) applyPermissions(doc, state, i18n.t); });
   const listeners = new AbortController();
   const cleanupControls = initConfigControls(i18n.t);
   const cleanupValidation = initConfigValidation(i18n.t, can);
@@ -65,6 +66,7 @@ export function initAdmin(): () => void {
   const panels = createPanels(context);
   const system = createSystem(context, panels.renderPanelCards, i18n.language);
   const cleanups = [initAuth(context, state), initUsers(context, state), initCodes(context, navigator.clipboard), initLogs(context), initLeaderboard(context), initHealth(context, i18n.language), panels.init(), system.init(), cleanupCharts];
+  const permissionReasons = initPermissionReasons(doc, i18n.t);
   let disposed = false;
   let leaving = false;
   let ready = false;
@@ -82,18 +84,19 @@ export function initAdmin(): () => void {
   }
   async function showTab(name: string): Promise<void> {
     if (!ready) { requestedTab = name; return; }
-    if (leaving || !doc.getElementById('tab-' + name) || !(TAB_PERMISSIONS[name] ?? ['*']).some(can)) return;
+    if (leaving || !doc.getElementById('tab-' + name)) return;
+    const allowed = (TAB_PERMISSIONS[name] ?? ['*']).some(can);
     const current = doc.querySelector<HTMLElement>('.tab-content.active');
-    if (current?.id === 'tab-' + name) { if (name === 'config') configOnTab(); return; }
+    if (current?.id === 'tab-' + name) { if (name === 'config' && allowed) configOnTab(); return; }
     leaving = true;
     try {
       if (current?.id === 'tab-config' && !await configOnTab.leave()) return;
       if (disposed) return;
       doc.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.getAttribute('data-tab') === name));
       doc.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === 'tab-' + name));
-      charts.chartsOnTab(name);
-      if (name === 'config') configOnTab();
-      loadTab(name);
+      charts.chartsOnTab(allowed ? name : '');
+      if (name === 'config' && allowed) configOnTab();
+      if (allowed) loadTab(name);
     } finally { leaving = false; }
   }
   doc.querySelectorAll<HTMLElement>('[data-tab]').forEach(tab => { tab.addEventListener('click', () => {
@@ -125,14 +128,10 @@ export function initAdmin(): () => void {
     if (disposed || state.authBlocked || !state.apiToken) return;
     ready = true;
     applyPermissions(doc, state, i18n.t);
-    const initial = requestedTab && TAB_PERMISSIONS[requestedTab]?.some(can) ? requestedTab : Object.keys(TAB_PERMISSIONS).find(name => TAB_PERMISSIONS[name]?.some(can));
+    const initial = requestedTab && TAB_PERMISSIONS[requestedTab] ? requestedTab : Object.keys(TAB_PERMISSIONS).find(name => TAB_PERMISSIONS[name]?.some(can)) ?? 'auth';
     const active = doc.querySelector<HTMLElement>('.tab-content.active');
-    if (initial && active?.id !== 'tab-' + initial) void showTab(initial);
-    else if (initial) loadTab(initial);
-    else {
-      active?.classList.remove('active');
-      const notice = doc.createElement('p'); notice.className = 'result-box'; notice.textContent = i18n.t('auth_no_permissions'); doc.querySelector('.admin-content')?.append(notice);
-    }
+    if (active?.id !== 'tab-' + initial) void showTab(initial);
+    else if (TAB_PERMISSIONS[initial]?.some(can)) loadTab(initial);
   });
   function dispose(): void {
     if (disposed) return;
@@ -141,6 +140,7 @@ export function initAdmin(): () => void {
     stopLanguage();
     auth.dispose();
     cleanups.forEach(cleanup => { cleanup(); });
+    permissionReasons.dispose();
     stopTheme();
     configDispose();
     cleanupEditors();
