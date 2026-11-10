@@ -132,6 +132,8 @@ class AsyncAuthRoutes(AsyncAdminApiMixin):
             )
         if kind == "accounts" and name == self.cfg.view()["api_admin_ui_auth"][0]:
             return err("The root account name is reserved", 409)
+        if kind == "tokens" and name == "root" and (existing is None or existing.name != name):
+            return err("Key name already exists", 409)
         try:
             permissions = validate_grants(
                 body.get("permissions", list(existing.permissions) if existing else None)

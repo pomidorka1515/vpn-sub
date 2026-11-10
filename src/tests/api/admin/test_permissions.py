@@ -8,6 +8,7 @@ import pytest
 from admin_permissions import PERMISSIONS, ROUTE_PERMISSIONS, allows, validate_grants
 from api import AsyncApi
 from api.common import web_lang_tables
+from db.admin import AdminIdentity
 
 if TYPE_CHECKING:
     from quart import Quart
@@ -54,6 +55,83 @@ def test_every_permission_has_localized_tooltips(language: Config[LangConfig]) -
         _, strings, _ = web_lang_tables(language, "admin", code)
         for permission in PERMISSIONS:
             assert strings["permission_" + permission.replace(".", "_")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["accounts", "tokens"])
+async def test_duplicate_identity_names_return_conflict_without_mutation(
+    admin_api: tuple[Quart, Subscription], kind: str
+) -> None:
+    app, sub = admin_api
+    client = app.test_client()
+    body: dict[str, object] = {"kind": kind, "name": "first", "permissions": []}
+    if kind == "accounts":
+        body["password"] = "password"
+    first = await client.post(PREFIX + "/auth/create", headers=ROOT, json=body)
+    assert first.status_code == 201
+    first_id = (await first.get_json())["obj"]["item"]["id"]
+    duplicate = await client.post(PREFIX + "/auth/create", headers=ROOT, json=body)
+    expected = "Account name already exists" if kind == "accounts" else "Key name already exists"
+    assert duplicate.status_code == 409
+    assert (await duplicate.get_json())["msg"] == expected
+
+    second = await client.post(
+        PREFIX + "/auth/create", headers=ROOT, json={**body, "name": "second"}
+    )
+    assert second.status_code == 201
+    second_id = (await second.get_json())["obj"]["item"]["id"]
+    before = await sub.res.db.admin_identity(second_id)
+    rename = await client.post(
+        PREFIX + "/auth/update",
+        headers=ROOT,
+        json={"kind": kind, "id": second_id, "name": "first", "permissions": ["user.read"]},
+    )
+    assert rename.status_code == 409
+    assert (await rename.get_json())["msg"] == expected
+    assert await sub.res.db.admin_identity(second_id) == before
+    assert await sub.res.db.admin_identity(first_id) is not None
+    unchanged = await client.post(
+        PREFIX + "/auth/update",
+        headers=ROOT,
+        json={"kind": kind, "id": second_id, "name": "second"},
+    )
+    assert unchanged.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_root_identity_names_are_reserved(admin_api: tuple[Quart, Subscription]) -> None:
+    app, sub = admin_api
+    client = app.test_client()
+    account = await client.post(
+        PREFIX + "/auth/create",
+        headers=ROOT,
+        json={"kind": "accounts", "name": "admin", "password": "password", "permissions": []},
+    )
+    assert account.status_code == 409
+    assert (await account.get_json())["msg"] == "The root account name is reserved"
+    key = await client.post(
+        PREFIX + "/auth/create",
+        headers=ROOT,
+        json={"kind": "tokens", "name": "root", "permissions": []},
+    )
+    assert key.status_code == 409
+    assert (await key.get_json())["msg"] == "Key name already exists"
+    identity_id, _ = await create_key(client, [], "other")
+    rename = await client.post(
+        PREFIX + "/auth/update",
+        headers=ROOT,
+        json={"kind": "tokens", "id": identity_id, "name": "root"},
+    )
+    assert rename.status_code == 409
+    assert (await rename.get_json())["msg"] == "Key name already exists"
+    legacy = AdminIdentity("legacy", "tokens", "root", "legacy-digest", (), 1)
+    assert await sub.res.db.admin_save_identity(legacy, actor=None, create=True)
+    update = await client.post(
+        PREFIX + "/auth/update",
+        headers=ROOT,
+        json={"kind": "tokens", "id": "legacy", "name": "root", "permissions": ["user.read"]},
+    )
+    assert update.status_code == 200
 
 
 @pytest.mark.parametrize(

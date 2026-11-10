@@ -190,6 +190,44 @@ describe('admin identity dialogs', () => {
       expect(document.querySelector('#tab-auth [data-auth-action="delete"] + .permission-reason')).toBeNull();
     } finally { reasons.dispose(); }
   });
+  it.each(['accounts', 'tokens'] as const)('keeps the %s create and edit forms open on a name conflict', async kind => {
+    const { api } = setup();
+    const name = required(document.querySelector<HTMLInputElement>('#authName'));
+    const dialog = required(document.querySelector<HTMLDialogElement>('#authDialog'));
+    const error = required(document.getElementById('authError'));
+    const submit = () => { required(document.getElementById('authForm')).dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); };
+    const conflict = kind === 'accounts' ? 'An account with this name already exists.' : 'A key with this name already exists.';
+    click(kind === 'accounts' ? 'btnCreateAccount' : 'btnCreateToken');
+    name.value = 'duplicate';
+    if (kind === 'accounts') required(document.querySelector<HTMLInputElement>('#authPassword')).value = 'secret';
+    check('user.read', true);
+    api.mockResolvedValueOnce({ success: false, status: 409, msg: conflict });
+    submit();
+    await vi.waitFor(() => { expect(error.textContent).toBe(conflict); });
+    expect(error.hidden).toBe(false);
+    expect(dialog.open).toBe(true);
+    expect(name.value).toBe('duplicate');
+    expect(required(document.querySelector<HTMLInputElement>('[data-permission="user.read"]')).checked).toBe(true);
+    if (kind === 'accounts') expect(required(document.querySelector<HTMLInputElement>('#authPassword')).value).toBe('secret');
+    name.value = 'new'; name.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(error.hidden).toBe(true);
+    click('authClose');
+
+    api.mockImplementation((_method, url) => Promise.resolve({ success: true, status: 200, obj: { items: [{ id: 'item', kind: url.endsWith('accounts') ? 'accounts' : 'tokens', name: 'original', root: false, permissions: [] }] } }));
+    click('btnLoadAuth');
+    await vi.waitFor(() => { expect(document.querySelector(`#auth${kind}Table [data-auth-action="edit"]`)).not.toBeNull(); });
+    required(document.querySelector<HTMLButtonElement>(`#auth${kind}Table [data-auth-action="edit"]`)).click();
+    name.value = 'duplicate';
+    api.mockResolvedValueOnce({ success: false, status: 409, msg: conflict });
+    submit();
+    await vi.waitFor(() => { expect(error.textContent).toBe(conflict); });
+    expect(dialog.open).toBe(true);
+    expect(name.value).toBe('duplicate');
+    name.value = 'available'; name.dispatchEvent(new Event('input', { bubbles: true }));
+    api.mockResolvedValueOnce({ success: true, status: 200, obj: { item: {} } });
+    submit();
+    await vi.waitFor(() => { expect(dialog.open).toBe(false); });
+  });
   it('submits normalized permissions and clears a one-time token when closed', async () => {
     const { api } = setup(); click('btnCreateToken'); check('*', true);
     required(document.querySelector<HTMLInputElement>('#authName')).value = 'key';

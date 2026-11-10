@@ -24,6 +24,8 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
   const secretDialog = getDialog('authSecretDialog');
   const form = element(doc, 'authForm');
   const tree = element(doc, 'authPermissionTree');
+  const error = element(doc, 'authError');
+  const clearError = (): void => { error.hidden = true; error.textContent = ''; };
   let kind: Kind = 'accounts';
   let selected = new Set<string>();
   let current: Identity | null = null;
@@ -106,6 +108,7 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
   function open(value: Kind, item: Identity | null, info: boolean, trigger: HTMLElement): void {
     if (!can('auth.read.' + value) || (!info && !(item ? editable(item) : can('auth.create.' + value)))) return;
     kind = value; current = item; readonly = info; opener = trigger;
+    clearError();
     selected = new Set(state.catalog.filter(entry => allows(item?.permissions ?? [], entry.permission)).map(entry => entry.permission));
     input(doc, 'authName').value = item?.name ?? ''; input(doc, 'authName').disabled = info || item?.root === true && value === 'tokens';
     input(doc, 'authPassword').value = ''; input(doc, 'authPassword').required = !item && value === 'accounts';
@@ -137,9 +140,10 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
     if (kind === 'accounts') { const password = input(doc, 'authPassword').value; if (password || !current) body['password'] = password; }
     else if (current) body['rotate'] = checkbox(doc, 'authRotate').checked;
     await withBusy(button(doc, 'authSave'), async () => {
+      clearError();
       const response = await api('POST', current ? '/api/auth/update' : '/api/auth/create', body);
       if (disposed) return;
-      if (!response?.success || !isRecord(response.obj)) { toast(response?.msg || t('error'), 'error'); return; }
+      if (!response?.success || !isRecord(response.obj)) { error.textContent = response?.msg || t('error'); error.hidden = false; return; }
       dialog.close(); input(doc, 'authPassword').value = '';
       toast(t('auth_saved'), 'success');
       if (typeof response.obj['token'] === 'string') { input(doc, 'authSecret').value = response.obj['token']; element(doc, 'authRestartHint').hidden = !Array.isArray(response.obj['restart']) || !response.obj['restart'].length; secretDialog.showModal(); }
@@ -165,6 +169,7 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
   button(doc, 'btnLoadAuth').addEventListener('click', () => { void load(); }, { signal: listeners.signal });
   for (const [id, kind] of [['btnCreateAccount', 'accounts'], ['btnCreateToken', 'tokens']] as const) button(doc, id).addEventListener('click', event => { if (event.currentTarget instanceof HTMLElement) open(kind, null, false, event.currentTarget); }, { signal: listeners.signal });
   form.addEventListener('submit', event => { event.preventDefault(); void save(); }, { signal: listeners.signal });
+  input(doc, 'authName').addEventListener('input', clearError, { signal: listeners.signal });
   button(doc, 'authClose').addEventListener('click', () => { dialog.close(); }, { signal: listeners.signal });
   button(doc, 'authSecretClose').addEventListener('click', () => { secretDialog.close(); }, { signal: listeners.signal });
   input(doc, 'authSecret').addEventListener('click', event => { if (event.currentTarget instanceof HTMLInputElement) event.currentTarget.select(); }, { signal: listeners.signal });

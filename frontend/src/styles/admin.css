@@ -85,6 +85,7 @@
 #tab-auth .toolbar .btn-primary { padding: 10px 20px; }
 #authDialog [hidden] { display: none; }
 .auth-root-hint { color: var(--yellow); font-size: .875rem; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
+.auth-error { color: var(--red); font-size: .8125rem; line-height: 1.5; overflow-wrap: anywhere; }
 #authSecretDialog .modal-input { width: 100%; margin: 14px 0; }
 
 .form-grid { display: grid; gap: 14px; }

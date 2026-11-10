@@ -102,6 +102,8 @@ describe('frontend translations', () => {
     expect(fmtUptime(90061, t)).toBe('1' + t('day_short') + ' 1' + t('hour_short') + ' 1' + t('minute_short'));
     expect(sharedMessage('missing_element', { id: 'test' }, language)).toContain('#test');
     expect(serverMessage('Invalid credentials.', language)).toBe(web['errors']?.[language]['Invalid credentials']);
+    expect(serverMessage('Account name already exists', language)).toBe(web['errors']?.[language]['Account name already exists']);
+    expect(serverMessage('Key name already exists', language)).toBe(web['errors']?.[language]['Key name already exists']);
     expect(serverMessage('Schema validation error: secret', language)).toBe(web['errors']?.[language]['Schema validation error']);
     expect(serverMessage('unrecognized private error', language)).toBe(web['errors']?.[language]['Request failed']);
     expect(serverMessage('Missing fields: username, password', language)).toBe(web['errors']?.[language]['Missing fields: {fields}']?.replace('{fields}', 'username, password'));

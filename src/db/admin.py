@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 from admin_permissions import validate_grants
 from constants import SESSION_MAX_AGE
+from errors import ConflictError
 
 from .common import ConnectionMixin
 
@@ -136,6 +137,18 @@ class AdminMixin(ConnectionMixin):
         async with self.transaction(immediate=True) as conn:
             if not await self._admin_revision_matches(conn, actor):
                 return False
+            if not create and not await self._admin_revision_matches(conn, identity):
+                return False
+            duplicate = await conn.row(
+                "SELECT 1 FROM admin_identities WHERE kind = ? AND name = ? AND id != ?",
+                (identity.kind, identity.name, identity.id),
+            )
+            if duplicate:
+                raise ConflictError(
+                    "Account name already exists"
+                    if identity.kind == "accounts"
+                    else "Key name already exists"
+                )
             if create:
                 await conn.execute(
                     "INSERT INTO admin_identities(id, kind, name, secret, permissions) VALUES (?, ?, ?, ?, ?)",
