@@ -1,5 +1,7 @@
 # Async Telegram (phase 9)  
   
+Administrator workflows are explicitly `*`-only: the configured Telegram administrator whitelist represents trusted root operators. Scoped HTTP admin accounts/keys do not grant Telegram access; granular HTTP permission checks are intentionally not implemented for non-HTTP bot conversations. Public user workflows are unchanged. See [PERMISSIONS.md](PERMISSIONS.md).  
+  
 `TelegramAdminBot` and `TelegramPublicBot` replace the synchronous bots in place, retaining the admin/public feature modules, localized keyboards, commands, callback payloads, and business validation. Both dependency manifests require pyTelegramBotAPI 4.37–4.x; compatibility was inspected and tested against 4.37.0. Constructors register handlers without starting polling or opening sessions.  
   
 ## Library and lifecycle  

@@ -4,6 +4,8 @@ The main HTTP application now uses Quart. `api.application.create_api_applicatio
   
 ## HTTP contracts  
   
+Scoped administrator authorization is documented in [PERMISSIONS.md](PERMISSIONS.md). Config credentials remain root-compatible; the admin auth decorator validates identity and route/field permissions before invoking business handlers. Identity management uses SQLite revision-checked writes; account sessions are independent and revoked on updates. Open live streams recheck authorization before each frame. Telegram and Discord administrators remain explicitly `*`-only.  
+  
 Routes await request parsing, rendering, file responses, repository and core calls. Authentication, validation and rate-limit decorators await their wrapped handlers and retain their signatures. Route paths, response envelopes, ordered JSON, redirects, subscription profiles, admin sessions and public `auth_token` cookies retain the contracts documented in [API.md](API.md) and [API_ADMIN.md](API_ADMIN.md). Config edits offload complete durable transactions and publish snapshots only after commit. Hashing, chart/QR rendering, file work and system sampling use the injected offload boundaries.  
   
 `AsyncRateLimiter` owns a `redis.asyncio` client, verifies connectivity at startup, registers the existing sliding-window Lua script, and closes owned clients at shutdown. Counters retain route scope and client-address keys. Redis errors fail closed with HTTP 429; injected clients remain caller-owned.  

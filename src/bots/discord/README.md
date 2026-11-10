@@ -14,6 +14,10 @@ Add to `data/config.json`:
 Omit the section or leave `token` empty to disable Discord. `whitelist` contains  
 Discord user IDs allowed to use `/admin`; an empty list allows no administrators.  
 Restart after changing the token or whitelist.  
+Discord `/admin` is explicitly `*`-only: whitelisted Discord IDs are trusted root
+operators. Scoped HTTP administrator accounts and API keys do not authorize bot
+commands; non-HTTP granular permissions are intentionally unsupported. Public
+user commands are unchanged. See [permissions](../../../docs/PERMISSIONS.md).
 The admin config editor's Integrations section can add, edit, or remove this  
 optional object. `data/config.json` is the only deployment config; no separate  
 Discord config is loaded.  

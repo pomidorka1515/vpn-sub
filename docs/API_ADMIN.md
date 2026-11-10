@@ -1,7 +1,8 @@
 # Admin API Documentation  
   
 ## Introduction  
-Authentication: `Authorization` header with the independent machine token (`api_token`) or a revocable browser token from `/admin/token`. Cookies alone never authorize admin API calls. These explicit, non-simple request headers protect browser API calls against CSRF; do not enable cross-origin credential sharing.  
+Authentication: `Authorization` header with the independent root machine token (`api_token`), a scoped API key, or a revocable browser token from `/admin/token`. Both raw tokens and `Bearer <token>` are accepted. Cookies alone never authorize admin API calls. These explicit, non-simple request headers protect browser API calls against CSRF; do not enable cross-origin credential sharing.  
+Scoped authorization is additive: existing config credentials remain non-deletable `*` roots. See [PERMISSIONS.md](PERMISSIONS.md) for the complete catalog, route mapping, account/key management endpoints, read prerequisites, delegation limits, and the explicitly root-only Telegram/Discord boundary. Missing permission returns HTTP 403 with `obj.required_permission`; existing 401/429/503 authentication behavior is unchanged.  
 `api_token` must contain at least 20 characters; use a randomly generated token. Existing shorter tokens must be replaced before loading or saving configuration.  
 Missing or incorrect tokens count toward a shared per-client-IP limit across all admin API routes: 10 failures within 5 minutes trigger a 15-minute lockout. Failures return `401`; the triggering attempt and subsequent attempts (including valid tokens) return `429` with `Retry-After` seconds. Blocked requests do not extend the lockout. Successful authentication clears pending failures. Redis stores the counters and lockouts; authentication returns `503` if that store is unavailable. Client IPs use the configured trusted-proxy handling.  
 On failure, returns HTTP 401.  
@@ -388,7 +389,7 @@ Response (error):
   
 ## Admin UI  
 
-Pages are mounted on the service URI, not under the admin API prefix. The UI uses a login form (no Register tab) against `api_admin_ui_auth`. There is one admin account. A successful login replaces the stored session and sets an HttpOnly `admin_ui` cookie on `/{uri}/admin`. The browser receives only a session-bound bearer token, kept in memory, never the machine token or a token in `localStorage`. Logout, a replacement login, session expiry, UI credential changes, and process restart invalidate both the UI cookie and its browser API authority. The browser token has no independent lifetime beyond the server-side session.  
+Pages are mounted on the service URI, not under the admin API prefix. The login form (no Register tab) accepts the config-backed root account or a scoped account. Each account has one independent active session; a successful login replaces only that account's session and sets an HttpOnly `admin_ui` cookie on `/{uri}/admin`. The browser receives only a session-bound bearer token, kept in memory, never the machine token or a token in `localStorage`. Logout, replacement login, expiry, account changes and process restart invalidate its browser authority. The first tab manages accounts and keys; unauthorized tabs remain visible but disabled with tooltips.  
 
 Machine credentials are intentionally independent: logout and changes to `api_admin_ui_auth` do not revoke `api_token`. If a machine token was previously disclosed (including to browsers by older releases), replace `api_token` and restart the service to revoke it. Saving a replacement alone leaves the boot-captured machine token active until restart. Browser config reads omit `api_token`; the UI field is write-only, and leaving it blank preserves the stored value.  
 
@@ -406,7 +407,7 @@ Body: none
 Response (success): HTML document (`admin-auth.html`).  
 
 ### POST /{uri}/admin/session  
-Description: Sign in with the configured admin UI username and password. Replaces the single stored session, so a new login signs out the previous one. Rate-limited.  
+Description: Sign in with the root or scoped admin account's username and password. Replaces only that account's session, signing out its previous browser. Rate-limited.  
 Authentication: none  
 Body: `{"username": "...", "password": "..."}`  
 Response (success): HTTP 200 and `Set-Cookie: admin_ui=...; HttpOnly; Secure; SameSite=Lax; Path=/{uri}/admin`.  
@@ -430,7 +431,10 @@ Response (success):
 	"msg": null,  
 	"obj": {  
 		"token": "ui.<session-bound-credential>",  
-		"api_root": "/sub/privapi" // or "/sub" when api_uri is empty  
+		"api_root": "/sub/privapi", // or "/sub" when api_uri is empty  
+		"panels_configured": true,
+		"permissions": ["*"],
+		"catalog": [{"permission": "user.read", "requires": null}] // complete catalog, abbreviated here
 	}  
 }  
 ```  
@@ -927,6 +931,7 @@ Response (success):
 ---  
   
 ### GET /api/config/get  
+Permission: any corresponding `config.read.main`, `config.read.inbounds`, or `config.read.panels` leaf. Scoped reads return only permitted sections; inbound reads also include the node catalog. Root credential/integration keys are visible only with literal `*`; the root browser still never receives `api_token`. The ETag always represents the complete config. See [permissions](PERMISSIONS.md).  
 Description: Return the on-disk config object, including `$schema` and secrets. Machine-authenticated callers receive the complete object; browser-authenticated callers receive it without `api_token`. The ETag still describes the complete revision and must be treated as opaque by browsers. Do not log the body.  
 Authentication: header  
 Body: none  
@@ -1015,6 +1020,7 @@ Response (error):
 ---  
   
 ### GET /api/teapot  
+Authentication: header; requires `health.read.teapot`.  
 Description: Verify the server cannot brew coffee because it is a teapot.  
 Authorization: None  
 Response (success):  

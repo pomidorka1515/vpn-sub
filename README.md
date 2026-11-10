@@ -38,6 +38,9 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
   session). Token API at `/{uri}/{api_uri}/api/...`: users, codes, panel health,
   audit log, snapshots, leaderboard, system status, and stuck-rollback markers.
   Header `Authorization`.
+  The first tab manages independent, editable admin accounts and API keys with
+  scoped permissions. Existing config credentials remain protected `*` root
+  identities without a config migration. See [permissions](docs/PERMISSIONS.md).
 - **Telegram.** Both bots are optional. Omit `bot` or `publicbot`, or leave its
   token empty, and that bot is not started. Admin bot is UID-whitelisted: users,
   codes, panels, traffic, leaderboard. Public bot: link account, traffic, charts,
@@ -46,6 +49,8 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
 - **Discord.** Optional `discord` config section, one token. Public slash commands plus `/admin`
   for a Discord-ID whitelist.
   See [Discord setup](src/bots/discord/README.md).
+  **Telegram and Discord admin operations are explicitly `*`-only** through their
+  existing administrator whitelists; granular permissions apply only to HTTP.
 - **Bandwidth watcher (`BWatch`).** Polls traffic about every 15s, checks quota
   and expiry about every 2 minutes, panel health about every 5 minutes. Daily
   bandwidth and state snapshots, with retry and admin alerts. Monthly reset
@@ -282,6 +287,16 @@ to the config or fix `$schema`.
 
 ## Upgrades and migration
 
+### Permission-scoped administrators (minor release)
+
+Existing `api_admin_ui_auth` and `api_token` continue to work unchanged as the
+non-deletable root account and root key (`*`). SQLite upgrades automatically to
+schema 8, adding independent scoped accounts, keys and sessions without changing
+subscription data. Back up SQLite before upgrading; older binaries cannot open
+schema 8. No manual config migration is needed for this feature. See
+[permissions and API contracts](docs/PERMISSIONS.md), including delegation rules
+and the intentionally root-only Telegram/Discord boundary.
+
 ### Upgrading config to v6
 
 v6 folds flags, links, nodes, and the other per-inbound maps into one object  
@@ -403,7 +418,7 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 - `src/core/`: `Subscription` and the user, code, panel, bandwidth, and audit
   services. All user mutations go through `Subscription` to keep panels and
   SQLite consistent; the admin API, WebAPI, and Telegram bots already do, and
-  Discord dispatches the same API handlers in-process
+  Discord calls the same shared services in-process
 - `src/bwatch/`: `BWatch`: owned quota, expiry, panel health and snapshot tasks
 - `src/session/`: `XUiSession`, buffered aiohttp transport and generation-safe caches
 - `src/config/`: atomic JSON config with thread + cross-process locking

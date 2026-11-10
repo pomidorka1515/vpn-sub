@@ -2,7 +2,8 @@
   
 ## Introduction  
 Audit config location is usually `../audit.jsonl` unless edited.  
-There are currently **12** possible actions in the audit log.  
+Administrator account/key management records metadata only, never passwords,
+key secrets, or browser/session credentials.  
 The base format is:  
 ```jsonc  
 {  
@@ -32,8 +33,16 @@ For config edits, retain the request's changed key names and the response's comm
 - `code_add`  
 - `code_delete`  
 - `config_update`  
+- `admin_auth_create`, `admin_auth_update`, `admin_auth_delete`  
   
 ## Action info  
+  
+### `admin_auth_create`, `admin_auth_update`, `admin_auth_delete`  
+`info` is `{id, kind, actor}`: target identity ID, `accounts` or `tokens`, and the
+acting scoped identity ID (or `root` for config-backed roots). Root account/key
+targets use `id: 'root'` within their respective kind. These operations use the
+same committed-but-audit-pending HTTP 202 contract; retain a returned one-time
+key securely and do not retry the committed operation. See [PERMISSIONS.md](PERMISSIONS.md).
   
 ---  
   

@@ -25,6 +25,7 @@ frontend/coverage/
 !API.md
 !API_ADMIN.md
 !AUDIT.md
+!docs/PERMISSIONS.md
 !docs/ASYNC_*
 !frontend/.node-version
 !frontend/.npmrc
