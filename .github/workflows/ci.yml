@@ -8,8 +8,8 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: frontend/.node-version
           cache: npm
@@ -27,9 +27,9 @@ jobs:
         command: ["pytest", "mypy", "pyright", "ruff check ."]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
           cache: pip
@@ -37,7 +37,7 @@ jobs:
       - name: install
         run: pip install -e ".[dev]"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: matrix.command == 'pytest'
         with:
           node-version-file: frontend/.node-version

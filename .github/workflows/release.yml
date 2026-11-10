@@ -37,9 +37,9 @@ jobs:
               --include-module=discord
               --include-package=bots.discord
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: frontend/.node-version
           cache: npm
@@ -50,7 +50,7 @@ jobs:
           npm --prefix frontend ci
           npm --prefix frontend run build
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
           cache: pip
@@ -680,7 +680,7 @@ jobs:
         run: tar -cf "$RUNNER_TEMP/ccache.tar" -C "$HOME/.cache/ccache" .
 
       - name: save ccache
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ccache-${{ runner.os }}-${{ runner.arch }}-${{ matrix.name }}
           path: ${{ runner.temp }}/ccache.tar
@@ -688,13 +688,13 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: build-report-${{ matrix.name }}
           path: build/dist/${{ matrix.name }}-report.xml
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.name }}
           path: |
@@ -706,7 +706,7 @@ jobs:
     needs: binaries
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: build/dist
           merge-multiple: true
