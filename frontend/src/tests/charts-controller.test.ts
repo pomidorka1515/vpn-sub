@@ -83,6 +83,23 @@ describe('admin chart controller', () => {
     expect(required(document.getElementById('chartsCutoffField')).hidden).toBe(true);
     expect(required(document.getElementById('chartsDelayField')).hidden).toBe(false);
   });
+  it('does not retry a forbidden stream, including after returning to the tab', async () => {
+    const { api, charts, click, request } = setup();
+    api.mockResolvedValue(success([]));
+    request.mockResolvedValue(new Response('', { status: 403 }));
+    charts.chartsOnTab('charts');
+    await vi.waitFor(() => { expect(renderer.renderGroup).toHaveBeenCalled(); });
+    click('[data-mode="live"]');
+    await vi.waitFor(() => { expect(required(document.getElementById('chartsStatus')).textContent).toBe('permission_missing'); });
+    vi.useFakeTimers();
+    try {
+      charts.chartsOnTab('users');
+      charts.chartsOnTab('charts');
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(required(document.getElementById('chartsStatus')).textContent).toBe('permission_missing');
+    } finally { vi.useRealTimers(); }
+  });
   it('aborts a live stream on tab exit and does not report an intentional abort', async () => {
     const { api, charts, click, request, toast } = setup();
     api.mockResolvedValue(success([]));

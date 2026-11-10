@@ -22,7 +22,7 @@ const state: {
   mode: 'snapshot' | 'live'; scope: string; group: string; cutoff: number; delay: number;
   rows: Row[]; panels: string[]; opened: boolean; timer: number | null; stream: AbortController | null;
   lastLive: number; inflight: boolean; errorStreak: number; charts: ChartMap; scales: Scales;
-  built: boolean; cutoffTimer: number | null; gen: number; hostCpuDropped: boolean; chartJsFailed: boolean;
+  built: boolean; cutoffTimer: number | null; gen: number; hostCpuDropped: boolean; chartJsFailed: boolean; liveDenied: boolean;
 } = {
   mode: 'snapshot',
   scope: 'host',
@@ -46,6 +46,7 @@ const state: {
   // pauses so a later real 0.0 still plots. Mode switches clear it.
   hostCpuDropped: false,
   chartJsFailed: false,
+  liveDenied: false,
 };
 
 let chartJsPromise: Promise<void> | null = null;
@@ -133,7 +134,7 @@ function liveOpts(): Live | undefined {
 
 function scheduleLive() {
   stopTimer();
-  if (state.mode !== 'live' || !tabActive() || state.chartJsFailed) return;
+  if (state.mode !== 'live' || !tabActive() || state.chartJsFailed || state.liveDenied) return;
   state.timer = window.setTimeout(() => {
     state.timer = null;
     void pollLive();
@@ -283,6 +284,7 @@ async function fetchSnapshots() {
 async function pollLive() {
   if (context.can && !context.can('state.charts.read')) return;
   if (state.mode !== 'live') return;
+  if (state.liveDenied) return;
   if (state.chartJsFailed) return;
   if (state.stream) return;
   if (!tabActive()) return;
@@ -297,9 +299,16 @@ async function pollLive() {
       credentials: 'same-origin',
       signal: controller.signal,
     });
+    if (controller.signal.aborted || gen !== state.gen || controller !== state.stream) return;
     if (response.status === 401) {
       stopLive();
       config.on401();
+      return;
+    }
+    if (response.status === 403) {
+      state.liveDenied = true;
+      const status = $('chartsStatus');
+      if (status) { status.hidden = false; status.className = 'charts-status err'; status.textContent = t('permission_missing').replace('{permission}', 'state.charts.read'); }
       return;
     }
     if (!response.ok || !response.body ||
@@ -383,6 +392,7 @@ async function startLive() {
   state.errorStreak = 0;
   state.hostCpuDropped = false;
   state.chartJsFailed = false;
+  state.liveDenied = false;
   state.built = false;
   destroyCharts(state.charts);
   $('chartsMount')?.replaceChildren();
@@ -514,6 +524,7 @@ function chartsOnTab(name: string): void {
     setStatus('chart_load_err', 'err');
     return;
   }
+  if (state.liveDenied) return;
   if (state.mode === 'live') {
     if (state.rows.length) showCharts();
     void pollLive();

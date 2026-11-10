@@ -10,14 +10,14 @@ const details = { action: 'bonus', days: 30, gb: 10, wl_gb: 5, uses: 1, perma: f
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); });
 
-function setup() {
+function setup(can: (permission: string) => boolean = () => true) {
   const template = readFileSync('src/templates/admin.html', 'utf8');
   document.body.innerHTML = template.slice(template.indexOf('<div id="tab-codes"'), template.indexOf('<div id="tab-logs"'));
   const api = vi.fn<AdminContext['api']>();
   const toast = vi.fn();
   const confirm = vi.fn<AdminContext['confirm']>().mockResolvedValue(true);
   const clipboard = { writeText: vi.fn<Clipboard['writeText']>().mockResolvedValue() };
-  dispose = initCodes({ doc: document, t: key => key === 'codes_unlimited_value' ? '∞' : key, api, toast, confirm, loadGen: () => () => true }, clipboard);
+  dispose = initCodes({ doc: document, t: key => key === 'codes_unlimited_value' ? '∞' : key, api, toast, confirm, loadGen: () => () => true, can }, clipboard);
   const list = required(document.getElementById('codeList'));
   const click = (id: string) => { required(document.getElementById(id)).click(); };
   const cards = () => [...list.querySelectorAll<HTMLElement>('.code-card')];
@@ -101,6 +101,30 @@ describe('admin codes', () => {
     await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/code/delete', { code: 'FIRST' }); });
     expect(cards()[0]).toBe(first);
     expect(cards()).toHaveLength(2);
+  });
+
+  it('shows an initial load failure and recovers on retry', async () => {
+    const { api, click, list, load } = setup();
+    api.mockResolvedValueOnce({ success: false, msg: 'denied', status: 403 });
+    click('btnLoadCodes');
+    await vi.waitFor(() => { expect(list.textContent).toBe('denied'); });
+    await load([]);
+    expect(list.textContent).toContain('no_codes');
+  });
+
+  it('selects an allowed creation action and prevents unauthorized deletions', async () => {
+    const { api, click, cards, load, confirm } = setup(permission => ['code.read', 'code.add.register'].includes(permission));
+    await load(['FIRST']);
+    const remove = required(required(cards()[0]).querySelector<HTMLButtonElement>('[data-code-action="delete"]'));
+    expect(remove.disabled).toBe(true);
+    remove.disabled = false; remove.click();
+    expect(confirm).not.toHaveBeenCalled();
+    click('btnShowAddCode');
+    expect(requiredInstance(document.getElementById('addAction'), HTMLSelectElement).value).toBe('register');
+    requiredInstance(document.getElementById('addCode'), HTMLInputElement).value = 'NEW';
+    api.mockResolvedValue(success());
+    click('btnDoAddCode');
+    await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/code/add', expect.objectContaining({ action: 'register' })); });
   });
 
   it('updates changed details without replacing unaffected cards or action buttons', async () => {
