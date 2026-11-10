@@ -249,6 +249,8 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_user_options(self, interaction: discord.Interaction, username: str) -> None:
+        await self._defer(interaction)
+        has_web_account = bool(await self.sub.user_svc.get_external_username(username))
         # Each token identifies one immutable target selection, even when the
         # same administrator opens another menu for the same username.
         generation = token_hex(8)
@@ -301,6 +303,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 label="🔑 Сброс пароля",
                 custom_id=f"admin:edit:password:{generation}",
                 style=discord.ButtonStyle.secondary,
+                disabled=not has_web_account,
             )
         )
         view.add_item(

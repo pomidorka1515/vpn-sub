@@ -147,6 +147,7 @@ def services() -> MagicMock:
     sub.user_svc = MagicMock()
     sub.user_svc.auth_token_to_user = AsyncMock(return_value="alice")
     sub.user_svc.external_username_exists = AsyncMock(return_value=False)
+    sub.user_svc.get_external_username = AsyncMock(return_value="alice-login")
     sub.user_svc.list_users = AsyncMock(return_value=["alice", "bob"])
     sub.business_svc = MagicMock()
     sub.business_svc.get_info = AsyncMock(return_value=stats_obj())

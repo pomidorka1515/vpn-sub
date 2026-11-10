@@ -212,6 +212,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
 
     async def _cb_edit_user_options(self, chat_id: int, username: str) -> None:
+        has_web_account = bool(await self.sub.user_svc.get_external_username(username))
         # The opaque token binds every downstream action to this target and menu,
         # without putting potentially long usernames in Telegram callback data.
         generation = token_hex(8)
@@ -231,13 +232,16 @@ class AdminUsersMixin(AdminFeatureMixin):
             ),
             types.InlineKeyboardButton("👤 Веб-логин", callback_data=f"edit_login:{generation}"),
             types.InlineKeyboardButton(
-                "🔑 Сброс пароля", callback_data=f"edit_password:{generation}"
-            ),
-            types.InlineKeyboardButton(
                 "📅 Дата окончания", callback_data=f"edit_date:{generation}"
             ),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"),
         )
+        if has_web_account:
+            markup.add(  # pyright: ignore[reportUnknownMemberType]
+                types.InlineKeyboardButton(
+                    "🔑 Сброс пароля", callback_data=f"edit_password:{generation}"
+                )
+            )
         await self.bot.send_message(
             chat_id,
             f"✏️ Что изменить для <b>{username}</b>?",

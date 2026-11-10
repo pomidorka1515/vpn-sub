@@ -28,6 +28,26 @@ async def test_admin_password_reset_link_and_stale_menu() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("external", [None, "alice-login"])
+async def test_password_reset_button_requires_web_login(external: str | None) -> None:
+    _, bot, _, sub = make_bots()
+    sub.user_svc.get_external_username.return_value = external
+    interaction = FakeInteraction()
+    await bot._cb_edit_user_options(cast(discord.Interaction, interaction), "alice")
+    assert interaction.response.deferred
+    view = cast(discord.ui.View, interaction.response.messages[-1]["view"])
+    buttons = [
+        item
+        for item in view.children
+        if isinstance(item, discord.ui.Button)
+        and item.custom_id is not None
+        and item.custom_id.startswith("admin:edit:password:")
+    ]
+    assert len(buttons) == 1
+    assert buttons[0].disabled is (external is None)
+
+
+@pytest.mark.asyncio
 async def test_admin_whitelist_guards_service_access() -> None:
     _, bot, _, sub = make_bots(whitelist=[99])
     fake = FakeInteraction(data={"custom_id": "admin:list_users"})

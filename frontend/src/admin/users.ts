@@ -1,4 +1,4 @@
-import { withBusy } from '../shared/busy';
+import { busyDepth, withBusy } from '../shared/busy';
 import { escapeHtml } from '../shared/dom';
 import { fmtBytes } from '../shared/formatting';
 import { renderIfChanged } from '../shared/render';
@@ -17,6 +17,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   let usersLoaded = false;
   let disposed = false;
   let detailGeneration = 0;
+  let resetAvailable = false;
   const getDialog = (id: string): HTMLDialogElement => {
     const dialog = element(doc, id);
     if (!(dialog instanceof HTMLDialogElement)) throw new Error(t('error'));
@@ -37,6 +38,8 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   const options = (): { okText: string; cancelText: string } => ({ okText: t('confirm'), cancelText: t('cancel') });
   function hideDetail(): void {
     detailGeneration++;
+    resetAvailable = false;
+    button(doc, 'btnPasswordReset').disabled = true;
     if (detail.open) detail.close();
     state.selectedUser = null;
   }
@@ -119,6 +122,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         return;
       }
       const row = (key: string, value: unknown): string => `<div class="info-row"><span class="info-label">${t(key)}</span><span class="info-value">${escapeHtml(value || '—')}</span></div>`;
+      const resetButton = button(doc, 'btnPasswordReset');
+      const hasWebAccount = typeof user['ext_username'] === 'string' && user['ext_username'].length > 0;
+      resetAvailable = hasWebAccount;
+      resetButton.disabled = !hasWebAccount || busyDepth(resetButton) > 0;
+      element(doc, 'passwordResetUnavailable').hidden = hasWebAccount;
       const trafficRow = (key: string, value: unknown): string => {
         const data = isRecord(value) ? value : {};
         const format = (part: string): string => escapeHtml(fmtBytes(typeof data[part] === 'number' ? data[part] : NaN, t));
@@ -192,8 +200,8 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   }
   async function issuePasswordReset(): Promise<void> {
     const username = state.selectedUser;
-    if (!username) return;
-    await withBusy(button(doc, 'btnPasswordReset'), async () => {
+    if (!username || !resetAvailable) return;
+    try { await withBusy(button(doc, 'btnPasswordReset'), async () => {
       const res = await api('POST', '/api/user/password-reset', { user: username });
       if (disposed || state.selectedUser !== username) return;
       if (!res?.success || !isRecord(res.obj) || typeof res.obj['link'] !== 'string') {
@@ -211,7 +219,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       result.append(hint, link);
       result.className = 'result-box success'; result.hidden = false;
       link.focus(); link.select();
-    });
+    }); } finally { button(doc, 'btnPasswordReset').disabled = !resetAvailable; }
   }
   function showAddUser(): void {
     element(doc, 'addUserCard').style.display = 'block';

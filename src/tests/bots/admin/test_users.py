@@ -98,6 +98,7 @@ async def test_password_reset_link_uses_shared_account_service(
     mixin, telegram, subscription = users
     link = "https://example.test/sub/reset?token=" + "x" * 75
     subscription.account_svc.issue_password_reset.return_value = link
+    subscription.user_svc.get_external_username.return_value = "alice-login"
     await mixin._cb_edit_user_options(7, "alice")
     generation = mixin._pending_edits[7]["generation"]
     assert f"edit_password:{generation}" in _buttons(
@@ -107,6 +108,19 @@ async def test_password_reset_link_uses_shared_account_service(
     subscription.account_svc.issue_password_reset.assert_awaited_once_with("alice")
     assert link in telegram.send_message.call_args.args[1]
     assert telegram.send_message.call_args.kwargs["disable_web_page_preview"]
+
+
+@pytest.mark.asyncio
+async def test_password_reset_not_available_without_web_login(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock],
+) -> None:
+    mixin, telegram, subscription = users
+    subscription.user_svc.get_external_username.return_value = None
+    await mixin._cb_edit_user_options(7, "alice")
+    assert not any(
+        button.startswith("edit_password:")
+        for button in _buttons(telegram.send_message.call_args.kwargs["reply_markup"])
+    )
 
 
 @pytest.mark.asyncio

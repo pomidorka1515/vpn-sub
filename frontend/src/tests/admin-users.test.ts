@@ -28,15 +28,55 @@ const success = (obj: unknown = null) => ({ success: true, obj, status: 200 });
 
 describe('admin user management', () => {
   it('issues a selectable reset link for the selected internal user', async () => {
-    const { state, api, click } = setup();
-    state.selectedUser = 'alice';
+    const { api, click, load } = setup();
+    await load(['alice']);
+    api.mockResolvedValueOnce(success({ ext_username: 'alice-login' }));
+    required(document.querySelector<HTMLButtonElement>('[data-user-action="view"]')).click();
+    await vi.waitFor(() => { expect(requiredInstance(document.getElementById('btnPasswordReset'), HTMLButtonElement).disabled).toBe(false); });
     const link = 'https://example.test/sub/reset?token=' + 'x'.repeat(75);
     api.mockResolvedValueOnce(success({ link }));
     click('btnPasswordReset');
     await vi.waitFor(() => { expect(document.querySelector<HTMLInputElement>('#userDetailResult input')?.value).toBe(link); });
-    expect(api).toHaveBeenCalledExactlyOnceWith('POST', '/api/user/password-reset', { user: 'alice' });
+    expect(api).toHaveBeenCalledWith('POST', '/api/user/password-reset', { user: 'alice' });
     expect(required(document.getElementById('userDetailResult')).hidden).toBe(false);
     expect(requiredInstance(document.querySelector('#userDetailResult input'), HTMLInputElement).readOnly).toBe(true);
+  });
+  it('disables password reset for users without a web account and updates when switching users', async () => {
+    const { api, click, load } = setup();
+    await load(['alice', 'bob']);
+    const views = document.querySelectorAll<HTMLButtonElement>('[data-user-action="view"]');
+    const reset = requiredInstance(document.getElementById('btnPasswordReset'), HTMLButtonElement);
+    expect(reset.disabled).toBe(true);
+    api.mockResolvedValueOnce(success({ ext_username: 'alice-login' }));
+    required(views[0]).click();
+    await vi.waitFor(() => { expect(reset.disabled).toBe(false); });
+    expect(required(document.getElementById('passwordResetUnavailable')).hidden).toBe(true);
+    api.mockResolvedValueOnce(success({ ext_username: null }));
+    required(views[1]).click();
+    await vi.waitFor(() => { expect(reset.disabled).toBe(true); });
+    expect(required(document.getElementById('passwordResetUnavailable')).hidden).toBe(false);
+    const calls = api.mock.calls.length;
+    click('btnPasswordReset');
+    expect(api).toHaveBeenCalledTimes(calls);
+  });
+  it('keeps reset disabled if the selected user changes while link issuance is pending', async () => {
+    const { api, click, load } = setup();
+    await load(['alice', 'bob']);
+    const views = document.querySelectorAll<HTMLButtonElement>('[data-user-action="view"]');
+    const reset = requiredInstance(document.getElementById('btnPasswordReset'), HTMLButtonElement);
+    api.mockResolvedValueOnce(success({ ext_username: 'alice-login' }));
+    required(views[0]).click();
+    await vi.waitFor(() => { expect(reset.disabled).toBe(false); });
+    let resolve!: (value: ReturnType<typeof success>) => void;
+    api.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    click('btnPasswordReset');
+    api.mockResolvedValueOnce(success({ ext_username: null }));
+    required(views[1]).click();
+    await vi.waitFor(() => { expect(required(document.getElementById('passwordResetUnavailable')).hidden).toBe(false); });
+    resolve(success({ link: 'https://example.test/sub/reset?token=secret' }));
+    await vi.waitFor(() => { expect(reset.hasAttribute('aria-busy')).toBe(false); });
+    expect(reset.disabled).toBe(true);
+    expect(required(document.getElementById('userDetailResult')).hidden).toBe(true);
   });
   it('shows external names and switches to web-only rows while keeping internal action targets', async () => {
     const { input, load, api } = setup();
