@@ -27,6 +27,40 @@ function setup() {
 const success = (obj: unknown = null) => ({ success: true, obj, status: 200 });
 
 describe('admin user management', () => {
+  it('filters usernames instantly without requests and restores the list when cleared', async () => {
+    const { state, api, input, load } = setup();
+    await load(['Alice', 'bob', 'malice', '<img>']);
+    const search = input('userSearch');
+    const names = () => [...document.querySelectorAll('.user-name')].map(cell => cell.textContent);
+    search.value = ' ALIce ';
+    search.dispatchEvent(new Event('input'));
+    expect(names()).toEqual(['Alice', 'malice']);
+    expect(state.currentUsers).toEqual(['Alice', 'bob', 'malice', '<img>']);
+    search.value = 'missing';
+    search.dispatchEvent(new Event('input'));
+    expect(required(document.getElementById('usersTableWrap')).textContent).toBe('no_matching_users');
+    search.value = '<img>';
+    search.dispatchEvent(new Event('input'));
+    expect(names()).toEqual(['<img>']);
+    expect(document.querySelector('#usersTableWrap img')).toBeNull();
+    search.value = '';
+    search.dispatchEvent(new Event('input'));
+    expect(names()).toEqual(state.currentUsers);
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+  it('keeps the search across refreshes and distinguishes an empty user list', async () => {
+    const { input, load } = setup();
+    const search = input('userSearch');
+    search.value = 'bob';
+    search.dispatchEvent(new Event('input'));
+    expect(required(document.getElementById('usersTableWrap')).querySelector('[data-t="loading"]')).not.toBeNull();
+    await load(['alice', 'bob']);
+    expect(document.querySelectorAll('.user-name')).toHaveLength(1);
+    await load(['bobby', 'carol']);
+    expect(document.querySelector('.user-name')?.textContent).toBe('bobby');
+    await load([]);
+    expect(required(document.getElementById('usersTableWrap')).textContent).toBe('no_users');
+  });
   it('filters invalid names, escapes markup and disables actions without panels', async () => {
     const { state, load } = setup();
     state.panelsConfigured = false;

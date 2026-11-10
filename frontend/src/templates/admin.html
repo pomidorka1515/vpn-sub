@@ -50,6 +50,10 @@
     <div class="card">
       <div class="card-title" data-t="user_list">{{ L['user_list'] }}</div>
       <div class="toolbar">
+        <label class="user-search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></svg>
+          <input type="search" id="userSearch" autocomplete="off" data-t-aria="search_users" aria-label="{{ L['search_users'] }}" data-t-ph="search_users" placeholder="{{ L['search_users'] }}" aria-controls="usersTableWrap">
+        </label>
         <button class="btn-secondary" id="btnLoadUsers" data-t="refresh">{{ L['refresh'] }}</button>
         <button class="btn btn-primary" style="padding:10px 20px" id="btnShowAdd" data-t="add_user_btn">{{ L['add_user_btn'] }}</button>
       </div>

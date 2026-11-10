@@ -154,6 +154,21 @@
   padding: 30px; text-align: center; color: var(--text2); font-size: 0.8125rem;
 }
 
+.user-search {
+  display: flex; align-items: center; gap: 10px; flex: 1 1 200px; min-width: 0;
+  padding: 10px 12px; background: var(--bg); color: var(--text2);
+  border: 1px solid var(--border); border-radius: 8px;
+  transition: border-color .2s, color .2s;
+}
+.user-search:hover { border-color: var(--border-h); }
+.user-search:focus-within { border-color: var(--accent); color: var(--accent); }
+.user-search svg { width: 16px; height: 16px; flex-shrink: 0; }
+.user-search input {
+  width: 100%; min-width: 0; border: none; outline: none; background: none;
+  color: var(--text); font-family: inherit; font-size: 0.8125rem;
+}
+.user-search input::placeholder { color: var(--text2); }
+
 .json-view {
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
   padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;

@@ -11,6 +11,8 @@ import type { AdminContext } from './context';
 export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext, state: AdminState): () => void {
   const listeners = new AbortController();
   const wrap = element(doc, 'usersTableWrap');
+  const search = input(doc, 'userSearch');
+  let usersLoaded = false;
   let disposed = false;
   let detailGeneration = 0;
   const getDialog = (id: string): HTMLDialogElement => {
@@ -43,9 +45,16 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       if (disposed || !current()) return;
       if (!res?.success) { toast(res?.msg || t('network_err'), 'error'); return; }
       state.currentUsers = Array.isArray(res.obj) ? res.obj.filter((user: unknown): user is string => typeof user === 'string') : [];
-      if (!state.currentUsers.length) { renderIfChanged(wrap, `<div class="table-empty">${t('no_users')}</div>`); return; }
-      renderIfChanged(wrap, `<table class="data-table users-table"><thead><tr><th>${t('internal_user')}</th><th>${t('actions')}</th></tr></thead><tbody>${state.currentUsers.map(user => `<tr><td class="mono user-name">${escapeHtml(user)}</td><td><div class="actions">${([['view', 'info', ICON_INFO], ['edit', 'edit', ICON_EDIT], ['delete', 'delete', ICON_DELETE]] as const).map(([action, key, icon]) => `<button class="btn-tiny user-action user-${action}${action === 'delete' ? ' danger' : ''}" data-user="${escapeHtml(user)}" data-user-action="${action}" aria-label="${escapeHtml(t(key))}" title="${escapeHtml(t(key))}" ${state.panelsConfigured ? '' : 'disabled'}>${actionContent(key, icon)}</button>`).join('')}</div></td></tr>`).join('')}</tbody></table>`);
+      usersLoaded = true;
+      renderUsers();
     });
+  }
+  function renderUsers(): void {
+    if (!usersLoaded) return;
+    const query = search.value.trim().toLowerCase();
+    const users = state.currentUsers.filter(user => user.toLowerCase().includes(query));
+    if (!users.length) { renderIfChanged(wrap, `<div class="table-empty">${escapeHtml(t(state.currentUsers.length ? 'no_matching_users' : 'no_users'))}</div>`); return; }
+    renderIfChanged(wrap, `<table class="data-table users-table"><thead><tr><th>${t('internal_user')}</th><th>${t('actions')}</th></tr></thead><tbody>${users.map(user => `<tr><td class="mono user-name">${escapeHtml(user)}</td><td><div class="actions">${([['view', 'info', ICON_INFO], ['edit', 'edit', ICON_EDIT], ['delete', 'delete', ICON_DELETE]] as const).map(([action, key, icon]) => `<button class="btn-tiny user-action user-${action}${action === 'delete' ? ' danger' : ''}" data-user="${escapeHtml(user)}" data-user-action="${action}" aria-label="${escapeHtml(t(key))}" title="${escapeHtml(t(key))}" ${state.panelsConfigured ? '' : 'disabled'}>${actionContent(key, icon)}</button>`).join('')}</div></td></tr>`).join('')}</tbody></table>`);
   }
   async function viewUser(username: string, trigger: HTMLButtonElement, editing = false): Promise<void> {
     const generation = ++detailGeneration;
@@ -218,6 +227,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   }, { signal: listeners.signal });
   const bind = (id: string, handler: () => void): void => { button(doc, id).addEventListener('click', handler, { signal: listeners.signal }); };
   bind('btnLoadUsers', () => { void loadUsers(); });
+  search.addEventListener('input', renderUsers, { signal: listeners.signal });
   bind('btnShowAdd', showAddUser);
   bind('btnCancelAdd', hideAddUser);
   bind('btnDoAdd', () => { void addUser(); });
