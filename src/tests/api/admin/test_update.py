@@ -20,6 +20,20 @@ HEADERS = {"Authorization": "secret"}
 
 
 @pytest.mark.parametrize("external", [None, "alice-login"])
+async def test_user_list_optionally_exposes_only_external_login(
+    admin_api: tuple[Quart, Subscription], database: Database, external: str | None
+) -> None:
+    app, _ = admin_api
+    await create_alice(database, ext_username=external, ext_password_hash="secret-hash")
+    client = app.test_client()
+    response = await client.get("/sub/api/api/user/list?include_external=1", headers=HEADERS)
+    assert response.status_code == 200
+    assert (await response.get_json())["obj"] == [{"username": "alice", "ext_username": external}]
+    legacy = await client.get("/sub/api/api/user/list", headers=HEADERS)
+    assert (await legacy.get_json())["obj"] == ["alice"]
+
+
+@pytest.mark.parametrize("external", [None, "alice-login"])
 async def test_info_exposes_external_login_for_editing(
     admin_api: tuple[Quart, Subscription], database: Database, external: str | None
 ) -> None:

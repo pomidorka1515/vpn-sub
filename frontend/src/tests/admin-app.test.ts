@@ -30,7 +30,7 @@ describe('admin application integration', () => {
     required(document.querySelector<HTMLElement>('[data-tab="users"]')).click();
     expect(request).toHaveBeenCalledTimes(1);
     resolve(token());
-    await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('https://example.test/api/api/user/list', expect.objectContaining({ method: 'GET', headers: { Authorization: 'csrf' } })); });
+    await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('https://example.test/api/api/user/list?include_external=1', expect.objectContaining({ method: 'GET', headers: { Authorization: 'csrf' } })); });
     expect(required(document.getElementById('bootOverlay')).hidden).toBe(true);
     expect(required(document.getElementById('tab-users')).classList.contains('active')).toBe(true);
     await vi.waitFor(() => { expect(required(document.getElementById('usersTableWrap')).textContent).toContain('no_users'); });

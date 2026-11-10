@@ -1108,6 +1108,7 @@
                 // dynamic labels
                 "no_users": "No users",
                 "search_users": "Search users…",
+                "web_users_only": "Web users only",
                 "no_matching_users": "No matching users",
                 "no_logs": "No logs",
                 "log_all_actions": "All actions",
@@ -1530,6 +1531,7 @@
                 // dynamic labels
                 "no_users": "Нет пользователей",
                 "search_users": "Поиск пользователей…",
+                "web_users_only": "Только веб-пользователи",
                 "no_matching_users": "Пользователи не найдены",
                 "no_logs": "Нет логов",
                 "log_all_actions": "Все действия",

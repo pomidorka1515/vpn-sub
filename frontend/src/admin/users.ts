@@ -5,13 +5,15 @@ import { renderIfChanged } from '../shared/render';
 import { isRecord } from '../shared/json';
 import { ICON_DELETE, ICON_EDIT, ICON_INFO } from '../shared/icons';
 import type { AdminState } from './bootstrap';
-import { button, element, input } from './context';
+import { button, checkbox, element, input } from './context';
 import type { AdminContext } from './context';
 
 export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext, state: AdminState): () => void {
   const listeners = new AbortController();
   const wrap = element(doc, 'usersTableWrap');
   const search = input(doc, 'userSearch');
+  const webOnly = checkbox(doc, 'webUsersOnly');
+  const externalNames = new Map<string, string>();
   let usersLoaded = false;
   let disposed = false;
   let detailGeneration = 0;
@@ -41,10 +43,16 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   async function loadUsers(): Promise<void> {
     const current = loadGen('users');
     await withBusy(button(doc, 'btnLoadUsers'), async () => {
-      const res = await api('GET', '/api/user/list');
+      const res = await api('GET', '/api/user/list?include_external=1');
       if (disposed || !current()) return;
       if (!res?.success) { toast(res?.msg || t('network_err'), 'error'); return; }
-      state.currentUsers = Array.isArray(res.obj) ? res.obj.filter((user: unknown): user is string => typeof user === 'string') : [];
+      externalNames.clear();
+      state.currentUsers = Array.isArray(res.obj) ? res.obj.flatMap((user: unknown): string[] => {
+        if (typeof user === 'string') return [user];
+        if (!isRecord(user) || typeof user['username'] !== 'string') return [];
+        if (typeof user['ext_username'] === 'string' && user['ext_username'].trim()) externalNames.set(user['username'], user['ext_username']);
+        return [user['username']];
+      }) : [];
       usersLoaded = true;
       renderUsers();
     });
@@ -52,9 +60,9 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   function renderUsers(): void {
     if (!usersLoaded) return;
     const query = search.value.trim().toLowerCase();
-    const users = state.currentUsers.filter(user => user.toLowerCase().includes(query));
+    const users = state.currentUsers.filter(user => (!webOnly.checked || externalNames.has(user)) && (user.toLowerCase().includes(query) || externalNames.get(user)?.toLowerCase().includes(query)));
     if (!users.length) { renderIfChanged(wrap, `<div class="table-empty">${escapeHtml(t(state.currentUsers.length ? 'no_matching_users' : 'no_users'))}</div>`); return; }
-    renderIfChanged(wrap, `<table class="data-table users-table"><thead><tr><th>${t('internal_user')}</th><th>${t('actions')}</th></tr></thead><tbody>${users.map(user => `<tr><td class="mono user-name">${escapeHtml(user)}</td><td><div class="actions">${([['view', 'info', ICON_INFO], ['edit', 'edit', ICON_EDIT], ['delete', 'delete', ICON_DELETE]] as const).map(([action, key, icon]) => `<button class="btn-tiny user-action user-${action}${action === 'delete' ? ' danger' : ''}" data-user="${escapeHtml(user)}" data-user-action="${action}" aria-label="${escapeHtml(t(key))}" title="${escapeHtml(t(key))}" ${state.panelsConfigured ? '' : 'disabled'}>${actionContent(key, icon)}</button>`).join('')}</div></td></tr>`).join('')}</tbody></table>`);
+    renderIfChanged(wrap, `<table class="data-table users-table"><thead><tr><th>${t(webOnly.checked ? 'ext_username' : 'internal_user')}</th>${webOnly.checked ? '' : `<th class="user-external">${t('ext_username')}</th>`}<th>${t('actions')}</th></tr></thead><tbody>${users.map(user => `<tr><td class="mono user-name">${escapeHtml(webOnly.checked ? externalNames.get(user) : user)}</td>${webOnly.checked ? '' : `<td class="mono user-external">${escapeHtml(externalNames.get(user) || '—')}</td>`}<td><div class="actions">${([['view', 'info', ICON_INFO], ['edit', 'edit', ICON_EDIT], ['delete', 'delete', ICON_DELETE]] as const).map(([action, key, icon]) => `<button class="btn-tiny user-action user-${action}${action === 'delete' ? ' danger' : ''}" data-user="${escapeHtml(user)}" data-user-action="${action}" aria-label="${escapeHtml(t(key))}" title="${escapeHtml(t(key))}" ${state.panelsConfigured ? '' : 'disabled'}>${actionContent(key, icon)}</button>`).join('')}</div></td></tr>`).join('')}</tbody></table>`);
   }
   async function viewUser(username: string, trigger: HTMLButtonElement, editing = false): Promise<void> {
     const generation = ++detailGeneration;
@@ -228,6 +236,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   const bind = (id: string, handler: () => void): void => { button(doc, id).addEventListener('click', handler, { signal: listeners.signal }); };
   bind('btnLoadUsers', () => { void loadUsers(); });
   search.addEventListener('input', renderUsers, { signal: listeners.signal });
+  webOnly.addEventListener('change', renderUsers, { signal: listeners.signal });
   bind('btnShowAdd', showAddUser);
   bind('btnCancelAdd', hideAddUser);
   bind('btnDoAdd', () => { void addUser(); });

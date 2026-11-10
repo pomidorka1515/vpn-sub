@@ -27,6 +27,31 @@ function setup() {
 const success = (obj: unknown = null) => ({ success: true, obj, status: 200 });
 
 describe('admin user management', () => {
+  it('shows external names and switches to web-only rows while keeping internal action targets', async () => {
+    const { input, load, api } = setup();
+    await load([{ username: 'alice', ext_username: '<alice-login>' }, { username: 'bob', ext_username: null }]);
+    expect([...document.querySelectorAll('td.user-external')].map(cell => cell.textContent)).toEqual(['<alice-login>', '—']);
+    const toggle = input('webUsersOnly');
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    expect(document.querySelectorAll('.user-name')).toHaveLength(1);
+    expect(document.querySelector('.user-name')?.textContent).toBe('<alice-login>');
+    expect(document.querySelector('thead th')?.textContent).toBe('ext_username');
+    expect(document.querySelector('.user-external')).toBeNull();
+    expect(document.querySelector('[data-user-action="view"]')?.getAttribute('data-user')).toBe('alice');
+    expect(document.querySelector('alice-login')).toBeNull();
+    input('userSearch').value = 'LOGIN';
+    input('userSearch').dispatchEvent(new Event('input'));
+    expect(document.querySelectorAll('.user-name')).toHaveLength(1);
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change'));
+    expect(document.querySelector('.user-name')?.textContent).toBe('alice');
+    expect(api).toHaveBeenCalledTimes(1);
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    await load([{ username: 'alice', ext_username: null }]);
+    expect(required(document.getElementById('usersTableWrap')).textContent).toBe('no_matching_users');
+  });
   it('filters usernames instantly without requests and restores the list when cleared', async () => {
     const { state, api, input, load } = setup();
     await load(['Alice', 'bob', 'malice', '<img>']);

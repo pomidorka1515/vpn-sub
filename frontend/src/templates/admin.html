@@ -57,6 +57,11 @@
         <button class="btn-secondary" id="btnLoadUsers" data-t="refresh">{{ L['refresh'] }}</button>
         <button class="btn btn-primary" style="padding:10px 20px" id="btnShowAdd" data-t="add_user_btn">{{ L['add_user_btn'] }}</button>
       </div>
+      <label class="dark-check user-web-toggle">
+        <input type="checkbox" id="webUsersOnly" role="switch" aria-controls="usersTableWrap">
+        <span class="check-track" aria-hidden="true"><span class="check-thumb"></span></span>
+        <span class="check-label" data-t="web_users_only">{{ L['web_users_only'] }}</span>
+      </label>
       <div class="table-wrap" id="usersTableWrap">
         <div class="table-empty" data-t="loading">{{ L['loading'] }}</div>
       </div>

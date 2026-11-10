@@ -13,7 +13,7 @@ function setup(external: string | null = null, time = 0, timeExact = String(time
   vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) { this.open = true; });
   vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')); });
   const info = { displayname: 'Alice', ext_username: external, fingerprint: 'chrome', time, time_exact: timeExact, enabled: true, bandwidth: { limit: 0, wl_limit: 0 } };
-  const api = vi.fn<AdminContext['api']>().mockImplementation((_method, path) => Promise.resolve({ success: true, status: 200, obj: path === '/api/user/list' ? ['alice'] : path === '/api/fingerprints' ? ['chrome', 'firefox'] : info }));
+  const api = vi.fn<AdminContext['api']>().mockImplementation((_method, path) => Promise.resolve({ success: true, status: 200, obj: path === '/api/user/list?include_external=1' ? ['alice'] : path === '/api/fingerprints' ? ['chrome', 'firefox'] : info }));
   const toast = vi.fn();
   cleanup = initUsers({ doc: document, t: key => key, api, toast, confirm: vi.fn(), loadGen: () => () => true }, createAdminState());
   required(document.getElementById('btnLoadUsers')).click();

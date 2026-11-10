@@ -34,6 +34,13 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
 
     @requires_admin_auth
     async def user_list(self) -> ResponseType:
+        if request.args.get("include_external") == "1":
+            return ok(
+                obj=[
+                    {"username": user["username"], "ext_username": user["ext_username"]}
+                    for user in await self.sub.user_svc.list_user_states()
+                ]
+            )
         users = await self.sub.user_svc.list_users()
         if not users:
             return ok(obj=[])
