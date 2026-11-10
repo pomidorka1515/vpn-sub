@@ -76,6 +76,7 @@
 .auth-grants { overflow-wrap: anywhere; white-space: normal; font-size: .75rem; }
 #tab-auth .section-title { margin-top: 20px; }
 #tab-auth .toolbar .btn-primary { padding: 10px 20px; }
+#authDialog [hidden] { display: none; }
 #authSecretDialog .modal-input { width: 100%; margin: 14px 0; }
 
 .form-grid { display: grid; gap: 14px; }

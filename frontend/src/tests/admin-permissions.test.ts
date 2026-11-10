@@ -61,6 +61,40 @@ describe('admin permission model', () => {
   });
 });
 describe('admin identity dialogs', () => {
+  it('shows rotation only when editing a key and respects hidden fields in the dialog', async () => {
+    const { api } = setup();
+    const css = readFileSync('src/styles/admin.css', 'utf8');
+    const style = document.createElement('style');
+    style.textContent = ['.form-row', '.dark-check', '#authDialog [hidden]'].map(selector => {
+      const start = css.indexOf(selector + ' {');
+      if (start < 0) throw new Error(`Missing CSS rule: ${selector}`);
+      return css.slice(start, css.indexOf('}', start) + 1);
+    }).join('\n');
+    document.head.append(style);
+    try {
+      const rotate = required(document.getElementById('authRotateRow'));
+      const password = required(document.getElementById('authPasswordRow'));
+      click('btnCreateToken');
+      expect(getComputedStyle(rotate).display).toBe('none');
+      expect(getComputedStyle(password).display).toBe('none');
+      click('authClose');
+
+      api.mockImplementation((_method, url) => Promise.resolve({ success: true, status: 200, obj: { items: [{ id: url.endsWith('accounts') ? 'account' : 'key', kind: url.endsWith('accounts') ? 'accounts' : 'tokens', name: 'test', root: false, permissions: [] }] } }));
+      click('btnLoadAuth');
+      await vi.waitFor(() => { expect(document.querySelectorAll('[data-auth-action="edit"]')).toHaveLength(2); });
+      required(document.querySelector<HTMLButtonElement>('#authaccountsTable [data-auth-action="edit"]')).click();
+      expect(getComputedStyle(rotate).display).toBe('none');
+      expect(getComputedStyle(password).display).not.toBe('none');
+      click('authClose');
+
+      required(document.querySelector<HTMLButtonElement>('#authtokensTable [data-auth-action="edit"]')).click();
+      expect(getComputedStyle(rotate).display).not.toBe('none');
+      expect(getComputedStyle(password).display).toBe('none');
+      required(document.querySelector<HTMLInputElement>('#authRotate')).checked = true;
+      required(document.getElementById('authForm')).dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/auth/update', { id: 'key', kind: 'tokens', name: 'test', permissions: [], rotate: true }); });
+    } finally { style.remove(); }
+  });
   it('opens a create dialog, adds read prerequisites, folds root and shows every tooltip', () => {
     setup(); click('btnCreateAccount');
     expect(required(document.querySelector<HTMLDialogElement>('#authDialog')).open).toBe(true);
