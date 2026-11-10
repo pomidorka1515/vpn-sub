@@ -229,6 +229,7 @@
 .user-dialog-header .modal-title { margin: 0; }
 .user-dialog input:disabled { opacity: .45; cursor: not-allowed; background: var(--bg); }
 .user-dialog .form-grid { margin-top: 20px; }
+.user-dialog .form-actions .btn { padding: 10px 18px; }
 @media (max-width: 600px) {
   #usersTableWrap .users-table { min-width: 0; width: 100%; table-layout: fixed; }
   .users-table th:last-child { width: 144px; }
@@ -486,7 +487,8 @@
   min-width: 0; max-width: none; flex: 1; text-align: right;
   overflow: visible; text-overflow: unset; white-space: normal; overflow-wrap: anywhere;
 }
-#userDetailInfo .traffic-breakdown { display: block; margin-top: 3px; font-size: 0.625rem; color: var(--text2); }
+#userDetailInfo .traffic-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; }
+#userDetailInfo .traffic-breakdown { grid-column: 1 / -1; min-width: 0; text-align: right; overflow-wrap: anywhere; font-family: 'JetBrains Mono', monospace; font-size: 0.625rem; color: var(--text2); }
 #userDetailResult .result-msg { overflow-wrap: anywhere; }
 
 .config-banner {

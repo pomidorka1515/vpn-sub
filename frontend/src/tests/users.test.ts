@@ -13,7 +13,7 @@ function setup(external: string | null = null, time = 0, timeExact = String(time
   vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) { this.open = true; });
   vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')); });
   const info = { displayname: 'Alice', ext_username: external, fingerprint: 'chrome', time, time_exact: timeExact, enabled: true, bandwidth: { limit: 0, wl_limit: 0 } };
-  const api = vi.fn<AdminContext['api']>().mockImplementation((_method, path) => Promise.resolve({ success: true, status: 200, obj: path === '/api/user/list' ? ['alice'] : info }));
+  const api = vi.fn<AdminContext['api']>().mockImplementation((_method, path) => Promise.resolve({ success: true, status: 200, obj: path === '/api/user/list' ? ['alice'] : path === '/api/fingerprints' ? ['chrome', 'firefox'] : info }));
   const toast = vi.fn();
   cleanup = initUsers({ doc: document, t: key => key, api, toast, confirm: vi.fn(), loadGen: () => () => true }, createAdminState());
   required(document.getElementById('btnLoadUsers')).click();
@@ -51,6 +51,47 @@ it.each([null, 'alice-login'])('edits with external login %s and sends only chan
   await vi.waitFor(() => { expect(toast).toHaveBeenCalledWith('user_updated', 'success'); });
   expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', displayname: 'New Alice', ...(external ? { new_username: 'new-login' } : {}) });
   expect(dialog.open).toBe(false);
+});
+
+it('offers configured fingerprints and submits only a selected change', async () => {
+  const { api } = setup();
+  await vi.waitFor(() => { expect(document.querySelector('[data-user-action="edit"]')).not.toBeNull(); });
+  required(document.querySelector<HTMLElement>('[data-user-action="edit"]')).click();
+  const dialog = requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement);
+  await vi.waitFor(() => { expect(dialog.open).toBe(true); });
+  const fp = requiredInstance(document.getElementById('editFp'), HTMLSelectElement);
+  expect([...fp.options].map(option => option.value)).toEqual(['chrome', 'firefox']);
+  expect(fp.value).toBe('chrome');
+  fp.value = 'invalid';
+  required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  expect(api).not.toHaveBeenCalledWith('POST', '/api/user/update', expect.anything());
+  fp.value = 'firefox';
+  required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', fingerprint: 'firefox' }); });
+});
+
+it('preserves an unavailable current fingerprint during unrelated edits', async () => {
+  const { api } = setup();
+  await vi.waitFor(() => { expect(document.querySelector('[data-user-action="edit"]')).not.toBeNull(); });
+  api.mockResolvedValueOnce({ success: true, status: 200, obj: { displayname: 'Alice', fingerprint: 'safari', time: 0, bandwidth: { limit: 0, wl_limit: 0 } } });
+  required(document.querySelector<HTMLElement>('[data-user-action="edit"]')).click();
+  await vi.waitFor(() => { expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(true); });
+  const fp = requiredInstance(document.getElementById('editFp'), HTMLSelectElement);
+  expect(fp.value).toBe('safari');
+  expect(fp.selectedOptions[0]?.disabled).toBe(true);
+  requiredInstance(document.getElementById('editDisplayName'), HTMLInputElement).value = 'New Alice';
+  required(document.getElementById('userEditForm')).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('POST', '/api/user/update', { username: 'alice', displayname: 'New Alice' }); });
+});
+
+it('does not open editing when fingerprint choices cannot be loaded', async () => {
+  const { api, toast } = setup();
+  await vi.waitFor(() => { expect(document.querySelector('[data-user-action="edit"]')).not.toBeNull(); });
+  api.mockResolvedValueOnce({ success: true, status: 200, obj: { fingerprint: 'chrome' } })
+    .mockResolvedValueOnce({ success: false, status: 500, msg: 'failed' });
+  required(document.querySelector<HTMLElement>('[data-user-action="edit"]')).click();
+  await vi.waitFor(() => { expect(toast).toHaveBeenCalledWith('failed', 'error'); });
+  expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(false);
 });
 
 it('accepts dates beyond 2038 in both expiry fields', async () => {

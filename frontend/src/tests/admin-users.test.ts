@@ -56,6 +56,22 @@ describe('admin user management', () => {
     expect(state.selectedUser).toBeNull();
     expect(requiredInstance(document.getElementById('userDetailCard'), HTMLDialogElement).open).toBe(false);
   });
+  it('ignores fingerprint choices arriving after a different user is selected', async () => {
+    const { api, load, state } = setup();
+    await load(['alice', 'bob']);
+    let resolveFingerprints!: (value: ReturnType<typeof success>) => void;
+    api.mockResolvedValueOnce(success({ fingerprint: 'chrome' }))
+      .mockImplementationOnce(() => new Promise(done => { resolveFingerprints = done; }))
+      .mockResolvedValueOnce(success({ displayname: 'Bob' }));
+    required(document.querySelector<HTMLButtonElement>('[data-user-action="edit"]')).click();
+    await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('GET', '/api/fingerprints'); });
+    required(document.querySelectorAll<HTMLButtonElement>('[data-user-action="view"]')[1]).click();
+    await vi.waitFor(() => { expect(state.selectedUser).toBe('bob'); });
+    resolveFingerprints(success(['chrome']));
+    await Promise.resolve(); await Promise.resolve();
+    expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(false);
+    expect(required(document.getElementById('userDetailInfo')).textContent).toContain('Bob');
+  });
   it('shows all-time traffic and only displays reset results when available', async () => {
     const { api, load, click, state } = setup();
     await load(['alice', 'bob']);
@@ -71,6 +87,8 @@ describe('admin user management', () => {
     expect(info.textContent).toContain('total_traffic3.00 gb_unit');
     expect(info.textContent).toContain('wl_total_traffic500.00 mb_unit');
     const breakdowns = info.querySelectorAll('.traffic-breakdown');
+    expect(info.querySelectorAll('.traffic-row')).toHaveLength(2);
+    expect([...breakdowns].every(item => item.parentElement?.classList.contains('traffic-row'))).toBe(true);
     expect(breakdowns[0]?.textContent).toBe('↑ 1.00 gb_unit / ↓ 2.00 gb_unit');
     expect(breakdowns[1]?.textContent).toBe('↑ 0 byte_unit / ↓ 500.00 mb_unit');
     expect(result.hidden).toBe(true);

@@ -58,6 +58,11 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       const user = res.obj;
       const bandwidth = isRecord(user['bandwidth']) ? user['bandwidth'] : {};
       if (editing) {
+        const fingerprints = await api('GET', '/api/fingerprints');
+        if (generation !== detailGeneration) return;
+        if (!fingerprints?.success || !Array.isArray(fingerprints.obj) || !fingerprints.obj.length || !fingerprints.obj.every((fp: unknown) => typeof fp === 'string' && fp.length > 0)) {
+          toast(fingerprints?.msg || t('network_err'), 'error'); return;
+        }
         editingUser = username;
         original = user;
         input(doc, 'editDisplayName').value = typeof user['displayname'] === 'string' ? user['displayname'] : '';
@@ -65,7 +70,20 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
         external.value = typeof user['ext_username'] === 'string' ? user['ext_username'] : '';
         external.disabled = !external.value;
         element(doc, 'editExtHint').hidden = !external.disabled;
-        input(doc, 'editFp').value = typeof user['fingerprint'] === 'string' ? user['fingerprint'] : '';
+        const fp = input(doc, 'editFp');
+        const currentFp = typeof user['fingerprint'] === 'string' ? user['fingerprint'] : '';
+        fp.replaceChildren();
+        if (!fingerprints.obj.includes(currentFp)) {
+          const current = doc.createElement('option');
+          current.value = currentFp; current.textContent = currentFp || t('na'); current.disabled = true;
+          fp.appendChild(current);
+        }
+        fingerprints.obj.forEach((value: string) => {
+          const option = doc.createElement('option');
+          option.value = value; option.textContent = value;
+          fp.appendChild(option);
+        });
+        fp.value = currentFp;
         input(doc, 'editLimit').value = String(Number(bandwidth['limit'] ?? 0));
         input(doc, 'editWlLimit').value = String(Number(bandwidth['wl_limit'] ?? 0));
         const expiry = typeof user['time'] === 'number' && user['time'] ? new Date(user['time'] * 1000) : null;
@@ -87,7 +105,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       const trafficRow = (key: string, value: unknown): string => {
         const data = isRecord(value) ? value : {};
         const format = (part: string): string => escapeHtml(fmtBytes(typeof data[part] === 'number' ? data[part] : NaN, t));
-        return `<div class="info-row"><span class="info-label">${t(key)}</span><span class="info-value">${format('total')}<span class="traffic-breakdown">↑ ${format('upload')} / ↓ ${format('download')}</span></span></div>`;
+        return `<div class="info-row traffic-row"><span class="info-label">${t(key)}</span><span class="info-value">${format('total')}</span><span class="traffic-breakdown">↑ ${format('upload')} / ↓ ${format('download')}</span></div>`;
       };
       const limit = (value: unknown): string => Number(value || 0) === 0 ? '∞' : `${escapeHtml(value)} ${escapeHtml(t('gb_unit'))}`;
       element(doc, 'userDetailInfo').innerHTML = row('internal_user', username) + row('display_name', user['displayname']) + row('uuid', user['uuid']) + row('token', user['token']) + row('fingerprint', user['fingerprint']) +
@@ -103,7 +121,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
     });
   }
   async function saveUser(): Promise<void> {
-    if (!input(doc, 'editExpiry').reportValidity()) return;
+    if (!input(doc, 'editExpiry').reportValidity() || !input(doc, 'editFp').reportValidity()) return;
     const username = editingUser;
     if (!username) return;
     const bandwidth = isRecord(original['bandwidth']) ? original['bandwidth'] : {};
