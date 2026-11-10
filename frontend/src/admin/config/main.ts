@@ -9,7 +9,7 @@ import type { ConfigObject } from './json';
 import { attr, restartIcon, fieldError, passWrap, readText, enhanceJsonInputs, rowList, bindRows, nodeOptions } from './controls';
 import { validateField, validateCard } from './validation';
 
-export function createMainEditor(markDirty: () => void, t: Translate) {
+export function createMainEditor(markDirty: () => void, t: Translate, canAccess: (key: string) => boolean = () => true) {
   function draft(): ConfigObject { if (!editor.draft) throw new Error(sharedMessage('config_not_loaded')); return editor.draft; }
   function object(key: string): ConfigObject { const value = draft()[key]; return isPlainObject(value) ? value : {}; }
   function commitMainField(key: string): void {
@@ -87,6 +87,7 @@ export function createMainEditor(markDirty: () => void, t: Translate) {
   }
 
   function boxHtml(key: string): string {
+    if (!canAccess(key)) return `<div class="config-box permission-disabled" id="cfg-box-${key.replace('$', '')}"><div class="config-box-label">${escapeHtml(t('config_field_' + key))}</div><div class="form-hint">${escapeHtml(t('permission_missing').replace('{permission}', '*'))}</div></div>`;
     const data = draft();
     const present = Object.prototype.hasOwnProperty.call(data, key);
     const optional = OPTIONAL_KEYS.includes(key);

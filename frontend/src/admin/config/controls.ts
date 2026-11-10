@@ -138,6 +138,8 @@ export function cardRoot(kind: string, id: string): HTMLElement | undefined {
 }
 
 export function showConfigSection(name: string): void {
+  const target = [...document.querySelectorAll<HTMLButtonElement>('.config-tab')].find(tab => tab.dataset['section'] === name);
+  if (target?.disabled) return;
   document.querySelectorAll<HTMLElement>('.config-tab').forEach(el => el.classList.toggle('active', el.dataset['section'] === name));
   document.querySelectorAll('.config-pane').forEach(el => el.classList.toggle('active', el.id === 'config-pane-' + name));
   refreshJsonEditors(document.getElementById('config-pane-' + name));

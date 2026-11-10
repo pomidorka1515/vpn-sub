@@ -72,13 +72,15 @@ export function createJsonEditors(doc: Document, url: string, t: Translate) {
     }
   }
   async function mount(textarea: HTMLTextAreaElement, { parse, format, label }: Options): Promise<void> {
-    if (disposed || instances.has(textarea)) return;
+    const readonly = (): boolean => textarea.disabled || textarea.readOnly;
+    if (disposed || instances.has(textarea) || readonly()) return;
     const pending: Instance = { destroy() {} };
     instances.set(textarea, pending);
     let factory: CodeMirrorFactory;
     try { factory = await loadEditor(); }
     catch { if (instances.get(textarea) === pending) instances.delete(textarea); return; }
     if (isDisposed() || !textarea.isConnected || instances.get(textarea) !== pending) return;
+    if (readonly()) { instances.delete(textarea); return; }
     const wrapper = doc.createElement('div');
     wrapper.className = 'config-json-editor';
     const toolbar = doc.createElement('div');

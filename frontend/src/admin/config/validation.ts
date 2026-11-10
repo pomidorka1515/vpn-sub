@@ -4,10 +4,12 @@ import { editor, KNOWN_KEYS, REQUIRED_KEYS, TEMPLATE_KEYS, PROFILE_FIELDS, PANEL
 import { ConfigNumber, isPlainObject, isInteger, isFiniteNumber, jsonEqual } from './json';
 import type { ConfigObject } from './json';
 import { cardRoot, cssId, readRows, showConfigSection, enhanceJsonInputs } from './controls';
+import { ROOT_CONFIG_KEYS, configSection } from '../permissions';
 
 export interface ValidationIssue { path: string; message: string }
 let t: Translate = key => key;
-export function initConfigValidation(translate: Translate): () => void { t = translate; return () => { t = key => key; }; }
+let can: (permission: string) => boolean = () => true;
+export function initConfigValidation(translate: Translate, access: (permission: string) => boolean = () => true): () => void { t = translate; can = access; return () => { t = key => key; can = () => true; }; }
 const currentDraft = (): ConfigObject => editor.draft ?? {};
 
 function issue(path: string, message: string): ValidationIssue {
@@ -250,7 +252,7 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
       }
     }
   });
-  return issues;
+  return issues.filter(item => { const key = item.path.split('.')[0] ?? ''; return can('config.read.' + configSection(key)) && (!ROOT_CONFIG_KEYS.has(key) || can('*')); });
 }
 
 function fieldOf(path: string): string {

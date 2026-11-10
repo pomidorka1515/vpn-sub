@@ -3,6 +3,7 @@ import { withBusy } from '../shared/busy';
 import { isRecord } from '../shared/json';
 import type { ApiConfig } from '../shared/api';
 import type { Translate } from '../shared/formatting';
+import type { PermissionEntry } from './permissions';
 
 export interface AdminState {
   baseUrl: string;
@@ -11,10 +12,12 @@ export interface AdminState {
   panelsConfigured: boolean;
   currentUsers: string[];
   selectedUser: string | null;
+  permissions: string[];
+  catalog: PermissionEntry[];
 }
 
 export function createAdminState(): AdminState {
-  return { baseUrl: '', apiToken: '', authBlocked: false, panelsConfigured: true, currentUsers: [], selectedUser: null };
+  return { baseUrl: '', apiToken: '', authBlocked: false, panelsConfigured: true, currentUsers: [], selectedUser: null, permissions: [], catalog: [] };
 }
 
 interface Dependencies {
@@ -63,6 +66,8 @@ export function createAdminBootstrap(state: AdminState, deps: Dependencies) {
       state.apiToken = data['obj']['token'];
       state.baseUrl = location.origin + data['obj']['api_root'];
       state.panelsConfigured = data['obj']['panels_configured'] !== false;
+      state.permissions = Array.isArray(data['obj']['permissions']) ? data['obj']['permissions'].filter((value: unknown): value is string => typeof value === 'string') : [];
+      state.catalog = Array.isArray(data['obj']['catalog']) ? data['obj']['catalog'].flatMap((entry: unknown): PermissionEntry[] => isRecord(entry) && typeof entry['permission'] === 'string' && (entry['requires'] === null || typeof entry['requires'] === 'string') ? [{ permission: entry['permission'], requires: entry['requires'] }] : []) : [];
       const overlay = doc.getElementById('bootOverlay');
       if (overlay) overlay.hidden = true;
       const content = doc.querySelector<HTMLElement>('.admin-content');

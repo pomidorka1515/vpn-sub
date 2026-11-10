@@ -15,13 +15,13 @@ afterEach(() => {
   editor.loaded = null; editor.draft = null; editor.fetched = false; editor.dirty = false; editor.conflict = false; editor.saving = false; editor.loading = false;
   editor.open.inbounds.clear(); editor.open.panels.clear(); editor.headerRows.clear(); editor.jsonInputs.clear(); editor.nodeRows = null;
 });
-function setup() {
+function setup(can?: AdminContext['can']) {
   document.body.innerHTML = readFileSync('src/templates/admin.html', 'utf8');
   required(document.getElementById('tab-config')).classList.add('active');
   const api = vi.fn<AdminContext['api']>();
   const confirm = vi.fn<AdminContext['confirm']>().mockResolvedValue(true);
   const toast = vi.fn();
-  initConfig({ doc: document, api, confirm, toast, t: key => key, loadGen: () => () => true }, 'en');
+  initConfig({ doc: document, api, confirm, toast, t: key => key, loadGen: () => () => true, ...(can ? { can } : {}) }, 'en');
   const load = async () => {
     expect(validateDraft(config)).toEqual([]);
     api.mockResolvedValueOnce({ success: true, obj: config, etag: 'v1', status: 200 });
@@ -36,6 +36,19 @@ function setup() {
 }
 
 describe('config editor controller', () => {
+  it('lets read-only scoped operators expand details without permitting edits', async () => {
+    const { api } = setup(permission => permission === 'config.read.inbounds');
+    requiredInstance(document.querySelector('.config-tab[data-section="main"]'), HTMLButtonElement).disabled = true;
+    api.mockResolvedValueOnce({ success: true, status: 200, etag: 'v1', obj: { profiles: { profile: { name: ['Name', 'Имя'], node: 'node', description: ['', ''], shortProfileDescription: ['', ''], flag: '', masterLink: '', whitelist: false } }, nodes: { node: 'host' } } });
+    configOnTab(); await vi.waitFor(() => { expect(editor.fetched).toBe(true); });
+    const toggle = requiredInstance(document.querySelector('#config-pane-inbounds .config-card-toggle'), HTMLButtonElement);
+    expect(toggle.disabled).toBe(false); toggle.click();
+    expect(required(document.querySelector('#config-pane-inbounds .panel-card')).classList.contains('open')).toBe(true);
+    expect(requiredInstance(document.getElementById('cfg-new-inbounds'), HTMLButtonElement).disabled).toBe(true);
+    expect([...document.querySelectorAll<HTMLInputElement>('#config-pane-inbounds input[type="text"]')].every(field => field.readOnly)).toBe(true);
+    expect(requiredInstance(document.getElementById('configSave'), HTMLButtonElement).disabled).toBe(true);
+    expect(api).toHaveBeenCalledTimes(1);
+  });
   it('loads once, marks edits dirty, and saves only changed values with the etag', async () => {
     const { api, load, editName } = setup(); await load();
     configOnTab(); expect(api).toHaveBeenCalledTimes(1);

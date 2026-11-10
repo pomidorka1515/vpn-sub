@@ -23,6 +23,8 @@ import { initLogs } from './logs';
 import { createPanels } from './panels';
 import { createSystem } from './system';
 import { initUsers } from './users';
+import { initAuth } from './auth';
+import { allows, applyPermissions, missingPermission, TAB_PERMISSIONS } from './permissions';
 
 export function initAdmin(): () => void {
   const doc = document;
@@ -36,19 +38,25 @@ export function initAdmin(): () => void {
   const dialogs = createDialogs(doc, i18n.t);
   const state = createAdminState();
   const auth = createAdminBootstrap(state, { doc, location, request: fetch, translate: i18n.t, logoutWarning: notifications.logoutWarning, stopCharts: () => { charts.chartsStop(); } });
-  const api = createApi(() => auth.config, i18n.t, notifications.toast, fetch);
-  const context: AdminContext = { doc, t: i18n.t, api, toast: notifications.toast, confirm: dialogs.confirmDialog, loadGen: createLoadGeneration() };
+  const transport = createApi(() => auth.config, i18n.t, notifications.toast, fetch);
+  const can = (permission: string): boolean => allows(state.permissions, permission);
+  const api: AdminContext['api'] = async (method, path, body) => {
+    const missing = missingPermission(state, path, body);
+    if (missing) return { success: false, status: 403, msg: i18n.t('permission_missing').replace('{permission}', missing), obj: { required_permission: missing } };
+    return transport(method, path, body);
+  };
+  const context: AdminContext = { doc, t: i18n.t, api, can, toast: notifications.toast, confirm: dialogs.confirmDialog, loadGen: createLoadGeneration() };
   const charts = createCharts(context, {
     baseUrl: () => state.baseUrl,
     headers: () => ({ Authorization: state.apiToken }),
-    guard: () => state.authBlocked || !state.baseUrl || !state.apiToken,
+    guard: () => state.authBlocked || !state.baseUrl || !state.apiToken || !can('state.charts.read'),
     on401: () => auth.config.on401?.(),
   }, bootstrap.page.chartUrl, bootstrap.page.debounceMs, i18n.language);
   initConfig(context, i18n.language);
   const stopLanguage = i18n.onChange(() => { setConfigLanguage(i18n.language); charts.chartsRefreshTheme(); });
   const listeners = new AbortController();
   const cleanupControls = initConfigControls(i18n.t);
-  const cleanupValidation = initConfigValidation(i18n.t);
+  const cleanupValidation = initConfigValidation(i18n.t, can);
   const cleanupDialog = initConfigDialog(i18n.t);
   const editorUrl = new URL('../vendor/codemirror-5.65.16.min.js', import.meta.url);
   editorUrl.search = new URL(import.meta.url).search;
@@ -56,14 +64,15 @@ export function initAdmin(): () => void {
   const cleanupCharts = charts.initCharts();
   const panels = createPanels(context);
   const system = createSystem(context, panels.renderPanelCards, i18n.language);
-  const cleanups = [initUsers(context, state), initCodes(context, navigator.clipboard), initLogs(context), initLeaderboard(context), initHealth(context, i18n.language), panels.init(), system.init(), cleanupCharts];
+  const cleanups = [initAuth(context, state), initUsers(context, state), initCodes(context, navigator.clipboard), initLogs(context), initLeaderboard(context), initHealth(context, i18n.language), panels.init(), system.init(), cleanupCharts];
   let disposed = false;
   let leaving = false;
   let ready = false;
+  let requestedTab: string | null = null;
   function loadTab(name: string): void {
     if (!ready) return;
     const refreshButtons: Record<string, string[]> = {
-      users: ['btnLoadUsers'], codes: ['btnLoadCodes'], logs: ['btnRefreshLogs'],
+      auth: ['btnLoadAuth'], users: ['btnLoadUsers'], codes: ['btnLoadCodes'], logs: ['btnRefreshLogs'],
       snapshots: ['btnLoadSnapshots'], health: ['btnLoadOperations', 'btnRunHealth', 'btnLoadOnline'],
     };
     for (const id of refreshButtons[name] ?? []) {
@@ -72,7 +81,8 @@ export function initAdmin(): () => void {
     }
   }
   async function showTab(name: string): Promise<void> {
-    if (leaving || !doc.getElementById('tab-' + name)) return;
+    if (!ready) { requestedTab = name; return; }
+    if (leaving || !doc.getElementById('tab-' + name) || !(TAB_PERMISSIONS[name] ?? ['*']).some(can)) return;
     const current = doc.querySelector<HTMLElement>('.tab-content.active');
     if (current?.id === 'tab-' + name) { if (name === 'config') configOnTab(); return; }
     leaving = true;
@@ -114,8 +124,15 @@ export function initAdmin(): () => void {
   void auth.bootstrap().then(() => {
     if (disposed || state.authBlocked || !state.apiToken) return;
     ready = true;
+    applyPermissions(doc, state, i18n.t);
+    const initial = requestedTab && TAB_PERMISSIONS[requestedTab]?.some(can) ? requestedTab : Object.keys(TAB_PERMISSIONS).find(name => TAB_PERMISSIONS[name]?.some(can));
     const active = doc.querySelector<HTMLElement>('.tab-content.active');
-    if (active) loadTab(active.id.slice('tab-'.length));
+    if (initial && active?.id !== 'tab-' + initial) void showTab(initial);
+    else if (initial) loadTab(initial);
+    else {
+      active?.classList.remove('active');
+      const notice = doc.createElement('p'); notice.className = 'result-box'; notice.textContent = i18n.t('auth_no_permissions'); doc.querySelector('.admin-content')?.append(notice);
+    }
   });
   function dispose(): void {
     if (disposed) return;

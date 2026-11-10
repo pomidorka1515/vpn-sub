@@ -20,20 +20,33 @@ function setup(request: typeof fetch) {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
   dispose = initAdmin();
 }
-const token = () => Response.json({ success: true, obj: { token: 'csrf', api_root: '/api', panels_configured: true } });
+const token = () => Response.json({ success: true, obj: { token: 'csrf', api_root: '/api', panels_configured: true, permissions: ['*'], catalog: [] } });
 
 describe('admin application integration', () => {
+  it('skips unreadable tabs and blocks unauthorized requests before fetching', async () => {
+    const request = vi.fn<typeof fetch>().mockImplementationOnce(() => Promise.resolve(Response.json({ success: true, obj: { token: 'scoped', api_root: '/api', permissions: ['user.read'], catalog: [] } }))).mockImplementation(() => Promise.resolve(Response.json({ success: true, obj: [] })));
+    setup(request);
+    await vi.waitFor(() => { expect(required(document.getElementById('tab-users')).classList.contains('active')).toBe(true); });
+    await vi.waitFor(() => { expect(request).toHaveBeenCalledTimes(2); });
+    const authTab = required(document.querySelector<HTMLButtonElement>('.tab[data-tab="auth"]'));
+    expect(authTab.hidden).toBe(false); expect(authTab.disabled).toBe(true); expect(authTab.title).toBeTruthy();
+    const health = required(document.querySelector<HTMLButtonElement>('#btnLoadOperations'));
+    health.disabled = false; health.click();
+    await Promise.resolve(); await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).not.toHaveBeenCalledWith(expect.stringContaining('/api/auth/list'), expect.anything());
+  });
   it('waits for authentication before refreshing the selected tab and attaches authorization', async () => {
     let resolve!: (response: Response) => void;
-    const request = vi.fn<typeof fetch>().mockImplementationOnce(() => new Promise(done => { resolve = done; })).mockResolvedValue(Response.json({ success: true, obj: [] }));
+    const request = vi.fn<typeof fetch>().mockImplementationOnce(() => new Promise(done => { resolve = done; })).mockImplementation(() => Promise.resolve(Response.json({ success: true, obj: { items: [] } })));
     setup(request);
     required(document.querySelector<HTMLElement>('[data-tab="users"]')).click();
     expect(request).toHaveBeenCalledTimes(1);
     resolve(token());
-    await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('https://example.test/api/api/user/list?include_external=1', expect.objectContaining({ method: 'GET', headers: { Authorization: 'csrf' } })); });
+    await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('https://example.test/api/api/auth/list?kind=accounts', expect.objectContaining({ method: 'GET', headers: { Authorization: 'csrf' } })); });
     expect(required(document.getElementById('bootOverlay')).hidden).toBe(true);
-    expect(required(document.getElementById('tab-users')).classList.contains('active')).toBe(true);
-    await vi.waitFor(() => { expect(required(document.getElementById('usersTableWrap')).textContent).toContain('no_users'); });
+    expect(required(document.getElementById('tab-auth')).classList.contains('active')).toBe(true);
+    await vi.waitFor(() => { expect(required(document.getElementById('authaccountsTable')).textContent).toContain('auth_empty'); });
   });
   it('prevents pending authentication from activating a disposed application', async () => {
     let resolve!: (response: Response) => void;

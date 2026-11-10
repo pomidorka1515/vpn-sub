@@ -68,6 +68,14 @@
 
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+.permission-disabled { opacity: .45; cursor: not-allowed; }
+.permission-tree { max-height: 45vh; overflow: auto; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.permission-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; color: var(--text); font-size: .75rem; width: max-content; min-width: 100%; }
+.permission-row input { accent-color: var(--accent); }
+.permission-row:has(input:disabled) { color: var(--text2); }
+.auth-grants { overflow-wrap: anywhere; white-space: normal; font-size: .75rem; }
+#tab-auth .section-title { margin-top: 20px; }
+#authSecretDialog .modal-input { width: 100%; margin: 14px 0; }
 
 .form-grid { display: grid; gap: 14px; }
 .form-row { display: flex; align-items: flex-start; gap: 12px; }

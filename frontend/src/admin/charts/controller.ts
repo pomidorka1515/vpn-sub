@@ -250,6 +250,7 @@ function rebuild() {
 }
 
 async function fetchSnapshots() {
+  if (context.can && !context.can('snapshots.read')) return;
   const gen = ++state.gen;
   state.inflight = true;
   setStatus('loading');
@@ -280,6 +281,7 @@ async function fetchSnapshots() {
 }
 
 async function pollLive() {
+  if (context.can && !context.can('state.charts.read')) return;
   if (state.mode !== 'live') return;
   if (state.chartJsFailed) return;
   if (state.stream) return;
@@ -400,6 +402,7 @@ async function startLive() {
 
 function setMode(mode: string | null): void {
   if (mode !== 'snapshot' && mode !== 'live') return;
+  if (context.can && !context.can(mode === 'live' ? 'state.charts.read' : 'snapshots.read')) return;
   if (mode === state.mode && state.opened) return;
   stopLive();
   state.gen += 1;
@@ -501,6 +504,7 @@ function chartsOnTab(name: string): void {
   }
   if (!state.opened) {
     state.opened = true;
+    if (context.can && !context.can('snapshots.read')) { state.mode = 'live'; syncControls(); void startLive(); return; }
     syncControls();
     void fetchSnapshots();
     return;

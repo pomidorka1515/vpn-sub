@@ -35,7 +35,8 @@
   <div class="boot-overlay" id="bootOverlay"></div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="users" data-t="users">{{ L['users'] }}</button>
+    <button class="tab active" data-tab="auth" data-t="auth_tab">{{ L['auth_tab'] }}</button>
+    <button class="tab" data-tab="users" data-t="users">{{ L['users'] }}</button>
     <button class="tab" data-tab="codes" data-t="codes">{{ L['codes'] }}</button>
     <button class="tab" data-tab="logs" data-t="audit_logs">{{ L['audit_logs'] }}</button>
     <button class="tab" data-tab="state" data-t="state">{{ L['state'] }}</button>
@@ -46,7 +47,43 @@
     <button class="tab" data-tab="config" data-t="config_tab">{{ L['config_tab'] }}</button>
   </div>
 
-  <div id="tab-users" class="tab-content active">
+  <div id="tab-auth" class="tab-content active">
+    <div class="card">
+      <div class="card-title" data-t="auth_tab">{{ L['auth_tab'] }}</div>
+      <div class="toolbar">
+        <label class="user-search"><input type="search" id="authSearch" autocomplete="off" data-t-aria="auth_search" data-t-ph="auth_search" aria-label="{{ L['auth_search'] }}" placeholder="{{ L['auth_search'] }}"></label>
+        <button class="btn-secondary" id="btnLoadAuth" data-t="refresh">{{ L['refresh'] }}</button>
+        <button class="btn btn-primary" id="btnCreateAccount" data-t="auth_create_account">{{ L['auth_create_account'] }}</button>
+        <button class="btn btn-primary" id="btnCreateToken" data-t="auth_create_token">{{ L['auth_create_token'] }}</button>
+      </div>
+      <h2 class="section-title" data-t="auth_accounts">{{ L['auth_accounts'] }}</h2>
+      <div class="table-wrap" id="authaccountsTable"></div>
+      <h2 class="section-title" data-t="auth_tokens">{{ L['auth_tokens'] }}</h2>
+      <div class="table-wrap" id="authtokensTable"></div>
+    </div>
+    <dialog class="modal log-dialog user-dialog" id="authDialog" aria-labelledby="authDialogTitle">
+      <h2 class="modal-title" id="authDialogTitle"></h2>
+      <form id="authForm" class="form-grid">
+        <div class="form-row"><label for="authName" data-t="auth_name">{{ L['auth_name'] }}</label><div class="input-wrap"><input id="authName" type="text" maxlength="64" required autocomplete="off"></div></div>
+        <div class="form-row" id="authPasswordRow"><label for="authPassword" data-t="ext_password">{{ L['ext_password'] }}</label><div class="input-wrap"><input id="authPassword" type="password" maxlength="128" autocomplete="new-password"><span class="form-hint" data-t="auth_password_hint">{{ L['auth_password_hint'] }}</span></div></div>
+        <label class="dark-check" id="authRotateRow"><input id="authRotate" type="checkbox"><span class="check-track"><span class="check-thumb"></span></span><span class="check-label" data-t="auth_rotate">{{ L['auth_rotate'] }}</span></label>
+        <p class="form-hint" id="authRootHint" data-t="auth_root_protected" hidden>{{ L['auth_root_protected'] }}</p>
+        <div class="section-title" data-t="auth_permissions">{{ L['auth_permissions'] }}</div>
+        <div class="permission-tree" id="authPermissionTree"></div>
+        <output class="mono auth-grants" id="authPermissionSummary"></output>
+        <div class="form-actions"><button type="submit" class="btn btn-primary" id="authSave" data-t="save">{{ L['save'] }}</button><button type="button" class="btn-secondary" id="authClose" data-t="close">{{ L['close'] }}</button></div>
+      </form>
+    </dialog>
+    <dialog class="modal log-dialog user-dialog" id="authSecretDialog" aria-labelledby="authSecretTitle">
+      <h2 class="modal-title" id="authSecretTitle" data-t="auth_token_once">{{ L['auth_token_once'] }}</h2>
+      <p class="form-hint" data-t="auth_token_hint">{{ L['auth_token_hint'] }}</p>
+      <input class="modal-input" id="authSecret" type="text" readonly data-t-aria="token" aria-label="{{ L['token'] }}" autocomplete="off">
+      <p id="authRestartHint" class="form-hint" data-t="auth_restart" hidden>{{ L['auth_restart'] }}</p>
+      <button type="button" class="btn-secondary" id="authSecretClose" data-t="close">{{ L['close'] }}</button>
+    </dialog>
+  </div>
+
+  <div id="tab-users" class="tab-content">
     <div class="card">
       <div class="card-title" data-t="user_list">{{ L['user_list'] }}</div>
       <div class="toolbar">

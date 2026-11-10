@@ -11,6 +11,7 @@ import { clone, jsonEqual, isPlainObject, parseConfigJson, stringifyConfig } fro
 import type { ConfigObject } from './json';
 import { showConfigSection } from './controls';
 import { validateAll, focusIssue } from './validation';
+import { ROOT_CONFIG_KEYS, configSection } from '../permissions';
 
 export { revealConfigPass, showConfigSection } from './controls';
 
@@ -21,6 +22,7 @@ let disposed = false;
 const isDisposed = (): boolean => disposed;
 let generation = 0;
 const t = (key: string): string => context.t(key);
+const can = (permission: string): boolean => context.can?.(permission) ?? true;
 const loadingHtml = (): string => renderLoading(t);
 const api = (method: string, path: string, body?: unknown) => context.api(method, path, body);
 const toast = (message: string, kind: string): void => { context.toast(message, kind); };
@@ -38,7 +40,7 @@ function configButton(id: string): HTMLButtonElement {
   return result;
 }
 
-const { renderMain } = createMainEditor(markDirty, t);
+const { renderMain } = createMainEditor(markDirty, t, key => !ROOT_CONFIG_KEYS.has(key) || can('*'));
 const { init: initCards, renderCards, toggleConfigCard, deleteConfigCard } = createCardEditor({
   markDirty,
   openNew: kind => { openNew(kind); },
@@ -61,7 +63,7 @@ function markDirty(): void {
   const label = document.getElementById('configDirty');
   if (label) label.textContent = editor.dirty ? t('config_unsaved') : t('config_saved_state');
   const save = document.querySelector<HTMLButtonElement>('#configSave');
-  if (save && !editor.saving) save.disabled = !editor.dirty || editor.conflict;
+  if (save && !editor.saving) save.disabled = !editor.dirty || editor.conflict || !['main', 'inbounds', 'panels'].some(section => can('config.write.' + section));
   if (editor.dirty) window.addEventListener('beforeunload', onBeforeUnload);
   else window.removeEventListener('beforeunload', onBeforeUnload);
 }
@@ -137,6 +139,7 @@ export async function saveConfig() {
         return;
       }
       const values = diffValues();
+      if (Object.keys(values).some(key => !can('config.write.' + configSection(key)) || ROOT_CONFIG_KEYS.has(key) && !can('*'))) { showResult(t('permission_missing').replace('{permission}', 'config.write.*'), 'error'); return; }
       if (!Object.keys(values).length) {
         toast(t('config_unchanged'), 'info');
         return;
@@ -254,6 +257,19 @@ async function loadConfig(force: boolean): Promise<void> {
   renderMain();
   renderCards('inbounds');
   renderCards('panels');
+  for (const section of ['main', 'inbounds', 'panels']) {
+    const pane = required('config-pane-' + section);
+    if (!can('config.write.' + section)) {
+      pane.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach(field => {
+        field.title = t('permission_missing').replace('{permission}', 'config.write.' + section);
+        if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement && field.type === 'checkbox') field.disabled = true;
+        else field.readOnly = true;
+      });
+      pane.querySelectorAll<HTMLButtonElement>('button:not(.config-card-toggle):not([data-config-pass])').forEach(button => { button.disabled = true; button.title = t('permission_missing').replace('{permission}', 'config.write.' + section); });
+    }
+  }
+  const active = document.querySelector<HTMLButtonElement>('.config-tab.active');
+  if (active?.disabled) { const section = ['main', 'inbounds', 'panels'].find(section => can('config.read.' + section)); if (section) showConfigSection(section); }
   showResult('');
   setRestartLine([]);
   markDirty();

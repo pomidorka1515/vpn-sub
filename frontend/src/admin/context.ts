@@ -10,6 +10,7 @@ export interface AdminContext {
   toast: (message: string, kind?: string) => void;
   confirm: (message: string, title?: string, options?: DialogOptions) => Promise<boolean | string | null>;
   loadGen: (key: string) => () => boolean;
+  can?: (permission: string) => boolean;
 }
 
 export function element(doc: Document, id: string): HTMLElement {
