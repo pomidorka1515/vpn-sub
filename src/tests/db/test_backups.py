@@ -497,7 +497,7 @@ def test_invalid_database_is_not_published(tmp_path: Path, invalid: str) -> None
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", range(1, 8))
+@pytest.mark.parametrize("version", range(1, SchemaMixin.SCHEMA_VERSION + 1))
 async def test_supported_schema_snapshot_can_be_restored(tmp_path: Path, version: int) -> None:
     source = tmp_path / "source ?#% ü.sqlite3"
     database = Database(path=source, start_backup=False)
@@ -505,6 +505,9 @@ async def test_supported_schema_snapshot_can_be_restored(tmp_path: Path, version
     await database.set_metadata("saved", "value")
     await database.close()
     with sqlite3.connect(source) as connection:
+        if version < 8:
+            connection.execute("DROP TABLE admin_sessions")
+            connection.execute("DROP TABLE admin_identities")
         if version < 7:
             connection.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
         if version < 6:

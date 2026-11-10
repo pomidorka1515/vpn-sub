@@ -43,7 +43,7 @@ async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 7
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 8
             )
             assert (
                 conn.execute(
@@ -106,6 +106,8 @@ async def test_session_expiry_migration_revokes_legacy_sessions(
     await database.set_admin_ui_session("legacy-admin")
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE admin_sessions")
+        conn.execute("DROP TABLE admin_identities")
         conn.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled")
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
@@ -144,7 +146,9 @@ async def test_migration_repairs_negative_bandwidth_snapshot_values(
     (await database.close())
     connection = sqlite3.connect(db_path)
     connection.executescript(
-        """ALTER TABLE users RENAME TO old_users;
+        """DROP TABLE admin_sessions;
+        DROP TABLE admin_identities;
+        ALTER TABLE users RENAME TO old_users;
         CREATE TABLE users (
             username TEXT PRIMARY KEY,
             uuid TEXT NOT NULL UNIQUE,
@@ -199,7 +203,9 @@ async def test_auth_token_migration_and_lookup(database: Database, db_path: Path
     (await database.close())
     connection = sqlite3.connect(db_path)
     connection.executescript(
-        """ALTER TABLE users RENAME TO old_users;
+        """DROP TABLE admin_sessions;
+        DROP TABLE admin_identities;
+        ALTER TABLE users RENAME TO old_users;
         CREATE TABLE users (
             username TEXT PRIMARY KEY,
             uuid TEXT NOT NULL UNIQUE,
@@ -250,6 +256,8 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
     (await database.close())
     connection = sqlite3.connect(db_path)
     connection.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session'")
+    connection.execute("DROP TABLE admin_sessions")
+    connection.execute("DROP TABLE admin_identities")
     connection.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
     connection.execute("ALTER TABLE users DROP COLUMN admin_disabled")
     connection.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
@@ -264,7 +272,7 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 7
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 8
             )
             assert (
                 conn.execute(
@@ -291,6 +299,8 @@ async def test_disable_intent_migration_preserves_legacy_flags(
     await database.set_user("alice", status=enabled, status_wl=enabled_wl)
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE admin_sessions")
+        conn.execute("DROP TABLE admin_identities")
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled")
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
         conn.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
@@ -440,6 +450,8 @@ async def test_bandwidth_interval_migration_and_end_filtered_history(
     await database.add_bandwidth_snapshot("alice", 100, 1, 2, 3, 4)
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE admin_sessions")
+        conn.execute("DROP TABLE admin_identities")
         conn.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
         conn.execute("UPDATE schema_version SET version = 6")
     db = Database(path=db_path, start_backup=False)

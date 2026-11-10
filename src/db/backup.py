@@ -42,6 +42,8 @@ def _validate_snapshot(snapshot: sqlite3.Connection) -> None:
             for row in snapshot.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         for (table,) in tables:
+            if version < 8 and table in {"admin_identities", "admin_sessions"}:
+                continue
             if table not in actual_tables:
                 raise sqlite3.DatabaseError(f"backup snapshot is missing table {table}")
             expected = {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from errors import MigrationError
 
+from .admin import ADMIN_SCHEMA
 from .common import ConnectionMixin
 
 SCHEMA_STATEMENTS = (
@@ -78,11 +79,12 @@ SCHEMA_STATEMENTS = (
         ts INTEGER PRIMARY KEY,
         payload TEXT NOT NULL
     )""",
+    *ADMIN_SCHEMA,
 )
 
 
 class SchemaMixin(ConnectionMixin):
-    SCHEMA_VERSION = 7
+    SCHEMA_VERSION = 8
 
     async def initialize(self) -> None:
         async with self.transaction(immediate=True) as conn:
@@ -159,6 +161,10 @@ class SchemaMixin(ConnectionMixin):
                 version = 6
             if version == 6:
                 await conn.execute("ALTER TABLE bandwidth_snapshots ADD COLUMN start_ts INTEGER")
+                version = 7
+            if version == 7:
+                for statement in ADMIN_SCHEMA:
+                    await conn.execute(statement)
             await conn.execute(
                 "UPDATE schema_version SET version = ? WHERE id = 1",
                 (self.SCHEMA_VERSION,),
