@@ -4,17 +4,21 @@ import asyncio
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from quart import Response, g
+from quart import Response, g, request
 
+from admin_permissions import allows
 from api.admin._base import AsyncAdminApiMixin
 from api.admin._numeric import SQLITE_MAX_INT, bounded_int
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_fields_strict
+from api.decorators.auth import resolve_admin
 from custom_types import PollingPanelInfo
 from sysutil import SysUtil
 from util import err, ok
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from api.common import ResponseType
     from custom_types import JsonifyValue
 
@@ -41,8 +45,17 @@ class AsyncStateRoutes(AsyncAdminApiMixin):
     @requires_admin_auth
     async def polling_status(self) -> ResponseType:
         """Stream shared dynamic state; unavailable panels are null."""
+        provided = request.headers.get("Authorization", "")
+
+        async def authorized_stream() -> AsyncGenerator[str]:
+            async for frame in self.live_state.stream():
+                principal = await resolve_admin(self, provided)
+                if principal is None or not allows(principal[0], "state.charts.read"):
+                    return
+                yield frame
+
         response = Response(
-            self.live_state.stream(),
+            authorized_stream(),
             content_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )

@@ -2,16 +2,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from quart import Response, make_response, redirect, render_template, request
+from argon2.exceptions import InvalidHashError, VerificationError
+from quart import Response, g, make_response, redirect, render_template, request
 
+from admin_permissions import PERMISSIONS, prerequisite
 from api.admin._base import AsyncAdminApiMixin
 from api.common import asset_version, web_lang_tables
 from api.decorators.auth import (
     ADMIN_UI_COOKIE,
     ADMIN_UI_SESSION_LEN,
     admin_browser_token,
+    credential_digest,
     new_admin_ui_session,
+    new_scoped_session,
     valid_admin_ui_session,
+    valid_scoped_cookie,
 )
 from api.decorators.rate_limit import rate_limit
 from constants import SESSION_MAX_AGE
@@ -45,7 +50,9 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
 
     async def _admin_auth_no_store(self, response: Response) -> Response:
         # Apply after error handling too, including rate-limit and storage failures.
-        if request.endpoint in {"admin_token", "admin_session", "admin_logout"}:
+        if request.endpoint in {"admin_token", "admin_session", "admin_logout"} or (
+            request.endpoint or ""
+        ).startswith("auth_"):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -76,6 +83,11 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
                 "token": admin_browser_token(self, request.cookies[ADMIN_UI_COOKIE]),
                 "api_root": self.uri,
                 "panels_configured": bool(self.sub.panels),
+                "permissions": list(self._cookie_permissions),
+                "catalog": [
+                    {"permission": permission, "requires": prerequisite(permission)}
+                    for permission in PERMISSIONS
+                ],
             },
         )
 
@@ -93,10 +105,26 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             or not password
         ):
             return err("Invalid credentials.", 401)
-        if not self._admin_credentials_ok(username, password):
-            return err("Invalid credentials.", 401)
-        session = new_admin_ui_session(self)
-        await self.sub.res.db.set_admin_ui_session(session)
+        if self._admin_credentials_ok(username, password):
+            session = new_admin_ui_session(self)
+            await self.sub.res.db.set_admin_ui_session(session)
+        else:
+            identity = await self.sub.res.db.admin_login_identity(username)
+            if identity is None or len(password) > 128:
+                return err("Invalid credentials.", 401)
+            try:
+                await self.sub.res.offloads.passwords.run(
+                    self.sub.res.password_hasher.verify, identity.secret, password
+                )
+            except InvalidHashError, VerificationError:
+                return err("Invalid credentials.", 401)
+            session = new_scoped_session(self)
+            if not await self.sub.res.db.admin_start_session(
+                identity,
+                credential_digest(session),
+                credential_digest(admin_browser_token(self, session)),
+            ):
+                return err("Credentials changed; retry login.", 409)
         response, code = ok(msg="Successful login")
         response.set_cookie(
             key=ADMIN_UI_COOKIE,
@@ -115,7 +143,11 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         expected = admin_browser_token(self, request.cookies[ADMIN_UI_COOKIE])
         if not compare(request.headers.get("X-Admin-CSRF", ""), expected):
             return err("Invalid CSRF token", 403)
-        await self.sub.res.db.set_admin_ui_session(None)
+        cookie = request.cookies[ADMIN_UI_COOKIE]
+        if cookie.startswith("sa."):
+            await self.sub.res.db.admin_end_session(credential_digest(cookie))
+        else:
+            await self.sub.res.db.set_admin_ui_session(None)
         response, code = ok(msg="Logged out")
         response.set_cookie(
             key=ADMIN_UI_COOKIE,
@@ -150,12 +182,31 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
 
     async def _admin_cookie_ok(self) -> bool:
         cookie = request.cookies.get(ADMIN_UI_COOKIE)
+        if cookie and cookie.startswith("sa.") and len(cookie) == 99:
+            if not valid_scoped_cookie(self, cookie):
+                return False
+            identity = await self.sub.res.db.admin_cookie_identity(credential_digest(cookie))
+            if identity is None:
+                return False
+            self._set_cookie_permissions(identity.permissions)
+            return True
         if not cookie or len(cookie) != ADMIN_UI_SESSION_LEN:
             return False
         stored = await valid_admin_ui_session(self)
         if not stored or len(stored) != ADMIN_UI_SESSION_LEN:
             return False
-        return compare(cookie, stored)
+        valid = compare(cookie, stored)
+        if valid:
+            self._set_cookie_permissions(("*",))
+        return valid
+
+    @staticmethod
+    def _set_cookie_permissions(permissions: tuple[str, ...]) -> None:
+        g.admin_cookie_permissions = permissions
+
+    @property
+    def _cookie_permissions(self) -> tuple[str, ...]:
+        return cast(tuple[str, ...], g.admin_cookie_permissions)
 
     async def admin_login_page(self) -> ResponseType:
         lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, "admin_auth")

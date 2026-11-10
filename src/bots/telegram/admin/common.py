@@ -31,6 +31,8 @@ class AdminCommonMixin(
     """Authentication, menus, and shared lifecycle glue."""
 
     def is_admin(self, user_id: int) -> bool:
+        # Non-HTTP administrators are trusted root (*) operators. Scoped HTTP
+        # identities never participate in this whitelist-only boundary.
         return user_id in self.admin_uids
 
     async def msg(self, text: str, parse_mode: str = "HTML") -> None:

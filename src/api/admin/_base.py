@@ -26,3 +26,11 @@ class AsyncAdminApiMixin:
     ui_session_key: bytes
     limiter: AsyncRateLimiter
     audit_cfg: AsyncLinesConfig
+
+    async def _backup_config_after_commit(self) -> None:
+        # The durable config edit has already succeeded. Backup failure must
+        # neither report a failed mutation nor prevent its audit append.
+        try:
+            await self.cfg.backup_now()
+        except Exception:
+            self.log.exception("config backup failed after commit")

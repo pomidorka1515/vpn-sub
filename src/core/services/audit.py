@@ -70,4 +70,7 @@ type AUDIT_VALUES = Literal[
     "code_add",
     "code_delete",
     "config_update",
+    "admin_auth_create",
+    "admin_auth_update",
+    "admin_auth_delete",
 ]

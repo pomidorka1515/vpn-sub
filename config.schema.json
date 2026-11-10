@@ -14,6 +14,7 @@
         "uri": { "type": "string", "description": "Main URI for the service.", "default": "sub" },
         "api_uri": { "type": "string", "description": "Admin API URI." },
         "api_admin_ui_auth": {
+            "description": "Non-deletable root administrator account [username, password], always granted *. Additional scoped accounts live in SQLite.",
         	"type": "array",
             "items": [
         		{ "type": "string", "description": "Username"},
@@ -25,7 +26,7 @@
         },
         "provider_id": { "type": "string" },
         "fallback_domain": { "type": "string", "description": "Fallback domain to retrieve the subscription from. Only works with Happ and if provider id is present.\nMust host a mirror of this service." },
-        "api_token": { "type": "string", "minLength": 20, "description": "Admin API Access token." },
+        "api_token": { "type": "string", "minLength": 20, "description": "Non-deletable root API token, always granted *. Additional scoped keys live in SQLite. Changes require restart." },
         "panel_alert_cooldown": { "type": "integer", "description": "Panel alert cooldown in seconds.", "default": 3600 },
         "domain": { "type": "string", "description": "Your domain." },
         "ping_check_url": { "type": "string", "description": "URL used for checking connectivity in Happ, works with provider id only, must return 204." },

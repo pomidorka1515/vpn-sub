@@ -83,6 +83,64 @@ def test_required_keys_match_schema() -> None:
     assert list(REQUIRED_KEYS) == json.loads((ROOT / "config.schema.json").read_text())["required"]
 
 
+@pytest.mark.asyncio
+async def test_auth_root_edits_keep_config_and_restart_contracts(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
+    app, cfg, path, audit = config_api
+    client = app.test_client()
+    username, password = cfg.view()["api_admin_ui_auth"]
+    assert (
+        await client.post("/sub/admin/session", json={"username": username, "password": password})
+    ).status_code == 200
+    root_path = "/sub/privapi/api/auth/update"
+    invalid = await client.post(
+        root_path, headers=HEADERS, json={"kind": "accounts", "id": "root", "permissions": []}
+    )
+    assert invalid.status_code == 400
+    update = await client.post(
+        root_path,
+        headers=HEADERS,
+        json={
+            "kind": "accounts",
+            "id": "root",
+            "name": "renamed-root",
+            "password": "new-root-password",
+        },
+    )
+    assert update.status_code == 200
+    assert (await update.get_json())["obj"]["item"]["permissions"] == ["*"]
+    assert cfg.view()["api_admin_ui_auth"] == ["renamed-root", "new-root-password"]
+    assert json.loads(path.read_bytes())["api_admin_ui_auth"] == [
+        "renamed-root",
+        "new-root-password",
+    ]
+    assert (await client.get("/sub/admin/token")).status_code == 401
+    assert (
+        await client.post(
+            "/sub/admin/session", json={"username": "renamed-root", "password": "new-root-password"}
+        )
+    ).status_code == 200
+    rotation = await client.post(
+        root_path, headers=HEADERS, json={"kind": "tokens", "id": "root", "rotate": True}
+    )
+    assert rotation.status_code == 200
+    payload = (await rotation.get_json())["obj"]
+    token = payload["token"]
+    assert payload["restart"] == ["api_token"]
+    assert cfg.view()["api_token"] == token
+    assert (await client.get("/sub/privapi/api/user/list", headers=HEADERS)).status_code == 200
+    assert (
+        await client.get("/sub/privapi/api/user/list", headers={"Authorization": token})
+    ).status_code == 401
+    assert token not in json.dumps(audit.records)
+    assert "new-root-password" not in json.dumps(audit.records)
+    assert [record["action"] for record in audit.records] == [
+        "admin_auth_update",
+        "admin_auth_update",
+    ]
+
+
 async def set_config(app: Quart, base: str, values: dict[str, JsonValue]) -> Response:
     return await app.test_client().post(
         "/sub/privapi/api/config/set",

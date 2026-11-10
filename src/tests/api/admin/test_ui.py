@@ -114,7 +114,10 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
     for part in (b"fonts.googleapis", b"fonts.gstatic", b"jsdelivr"):
         assert part not in body
     response = await client.get("/sub/admin/token")
-    assert (await response.get_json())["obj"] == {
+    payload = (await response.get_json())["obj"]
+    assert payload.pop("permissions") == ["*"]
+    assert payload.pop("catalog")
+    assert payload == {
         "token": await browser_token(client),
         "api_root": "/sub/api",
         "panels_configured": True,
@@ -348,6 +351,8 @@ async def test_admin_empty_uri_contract(
         assert payload["success"] is True
         token = payload["obj"]["token"]
         assert token.startswith("ui.")
+        assert payload["obj"].pop("permissions") == ["*"]
+        assert payload["obj"].pop("catalog")
         assert payload["obj"] == {"token": token, "api_root": root, "panels_configured": True}
         response = await client.post(f"{panel}/logout", headers={"X-Admin-CSRF": token})
         assert response.status_code == 200

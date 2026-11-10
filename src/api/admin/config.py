@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 from quart import g
 
+from admin_permissions import ROOT_CONFIG_KEYS, allows, config_section
 from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
 from api.config_patch import apply_config_patch, config_etag
@@ -30,7 +31,14 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
     @requires_admin_auth
     async def config_get(self) -> ResponseType:
         data = self.cfg.view()
-        visible = dict(data)
+        visible = {
+            key: value
+            for key, value in data.items()
+            if allows(g.admin_permissions, f"config.read.{config_section(key)}")
+            and (key not in ROOT_CONFIG_KEYS or allows(g.admin_permissions, "*"))
+        }
+        if allows(g.admin_permissions, "config.read.inbounds"):
+            visible["nodes"] = data["nodes"]
         if g.admin_browser_auth:
             visible.pop("api_token", None)
         response, code = ok(obj=cast(JsonifyValue, visible))
@@ -83,10 +91,7 @@ class AsyncConfigRoutes(AsyncAdminApiMixin):
                 await self.sub.res.db.set_admin_ui_session(None)
             # The file is already replaced. A backup failure must not turn a
             # committed edit into a 500, and must not skip the audit.
-            try:
-                await self.cfg.backup_now()
-            except Exception:
-                self.log.exception("config backup failed after commit")
+            await self._backup_config_after_commit()
             await self.sub.audit_svc.audit_committed(
                 name="config_update",
                 info={"keys": changed},

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 from api.common import AsyncBaseApi
 from loggers import Logger
 
+from .auth import AsyncAuthRoutes
 from .code import AsyncCodeRoutes
 from .config import AsyncConfigRoutes
 from .live import LiveState
@@ -29,6 +30,7 @@ __all__ = ["AsyncApi"]
 
 
 class AsyncApi(
+    AsyncAuthRoutes,
     AsyncUserRoutes,
     AsyncPanelRoutes,
     AsyncCodeRoutes,
@@ -42,6 +44,7 @@ class AsyncApi(
     """Private admin API."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
+        *AsyncAuthRoutes.ROUTES,
         *AsyncUserRoutes.ROUTES,
         *AsyncPanelRoutes.ROUTES,
         *AsyncCodeRoutes.ROUTES,

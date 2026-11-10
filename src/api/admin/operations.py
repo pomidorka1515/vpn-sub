@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from quart import g
 
+from admin_permissions import allows
 from api.admin._base import AsyncAdminApiMixin
 from api.common import Route
 from api.decorators import requires_admin_auth, requires_fields_strict
@@ -61,9 +62,15 @@ class AsyncOperationsRoutes(AsyncAdminApiMixin):
                     or any(rollback_failures.values())
                     or any(pending_recovery.values())
                 ),
-                "daily_snapshot_failure": snapshot_failure,
-                "rollback_failures": rollback_failures,
-                "pending_recovery": pending_recovery,
+                **(
+                    {
+                        "daily_snapshot_failure": snapshot_failure,
+                        "rollback_failures": rollback_failures,
+                        "pending_recovery": pending_recovery,
+                    }
+                    if allows(g.admin_permissions, "health.read.recovery")
+                    else {}
+                ),
             },
         )
 
@@ -91,5 +98,6 @@ class AsyncOperationsRoutes(AsyncAdminApiMixin):
             return err("kind must be 'uuid' or 'registration'")
         return ok("Resolved")
 
+    @requires_admin_auth
     async def teapot(self) -> ResponseType:
         return err("I'm a teapot", 418, obj={"teapot": random() < 0.01})  # is it really an error?
