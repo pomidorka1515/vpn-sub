@@ -12,6 +12,22 @@ from tests.support.discord import FakeInteraction, make_bots, modal_data
 
 
 @pytest.mark.asyncio
+async def test_admin_password_reset_link_and_stale_menu() -> None:
+    _, bot, _, sub = make_bots()
+    link = "https://example.test/sub/reset?token=" + "x" * 75
+    sub.account_svc.issue_password_reset = AsyncMock(return_value=link)
+    bot._pending_edits[7] = {"username": "alice", "generation": "current"}
+    stale = FakeInteraction(data={"custom_id": "admin:edit:password:stale"})
+    await bot.dispatch_component(cast(discord.Interaction, stale))
+    sub.account_svc.issue_password_reset.assert_not_awaited()
+    current = FakeInteraction(data={"custom_id": "admin:edit:password:current"})
+    await bot.dispatch_component(cast(discord.Interaction, current))
+    assert current.response.deferred
+    sub.account_svc.issue_password_reset.assert_awaited_once_with("alice")
+    assert link in str(current.response.messages[-1]["content"])
+
+
+@pytest.mark.asyncio
 async def test_admin_whitelist_guards_service_access() -> None:
     _, bot, _, sub = make_bots(whitelist=[99])
     fake = FakeInteraction(data={"custom_id": "admin:list_users"})

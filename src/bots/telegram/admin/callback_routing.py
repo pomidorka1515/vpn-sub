@@ -307,6 +307,7 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             "name": self._cb_edit_name,
             "login": self._cb_edit_login,
             "date": self._cb_edit_date,
+            "password": self._cb_password_reset,
         }
         handler = handlers.get(action.split("_", 1)[1])
         if handler is not None:

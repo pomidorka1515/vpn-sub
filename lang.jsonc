@@ -602,6 +602,8 @@
                 // tabs and titles
                 "sign_in": "Sign in",
                 "create_account": "Create account",
+                "reset_password": "Reset password",
+                "password_reset_success": "Password updated. You can now sign in with your new password.",
                 "login": "Login",
                 "register": "Register",
 
@@ -621,6 +623,8 @@
                 // tabs and titles
                 "sign_in": "Вход",
                 "create_account": "Регистрация",
+                "reset_password": "Сбросить пароль",
+                "password_reset_success": "Пароль обновлён. Теперь можно войти с новым паролем.",
                 "login": "Вход",
                 "register": "Регистрация",
 
@@ -894,6 +898,8 @@
                 "actions": "Actions",
                 "info": "Info",
                 "reset": "Reset",
+                "password_reset_link": "Password reset link",
+                "password_reset_hint": "Single-use link. Expires in one hour or when the service restarts. Share it only with this user.",
                 "delete": "Delete",
 
                 // user hints
@@ -1317,6 +1323,8 @@
                 "actions": "Действия",
                 "info": "Инфо",
                 "reset": "Сброс",
+                "password_reset_link": "Ссылка для сброса пароля",
+                "password_reset_hint": "Одноразовая ссылка. Действует один час или до перезапуска сервиса. Передайте её только этому пользователю.",
                 "delete": "Удалить",
 
                 // user hints

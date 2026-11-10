@@ -27,10 +27,19 @@ class AsyncUserRoutes(AsyncAdminApiMixin):
         Route("POST", "/api/user/refresh", "user_refresh"),
         Route("GET", "/api/user/onlines", "user_onlines"),
         Route("POST", "/api/user/reset", "user_reset"),
+        Route("POST", "/api/user/password-reset", "user_password_reset"),
         Route("POST", "/api/user/update", "user_update"),
         Route("GET", "/api/user/history", "user_history"),
         Route("GET", "/api/fingerprints", "fingerprints"),
     )
+
+    @requires_admin_auth
+    @requires_fields_strict(("user", str))
+    async def user_password_reset(self) -> ResponseType:
+        link = await self.sub.account_svc.issue_password_reset(g.json_obj["user"])
+        response, status = ok(obj={"link": link})
+        response.headers["Cache-Control"] = "no-store"
+        return response, status
 
     @requires_admin_auth
     async def user_list(self) -> ResponseType:

@@ -231,6 +231,9 @@ class AdminUsersMixin(AdminFeatureMixin):
             ),
             types.InlineKeyboardButton("👤 Веб-логин", callback_data=f"edit_login:{generation}"),
             types.InlineKeyboardButton(
+                "🔑 Сброс пароля", callback_data=f"edit_password:{generation}"
+            ),
+            types.InlineKeyboardButton(
                 "📅 Дата окончания", callback_data=f"edit_date:{generation}"
             ),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"),
@@ -240,6 +243,20 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"✏️ Что изменить для <b>{username}</b>?",
             parse_mode="HTML",
             reply_markup=markup,
+        )
+
+    async def _cb_password_reset(self, chat_id: int, username: str) -> None:
+        try:
+            link = await self.sub.account_svc.issue_password_reset(username)
+        except AppError as error:
+            await self._send_message(chat_id, f"❌ {error.message}")
+            return
+        await self.bot.send_message(
+            chat_id,
+            "🔑 Ссылка для сброса пароля (одноразовая, действует 1 час или до перезапуска). "
+            "Передайте её только этому пользователю:\n\n" + link,
+            disable_web_page_preview=True,
+            reply_markup=self.get_main_menu(),
         )
 
     async def _cb_edit_fingerprint(self, chat_id: int, username: str) -> None:

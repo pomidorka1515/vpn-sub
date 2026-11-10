@@ -4,12 +4,14 @@ import json
 import re
 import uuid
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 from argon2 import PasswordHasher
 
-from api import AsyncWebApi
+from api import AsyncApi, AsyncWebApi
+from config.store import AsyncLinesConfig
 from fonts import FONT_FILES, font_version
 from paths import frontend_root
 from tests.support.api import api_app, config_snapshot, make_subscription, make_watch
@@ -25,6 +27,66 @@ if TYPE_CHECKING:
     from db import Database
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize("query", ["", "?token=", "?token=invalid", "?token=" + "x" * 75])
+async def test_password_reset_invalid_token_is_404(
+    web_api: tuple[Quart, Database], query: str
+) -> None:
+    client = web_api[0].test_client()
+    response = await client.get("/custom/reset" + query, headers={"User-Agent": "Mozilla/5.0"})
+    assert response.status_code == 404
+    assert "resetForm" not in await response.get_data(as_text=True)
+    response = await client.post("/custom/webapi/password-reset" + query, json={"password": "new"})
+    assert response.status_code == 404
+
+
+async def test_password_reset_without_authentication(web_api: tuple[Quart, Database]) -> None:
+    app, db = web_api
+    sub = app.extensions["subscriptions"][0]
+    link = await sub.account_svc.issue_password_reset("alice")
+    query = "?" + link.split("?", 1)[1]
+    client = app.test_client()
+    response = await client.get("/custom/reset" + query)
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert "resetForm" in await response.get_data(as_text=True)
+    assert (await client.post("/custom/webapi/password-reset" + query, json={})).status_code == 400
+    response = await client.post("/custom/webapi/password-reset" + query, json={"password": "new"})
+    assert response.status_code == 200
+    assert await sub.password_svc.validate_credentials("alice-login", "new") == "alice"
+    assert await db.ext_to_user("alice-login") == "alice"
+    assert (await client.get("/custom/reset" + query)).status_code == 404
+
+
+async def test_admin_password_reset_requires_admin_and_issues_public_link(
+    web_api: tuple[Quart, Database],
+) -> None:
+    app, db = web_api
+    sub = app.extensions["subscriptions"][0]
+    AsyncApi(
+        app=app,
+        cfg=config_snapshot(subscription_config(uri="custom")),
+        sub=sub,
+        bw=make_watch(db, sub),
+        limiter=app.extensions["limiter"],
+        audit_cfg=MagicMock(spec=AsyncLinesConfig),
+    )
+    client = app.test_client()
+    path = "/custom/api/user/password-reset"
+    assert (await client.post(path, json={"user": "alice"})).status_code == 401
+    await db.set_auth_token("alice", "a" * 100)
+    client.set_cookie("localhost", "auth_token", "a" * 100)
+    assert (await client.post(path, json={"user": "alice"})).status_code == 401
+    response = await client.post(path, json={"user": "alice"}, headers={"Authorization": "secret"})
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    link = (await response.get_json())["obj"]["link"]
+    assert re.fullmatch(r"https://example.test/custom/reset\?token=[A-Za-z0-9_-]{75}", link)
+    # Issuing the link neither changes the password nor signs out the user.
+    assert await sub.password_svc.validate_credentials("alice-login", "secret") == "alice"
+    assert await db.auth_token_to_user("a" * 100) == "alice"
 
 
 @pytest_asyncio.fixture

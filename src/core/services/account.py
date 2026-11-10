@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import secrets
+import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from errors import AppError, ValidationError
+from errors import AppError, NotFoundError, ValidationError
 from util import generate_token
 
 from ..common import BaseService
@@ -12,6 +15,15 @@ if TYPE_CHECKING:
     from ..common import SharedCoreResources
     from .password import PasswordService
     from .user import BusinessUserService, CommonUserService
+
+
+@dataclass(frozen=True)
+class PasswordReset:
+    username: str
+    uuid: str
+    external: str
+    password_hash: str | None
+    expires: float
 
 
 class AccountService(BaseService):
@@ -29,6 +41,61 @@ class AccountService(BaseService):
         self.password_svc = password_svc
         self.user_svc = user_svc
         self.business_svc = business_svc
+        self._password_resets: dict[str, PasswordReset] = {}
+
+    @user_mutation
+    async def issue_password_reset(self, username: str) -> str:
+        user = await self.user_svc.user(username)
+        external = user["ext_username"]
+        if not external:
+            raise ValidationError("Account has no web login")
+        now = time.monotonic()
+        self._password_resets = {
+            token: reset
+            for token, reset in self._password_resets.items()
+            if reset.expires > now and reset.username != username
+        }
+        token = secrets.token_urlsafe(56)
+        self._password_resets[token] = PasswordReset(
+            username, user["uuid"], external, user["ext_password_hash"], now + 3600
+        )
+        conf = self.cfg.view()
+        prefix = "/".join(part for part in conf["uri"].split("/") if part)
+        base = conf["domain"].rstrip("/") + (f"/{prefix}" if prefix else "")
+        return f"{base}/reset?token={token}"
+
+    async def password_reset(self, token: str | None) -> PasswordReset:
+        reset = self._password_resets.get(token or "")
+        if reset is not None:
+            user = await self.db.get_user(reset.username)
+            if (
+                reset.expires > time.monotonic()
+                and self._password_resets.get(token or "") is reset
+                and user is not None
+                and user["uuid"] == reset.uuid
+                and user["ext_username"] == reset.external
+                and user["ext_password_hash"] == reset.password_hash
+            ):
+                return reset
+        self._password_resets.pop(token or "", None)
+        raise NotFoundError("Not found")
+
+    async def reset_password(self, token: str | None, password: str) -> None:
+        reset = await self.password_reset(token)
+
+        async def commit() -> None:
+            await self.password_reset(token)
+            self.password_svc.validate_new_password(password)
+            hashed = await self.password_svc.hash(password)
+            # Recheck after hashing: expiration and replacement can happen while awaiting.
+            await self.password_reset(token)
+            await self.db.reset_password(reset.username, hashed)
+            self._password_resets.pop(token or "", None)
+            await self.business_svc.audit_svc.audit_committed(
+                name="user_password_reset", info={"username": reset.username}
+            )
+
+        await self.res.coordinator.run([reset.username], commit, name="core:password-reset")
 
     async def login(self, username: str, password: str) -> str:
         internal = await self.db.ext_to_user(username)

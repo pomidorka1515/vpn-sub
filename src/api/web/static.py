@@ -45,6 +45,8 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         Route("GET", "/vendor/codemirror-5.65.16.min.css", "codemirror_css"),
         Route("GET", "/panel", "gui_panel"),
         Route("GET", "/auth", "gui_auth"),
+        Route("GET", "/reset", "gui_password_reset"),
+        Route("GET", "/reset.js", "password_reset_js"),
         Route("GET", "/history", "gui_history"),
     )
 
@@ -169,6 +171,17 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
     async def gui_auth(self) -> ResponseType:
         return await self._page("auth.html")
 
+    async def password_reset_js(self) -> ResponseType:
+        return await self._static("reset.js", "text/javascript")
+
+    async def gui_password_reset(self) -> ResponseType:
+        await self.sub.account_svc.password_reset(request.args.get("token"))
+        response = await self._page("reset.html")
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        return response
+
     async def gui_history(self) -> ResponseType:
         auth_token = request.cookies.get("auth_token")
         if not await self.validate_auth_token(auth_token):
@@ -176,7 +189,12 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         return await self._page("history.html")
 
     async def _page(self, name: str) -> Response:
-        page = {"auth.html": "auth", "dashboard.html": "dashboard", "history.html": "history"}[name]
+        page = {
+            "auth.html": "auth",
+            "reset.html": "auth",
+            "dashboard.html": "dashboard",
+            "history.html": "history",
+        }[name]
         lang, strings, fallback = web_lang_tables(self.sub.res.lang_cfg, page)
         html = await render_template(
             name,

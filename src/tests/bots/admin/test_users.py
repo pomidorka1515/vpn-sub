@@ -92,6 +92,24 @@ def _buttons(markup: object) -> list[str]:
 
 
 @pytest.mark.asyncio
+async def test_password_reset_link_uses_shared_account_service(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock],
+) -> None:
+    mixin, telegram, subscription = users
+    link = "https://example.test/sub/reset?token=" + "x" * 75
+    subscription.account_svc.issue_password_reset.return_value = link
+    await mixin._cb_edit_user_options(7, "alice")
+    generation = mixin._pending_edits[7]["generation"]
+    assert f"edit_password:{generation}" in _buttons(
+        telegram.send_message.call_args.kwargs["reply_markup"]
+    )
+    await mixin._cb_password_reset(7, "alice")
+    subscription.account_svc.issue_password_reset.assert_awaited_once_with("alice")
+    assert link in telegram.send_message.call_args.args[1]
+    assert telegram.send_message.call_args.kwargs["disable_web_page_preview"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("length", [54, 55, 200])
 async def test_info_edit_button_fits_long_existing_username(
     users: tuple[AdminUsersMixin, MagicMock, MagicMock],

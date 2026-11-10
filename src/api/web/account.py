@@ -21,12 +21,27 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
         Route("POST", "/webapi/bonus", "bonus", 15),
         Route("GET", "/webapi/stats", "stats", 20),
         Route("POST", "/webapi/reset", "reset", 3),
+        Route("POST", "/webapi/password-reset", "password_reset", 10),
         Route("POST", "/webapi/settings", "settings", 15),
         Route("GET", "/webapi/fingerprints", "fps", None),
         Route("GET", "/webapi/profiles", "profiles", 60),
         Route("GET", "/webapi/history", "bandwidth_history", 30),
         Route("GET", "/webapi/qr", "qr", 80),
     )
+
+    async def password_reset(self) -> ResponseType:
+        token = request.args.get("token")
+        await self.sub.account_svc.password_reset(token)
+        content = await request.get_json(silent=True)
+        if not isinstance(content, dict):
+            return err("Password required", 400)
+        password = cast(dict[str, object], content).get("password")
+        if not isinstance(password, str):
+            return err("Password required", 400)
+        await self.sub.account_svc.reset_password(token, password)
+        response, status = ok()
+        response.headers["Cache-Control"] = "no-store"
+        return response, status
 
     @requires_webapi_auth
     async def qr(self, username: str) -> ResponseType:

@@ -298,6 +298,13 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
         view.add_item(
             discord.ui.Button(
+                label="🔑 Сброс пароля",
+                custom_id=f"admin:edit:password:{generation}",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
                 label="📅 Дата окончания",
                 custom_id=f"admin:edit:date:{generation}",
                 style=discord.ButtonStyle.secondary,
@@ -311,6 +318,20 @@ class AdminUsersMixin(AdminFeatureMixin):
             ),
         )
         await self._respond(interaction, f"✏️ Что изменить для **{username}**?", view=view)
+
+    async def _cb_password_reset(self, interaction: discord.Interaction, username: str) -> None:
+        await self._defer(interaction)
+        try:
+            link = await self.sub.account_svc.issue_password_reset(username)
+        except AppError as error:
+            await self._respond(interaction, f"❌ {error.message}", view=self.main_menu_view())
+            return
+        await self._respond(
+            interaction,
+            "🔑 Ссылка для сброса пароля (одноразовая, действует 1 час или до перезапуска). "
+            f"Передайте её только этому пользователю:\n\n`{link}`",
+            view=self.main_menu_view(),
+        )
 
     async def _cb_edit_fingerprint(self, interaction: discord.Interaction, username: str) -> None:
         generation = self._pending_edits.get(interaction.user.id, {}).get("generation", "")

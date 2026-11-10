@@ -28,6 +28,14 @@ async def check_uuid_available(conn: Connection, uuid: str, owner: str | None = 
 
 
 class UsersMixin(ConnectionMixin):
+    async def reset_password(self, username: str, password_hash: str) -> None:
+        async with self.transaction(immediate=True) as conn:
+            await conn.execute(
+                "UPDATE users SET ext_password_hash = ?, auth_token = NULL, "
+                "auth_token_expires_at = NULL WHERE username = ?",
+                (password_hash, username),
+            )
+
     async def get_user(self, username: str) -> UserRecord | None:
         async with self.connection() as conn:
             row = await conn.row("SELECT * FROM users WHERE username = ?", (username,))

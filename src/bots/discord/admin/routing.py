@@ -424,6 +424,7 @@ class AdminRoutingMixin(AdminFeatureMixin):
             "name": self._cb_edit_name,
             "login": self._cb_edit_login,
             "date": self._cb_edit_date,
+            "password": self._cb_password_reset,
         }
         handler = handlers.get(action)
         if handler is not None:

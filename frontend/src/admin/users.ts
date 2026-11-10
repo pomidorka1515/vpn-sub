@@ -190,6 +190,29 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
       result.hidden = false;
     });
   }
+  async function issuePasswordReset(): Promise<void> {
+    const username = state.selectedUser;
+    if (!username) return;
+    await withBusy(button(doc, 'btnPasswordReset'), async () => {
+      const res = await api('POST', '/api/user/password-reset', { user: username });
+      if (disposed || state.selectedUser !== username) return;
+      if (!res?.success || !isRecord(res.obj) || typeof res.obj['link'] !== 'string') {
+        toast(res?.msg || t('error'), 'error'); return;
+      }
+      const result = element(doc, 'userDetailResult');
+      result.replaceChildren();
+      const hint = doc.createElement('p');
+      hint.className = 'result-msg';
+      hint.textContent = t('password_reset_hint');
+      const link = doc.createElement('input');
+      link.type = 'text'; link.className = 'modal-input'; link.readOnly = true; link.value = res.obj['link'];
+      link.setAttribute('aria-label', t('password_reset_link'));
+      link.addEventListener('click', () => { link.select(); });
+      result.append(hint, link);
+      result.className = 'result-box success'; result.hidden = false;
+      link.focus(); link.select();
+    });
+  }
   function showAddUser(): void {
     element(doc, 'addUserCard').style.display = 'block';
     for (const [id, value] of [['addUser', ''], ['addDisplayName', ''], ['addExtUser', ''], ['addExtPass', ''], ['addFp', ''], ['addLimit', '0'], ['addWlLimit', '5'], ['addExpiry', ''], ['addToken', ''], ['addUuid', '']] as const) input(doc, id).value = value;
@@ -242,6 +265,7 @@ export function initUsers({ doc, t, api, toast, confirm, loadGen }: AdminContext
   bind('btnDoAdd', () => { void addUser(); });
   bind('btnCloseDetail', hideDetail);
   bind('btnDoReset', () => { void resetUser(); });
+  bind('btnPasswordReset', () => { void issuePasswordReset(); });
   bind('btnEditDetail', () => { if (state.selectedUser) void viewUser(state.selectedUser, editButton, true); });
   bind('btnCancelEdit', () => { edit.close(); });
   input(doc, 'editExpiry').addEventListener('input', () => { expiryChanged = true; }, { signal: listeners.signal });

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+from core.services.account import AccountService
 from core.services.bandwidth import BandwidthService
 from core.services.code import BusinessCodeService, CodeService
 from core.services.leaderboard import LeaderboardService
@@ -29,6 +30,7 @@ def telegram_mock() -> MagicMock:
 def subscription_mock() -> MagicMock:
     sub = MagicMock()
     for name, service in (
+        ("account_svc", AccountService),
         ("user_svc", CommonUserService),
         ("business_svc", BusinessUserService),
         ("code_svc", CodeService),

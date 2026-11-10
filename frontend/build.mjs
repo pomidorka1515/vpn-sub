@@ -18,6 +18,7 @@ if (process.argv.slice(2).some((arg) => arg !== "--watch")) {
 
 const moduleEntries = {
   auth: "src/entries/auth.ts",
+  reset: "src/entries/reset.ts",
   "admin-auth": "src/entries/admin-auth.ts",
   "admin/main": "src/entries/admin.ts",
 };

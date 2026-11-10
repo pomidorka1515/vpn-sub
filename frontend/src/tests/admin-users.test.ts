@@ -27,6 +27,17 @@ function setup() {
 const success = (obj: unknown = null) => ({ success: true, obj, status: 200 });
 
 describe('admin user management', () => {
+  it('issues a selectable reset link for the selected internal user', async () => {
+    const { state, api, click } = setup();
+    state.selectedUser = 'alice';
+    const link = 'https://example.test/sub/reset?token=' + 'x'.repeat(75);
+    api.mockResolvedValueOnce(success({ link }));
+    click('btnPasswordReset');
+    await vi.waitFor(() => { expect(document.querySelector<HTMLInputElement>('#userDetailResult input')?.value).toBe(link); });
+    expect(api).toHaveBeenCalledExactlyOnceWith('POST', '/api/user/password-reset', { user: 'alice' });
+    expect(required(document.getElementById('userDetailResult')).hidden).toBe(false);
+    expect(requiredInstance(document.querySelector('#userDetailResult input'), HTMLInputElement).readOnly).toBe(true);
+  });
   it('shows external names and switches to web-only rows while keeping internal action targets', async () => {
     const { input, load, api } = setup();
     await load([{ username: 'alice', ext_username: '<alice-login>' }, { username: 'bob', ext_username: null }]);
