@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AdminContext } from '../admin/context';
 import { initHealth } from '../admin/health';
+import { createApi } from '../shared/api';
 import { createLoadGeneration } from '../shared/stale';
 
 let dispose: (() => void) | undefined;
@@ -64,7 +65,10 @@ describe('admin health and recovery', () => {
     const { api, click, el } = setup();
     api.mockResolvedValueOnce({ success: true, status: 200, msg: '<done>' })
       .mockResolvedValueOnce({ success: false, status: 500 })
-      .mockResolvedValueOnce({ success: true, status: 200, obj: { teapot: true } })
+      .mockResolvedValueOnce({ success: false, status: 418, obj: { teapot: true } })
+      .mockResolvedValueOnce({ success: false, status: 418, obj: { teapot: false } })
+      .mockResolvedValueOnce({ success: false, status: 403, msg: 'denied', obj: { teapot: true } })
+      .mockResolvedValueOnce({ success: false, status: 418, msg: 'invalid', obj: { teapot: 'yes' } })
       .mockResolvedValueOnce(null);
     click('btnDoRefresh');
     await vi.waitFor(() => { expect(el('refreshResult').className).toBe('result-box success'); });
@@ -76,7 +80,22 @@ describe('admin health and recovery', () => {
     click('btnTeapot');
     await vi.waitFor(() => { expect(el('teapotStatus').textContent).toContain('teapot_yes'); });
     click('btnTeapot');
+    await vi.waitFor(() => { expect(el('teapotStatus').textContent).toBe('teapot_no'); });
+    click('btnTeapot');
+    await vi.waitFor(() => { expect(el('teapotStatus').textContent).toBe('denied'); });
+    click('btnTeapot');
+    await vi.waitFor(() => { expect(el('teapotStatus').textContent).toBe('invalid'); });
+    click('btnTeapot');
     await vi.waitFor(() => { expect(el('teapotStatus').textContent).toBe('network_err'); });
+  });
+
+  it('renders the actual 418 error envelope through the shared transport', async () => {
+    document.body.innerHTML = readFileSync('src/templates/admin.html', 'utf8');
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: false, msg: "I'm a teapot", obj: { teapot: false } }), { status: 418 }));
+    const api = createApi(() => ({}), key => key, vi.fn(), request);
+    dispose = initHealth({ doc: document, t: key => key, api, toast: vi.fn(), confirm: vi.fn(), loadGen: createLoadGeneration() }, 'en');
+    required(document.getElementById('btnTeapot')).click();
+    await vi.waitFor(() => { expect(required(document.getElementById('teapotStatus')).textContent).toBe('teapot_no'); });
   });
 
   it('renders recovery issues and resolves only after confirmation', async () => {

@@ -101,7 +101,7 @@ export function initHealth({ doc, t, api, toast, confirm, loadGen, can }: AdminC
       const res = await api('GET', '/api/teapot');
       if (disposed) return;
       const status = element(doc, 'teapotStatus');
-      if (!res?.success || !isRecord(res.obj)) { status.textContent = res?.msg || t('network_err'); status.style.color = 'var(--red)'; return; }
+      if (!res || res.status !== 418 || !isRecord(res.obj) || typeof res.obj['teapot'] !== 'boolean') { status.textContent = res?.msg || t('network_err'); status.style.color = 'var(--red)'; return; }
       const yes = res.obj['teapot'];
       status.textContent = yes ? t('teapot_yes') + ' 🍵' : t('teapot_no');
       status.style.color = yes ? 'var(--orange)' : 'var(--green)';

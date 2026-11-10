@@ -82,8 +82,7 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
       const amount = leaves.filter(entry => selected.has(entry.permission)).length;
       check.checked = amount === leaves.length && leaves.length > 0; check.indeterminate = amount > 0 && amount < leaves.length;
       check.disabled = readonly || !!current?.root || !can(permission);
-      if (!can(permission)) check.title = hint(permission);
-      else if (current?.root) check.title = t('auth_root_protected');
+      if (!current?.root && !can(permission)) check.title = hint(permission);
       const text = doc.createElement('span'); text.className = 'mono'; text.textContent = permission;
       label.title = t(prefix ? 'permission_branch_tip' : 'permission_root_tip').replace('{permission}', permission);
       label.append(check, text); tree.append(label);
@@ -94,8 +93,7 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
         if (!leaf) { build(name, depth + 1); continue; }
         const row = doc.createElement('label'); row.className = 'permission-row'; row.style.paddingInlineStart = String((depth + 1) * 6 + 6) + 'px';
         const field = doc.createElement('input'); field.type = 'checkbox'; field.dataset['permission'] = name; field.checked = selected.has(name); field.disabled = readonly || !!current?.root || !can(name);
-        if (!can(name)) field.title = hint(name);
-        else if (current?.root) field.title = t('auth_root_protected');
+        if (!current?.root && !can(name)) field.title = hint(name);
         const text = doc.createElement('span'); text.className = 'mono'; text.textContent = name;
         row.title = t('permission_' + name.replaceAll('.', '_'));
         row.append(field, text); tree.append(row);

@@ -10,7 +10,7 @@ export function initPermissionReasons(doc: Document, t: Translate) {
   let translations = { missing: t('permission_missing'), noPanels: t('no_panels'), root: t('auth_root_protected') };
   function isReason(text: string): boolean {
     const [before = '', after = ''] = t('permission_missing').split('{permission}');
-    return !!text && (text === t('no_panels') || text === t('auth_root_protected') ||
+    return !!text && (text === t('no_panels') ||
       (before || after) !== '' && text.startsWith(before) && text.endsWith(after));
   }
   function remove(target: HTMLElement, reason: HTMLElement): void {
@@ -25,10 +25,10 @@ export function initPermissionReasons(doc: Document, t: Translate) {
     if (stopped) return;
     const next = new Map<HTMLElement, string>();
     doc.querySelectorAll<HTMLElement>('button[disabled][title], input[disabled][title], input[readonly][title], textarea[readonly][title], select[disabled][title]').forEach(target => {
-      if (isReason(target.title)) next.set(target, target.title);
+      if (isReason(target.title) && (!target.closest('#usersTableWrap') || target.title === t('no_panels'))) next.set(target, target.title);
     });
     doc.querySelectorAll<HTMLSelectElement>('select').forEach(select => {
-      const messages = [...new Set([...select.options].filter(option => option.disabled && isReason(option.title)).map(option => option.title))];
+      const messages = [...new Set([...select.options].filter(option => option.disabled && isReason(option.title) && (!select.closest('#usersTableWrap') || option.title === t('no_panels'))).map(option => option.title))];
       if (messages.length) next.set(select, [next.get(select), ...messages].filter(Boolean).join(' · '));
     });
     for (const [target, reason] of reasons) if (!target.isConnected || !next.has(target)) remove(target, reason);

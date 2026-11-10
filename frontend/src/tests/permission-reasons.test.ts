@@ -43,4 +43,16 @@ describe('permission explanations', () => {
     expect(button.title).toBe('Required code.delete');
     expect(button.nextElementSibling?.textContent).toBe('Required code.delete');
   });
+  it('omits root protection and users table permission explanations without suppressing other reasons', async () => {
+    document.body.innerHTML = '<div id="usersTableWrap"><button disabled title="Missing user.delete permission"></button></div><div id="auth"><button disabled title="auth_root_protected"></button></div><div class="toolbar"><button disabled title="Missing health.sync permission"></button><button>next</button></div>';
+    dispose = initPermissionReasons(document, t).dispose;
+    expect(document.querySelector('#usersTableWrap .permission-reason')).toBeNull();
+    expect(document.querySelector('#auth .permission-reason')).toBeNull();
+    const button = required(document.querySelector<HTMLButtonElement>('.toolbar button'));
+    expect(button.nextElementSibling?.textContent).toBe('Missing health.sync permission');
+    expect(button.getAttribute('aria-describedby')).toBe(button.nextElementSibling?.id);
+    const userButton = required(document.querySelector<HTMLButtonElement>('#usersTableWrap button'));
+    userButton.title = 'no_panels';
+    await vi.waitFor(() => { expect(userButton.nextElementSibling?.textContent).toBe('no_panels'); });
+  });
 });

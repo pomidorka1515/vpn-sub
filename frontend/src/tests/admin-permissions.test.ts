@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initAuth } from '../admin/auth';
+import { initPermissionReasons } from '../admin/permission-reasons';
 import { createAdminState } from '../admin/bootstrap';
 import { allows, applyPermissions, foldPermissions, missingPermission, requestPermissions } from '../admin/permissions';
 import type { PermissionEntry } from '../admin/permissions';
@@ -166,6 +167,28 @@ describe('admin identity dialogs', () => {
     expect(required(document.querySelector<HTMLDialogElement>('#authDialog')).open).toBe(true);
     expect(required(document.querySelector<HTMLInputElement>('#authName')).value).toBe('<img src=x>');
     expect([...document.querySelectorAll<HTMLInputElement>('.permission-row input')].every(field => field.disabled)).toBe(true);
+    expect([...document.querySelectorAll<HTMLInputElement>('.permission-row input')].every(field => !field.title)).toBe(true);
+    expect(required(document.getElementById('authRootHint')).hidden).toBe(false);
+  });
+  it('shows one root notice for accounts and keys even when the viewer lacks grants', async () => {
+    const { api } = setup(['auth.read.accounts', 'auth.read.tokens']);
+    const reasons = initPermissionReasons(document, key => key === 'permission_missing' ? 'Missing {permission}' : key);
+    try {
+      api.mockImplementation((_method, url) => {
+        const kind = url.endsWith('accounts') ? 'accounts' : 'tokens';
+        return Promise.resolve({ success: true, status: 200, obj: { items: [{ id: 'root', kind, name: 'root', root: true, permissions: ['*'] }] } });
+      });
+      click('btnLoadAuth');
+      await vi.waitFor(() => { expect(document.querySelectorAll('[data-auth-action="info"]')).toHaveLength(2); });
+      for (const kind of ['accounts', 'tokens']) {
+        required(document.querySelector<HTMLButtonElement>(`#auth${kind}Table [data-auth-action="info"]`)).click();
+        expect(required(document.getElementById('authRootHint')).hidden).toBe(false);
+        expect([...document.querySelectorAll<HTMLInputElement>('#authPermissionTree input')].every(field => field.disabled && !field.title)).toBe(true);
+        expect(document.querySelector('#authPermissionTree .permission-reason')).toBeNull();
+        click('authClose');
+      }
+      expect(document.querySelector('#tab-auth [data-auth-action="delete"] + .permission-reason')).toBeNull();
+    } finally { reasons.dispose(); }
   });
   it('submits normalized permissions and clears a one-time token when closed', async () => {
     const { api } = setup(); click('btnCreateToken'); check('*', true);
