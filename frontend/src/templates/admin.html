@@ -51,7 +51,10 @@
     <div class="card">
       <div class="card-title" data-t="auth_tab">{{ L['auth_tab'] }}</div>
       <div class="toolbar">
-        <label class="user-search"><input type="search" id="authSearch" autocomplete="off" data-t-aria="auth_search" data-t-ph="auth_search" aria-label="{{ L['auth_search'] }}" placeholder="{{ L['auth_search'] }}"></label>
+        <label class="user-search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></svg>
+          <input type="search" id="authSearch" autocomplete="off" data-t-aria="auth_search" data-t-ph="auth_search" aria-label="{{ L['auth_search'] }}" placeholder="{{ L['auth_search'] }}">
+        </label>
         <button class="btn-secondary" id="btnLoadAuth" data-t="refresh">{{ L['refresh'] }}</button>
         <button class="btn btn-primary" id="btnCreateAccount" data-t="auth_create_account">{{ L['auth_create_account'] }}</button>
         <button class="btn btn-primary" id="btnCreateToken" data-t="auth_create_token">{{ L['auth_create_token'] }}</button>
