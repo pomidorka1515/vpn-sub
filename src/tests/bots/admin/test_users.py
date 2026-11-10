@@ -10,7 +10,7 @@ from telebot import types
 from bots.telegram.admin.user_callbacks import user_callback
 from bots.telegram.admin.users import AdminUsersMixin
 from custom_types import UserInfo, UserInfoBandwidth, UserInfoBandwidthTotal
-from errors import AppError, NotFoundError, PanelUnavailableError
+from errors import AppError, CommittedAuditError, NotFoundError, PanelUnavailableError
 from tests.support.config import config_mock, subscription_config
 from tests.support.telegram import subscription_mock, telegram_mock
 
@@ -218,6 +218,9 @@ async def test_delete_and_edit_options(
     assert f"edit_fp:{generation}" in _buttons(
         telegram.send_message.call_args.kwargs["reply_markup"]
     )
+    buttons = _buttons(telegram.send_message.call_args.kwargs["reply_markup"])
+    assert f"edit_login:{generation}" in buttons
+    assert f"edit_date:{generation}" in buttons
 
 
 @pytest.mark.asyncio
@@ -320,6 +323,60 @@ async def test_stale_edit_prompt_is_rejected(
     await args[1](_message("10"), *args[2:])
     subscription.business_svc.update_params.assert_not_awaited()
     assert mixin._pending_edits[7] is current
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["login", "date"])
+async def test_new_edit_prompts_reject_stale_generations(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock], field: str
+) -> None:
+    mixin, _, subscription = users
+    await mixin._cb_edit_user_options(7, "alice")
+    await getattr(mixin, f"_cb_edit_{field}")(7, "alice")
+    args = cast(MagicMock, mixin._expect).call_args.args
+    await mixin._cb_edit_user_options(7, "bob")
+    await args[1](_message("2027-01-02 03:04"), *args[2:])
+    subscription.business_svc.edit_user.assert_not_awaited()
+    subscription.business_svc.update_params.assert_not_awaited()
+    assert mixin._pending_edits[7]["username"] == "bob"
+
+
+@pytest.mark.asyncio
+async def test_edit_login_validates_and_handles_service_results(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock],
+) -> None:
+    mixin, telegram, subscription = users
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_login(_message(" " * 2), "alice", "test")
+    await mixin._step_edit_login(_message("x" * 33), "alice", "test")
+    subscription.business_svc.edit_user.assert_not_awaited()
+    subscription.business_svc.edit_user.side_effect = NotFoundError("Unknown external username")
+    await mixin._step_edit_login(_message("login"), "alice", "test")
+    assert "Unknown external username" in telegram.send_message.call_args.args[1]
+    subscription.business_svc.edit_user.side_effect = None
+    await mixin._step_edit_login(_message(" login "), "alice", "test")
+    subscription.business_svc.edit_user.assert_awaited_with(username="alice", new_username="login")
+    assert 7 not in mixin._pending_edits
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    subscription.business_svc.edit_user.side_effect = CommittedAuditError()
+    await mixin._step_edit_login(_message("login"), "alice", "test")
+    assert "Не повторяйте" in telegram.send_message.call_args.args[1]
+    assert 7 not in mixin._pending_edits
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("value", "expected"), [("2027-01-02 03:04", 1798859040), ("0", 0)])
+async def test_edit_date(
+    users: tuple[AdminUsersMixin, MagicMock, MagicMock], value: str, expected: int
+) -> None:
+    mixin, _, subscription = users
+    mixin._pending_edits[7] = {"username": "alice", "generation": "test"}
+    await mixin._step_edit_date(_message("bad date"), "alice", "test")
+    subscription.business_svc.update_params.assert_not_awaited()
+    await mixin._step_edit_date(_message(value), "alice", "test")
+    subscription.business_svc.update_params.assert_awaited_once_with(
+        username="alice", timee=expected
+    )
 
 
 @pytest.mark.asyncio

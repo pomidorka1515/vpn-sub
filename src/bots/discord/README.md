@@ -31,6 +31,9 @@ This applies equally to future, expired, and unlimited accounts; a future expiry
 can therefore become earlier, and an unlimited account can become time-limited.  
 Enter `0` to replace the expiry with unlimited. Successful timed edits display the  
 resulting expiration date in UTC.  
+The separate date option sets an exact UTC date and time (`YYYY-MM-DD HH:MM`),  
+or `0` for unlimited. The web-login option renames an existing web account;  
+it does not create one for users without a web account.  
   
 Sessions and language preferences are stored in SQLite. Existing  
 `data/discord-sessions.json` is imported once when Discord first starts; the  

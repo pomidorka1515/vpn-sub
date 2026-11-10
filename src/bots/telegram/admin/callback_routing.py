@@ -305,6 +305,8 @@ class AdminCallbackRoutingMixin(AdminFeatureMixin):
             "wl_limit": self._cb_edit_wl_limit,
             "time": self._cb_edit_time,
             "name": self._cb_edit_name,
+            "login": self._cb_edit_login,
+            "date": self._cb_edit_date,
         }
         handler = handlers.get(action.split("_", 1)[1])
         if handler is not None:

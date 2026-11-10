@@ -8,8 +8,9 @@ from typing import cast
 
 from telebot import types
 
+from bots.edit_expiry import parse_edit_expiry
 from bots.list_messages import list_messages
-from errors import AppError, PanelUnavailableError
+from errors import AppError, CommittedAuditError, PanelUnavailableError
 from util import fmt_timestamp
 
 from ..composition import AdminFeatureMixin
@@ -228,6 +229,10 @@ class AdminUsersMixin(AdminFeatureMixin):
             types.InlineKeyboardButton(
                 "🏷 Отображаемое имя", callback_data=f"edit_name:{generation}"
             ),
+            types.InlineKeyboardButton("👤 Веб-логин", callback_data=f"edit_login:{generation}"),
+            types.InlineKeyboardButton(
+                "📅 Дата окончания", callback_data=f"edit_date:{generation}"
+            ),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel"),
         )
         await self.bot.send_message(
@@ -426,7 +431,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             new_date = fmt_timestamp(timee)
             await self.bot.send_message(
                 message.chat.id,
-                f"✅ Срок продлён на <code>{days}</code> дней, новая дата: <code>{new_date}</code>",
+                f"✅ Срок заменён: <code>{days}</code> дней от текущего момента, дата: <code>{new_date}</code>",
                 parse_mode="HTML",
                 reply_markup=self.get_main_menu(),
             )
@@ -488,6 +493,98 @@ class AdminUsersMixin(AdminFeatureMixin):
             f"✅ Имя обновлено: <code>{new_name}</code>",
             parse_mode="HTML",
             reply_markup=self.get_main_menu(),
+        )
+
+    async def _cb_edit_login(self, chat_id: int, username: str) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
+        msg = await self.bot.send_message(
+            chat_id, "👤 Введите новый веб-логин (только для существующего веб-аккаунта):"
+        )
+        self._expect(msg, self._step_edit_login, username, generation)  # pyright: ignore[reportUnknownMemberType]
+
+    async def _step_edit_login(
+        self, message: types.Message, username: str, generation: str
+    ) -> None:
+        pending = self._pending_edits.get(message.chat.id)
+        if not pending or pending != {"username": username, "generation": generation}:
+            return
+        text = cast(str, message.text).strip()
+        if text.startswith("/"):
+            return
+        if not text or len(text) > 32:
+            await self.bot.send_message(
+                message.chat.id,
+                "❌ Введите логин длиной от 1 до 32 символов.",
+                reply_markup=self.get_main_menu(),
+            )
+            return
+        try:
+            await self.sub.business_svc.edit_user(username=username, new_username=text)
+        except CommittedAuditError:
+            self.log.exception("user edit committed but audit failed")
+            if self._pending_edits.get(message.chat.id) is pending:
+                self._pending_edits.pop(message.chat.id, None)
+            await self.bot.send_message(
+                message.chat.id,
+                "⚠️ Изменение сохранено, но запись аудита не удалась. Не повторяйте изменение.",
+                reply_markup=self.get_main_menu(),
+            )
+            return
+        except AppError as error:
+            await self.bot.send_message(
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+            )
+            return
+        if self._pending_edits.get(message.chat.id) is pending:
+            self._pending_edits.pop(message.chat.id, None)
+        await self.bot.send_message(
+            message.chat.id, "✅ Веб-логин обновлён.", reply_markup=self.get_main_menu()
+        )
+
+    async def _cb_edit_date(self, chat_id: int, username: str) -> None:
+        generation = self._pending_edits.get(chat_id, {}).get("generation", "")
+        msg = await self.bot.send_message(
+            chat_id, "📅 Введите дату окончания в UTC: ГГГГ-ММ-ДД ЧЧ:ММ, или 0 для безлимита."
+        )
+        self._expect(msg, self._step_edit_date, username, generation)  # pyright: ignore[reportUnknownMemberType]
+
+    async def _step_edit_date(self, message: types.Message, username: str, generation: str) -> None:
+        pending = self._pending_edits.get(message.chat.id)
+        if not pending or pending != {"username": username, "generation": generation}:
+            return
+        text = cast(str, message.text).strip()
+        if text.startswith("/"):
+            return
+        try:
+            timee = parse_edit_expiry(text)
+        except ValueError:
+            await self.bot.send_message(
+                message.chat.id,
+                "❌ Неверная дата. Используйте ГГГГ-ММ-ДД ЧЧ:ММ (UTC) или 0.",
+                reply_markup=self.get_main_menu(),
+            )
+            return
+        try:
+            await self.sub.business_svc.update_params(username=username, timee=timee)
+        except CommittedAuditError:
+            self.log.exception("user edit committed but audit failed")
+            if self._pending_edits.get(message.chat.id) is pending:
+                self._pending_edits.pop(message.chat.id, None)
+            await self.bot.send_message(
+                message.chat.id,
+                "⚠️ Изменение сохранено, но запись аудита не удалась. Не повторяйте изменение.",
+                reply_markup=self.get_main_menu(),
+            )
+            return
+        except AppError as error:
+            await self.bot.send_message(
+                message.chat.id, f"❌ Ошибка: {error.message}", reply_markup=self.get_main_menu()
+            )
+            return
+        if self._pending_edits.get(message.chat.id) is pending:
+            self._pending_edits.pop(message.chat.id, None)
+        await self.bot.send_message(
+            message.chat.id, "✅ Дата окончания обновлена.", reply_markup=self.get_main_menu()
         )
 
     async def _step_reset_user(self, message: types.Message) -> None:

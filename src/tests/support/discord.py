@@ -150,7 +150,7 @@ def services() -> MagicMock:
     sub.user_svc.list_users = AsyncMock(return_value=["alice", "bob"])
     sub.business_svc = MagicMock()
     sub.business_svc.get_info = AsyncMock(return_value=stats_obj())
-    for method in ("reset_user", "delete_user", "update_params", "add_new_user"):
+    for method in ("reset_user", "delete_user", "update_params", "edit_user", "add_new_user"):
         setattr(sub.business_svc, method, AsyncMock())
     sub.account_svc = MagicMock()
     sub.account_svc.login = AsyncMock(return_value="newtoken")

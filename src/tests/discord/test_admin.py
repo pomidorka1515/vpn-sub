@@ -7,6 +7,7 @@ import discord
 import pytest
 
 from core.services.refresh import RefreshResult
+from errors import CommittedAuditError, NotFoundError
 from tests.support.discord import FakeInteraction, make_bots, modal_data
 
 
@@ -35,12 +36,76 @@ async def test_admin_list_and_edit_menu_routing() -> None:
         "admin:edit:wl_limit",
         "admin:edit:time",
         "admin:edit:name",
+        "admin:edit:login",
+        "admin:edit:date",
     ):
         modal = FakeInteraction(data={"custom_id": f"{custom_id}:{generation}"})
         await bot.dispatch_component(cast(discord.Interaction, modal))
         assert modal.response.modals
         assert not modal.response.deferred
     sub.business_svc.get_info.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value", "key", "expected"),
+    [
+        ("login", " newlogin ", "new_username", "newlogin"),
+        ("date", "2027-01-02 03:04", "timee", 1798859040),
+        ("date", "0", "timee", 0),
+    ],
+)
+async def test_new_edit_modal_routes_and_rejects_stale(
+    field: str, value: str, key: str, expected: str | int
+) -> None:
+    _, bot, _, sub = make_bots()
+    bot._pending_edits[7] = {"username": "alice", "generation": "current"}
+    stale = FakeInteraction(data=modal_data(f"admin:modal:edit_{field}:old", {field: value}))
+    await bot.dispatch_modal(cast(discord.Interaction, stale))
+    assert "истекла" in str(stale.response.messages[-1]["content"])
+    sub.business_svc.edit_user.assert_not_awaited()
+    sub.business_svc.update_params.assert_not_awaited()
+    active = FakeInteraction(data=modal_data(f"admin:modal:edit_{field}:current", {field: value}))
+    await bot.dispatch_modal(cast(discord.Interaction, active))
+    service = sub.business_svc.edit_user if field == "login" else sub.business_svc.update_params
+    service.assert_awaited_once_with(username="alice", **{key: expected})
+    assert 7 not in bot._pending_edits
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("field", "value"), [("login", " "), ("login", "x" * 33), ("date", "bad")])
+async def test_new_edit_modal_rejects_invalid_values(field: str, value: str) -> None:
+    _, bot, _, sub = make_bots()
+    bot._pending_edits[7] = {"username": "alice", "generation": "current"}
+    interaction = FakeInteraction(
+        data=modal_data(f"admin:modal:edit_{field}:current", {field: value})
+    )
+    await bot.dispatch_modal(cast(discord.Interaction, interaction))
+    assert "❌" in str(interaction.response.messages[-1]["content"])
+    sub.business_svc.edit_user.assert_not_awaited()
+    sub.business_svc.update_params.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("committed", [False, True])
+async def test_edit_login_reports_service_errors(committed: bool) -> None:
+    _, bot, _, sub = make_bots()
+    bot._pending_edits[7] = {"username": "alice", "generation": "current"}
+    sub.business_svc.edit_user.side_effect = (
+        CommittedAuditError() if committed else NotFoundError("Unknown external username")
+    )
+    interaction = FakeInteraction(
+        data=modal_data("admin:modal:edit_login:current", {"login": "new"})
+    )
+    await bot.dispatch_modal(cast(discord.Interaction, interaction))
+    assert interaction.response.deferred
+    text = str(interaction.response.messages[-1]["content"])
+    if committed:
+        assert "Не повторяйте" in text
+        assert 7 not in bot._pending_edits
+    else:
+        assert "Unknown external username" in text
+        assert 7 in bot._pending_edits
 
 
 @pytest.mark.asyncio

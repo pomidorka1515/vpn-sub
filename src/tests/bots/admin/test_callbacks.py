@@ -88,6 +88,21 @@ async def test_user_callbacks_fit_and_resolve_full_username(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["login", "date"])
+async def test_new_edit_callback_routes(
+    admin: tuple[TelegramAdminBot, MagicMock, MagicMock], field: str
+) -> None:
+    bot, _, _ = admin
+    await bot._cb_edit_user_options(7, "alice")
+    generation = bot._pending_edits[7]["generation"]
+    with patch.object(TelegramAdminBot, f"_cb_edit_{field}") as edit:
+        await bot.handle_callbacks(_callback(f"edit_{field}:{generation}"))
+        edit.assert_awaited_once_with(7, "alice")
+        await bot.handle_callbacks(_callback(f"edit_{field}:stale"))
+        edit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("prefix", ["info", "dodel", "edit_user"])
 async def test_removed_user_reference_cannot_retarget_current_workflow(
     admin: tuple[TelegramAdminBot, MagicMock, MagicMock],

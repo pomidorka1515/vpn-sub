@@ -54,6 +54,8 @@ class AdminRoutingMixin(AdminFeatureMixin):
         "admin:modal:edit_wl_limit": "handle_edit_wl_limit_modal",
         "admin:modal:edit_time": "handle_edit_time_modal",
         "admin:modal:edit_name": "handle_edit_name_modal",
+        "admin:modal:edit_login": "handle_edit_login_modal",
+        "admin:modal:edit_date": "handle_edit_date_modal",
         "admin:modal:info_code": "handle_info_code_modal",
         "admin:modal:del_code": "handle_del_code_modal",
         "admin:modal:add_code": "handle_add_code_name_modal",
@@ -420,6 +422,8 @@ class AdminRoutingMixin(AdminFeatureMixin):
             "wl_limit": self._cb_edit_wl_limit,
             "time": self._cb_edit_time,
             "name": self._cb_edit_name,
+            "login": self._cb_edit_login,
+            "date": self._cb_edit_date,
         }
         handler = handlers.get(action)
         if handler is not None:

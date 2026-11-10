@@ -7,8 +7,9 @@ from typing import TypedDict
 import discord
 
 from bots.discord.composition import AdminFeatureMixin
+from bots.edit_expiry import parse_edit_expiry
 from bots.list_messages import list_messages
-from errors import CommittedAuditError
+from errors import AppError, CommittedAuditError
 from util import fmt_timestamp
 
 __all__ = ["AdminUsersMixin"]
@@ -33,6 +34,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         timee: int | None = None,
         displayname: str | None = None,
         fingerprint: str | None = None,
+        new_username: str | None = None,
     ) -> bool:
         await self._defer(interaction)
         if not interaction.response.is_done():
@@ -54,7 +56,12 @@ class AdminUsersMixin(AdminFeatureMixin):
         if fingerprint is not None:
             params["fingerprint"] = fingerprint
         try:
-            await self.sub.business_svc.update_params(username=pending["username"], **params)
+            if new_username is not None:
+                await self.sub.business_svc.edit_user(
+                    username=pending["username"], new_username=new_username
+                )
+            else:
+                await self.sub.business_svc.update_params(username=pending["username"], **params)
         except CommittedAuditError:
             self.log.exception("user edit committed but audit failed")
             if self._pending_edits.get(interaction.user.id) is pending:
@@ -63,6 +70,11 @@ class AdminUsersMixin(AdminFeatureMixin):
                 interaction,
                 "⚠️ Изменение сохранено, но запись аудита не удалась. Не повторяйте изменение.",
                 view=self.main_menu_view(),
+            )
+            return False
+        except AppError as error:
+            await self._respond(
+                interaction, f"❌ Ошибка: {error.message}", view=self.main_menu_view()
             )
             return False
         except Exception:
@@ -279,6 +291,20 @@ class AdminUsersMixin(AdminFeatureMixin):
         )
         view.add_item(
             discord.ui.Button(
+                label="👤 Веб-логин",
+                custom_id=f"admin:edit:login:{generation}",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="📅 Дата окончания",
+                custom_id=f"admin:edit:date:{generation}",
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
                 label="🔙 Отмена",
                 custom_id="admin:cancel",
                 style=discord.ButtonStyle.primary,
@@ -329,7 +355,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 label="Лимит GB (0 = безлимит)",
                 custom_id="limit",
                 min_length=1,
-                max_length=8,
+                max_length=10,
             ),
         )
         await self._send_modal(interaction, modal)
@@ -345,7 +371,7 @@ class AdminUsersMixin(AdminFeatureMixin):
                 label="Лимит GB (0 = безлимит)",
                 custom_id="wl_limit",
                 min_length=1,
-                max_length=8,
+                max_length=10,
             ),
         )
         await self._send_modal(interaction, modal)
@@ -382,6 +408,79 @@ class AdminUsersMixin(AdminFeatureMixin):
             ),
         )
         await self._send_modal(interaction, modal)
+
+    async def _cb_edit_login(self, interaction: discord.Interaction, username: str) -> None:
+        del username
+        generation = self._pending_edits[interaction.user.id]["generation"]
+        modal = discord.ui.Modal(
+            title="Веб-логин", custom_id=f"admin:modal:edit_login:{generation}"
+        )
+        modal.add_item(
+            discord.ui.TextInput(
+                label="Новый логин существующего веб-аккаунта",
+                custom_id="login",
+                min_length=1,
+                max_length=32,
+            )
+        )
+        await self._send_modal(interaction, modal)
+
+    async def _cb_edit_date(self, interaction: discord.Interaction, username: str) -> None:
+        del username
+        generation = self._pending_edits[interaction.user.id]["generation"]
+        modal = discord.ui.Modal(
+            title="Дата окончания", custom_id=f"admin:modal:edit_date:{generation}"
+        )
+        modal.add_item(
+            discord.ui.TextInput(
+                label="ГГГГ-ММ-ДД ЧЧ:ММ (UTC), 0 = безлимит",
+                custom_id="date",
+                min_length=1,
+                max_length=16,
+            )
+        )
+        await self._send_modal(interaction, modal)
+
+    async def handle_edit_login_modal(self, interaction: discord.Interaction) -> None:
+        pending = self._pending_edits.get(interaction.user.id)
+        generation = self._custom_id(interaction).removeprefix("admin:modal:edit_login:")
+        if not pending or not generation or pending.get("generation") != generation:
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+            )
+            return
+        login = self.modal_values(interaction).get("login", "").strip()
+        if not login or len(login) > 32:
+            await self._respond(
+                interaction,
+                "❌ Введите логин длиной от 1 до 32 символов.",
+                view=self.main_menu_view(),
+            )
+            return
+        if await self._update_edit_params(interaction, pending, new_username=login):
+            await self._respond(interaction, "✅ Веб-логин обновлён.", view=self.main_menu_view())
+
+    async def handle_edit_date_modal(self, interaction: discord.Interaction) -> None:
+        pending = self._pending_edits.get(interaction.user.id)
+        generation = self._custom_id(interaction).removeprefix("admin:modal:edit_date:")
+        if not pending or not generation or pending.get("generation") != generation:
+            await self._respond(
+                interaction, "❌ Сессия истекла, начните с /admin", view=self.main_menu_view()
+            )
+            return
+        try:
+            timee = parse_edit_expiry(self.modal_values(interaction).get("date", ""))
+        except ValueError:
+            await self._respond(
+                interaction,
+                "❌ Неверная дата. Используйте ГГГГ-ММ-ДД ЧЧ:ММ (UTC) или 0.",
+                view=self.main_menu_view(),
+            )
+            return
+        if await self._update_edit_params(interaction, pending, timee=timee):
+            await self._respond(
+                interaction, "✅ Дата окончания обновлена.", view=self.main_menu_view()
+            )
 
     async def handle_reset_user_modal(self, interaction: discord.Interaction) -> None:
         username = self.modal_values(interaction).get("username", "").strip()
