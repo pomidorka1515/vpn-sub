@@ -59,6 +59,24 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   snapshots: ['snapshots.read'], charts: ['snapshots.read', 'state.charts.read'], health: ['health.read.recovery', 'health.read.status', 'health.read.online_users', 'health.read.teapot', 'health.sync'],
   leaderboard: ['leaderboard.read.total', 'leaderboard.read.monthly', 'leaderboard.read.wl_monthly'], config: ['config.read.main', 'config.read.inbounds', 'config.read.panels'],
 };
+export function updateActionPermissionNotices(doc: Document, state: AdminState, t: Translate): void {
+  const can = (permission: string): boolean => allows(state.permissions, permission);
+  const auth = (['accounts', 'tokens'] as const).flatMap(kind => can('auth.read.' + kind)
+    ? ['auth.create.' + kind, 'auth.update.' + kind]
+    : ['auth.read.' + kind]);
+  const notices: Record<string, string[]> = {
+    authPermissionNotice: [...auth, ...state.identityGrants],
+    usersPermissionNotice: ['user.create', 'user.delete', 'user.reset', 'user.password_reset', ...Object.values(USER_FIELD_PERMISSIONS)],
+    codesPermissionNotice: ['code.add.bonus', 'code.add.register', 'code.delete'],
+  };
+  for (const [id, permissions] of Object.entries(notices)) {
+    const notice = doc.getElementById(id);
+    if (!notice) continue;
+    const missing = [...new Set(permissions.filter(permission => !can(permission)))];
+    notice.textContent = missing.length ? t('permission_missing').replace('{permission}', missing.join(' / ')) : '';
+    notice.hidden = missing.length === 0;
+  }
+}
 function restrictContents(target: HTMLElement, permissions: string[], restricted: boolean, t: Translate): void {
   target.classList.toggle('permission-restricted', restricted);
   let notice = target.querySelector<HTMLElement>(':scope > .permission-tab-notice');
@@ -79,6 +97,7 @@ function restrictContents(target: HTMLElement, permissions: string[], restricted
 }
 export function applyPermissions(doc: Document, state: AdminState, t: Translate): void {
   const can = (permission: string): boolean => allows(state.permissions, permission);
+  updateActionPermissionNotices(doc, state, t);
   const needsPanels = new Set(['btnShowAdd', 'btnDoReset', 'btnDoDelete', 'btnDoAdd', 'btnDoRefresh', 'btnLoadOnline', 'onlineKeyed']);
   const restrict = (target: HTMLElement, permissions: string[]): void => {
     const permitted = permissions.some(can);
@@ -86,7 +105,7 @@ export function applyPermissions(doc: Document, state: AdminState, t: Translate)
     const allowed = permitted && !noPanels;
     target.setAttribute('aria-disabled', String(!allowed));
     target.classList.toggle('permission-disabled', !allowed);
-    target.classList.toggle('permission-action-blurred', !permitted && !!target.closest('#tab-auth, #tab-state, #tab-health, #tab-config'));
+    target.classList.toggle('permission-action-disabled', !permitted && !!target.closest('#tab-auth, #tab-state, #tab-health, #tab-config'));
     if (!allowed) target.title = !permitted ? t('permission_missing').replace('{permission}', permissions.join(' / ')) : t('no_panels');
     if (!allowed && (target instanceof HTMLButtonElement || target instanceof HTMLInputElement || target instanceof HTMLOptionElement)) target.disabled = true;
   };

@@ -16,12 +16,12 @@ const catalog: PermissionEntry[] = [
 ];
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); dispose = undefined; });
-function setup(permissions = ['*']) {
+function setup(permissions = ['*'], t: AdminContext['t'] = key => key) {
   const html = readFileSync('src/templates/admin.html', 'utf8');
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'));
   const state = createAdminState(); state.permissions = permissions; state.catalog = catalog;
   const api = vi.fn<AdminContext['api']>().mockResolvedValue({ success: true, status: 200, obj: { items: [] } });
-  const context: AdminContext = { doc: document, t: key => key, api, toast: vi.fn(), confirm: vi.fn().mockResolvedValue(true), loadGen: createLoadGeneration(), can: permission => allows(permissions, permission) };
+  const context: AdminContext = { doc: document, t, api, toast: vi.fn(), confirm: vi.fn().mockResolvedValue(true), loadGen: createLoadGeneration(), can: permission => allows(permissions, permission) };
   dispose = initAuth(context, state);
   return { api, state };
 }
@@ -112,17 +112,46 @@ describe('admin permission model', () => {
     expect(denied.querySelector('.permission-tab-notice')).toBeNull();
     expect([...denied.children].every(child => child instanceof HTMLElement && !child.inert)).toBe(true);
   });
-  it('blurs restricted actions only in the requested tabs', () => {
+  it('marks restricted actions without blurring them', () => {
     const { state } = setup(['auth.read.accounts', 'user.read', 'code.read', 'audit.read', 'snapshots.read', 'leaderboard.read.total', 'config.read.main']);
     applyPermissions(document, state, key => key);
-    expect(required(document.getElementById('btnCreateAccount')).classList.contains('permission-action-blurred')).toBe(true);
-    expect(required(document.querySelector('.config-tab[data-section="panels"]')).classList.contains('permission-action-blurred')).toBe(true);
+    expect(required(document.getElementById('btnCreateAccount')).classList.contains('permission-action-disabled')).toBe(true);
+    expect(required(document.querySelector('.config-tab[data-section="panels"]')).classList.contains('permission-action-disabled')).toBe(true);
     for (const id of ['btnShowAdd', 'btnShowAddCode', 'btnRefreshLogs', 'btnLoadSnapshots', 'lbType']) {
-      expect(required(document.getElementById(id)).classList.contains('permission-action-blurred')).toBe(false);
+      expect(required(document.getElementById(id)).classList.contains('permission-action-disabled')).toBe(false);
     }
     for (const tab of ['users', 'codes', 'logs', 'snapshots', 'leaderboard']) {
       expect(document.querySelectorAll(`#tab-${tab} .permission-section`)).toHaveLength(0);
     }
+    const css = readFileSync('src/styles/admin.css', 'utf8');
+    const rule = css.slice(css.indexOf('.permission-action-disabled:not'), css.indexOf('}', css.indexOf('.permission-action-disabled:not')));
+    expect(rule).not.toContain('blur(');
+    expect(rule).toContain('cursor: not-allowed');
+  });
+  it('summarizes missing actions at the top and updates translations and grants', () => {
+    const { state } = setup(['auth.read.accounts', 'auth.read.tokens', 'user.read', 'user.edit.displayname', 'code.read', 'code.add.bonus']);
+    const translate = (prefix: string) => (key: string) => key === 'permission_missing' ? prefix + ' {permission}' : key;
+    applyPermissions(document, state, translate('Missing'));
+    const auth = required(document.getElementById('authPermissionNotice'));
+    const users = required(document.getElementById('usersPermissionNotice'));
+    const codes = required(document.getElementById('codesPermissionNotice'));
+    for (const notice of [auth, users, codes]) {
+      expect(notice.parentElement?.firstElementChild).toBe(notice);
+      expect(notice.hidden).toBe(false);
+    }
+    expect(auth.textContent).toContain('auth.update.accounts');
+    expect(auth.textContent).toContain('auth.create.tokens');
+    expect(users.textContent).toContain('user.delete');
+    expect(users.textContent).toContain('user.edit.username');
+    expect(users.textContent).not.toContain('user.edit.displayname');
+    expect(codes.textContent).toContain('code.delete');
+    expect(codes.textContent).toContain('code.add.register');
+    expect(codes.textContent).not.toContain('code.add.bonus');
+    applyPermissions(document, state, translate('Required'));
+    expect(users.textContent).toContain('Required');
+    state.permissions = ['*'];
+    applyPermissions(document, state, translate('Missing'));
+    expect([auth, users, codes].every(notice => notice.hidden && !notice.textContent)).toBe(true);
   });
   it('keeps section notices sharp and avoids duplicate control warnings', () => {
     const { state } = setup(['health.read.status']);
@@ -135,7 +164,7 @@ describe('admin permission model', () => {
     document.head.append(style);
     try {
       const section = required(document.querySelector('[data-permission-section="health.sync"]'));
-      expect(getComputedStyle(required(section.querySelector('.card-title'))).filter).toBe('blur(5px)');
+      expect(getComputedStyle(required(section.querySelector('.card-title'))).filter).not.toContain('blur');
       expect(getComputedStyle(required(section.querySelector('.permission-tab-notice'))).filter).not.toContain('blur');
       expect(section.querySelector('.permission-reason')).toBeNull();
     } finally { style.remove(); reasons.dispose(); }
@@ -212,7 +241,7 @@ describe('admin identity dialogs', () => {
     expect(api).toHaveBeenCalledWith('GET', '/api/auth/list?kind=tokens');
     click('btnCreateAccount'); expect(required(document.querySelector<HTMLDialogElement>('#authDialog')).open).toBe(false);
   });
-  it('blurs unauthorized identity mutations but keeps details available', async () => {
+  it('disables unauthorized identity mutations but keeps details available', async () => {
     const { api } = setup(['auth.read.accounts']);
     api.mockResolvedValue({ success: true, status: 200, obj: { items: [{ id: 'account', kind: 'accounts', name: 'test', root: false, permissions: [] }] } });
     click('btnLoadAuth');
@@ -220,9 +249,20 @@ describe('admin identity dialogs', () => {
     for (const action of ['edit', 'delete']) {
       const target = required(document.querySelector<HTMLButtonElement>(`#authaccountsTable [data-auth-action="${action}"]`));
       expect(target.disabled).toBe(true);
-      expect(target.classList.contains('permission-action-blurred')).toBe(true);
+      expect(target.classList.contains('permission-action-disabled')).toBe(true);
     }
-    expect(required(document.querySelector('#authaccountsTable [data-auth-action="info"]')).classList.contains('permission-action-blurred')).toBe(false);
+    expect(required(document.querySelector('#authaccountsTable [data-auth-action="info"]')).classList.contains('permission-action-disabled')).toBe(false);
+  });
+  it('summarizes missing grants needed to manage an identity', async () => {
+    const { api, state } = setup(['auth.read.accounts', 'auth.update.accounts'], key => key === 'permission_missing' ? 'Missing {permission}' : key);
+    api.mockResolvedValue({ success: true, status: 200, obj: { items: [{ id: 'account', kind: 'accounts', name: 'test', root: false, permissions: ['user.read'] }] } });
+    click('btnLoadAuth');
+    await vi.waitFor(() => { expect(required(document.getElementById('authPermissionNotice')).textContent).toContain('user.read'); });
+    const edit = required(document.querySelector<HTMLButtonElement>('#authaccountsTable [data-auth-action="edit"]'));
+    expect(edit.disabled).toBe(true);
+    applyPermissions(document, state, key => key === 'permission_missing' ? 'Required {permission}' : key);
+    expect(required(document.getElementById('authPermissionNotice')).textContent).toContain('Required');
+    expect(required(document.getElementById('authPermissionNotice')).textContent).toContain('user.read');
   });
   it('replaces the identity loading placeholder on a failed request', async () => {
     const { api } = setup(['auth.read.accounts']);

@@ -25,10 +25,11 @@ export function initPermissionReasons(doc: Document, t: Translate) {
     if (stopped) return;
     const next = new Map<HTMLElement, string>();
     doc.querySelectorAll<HTMLElement>('button[disabled][title], input[disabled][title], input[readonly][title], textarea[readonly][title], select[disabled][title]').forEach(target => {
-      if (!target.closest('#tab-config, #configEditorOverlay, .permission-restricted') && isReason(target.title) && (!target.closest('#usersTableWrap') || target.title === t('no_panels'))) next.set(target, target.title);
+      const summarized = target.closest('#tab-auth, #tab-users, #tab-codes') && !target.closest('dialog');
+      if (!target.closest('#tab-config, #configEditorOverlay, .permission-restricted') && isReason(target.title) && (!summarized || target.title === t('no_panels'))) next.set(target, target.title);
     });
     doc.querySelectorAll<HTMLSelectElement>('select').forEach(select => {
-      if (select.closest('#tab-config, #configEditorOverlay')) return;
+      if (select.closest('#tab-config, #configEditorOverlay') || select.closest('#tab-auth, #tab-users, #tab-codes') && !select.closest('dialog')) return;
       const messages = [...new Set([...select.options].filter(option => option.disabled && isReason(option.title) && (!select.closest('#usersTableWrap') || option.title === t('no_panels'))).map(option => option.title))];
       if (messages.length) next.set(select, [next.get(select), ...messages].filter(Boolean).join(' · '));
     });

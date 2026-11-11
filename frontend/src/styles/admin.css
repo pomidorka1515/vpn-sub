@@ -71,12 +71,12 @@
 .permission-disabled { opacity: .45; cursor: not-allowed; }
 .tab.permission-disabled, .topbar [data-tab].permission-disabled { cursor: pointer; }
 .tab-content.permission-restricted { position: relative; min-height: 12rem; }
-.permission-restricted > :not(.permission-tab-notice) { filter: blur(5px); opacity: .45; pointer-events: none; user-select: none; }
+.permission-restricted > :not(.permission-tab-notice) { opacity: .55; pointer-events: none; user-select: none; }
 .permission-section { position: relative; }
 .permission-section + .permission-section { margin-top: 20px; }
 .permission-section > .toolbar > .section-title { margin: 0; flex: 1; }
 .permission-section > .permission-tab-notice { position: relative; top: auto; font-size: .8125rem; }
-.permission-action-blurred:not(.permission-restricted *) { filter: blur(2px); opacity: .45; user-select: none; }
+.permission-action-disabled:not(.permission-restricted *) { opacity: .55; cursor: not-allowed; user-select: none; }
 .permission-tab-notice { position: sticky; top: 4rem; z-index: 2; margin: 0 0 16px; padding: 16px; border: 1px solid var(--orange); border-radius: 8px; background: var(--surface); color: var(--text); overflow-wrap: anywhere; }
 .permission-reason { display: block; flex: 0 0 100%; min-width: 0; max-width: 100%; margin-top: 4px; color: var(--text2); font-size: .6875rem; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
 :has(> .permission-reason) { flex-wrap: wrap; }

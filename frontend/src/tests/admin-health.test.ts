@@ -152,7 +152,7 @@ describe('admin health and recovery', () => {
     await vi.waitFor(() => { expect(document.querySelector('[data-rollback-kind]')).not.toBeNull(); });
     const resolve = required(document.querySelector<HTMLButtonElement>('[data-rollback-kind]'));
     expect(resolve.disabled).toBe(true);
-    expect(resolve.classList.contains('permission-action-blurred')).toBe(true);
+    expect(resolve.classList.contains('permission-action-disabled')).toBe(true);
     resolve.disabled = false; resolve.click();
     expect(confirm).not.toHaveBeenCalled();
     expect(api).toHaveBeenCalledTimes(1);

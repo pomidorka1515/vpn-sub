@@ -51,10 +51,10 @@ describe('config editor controller', () => {
       expect(document.querySelectorAll('#tab-config .permission-reason')).toHaveLength(0);
       expect(document.querySelectorAll('#tab-config .config-box .form-hint')).not.toHaveLength(0);
       expect(required(document.getElementById('cfg-box-salt')).textContent).not.toContain('missing');
-      expect(required(document.getElementById('cfg-box-salt')).classList.contains('permission-action-blurred')).toBe(true);
+      expect(required(document.getElementById('cfg-box-salt')).classList.contains('permission-action-disabled')).toBe(true);
       expect(required(document.getElementById('cfg-box-salt')).hasAttribute('inert')).toBe(true);
-      expect(required(document.getElementById('configSave')).classList.contains('permission-action-blurred')).toBe(true);
-      expect(required(document.getElementById('cfg-sub_name')).classList.contains('permission-action-blurred')).toBe(false);
+      expect(required(document.getElementById('configSave')).classList.contains('permission-action-disabled')).toBe(true);
+      expect(required(document.getElementById('cfg-sub_name')).classList.contains('permission-action-disabled')).toBe(false);
       language = 'ru'; setConfigLanguage('ru');
       expect(notice.textContent).toContain('ru missing');
     } finally { reasons.dispose(); }
@@ -68,8 +68,8 @@ describe('config editor controller', () => {
     expect(toggle.disabled).toBe(false); toggle.click();
     expect(required(document.querySelector('#config-pane-inbounds .panel-card')).classList.contains('open')).toBe(true);
     expect(requiredInstance(document.getElementById('cfg-new-inbounds'), HTMLButtonElement).disabled).toBe(true);
-    expect(required(document.getElementById('cfg-new-inbounds')).classList.contains('permission-action-blurred')).toBe(true);
-    expect(toggle.classList.contains('permission-action-blurred')).toBe(false);
+    expect(required(document.getElementById('cfg-new-inbounds')).classList.contains('permission-action-disabled')).toBe(true);
+    expect(toggle.classList.contains('permission-action-disabled')).toBe(false);
     expect([...document.querySelectorAll<HTMLInputElement>('#config-pane-inbounds input[type="text"]')].every(field => field.readOnly)).toBe(true);
     expect(requiredInstance(document.getElementById('configSave'), HTMLButtonElement).disabled).toBe(true);
     expect(api).toHaveBeenCalledTimes(1);

@@ -14,10 +14,11 @@ export interface AdminState {
   selectedUser: string | null;
   permissions: string[];
   catalog: PermissionEntry[];
+  identityGrants: string[];
 }
 
 export function createAdminState(): AdminState {
-  return { baseUrl: '', apiToken: '', authBlocked: false, panelsConfigured: true, currentUsers: [], selectedUser: null, permissions: [], catalog: [] };
+  return { baseUrl: '', apiToken: '', authBlocked: false, panelsConfigured: true, currentUsers: [], selectedUser: null, permissions: [], catalog: [], identityGrants: [] };
 }
 
 interface Dependencies {

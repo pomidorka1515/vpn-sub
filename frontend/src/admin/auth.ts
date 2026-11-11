@@ -5,7 +5,7 @@ import { isRecord } from '../shared/json';
 import type { AdminState } from './bootstrap';
 import { button, checkbox, element, input } from './context';
 import type { AdminContext } from './context';
-import { allows, foldPermissions } from './permissions';
+import { allows, foldPermissions, updateActionPermissionNotices } from './permissions';
 
 type Kind = 'accounts' | 'tokens';
 interface Identity { id: string; kind: Kind; name: string; permissions: string[]; root: boolean }
@@ -35,6 +35,8 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
   const hint = (permission: string): string => t('permission_missing').replace('{permission}', permission);
   const editable = (item: Identity): boolean => can('auth.update.' + item.kind) && item.permissions.every(can);
   function render(kind: Kind): void {
+    state.identityGrants = [...identities.values()].flat().flatMap(item => can('auth.update.' + item.kind) ? item.permissions.filter(permission => !can(permission)) : []);
+    updateActionPermissionNotices(doc, state, t);
     const wrap = element(doc, 'auth' + kind + 'Table');
     const query = input(doc, 'authSearch').value.trim().toLowerCase();
     const items = (identities.get(kind) ?? []).filter(item => item.name.toLowerCase().includes(query));
@@ -44,8 +46,8 @@ export function initAuth(context: AdminContext, state: AdminState): () => void {
     if (!items.length) { wrap.innerHTML = `<div class="table-empty">${escapeHtml(t('auth_empty'))}</div>`; return; }
     wrap.innerHTML = `<table class="data-table users-table"><thead><tr><th>${escapeHtml(t('auth_name'))}</th><th>${escapeHtml(t('auth_permissions'))}</th><th>${escapeHtml(t('actions'))}</th></tr></thead><tbody>${items.map(item => `<tr><td class="mono user-name">${escapeHtml(item.name)}${item.root ? `<span class="badge">${escapeHtml(t('auth_root'))}</span>` : ''}</td><td class="mono auth-grants">${escapeHtml(item.permissions.join(', ') || t('auth_no_permissions'))}</td><td><div class="actions">${([['info', ICON_INFO], ['edit', ICON_EDIT], ['delete', ICON_DELETE]] as const).map(([action, icon]) => {
       const allowed = action === 'info' || editable(item) && (action !== 'delete' || !item.root);
-      const title = allowed ? t(action) : item.root && action === 'delete' ? t('auth_root_protected') : hint('auth.update.' + kind);
-      return `<button class="btn-tiny user-action user-${action === 'info' ? 'view' : action}${action === 'delete' ? ' danger' : ''}${!allowed && !(item.root && action === 'delete') ? ' permission-action-blurred' : ''}" data-auth-kind="${kind}" data-auth-id="${escapeHtml(item.id)}" data-auth-action="${action}" title="${escapeHtml(title)}" aria-label="${escapeHtml(t(action))}" ${allowed ? '' : 'disabled'}>${icon}<span class="user-action-label">${escapeHtml(t(action))}</span></button>`;
+      const title = allowed ? t(action) : item.root && action === 'delete' ? t('auth_root_protected') : hint(can('auth.update.' + kind) ? item.permissions.find(permission => !can(permission)) ?? 'auth.update.' + kind : 'auth.update.' + kind);
+      return `<button class="btn-tiny user-action user-${action === 'info' ? 'view' : action}${action === 'delete' ? ' danger' : ''}${!allowed && !(item.root && action === 'delete') ? ' permission-action-disabled' : ''}" data-auth-kind="${kind}" data-auth-id="${escapeHtml(item.id)}" data-auth-action="${action}" title="${escapeHtml(title)}" aria-label="${escapeHtml(t(action))}" ${allowed ? '' : 'disabled'}>${icon}<span class="user-action-label">${escapeHtml(t(action))}</span></button>`;
     }).join('')}</div></td></tr>`).join('')}</tbody></table>`;
   }
   async function load(): Promise<void> {

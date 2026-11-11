@@ -49,10 +49,13 @@ describe('permission explanations', () => {
     expect(document.querySelector('#tab-config .permission-reason')).toBeNull();
     expect(document.querySelector('#configEditorOverlay .permission-reason')).toBeNull();
   });
-  it('omits root protection and users table permission explanations without suppressing other reasons', async () => {
-    document.body.innerHTML = '<div id="usersTableWrap"><button disabled title="Missing user.delete permission"></button></div><div id="auth"><button disabled title="auth_root_protected"></button></div><div class="toolbar"><button disabled title="Missing health.sync permission"></button><button>next</button></div>';
+  it('summarizes tab permissions without suppressing dialog and other reasons', async () => {
+    document.body.innerHTML = '<div id="tab-users"><div id="usersTableWrap"><button disabled title="Missing user.delete permission"></button></div><dialog><button disabled title="Missing user.reset permission"></button></dialog></div><div id="tab-auth"><button disabled title="Missing auth.update.accounts permission"></button></div><div id="tab-codes"><button disabled title="Missing code.delete permission"></button></div><div id="auth"><button disabled title="auth_root_protected"></button></div><div class="toolbar"><button disabled title="Missing health.sync permission"></button><button>next</button></div>';
     dispose = initPermissionReasons(document, t).dispose;
     expect(document.querySelector('#usersTableWrap .permission-reason')).toBeNull();
+    expect(document.querySelector('#tab-auth .permission-reason')).toBeNull();
+    expect(document.querySelector('#tab-codes .permission-reason')).toBeNull();
+    expect(document.querySelector('#tab-users dialog .permission-reason')?.textContent).toBe('Missing user.reset permission');
     expect(document.querySelector('#auth .permission-reason')).toBeNull();
     const button = required(document.querySelector<HTMLButtonElement>('.toolbar button'));
     expect(button.nextElementSibling?.textContent).toBe('Missing health.sync permission');
