@@ -70,7 +70,8 @@ describe('admin application integration', () => {
     const online = required(document.querySelector<HTMLInputElement>('#onlineKeyed'));
     expect(online.disabled).toBe(true);
     expect(required(document.getElementById('onlineUsersWrap')).textContent).toContain('permission_missing');
-    expect(required(document.getElementById('operationsStatusWrap')).textContent).toContain('permission_missing');
+    expect(required(document.getElementById('operationsStatusWrap')).hidden).toBe(true);
+    await vi.waitFor(() => { expect(required(document.getElementById('btnLoadOperations')).nextElementSibling?.textContent).toContain('permission_missing'); });
     online.dispatchEvent(new Event('change'));
     await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(2);

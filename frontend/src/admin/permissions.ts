@@ -113,8 +113,10 @@ export function applyPermissions(doc: Document, state: AdminState, t: Translate)
   }
   doc.querySelectorAll<HTMLElement>('.config-tab[data-section]').forEach(tab => { restrict(tab, ['config.read.' + (tab.dataset['section'] ?? '')]); });
   doc.querySelectorAll<HTMLElement>('#chartsMode [data-mode]').forEach(tab => { restrict(tab, [tab.dataset['mode'] === 'live' ? 'state.charts.read' : 'snapshots.read']); });
+  const operations = doc.getElementById('operationsStatusWrap');
+  if (operations) operations.hidden = !can('health.read.recovery');
   for (const [id, permission] of [
-    ['operationsStatusWrap', 'health.read.recovery'], ['healthText', 'health.read.status'],
+    ['healthText', 'health.read.status'],
     ['onlineUsersWrap', 'health.read.online_users'], ['teapotStatus', 'health.read.teapot'],
   ] as const) {
     const target = doc.getElementById(id);

@@ -71,10 +71,16 @@ describe('admin permission model', () => {
   it('replaces inaccessible loading placeholders and disables the online selector', () => {
     const { state } = setup(['health.read.status']);
     applyPermissions(document, state, key => key === 'permission_missing' ? 'Missing {permission}' : key);
-    expect(required(document.getElementById('operationsStatusWrap')).textContent).toBe('Missing health.read.recovery');
+    const operations = required(document.getElementById('operationsStatusWrap'));
+    expect(operations.hidden).toBe(true);
+    expect(operations.textContent).not.toContain('Missing health.read.recovery');
+    expect(required(document.getElementById('btnLoadOperations')).title).toBe('Missing health.read.recovery');
     expect(required(document.getElementById('onlineUsersWrap')).textContent).toBe('Missing health.read.online_users');
     expect(required(document.querySelector<HTMLInputElement>('#onlineKeyed')).disabled).toBe(true);
     expect(required(document.getElementById('healthText')).textContent).not.toContain('Missing');
+    state.permissions.push('health.read.recovery');
+    applyPermissions(document, state, key => key);
+    expect(operations.hidden).toBe(false);
   });
   it('updates a restricted tab warning when the language changes', () => {
     const { state } = setup(['user.read']);
