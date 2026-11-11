@@ -56,13 +56,21 @@
           <input type="search" id="authSearch" autocomplete="off" data-t-aria="auth_search" data-t-ph="auth_search" aria-label="{{ L['auth_search'] }}" placeholder="{{ L['auth_search'] }}">
         </label>
         <button class="btn-secondary" id="btnLoadAuth" data-t="refresh">{{ L['refresh'] }}</button>
-        <button class="btn btn-primary" id="btnCreateAccount" data-t="auth_create_account">{{ L['auth_create_account'] }}</button>
-        <button class="btn btn-primary" id="btnCreateToken" data-t="auth_create_token">{{ L['auth_create_token'] }}</button>
       </div>
-      <h2 class="section-title" data-t="auth_accounts">{{ L['auth_accounts'] }}</h2>
-      <div class="table-wrap" id="authaccountsTable"></div>
-      <h2 class="section-title" data-t="auth_tokens">{{ L['auth_tokens'] }}</h2>
-      <div class="table-wrap" id="authtokensTable"></div>
+      <section class="permission-section" data-permission-section="auth.read.accounts">
+        <div class="toolbar">
+          <h2 class="section-title" data-t="auth_accounts">{{ L['auth_accounts'] }}</h2>
+          <button class="btn btn-primary" id="btnCreateAccount" data-t="auth_create_account">{{ L['auth_create_account'] }}</button>
+        </div>
+        <div class="table-wrap" id="authaccountsTable"></div>
+      </section>
+      <section class="permission-section" data-permission-section="auth.read.tokens">
+        <div class="toolbar">
+          <h2 class="section-title" data-t="auth_tokens">{{ L['auth_tokens'] }}</h2>
+          <button class="btn btn-primary" id="btnCreateToken" data-t="auth_create_token">{{ L['auth_create_token'] }}</button>
+        </div>
+        <div class="table-wrap" id="authtokensTable"></div>
+      </section>
     </div>
     <dialog class="modal log-dialog user-dialog" id="authDialog" aria-labelledby="authDialogTitle">
       <h2 class="modal-title" id="authDialogTitle"></h2>
@@ -310,7 +318,7 @@
   </div>
 
   <div id="tab-state" class="tab-content">
-    <div class="card">
+    <div class="card permission-section" data-permission-section="state.read.panels">
       <div class="card-title" data-t="panel_status">{{ L['panel_status'] }}</div>
       <div class="form-row">
         <label data-t="panel_name">{{ L['panel_name'] }}</label>
@@ -325,7 +333,7 @@
       <div class="result-box" id="panelStatusResult"></div>
     </div>
 
-    <div class="card">
+    <div class="card permission-section" data-permission-section="state.read.host">
       <div class="card-title" data-t="host_system_status">{{ L['host_system_status'] }}</div>
       <div style="margin-top:4px">
         <button class="btn-secondary" id="btnSystemStatus" data-t="load_system_status">{{ L['load_system_status'] }}</button>
@@ -383,7 +391,7 @@
   </div>
 
   <div id="tab-health" class="tab-content">
-    <div class="card">
+    <div class="card permission-section" data-permission-section="health.read.recovery">
       <div class="card-title" data-t="operations_recovery">{{ L['operations_recovery'] }}</div>
       <div class="toolbar">
         <button class="btn-secondary" id="btnLoadOperations" data-t="refresh">{{ L['refresh'] }}</button>
@@ -393,7 +401,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card permission-section" data-permission-section="health.read.status">
       <div class="card-title" data-t="health_status">{{ L['health_status'] }}</div>
       <div class="health-indicator" id="healthIndicator">
         <div class="health-dot" id="healthDot"></div>
@@ -405,7 +413,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card permission-section" data-permission-section="health.read.online_users">
       <div class="card-title" data-t="online_users">{{ L['online_users'] }}</div>
       <div class="toolbar">
         <button class="btn-secondary" id="btnLoadOnline" data-t="refresh">{{ L['refresh'] }}</button>
@@ -420,14 +428,14 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card permission-section" data-permission-section="health.sync">
       <div class="card-title" data-t="refresh_users">{{ L['refresh_users'] }}</div>
       <p style="font-size:0.8125rem;color:var(--text2);margin-bottom:12px" data-t="refresh_warning">{{ L['refresh_warning'] }}</p>
       <button class="btn-secondary" id="btnDoRefresh" data-t="refresh_users_btn">{{ L['refresh_users_btn'] }}</button>
       <div class="result-box" id="refreshResult"></div>
     </div>
 
-    <div class="card">
+    <div class="card permission-section" data-permission-section="health.read.teapot">
       <div class="card-title" data-t="teapot_title">{{ L['teapot_title'] }}</div>
       <div class="teapot-box">
         <div class="teapot-icon">🍵</div>

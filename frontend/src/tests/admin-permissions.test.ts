@@ -68,12 +68,15 @@ describe('admin permission model', () => {
     expect(pane.querySelector('.permission-tab-notice')).toBeNull();
     expect(required(pane.querySelector<HTMLElement>('.card')).inert).toBe(false);
   });
-  it('replaces inaccessible loading placeholders and disables the online selector', () => {
+  it('blurs inaccessible health cards instead of hiding their contents', () => {
     const { state } = setup(['health.read.status']);
     applyPermissions(document, state, key => key === 'permission_missing' ? 'Missing {permission}' : key);
     const operations = required(document.getElementById('operationsStatusWrap'));
-    expect(operations.hidden).toBe(true);
-    expect(operations.textContent).not.toContain('Missing health.read.recovery');
+    expect(operations.hidden).toBe(false);
+    expect(operations.textContent).toBe('Missing health.read.recovery');
+    expect(operations.closest('.card')?.classList.contains('permission-restricted')).toBe(true);
+    expect(operations.inert).toBe(true);
+    expect(document.querySelectorAll('#tab-health .permission-tab-notice')).toHaveLength(4);
     expect(required(document.getElementById('btnLoadOperations')).title).toBe('Missing health.read.recovery');
     expect(required(document.getElementById('onlineUsersWrap')).textContent).toBe('Missing health.read.online_users');
     expect(required(document.querySelector<HTMLInputElement>('#onlineKeyed')).disabled).toBe(true);
@@ -81,6 +84,61 @@ describe('admin permission model', () => {
     state.permissions.push('health.read.recovery');
     applyPermissions(document, state, key => key);
     expect(operations.hidden).toBe(false);
+    expect(operations.inert).toBe(false);
+    expect(operations.closest('.card')?.classList.contains('permission-restricted')).toBe(false);
+  });
+  it.each([
+    ['auth.read.accounts', 'auth.read.tokens'],
+    ['auth.read.tokens', 'auth.read.accounts'],
+    ['state.read.panels', 'state.read.host'],
+    ['state.read.host', 'state.read.panels'],
+  ])('restricts only the unreadable section with %s', (granted, missing) => {
+    const { state } = setup([granted]);
+    const t = (key: string) => key === 'permission_missing' ? 'Missing {permission}' : key;
+    applyPermissions(document, state, t);
+    const allowed = required(document.querySelector<HTMLElement>(`[data-permission-section="${granted}"]`));
+    const denied = required(document.querySelector<HTMLElement>(`[data-permission-section="${missing}"]`));
+    expect(allowed.classList.contains('permission-restricted')).toBe(false);
+    expect(denied.classList.contains('permission-restricted')).toBe(true);
+    const notice = required(denied.querySelector<HTMLElement>(':scope > .permission-tab-notice'));
+    expect(notice.textContent).toBe('Missing ' + missing);
+    expect(notice.inert).not.toBe(true);
+    expect([...denied.children].filter(child => child !== notice).every(child => child instanceof HTMLElement && child.inert)).toBe(true);
+    applyPermissions(document, state, key => key === 'permission_missing' ? 'Required {permission}' : key);
+    expect(notice.textContent).toBe('Required ' + missing);
+    expect(denied.querySelectorAll('.permission-tab-notice')).toHaveLength(1);
+    state.permissions = ['*']; applyPermissions(document, state, t);
+    expect(denied.classList.contains('permission-restricted')).toBe(false);
+    expect(denied.querySelector('.permission-tab-notice')).toBeNull();
+    expect([...denied.children].every(child => child instanceof HTMLElement && !child.inert)).toBe(true);
+  });
+  it('blurs restricted actions only in the requested tabs', () => {
+    const { state } = setup(['auth.read.accounts', 'user.read', 'code.read', 'audit.read', 'snapshots.read', 'leaderboard.read.total', 'config.read.main']);
+    applyPermissions(document, state, key => key);
+    expect(required(document.getElementById('btnCreateAccount')).classList.contains('permission-action-blurred')).toBe(true);
+    expect(required(document.querySelector('.config-tab[data-section="panels"]')).classList.contains('permission-action-blurred')).toBe(true);
+    for (const id of ['btnShowAdd', 'btnShowAddCode', 'btnRefreshLogs', 'btnLoadSnapshots', 'lbType']) {
+      expect(required(document.getElementById(id)).classList.contains('permission-action-blurred')).toBe(false);
+    }
+    for (const tab of ['users', 'codes', 'logs', 'snapshots', 'leaderboard']) {
+      expect(document.querySelectorAll(`#tab-${tab} .permission-section`)).toHaveLength(0);
+    }
+  });
+  it('keeps section notices sharp and avoids duplicate control warnings', () => {
+    const { state } = setup(['health.read.status']);
+    const t = (key: string) => key === 'permission_missing' ? 'Missing {permission}' : key;
+    applyPermissions(document, state, t);
+    const reasons = initPermissionReasons(document, t);
+    const style = document.createElement('style');
+    const css = readFileSync('src/styles/admin.css', 'utf8');
+    style.textContent = css.slice(css.indexOf('.permission-disabled {'), css.indexOf('.permission-tree {'));
+    document.head.append(style);
+    try {
+      const section = required(document.querySelector('[data-permission-section="health.sync"]'));
+      expect(getComputedStyle(required(section.querySelector('.card-title'))).filter).toBe('blur(5px)');
+      expect(getComputedStyle(required(section.querySelector('.permission-tab-notice'))).filter).not.toContain('blur');
+      expect(section.querySelector('.permission-reason')).toBeNull();
+    } finally { style.remove(); reasons.dispose(); }
   });
   it('updates a restricted tab warning when the language changes', () => {
     const { state } = setup(['user.read']);
@@ -153,6 +211,18 @@ describe('admin identity dialogs', () => {
     click('btnLoadAuth'); await vi.waitFor(() => { expect(api).toHaveBeenCalledTimes(1); });
     expect(api).toHaveBeenCalledWith('GET', '/api/auth/list?kind=tokens');
     click('btnCreateAccount'); expect(required(document.querySelector<HTMLDialogElement>('#authDialog')).open).toBe(false);
+  });
+  it('blurs unauthorized identity mutations but keeps details available', async () => {
+    const { api } = setup(['auth.read.accounts']);
+    api.mockResolvedValue({ success: true, status: 200, obj: { items: [{ id: 'account', kind: 'accounts', name: 'test', root: false, permissions: [] }] } });
+    click('btnLoadAuth');
+    await vi.waitFor(() => { expect(document.querySelectorAll('#authaccountsTable .user-action')).toHaveLength(3); });
+    for (const action of ['edit', 'delete']) {
+      const target = required(document.querySelector<HTMLButtonElement>(`#authaccountsTable [data-auth-action="${action}"]`));
+      expect(target.disabled).toBe(true);
+      expect(target.classList.contains('permission-action-blurred')).toBe(true);
+    }
+    expect(required(document.querySelector('#authaccountsTable [data-auth-action="info"]')).classList.contains('permission-action-blurred')).toBe(false);
   });
   it('replaces the identity loading placeholder on a failed request', async () => {
     const { api } = setup(['auth.read.accounts']);

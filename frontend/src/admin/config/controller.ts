@@ -77,6 +77,7 @@ function markDirty(): void {
   if (save && !editor.saving) {
     const writable = ['main', 'inbounds', 'panels'].some(section => can('config.write.' + section));
     save.disabled = !editor.dirty || editor.conflict || !writable;
+    save.classList.toggle('permission-action-blurred', !writable);
     save.title = writable ? '' : t('permission_missing').replace('{permission}', 'config.write.*');
   }
   if (editor.dirty) window.addEventListener('beforeunload', onBeforeUnload);
@@ -281,7 +282,7 @@ async function loadConfig(force: boolean): Promise<void> {
         if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement && field.type === 'checkbox') field.disabled = true;
         else field.readOnly = true;
       });
-      pane.querySelectorAll<HTMLButtonElement>('button:not(.config-card-toggle):not([data-config-pass])').forEach(button => { button.disabled = true; button.title = t('permission_missing').replace('{permission}', 'config.write.' + section); });
+      pane.querySelectorAll<HTMLButtonElement>('button:not(.config-card-toggle):not([data-config-pass])').forEach(button => { button.disabled = true; button.classList.add('permission-action-blurred'); button.title = t('permission_missing').replace('{permission}', 'config.write.' + section); });
     }
   }
   const active = document.querySelector<HTMLButtonElement>('.config-tab.active');

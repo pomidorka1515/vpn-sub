@@ -59,6 +59,24 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   snapshots: ['snapshots.read'], charts: ['snapshots.read', 'state.charts.read'], health: ['health.read.recovery', 'health.read.status', 'health.read.online_users', 'health.read.teapot', 'health.sync'],
   leaderboard: ['leaderboard.read.total', 'leaderboard.read.monthly', 'leaderboard.read.wl_monthly'], config: ['config.read.main', 'config.read.inbounds', 'config.read.panels'],
 };
+function restrictContents(target: HTMLElement, permissions: string[], restricted: boolean, t: Translate): void {
+  target.classList.toggle('permission-restricted', restricted);
+  let notice = target.querySelector<HTMLElement>(':scope > .permission-tab-notice');
+  if (restricted) {
+    if (!notice) {
+      notice = target.ownerDocument.createElement('div');
+      notice.className = 'permission-tab-notice';
+      notice.setAttribute('role', 'status');
+      target.prepend(notice);
+    }
+    notice.textContent = t('permission_missing').replace('{permission}', permissions.join(' / '));
+  } else notice?.remove();
+  for (const child of target.children) {
+    if (!(child instanceof HTMLElement) || child === notice) continue;
+    if (restricted && !child.inert) { child.inert = true; child.dataset['permissionInert'] = ''; }
+    else if (!restricted && child.dataset['permissionInert'] !== undefined) { child.inert = false; delete child.dataset['permissionInert']; }
+  }
+}
 export function applyPermissions(doc: Document, state: AdminState, t: Translate): void {
   const can = (permission: string): boolean => allows(state.permissions, permission);
   const needsPanels = new Set(['btnShowAdd', 'btnDoReset', 'btnDoDelete', 'btnDoAdd', 'btnDoRefresh', 'btnLoadOnline', 'onlineKeyed']);
@@ -68,6 +86,7 @@ export function applyPermissions(doc: Document, state: AdminState, t: Translate)
     const allowed = permitted && !noPanels;
     target.setAttribute('aria-disabled', String(!allowed));
     target.classList.toggle('permission-disabled', !allowed);
+    target.classList.toggle('permission-action-blurred', !permitted && !!target.closest('#tab-auth, #tab-state, #tab-health, #tab-config'));
     if (!allowed) target.title = !permitted ? t('permission_missing').replace('{permission}', permissions.join(' / ')) : t('no_panels');
     if (!allowed && (target instanceof HTMLButtonElement || target instanceof HTMLInputElement || target instanceof HTMLOptionElement)) target.disabled = true;
   };
@@ -81,24 +100,12 @@ export function applyPermissions(doc: Document, state: AdminState, t: Translate)
   for (const [name, permissions] of Object.entries(TAB_PERMISSIONS)) {
     const tab = doc.getElementById('tab-' + name);
     if (!tab) continue;
-    const restricted = !permissions.some(can);
-    tab.classList.toggle('permission-restricted', restricted);
-    let notice = tab.querySelector<HTMLElement>(':scope > .permission-tab-notice');
-    if (restricted) {
-      if (!notice) {
-        notice = doc.createElement('div');
-        notice.className = 'permission-tab-notice';
-        notice.setAttribute('role', 'status');
-        tab.prepend(notice);
-      }
-      notice.textContent = t('permission_missing').replace('{permission}', permissions.join(' / '));
-    } else notice?.remove();
-    for (const child of tab.children) {
-      if (!(child instanceof HTMLElement) || child === notice) continue;
-      if (restricted && !child.inert) { child.inert = true; child.dataset['permissionInert'] = ''; }
-      else if (!restricted && child.dataset['permissionInert'] !== undefined) { child.inert = false; delete child.dataset['permissionInert']; }
-    }
+    restrictContents(tab, permissions, !permissions.some(can), t);
   }
+  doc.querySelectorAll<HTMLElement>('[data-permission-section]').forEach(section => {
+    const permissions = [section.dataset['permissionSection'] ?? '*'];
+    restrictContents(section, permissions, !permissions.some(can) && !section.closest('.tab-content.permission-restricted'), t);
+  });
   const controls: Record<string, string[]> = {
     btnCreateAccount: ['auth.create.accounts'], btnCreateToken: ['auth.create.tokens'],
     btnLoadUsers: ['user.read'], btnShowAdd: ['user.create'], btnDoAdd: ['user.create'], btnDoDelete: ['user.delete'], btnDoReset: ['user.reset'], btnPasswordReset: ['user.password_reset'],
@@ -113,9 +120,8 @@ export function applyPermissions(doc: Document, state: AdminState, t: Translate)
   }
   doc.querySelectorAll<HTMLElement>('.config-tab[data-section]').forEach(tab => { restrict(tab, ['config.read.' + (tab.dataset['section'] ?? '')]); });
   doc.querySelectorAll<HTMLElement>('#chartsMode [data-mode]').forEach(tab => { restrict(tab, [tab.dataset['mode'] === 'live' ? 'state.charts.read' : 'snapshots.read']); });
-  const operations = doc.getElementById('operationsStatusWrap');
-  if (operations) operations.hidden = !can('health.read.recovery');
   for (const [id, permission] of [
+    ['operationsStatusWrap', 'health.read.recovery'],
     ['healthText', 'health.read.status'],
     ['onlineUsersWrap', 'health.read.online_users'], ['teapotStatus', 'health.read.teapot'],
   ] as const) {

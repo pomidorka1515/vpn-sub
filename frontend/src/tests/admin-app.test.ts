@@ -70,8 +70,11 @@ describe('admin application integration', () => {
     const online = required(document.querySelector<HTMLInputElement>('#onlineKeyed'));
     expect(online.disabled).toBe(true);
     expect(required(document.getElementById('onlineUsersWrap')).textContent).toContain('permission_missing');
-    expect(required(document.getElementById('operationsStatusWrap')).hidden).toBe(true);
-    await vi.waitFor(() => { expect(required(document.getElementById('btnLoadOperations')).nextElementSibling?.textContent).toContain('permission_missing'); });
+    expect(required(document.getElementById('operationsStatusWrap')).hidden).toBe(false);
+    const recovery = required(document.getElementById('operationsStatusWrap')?.closest('.card'));
+    expect(recovery.classList.contains('permission-restricted')).toBe(true);
+    expect(required(recovery.querySelector('.permission-tab-notice')).textContent).toContain('permission_missing');
+    expect(document.querySelectorAll('#tab-health .permission-reason')).toHaveLength(0);
     online.dispatchEvent(new Event('change'));
     await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(2);
