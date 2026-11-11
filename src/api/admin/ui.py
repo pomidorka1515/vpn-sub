@@ -36,6 +36,11 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         for path, handler in (
             ("/admin", "admin_ui"),
             ("/admin/main.js", "admin_js"),
+            ("/admin/chart.umd.min.js", "admin_chart_js"),
+            ("/admin/vendor/codemirror-5.65.16.min.js", "admin_codemirror_js"),
+            ("/admin/main.css", "admin_css"),
+            ("/admin/charts.css", "admin_charts_css"),
+            ("/admin/vendor/codemirror-5.65.16.min.css", "admin_codemirror_css"),
             ("/admin/token", "admin_token"),
             ("/admin/login", "admin_login_page"),
             ("/admin/session", "admin_session"),
@@ -51,9 +56,17 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
 
     async def _admin_auth_no_store(self, response: Response) -> Response:
         # Apply after error handling too, including rate-limit and storage failures.
-        if request.endpoint in {"admin_js", "admin_token", "admin_session", "admin_logout"} or (
-            request.endpoint or ""
-        ).startswith("auth_"):
+        if request.endpoint in {
+            "admin_js",
+            "admin_chart_js",
+            "admin_codemirror_js",
+            "admin_css",
+            "admin_charts_css",
+            "admin_codemirror_css",
+            "admin_token",
+            "admin_session",
+            "admin_logout",
+        } or (request.endpoint or "").startswith("auth_"):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -65,6 +78,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         html = await render_template(
             "admin.html",
             prefix="/" + "/".join(p for p in conf["uri"].split("/") if p),
+            chart_prefix=self._admin_cookie_path(),
             asset_version=await self.sub.res.offloads.files.run(asset_version),
             lang=lang,
             L=strings,
@@ -77,11 +91,29 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         return response
 
     async def admin_js(self) -> ResponseType:
+        return await self._admin_asset("assets/admin/main.js", "text/javascript")
+
+    async def admin_chart_js(self) -> ResponseType:
+        return await self._admin_asset("vendor/chart.umd.min.js", "text/javascript")
+
+    async def admin_codemirror_js(self) -> ResponseType:
+        return await self._admin_asset("vendor/codemirror-5.65.16.min.js", "text/javascript")
+
+    async def admin_css(self) -> ResponseType:
+        return await self._admin_asset("assets/admin.css", "text/css")
+
+    async def admin_charts_css(self) -> ResponseType:
+        return await self._admin_asset("assets/charts.css", "text/css")
+
+    async def admin_codemirror_css(self) -> ResponseType:
+        return await self._admin_asset("vendor/codemirror-5.65.16.min.css", "text/css")
+
+    async def _admin_asset(self, name: str, mimetype: str) -> ResponseType:
         if not await self._admin_cookie_ok():
             return err("Unauthorized", 401)
         return await send_file(
-            RES_DIR / "assets" / "admin" / "main.js",
-            mimetype="text/javascript",
+            RES_DIR / name,
+            mimetype=mimetype,
             add_etags=False,
             cache_timeout=0,
         )

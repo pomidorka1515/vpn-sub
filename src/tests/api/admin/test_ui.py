@@ -20,6 +20,15 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.asyncio
 
+ADMIN_ASSETS = {
+    "main.js": "assets/admin/main.js",
+    "chart.umd.min.js": "vendor/chart.umd.min.js",
+    "vendor/codemirror-5.65.16.min.js": "vendor/codemirror-5.65.16.min.js",
+    "main.css": "assets/admin.css",
+    "charts.css": "assets/charts.css",
+    "vendor/codemirror-5.65.16.min.css": "vendor/codemirror-5.65.16.min.css",
+}
+
 
 async def sign_in(client: TestClientProtocol) -> None:
     response = await client.post(
@@ -65,15 +74,16 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
 
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
 @pytest.mark.parametrize("cookie", [None, "invalid", "x" * 100])
-async def test_admin_bundle_requires_session(
-    admin_api: tuple[Quart, Subscription], method: str, cookie: str | None
+@pytest.mark.parametrize("path", ADMIN_ASSETS)
+async def test_admin_assets_require_session(
+    admin_api: tuple[Quart, Subscription], method: str, cookie: str | None, path: str
 ) -> None:
     client = admin_api[0].test_client()
     if cookie is not None:
         client.set_cookie("localhost", "admin_ui", cookie, path="/sub/admin")
     request_asset = client.get if method == "GET" else client.head
     response = await request_asset(
-        "/sub/admin/main.js?v=test",
+        f"/sub/admin/{path}?v=test",
         headers={"Authorization": "secret", "If-None-Match": "*"},
     )
     assert response.status_code == 401
@@ -84,25 +94,27 @@ async def test_admin_bundle_requires_session(
 
 
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
-async def test_admin_bundle_with_session_is_not_stored(
-    admin_api: tuple[Quart, Subscription], method: str
+@pytest.mark.parametrize(("path", "resource"), ADMIN_ASSETS.items())
+async def test_admin_assets_with_session_are_not_stored(
+    admin_api: tuple[Quart, Subscription], method: str, path: str, resource: str
 ) -> None:
     client = admin_api[0].test_client()
     await sign_in(client)
     request_asset = client.get if method == "GET" else client.head
-    response = await request_asset("/sub/admin/main.js?v=test")
+    response = await request_asset(f"/sub/admin/{path}?v=test", headers={"If-None-Match": "*"})
     assert response.status_code == 200
-    assert response.mimetype == "text/javascript"
+    assert response.mimetype == ("text/css" if path.endswith(".css") else "text/javascript")
     assert response.headers["Cache-Control"] == "no-store"
     assert "ETag" not in response.headers
     body = await response.get_data()
     assert isinstance(body, bytes)
     if method == "GET":
-        assert body == (frontend_root() / "assets" / "admin" / "main.js").read_bytes()
-        assert b"import.meta.url" in body
-        assert b"sourceMappingURL" not in body
-        assert b"// src/" not in body
-        assert b"\n" not in body
+        assert body == (frontend_root() / resource).read_bytes()
+        if path == "main.js":
+            assert b"import.meta.url" in body
+            assert b"sourceMappingURL" not in body
+            assert b"// src/" not in body
+            assert b"\n" not in body
 
 
 @pytest.mark.parametrize(
@@ -145,11 +157,13 @@ async def test_admin_session_and_local_page(admin_api: tuple[Quart, Subscription
     for part in (
         b"<html",
         b'href="/sub/common.css?v=',
-        b'href="/sub/admin.css?v=',
+        b'href="/sub/admin/main.css?v=',
+        b'href="/sub/admin/charts.css?v=',
+        b'href="/sub/admin/vendor/codemirror-5.65.16.min.css?v=',
         b'type="module"',
         b'src="/sub/admin/main.js?v=',
         b'id="btnLogout"',
-        b'"chartUrl": "/sub/chart.umd.min.js?v=',
+        b'"chartUrl": "/sub/admin/chart.umd.min.js?v=',
         b'id="frontend-bootstrap" type="application/json"',
         b'"prefix": "/sub"',
     ):
@@ -242,9 +256,10 @@ async def test_browser_api_authority_is_session_bound(
     assert response.status_code == 401
     assert response.headers["Cache-Control"] == "no-store"
     assert (await client.get("/sub/api/api/config/get", headers=headers)).status_code == 401
-    response = await client.get("/sub/admin/main.js?v=test", headers={"If-None-Match": "*"})
-    assert response.status_code == 401
-    assert response.headers["Cache-Control"] == "no-store"
+    for path in ADMIN_ASSETS:
+        response = await client.get(f"/sub/admin/{path}?v=test", headers={"If-None-Match": "*"})
+        assert response.status_code == 401
+        assert response.headers["Cache-Control"] == "no-store"
     response = await client.get("/sub/api/api/config/get", headers={"Authorization": "secret"})
     assert response.status_code == 200
     assert (await response.get_json())["obj"]["api_token"] == "secret"
@@ -317,7 +332,7 @@ async def test_admin_auth_rate_limit_responses_are_not_stored(
     assert response.headers["Cache-Control"] == "no-store"
 
 
-@pytest.mark.parametrize("endpoint", ["token", "session", "logout", "main.js"])
+@pytest.mark.parametrize("endpoint", ["token", "session", "logout", *ADMIN_ASSETS])
 async def test_admin_auth_storage_errors_are_not_stored(
     admin_api: tuple[Quart, Subscription],
     monkeypatch: pytest.MonkeyPatch,
@@ -327,10 +342,10 @@ async def test_admin_auth_storage_errors_are_not_stored(
     client = app.test_client()
     await sign_in(client)
     token = await browser_token(client)
-    operation = "admin_ui_session" if endpoint in {"token", "main.js"} else "set_admin_ui_session"
+    operation = "set_admin_ui_session" if endpoint in {"session", "logout"} else "admin_ui_session"
     monkeypatch.setattr(sub.res.db, operation, AsyncMock(side_effect=RuntimeError()))
 
-    if endpoint in {"token", "main.js"}:
+    if endpoint not in {"session", "logout"}:
         response = await client.get(f"/sub/admin/{endpoint}")
     else:
         response = await client.post(
@@ -391,9 +406,10 @@ async def test_admin_empty_uri_contract(
         )
         assert response.status_code == 200
         assert f"Path={panel}" in response.headers["Set-Cookie"]
-        response = await client.get(f"{panel}/main.js")
-        assert response.status_code == 200
-        assert response.headers["Cache-Control"] == "no-store"
+        for path in ADMIN_ASSETS:
+            response = await client.get(f"{panel}/{path}")
+            assert response.status_code == 200
+            assert response.headers["Cache-Control"] == "no-store"
         response = await client.get(f"{panel}/token")
         assert response.status_code == 200
         payload = await response.get_json()

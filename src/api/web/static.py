@@ -35,19 +35,40 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         Route("GET", "/redirect.js", "redirect_js"),
         Route("GET", "/dashboard.css", "dashboard_css"),
         Route("GET", "/history.css", "history_css"),
-        Route("GET", "/charts.css", "charts_css"),
-        Route("GET", "/admin.css", "admin_css"),
         Route("GET", "/dashboard.js", "dashboard_js"),
         Route("GET", "/history.js", "history_js"),
         Route("GET", "/chart.umd.min.js", "chart_js"),
-        Route("GET", "/vendor/codemirror-5.65.16.min.js", "codemirror_js"),
-        Route("GET", "/vendor/codemirror-5.65.16.min.css", "codemirror_css"),
         Route("GET", "/panel", "gui_panel"),
         Route("GET", "/auth", "gui_auth"),
         Route("GET", "/reset", "gui_password_reset"),
         Route("GET", "/reset.js", "password_reset_js"),
         Route("GET", "/history", "gui_history"),
     )
+
+    def reg_handles(self) -> None:
+        self.app.after_request(self._session_assets_no_store)
+
+    async def _session_assets_no_store(self, response: Response) -> Response:
+        # Include rejected requests and authentication/storage failures too.
+        if request.endpoint in {
+            "dashboard_js",
+            "history_js",
+            "chart_js",
+            "dashboard_css",
+            "history_css",
+        }:
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    async def _session_asset(self, name: str, mimetype: str) -> ResponseType:
+        if not await self.validate_auth_token(request.cookies.get("auth_token")):
+            return err("Invalid auth token.", 401)
+        return await send_file(
+            RES_DIR / name,
+            mimetype=mimetype,
+            add_etags=False,
+            cache_timeout=0,
+        )
 
     async def redirect_page(self) -> ResponseType:
         prefix = request.args.get("prefix", "")
@@ -122,41 +143,19 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         return response
 
     async def dashboard_css(self) -> ResponseType:
-        return await self._static("dashboard.css", "text/css")
+        return await self._session_asset("assets/dashboard.css", "text/css")
 
     async def history_css(self) -> ResponseType:
-        return await self._static("history.css", "text/css")
-
-    async def charts_css(self) -> ResponseType:
-        return await self._static("charts.css", "text/css")
-
-    async def admin_css(self) -> ResponseType:
-        return await self._static("admin.css", "text/css")
+        return await self._session_asset("assets/history.css", "text/css")
 
     async def dashboard_js(self) -> ResponseType:
-        return await self._static("dashboard.js", "text/javascript")
+        return await self._session_asset("assets/dashboard.js", "text/javascript")
 
     async def history_js(self) -> ResponseType:
-        return await self._static("history.js", "text/javascript")
+        return await self._session_asset("assets/history.js", "text/javascript")
 
     async def chart_js(self) -> ResponseType:
-        return await self._static("vendor/chart.umd.min.js", "text/javascript")
-
-    async def codemirror_js(self) -> ResponseType:
-        name = "vendor/codemirror-5.65.16.min.js"
-        return await self._static(
-            name,
-            "text/javascript",
-            await self.sub.res.offloads.files.run((RES_DIR / name).read_bytes),
-        )
-
-    async def codemirror_css(self) -> ResponseType:
-        name = "vendor/codemirror-5.65.16.min.css"
-        return await self._static(
-            name,
-            "text/css",
-            await self.sub.res.offloads.files.run((RES_DIR / name).read_bytes),
-        )
+        return await self._session_asset("vendor/chart.umd.min.js", "text/javascript")
 
     async def gui_panel(self) -> ResponseType:
         auth_token = request.cookies.get("auth_token")

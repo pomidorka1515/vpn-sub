@@ -4,7 +4,7 @@ import json
 import re
 import uuid
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -27,6 +27,14 @@ if TYPE_CHECKING:
     from db import Database
 
 pytestmark = pytest.mark.asyncio
+
+SESSION_ASSETS = {
+    "dashboard.js": "assets/dashboard.js",
+    "history.js": "assets/history.js",
+    "chart.umd.min.js": "vendor/chart.umd.min.js",
+    "dashboard.css": "assets/dashboard.css",
+    "history.css": "assets/history.css",
+}
 
 
 @pytest.mark.parametrize("query", ["", "?token=", "?token=invalid", "?token=" + "x" * 75])
@@ -328,11 +336,6 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None
     [
         ("common.css", "text/css", b"url('/custom/fonts/outfit-latin.woff2?v="),
         ("fonts/outfit-latin.woff2", "font/woff2", b"wOF2"),
-        ("dashboard.js", "text/javascript", b"_0x"),
-        ("history.js", "text/javascript", b"_0x"),
-        ("chart.umd.min.js", "text/javascript", b"Chart.js v4.4.1"),
-        ("vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
-        ("vendor/codemirror-5.65.16.min.css", "text/css", b"CodeMirror"),
     ],
 )
 async def test_prefixed_static_assets(
@@ -352,11 +355,6 @@ async def test_prefixed_static_assets(
     }
     for part in extras.get(path, ()):
         assert part in body
-    if path in {"dashboard.js", "history.js"}:
-        assert body == (frontend_root() / "assets" / path).read_bytes()
-        assert b"sourceMappingURL" not in body
-        assert b"// src/" not in body
-        assert b"\n" not in body
     if path == "common.css":
         for name in FONT_FILES:
             url = f"/custom/fonts/{name}?v={font_version()}"
@@ -378,8 +376,129 @@ async def test_prefixed_static_assets(
     assert "immutable" in response.headers["Cache-Control"]
 
 
+@pytest.mark.parametrize("path", SESSION_ASSETS)
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+@pytest.mark.parametrize("cookie", [None, "invalid", "x" * 100, "a" * 40])
+async def test_dashboard_assets_require_user_session(
+    web_api: tuple[Quart, Database], path: str, method: str, cookie: str | None
+) -> None:
+    client = web_api[0].test_client()
+    if cookie is not None:
+        client.set_cookie("localhost", "auth_token", cookie)
+    client.set_cookie("localhost", "token", "a" * 40)
+    client.set_cookie("localhost", "admin_ui", "x" * 100)
+    request_asset = client.get if method == "GET" else client.head
+    response = await request_asset(
+        f"/custom/{path}?v=test",
+        headers={"Authorization": "secret", "If-None-Match": "*"},
+    )
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.mimetype != "text/javascript"
+    assert response.mimetype != "text/css"
+
+
+@pytest.mark.parametrize(("path", "resource"), SESSION_ASSETS.items())
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+async def test_dashboard_assets_with_session_are_not_stored(
+    web_api: tuple[Quart, Database], path: str, resource: str, method: str
+) -> None:
+    client = web_api[0].test_client()
+    await login(client)
+    request_asset = client.get if method == "GET" else client.head
+    response = await request_asset(f"/custom/{path}?v=test", headers={"If-None-Match": "*"})
+    assert response.status_code == 200
+    assert response.mimetype == ("text/css" if path.endswith(".css") else "text/javascript")
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "ETag" not in response.headers
+    body = await response.get_data()
+    assert isinstance(body, bytes)
+    if method == "GET":
+        assert body == (frontend_root() / resource).read_bytes()
+        if path in {"dashboard.js", "history.js"}:
+            assert b"sourceMappingURL" not in body
+            assert b"// src/" not in body
+            assert b"\n" not in body
+
+
+@pytest.mark.parametrize("path", SESSION_ASSETS)
+@pytest.mark.parametrize("revoke", ["logout", "relogin", "expire"])
+async def test_dashboard_assets_reject_revoked_sessions(
+    web_api: tuple[Quart, Database], path: str, revoke: str
+) -> None:
+    app, db = web_api
+    client = app.test_client()
+    token = await login(client)
+    assert (await client.get(f"/custom/{path}")).status_code == 200
+    if revoke == "logout":
+        assert (await client.post("/custom/webapi/logout")).status_code == 200
+    elif revoke == "relogin":
+        await login(app.test_client())
+    else:
+        async with db.transaction(immediate=True) as conn:
+            await conn.execute(
+                "UPDATE users SET auth_token_expires_at = 1 WHERE username = 'alice'"
+            )
+    client.set_cookie("localhost", "auth_token", token)
+    response = await client.get(f"/custom/{path}", headers={"If-None-Match": "*"})
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize("path", SESSION_ASSETS)
+async def test_dashboard_asset_auth_storage_errors_are_not_stored(
+    web_api: tuple[Quart, Database], monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    app, _ = web_api
+    client = app.test_client()
+    await login(client)
+    sub = app.extensions["subscriptions"][0]
+    monkeypatch.setattr(sub.user_svc, "auth_token_to_user", AsyncMock(side_effect=RuntimeError()))
+    response = await client.get(f"/custom/{path}")
+    assert response.status_code == 500
+    assert response.headers["Cache-Control"] == "no-store"
+
+
 async def test_admin_bundle_is_not_a_public_static_asset(web_api: tuple[Quart, Database]) -> None:
     assert (await web_api[0].test_client().get("/custom/admin/main.js")).status_code == 404
+
+
+async def test_user_and_admin_asset_sessions_are_separate(web_api: tuple[Quart, Database]) -> None:
+    app, db = web_api
+    sub = app.extensions["subscriptions"][0]
+    AsyncApi(
+        app=app,
+        cfg=config_snapshot(
+            subscription_config(uri="custom", api_admin_ui_auth=["admin", "panel-secret"])
+        ),
+        sub=sub,
+        bw=make_watch(db, sub),
+        limiter=app.extensions["limiter"],
+        audit_cfg=MagicMock(spec=AsyncLinesConfig),
+    )
+    user = app.test_client()
+    await login(user)
+    admin = app.test_client()
+    response = await admin.post(
+        "/custom/admin/session", json={"username": "admin", "password": "panel-secret"}
+    )
+    assert response.status_code == 200
+    for path in SESSION_ASSETS:
+        response = await admin.get(f"/custom/{path}")
+        assert response.status_code == 401
+        assert response.headers["Cache-Control"] == "no-store"
+    for path in (
+        "main.js",
+        "chart.umd.min.js",
+        "vendor/codemirror-5.65.16.min.js",
+        "main.css",
+        "charts.css",
+        "vendor/codemirror-5.65.16.min.css",
+    ):
+        response = await user.get(f"/custom/admin/{path}")
+        assert response.status_code == 401
+        assert response.headers["Cache-Control"] == "no-store"
+        assert (await admin.get(f"/custom/admin/{path}")).status_code == 200
 
 
 @pytest.mark.parametrize(
@@ -407,6 +526,18 @@ async def test_nested_config_sources_are_not_served(
         "frontend/src/legacy/admin/main.js",
         "frontend/package.json",
         "vendor/LICENSE_CODEMIRROR",
+        "vendor/codemirror-5.65.16.min.js",
+        "vendor/codemirror-5.65.16.min.css",
+        "vendor/chart.umd.min.js",
+        "assets/dashboard.js",
+        "assets/history.js",
+        "admin/chart.umd.min.js",
+        "admin/vendor/codemirror-5.65.16.min.js",
+        "admin/main.css",
+        "admin/charts.css",
+        "admin/vendor/codemirror-5.65.16.min.css",
+        "admin.css",
+        "charts.css",
     ],
 )
 async def test_unknown_assets(web_api: tuple[Quart, Database], path: str) -> None:

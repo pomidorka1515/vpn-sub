@@ -230,9 +230,18 @@ async def test_account_login_and_session_revocation(admin_api: tuple[Quart, Subs
     ).status_code == 200
     session = (await (await client.get("/sub/admin/token")).get_json())["obj"]
     assert session["permissions"] == ["code.read"]
-    response = await client.get("/sub/admin/main.js")
-    assert response.status_code == 200
-    assert response.headers["Cache-Control"] == "no-store"
+    assets = (
+        "main.js",
+        "chart.umd.min.js",
+        "vendor/codemirror-5.65.16.min.js",
+        "main.css",
+        "charts.css",
+        "vendor/codemirror-5.65.16.min.css",
+    )
+    for path in assets:
+        response = await client.get(f"/sub/admin/{path}")
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
     headers = {"Authorization": session["token"]}
     assert (await client.get(PREFIX + "/code/list", headers=headers)).status_code == 200
     assert (await client.get(PREFIX + "/user/list", headers=headers)).status_code == 403
@@ -250,7 +259,8 @@ async def test_account_login_and_session_revocation(admin_api: tuple[Quart, Subs
     )
     assert update.status_code == 200
     assert (await client.get("/sub/admin/token")).status_code == 401
-    assert (await client.get("/sub/admin/main.js")).status_code == 401
+    for path in assets:
+        assert (await client.get(f"/sub/admin/{path}")).status_code == 401
     assert (await client.get(PREFIX + "/code/list", headers=headers)).status_code == 401
     assert (await root.get("/sub/admin/token")).status_code == 200
 

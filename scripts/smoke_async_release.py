@@ -205,17 +205,72 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                             raise RuntimeError("bundled admin template did not render")
                     for path, content_type, signature in (
                         ("/sub/admin/main.js", "text/javascript", b"bootstrap"),
+                        ("/sub/admin/chart.umd.min.js", "text/javascript", b"Chart.js"),
+                        ("/sub/admin/main.css", "text/css", b".tab"),
+                        ("/sub/admin/charts.css", "text/css", b".chart"),
+                        (
+                            "/sub/admin/vendor/codemirror-5.65.16.min.js",
+                            "text/javascript",
+                            b"CodeMirror",
+                        ),
+                        ("/sub/admin/vendor/codemirror-5.65.16.min.css", "text/css", b"CodeMirror"),
                         ("/sub/common.css", "text/css", b"@font-face"),
                         ("/sub/fonts/outfit-latin.woff2", "font/woff2", b"wOF2"),
-                        ("/sub/vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
                     ):
-                        async with client.get(f"http://127.0.0.1:{http_port}{path}") as response:
+                        private = path.startswith("/sub/admin/")
+                        if private:
+                            async with client.get(
+                                f"http://127.0.0.1:{http_port}{path}"
+                            ) as response:
+                                if (
+                                    response.status != 401
+                                    or response.headers.get("Cache-Control") != "no-store"
+                                ):
+                                    raise RuntimeError(
+                                        f"admin asset exposed without a session: {path}"
+                                    )
+                        async with client.get(
+                            f"http://127.0.0.1:{http_port}{path}",
+                            cookies={"admin_ui": cookie} if private else {},
+                        ) as response:
                             if (
                                 response.status != 200
                                 or response.content_type != content_type
                                 or signature not in await response.read()
                             ):
                                 raise RuntimeError(f"bundled frontend asset failed: {path}")
+                            if private and response.headers.get("Cache-Control") != "no-store":
+                                raise RuntimeError(f"admin asset is cacheable: {path}")
+                    for path in (
+                        "dashboard.js",
+                        "history.js",
+                        "chart.umd.min.js",
+                        "dashboard.css",
+                        "history.css",
+                    ):
+                        async with client.get(
+                            f"http://127.0.0.1:{http_port}/sub/{path}"
+                        ) as response:
+                            if (
+                                response.status != 401
+                                or response.headers.get("Cache-Control") != "no-store"
+                            ):
+                                raise RuntimeError(
+                                    f"dashboard asset exposed without a session: {path}"
+                                )
+                    for path in (
+                        "admin.css",
+                        "charts.css",
+                        "vendor/codemirror-5.65.16.min.js",
+                        "vendor/codemirror-5.65.16.min.css",
+                    ):
+                        async with client.get(
+                            f"http://127.0.0.1:{http_port}/sub/{path}"
+                        ) as response:
+                            if response.status != 404:
+                                raise RuntimeError(
+                                    f"legacy public admin asset unexpectedly exposed: {path}"
+                                )
                     async with client.get(
                         f"http://127.0.0.1:{http_port}/sub/frontend/src/templates/admin.html"
                     ) as response:

@@ -103,8 +103,7 @@ async def test_page_script_routes_and_error_context(
     names = (
         "auth.js",
         "admin-auth.js",
-        "dashboard.js",
-        "history.js",
+        "reset.js",
         "error.js",
         "redirect.js",
     )
@@ -213,3 +212,42 @@ async def test_generated_resources_served_at_configured_prefix(
             "/static/frontend/src/templates/auth.html",
         ):
             assert (await client.get(url)).status_code == 404
+
+        await database.create_user(
+            username="alice",
+            uuid="alice-uuid",
+            token="a" * 40,
+            fingerprint="chrome",
+            displayname="Alice",
+        )
+        await database.set_auth_token("alice", "a" * 100)
+        for name in (
+            "dashboard.js",
+            "history.js",
+            "chart.umd.min.js",
+            "dashboard.css",
+            "history.css",
+        ):
+            url = f"{prefix}/{name}?v={version}"
+            denied = await client.get(url)
+            assert denied.status_code == 401
+            assert denied.headers["Cache-Control"] == "no-store"
+        client.set_cookie("localhost", "auth_token", "a" * 100)
+        for page in ("panel", "history"):
+            response = await client.get(f"{prefix}/{page}")
+            assert response.status_code == 200
+            html = await response.get_data(as_text=True)
+            for name in ("dashboard.js", "history.js", "dashboard.css", "history.css"):
+                if name in html:
+                    assert f"{prefix}/{name}?v={version}" in html
+        for name in (
+            "dashboard.js",
+            "history.js",
+            "chart.umd.min.js",
+            "dashboard.css",
+            "history.css",
+        ):
+            asset = await client.get(f"{prefix}/{name}?v={version}")
+            assert asset.status_code == 200
+            assert await asset.get_data()
+            assert asset.headers["Cache-Control"] == "no-store"

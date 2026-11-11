@@ -5,7 +5,7 @@
   'fallback': L_en,
   'languages': {'en': L_en, 'ru': L_ru},
   'page': {
-    'chartUrl': prefix ~ '/chart.umd.min.js?v=' ~ asset_version,
+    'chartUrl': (chart_prefix | default(prefix)) ~ '/chart.umd.min.js?v=' ~ asset_version,
     'debounceMs': 1000
   }
 } | tojson }}</script>
