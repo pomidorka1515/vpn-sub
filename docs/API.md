@@ -32,6 +32,7 @@ Missing authorization:
 ```  
 Rate limiting:  
 Every `Rate limit` field in routes are in requests / min.  
+Limits apply per route and client IP; rate-limit store failures also return HTTP 429.  
 Response:  
 ```jsonc  
 // HTTP 429  
@@ -59,6 +60,8 @@ Errors use the same response shape and semantic HTTP status codes. Validation fa
   
 ### POST /register  
 Description: Register a new account with an invite code.  
+The registration form first checks the code with `POST /validate-code`. Until a valid code is confirmed, username validation and registration submission are disabled. Input checks are debounced by 400 ms, not continuously polled. Editing the code immediately invalidates the previous confirmation.  
+Preflight checks do not reserve or consume a use. Registration checks the code again and consumes it transactionally; a code can become unavailable between preflight and registration.  
 Rate limit: 5  
 Authentication: none (must NOT have an auth_token cookie set)  
 Body:  
@@ -332,12 +335,34 @@ Response (error):
   
 ---  
   
-### GET /validate  
-Description: Validate a username for illegal characters and availability.  
-Rate limit: 80  
+### POST /validate-code  
+Description: Check whether an invite code can currently be used for registration, without reserving or consuming it.  
+Rate limit: 20  
 Authentication: none  
+Body:  
+```jsonc  
+{  
+    "code": "invite" // required str, 1–64 characters for a valid code  
+}  
+```  
+Response (success):  
+```jsonc  
+// HTTP 200  
+{"success": true, "msg": null, "obj": {"valid": true}}  
+```  
+`valid` is true only for a registration code with remaining uses, or a permanent registration code. Unknown, exhausted, bonus, empty, and overlong code values return HTTP 200 with `valid: false`. An omitted `code` field or a non-string value returns HTTP 400. No code metadata is exposed.  
+Each eligible request performs a fresh indexed SQLite lookup; results are not cached. Empty and overlong values are rejected without a lookup.  
+  
+---  
+  
+### GET /validate  
+Description: Validate a username for illegal characters and availability, gated by a usable registration code.  
+Rate limit: 80  
+Authentication: valid registration code (an auth_token cookie is not a substitute)  
 Args:  
-    username: Username to validate.  
+    username: Required username to validate.  
+    code: Required registration code, 1–64 characters.  
+The code is checked before any username lookup and is not reserved or consumed. Bonus, exhausted, unknown, empty, overlong, or omitted codes return HTTP 403. Availability is checked against SQLite on every request, without caching.  
 Response (success):  
 ```jsonc  
 // HTTP 200  
@@ -345,12 +370,30 @@ Response (success):
     "success": true,  
     "msg": null,  
     "obj": {  
+        "MAX_LENGTH": 32, // int, maximum username length  
         "valid": true, // bool, true if no illegal chars and non-empty  
         "taken": true, // bool, username already registered  
-        "sanitized": "" // str, username with illegal chars stripped  
+        "sanitized": "" // str, allowed characters only, truncated to MAX_LENGTH  
     }  
 }  
 ```  
+Response (error):  
+```jsonc  
+// HTTP 403  
+{"success": false, "msg": "Invalid code", "obj": null}  
+// HTTP 400, after a valid code is supplied  
+{"success": false, "msg": "'username' field is missing", "obj": null}  
+```  
+  
+---  
+  
+### GET /settings/validate  
+Description: Validate a username for an authenticated account's settings. Used by the dashboard when changing the login username.  
+Rate limit: 80  
+Authentication: cookie (must be a live session)  
+Args:  
+    username: Required username to validate.  
+No registration code is needed. Success responses and missing-username errors have the same shape as `GET /validate`; a missing, invalid, or expired session returns HTTP 401.  
   
 ---  
   
