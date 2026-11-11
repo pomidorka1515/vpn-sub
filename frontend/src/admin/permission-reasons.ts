@@ -38,8 +38,9 @@ export function initPermissionReasons(doc: Document, t: Translate) {
         reason = doc.createElement('span');
         do { reason.id = 'permission-reason-' + String(++nextId); } while (doc.getElementById(reason.id));
         reason.className = 'permission-reason';
-        const anchor = target.closest('label') ?? target;
-        anchor.insertAdjacentElement('afterend', reason);
+        const inConfig = !!target.closest('#tab-config, #configEditorOverlay');
+        const anchor = (inConfig ? target.closest('.config-pass') : null) ?? target.closest('label') ?? target;
+        anchor.insertAdjacentElement(inConfig ? 'beforebegin' : 'afterend', reason);
         const described = (target.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
         described.push(reason.id);
         target.setAttribute('aria-describedby', described.join(' '));

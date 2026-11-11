@@ -658,6 +658,7 @@
 .config-editor-body { overflow: auto; min-height: 0; margin-bottom: 16px; overscroll-behavior: contain; }
 #configEditorOverlay { padding: 16px; }
 #tab-config .input-wrap, .config-editor-body .input-wrap { min-width: 0; }
+#tab-config .permission-reason, .config-editor-body .permission-reason { margin: 0 0 4px; font-size: 0.875rem; }
 #tab-config .form-row > label, .config-editor-body .form-row > label { overflow-wrap: anywhere; }
 #tab-config .panel-card-body { padding-top: 16px; }
 #tab-config .panel-card-title { min-width: 0; flex-wrap: wrap; overflow-wrap: anywhere; }
