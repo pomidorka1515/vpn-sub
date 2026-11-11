@@ -2,7 +2,8 @@ import { required, requiredInstance } from './required';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AdminContext } from '../admin/context';
-import { configDispose, configOnTab, initConfig, reloadConfig, saveConfig } from '../admin/config/controller';
+import { configDispose, configOnTab, initConfig, reloadConfig, saveConfig, setConfigLanguage } from '../admin/config/controller';
+import { initPermissionReasons } from '../admin/permission-reasons';
 import { serializeBody } from '../shared/api';
 import { editor } from '../admin/config/state';
 import { validateDraft } from '../admin/config/validation';
@@ -15,13 +16,13 @@ afterEach(() => {
   editor.loaded = null; editor.draft = null; editor.fetched = false; editor.dirty = false; editor.conflict = false; editor.saving = false; editor.loading = false;
   editor.open.inbounds.clear(); editor.open.panels.clear(); editor.headerRows.clear(); editor.jsonInputs.clear(); editor.nodeRows = null;
 });
-function setup(can?: AdminContext['can']) {
+function setup(can?: AdminContext['can'], t: AdminContext['t'] = key => key) {
   document.body.innerHTML = readFileSync('src/templates/admin.html', 'utf8');
   required(document.getElementById('tab-config')).classList.add('active');
   const api = vi.fn<AdminContext['api']>();
   const confirm = vi.fn<AdminContext['confirm']>().mockResolvedValue(true);
   const toast = vi.fn();
-  initConfig({ doc: document, api, confirm, toast, t: key => key, loadGen: () => () => true, ...(can ? { can } : {}) }, 'en');
+  initConfig({ doc: document, api, confirm, toast, t, loadGen: () => () => true, ...(can ? { can } : {}) }, 'en');
   const load = async () => {
     expect(validateDraft(config)).toEqual([]);
     api.mockResolvedValueOnce({ success: true, obj: config, etag: 'v1', status: 200 });
@@ -36,6 +37,24 @@ function setup(can?: AdminContext['can']) {
 }
 
 describe('config editor controller', () => {
+  it('shows one translated permission notice above the editor instead of warnings on fields', async () => {
+    let language = 'en';
+    const t = (key: string) => key === 'permission_missing' ? language + ' missing {permission}' : key;
+    const { load } = setup(permission => permission.startsWith('config.read.'), t);
+    const reasons = initPermissionReasons(document, t);
+    try {
+      await load();
+      const notice = required(document.getElementById('configPermissionNotice'));
+      expect(notice.hidden).toBe(false);
+      expect(notice.textContent).toBe('en missing config.write.main / config.write.inbounds / config.write.panels / *');
+      expect(notice.parentElement?.firstElementChild).toBe(notice);
+      expect(document.querySelectorAll('#tab-config .permission-reason')).toHaveLength(0);
+      expect(document.querySelectorAll('#tab-config .config-box .form-hint')).not.toHaveLength(0);
+      expect(required(document.getElementById('cfg-box-salt')).textContent).not.toContain('missing');
+      language = 'ru'; setConfigLanguage('ru');
+      expect(notice.textContent).toContain('ru missing');
+    } finally { reasons.dispose(); }
+  });
   it('lets read-only scoped operators expand details without permitting edits', async () => {
     const { api } = setup(permission => permission === 'config.read.inbounds');
     requiredInstance(document.querySelector('.config-tab[data-section="main"]'), HTMLButtonElement).disabled = true;

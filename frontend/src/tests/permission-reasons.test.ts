@@ -43,19 +43,11 @@ describe('permission explanations', () => {
     expect(button.title).toBe('Required code.delete');
     expect(button.nextElementSibling?.textContent).toBe('Required code.delete');
   });
-  it('places config explanations before controls and outside password and checkbox wrappers', () => {
-    document.body.innerHTML = '<div id="tab-config"><div class="config-box"><input readonly title="Missing config.write.main permission"><div class="config-pass"><input readonly title="Missing config.write.main permission"><button>show</button></div><label><input type="checkbox" disabled title="Missing config.write.main permission"><span class="track"></span></label></div></div><div id="configEditorOverlay"><input readonly title="Missing config.write.panels permission"></div>';
+  it('does not add individual explanations to config controls or options', () => {
+    document.body.innerHTML = '<div id="tab-config"><input readonly title="Missing config.write.main permission"><button disabled title="Missing config.write.main permission"></button><select><option disabled title="Missing config.read.panels permission"></option></select></div><div id="configEditorOverlay"><input readonly title="Missing config.write.panels permission"></div>';
     dispose = initPermissionReasons(document, t).dispose;
-    const controls = document.querySelectorAll<HTMLInputElement>('#tab-config input, #configEditorOverlay input');
-    controls.forEach(control => {
-      const anchor = control.closest('.config-pass, label') ?? control;
-      const reason = required(anchor.previousElementSibling);
-      expect(reason.className).toBe('permission-reason');
-      expect(reason.textContent).toBe(control.title);
-      expect(control.getAttribute('aria-describedby')).toBe(reason.id);
-    });
-    expect(document.querySelector('.config-pass .permission-reason')).toBeNull();
-    expect(document.querySelector('label .permission-reason')).toBeNull();
+    expect(document.querySelector('#tab-config .permission-reason')).toBeNull();
+    expect(document.querySelector('#configEditorOverlay .permission-reason')).toBeNull();
   });
   it('omits root protection and users table permission explanations without suppressing other reasons', async () => {
     document.body.innerHTML = '<div id="usersTableWrap"><button disabled title="Missing user.delete permission"></button></div><div id="auth"><button disabled title="auth_root_protected"></button></div><div class="toolbar"><button disabled title="Missing health.sync permission"></button><button>next</button></div>';

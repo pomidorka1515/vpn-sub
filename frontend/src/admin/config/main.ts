@@ -87,7 +87,7 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
   }
 
   function boxHtml(key: string): string {
-    if (!canAccess(key)) return `<div class="config-box permission-disabled" id="cfg-box-${key.replace('$', '')}"><div class="config-box-label">${escapeHtml(t('config_field_' + key))}</div><div class="form-hint">${escapeHtml(t('permission_missing').replace('{permission}', '*'))}</div></div>`;
+    if (!canAccess(key)) return `<div class="config-box permission-disabled" id="cfg-box-${key.replace('$', '')}"><div class="config-box-label">${escapeHtml(t('config_field_' + key))}</div></div>`;
     const data = draft();
     const present = Object.prototype.hasOwnProperty.call(data, key);
     const optional = OPTIONAL_KEYS.includes(key);

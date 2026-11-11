@@ -28,7 +28,7 @@ const api = (method: string, path: string, body?: unknown) => context.api(method
 const toast = (message: string, kind: string): void => { context.toast(message, kind); };
 const confirmDialog = (message: string, title: string) => context.confirm(message, title);
 export function initConfig(env: AdminContext, language: string): void { context = env; pageLanguage = language; disposed = false; generation++; cleanupCards = initCards(); }
-export function setConfigLanguage(language: string): void { pageLanguage = language; }
+export function setConfigLanguage(language: string): void { pageLanguage = language; if (editor.fetched) updatePermissionNotice(); }
 function required(id: string): HTMLElement {
   const result = document.getElementById(id);
   if (!result) throw new Error(sharedMessage('missing_element', { id }));
@@ -38,6 +38,17 @@ function configButton(id: string): HTMLButtonElement {
   const result = required(id);
   if (!(result instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id }));
   return result;
+}
+
+function updatePermissionNotice(): void {
+  const notice = required('configPermissionNotice');
+  const missing = ['main', 'inbounds', 'panels'].flatMap(section => {
+    if (!can('config.read.' + section)) return ['config.read.' + section];
+    return can('config.write.' + section) ? [] : ['config.write.' + section];
+  });
+  if (!can('*') && can('config.read.main')) missing.push('*');
+  notice.textContent = missing.length ? t('permission_missing').replace('{permission}', missing.join(' / ')) : '';
+  notice.hidden = missing.length === 0;
 }
 
 const { renderMain } = createMainEditor(markDirty, t, key => !ROOT_CONFIG_KEYS.has(key) || can('*'));
@@ -253,6 +264,7 @@ async function loadConfig(force: boolean): Promise<void> {
   required('config-pane-panels').innerHTML = '';
   editor.etag = res.etag || '';
   editor.fetched = true;
+  updatePermissionNotice();
   editor.conflict = false;
   editor.open.inbounds.clear();
   editor.open.panels.clear();

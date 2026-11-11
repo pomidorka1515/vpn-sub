@@ -25,9 +25,10 @@ export function initPermissionReasons(doc: Document, t: Translate) {
     if (stopped) return;
     const next = new Map<HTMLElement, string>();
     doc.querySelectorAll<HTMLElement>('button[disabled][title], input[disabled][title], input[readonly][title], textarea[readonly][title], select[disabled][title]').forEach(target => {
-      if (isReason(target.title) && (!target.closest('#usersTableWrap') || target.title === t('no_panels'))) next.set(target, target.title);
+      if (!target.closest('#tab-config, #configEditorOverlay') && isReason(target.title) && (!target.closest('#usersTableWrap') || target.title === t('no_panels'))) next.set(target, target.title);
     });
     doc.querySelectorAll<HTMLSelectElement>('select').forEach(select => {
+      if (select.closest('#tab-config, #configEditorOverlay')) return;
       const messages = [...new Set([...select.options].filter(option => option.disabled && isReason(option.title) && (!select.closest('#usersTableWrap') || option.title === t('no_panels'))).map(option => option.title))];
       if (messages.length) next.set(select, [next.get(select), ...messages].filter(Boolean).join(' · '));
     });
@@ -38,9 +39,8 @@ export function initPermissionReasons(doc: Document, t: Translate) {
         reason = doc.createElement('span');
         do { reason.id = 'permission-reason-' + String(++nextId); } while (doc.getElementById(reason.id));
         reason.className = 'permission-reason';
-        const inConfig = !!target.closest('#tab-config, #configEditorOverlay');
-        const anchor = (inConfig ? target.closest('.config-pass') : null) ?? target.closest('label') ?? target;
-        anchor.insertAdjacentElement(inConfig ? 'beforebegin' : 'afterend', reason);
+        const anchor = target.closest('label') ?? target;
+        anchor.insertAdjacentElement('afterend', reason);
         const described = (target.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
         described.push(reason.id);
         target.setAttribute('aria-describedby', described.join(' '));
