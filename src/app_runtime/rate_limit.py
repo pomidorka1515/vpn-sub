@@ -61,7 +61,8 @@ if count < limit then
   redis.call('EXPIRE', key, ttl)
   return 1
 end
-return 0
+local oldest = redis.call('ZRANGE', key, count - limit, count - limit, 'WITHSCORES')
+return -math.max(1, math.ceil(tonumber(oldest[2]) + window - now))
 """
 
 log = Logger("rate_limit")
@@ -151,28 +152,30 @@ class AsyncRateLimiter:
         )
 
     async def allow(self, scope: str, key: str, max_requests: int) -> bool:
+        return await self.retry_after(scope, key, max_requests) == 0
+
+    async def retry_after(self, scope: str, key: str, max_requests: int) -> int:
         """Use Redis wall time: forward jumps age entries; backward jumps restart future entries.
 
+        Return 0 when admitted, otherwise the number of seconds until a slot opens.
         Denials do not refresh expiry, except when rebasing after a backward jump.
         Redis key expiry itself also follows its wall clock.
         """
         if self._script is None:
             raise RuntimeError("Redis limiter has not started")
-        return (
-            int(
-                await self._script(
-                    keys=(f"ratelimit:{scope}:{key}",),
-                    args=(
-                        0.0,
-                        _RATE_LIMIT_WINDOW,
-                        secrets.token_hex(16),
-                        max_requests,
-                        int(_RATE_LIMIT_WINDOW),
-                    ),
+        result = int(
+            await self._script(
+                keys=(f"ratelimit:{scope}:{key}",),
+                args=(
+                    0.0,
+                    _RATE_LIMIT_WINDOW,
+                    secrets.token_hex(16),
+                    max_requests,
+                    int(_RATE_LIMIT_WINDOW),
                 ),
-            )
-            == 1
+            ),
         )
+        return 0 if result == 1 else -result
 
     async def close(self) -> None:
         self._script = None

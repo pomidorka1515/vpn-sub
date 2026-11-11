@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -37,7 +38,7 @@ class RedisStore:
             events = self.events.setdefault(keys[0], [])
             events[:] = [min(stamp, now) for stamp in events if stamp > now - window]
             if len(events) >= limit:
-                return 0
+                return -max(1, math.ceil(sorted(events)[len(events) - limit] + window - now))
             events.append(now)
             return 1
 
@@ -58,11 +59,11 @@ async def test_shared_windows_scope_ip_and_expiry() -> None:
     await first.start()
     await second.start()
     assert await first.allow("route", "ip", 1)
-    assert not await second.allow("route", "ip", 1)
+    assert await second.retry_after("route", "ip", 1) == 60
     assert await second.allow("other", "ip", 1)
     assert await second.allow("route", "other-ip", 1)
     store.now = 159.999
-    assert not await second.allow("route", "ip", 1)
+    assert await second.retry_after("route", "ip", 1) == 1
     store.now = 160
     assert await second.allow("route", "ip", 1)
     await first.close()
@@ -93,10 +94,14 @@ async def test_failure_is_fail_closed() -> None:
     handler.limiter = limiter
     async with app.test_request_context("/test"):  # pyright: ignore[reportUnknownMemberType]  # Upstream auth parameter is untyped.
         assert (await handler.endpoint())[1] == 200
-        assert (await handler.endpoint())[1] == 429
+        response, status = await handler.endpoint()
+        assert status == 429
+        assert response.headers["Retry-After"] == "60"
     store.failed = True
     async with app.test_request_context("/test"):  # pyright: ignore[reportUnknownMemberType]  # Upstream auth parameter is untyped.
-        assert (await handler.endpoint())[1] == 429
+        response, status = await handler.endpoint()
+        assert status == 429
+        assert "Retry-After" not in response.headers
     await limiter.close()
 
 
@@ -166,7 +171,13 @@ async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPa
     try:
         for index in range(60):
             assert (await client.get(f"/sub?token={index}")).status_code == 200
-        assert (await client.get("/sub/")).status_code == 429
+        response = await client.get("/sub/")
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == "60"
+        store.now = 159.999
+        response = await client.get("/sub")
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == "1"
         assert builder.await_count == 60
         assert (
             await client.get("/sub", scope_base={"client": ("other-ip", 1234)})
@@ -174,7 +185,9 @@ async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPa
         store.now = 160
         assert (await client.get("/sub")).status_code == 200
         store.failed = True
-        assert (await client.get("/sub")).status_code == 429
+        response = await client.get("/sub")
+        assert response.status_code == 429
+        assert "Retry-After" not in response.headers
         assert builder.await_count == 62
     finally:
         await limiter.close()

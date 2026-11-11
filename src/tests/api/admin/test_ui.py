@@ -298,13 +298,14 @@ async def test_admin_logout_is_rate_limited(
     admin = app.test_client()
     await sign_in(admin)
     session = await sub.res.db.admin_ui_session()
-    allow = AsyncMock(side_effect=[True] * 10 + [False])
-    monkeypatch.setattr(app.extensions["limiter"], "allow", allow)
+    allow = AsyncMock(side_effect=[0] * 10 + [60])
+    monkeypatch.setattr(app.extensions["limiter"], "retry_after", allow)
     attacker = app.test_client()
     for _ in range(10):
         assert (await attacker.post("/sub/admin/logout")).status_code == 401
     response = await attacker.post("/sub/admin/logout")
     assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
     assert response.headers["Cache-Control"] == "no-store"
     assert allow.await_count == 11
     for call in allow.await_args_list:
@@ -323,12 +324,13 @@ async def test_admin_auth_rate_limit_responses_are_not_stored(
     store_failed: bool,
 ) -> None:
     app, _ = admin_api
-    allow = AsyncMock(return_value=False, side_effect=RuntimeError() if store_failed else None)
-    monkeypatch.setattr(app.extensions["limiter"], "allow", allow)
+    allow = AsyncMock(return_value=60, side_effect=RuntimeError() if store_failed else None)
+    monkeypatch.setattr(app.extensions["limiter"], "retry_after", allow)
 
     response = await app.test_client().post(f"/sub/admin/{endpoint}")
 
     assert response.status_code == 429
+    assert response.headers.get("Retry-After") == (None if store_failed else "60")
     assert response.headers["Cache-Control"] == "no-store"
 
 

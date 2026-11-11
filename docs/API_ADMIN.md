@@ -5,6 +5,7 @@ Authentication: `Authorization` header with the independent root machine token (
 Scoped authorization is additive: existing config credentials remain non-deletable `*` roots. See [PERMISSIONS.md](PERMISSIONS.md) for the complete catalog, route mapping, account/key management endpoints, read prerequisites, delegation limits, and the explicitly root-only Telegram/Discord boundary. Missing permission returns HTTP 403 with `obj.required_permission`; existing 401/429/503 authentication behavior is unchanged.  
 `api_token` must contain at least 20 characters; use a randomly generated token. Existing shorter tokens must be replaced before loading or saving configuration.  
 Missing or incorrect tokens count toward a shared per-client-IP limit across all admin API routes: 10 failures within 5 minutes trigger a 15-minute lockout. Failures return `401`; the triggering attempt and subsequent attempts (including valid tokens) return `429` with `Retry-After` seconds. Blocked requests do not extend the lockout. Successful authentication clears pending failures. Redis stores the counters and lockouts; authentication returns `503` if that store is unavailable. Client IPs use the configured trusted-proxy handling.  
+Rate-limited admin browser routes return `429` with `Retry-After` seconds when the limit is exceeded; if the rate-limit store fails, they return `429` without that header.  
 On failure, returns HTTP 401.  
   
 ## Root URI  

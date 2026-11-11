@@ -107,15 +107,37 @@ async def test_redis_clock_discontinuities_rebase_and_expire_atomically(
     assert await allow(1_000, 500_000, "a") == 1
     assert await allow(1_001, 0, "b") == 1
     await client.expire(key, 5)
-    assert await allow(900, 250_000, "denied") == 0
+    assert await allow(900, 250_000, "denied") == -60
     assert await client.zcard(key) == 2
     assert await client.zscore(key, "a") == 900.25
     assert await client.zscore(key, "b") == 900.25
     assert await client.ttl(key) > 5
     await client.expire(key, 5)
-    assert await allow(960, 249_999, "still-denied") == 0
+    assert await allow(960, 249_999, "still-denied") == -1
     assert 0 < await client.ttl(key) <= 5
     assert await allow(960, 250_000, "c") == 1
     assert await allow(10_000, 0, "d") == 1
     assert await client.zcard(key) == 1
     assert await client.zscore(key, "d") == 10_000.0
+
+
+@pytest.mark.asyncio
+async def test_retry_delay_tracks_next_available_slot(
+    redis_store: tuple[AsyncRateLimiter, Redis],
+) -> None:
+    _, client = redis_store
+    clock_call = "local clock = redis.call('TIME')"
+    script = client.register_script(
+        _RATE_LIMIT_SCRIPT.replace(clock_call, "local clock = {ARGV[6], ARGV[7]}")
+    )
+    key = "ratelimit:route:delays"
+
+    async def check(seconds: int, micros: int, member: str, limit: int = 2) -> int:
+        return int(await script(keys=[key], args=[0, 60, member, limit, 60, seconds, micros]))
+
+    assert await check(100, 250_000, "a") == 1
+    assert await check(110, 500_000, "b") == 1
+    assert await check(115, 0, "denied") == -46
+    assert await check(115, 0, "lower-limit", limit=1) == -56
+    assert await check(160, 249_999, "almost") == -1
+    assert await check(160, 250_000, "admitted") == 1

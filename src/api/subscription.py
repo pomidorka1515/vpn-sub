@@ -24,12 +24,16 @@ def register_subscription_route(app: Quart, sub: Subscription, limiter: AsyncRat
     @app.route(f"/{uri}", strict_slashes=False)
     async def subscription() -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction]
         try:
-            allowed = await limiter.allow("subscription", request.remote_addr or "<unknown>", 60)
+            retry_after = await limiter.retry_after(
+                "subscription", request.remote_addr or "<unknown>", 60
+            )
         except Exception:
             log.error("rate limit store failed")  # ruff: ignore[error-instead-of-exception] credentials may occur in exception text
             return err("Too many requests.", 429)
-        if not allowed:
-            return err("Too many requests.", 429)
+        if retry_after:
+            response, status = err("Too many requests.", 429)
+            response.headers["Retry-After"] = str(retry_after)
+            return response, status
         return await get_subscription(
             sub,
             token=request.args.get("token", ""),

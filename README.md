@@ -121,7 +121,11 @@ default port, not something this app chooses:
 ```
 
 Start Redis before the HTTP service. If Redis dies later, rate-limited routes
-return 429.
+return 429 without `Retry-After` because recovery time is unknown. When a
+sliding-window limit is exceeded, HTTP 429 includes `Retry-After` in seconds
+until a slot opens (rounded up); another request may consume it first. Admin
+authentication lockouts also return 429 with `Retry-After` in seconds, while
+authentication store failures return 503.
 
 ### 3x-ui panel auth
 
@@ -394,7 +398,7 @@ Discord starts and stops with the main systemd unit.
 - One Hypercorn serving process and one event loop. A file lock  
   (`<DIR_RUNTIME>/.primary.lock`) rejects secondary instances. Single-node design.  
 - Local Redis is required. If it dies after startup, rate-limited routes fail
-  closed with 429.
+  closed with 429 and no `Retry-After`.
 - Not highly available. Panel, database, and bots all live on the same box. A
   dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`).

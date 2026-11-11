@@ -680,7 +680,7 @@ async def test_browser_subscription_navigation(
         template_folder=str(TEMPLATE_DIR),
     )
     limiter = MagicMock(spec=AsyncRateLimiter)
-    limiter.allow = AsyncMock(return_value=True)
+    limiter.retry_after = AsyncMock(return_value=0)
     register_subscription_route(app, subscription, limiter)
     client = app.test_client()
     if cookie:

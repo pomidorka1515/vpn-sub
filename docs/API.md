@@ -32,13 +32,14 @@ Missing authorization:
 ```  
 Rate limiting:  
 Every `Rate limit` field in routes are in requests / min.  
-Limits apply per route and client IP; rate-limit store failures also return HTTP 429.  
+Limits apply per route and client IP in a sliding one-minute window. A limit-exceeded response includes `Retry-After` with the number of seconds until a slot opens, rounded up. Concurrent requests may consume that slot first. The subscription endpoint uses the same behavior.  
+Rate-limit store failures also return HTTP 429, but without `Retry-After` because the recovery time is unknown.  
 Response:  
 ```jsonc  
 // HTTP 429  
 {  
     "success": false,  
-    "msg": "429 Too many requests",  
+    "msg": "Too many requests.",  
     "obj": null  
 }  
 ```  
