@@ -63,10 +63,16 @@ describe('user authentication', () => {
   it('validates password confirmation and falls back to login if automatic login fails', async () => {
     const { request, field, click, navigate } = setup();
     click('tabRegister');
+    vi.useFakeTimers();
+    field('regCode').value = 'invite';
+    request.mockResolvedValueOnce(Response.json({ success: true, obj: { valid: true } }));
+    field('regCode').dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(400);
+    vi.useRealTimers();
     field('regUser').value = 'alice'; field('regPass').value = 'secret'; field('regPass2').value = 'different';
     click('regBtn');
     expect(required(document.getElementById('authError')).textContent).toBe('passwords_not_match');
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(2);
     field('regPass2').value = 'secret'; field('regCode').value = 'invite'; field('regName').value = 'Alice';
     request.mockResolvedValueOnce(Response.json({ success: true })).mockRejectedValueOnce(new Error('offline'));
     click('regBtn');
@@ -74,21 +80,105 @@ describe('user authentication', () => {
     expect(field('loginUser').value).toBe('alice');
     expect(required(document.getElementById('loginForm')).style.display).toBe('block');
     expect(navigate).not.toHaveBeenCalled();
-    expect(request).toHaveBeenNthCalledWith(2, '/sub/webapi/register', expect.objectContaining({ body: JSON.stringify({ username: 'alice', password: 'secret', code: 'invite', name: 'Alice' }) }));
+    expect(request).toHaveBeenNthCalledWith(3, '/sub/webapi/register', expect.objectContaining({ body: JSON.stringify({ username: 'alice', password: 'secret', code: 'invite', name: 'Alice' }) }));
   });
   it('ignores an outdated username validation response', async () => {
     const { request, field } = setup();
     vi.useFakeTimers();
+    request.mockResolvedValueOnce(Response.json({ success: true, obj: { valid: true } }));
+    field('regCode').value = 'invite'; field('regCode').dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(400);
     let resolve!: (response: Response) => void;
     request.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
     field('regUser').value = 'old&name'; field('regUser').dispatchEvent(new Event('input'));
     await vi.advanceTimersByTimeAsync(400);
-    expect(request).toHaveBeenLastCalledWith('/sub/webapi/validate?username=old%26name', expect.anything());
+    expect(request).toHaveBeenLastCalledWith('/sub/webapi/validate?username=old%26name&code=invite', expect.anything());
     field('regUser').value = '';
     field('regUser').dispatchEvent(new Event('input'));
     resolve(Response.json({ success: true, obj: { valid: true, taken: true } }));
     await vi.advanceTimersByTimeAsync(0);
     expect(required(document.getElementById('usernameHint')).textContent).toBe('');
+  });
+  it('requires a verified code before validating usernames or registering', async () => {
+    const { request, field, click } = setup();
+    vi.useFakeTimers();
+    const register = requiredInstance(document.getElementById('regBtn'), HTMLButtonElement);
+    expect(register.disabled).toBe(true);
+    field('regUser').value = 'alice'; field('regUser').dispatchEvent(new Event('input'));
+    field('regPass').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    click('regBtn');
+    await vi.advanceTimersByTimeAsync(400);
+    expect(request).toHaveBeenCalledTimes(1);
+    request.mockResolvedValueOnce(Response.json({ success: true, obj: { valid: false } }));
+    field('regCode').value = 'bonus'; field('regCode').dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(register.disabled).toBe(true);
+    expect(required(document.getElementById('codeHint')).textContent).toBe('code_invalid');
+    expect(request).toHaveBeenCalledTimes(2);
+    request.mockResolvedValueOnce(Response.json({ success: true, obj: { valid: true } }))
+      .mockResolvedValueOnce(Response.json({ success: true, obj: { valid: true, taken: false } }));
+    field('regCode').value = 'invite&code'; field('regCode').dispatchEvent(new Event('input'));
+    expect(register.disabled).toBe(true);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(request).toHaveBeenLastCalledWith('/sub/webapi/validate-code', expect.objectContaining({ method: 'POST', body: JSON.stringify({ code: 'invite&code' }) }));
+    expect(register.disabled).toBe(false);
+    expect(required(document.getElementById('codeHint')).textContent).toBe('code_valid');
+    await vi.advanceTimersByTimeAsync(400);
+    expect(request).toHaveBeenLastCalledWith('/sub/webapi/validate?username=alice&code=invite%26code', expect.anything());
+    expect(required(document.getElementById('usernameHint')).textContent).toBe('hint_ok');
+    field('regCode').value = ''; field('regCode').dispatchEvent(new Event('input'));
+    expect(register.disabled).toBe(true);
+    expect(required(document.getElementById('usernameHint')).textContent).toBe('');
+    expect(required(document.getElementById('codeHint')).textContent).toBe('code_required');
+  });
+  it('ignores stale code and username results after the code changes', async () => {
+    const { request, field } = setup();
+    vi.useFakeTimers();
+    let resolveCode!: (response: Response) => void;
+    request.mockImplementationOnce(() => new Promise(done => { resolveCode = done; }));
+    field('regCode').value = 'old'; field('regCode').dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(400);
+    field('regCode').value = 'new'; field('regCode').dispatchEvent(new Event('input'));
+    resolveCode(Response.json({ success: true, obj: { valid: true } }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(requiredInstance(document.getElementById('regBtn'), HTMLButtonElement).disabled).toBe(true);
+    request.mockResolvedValueOnce(Response.json({ success: true, obj: { valid: true } }));
+    await vi.advanceTimersByTimeAsync(400);
+    let resolveUsername!: (response: Response) => void;
+    request.mockImplementationOnce(() => new Promise(done => { resolveUsername = done; }));
+    field('regUser').value = 'alice'; field('regUser').dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(400);
+    field('regCode').value = ''; field('regCode').dispatchEvent(new Event('input'));
+    resolveUsername(Response.json({ success: true, obj: { valid: true, taken: true } }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(required(document.getElementById('usernameHint')).textContent).toBe('');
+    expect(requiredInstance(document.getElementById('regBtn'), HTMLButtonElement).disabled).toBe(true);
+  });
+  it.each([
+    () => Promise.reject(new Error('offline')),
+    () => Promise.resolve(Response.json({ success: true, obj: { valid: true } }, { status: 503 })),
+    () => Promise.resolve(Response.json({ success: true, obj: {} })),
+  ])('fails closed when the code check fails', async response => {
+    const { request, field } = setup();
+    vi.useFakeTimers();
+    request.mockImplementationOnce(response);
+    field('regCode').value = 'invite'; field('regCode').dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(requiredInstance(document.getElementById('regBtn'), HTMLButtonElement).disabled).toBe(true);
+    expect(required(document.getElementById('codeHint')).textContent).toBe('code_check_failed');
+  });
+  it('discards pending code checks on disposal', async () => {
+    const { request, field } = setup();
+    vi.useFakeTimers();
+    let resolve!: (response: Response) => void;
+    request.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    field('regCode').value = 'invite'; field('regCode').dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(400);
+    dispose?.();
+    resolve(Response.json({ success: true, obj: { valid: true } }));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(requiredInstance(document.getElementById('regBtn'), HTMLButtonElement).disabled).toBe(true);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
 

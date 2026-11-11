@@ -43,6 +43,7 @@
     <div class="form-group">
       <label data-t="invite_code"></label>
       <input type="text" id="regCode" spellcheck="false" maxlength="64">
+      <div class="username-hint" id="codeHint" role="status" aria-live="polite"></div>
     </div>
     <div class="form-group">
       <label data-t="username"></label>
@@ -67,7 +68,7 @@
         <button class="pass-toggle" data-password="regPass2" type="button" data-t-aria="toggle_password"></button>
       </div>
     </div>
-    <button class="btn btn-primary" id="regBtn" data-t="create_account"></button>
+    <button class="btn btn-primary" id="regBtn" data-t="create_account" disabled></button>
   </div>
 </div>
 </div>

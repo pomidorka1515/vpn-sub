@@ -14,6 +14,36 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action", "permanent", "uses", "valid"),
+    [
+        ("register", False, 1, True),
+        ("register", True, -1, True),
+        ("register", False, 0, False),
+        ("bonus", False, 1, False),
+        ("bonus", True, -1, False),
+    ],
+)
+async def test_registration_code_validation_is_read_only(
+    database: Database,
+    subscription: Subscription,
+    action: str,
+    uses: int,
+    *,
+    permanent: bool,
+    valid: bool,
+) -> None:
+    await database.add_code("invite", action, permanent=permanent, uses=uses)
+    before = await database.get_code("invite")
+    for _ in range(2):
+        assert await subscription.code_svc.is_registration_code_valid("invite") is valid
+        assert await database.get_code("invite") == before
+    assert not await subscription.code_svc.is_registration_code_valid("missing")
+    assert not await subscription.code_svc.is_registration_code_valid("")
+    assert not await subscription.code_svc.is_registration_code_valid("x" * 65)
+
+
+@pytest.mark.asyncio
 async def test_add_code_rejects_unknown_action(subscription: Subscription) -> None:
     with pytest.raises(ValidationError):
         (await subscription.code_svc.add_code("invite", "gift"))

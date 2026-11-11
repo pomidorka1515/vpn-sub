@@ -205,7 +205,7 @@ export function initDashboard(doc: Document = document, win: Window = window): (
     if (!v) { h.textContent = ''; h.className = 'username-hint'; return; }
     svt = schedule(() => { void (async () => {
       try {
-        const res = await api('GET', `/validate?username=${encodeURIComponent(v)}`);
+        const res = await api('GET', `/settings/validate?username=${encodeURIComponent(v)}`);
         if (disposed || gen !== settingsValidationGen || input('setUser').value.trim() !== v) return;
         if (!res) return;
         if (res.success && isRecord(res.obj) && typeof res.obj['valid'] === 'boolean' && typeof res.obj['taken'] === 'boolean' && typeof res.obj['sanitized'] === 'string') {

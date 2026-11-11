@@ -184,7 +184,7 @@ describe('dashboard page', () => {
     request.mockImplementationOnce(() => new Promise(done => { resolve = done; }))
       .mockResolvedValueOnce(ok({ valid: true, taken: true, sanitized: 'new' }));
     input('setUser').value = 'old'; input('setUser').dispatchEvent(new Event('input'));
-    await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('/sub/webapi/validate?username=old', expect.anything()); }, { timeout: 1500 });
+    await vi.waitFor(() => { expect(request).toHaveBeenCalledWith('/sub/webapi/settings/validate?username=old', expect.anything()); }, { timeout: 1500 });
     input('setUser').value = 'new'; input('setUser').dispatchEvent(new Event('input'));
     resolve(ok({ valid: false, taken: false, sanitized: 'old' }));
     await vi.waitFor(() => { expect(required(document.getElementById('setUserHint')).textContent).toBe('hint_taken'); }, { timeout: 1500 });

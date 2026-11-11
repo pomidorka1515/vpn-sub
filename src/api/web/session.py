@@ -32,6 +32,8 @@ class AsyncSessionRoutes(AsyncWebApiMixin):
         Route("POST", "/webapi/logout", "logout", 20),
         Route("POST", "/webapi/delete", "delete", 3),
         Route("GET", "/webapi/validate", "validate_username", 80),
+        Route("POST", "/webapi/validate-code", "validate_registration_code", 20),
+        Route("GET", "/webapi/settings/validate", "validate_settings_username", 80),
     )
 
     async def validate_auth_token(self, auth_token: str | None = None) -> str | None:
@@ -54,6 +56,21 @@ class AsyncSessionRoutes(AsyncWebApiMixin):
         return await self.sub.password_svc.validate_credentials(username, password) or False
 
     async def validate_username(self) -> ResponseType:
+        """Check usernames only for holders of an available registration code."""
+        if not await self.sub.code_svc.is_registration_code_valid(request.args.get("code", "")):
+            return err("Invalid code", 403)
+        return await self._validate_username()
+
+    @requires_fields_strict(("code", str))
+    async def validate_registration_code(self) -> ResponseType:
+        valid = await self.sub.code_svc.is_registration_code_valid(g.json_obj["code"])
+        return ok(obj={"valid": valid})
+
+    @requires_webapi_auth
+    async def validate_settings_username(self, _username: str) -> ResponseType:
+        return await self._validate_username()
+
+    async def _validate_username(self) -> ResponseType:
         """Check if a username is valid (no illegal chars)."""
         raw = request.args.get("username", None)
         if not raw:

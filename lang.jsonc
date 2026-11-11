@@ -631,6 +631,11 @@
                 "display_name": "Display name",
 
                 // validation
+                "code_required": "Enter a valid invite code to continue",
+                "code_checking": "Checking invite code...",
+                "code_valid": "Invite code is valid",
+                "code_invalid": "Invalid or exhausted invite code",
+                "code_check_failed": "Could not check the invite code. Edit it to try again.",
                 "passwords_not_match": "Passwords do not match",
                 "account_created_login_failed": "Account created. Please sign in manually: "
             },
@@ -652,6 +657,11 @@
                 "display_name": "Отображаемое имя",
 
                 // validation
+                "code_required": "Для продолжения введите действительный код приглашения",
+                "code_checking": "Проверка кода приглашения...",
+                "code_valid": "Код приглашения действителен",
+                "code_invalid": "Код приглашения неверен или исчерпан",
+                "code_check_failed": "Не удалось проверить код приглашения. Измените его, чтобы повторить попытку.",
                 "passwords_not_match": "Пароли не совпадают",
                 "account_created_login_failed": "Аккаунт создан. Войдите вручную: "
             }

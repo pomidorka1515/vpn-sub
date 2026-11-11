@@ -50,6 +50,13 @@ class CodeService(BaseService):
             wl_gb=result["wl_gb"],
         )
 
+    async def is_registration_code_valid(self, code: str) -> bool:
+        """Check availability without reserving or consuming a registration code."""
+        if not 1 <= len(code) <= 64:
+            return False
+        result = await self.db.get_code(code)
+        return result is not None and result["action"] == "register"
+
     @user_mutation
     async def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject:
         if not isinstance(code, str) or not code:

@@ -4,7 +4,7 @@ import json
 import re
 import uuid
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -275,12 +275,13 @@ async def test_validate_username_sanitization(
     taken: bool,
     sanitized: str,
 ) -> None:
+    await web_api[1].add_code("invite", "register")
     response = (
         await web_api[0]
         .test_client()
         .get(
             "/custom/webapi/validate",
-            query_string={"username": username},
+            query_string={"username": username, "code": "invite"},
         )
     )
     assert response.status_code == 200
@@ -291,6 +292,80 @@ async def test_validate_username_sanitization(
         "taken": taken,
         "sanitized": sanitized,
     }
+    invite = await web_api[1].get_code("invite")
+    assert invite is not None
+    assert invite["uses"] == 1
+
+
+@pytest.mark.parametrize("code", [None, "", "missing", "bonus", "exhausted", "x" * 65])
+async def test_username_validation_rejects_invalid_code_before_lookup(
+    web_api: tuple[Quart, Database], code: str | None
+) -> None:
+    app, db = web_api
+    await db.add_code("bonus", "bonus")
+    await db.add_code("exhausted", "register", uses=0)
+    sub = app.extensions["subscriptions"][0]
+    query = {"username": "alice-login"}
+    if code is not None:
+        query["code"] = code
+    with patch.object(sub.user_svc, "external_username_exists", new_callable=AsyncMock) as lookup:
+        response = await app.test_client().get("/custom/webapi/validate", query_string=query)
+        assert response.status_code == 403
+        assert (await response.get_json())["success"] is False
+        lookup.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("code", "valid"),
+    [
+        ("invite", True),
+        ("permanent", True),
+        ("bonus", False),
+        ("exhausted", False),
+        ("missing", False),
+        ("", False),
+        ("x" * 65, False),
+    ],
+)
+async def test_validate_registration_code_does_not_consume(
+    web_api: tuple[Quart, Database], code: str, *, valid: bool
+) -> None:
+    app, db = web_api
+    await db.add_code("invite", "register")
+    await db.add_code("permanent", "register", permanent=True)
+    await db.add_code("bonus", "bonus")
+    await db.add_code("exhausted", "register", uses=0)
+    before = await db.get_code(code)
+    for _ in range(2):
+        response = await app.test_client().post("/custom/webapi/validate-code", json={"code": code})
+        assert response.status_code == 200
+        assert (await response.get_json())["obj"] == {"valid": valid}
+        assert await db.get_code(code) == before
+
+
+@pytest.mark.parametrize("body", [{}, {"code": None}, {"code": 123}, {"code": []}])
+async def test_validate_code_requires_string(
+    web_api: tuple[Quart, Database], body: dict[str, object]
+) -> None:
+    response = await web_api[0].test_client().post("/custom/webapi/validate-code", json=body)
+    assert response.status_code == 400
+
+
+async def test_settings_validation_requires_live_session(web_api: tuple[Quart, Database]) -> None:
+    app, db = web_api
+    client = app.test_client()
+    path = "/custom/webapi/settings/validate?username=alice-login"
+    assert (await client.get(path)).status_code == 401
+    await db.set_auth_token("alice", "a" * 100)
+    client.set_cookie("localhost", "auth_token", "a" * 100)
+    response = await client.get(path)
+    assert response.status_code == 200
+    assert (await response.get_json())["obj"]["taken"] is True
+    # A session is not a substitute for a code on the registration endpoint.
+    assert (await client.get("/custom/webapi/validate?username=alice-login")).status_code == 403
+    async with db.transaction(immediate=True) as conn:
+        await conn.execute("UPDATE users SET auth_token_expires_at = 1 WHERE username = 'alice'")
+    assert (await client.get(path)).status_code == 401
 
 
 async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None:
