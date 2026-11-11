@@ -99,13 +99,12 @@ async def test_page_script_routes_and_error_context(
     templates = common.RES_DIR / "templates"
     shutil.copytree(templates, tmp_path / "templates")
     assets = tmp_path / "assets"
-    (assets / "admin").mkdir(parents=True)
+    assets.mkdir()
     names = (
         "auth.js",
         "admin-auth.js",
         "dashboard.js",
         "history.js",
-        "admin/main.js",
         "error.js",
         "redirect.js",
     )
@@ -207,6 +206,7 @@ async def test_generated_resources_served_at_configured_prefix(
             assert body.startswith(b"wOF2")
 
         for url in (
+            f"{prefix}/admin/main.js",
             f"{prefix}/admin/config/state.js",
             f"{prefix}/frontend/src/templates/auth.html",
             f"{prefix}/vendor/LICENSE_CODEMIRROR",

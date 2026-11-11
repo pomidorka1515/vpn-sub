@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from argon2.exceptions import InvalidHashError, VerificationError
-from quart import Response, g, make_response, redirect, render_template, request
+from quart import Response, g, make_response, redirect, render_template, request, send_file  # pyright: ignore[reportUnknownVariableType]  # Upstream PathLike lacks a type argument.
 
 from admin_permissions import PERMISSIONS, prerequisite
 from api.admin._base import AsyncAdminApiMixin
-from api.common import asset_version, web_lang_tables
+from api.common import RES_DIR, asset_version, web_lang_tables
 from api.decorators.auth import (
     ADMIN_UI_COOKIE,
     ADMIN_UI_SESSION_LEN,
@@ -35,6 +35,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         prefix = "/" + "/".join(p.strip("/ ") for p in (conf["uri"],) if p and p.strip("/ "))
         for path, handler in (
             ("/admin", "admin_ui"),
+            ("/admin/main.js", "admin_js"),
             ("/admin/token", "admin_token"),
             ("/admin/login", "admin_login_page"),
             ("/admin/session", "admin_session"),
@@ -50,7 +51,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
 
     async def _admin_auth_no_store(self, response: Response) -> Response:
         # Apply after error handling too, including rate-limit and storage failures.
-        if request.endpoint in {"admin_token", "admin_session", "admin_logout"} or (
+        if request.endpoint in {"admin_js", "admin_token", "admin_session", "admin_logout"} or (
             request.endpoint or ""
         ).startswith("auth_"):
             response.headers["Cache-Control"] = "no-store"
@@ -74,6 +75,16 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
         if request.args.get("lang", "").lower() in {"en", "ru"}:
             response.set_cookie("lang", lang, max_age=31536000, samesite="Lax", path="/")
         return response
+
+    async def admin_js(self) -> ResponseType:
+        if not await self._admin_cookie_ok():
+            return err("Unauthorized", 401)
+        return await send_file(
+            RES_DIR / "assets" / "admin" / "main.js",
+            mimetype="text/javascript",
+            add_etags=False,
+            cache_timeout=0,
+        )
 
     async def admin_token(self) -> ResponseType:
         if not await self._admin_cookie_ok():

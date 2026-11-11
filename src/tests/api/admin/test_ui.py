@@ -7,6 +7,7 @@ import pytest
 
 from api import AsyncApi
 from config.store import AsyncLinesConfig
+from paths import frontend_root
 from tests.support.api import Audit, api_app, config_snapshot, make_subscription, make_watch
 from tests.support.config import subscription_config
 
@@ -60,6 +61,48 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
         assert part in body
     for part in (b'id="tabRegister"', b'id="registerForm"', b"const API", b"PANEL + '/'"):
         assert part not in body
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+@pytest.mark.parametrize("cookie", [None, "invalid", "x" * 100])
+async def test_admin_bundle_requires_session(
+    admin_api: tuple[Quart, Subscription], method: str, cookie: str | None
+) -> None:
+    client = admin_api[0].test_client()
+    if cookie is not None:
+        client.set_cookie("localhost", "admin_ui", cookie, path="/sub/admin")
+    request_asset = client.get if method == "GET" else client.head
+    response = await request_asset(
+        "/sub/admin/main.js?v=test",
+        headers={"Authorization": "secret", "If-None-Match": "*"},
+    )
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
+    body = await response.get_data()
+    assert isinstance(body, bytes)
+    assert b"import.meta.url" not in body
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+async def test_admin_bundle_with_session_is_not_stored(
+    admin_api: tuple[Quart, Subscription], method: str
+) -> None:
+    client = admin_api[0].test_client()
+    await sign_in(client)
+    request_asset = client.get if method == "GET" else client.head
+    response = await request_asset("/sub/admin/main.js?v=test")
+    assert response.status_code == 200
+    assert response.mimetype == "text/javascript"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "ETag" not in response.headers
+    body = await response.get_data()
+    assert isinstance(body, bytes)
+    if method == "GET":
+        assert body == (frontend_root() / "assets" / "admin" / "main.js").read_bytes()
+        assert b"import.meta.url" in body
+        assert b"sourceMappingURL" not in body
+        assert b"// src/" not in body
+        assert b"\n" not in body
 
 
 @pytest.mark.parametrize(
@@ -199,6 +242,9 @@ async def test_browser_api_authority_is_session_bound(
     assert response.status_code == 401
     assert response.headers["Cache-Control"] == "no-store"
     assert (await client.get("/sub/api/api/config/get", headers=headers)).status_code == 401
+    response = await client.get("/sub/admin/main.js?v=test", headers={"If-None-Match": "*"})
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
     response = await client.get("/sub/api/api/config/get", headers={"Authorization": "secret"})
     assert response.status_code == 200
     assert (await response.get_json())["obj"]["api_token"] == "secret"
@@ -271,7 +317,7 @@ async def test_admin_auth_rate_limit_responses_are_not_stored(
     assert response.headers["Cache-Control"] == "no-store"
 
 
-@pytest.mark.parametrize("endpoint", ["token", "session", "logout"])
+@pytest.mark.parametrize("endpoint", ["token", "session", "logout", "main.js"])
 async def test_admin_auth_storage_errors_are_not_stored(
     admin_api: tuple[Quart, Subscription],
     monkeypatch: pytest.MonkeyPatch,
@@ -281,11 +327,11 @@ async def test_admin_auth_storage_errors_are_not_stored(
     client = app.test_client()
     await sign_in(client)
     token = await browser_token(client)
-    operation = "admin_ui_session" if endpoint == "token" else "set_admin_ui_session"
+    operation = "admin_ui_session" if endpoint in {"token", "main.js"} else "set_admin_ui_session"
     monkeypatch.setattr(sub.res.db, operation, AsyncMock(side_effect=RuntimeError()))
 
-    if endpoint == "token":
-        response = await client.get("/sub/admin/token")
+    if endpoint in {"token", "main.js"}:
+        response = await client.get(f"/sub/admin/{endpoint}")
     else:
         response = await client.post(
             f"/sub/admin/{endpoint}",
@@ -345,6 +391,9 @@ async def test_admin_empty_uri_contract(
         )
         assert response.status_code == 200
         assert f"Path={panel}" in response.headers["Set-Cookie"]
+        response = await client.get(f"{panel}/main.js")
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
         response = await client.get(f"{panel}/token")
         assert response.status_code == 200
         payload = await response.get_json()

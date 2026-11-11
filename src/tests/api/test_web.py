@@ -331,7 +331,6 @@ async def test_prefixed_pages_embed_uri(web_api: tuple[Quart, Database]) -> None
         ("dashboard.js", "text/javascript", b"_0x"),
         ("history.js", "text/javascript", b"_0x"),
         ("chart.umd.min.js", "text/javascript", b"Chart.js v4.4.1"),
-        ("admin/main.js", "text/javascript", b"import.meta.url"),
         ("vendor/codemirror-5.65.16.min.js", "text/javascript", b"CodeMirror"),
         ("vendor/codemirror-5.65.16.min.css", "text/css", b"CodeMirror"),
     ],
@@ -353,7 +352,7 @@ async def test_prefixed_static_assets(
     }
     for part in extras.get(path, ()):
         assert part in body
-    if path in {"dashboard.js", "history.js", "admin/main.js"}:
+    if path in {"dashboard.js", "history.js"}:
         assert body == (frontend_root() / "assets" / path).read_bytes()
         assert b"sourceMappingURL" not in body
         assert b"// src/" not in body
@@ -377,6 +376,10 @@ async def test_prefixed_static_assets(
     if path.endswith(".woff2"):
         assert body[:4] == b"wOF2"
     assert "immutable" in response.headers["Cache-Control"]
+
+
+async def test_admin_bundle_is_not_a_public_static_asset(web_api: tuple[Quart, Database]) -> None:
+    assert (await web_api[0].test_client().get("/custom/admin/main.js")).status_code == 404
 
 
 @pytest.mark.parametrize(

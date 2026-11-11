@@ -37,7 +37,6 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         Route("GET", "/history.css", "history_css"),
         Route("GET", "/charts.css", "charts_css"),
         Route("GET", "/admin.css", "admin_css"),
-        Route("GET", "/admin/main.js", "admin_js"),
         Route("GET", "/dashboard.js", "dashboard_js"),
         Route("GET", "/history.js", "history_js"),
         Route("GET", "/chart.umd.min.js", "chart_js"),
@@ -133,9 +132,6 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
 
     async def admin_css(self) -> ResponseType:
         return await self._static("admin.css", "text/css")
-
-    async def admin_js(self) -> ResponseType:
-        return await self._static("admin/main.js", "text/javascript")
 
     async def dashboard_js(self) -> ResponseType:
         return await self._static("dashboard.js", "text/javascript")
