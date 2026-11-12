@@ -189,6 +189,41 @@ describe('admin permission model', () => {
   });
 });
 describe('admin identity dialogs', () => {
+  it.each(['accounts', 'tokens'] as const)('summarizes grant restrictions in the %s create and edit dialogs', async kind => {
+    const grants = ['auth.read.accounts', 'auth.create.accounts', 'auth.update.accounts', 'auth.read.tokens', 'auth.create.tokens', 'auth.update.tokens', 'user.read'];
+    const t = (key: string) => key === 'permission_missing' ? 'Missing {permission} permission' : key;
+    const { api, state } = setup(grants, t);
+    const reasons = initPermissionReasons(document, t);
+    try {
+      const notice = required(document.getElementById('authGrantNotice'));
+      const tree = required(document.getElementById('authPermissionTree'));
+      expect(notice.nextElementSibling?.getAttribute('data-t')).toBe('auth_permissions');
+      const verify = async () => {
+        await Promise.resolve();
+        expect(notice.hidden).toBe(false);
+        expect(notice.getAttribute('data-t')).toBe('auth_grant_notice');
+        expect(required(tree.querySelector<HTMLInputElement>('[data-permission="user.read"]')).disabled).toBe(false);
+        expect(required(tree.querySelector<HTMLInputElement>('[data-permission="user.edit.displayname"]')).disabled).toBe(true);
+        expect(tree.querySelector('.permission-reason')).toBeNull();
+        expect([...tree.querySelectorAll<HTMLInputElement>('input')].every(field => !field.title)).toBe(true);
+      };
+      click(kind === 'accounts' ? 'btnCreateAccount' : 'btnCreateToken');
+      await verify();
+      click('authClose');
+      api.mockImplementation((_method, url) => {
+        const itemKind = url.endsWith('accounts') ? 'accounts' : 'tokens';
+        return Promise.resolve({ success: true, status: 200, obj: { items: [{ id: 'item', kind: itemKind, name: 'test', root: false, permissions: [] }] } });
+      });
+      click('btnLoadAuth');
+      await vi.waitFor(() => { expect(document.querySelector(`#auth${kind}Table [data-auth-action="edit"]`)).not.toBeNull(); });
+      required(document.querySelector<HTMLButtonElement>(`#auth${kind}Table [data-auth-action="edit"]`)).click();
+      await verify();
+      click('authClose');
+      state.permissions = ['*'];
+      click(kind === 'accounts' ? 'btnCreateAccount' : 'btnCreateToken');
+      expect(notice.hidden).toBe(true);
+    } finally { reasons.dispose(); }
+  });
   it('shows rotation only when editing a key and respects hidden fields in the dialog', async () => {
     const { api } = setup();
     const css = readFileSync('src/styles/admin.css', 'utf8');
