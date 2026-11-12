@@ -21,6 +21,12 @@ log = Logger("rate_limit")
 def register_subscription_route(app: Quart, sub: Subscription, limiter: AsyncRateLimiter) -> None:
     uri = sub.res.cfg.view()["uri"].strip("/")
 
+    @app.after_request
+    async def subscription_no_store(response: Response) -> Response:
+        if request.endpoint == "subscription":
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
+
     @app.route(f"/{uri}", strict_slashes=False)
     async def subscription() -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction]
         try:

@@ -11,6 +11,8 @@ from api.common import (
     web_lang_tables,
 )
 from api.web._base import AsyncWebApiMixin
+from api.web.account import AsyncAccountRoutes
+from api.web.session import AsyncSessionRoutes
 from fonts import FONT_FILES, embed_font_faces
 from util import err
 
@@ -44,19 +46,29 @@ class AsyncStaticRoutes(AsyncWebApiMixin):
         Route("GET", "/reset.js", "password_reset_js"),
         Route("GET", "/history", "gui_history"),
     )
-
-    def reg_handles(self) -> None:
-        self.app.after_request(self._session_assets_no_store)
-
-    async def _session_assets_no_store(self, response: Response) -> Response:
-        # Include rejected requests and authentication/storage failures too.
-        if request.endpoint in {
+    _NO_STORE_ENDPOINTS: ClassVar[frozenset[str]] = frozenset(
+        {
+            *(route.handler for route in AsyncAccountRoutes.ROUTES),
+            *(route.handler for route in AsyncSessionRoutes.ROUTES),
+            "redirect_page",
+            "gui_panel",
+            "gui_auth",
+            "gui_password_reset",
+            "gui_history",
             "dashboard_js",
             "history_js",
             "chart_js",
             "dashboard_css",
             "history_css",
-        }:
+        }
+    )
+
+    def reg_handles(self) -> None:
+        self.app.after_request(self._sensitive_no_store)
+
+    async def _sensitive_no_store(self, response: Response) -> Response:
+        # Include rejected requests and authentication/storage failures too.
+        if request.endpoint in self._NO_STORE_ENDPOINTS:
             response.headers["Cache-Control"] = "no-store"
         return response
 

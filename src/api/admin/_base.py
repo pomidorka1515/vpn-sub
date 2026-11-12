@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from quart import Quart
 
-    from api.common import SnapshotStatus
+    from api.common import Route, SnapshotStatus
     from app_runtime.rate_limit import AsyncRateLimiter
     from config import AppConfig
     from config.store import AsyncConfig, AsyncLinesConfig
@@ -17,6 +17,7 @@ class AsyncAdminApiMixin:
     """Attributes every admin route group reads from the composed Api."""
 
     app: Quart
+    ROUTES: ClassVar[tuple[Route, ...]]
     cfg: AsyncConfig[AppConfig]
     sub: Subscription
     bw: SnapshotStatus

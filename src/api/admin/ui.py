@@ -30,10 +30,7 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
     """Admin HTML pages and cookie session."""
 
     def reg_handles(self) -> None:
-        self.app.after_request(self._admin_auth_no_store)
-        conf = self.cfg.view()
-        prefix = "/" + "/".join(p.strip("/ ") for p in (conf["uri"],) if p and p.strip("/ "))
-        for path, handler in (
+        ui_routes = (
             ("/admin", "admin_ui"),
             ("/admin/main.js", "admin_js"),
             ("/admin/chart.umd.min.js", "admin_chart_js"),
@@ -45,7 +42,14 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             ("/admin/login", "admin_login_page"),
             ("/admin/session", "admin_session"),
             ("/admin/logout", "admin_logout"),
-        ):
+        )
+        self._no_store_endpoints = frozenset(
+            [*(route.handler for route in self.ROUTES), *(handler for _, handler in ui_routes)]
+        )
+        self.app.after_request(self._admin_no_store)
+        conf = self.cfg.view()
+        prefix = "/" + "/".join(p.strip("/ ") for p in (conf["uri"],) if p and p.strip("/ "))
+        for path, handler in ui_routes:
             func = getattr(type(self), handler)
             url = "/" + "/".join(p.strip("/") for p in (prefix, path) if p.strip("/"))
             methods = ["POST"] if handler in {"admin_session", "admin_logout"} else ["GET"]
@@ -54,19 +58,9 @@ class AsyncUiRoutes(AsyncAdminApiMixin):
             func = func.__get__(self, type(self))
             self.app.add_url_rule(url, handler, func, methods=methods, strict_slashes=False)
 
-    async def _admin_auth_no_store(self, response: Response) -> Response:
+    async def _admin_no_store(self, response: Response) -> Response:
         # Apply after error handling too, including rate-limit and storage failures.
-        if request.endpoint in {
-            "admin_js",
-            "admin_chart_js",
-            "admin_codemirror_js",
-            "admin_css",
-            "admin_charts_css",
-            "admin_codemirror_css",
-            "admin_token",
-            "admin_session",
-            "admin_logout",
-        } or (request.endpoint or "").startswith("auth_"):
+        if request.endpoint in self._no_store_endpoints:
             response.headers["Cache-Control"] = "no-store"
         return response
 

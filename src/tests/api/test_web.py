@@ -49,6 +49,35 @@ async def test_password_reset_invalid_token_is_404(
     assert response.status_code == 404
 
 
+async def test_sensitive_web_responses_are_not_stored(web_api: tuple[Quart, Database]) -> None:
+    app, db = web_api
+    client = app.test_client()
+    for path in ("/custom/auth", "/custom/panel", "/custom/redirect?prefix=happ://test"):
+        response = await client.get(path)
+        assert response.headers["Cache-Control"] == "no-store"
+
+    response = await client.get(
+        "/custom/reset?token=invalid", headers={"User-Agent": "Firefox/120.0"}
+    )
+    assert response.status_code == 404
+    assert response.mimetype == "text/html"
+    assert response.headers["Cache-Control"] == "no-store"
+
+    response = await client.get("/custom/webapi/stats")
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
+    await db.set_auth_token("alice", "a" * 100)
+    client.set_cookie("localhost", "auth_token", "a" * 100)
+    for path in ("/custom/panel", "/custom/history", "/custom/webapi/stats"):
+        response = await client.get(path)
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
+
+    response = await client.get("/custom/common.js")
+    assert "immutable" in response.headers["Cache-Control"]
+    assert "no-store" not in response.headers["Cache-Control"]
+
+
 async def test_password_reset_without_authentication(web_api: tuple[Quart, Database]) -> None:
     app, db = web_api
     sub = app.extensions["subscriptions"][0]

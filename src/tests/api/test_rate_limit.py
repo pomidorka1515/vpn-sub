@@ -173,10 +173,12 @@ async def test_subscription_limit_per_ip_and_expiry(monkeypatch: pytest.MonkeyPa
             assert (await client.get(f"/sub?token={index}")).status_code == 200
         response = await client.get("/sub/")
         assert response.status_code == 429
+        assert response.headers["Cache-Control"] == "private, no-store"
         assert response.headers["Retry-After"] == "60"
         store.now = 159.999
         response = await client.get("/sub")
         assert response.status_code == 429
+        assert response.headers["Cache-Control"] == "private, no-store"
         assert response.headers["Retry-After"] == "1"
         assert builder.await_count == 60
         assert (

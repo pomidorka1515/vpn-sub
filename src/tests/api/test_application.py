@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
+from quart import Response
 from werkzeug.datastructures import WWWAuthenticate
 from werkzeug.exceptions import TooManyRequests, Unauthorized
 from werkzeug.wrappers import Response as WerkzeugResponse
@@ -18,6 +19,62 @@ if TYPE_CHECKING:
     from api.common import ResponseType
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize(
+    ("path", "headers", "status", "mimetype"),
+    [
+        ("/html", {}, 200, "text/html"),
+        ("/json", {}, 200, "application/json"),
+        ("/asset", {}, 200, "text/javascript"),
+        ("/missing", {}, 404, "application/json"),
+        ("/missing", {"User-Agent": "Firefox/120.0"}, 404, "text/html"),
+        ("/failure", {}, 500, "application/json"),
+    ],
+)
+async def test_security_headers_on_responses(
+    path: str, headers: dict[str, str], status: int, mimetype: str
+) -> None:
+    app = create_api_application(proxy_hops=0)
+
+    @app.get("/html")
+    async def html() -> Response:
+        return Response(
+            "<html></html>", mimetype="text/html", headers={"X-Frame-Options": "SAMEORIGIN"}
+        )
+
+    @app.get("/json")
+    async def json_response() -> ResponseType:
+        return ok()
+
+    @app.get("/asset")
+    async def asset() -> Response:
+        return Response("", mimetype="text/javascript")
+
+    @app.get("/failure")
+    async def failure() -> ResponseType:
+        raise RuntimeError("failure")
+
+    response = await app.test_client().get(path, headers=headers)
+    assert response.status_code == status
+    assert response.mimetype == mimetype
+    assert response.headers.getlist("X-Frame-Options") == ["DENY"]
+    assert response.headers.getlist("X-Content-Type-Options") == ["nosniff"]
+    csp = response.headers.getlist("Content-Security-Policy")
+    assert len(csp) == 1
+    assert "script-src 'self'" in csp[0]
+    assert "style-src 'self' 'unsafe-inline'" in csp[0]
+    assert "img-src 'self' blob:" in csp[0]
+    assert "frame-ancestors 'none'" in csp[0]
+
+
+async def test_security_headers_on_proxy_rejection() -> None:
+    app = create_api_application(require_proxy=True)
+    response = await app.test_client().get("/", scope_base={"client": ("10.0.0.1", 1234)})
+    assert response.status_code == 400
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert "img-src 'self' blob:" in response.headers["Content-Security-Policy"]
 
 
 async def test_method_not_allowed_preserves_allow_header() -> None:

@@ -56,11 +56,13 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
     client = admin_api[0].test_client()
     response = await client.get("/sub/admin")
     assert response.status_code == 302
+    assert response.headers["Cache-Control"] == "no-store"
     assert response.headers["Location"].endswith("/sub/admin/login")
     response = await client.get("/sub/admin/token")
     assert response.status_code == 401
     assert response.headers["Cache-Control"] == "no-store"
     response = await client.get("/sub/admin/login")
+    assert response.headers["Cache-Control"] == "no-store"
     body = await response.get_data()
     assert isinstance(body, bytes)
     for part in (
@@ -70,6 +72,20 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
         assert part in body
     for part in (b'id="tabRegister"', b'id="registerForm"', b"const API", b"PANEL + '/'"):
         assert part not in body
+
+
+async def test_admin_api_responses_are_not_stored(admin_api: tuple[Quart, Subscription]) -> None:
+    client = admin_api[0].test_client()
+    response = await client.get("/sub/api/api/state/system")
+    assert response.status_code == 401
+    assert response.headers["Cache-Control"] == "no-store"
+    response = await client.get("/sub/api/api/state/system", headers={"Authorization": "secret"})
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    await sign_in(client)
+    response = await client.get("/sub/admin")
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.parametrize("method", ["GET", "HEAD"])

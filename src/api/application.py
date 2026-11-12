@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from jinja2 import FileSystemLoader
 from quart import Quart, Response, render_template, request
 from quart.json.provider import DefaultJSONProvider
@@ -16,7 +18,55 @@ from .common import RES_DIR, asset_version, web_lang_tables
 from .middleware import ProxyMiddleware
 from .web.static import AsyncStaticRoutes
 
+if TYPE_CHECKING:
+    from hypercorn.typing import (
+        ASGIFramework,
+        ASGIReceiveCallable,
+        ASGISendCallable,
+        ASGISendEvent,
+        Scope,
+    )
+
 log = Logger("api")
+
+_SECURITY_HEADERS = (
+    (b"x-frame-options", b"DENY"),
+    (b"x-content-type-options", b"nosniff"),
+    (b"referrer-policy", b"no-referrer"),
+    (
+        b"content-security-policy",
+        (
+            b"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            b"img-src 'self' blob:; object-src 'none'; base-uri 'self'; "
+            b"form-action 'self'; frame-ancestors 'none'"
+        ),
+    ),
+)
+_SECURITY_HEADER_NAMES = frozenset(name for name, _ in _SECURITY_HEADERS)
+
+
+class SecurityHeadersMiddleware:
+    """Apply security headers to every HTTP response, including proxy rejections."""
+
+    def __init__(self, app: ASGIFramework) -> None:
+        self.app = app
+
+    async def __call__(
+        self,
+        scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
+    ) -> None:
+        async def secure_send(message: ASGISendEvent) -> None:
+            if message["type"] == "http.response.start":
+                message["headers"] = [
+                    (name, value)
+                    for name, value in message.get("headers", [])
+                    if name.lower() not in _SECURITY_HEADER_NAMES
+                ] + list(_SECURITY_HEADERS)
+            await send(message)
+
+        await self.app(scope, receive, secure_send)
 
 
 def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) -> Quart:
@@ -26,7 +76,9 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
     app.json.sort_keys = False
     app.jinja_env.loader = FileSystemLoader(str(RES_DIR / "templates"))
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
-    app.asgi_app = ProxyMiddleware(app.asgi_app, hops=proxy_hops, require_proxy=require_proxy)  # type: ignore[method-assign]
+    app.asgi_app = SecurityHeadersMiddleware(  # type: ignore[method-assign]
+        ProxyMiddleware(app.asgi_app, hops=proxy_hops, require_proxy=require_proxy),
+    )
 
     @app.after_request
     async def browser_not_found(response: Response) -> Response:
@@ -53,7 +105,10 @@ def create_api_application(*, proxy_hops: int = 1, require_proxy: bool = False) 
                 html = await named_to_thread("frontend:error-fonts", embed_font_faces, html, prefix)
             else:
                 html = await web_api.sub.res.offloads.files.run(embed_font_faces, html, prefix)
-            return Response(html, status=404, mimetype="text/html")
+            page = Response(html, status=404, mimetype="text/html")
+            if response.cache_control.no_store:
+                page.headers["Cache-Control"] = response.headers["Cache-Control"]
+            return page
         return response
 
     @app.errorhandler(AppError)
