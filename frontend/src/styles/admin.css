@@ -71,7 +71,8 @@
 .permission-disabled { opacity: .45; cursor: not-allowed; }
 .tab.permission-disabled, .topbar [data-tab].permission-disabled { cursor: pointer; }
 .tab-content.permission-restricted { position: relative; min-height: 12rem; }
-.permission-restricted > :not(.permission-tab-notice) { opacity: .55; pointer-events: none; user-select: none; }
+.permission-restricted > :not(.permission-tab-notice) { opacity: .55; filter: blur(2px); pointer-events: none; user-select: none; }
+.tab-content.permission-restricted > :not(.permission-tab-notice) { filter: blur(5px); }
 .permission-section { position: relative; }
 .permission-section + .permission-section { margin-top: 20px; }
 .permission-section > .toolbar > .section-title { margin: 0; flex: 1; }

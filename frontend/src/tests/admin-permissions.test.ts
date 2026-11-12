@@ -153,7 +153,7 @@ describe('admin permission model', () => {
     applyPermissions(document, state, translate('Missing'));
     expect([auth, users, codes].every(notice => notice.hidden && !notice.textContent)).toBe(true);
   });
-  it('keeps section notices sharp and avoids duplicate control warnings', () => {
+  it('blurs restricted tabs more strongly than sections while keeping notices sharp', () => {
     const { state } = setup(['health.read.status']);
     const t = (key: string) => key === 'permission_missing' ? 'Missing {permission}' : key;
     applyPermissions(document, state, t);
@@ -164,9 +164,12 @@ describe('admin permission model', () => {
     document.head.append(style);
     try {
       const section = required(document.querySelector('[data-permission-section="health.sync"]'));
-      expect(getComputedStyle(required(section.querySelector('.card-title'))).filter).not.toContain('blur');
+      expect(getComputedStyle(required(section.querySelector('.card-title'))).filter).toBe('blur(2px)');
       expect(getComputedStyle(required(section.querySelector('.permission-tab-notice'))).filter).not.toContain('blur');
       expect(section.querySelector('.permission-reason')).toBeNull();
+      const tab = required(document.getElementById('tab-logs'));
+      expect(getComputedStyle(required(tab.querySelector(':scope > .card'))).filter).toBe('blur(5px)');
+      expect(getComputedStyle(required(tab.querySelector(':scope > .permission-tab-notice'))).filter).not.toContain('blur');
     } finally { style.remove(); reasons.dispose(); }
   });
   it('updates a restricted tab warning when the language changes', () => {
