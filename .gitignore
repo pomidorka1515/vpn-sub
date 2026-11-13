@@ -29,6 +29,7 @@ frontend/coverage/
 !docs/ASYNC_*
 !frontend/.node-version
 !frontend/.npmrc
+!frontend/.prettierignore
 *.egg-info
 *.egg
 .DS_Store

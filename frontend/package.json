@@ -10,6 +10,8 @@
     "test:watch": "vitest",
     "test:coverage": "npm run typecheck:tests && vitest run --coverage",
     "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "npm run lint && tsc --project tsconfig.json && npm run typecheck:tests",
     "typecheck:tests": "tsc --project tsconfig.tests.json",
     "build": "npm run lint && node build.mjs",
@@ -20,6 +22,7 @@
     "esbuild": "0.28.2",
     "eslint": "10.14.0",
     "javascript-obfuscator": "5.10.0",
+    "prettier": "3.10.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.1"
   },

@@ -496,6 +496,11 @@ npm --prefix frontend run build
 npm --prefix frontend run watch
 ```
 
+Format frontend sources and tooling with `npm --prefix frontend run format`, or
+check without writing changes with `npm --prefix frontend run format:check`.
+Prettier uses a 120-column print width (a wrapping target, not a hard limit).
+Generated files, vendor assets, fonts, and Jinja templates are excluded.
+
 `typecheck` checks application and test TypeScript strictly without emitting files. `build` also
 checks types before generating `frontend/dist/`; run it before starting Python
 from a clean checkout or deploying. Do not edit or commit `frontend/dist/` or
