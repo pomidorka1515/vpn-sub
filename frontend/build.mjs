@@ -68,14 +68,23 @@ async function buildJavaScript(options) {
       selfDefending: false,
       debugProtection: false,
       sourceMap: false,
-      splitStrings: true,
-      splitStringsChunkLength: 8,
+      // Encrypt whole literals instead of multiplying decoder calls for fragments.
+      splitStrings: false,
       stringArray: true,
       stringArrayCallsTransform: true,
-      stringArrayCallsTransformThreshold: 0.5,
-      stringArrayEncoding: ['base64'],
+      stringArrayCallsTransformThreshold: 0.75,
+      // Encode strings locally and hide lookups behind chained aliases.
+      // This raises inspection cost, not a security boundary or a place for secrets.
+      stringArrayEncoding: ['rc4'],
+      // RC4 rotation bootstraps repeatedly decrypt strings before page startup.
+      // Shuffling and shifted indexes still obscure the table without that loop.
+      stringArrayRotate: false,
       stringArrayThreshold: 1,
+      stringArrayWrappersChainedCalls: true,
+      stringArrayWrappersCount: 2,
+      stringArrayWrappersType: 'variable',
       target: 'browser-no-eval',
+      transformObjectKeys: true,
     });
     await mkdir(dirname(file.path), { recursive: true });
     await writeFile(file.path, obfuscated.getObfuscatedCode());

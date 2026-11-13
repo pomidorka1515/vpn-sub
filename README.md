@@ -507,7 +507,8 @@ from a clean checkout or deploying. Do not edit or commit `frontend/dist/` or
 `frontend/node_modules/`. Node and npm are build tools, not runtime dependencies.
 
 Generated application JavaScript is minified and locally obfuscated; styles are
-minified too. No source maps or source-path comments are emitted. Vendor assets
+minified too. String literals use RC4 encoding and chained lookup aliases, including
+transformed object keys. No source maps or source-path comments are emitted. Vendor assets
 retain their upstream licenses. Obfuscation discourages casual inspection, but
 browser code and API traffic remain inspectable: never put secrets in the frontend.
 

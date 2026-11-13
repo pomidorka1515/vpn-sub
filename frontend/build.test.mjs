@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { createContext, Script } from 'node:vm';
 import { transform } from 'esbuild';
 import { JSDOM } from 'jsdom';
 
@@ -36,6 +37,31 @@ test('release assets are compact, valid JavaScript with no source references', a
     assert.equal(css.trim().includes('\n'), false, file);
     assert.doesNotMatch(css.replace('/* __FONTS__ */', ''), /\/\*|sourceMappingURL/, file);
     if (file === 'assets/common.css') assert.ok(css.startsWith('/* __FONTS__ */'));
+  }
+});
+
+test('release strings and object keys are not exposed as plaintext or simple Base64', async () => {
+  const samples = {
+    'common.js': ['data-theme', 'themeIconDark'],
+    'auth.js': ['/validate-code', 'current_password', 'toggle_theme'],
+    'reset.js': ['/password-reset?token=', 'passwords_not_match'],
+    'admin-auth.js': ['invalid_credentials', 'application/json'],
+    'dashboard.js': ['/fingerprints', 'current_password', 'bandwidth_unlimited'],
+    'history.js': ['chart_load_err', 'current_password'],
+    'admin/main.js': ['/api/user/list', '/api/config/set', 'current_password', 'toggle_theme'],
+  };
+  for (const [file, strings] of Object.entries(samples)) {
+    const code = await readFile(new URL(`assets/${file}`, output), 'utf8');
+    for (const value of strings) {
+      const base64 = Buffer.from(value).toString('base64');
+      // The obfuscator's Base64 alphabet swaps the usual upper/lowercase halves.
+      const swappedBase64 = base64.replace(/[a-zA-Z]/g, (char) =>
+        char === char.toLowerCase() ? char.toUpperCase() : char.toLowerCase(),
+      );
+      for (const exposed of [value, base64, swappedBase64]) {
+        assert.equal(code.includes(exposed), false, `${file}: exposed ${value}`);
+      }
+    }
   }
 });
 
@@ -98,14 +124,19 @@ test('pages share theme-aware soft status and usage colors', async () => {
 });
 
 for (const theme of ['dark', 'light']) {
-  test(`obfuscated blocking script applies the ${theme} theme`, async () => {
+  test(`obfuscated blocking script applies the ${theme} theme without runtime code generation`, async () => {
     const dom = new JSDOM('<!doctype html><button id="themeBtn"></button>', {
       url: 'https://example.test/',
       runScripts: 'outside-only',
     });
     try {
       dom.window.localStorage.setItem('theme', theme);
-      dom.window.eval(await readFile(new URL(join('assets', 'common.js'), output), 'utf8'));
+      const context = createContext(
+        { document: dom.window.document, localStorage: dom.window.localStorage },
+        { codeGeneration: { strings: false, wasm: false } },
+      );
+      const script = new Script(await readFile(new URL(join('assets', 'common.js'), output), 'utf8'));
+      script.runInContext(context, { timeout: 1000 });
       assert.equal(dom.window.document.documentElement.dataset.theme, theme);
       assert.ok(dom.window.document.getElementById('themeIconDark'));
       assert.ok(dom.window.document.getElementById('themeIconLight'));
