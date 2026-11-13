@@ -1,15 +1,57 @@
 import type { ConfigObject } from './json';
 
-export const RESTART_KEYS = ['uri', 'api_uri', 'api_token', '3xui', 'redis', 'bot', 'publicbot', 'discord', 'panel_alert_cooldown', 'salt'];
-export const OPTIONAL_KEYS = ['api_uri', 'fallback_domain', 'funny_strings', 'bot', 'publicbot', 'discord', 'support_text'];
-export const REQUIRED_KEYS = [
-  'uri', 'api_token', 'api_admin_ui_auth', 'provider_id', 'panel_alert_cooldown', 'salt',
-  'fingerprints', 'nodes', 'json_template', 'bypass_packages', 'domain', 'ping_check_url',
-  '3xui', 'sub_name', 'profiles', 'redis',
+export const RESTART_KEYS = [
+  'uri',
+  'api_uri',
+  'api_token',
+  '3xui',
+  'redis',
+  'bot',
+  'publicbot',
+  'discord',
+  'panel_alert_cooldown',
+  'salt',
 ];
-export const KNOWN_KEYS = ['$schema', ...REQUIRED_KEYS, ...OPTIONAL_KEYS.filter(k => !REQUIRED_KEYS.includes(k))];
+export const OPTIONAL_KEYS = [
+  'api_uri',
+  'fallback_domain',
+  'funny_strings',
+  'bot',
+  'publicbot',
+  'discord',
+  'support_text',
+];
+export const REQUIRED_KEYS = [
+  'uri',
+  'api_token',
+  'api_admin_ui_auth',
+  'provider_id',
+  'panel_alert_cooldown',
+  'salt',
+  'fingerprints',
+  'nodes',
+  'json_template',
+  'bypass_packages',
+  'domain',
+  'ping_check_url',
+  '3xui',
+  'sub_name',
+  'profiles',
+  'redis',
+];
+export const KNOWN_KEYS = ['$schema', ...REQUIRED_KEYS, ...OPTIONAL_KEYS.filter((k) => !REQUIRED_KEYS.includes(k))];
 export const TEMPLATE_KEYS = ['dns', 'routing', 'inbounds', 'outbounds', 'remarks'];
-export const PROFILE_FIELDS = ['flag', 'name', 'json', 'description', 'whitelist', 'xhttpExtra', 'masterLink', 'node', 'shortProfileDescription'];
+export const PROFILE_FIELDS = [
+  'flag',
+  'name',
+  'json',
+  'description',
+  'whitelist',
+  'xhttpExtra',
+  'masterLink',
+  'node',
+  'shortProfileDescription',
+];
 export const PANEL_FIELDS = ['name', 'address', 'port', 'uri', 'token', 'https', 'whitelist', 'inbounds_list', 'mode'];
 export const PANEL_OPTIONAL = ['inject_headers'];
 export const INTEGER_RE = /^(0|-?[1-9]\d*)$/;

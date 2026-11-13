@@ -50,7 +50,15 @@ const HOST_GENERAL: ChartSpec[] = [
     threshold: 'memory',
     series: [
       { key: 'used', labelKey: 'used', path: ['memory', 'ram', 'used'] },
-      { key: 'percent', labelKey: 'percent', path: ['memory', 'ram', 'used'], scale: 'percent', totalPath: ['memory', 'ram', 'total'], axis: 'y1', unit: 'percent' },
+      {
+        key: 'percent',
+        labelKey: 'percent',
+        path: ['memory', 'ram', 'used'],
+        scale: 'percent',
+        totalPath: ['memory', 'ram', 'total'],
+        axis: 'y1',
+        unit: 'percent',
+      },
     ],
   },
   {
@@ -59,7 +67,15 @@ const HOST_GENERAL: ChartSpec[] = [
     unit: 'bytes',
     series: [
       { key: 'used', labelKey: 'used', path: ['memory', 'swap', 'used'] },
-      { key: 'percent', labelKey: 'percent', path: ['memory', 'swap', 'used'], scale: 'percent', totalPath: ['memory', 'swap', 'total'], axis: 'y1', unit: 'percent' },
+      {
+        key: 'percent',
+        labelKey: 'percent',
+        path: ['memory', 'swap', 'used'],
+        scale: 'percent',
+        totalPath: ['memory', 'swap', 'total'],
+        axis: 'y1',
+        unit: 'percent',
+      },
     ],
   },
 ];
@@ -140,7 +156,15 @@ const PANEL_GENERAL: ChartSpec[] = [
     threshold: 'memory',
     series: [
       { key: 'used', labelKey: 'used', path: ['mem', 'current'] },
-      { key: 'percent', labelKey: 'percent', path: ['mem', 'current'], scale: 'percent', totalPath: ['mem', 'total'], axis: 'y1', unit: 'percent' },
+      {
+        key: 'percent',
+        labelKey: 'percent',
+        path: ['mem', 'current'],
+        scale: 'percent',
+        totalPath: ['mem', 'total'],
+        axis: 'y1',
+        unit: 'percent',
+      },
     ],
   },
   {
@@ -149,7 +173,15 @@ const PANEL_GENERAL: ChartSpec[] = [
     unit: 'bytes',
     series: [
       { key: 'used', labelKey: 'used', path: ['swap', 'current'] },
-      { key: 'percent', labelKey: 'percent', path: ['swap', 'current'], scale: 'percent', totalPath: ['swap', 'total'], axis: 'y1', unit: 'percent' },
+      {
+        key: 'percent',
+        labelKey: 'percent',
+        path: ['swap', 'current'],
+        scale: 'percent',
+        totalPath: ['swap', 'total'],
+        axis: 'y1',
+        unit: 'percent',
+      },
     ],
   },
   {
@@ -159,7 +191,15 @@ const PANEL_GENERAL: ChartSpec[] = [
     threshold: 'disk',
     series: [
       { key: 'used', labelKey: 'used', path: ['disk', 'current'] },
-      { key: 'percent', labelKey: 'percent', path: ['disk', 'current'], scale: 'percent', totalPath: ['disk', 'total'], axis: 'y1', unit: 'percent' },
+      {
+        key: 'percent',
+        labelKey: 'percent',
+        path: ['disk', 'current'],
+        scale: 'percent',
+        totalPath: ['disk', 'total'],
+        axis: 'y1',
+        unit: 'percent',
+      },
     ],
   },
 ];
@@ -214,7 +254,9 @@ const PANEL_UPTIME: ChartSpec[] = [
     id: 'panel_threads',
     titleKey: 'app_threads',
     unit: 'count',
-    series: [{ key: 'threads', labelKey: 'app_threads', path: ['appStats', 'threads'], altPath: ['app_stats', 'threads'] }],
+    series: [
+      { key: 'threads', labelKey: 'app_threads', path: ['appStats', 'threads'], altPath: ['app_stats', 'threads'] },
+    ],
   },
 ];
 

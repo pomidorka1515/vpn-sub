@@ -29,7 +29,7 @@ export function createDialogs(doc: Document, translate: Translate) {
       input.style.display = options.input ? 'block' : 'none';
       if (options.input) input.placeholder = options.inputPlaceholder || '';
     }
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       function close(value: boolean | string | null): void {
         overlay.classList.remove('show');
         overlay.close();
@@ -41,12 +41,23 @@ export function createDialogs(doc: Document, translate: Translate) {
         if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
         resolve(value);
       }
-      function submit(): void { close(options.input ? input?.value || null : true); }
-      function dismiss(): void { close(options.input ? null : false); }
-      function outside(event: MouseEvent): void { if (event.target === overlay) dismiss(); }
+      function submit(): void {
+        close(options.input ? input?.value || null : true);
+      }
+      function dismiss(): void {
+        close(options.input ? null : false);
+      }
+      function outside(event: MouseEvent): void {
+        if (event.target === overlay) dismiss();
+      }
       function onKey(event: KeyboardEvent): void {
-        if (event.key === 'Escape') { event.preventDefault(); dismiss(); }
-        else if (event.key === 'Enter') { event.preventDefault(); submit(); }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          dismiss();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          submit();
+        }
       }
       dismissActive = dismiss;
       ok.addEventListener('click', submit);

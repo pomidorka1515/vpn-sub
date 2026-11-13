@@ -25,10 +25,21 @@ const t = (key: string): string => context.t(key);
 const can = (permission: string): boolean => context.can?.(permission) ?? true;
 const loadingHtml = (): string => renderLoading(t);
 const api = (method: string, path: string, body?: unknown) => context.api(method, path, body);
-const toast = (message: string, kind: string): void => { context.toast(message, kind); };
+const toast = (message: string, kind: string): void => {
+  context.toast(message, kind);
+};
 const confirmDialog = (message: string, title: string) => context.confirm(message, title);
-export function initConfig(env: AdminContext, language: string): void { context = env; pageLanguage = language; disposed = false; generation++; cleanupCards = initCards(); }
-export function setConfigLanguage(language: string): void { pageLanguage = language; if (editor.fetched) updatePermissionNotice(); }
+export function initConfig(env: AdminContext, language: string): void {
+  context = env;
+  pageLanguage = language;
+  disposed = false;
+  generation++;
+  cleanupCards = initCards();
+}
+export function setConfigLanguage(language: string): void {
+  pageLanguage = language;
+  if (editor.fetched) updatePermissionNotice();
+}
 function required(id: string): HTMLElement {
   const result = document.getElementById(id);
   if (!result) throw new Error(sharedMessage('missing_element', { id }));
@@ -42,7 +53,7 @@ function configButton(id: string): HTMLButtonElement {
 
 function updatePermissionNotice(): void {
   const notice = required('configPermissionNotice');
-  const missing = ['main', 'inbounds', 'panels'].flatMap(section => {
+  const missing = ['main', 'inbounds', 'panels'].flatMap((section) => {
     if (!can('config.read.' + section)) return ['config.read.' + section];
     return can('config.write.' + section) ? [] : ['config.write.' + section];
   });
@@ -51,10 +62,17 @@ function updatePermissionNotice(): void {
   notice.hidden = missing.length === 0;
 }
 
-const { renderMain } = createMainEditor(markDirty, t, key => !ROOT_CONFIG_KEYS.has(key) || can('*'));
-const { init: initCards, renderCards, toggleConfigCard, deleteConfigCard } = createCardEditor({
+const { renderMain } = createMainEditor(markDirty, t, (key) => !ROOT_CONFIG_KEYS.has(key) || can('*'));
+const {
+  init: initCards,
+  renderCards,
+  toggleConfigCard,
+  deleteConfigCard,
+} = createCardEditor({
   markDirty,
-  openNew: kind => { openNew(kind); },
+  openNew: (kind) => {
+    openNew(kind);
+  },
   t,
   language: () => pageLanguage,
   confirm: confirmDialog,
@@ -66,16 +84,19 @@ export { toggleConfigCard, deleteConfigCard };
 function markDirty(): void {
   if (disposed || !editor.loaded) return;
   editor.dirty = !jsonEqual(editor.draft ?? undefined, editor.loaded);
-  if (editor.nodeRows && new Set(editor.nodeRows.map(row => row[0])).size !== editor.nodeRows.length) editor.dirty = true;
-  editor.headerRows.forEach(rows => { if (new Set(rows.map(row => row[0])).size !== rows.length) editor.dirty = true; });
-  document.querySelectorAll<HTMLInputElement>('#tab-config .panel-card [data-field="id"]').forEach(input => {
+  if (editor.nodeRows && new Set(editor.nodeRows.map((row) => row[0])).size !== editor.nodeRows.length)
+    editor.dirty = true;
+  editor.headerRows.forEach((rows) => {
+    if (new Set(rows.map((row) => row[0])).size !== rows.length) editor.dirty = true;
+  });
+  document.querySelectorAll<HTMLInputElement>('#tab-config .panel-card [data-field="id"]').forEach((input) => {
     if (input.value.trim() !== input.closest<HTMLElement>('.panel-card')?.dataset['id']) editor.dirty = true;
   });
   const label = document.getElementById('configDirty');
   if (label) label.textContent = editor.dirty ? t('config_unsaved') : t('config_saved_state');
   const save = document.querySelector<HTMLButtonElement>('#configSave');
   if (save && !editor.saving) {
-    const writable = ['main', 'inbounds', 'panels'].some(section => can('config.write.' + section));
+    const writable = ['main', 'inbounds', 'panels'].some((section) => can('config.write.' + section));
     save.disabled = !editor.dirty || editor.conflict || !writable;
     save.classList.toggle('permission-action-disabled', !writable);
     save.title = writable ? '' : t('permission_missing').replace('{permission}', 'config.write.*');
@@ -118,13 +139,14 @@ function diffValues(): ConfigObject {
   const loaded = editor.loaded;
   const draft = editor.draft;
   const keys = new Set([...Object.keys(loaded), ...Object.keys(draft)]);
-  keys.forEach(key => {
+  keys.forEach((key) => {
     if (key === '$schema') return;
     const had = Object.prototype.hasOwnProperty.call(loaded, key);
     const has = Object.prototype.hasOwnProperty.call(draft, key);
     if (!had && !has) return;
     if (had && !has) values[key] = null;
-    else if (draft[key] !== undefined && !jsonEqual(draft[key], had ? loaded[key] : undefined)) values[key] = clone(draft[key]);
+    else if (draft[key] !== undefined && !jsonEqual(draft[key], had ? loaded[key] : undefined))
+      values[key] = clone(draft[key]);
   });
   return values;
 }
@@ -155,7 +177,14 @@ export async function saveConfig() {
         return;
       }
       const values = diffValues();
-      if (Object.keys(values).some(key => !can('config.write.' + configSection(key)) || ROOT_CONFIG_KEYS.has(key) && !can('*'))) { showResult(t('permission_missing').replace('{permission}', 'config.write.*'), 'error'); return; }
+      if (
+        Object.keys(values).some(
+          (key) => !can('config.write.' + configSection(key)) || (ROOT_CONFIG_KEYS.has(key) && !can('*')),
+        )
+      ) {
+        showResult(t('permission_missing').replace('{permission}', 'config.write.*'), 'error');
+        return;
+      }
       if (!Object.keys(values).length) {
         toast(t('config_unchanged'), 'info');
         return;
@@ -201,12 +230,20 @@ export async function saveConfig() {
       }
       showResult(res.rawMsg === 'Unchanged' ? t('config_unchanged') : t('config_saved_state'), 'ok');
       if (res.rawMsg === 'Unchanged') setRestartLine([]);
-      else setRestartLine(Array.isArray(result['restart']) ? result['restart'].filter((value): value is string => typeof value === 'string') : []);
+      else
+        setRestartLine(
+          Array.isArray(result['restart'])
+            ? result['restart'].filter((value): value is string => typeof value === 'string')
+            : [],
+        );
     } catch {
       if (!disposed && current === generation) showResult(t('network_err'), 'error');
     } finally {
       editor.saving = false;
-      if (!disposed && current === generation) { configButton('configReload').disabled = false; markDirty(); }
+      if (!disposed && current === generation) {
+        configButton('configReload').disabled = false;
+        markDirty();
+      }
     }
   });
   if (!isDisposed() && current === generation) markDirty();
@@ -220,7 +257,9 @@ function showConflict(): void {
   button.className = 'btn-tiny';
   button.dataset['discard'] = '1';
   button.textContent = t('config_discard_reload');
-  button.addEventListener('click', () => { void loadConfig(true); });
+  button.addEventListener('click', () => {
+    void loadConfig(true);
+  });
   el.appendChild(button);
 }
 
@@ -243,18 +282,27 @@ async function loadConfig(force: boolean): Promise<void> {
   load.innerHTML = loadingHtml();
   root.hidden = true;
   let res;
-  try { res = await api('GET', '/api/config/get'); }
-  catch { res = null; }
-  finally { editor.loading = false; }
+  try {
+    res = await api('GET', '/api/config/get');
+  } catch {
+    res = null;
+  } finally {
+    editor.loading = false;
+  }
   if (isDisposed() || current !== generation) return;
   if (!res || !res.success || !isPlainObject(res.obj) || !res.etag) {
     load.innerHTML = `<div class="table-empty">${escapeHtml(res?.msg ? safeServerMessage(res.msg) : t('config_load_failed'))}</div><button type="button" class="btn-secondary" id="configRetry">${escapeHtml(t('config_retry'))}</button>`;
-    required('configRetry').addEventListener('click', () => { void loadConfig(true); });
+    required('configRetry').addEventListener('click', () => {
+      void loadConfig(true);
+    });
     return;
   }
   const parsed = res.rawJson ? parseConfigJson(res.rawJson) : null;
   const configDocument = parsed && isPlainObject(parsed) ? parsed['obj'] : res.obj;
-  if (!isPlainObject(configDocument)) { load.textContent = t('config_load_failed'); return; }
+  if (!isPlainObject(configDocument)) {
+    load.textContent = t('config_load_failed');
+    return;
+  }
   editor.loaded = clone(configDocument);
   editor.draft = clone(configDocument);
   editor.nodeRows = null;
@@ -277,16 +325,28 @@ async function loadConfig(force: boolean): Promise<void> {
   for (const section of ['main', 'inbounds', 'panels']) {
     const pane = required('config-pane-' + section);
     if (!can('config.write.' + section)) {
-      pane.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach(field => {
-        field.title = t('permission_missing').replace('{permission}', 'config.write.' + section);
-        if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement && field.type === 'checkbox') field.disabled = true;
-        else field.readOnly = true;
-      });
-      pane.querySelectorAll<HTMLButtonElement>('button:not(.config-card-toggle):not([data-config-pass])').forEach(button => { button.disabled = true; button.classList.add('permission-action-disabled'); button.title = t('permission_missing').replace('{permission}', 'config.write.' + section); });
+      pane
+        .querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select')
+        .forEach((field) => {
+          field.title = t('permission_missing').replace('{permission}', 'config.write.' + section);
+          if (field instanceof HTMLSelectElement || (field instanceof HTMLInputElement && field.type === 'checkbox'))
+            field.disabled = true;
+          else field.readOnly = true;
+        });
+      pane
+        .querySelectorAll<HTMLButtonElement>('button:not(.config-card-toggle):not([data-config-pass])')
+        .forEach((button) => {
+          button.disabled = true;
+          button.classList.add('permission-action-disabled');
+          button.title = t('permission_missing').replace('{permission}', 'config.write.' + section);
+        });
     }
   }
   const active = document.querySelector<HTMLButtonElement>('.config-tab.active');
-  if (active?.disabled) { const section = ['main', 'inbounds', 'panels'].find(section => can('config.read.' + section)); if (section) showConfigSection(section); }
+  if (active?.disabled) {
+    const section = ['main', 'inbounds', 'panels'].find((section) => can('config.read.' + section));
+    if (section) showConfigSection(section);
+  }
   showResult('');
   setRestartLine([]);
   markDirty();
@@ -302,7 +362,10 @@ export function configOnTab() {
 
 configOnTab.leave = async function leave() {
   if (disposed || editor.saving || editor.loading) return false;
-  if (!editor.dirty) { editor.fetched = false; return true; }
+  if (!editor.dirty) {
+    editor.fetched = false;
+    return true;
+  }
   const ok = await confirmDialog(t('config_leave_confirm'), t('confirm'));
   if (!ok || isDisposed()) return false;
   editor.draft = clone(editor.loaded);

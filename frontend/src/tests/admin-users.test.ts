@@ -7,20 +7,27 @@ import { initUsers } from '../admin/users';
 import { createLoadGeneration } from '../shared/stale';
 
 let dispose: (() => void) | undefined;
-afterEach(() => { dispose?.(); dispose = undefined; });
+afterEach(() => {
+  dispose?.();
+  dispose = undefined;
+});
 function setup() {
   document.body.innerHTML = readFileSync('src/templates/admin.html', 'utf8');
   const state = createAdminState();
   const api = vi.fn<AdminContext['api']>();
   const confirm = vi.fn<AdminContext['confirm']>().mockResolvedValue(true);
   const toast = vi.fn();
-  dispose = initUsers({ doc: document, t: key => key, api, confirm, toast, loadGen: createLoadGeneration() }, state);
-  const click = (id: string) => { required(document.getElementById(id)).click(); };
+  dispose = initUsers({ doc: document, t: (key) => key, api, confirm, toast, loadGen: createLoadGeneration() }, state);
+  const click = (id: string) => {
+    required(document.getElementById(id)).click();
+  };
   const input = (id: string) => requiredInstance(document.getElementById(id), HTMLInputElement);
   const load = async (users: unknown = ['alice']) => {
     api.mockResolvedValueOnce({ success: true, obj: users, status: 200 });
     click('btnLoadUsers');
-    await vi.waitFor(() => { expect(requiredInstance(document.getElementById('btnLoadUsers'), HTMLButtonElement).disabled).toBe(false); });
+    await vi.waitFor(() => {
+      expect(requiredInstance(document.getElementById('btnLoadUsers'), HTMLButtonElement).disabled).toBe(false);
+    });
   };
   return { state, api, confirm, toast, click, input, load };
 }
@@ -32,11 +39,15 @@ describe('admin user management', () => {
     await load(['alice']);
     api.mockResolvedValueOnce(success({ ext_username: 'alice-login' }));
     required(document.querySelector<HTMLButtonElement>('[data-user-action="view"]')).click();
-    await vi.waitFor(() => { expect(requiredInstance(document.getElementById('btnPasswordReset'), HTMLButtonElement).disabled).toBe(false); });
+    await vi.waitFor(() => {
+      expect(requiredInstance(document.getElementById('btnPasswordReset'), HTMLButtonElement).disabled).toBe(false);
+    });
     const link = 'https://example.test/sub/reset?token=' + 'x'.repeat(75);
     api.mockResolvedValueOnce(success({ link }));
     click('btnPasswordReset');
-    await vi.waitFor(() => { expect(document.querySelector<HTMLInputElement>('#userDetailResult input')?.value).toBe(link); });
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLInputElement>('#userDetailResult input')?.value).toBe(link);
+    });
     expect(api).toHaveBeenCalledWith('POST', '/api/user/password-reset', { user: 'alice' });
     expect(required(document.getElementById('userDetailResult')).hidden).toBe(false);
     expect(requiredInstance(document.querySelector('#userDetailResult input'), HTMLInputElement).readOnly).toBe(true);
@@ -49,11 +60,15 @@ describe('admin user management', () => {
     expect(reset.disabled).toBe(true);
     api.mockResolvedValueOnce(success({ ext_username: 'alice-login' }));
     required(views[0]).click();
-    await vi.waitFor(() => { expect(reset.disabled).toBe(false); });
+    await vi.waitFor(() => {
+      expect(reset.disabled).toBe(false);
+    });
     expect(required(document.getElementById('passwordResetUnavailable')).hidden).toBe(true);
     api.mockResolvedValueOnce(success({ ext_username: null }));
     required(views[1]).click();
-    await vi.waitFor(() => { expect(reset.disabled).toBe(true); });
+    await vi.waitFor(() => {
+      expect(reset.disabled).toBe(true);
+    });
     expect(required(document.getElementById('passwordResetUnavailable')).hidden).toBe(false);
     const calls = api.mock.calls.length;
     click('btnPasswordReset');
@@ -66,22 +81,39 @@ describe('admin user management', () => {
     const reset = requiredInstance(document.getElementById('btnPasswordReset'), HTMLButtonElement);
     api.mockResolvedValueOnce(success({ ext_username: 'alice-login' }));
     required(views[0]).click();
-    await vi.waitFor(() => { expect(reset.disabled).toBe(false); });
+    await vi.waitFor(() => {
+      expect(reset.disabled).toBe(false);
+    });
     let resolve!: (value: ReturnType<typeof success>) => void;
-    api.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    api.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
     click('btnPasswordReset');
     api.mockResolvedValueOnce(success({ ext_username: null }));
     required(views[1]).click();
-    await vi.waitFor(() => { expect(required(document.getElementById('passwordResetUnavailable')).hidden).toBe(false); });
+    await vi.waitFor(() => {
+      expect(required(document.getElementById('passwordResetUnavailable')).hidden).toBe(false);
+    });
     resolve(success({ link: 'https://example.test/sub/reset?token=secret' }));
-    await vi.waitFor(() => { expect(reset.hasAttribute('aria-busy')).toBe(false); });
+    await vi.waitFor(() => {
+      expect(reset.hasAttribute('aria-busy')).toBe(false);
+    });
     expect(reset.disabled).toBe(true);
     expect(required(document.getElementById('userDetailResult')).hidden).toBe(true);
   });
   it('shows external names and switches to web-only rows while keeping internal action targets', async () => {
     const { input, load, api } = setup();
-    await load([{ username: 'alice', ext_username: '<alice-login>' }, { username: 'bob', ext_username: null }]);
-    expect([...document.querySelectorAll('td.user-external')].map(cell => cell.textContent)).toEqual(['<alice-login>', '—']);
+    await load([
+      { username: 'alice', ext_username: '<alice-login>' },
+      { username: 'bob', ext_username: null },
+    ]);
+    expect([...document.querySelectorAll('td.user-external')].map((cell) => cell.textContent)).toEqual([
+      '<alice-login>',
+      '—',
+    ]);
     const toggle = input('webUsersOnly');
     toggle.checked = true;
     toggle.dispatchEvent(new Event('change'));
@@ -107,7 +139,7 @@ describe('admin user management', () => {
     const { state, api, input, load } = setup();
     await load(['Alice', 'bob', 'malice', '<img>']);
     const search = input('userSearch');
-    const names = () => [...document.querySelectorAll('.user-name')].map(cell => cell.textContent);
+    const names = () => [...document.querySelectorAll('.user-name')].map((cell) => cell.textContent);
     search.value = ' ALIce ';
     search.dispatchEvent(new Event('input'));
     expect(names()).toEqual(['Alice', 'malice']);
@@ -145,24 +177,43 @@ describe('admin user management', () => {
     const wrap = required(document.getElementById('usersTableWrap'));
     expect(wrap.querySelector('img')).toBeNull();
     expect(wrap.textContent).toContain('<img>');
-    expect([...wrap.querySelectorAll('button')].every(button => button.disabled)).toBe(true);
+    expect([...wrap.querySelectorAll('button')].every((button) => button.disabled)).toBe(true);
   });
   it('ignores outdated details when another user is selected and when details are closed', async () => {
     const { api, load, state, click } = setup();
     await load(['alice', 'bob']);
     let resolveAlice!: (value: ReturnType<typeof success>) => void;
-    api.mockImplementationOnce(() => new Promise(done => { resolveAlice = done; })).mockResolvedValueOnce(success({ displayname: 'Bob' }));
+    api
+      .mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolveAlice = done;
+          }),
+      )
+      .mockResolvedValueOnce(success({ displayname: 'Bob' }));
     const buttons = document.querySelectorAll<HTMLButtonElement>('[data-user-action="view"]');
-    required(buttons[0]).click(); required(buttons[1]).click();
-    await vi.waitFor(() => { expect(state.selectedUser).toBe('bob'); });
+    required(buttons[0]).click();
+    required(buttons[1]).click();
+    await vi.waitFor(() => {
+      expect(state.selectedUser).toBe('bob');
+    });
     resolveAlice(success({ displayname: 'Alice' }));
-    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(state.selectedUser).toBe('bob');
     expect(required(document.getElementById('userDetailInfo')).textContent).toContain('Bob');
     let resolve!: (value: ReturnType<typeof success>) => void;
-    api.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-    required(buttons[0]).click(); click('btnCloseDetail'); resolve(success({ displayname: 'Alice' }));
-    await Promise.resolve(); await Promise.resolve();
+    api.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    required(buttons[0]).click();
+    click('btnCloseDetail');
+    resolve(success({ displayname: 'Alice' }));
+    await Promise.resolve();
+    await Promise.resolve();
     expect(state.selectedUser).toBeNull();
     expect(requiredInstance(document.getElementById('userDetailCard'), HTMLDialogElement).open).toBe(false);
   });
@@ -170,15 +221,26 @@ describe('admin user management', () => {
     const { api, load, state } = setup();
     await load(['alice', 'bob']);
     let resolveFingerprints!: (value: ReturnType<typeof success>) => void;
-    api.mockResolvedValueOnce(success({ fingerprint: 'chrome' }))
-      .mockImplementationOnce(() => new Promise(done => { resolveFingerprints = done; }))
+    api
+      .mockResolvedValueOnce(success({ fingerprint: 'chrome' }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolveFingerprints = done;
+          }),
+      )
       .mockResolvedValueOnce(success({ displayname: 'Bob' }));
     required(document.querySelector<HTMLButtonElement>('[data-user-action="edit"]')).click();
-    await vi.waitFor(() => { expect(api).toHaveBeenCalledWith('GET', '/api/fingerprints'); });
+    await vi.waitFor(() => {
+      expect(api).toHaveBeenCalledWith('GET', '/api/fingerprints');
+    });
     required(document.querySelectorAll<HTMLButtonElement>('[data-user-action="view"]')[1]).click();
-    await vi.waitFor(() => { expect(state.selectedUser).toBe('bob'); });
+    await vi.waitFor(() => {
+      expect(state.selectedUser).toBe('bob');
+    });
     resolveFingerprints(success(['chrome']));
-    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(requiredInstance(document.getElementById('userEditDialog'), HTMLDialogElement).open).toBe(false);
     expect(required(document.getElementById('userDetailInfo')).textContent).toContain('Bob');
   });
@@ -189,51 +251,82 @@ describe('admin user management', () => {
     const result = required(document.getElementById('userDetailResult'));
     expect(result.hidden).toBe(true);
     const token = 'long-token'.repeat(100);
-    api.mockResolvedValueOnce(success({ token, bandwidth: { total: { upload: 1e9, download: 2e9, total: 3e9 }, wl_total: { upload: 0, download: 500e6, total: 500e6 } } }));
+    api.mockResolvedValueOnce(
+      success({
+        token,
+        bandwidth: {
+          total: { upload: 1e9, download: 2e9, total: 3e9 },
+          wl_total: { upload: 0, download: 500e6, total: 500e6 },
+        },
+      }),
+    );
     required(views[0]).click();
-    await vi.waitFor(() => { expect(state.selectedUser).toBe('alice'); });
+    await vi.waitFor(() => {
+      expect(state.selectedUser).toBe('alice');
+    });
     const info = required(document.getElementById('userDetailInfo'));
     expect(info.textContent).toContain(token);
     expect(info.textContent).toContain('total_traffic3.00 gb_unit');
     expect(info.textContent).toContain('wl_total_traffic500.00 mb_unit');
     const breakdowns = info.querySelectorAll('.traffic-breakdown');
     expect(info.querySelectorAll('.traffic-row')).toHaveLength(2);
-    expect([...breakdowns].every(item => item.parentElement?.classList.contains('traffic-row'))).toBe(true);
+    expect([...breakdowns].every((item) => item.parentElement?.classList.contains('traffic-row'))).toBe(true);
     expect(breakdowns[0]?.textContent).toBe('↑ 1.00 gb_unit / ↓ 2.00 gb_unit');
     expect(breakdowns[1]?.textContent).toBe('↑ 0 byte_unit / ↓ 500.00 mb_unit');
     expect(result.hidden).toBe(true);
     api.mockResolvedValueOnce(success({ uuid: 'new-uuid', token }));
     click('btnDoReset');
-    await vi.waitFor(() => { expect(result.hidden).toBe(false); });
+    await vi.waitFor(() => {
+      expect(result.hidden).toBe(false);
+    });
     expect(result.textContent).toContain(token);
     api.mockResolvedValueOnce(success({ bandwidth: { total: { total: 0 } } }));
     required(views[1]).click();
-    await vi.waitFor(() => { expect(state.selectedUser).toBe('bob'); });
+    await vi.waitFor(() => {
+      expect(state.selectedUser).toBe('bob');
+    });
     expect(result.hidden).toBe(true);
     expect(result.textContent).toBe('');
     expect(info.textContent).toContain('total_traffic0 byte_unit');
     expect(info.textContent).toContain('wl_total_trafficna');
-    expect([...info.querySelectorAll('.traffic-breakdown')].map(item => item.textContent)).toEqual(['↑ na / ↓ na', '↑ na / ↓ na']);
+    expect([...info.querySelectorAll('.traffic-breakdown')].map((item) => item.textContent)).toEqual([
+      '↑ na / ↓ na',
+      '↑ na / ↓ na',
+    ]);
     api.mockResolvedValueOnce({ success: false, msg: 'failed', status: 400 });
     click('btnDoReset');
-    await vi.waitFor(() => { expect(result.hidden).toBe(false); });
+    await vi.waitFor(() => {
+      expect(result.hidden).toBe(false);
+    });
     expect(result.textContent).toContain('failed');
   });
   it('validates required fields and preserves password whitespace in add requests', async () => {
     const { api, click, input, toast } = setup();
-    click('btnShowAdd'); click('btnDoAdd');
+    click('btnShowAdd');
+    click('btnDoAdd');
     expect(toast).toHaveBeenLastCalledWith('internal_user_required', 'error');
-    input('addUser').value = ' alice '; click('btnDoAdd');
+    input('addUser').value = ' alice ';
+    click('btnDoAdd');
     expect(toast).toHaveBeenLastCalledWith('display_name_required', 'error');
     input('addDisplayName').value = ' Alice ';
     input('addExtUser').value = ' ext ';
     input('addExtPass').value = ' pass ';
-    input('addLimit').value = '10'; input('addWlLimit').value = '0';
+    input('addLimit').value = '10';
+    input('addWlLimit').value = '0';
     api.mockResolvedValueOnce({ success: false, msg: '<failed>', status: 400 });
     click('btnDoAdd');
-    await vi.waitFor(() => { expect(required(document.getElementById('addUserResult')).textContent).toContain('<failed>'); });
+    await vi.waitFor(() => {
+      expect(required(document.getElementById('addUserResult')).textContent).toContain('<failed>');
+    });
     expect(required(document.getElementById('addUserResult')).querySelector('failed')).toBeNull();
-    expect(api).toHaveBeenCalledWith('POST', '/api/user/add', { user: 'alice', displayname: 'Alice', ext_username: 'ext', ext_password: ' pass ', limit: 10, wl_limit: 0 });
+    expect(api).toHaveBeenCalledWith('POST', '/api/user/add', {
+      user: 'alice',
+      displayname: 'Alice',
+      ext_username: 'ext',
+      ext_password: ' pass ',
+      limit: 10,
+      wl_limit: 0,
+    });
   });
   it('does not delete when confirmation is declined and reloads after success', async () => {
     const { api, confirm, load, state } = setup();
@@ -246,7 +339,9 @@ describe('admin user management', () => {
     state.selectedUser = 'alice';
     api.mockResolvedValueOnce(success()).mockResolvedValueOnce(success([]));
     button.click();
-    await vi.waitFor(() => { expect(state.currentUsers).toEqual([]); });
+    await vi.waitFor(() => {
+      expect(state.currentUsers).toEqual([]);
+    });
     expect(api).toHaveBeenCalledWith('POST', '/api/user/delete', { user: 'alice' });
     expect(state.selectedUser).toBeNull();
   });

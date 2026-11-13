@@ -6,32 +6,60 @@ import { renderIfChanged } from '../shared/render';
 import { button, element, input } from './context';
 import type { AdminContext } from './context';
 
-interface ThreadInfo { tid?: string | number; name?: string; state?: string; cpu?: number; ctx_switches?: number; stack?: number }
+interface ThreadInfo {
+  tid?: string | number;
+  name?: string;
+  state?: string;
+  cpu?: number;
+  ctx_switches?: number;
+  stack?: number;
+}
 interface SystemStatus {
-  cpu?: number; cpu_info?: { name?: string; cores?: number; mhz_max?: number };
+  cpu?: number;
+  cpu_info?: { name?: string; cores?: number; mhz_max?: number };
   loadavg?: { load_1m?: number; load_5m?: number; load_15m?: number };
   memory?: { ram?: { used: number; total: number; available: number }; swap?: { used: number; total: number } };
-  network?: { recv: number; sent: number }; app_memory?: { ram: number; swap: number };
-  uptime?: number; app_uptime?: number; app_thread_amount?: number; process_count?: number;
-  app_threads?: ThreadInfo[]; connections?: { tcp?: number; udp?: number }; ip?: { ipv4?: string[]; ipv6?: string[] };
+  network?: { recv: number; sent: number };
+  app_memory?: { ram: number; swap: number };
+  uptime?: number;
+  app_uptime?: number;
+  app_thread_amount?: number;
+  process_count?: number;
+  app_threads?: ThreadInfo[];
+  connections?: { tcp?: number; udp?: number };
+  ip?: { ipv4?: string[]; ipv6?: string[] };
 }
-interface Snapshot { ts?: number; panels?: Record<string, unknown>; host?: SystemStatus }
+interface Snapshot {
+  ts?: number;
+  panels?: Record<string, unknown>;
+  host?: SystemStatus;
+}
 
 function systemStatus(value: unknown): SystemStatus | null {
   if (!isRecord(value)) return null;
   for (const key of ['cpu_info', 'loadavg', 'memory', 'network', 'app_memory', 'connections', 'ip'] as const) {
     if (value[key] != null && !isRecord(value[key])) return null;
   }
-  const optionalNumbers = (object: Record<string, unknown>, keys: readonly string[]): boolean => keys.every(key => object[key] == null || typeof object[key] === 'number');
-  const requiredNumbers = (object: Record<string, unknown>, keys: readonly string[]): boolean => keys.every(key => typeof object[key] === 'number');
+  const optionalNumbers = (object: Record<string, unknown>, keys: readonly string[]): boolean =>
+    keys.every((key) => object[key] == null || typeof object[key] === 'number');
+  const requiredNumbers = (object: Record<string, unknown>, keys: readonly string[]): boolean =>
+    keys.every((key) => typeof object[key] === 'number');
   if (!optionalNumbers(value, ['cpu', 'uptime', 'app_uptime', 'app_thread_amount', 'process_count'])) return null;
-  if (isRecord(value['cpu_info']) && (!optionalNumbers(value['cpu_info'], ['cores', 'mhz_max']) || (value['cpu_info']['name'] != null && typeof value['cpu_info']['name'] !== 'string'))) return null;
+  if (
+    isRecord(value['cpu_info']) &&
+    (!optionalNumbers(value['cpu_info'], ['cores', 'mhz_max']) ||
+      (value['cpu_info']['name'] != null && typeof value['cpu_info']['name'] !== 'string'))
+  )
+    return null;
   if (isRecord(value['loadavg']) && !optionalNumbers(value['loadavg'], ['load_1m', 'load_5m', 'load_15m'])) return null;
   if (isRecord(value['network']) && !requiredNumbers(value['network'], ['recv', 'sent'])) return null;
   if (isRecord(value['app_memory']) && !requiredNumbers(value['app_memory'], ['ram', 'swap'])) return null;
   if (isRecord(value['connections']) && !optionalNumbers(value['connections'], ['tcp', 'udp'])) return null;
   if (isRecord(value['memory'])) {
-    for (const [key, fields] of [['ram', ['used', 'total', 'available']], ['swap', ['used', 'total']]] as const) {
+    for (const [key, fields] of [
+      ['ram', ['used', 'total', 'available']],
+      ['swap', ['used', 'total']],
+    ] as const) {
       const part = value['memory'][key];
       if (part != null && (!isRecord(part) || !requiredNumbers(part, fields))) return null;
     }
@@ -42,88 +70,101 @@ function systemStatus(value: unknown): SystemStatus | null {
       if (list != null && (!Array.isArray(list) || list.some((item: unknown) => typeof item !== 'string'))) return null;
     }
   }
-  if (value['app_threads'] !== undefined && (!Array.isArray(value['app_threads']) || value['app_threads'].some((thread: unknown) => {
-    if (!isRecord(thread) || !optionalNumbers(thread, ['cpu', 'ctx_switches', 'stack'])) return true;
-    if (thread['tid'] != null && typeof thread['tid'] !== 'number' && typeof thread['tid'] !== 'string') return true;
-    return ['name', 'state'].some(key => thread[key] != null && typeof thread[key] !== 'string');
-  }))) return null;
+  if (
+    value['app_threads'] !== undefined &&
+    (!Array.isArray(value['app_threads']) ||
+      value['app_threads'].some((thread: unknown) => {
+        if (!isRecord(thread) || !optionalNumbers(thread, ['cpu', 'ctx_switches', 'stack'])) return true;
+        if (thread['tid'] != null && typeof thread['tid'] !== 'number' && typeof thread['tid'] !== 'string')
+          return true;
+        return ['name', 'state'].some((key) => thread[key] != null && typeof thread[key] !== 'string');
+      }))
+  )
+    return null;
   // Required and optional presentation fields have been validated above.
   return value;
 }
 
-export function createSystem({ doc, t, api, toast, loadGen }: AdminContext, renderPanelCards: (data: unknown, prefix?: string) => string, language: string) {
+export function createSystem(
+  { doc, t, api, toast, loadGen }: AdminContext,
+  renderPanelCards: (data: unknown, prefix?: string) => string,
+  language: string,
+) {
   const fmtBytes = (bytes: number): string => formatBytes(bytes, t);
   const fmtUptime = (seconds?: number): string => formatUptime(seconds, t);
   let disposed = false;
 
-async function loadSystemStatus(): Promise<void> {
-  const result = element(doc, 'systemStatusResult');
-  const current = loadGen('system');
-  await withBusy(button(doc, 'btnSystemStatus'), () => {
-    result.innerHTML = loadingHtml(t);
-    result.className = 'result-box';
-    return loadSystemStatusRequest(result, current);
-  });
-}
-
-async function loadSystemStatusRequest(result: HTMLElement, current: () => boolean): Promise<void> {
-  const res = await api('GET', '/api/state/system');
-  if (disposed || !current()) return;
-  if (res && res.success) {
-    result.innerHTML = renderSystemStatus(res.obj);
-    result.className = 'result-box';
-  } else {
-    result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
-    result.className = 'result-box error';
+  async function loadSystemStatus(): Promise<void> {
+    const result = element(doc, 'systemStatusResult');
+    const current = loadGen('system');
+    await withBusy(button(doc, 'btnSystemStatus'), () => {
+      result.innerHTML = loadingHtml(t);
+      result.className = 'result-box';
+      return loadSystemStatusRequest(result, current);
+    });
   }
-}
 
-function renderSystemStatus(value: unknown, keyPrefix = ''): string {
-  const s = systemStatus(value);
-  if (!s) return `<div class="table-empty">${t('no_data')}</div>`;
+  async function loadSystemStatusRequest(result: HTMLElement, current: () => boolean): Promise<void> {
+    const res = await api('GET', '/api/state/system');
+    if (disposed || !current()) return;
+    if (res && res.success) {
+      result.innerHTML = renderSystemStatus(res.obj);
+      result.className = 'result-box';
+    } else {
+      result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
+      result.className = 'result-box error';
+    }
+  }
 
-  const cpuPct = s.cpu != null ? Math.round(s.cpu * 100) / 100 : null;
-  const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
-  const cpuName = s.cpu_info?.name || t('na');
-  const cpuCores = s.cpu_info?.cores ?? t('na');
-  const cpuSpeed = s.cpu_info?.mhz_max ? String(Math.round(s.cpu_info.mhz_max)) + ' ' + t('mhz_unit') : t('na');
-  const loads = s.loadavg
-    ? [s.loadavg.load_1m, s.loadavg.load_5m, s.loadavg.load_15m].map(l => (l ?? 0).toFixed(2)).join(', ')
-    : t('na');
+  function renderSystemStatus(value: unknown, keyPrefix = ''): string {
+    const s = systemStatus(value);
+    if (!s) return `<div class="table-empty">${t('no_data')}</div>`;
 
-  const ram = s.memory?.ram;
-  const memUsed = ram ? fmtBytes(ram.used) : t('na');
-  const memTotal = ram ? fmtBytes(ram.total) : t('na');
-  const memAvail = ram ? fmtBytes(ram.available) : t('na');
-  const memPct = ram && ram.total > 0 ? Math.round(ram.used / ram.total * 100) : null;
-  const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
+    const cpuPct = s.cpu != null ? Math.round(s.cpu * 100) / 100 : null;
+    const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
+    const cpuName = s.cpu_info?.name || t('na');
+    const cpuCores = s.cpu_info?.cores ?? t('na');
+    const cpuSpeed = s.cpu_info?.mhz_max ? String(Math.round(s.cpu_info.mhz_max)) + ' ' + t('mhz_unit') : t('na');
+    const loads = s.loadavg
+      ? [s.loadavg.load_1m, s.loadavg.load_5m, s.loadavg.load_15m].map((l) => (l ?? 0).toFixed(2)).join(', ')
+      : t('na');
 
-  const swap = s.memory?.swap;
-  const swapUsed = swap ? fmtBytes(swap.used) : t('na');
-  const swapTotal = swap ? fmtBytes(swap.total) : t('na');
+    const ram = s.memory?.ram;
+    const memUsed = ram ? fmtBytes(ram.used) : t('na');
+    const memTotal = ram ? fmtBytes(ram.total) : t('na');
+    const memAvail = ram ? fmtBytes(ram.available) : t('na');
+    const memPct = ram && ram.total > 0 ? Math.round((ram.used / ram.total) * 100) : null;
+    const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
 
-  const netRecv = s.network ? fmtBytes(s.network.recv) : t('na');
-  const netSent = s.network ? fmtBytes(s.network.sent) : t('na');
+    const swap = s.memory?.swap;
+    const swapUsed = swap ? fmtBytes(swap.used) : t('na');
+    const swapTotal = swap ? fmtBytes(swap.total) : t('na');
 
-  const appMem = s.app_memory ? fmtBytes(s.app_memory.ram) : t('na');
-  const appSwap = s.app_memory ? fmtBytes(s.app_memory.swap) : t('na');
-  const sysUptime = fmtUptime(s.uptime);
-  const appUptime = fmtUptime(s.app_uptime);
-  const threads = s.app_thread_amount ?? t('na');
-  const procs = s.process_count ?? t('na');
-  const threadRows = Array.isArray(s.app_threads) ? s.app_threads : [];
+    const netRecv = s.network ? fmtBytes(s.network.recv) : t('na');
+    const netSent = s.network ? fmtBytes(s.network.sent) : t('na');
 
-  const ipRows = (label: string, list: string[] | undefined): string => {
-    const arr = Array.isArray(list) ? list.filter(Boolean) : [];
-    if (!arr.length) return `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value">${t('na')}</span></div>`;
-    return arr.map((ip, i) => {
-      const lbl = arr.length > 1 ? `${label} ${String(i + 1)}` : label;
-      const fs = ip.length > 28 ? '8px' : ip.length > 22 ? '9px' : ip.length > 15 ? '10px' : '11px';
-      return `<div class="panel-metric"><span class="panel-metric-label">${lbl}</span><span class="panel-metric-value" style="font-size:${fs}">${escapeHtml(ip)}</span></div>`;
-    }).join('');
-  };
+    const appMem = s.app_memory ? fmtBytes(s.app_memory.ram) : t('na');
+    const appSwap = s.app_memory ? fmtBytes(s.app_memory.swap) : t('na');
+    const sysUptime = fmtUptime(s.uptime);
+    const appUptime = fmtUptime(s.app_uptime);
+    const threads = s.app_thread_amount ?? t('na');
+    const procs = s.process_count ?? t('na');
+    const threadRows = Array.isArray(s.app_threads) ? s.app_threads : [];
 
-  return `
+    const ipRows = (label: string, list: string[] | undefined): string => {
+      const arr = Array.isArray(list) ? list.filter(Boolean) : [];
+      if (!arr.length)
+        return `<div class="panel-metric"><span class="panel-metric-label">${label}</span><span class="panel-metric-value">${t('na')}</span></div>`;
+      return arr
+        .map((ip, i) => {
+          const lbl = arr.length > 1 ? `${label} ${String(i + 1)}` : label;
+          const fs = ip.length > 28 ? '8px' : ip.length > 22 ? '9px' : ip.length > 15 ? '10px' : '11px';
+          return `<div class="panel-metric"><span class="panel-metric-label">${lbl}</span><span class="panel-metric-value" style="font-size:${fs}">${escapeHtml(ip)}</span></div>`;
+        })
+        .join('');
+    };
+
+    return `
     <div class="panel-grid" style="padding-top:0">
       <div class="panel-section">
         <div class="panel-section-label">${t('system')}</div>
@@ -167,30 +208,32 @@ function renderSystemStatus(value: unknown, keyPrefix = ''): string {
     </div>
     ${renderThreadTable(threadRows, threads, keyPrefix || '')}
   `;
-}
+  }
 
-function threadState(state: string | undefined): string {
-  if (!state) return t('na');
-  const key = 'thread_' + state.replace(/-/g, '_');
-  const label = t(key);
-  return label === key ? state : label;
-}
+  function threadState(state: string | undefined): string {
+    if (!state) return t('na');
+    const key = 'thread_' + state.replace(/-/g, '_');
+    const label = t(key);
+    return label === key ? state : label;
+  }
 
-function threadCpu(seconds: number | undefined): string {
-  if (seconds == null || isNaN(seconds)) return t('na');
-  return seconds.toFixed(1);
-}
+  function threadCpu(seconds: number | undefined): string {
+    if (seconds == null || isNaN(seconds)) return t('na');
+    return seconds.toFixed(1);
+  }
 
-function threadStack(bytes: number | undefined): string {
-  if (bytes == null || isNaN(bytes)) return t('na');
-  return String(Math.round(bytes / 1024));
-}
+  function threadStack(bytes: number | undefined): string {
+    if (bytes == null || isNaN(bytes)) return t('na');
+    return String(Math.round(bytes / 1024));
+  }
 
-function renderThreadTable(rows: ThreadInfo[], count: number | string | undefined, keyPrefix: string): string {
-  const shown = count ?? rows.length;
-  const key = (keyPrefix || '') + 'threads';
-  const body = rows.length
-    ? rows.map(row => `
+  function renderThreadTable(rows: ThreadInfo[], count: number | string | undefined, keyPrefix: string): string {
+    const shown = count ?? rows.length;
+    const key = (keyPrefix || '') + 'threads';
+    const body = rows.length
+      ? rows
+          .map(
+            (row) => `
         <tr>
           <td class="mono">${escapeHtml(row.tid ?? t('na'))}</td>
           <td class="mono">${escapeHtml(row.name || t('na'))}</td>
@@ -199,9 +242,11 @@ function renderThreadTable(rows: ThreadInfo[], count: number | string | undefine
           <td class="mono">${escapeHtml(row.ctx_switches ?? t('na'))}</td>
           <td class="mono">${escapeHtml(threadStack(row.stack))}</td>
         </tr>
-      `).join('')
-    : `<tr><td colspan="6" class="table-empty">${t('no_threads')}</td></tr>`;
-  return `
+      `,
+          )
+          .join('')
+      : `<tr><td colspan="6" class="table-empty">${t('no_threads')}</td></tr>`;
+    return `
     <div class="panel-card thread-card" id="pc-${key}">
       <div class="panel-card-header" data-panel-toggle="${key}">
         <div class="panel-card-title">
@@ -233,55 +278,69 @@ function renderThreadTable(rows: ThreadInfo[], count: number | string | undefine
       </div>
     </div>
   `;
-}
-
-async function loadSnapshots(): Promise<void> {
-  const list = element(doc, 'snapshotsList');
-  const cutoff = parseInt(input(doc, 'snapCutoff').value, 10);
-  if (isNaN(cutoff) || cutoff <= 0) { toast(t('cutoff_invalid'), 'error'); return; }
-  const current = loadGen('snapshots');
-  await withBusy(button(doc, 'btnLoadSnapshots'), () => {
-    return loadSnapshotsRequest(list, cutoff, current);
-  });
-}
-
-async function loadSnapshotsRequest(list: HTMLElement, cutoff: number, current: () => boolean): Promise<void> {
-  const res = await api('POST', '/api/state/snapshots', { cutoff });
-  if (disposed || !current()) return;
-  if (!res || !res.success) {
-    renderIfChanged(list, `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`);
-    return;
   }
-  renderIfChanged(list, renderSnapshots(res.obj || []));
-}
 
-function fmtSnapDate(ts: number | undefined): string {
-  if (ts == null || isNaN(ts)) return t('na');
-  return new Date(ts * 1000).toLocaleString((doc.documentElement.lang || language) === 'ru' ? 'ru-RU' : 'en-US', {
-    timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  }) + ' ' + t('utc');
-}
-
-function renderSnapshots(data: unknown): string {
-  const snaps: Snapshot[] = Array.isArray(data) ? data.filter(isRecord).map(value => {
-    const host = systemStatus(value['host']);
-    return {
-      ...(typeof value['ts'] === 'number' ? { ts: value['ts'] } : {}),
-      ...(isRecord(value['panels']) ? { panels: value['panels'] } : {}),
-      ...(host ? { host } : {}),
-    };
-  }) : [];
-  if (!Array.isArray(snaps) || !snaps.length) {
-    return `<div class="table-empty">${t('no_snapshots')}</div>`;
+  async function loadSnapshots(): Promise<void> {
+    const list = element(doc, 'snapshotsList');
+    const cutoff = parseInt(input(doc, 'snapCutoff').value, 10);
+    if (isNaN(cutoff) || cutoff <= 0) {
+      toast(t('cutoff_invalid'), 'error');
+      return;
+    }
+    const current = loadGen('snapshots');
+    await withBusy(button(doc, 'btnLoadSnapshots'), () => {
+      return loadSnapshotsRequest(list, cutoff, current);
+    });
   }
-  return `
+
+  async function loadSnapshotsRequest(list: HTMLElement, cutoff: number, current: () => boolean): Promise<void> {
+    const res = await api('POST', '/api/state/snapshots', { cutoff });
+    if (disposed || !current()) return;
+    if (!res || !res.success) {
+      renderIfChanged(list, `<div class="table-empty">${escapeHtml(res?.msg || t('network_err'))}</div>`);
+      return;
+    }
+    renderIfChanged(list, renderSnapshots(res.obj || []));
+  }
+
+  function fmtSnapDate(ts: number | undefined): string {
+    if (ts == null || isNaN(ts)) return t('na');
+    return (
+      new Date(ts * 1000).toLocaleString((doc.documentElement.lang || language) === 'ru' ? 'ru-RU' : 'en-US', {
+        timeZone: 'UTC',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }) +
+      ' ' +
+      t('utc')
+    );
+  }
+
+  function renderSnapshots(data: unknown): string {
+    const snaps: Snapshot[] = Array.isArray(data)
+      ? data.filter(isRecord).map((value) => {
+          const host = systemStatus(value['host']);
+          return {
+            ...(typeof value['ts'] === 'number' ? { ts: value['ts'] } : {}),
+            ...(isRecord(value['panels']) ? { panels: value['panels'] } : {}),
+            ...(host ? { host } : {}),
+          };
+        })
+      : [];
+    if (!Array.isArray(snaps) || !snaps.length) {
+      return `<div class="table-empty">${t('no_snapshots')}</div>`;
+    }
+    return `
     <div class="panel-cards">
-      ${snaps.map((snap, snapIndex) => {
-        const key = 'snap-' + String(snapIndex);
-        const panelNames = snap.panels ? Object.keys(snap.panels) : [];
-        const wrappedPanels = Object.fromEntries(panelNames.map(n => [n, { obj: snap.panels?.[n] }]));
-        return `
+      ${snaps
+        .map((snap, snapIndex) => {
+          const key = 'snap-' + String(snapIndex);
+          const panelNames = snap.panels ? Object.keys(snap.panels) : [];
+          const wrappedPanels = Object.fromEntries(panelNames.map((n) => [n, { obj: snap.panels?.[n] }]));
+          return `
           <div class="panel-card" id="pc-${key}">
             <div class="panel-card-header" data-panel-toggle="${key}">
               <div class="panel-card-title">
@@ -302,16 +361,32 @@ function renderSnapshots(data: unknown): string {
             </div>
           </div>
         `;
-      }).join('')}
+        })
+        .join('')}
     </div>
   `;
-}
+  }
 
-function init(): () => void {
-  const controller = new AbortController();
-  button(doc, 'btnSystemStatus').addEventListener('click', () => { void loadSystemStatus(); }, { signal: controller.signal });
-  button(doc, 'btnLoadSnapshots').addEventListener('click', () => { void loadSnapshots(); }, { signal: controller.signal });
-  return () => { disposed = true; controller.abort(); };
-}
-return { init, renderSystemStatus, fmtSnapDate };
+  function init(): () => void {
+    const controller = new AbortController();
+    button(doc, 'btnSystemStatus').addEventListener(
+      'click',
+      () => {
+        void loadSystemStatus();
+      },
+      { signal: controller.signal },
+    );
+    button(doc, 'btnLoadSnapshots').addEventListener(
+      'click',
+      () => {
+        void loadSnapshots();
+      },
+      { signal: controller.signal },
+    );
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }
+  return { init, renderSystemStatus, fmtSnapDate };
 }

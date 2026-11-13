@@ -6,96 +6,146 @@ import { button, element, input } from './context';
 import type { AdminContext } from './context';
 
 interface PanelMetrics {
-  cpu: number; cpuCores?: number | null; cpuSpeedMhz?: number | null; uptime: number;
-  mem: { current: number; total: number }; swap: { current: number; total: number }; disk: { current: number; total: number };
+  cpu: number;
+  cpuCores?: number | null;
+  cpuSpeedMhz?: number | null;
+  uptime: number;
+  mem: { current: number; total: number };
+  swap: { current: number; total: number };
+  disk: { current: number; total: number };
   xray?: { state?: string | null; version?: string | null; errorMsg?: string | null } | null;
-  appStats: { mem: number; threads?: number | null }; netIO: { down: number; up: number }; netTraffic: { recv: number; sent: number };
-  publicIP?: { ipv4?: string | null; ipv6?: string | null } | null; loads?: number[] | null; tcpCount?: number | null; udpCount?: number | null;
+  appStats: { mem: number; threads?: number | null };
+  netIO: { down: number; up: number };
+  netTraffic: { recv: number; sent: number };
+  publicIP?: { ipv4?: string | null; ipv6?: string | null } | null;
+  loads?: number[] | null;
+  tcpCount?: number | null;
+  udpCount?: number | null;
 }
 
 function isPanelMetrics(value: unknown): value is PanelMetrics {
   if (!isRecord(value) || typeof value['cpu'] !== 'number' || typeof value['uptime'] !== 'number') return false;
-  for (const [key, fields] of [['mem', ['current', 'total']], ['swap', ['current', 'total']], ['disk', ['current', 'total']], ['appStats', ['mem']], ['netIO', ['down', 'up']], ['netTraffic', ['recv', 'sent']]] as const) {
+  for (const [key, fields] of [
+    ['mem', ['current', 'total']],
+    ['swap', ['current', 'total']],
+    ['disk', ['current', 'total']],
+    ['appStats', ['mem']],
+    ['netIO', ['down', 'up']],
+    ['netTraffic', ['recv', 'sent']],
+  ] as const) {
     const nested = value[key];
-    if (!isRecord(nested) || fields.some(field => typeof nested[field] !== 'number')) return false;
+    if (!isRecord(nested) || fields.some((field) => typeof nested[field] !== 'number')) return false;
   }
-  if (value['loads'] != null && (!Array.isArray(value['loads']) || value['loads'].some((item: unknown) => typeof item !== 'number'))) return false;
+  if (
+    value['loads'] != null &&
+    (!Array.isArray(value['loads']) || value['loads'].some((item: unknown) => typeof item !== 'number'))
+  )
+    return false;
   for (const key of ['xray', 'publicIP'] as const) if (value[key] != null && !isRecord(value[key])) return false;
-  for (const key of ['cpuCores', 'cpuSpeedMhz', 'tcpCount', 'udpCount'] as const) if (value[key] != null && typeof value[key] !== 'number') return false;
-  if (isRecord(value['xray']) && ['state', 'version', 'errorMsg'].some(key => value['xray'] && isRecord(value['xray']) && value['xray'][key] != null && typeof value['xray'][key] !== 'string')) return false;
-  if (isRecord(value['publicIP']) && ['ipv4', 'ipv6'].some(key => value['publicIP'] && isRecord(value['publicIP']) && value['publicIP'][key] != null && typeof value['publicIP'][key] !== 'string')) return false;
-  if (isRecord(value['appStats']) && value['appStats']['threads'] != null && typeof value['appStats']['threads'] !== 'number') return false;
+  for (const key of ['cpuCores', 'cpuSpeedMhz', 'tcpCount', 'udpCount'] as const)
+    if (value[key] != null && typeof value[key] !== 'number') return false;
+  if (
+    isRecord(value['xray']) &&
+    ['state', 'version', 'errorMsg'].some(
+      (key) =>
+        value['xray'] &&
+        isRecord(value['xray']) &&
+        value['xray'][key] != null &&
+        typeof value['xray'][key] !== 'string',
+    )
+  )
+    return false;
+  if (
+    isRecord(value['publicIP']) &&
+    ['ipv4', 'ipv6'].some(
+      (key) =>
+        value['publicIP'] &&
+        isRecord(value['publicIP']) &&
+        value['publicIP'][key] != null &&
+        typeof value['publicIP'][key] !== 'string',
+    )
+  )
+    return false;
+  if (
+    isRecord(value['appStats']) &&
+    value['appStats']['threads'] != null &&
+    typeof value['appStats']['threads'] !== 'number'
+  )
+    return false;
   return true;
 }
 
-function metrics(value: unknown): PanelMetrics | null { return isPanelMetrics(value) ? value : null; }
+function metrics(value: unknown): PanelMetrics | null {
+  return isPanelMetrics(value) ? value : null;
+}
 
 export function createPanels({ doc, t, api, loadGen }: AdminContext) {
   const fmtBytes = (bytes: number): string => formatBytes(bytes, t);
   const fmtUptime = (seconds: number): string => formatUptime(seconds, t);
   let disposed = false;
-async function checkPanelStatus(): Promise<void> {
-  const result = element(doc, 'panelStatusResult');
-  const current = loadGen('panels');
-  await withBusy(button(doc, 'btnPanelStatus'), async () => {
-    result.innerHTML = loadingHtml(t);
-    result.className = 'result-box';
-    const name = input(doc, 'panelName').value.trim();
-    const path = name ? `/api/panel/status?name=${encodeURIComponent(name)}` : '/api/panel/status';
-    const res = await api('GET', path);
-    if (disposed || !current()) return;
-    if (res && res.success) {
-      result.innerHTML = renderPanelCards(res.obj);
+  async function checkPanelStatus(): Promise<void> {
+    const result = element(doc, 'panelStatusResult');
+    const current = loadGen('panels');
+    await withBusy(button(doc, 'btnPanelStatus'), async () => {
+      result.innerHTML = loadingHtml(t);
       result.className = 'result-box';
-    } else {
-      result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
-      result.className = 'result-box error';
-    }
-  });
-}
-
-function renderPanelCards(data: unknown, idPrefix = ''): string {
-  const panels = isRecord(data) ? data : {};
-  if (!Object.keys(panels).length) {
-    return `<div class="table-empty">${t('no_panels')}</div>`;
+      const name = input(doc, 'panelName').value.trim();
+      const path = name ? `/api/panel/status?name=${encodeURIComponent(name)}` : '/api/panel/status';
+      const res = await api('GET', path);
+      if (disposed || !current()) return;
+      if (res && res.success) {
+        result.innerHTML = renderPanelCards(res.obj);
+        result.className = 'result-box';
+      } else {
+        result.innerHTML = `<div class="result-title err">${t('error')}</div><div class="result-msg">${escapeHtml(res?.msg || t('error'))}</div>`;
+        result.className = 'result-box error';
+      }
+    });
   }
-  return `
+
+  function renderPanelCards(data: unknown, idPrefix = ''): string {
+    const panels = isRecord(data) ? data : {};
+    if (!Object.keys(panels).length) {
+      return `<div class="table-empty">${t('no_panels')}</div>`;
+    }
+    return `
     <div class="panel-cards">
-      ${Object.entries(panels).map(([panelName, panel], panelIndex) => {
-        const s = isRecord(panel) ? metrics(panel['obj']) : null;
-        const cpuPct = s ? Math.round(s.cpu * 100) / 100 : null;
-        const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
-        const xrayState = s?.xray?.state;
-        const xrayClr = xrayState === 'running' ? 'ok' : 'err';
-        const xrayVersion = s?.xray?.version || t('na');
-        const xrayErr = s?.xray?.errorMsg;
+      ${Object.entries(panels)
+        .map(([panelName, panel], panelIndex) => {
+          const s = isRecord(panel) ? metrics(panel['obj']) : null;
+          const cpuPct = s ? Math.round(s.cpu * 100) / 100 : null;
+          const cpuClr = cpuPct !== null ? (cpuPct > 80 ? 'err' : cpuPct > 50 ? 'warn' : 'ok') : 'ok';
+          const xrayState = s?.xray?.state;
+          const xrayClr = xrayState === 'running' ? 'ok' : 'err';
+          const xrayVersion = s?.xray?.version || t('na');
+          const xrayErr = s?.xray?.errorMsg;
 
-        const uptimeFmt = s ? fmtUptime(s.uptime) : t('na');
-        const memUsed = s ? fmtBytes(s.mem.current) : t('na');
-        const memTotal = s ? fmtBytes(s.mem.total) : t('na');
-        const memPct = s && s.mem.total > 0 ? Math.round(s.mem.current / s.mem.total * 100) : null;
-        const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
+          const uptimeFmt = s ? fmtUptime(s.uptime) : t('na');
+          const memUsed = s ? fmtBytes(s.mem.current) : t('na');
+          const memTotal = s ? fmtBytes(s.mem.total) : t('na');
+          const memPct = s && s.mem.total > 0 ? Math.round((s.mem.current / s.mem.total) * 100) : null;
+          const memClr = memPct !== null ? (memPct > 85 ? 'err' : memPct > 65 ? 'warn' : 'ok') : 'ok';
 
-        const swapUsed = s ? fmtBytes(s.swap.current) : t('na');
-        const swapTotal = s ? fmtBytes(s.swap.total) : t('na');
+          const swapUsed = s ? fmtBytes(s.swap.current) : t('na');
+          const swapTotal = s ? fmtBytes(s.swap.total) : t('na');
 
-        const diskUsed = s ? fmtBytes(s.disk.current) : t('na');
-        const diskTotal = s ? fmtBytes(s.disk.total) : t('na');
-        const diskPct = s && s.disk.total > 0 ? Math.round(s.disk.current / s.disk.total * 100) : null;
-        const diskClr = diskPct !== null ? (diskPct > 90 ? 'err' : diskPct > 75 ? 'warn' : 'ok') : 'ok';
+          const diskUsed = s ? fmtBytes(s.disk.current) : t('na');
+          const diskTotal = s ? fmtBytes(s.disk.total) : t('na');
+          const diskPct = s && s.disk.total > 0 ? Math.round((s.disk.current / s.disk.total) * 100) : null;
+          const diskClr = diskPct !== null ? (diskPct > 90 ? 'err' : diskPct > 75 ? 'warn' : 'ok') : 'ok';
 
-        const appMem = s ? fmtBytes(s.appStats.mem) : t('na');
-        const netDown = s ? fmtBytes(s.netIO.down) + t('per_second') : t('na');
-        const netUp = s ? fmtBytes(s.netIO.up) + t('per_second') : t('na');
-        const netRecv = s ? fmtBytes(s.netTraffic.recv) : t('na');
-        const netSent = s ? fmtBytes(s.netTraffic.sent) : t('na');
-        const ipv4 = s?.publicIP?.ipv4 || t('na');
-        const ipv6 = s?.publicIP?.ipv6 || t('na');
-        const loads = s?.loads ? s.loads.map(l => l.toFixed(2)).join(', ') : t('na');
-        const threads = s?.appStats.threads ?? t('na');
+          const appMem = s ? fmtBytes(s.appStats.mem) : t('na');
+          const netDown = s ? fmtBytes(s.netIO.down) + t('per_second') : t('na');
+          const netUp = s ? fmtBytes(s.netIO.up) + t('per_second') : t('na');
+          const netRecv = s ? fmtBytes(s.netTraffic.recv) : t('na');
+          const netSent = s ? fmtBytes(s.netTraffic.sent) : t('na');
+          const ipv4 = s?.publicIP?.ipv4 || t('na');
+          const ipv6 = s?.publicIP?.ipv6 || t('na');
+          const loads = s?.loads ? s.loads.map((l) => l.toFixed(2)).join(', ') : t('na');
+          const threads = s?.appStats.threads ?? t('na');
 
-        const cardKey = idPrefix + 'panel-' + String(panelIndex);
-        return `
+          const cardKey = idPrefix + 'panel-' + String(panelIndex);
+          return `
           <div class="panel-card" id="pc-${cardKey}">
             <div class="panel-card-header" data-panel-toggle="${cardKey}">
               <div class="panel-card-title">
@@ -154,33 +204,51 @@ function renderPanelCards(data: unknown, idPrefix = ''): string {
                   <div class="panel-metric"><span class="panel-metric-label">${t('app_threads')}</span><span class="panel-metric-value">${String(s?.appStats.threads ?? t('na'))}</span></div>
                   <div class="panel-metric"><span class="panel-metric-label">${t('xray_ver')}</span><span class="panel-metric-value">${escapeHtml(xrayVersion)}</span></div>
                 </div>
-                ${xrayErr && xrayErr !== '' ? `
+                ${
+                  xrayErr && xrayErr !== ''
+                    ? `
                 <div class="panel-section">
                   <div class="panel-section-label">${t('xray_error')}</div>
                   <div class="panel-metric"><span class="panel-metric-label err">${escapeHtml(xrayErr)}</span></div>
-                </div>` : ''}
+                </div>`
+                    : ''
+                }
               </div>
             </div>
           </div>
         `;
-      }).join('')}
+        })
+        .join('')}
     </div>
   `;
-}
-
-function init(): () => void {
-  const controller = new AbortController();
-  button(doc, 'btnPanelStatus').addEventListener('click', () => { void checkPanelStatus(); }, { signal: controller.signal });
-  // Also covers system and snapshot cards, including nested panel cards.
-  for (const id of ['panelStatusResult', 'systemStatusResult', 'snapshotsList']) {
-    element(doc, id).addEventListener('click', event => {
-      if (!(event.target instanceof Element)) return;
-      const header = event.target.closest<HTMLElement>('[data-panel-toggle]');
-      const card = header?.closest<HTMLElement>('.panel-card');
-      if (card && header && element(doc, id).contains(header)) card.classList.toggle('open');
-    }, { signal: controller.signal });
   }
-  return () => { disposed = true; controller.abort(); };
-}
-return { init, renderPanelCards };
+
+  function init(): () => void {
+    const controller = new AbortController();
+    button(doc, 'btnPanelStatus').addEventListener(
+      'click',
+      () => {
+        void checkPanelStatus();
+      },
+      { signal: controller.signal },
+    );
+    // Also covers system and snapshot cards, including nested panel cards.
+    for (const id of ['panelStatusResult', 'systemStatusResult', 'snapshotsList']) {
+      element(doc, id).addEventListener(
+        'click',
+        (event) => {
+          if (!(event.target instanceof Element)) return;
+          const header = event.target.closest<HTMLElement>('[data-panel-toggle]');
+          const card = header?.closest<HTMLElement>('.panel-card');
+          if (card && header && element(doc, id).contains(header)) card.classList.toggle('open');
+        },
+        { signal: controller.signal },
+      );
+    }
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }
+  return { init, renderPanelCards };
 }

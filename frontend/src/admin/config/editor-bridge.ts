@@ -8,11 +8,21 @@ export function initJsonEditors(doc: Document, url: string, translate: Translate
   if (active) throw new Error(sharedMessage('editors_initialized'));
   const editors = createJsonEditors(doc, url, translate);
   active = editors;
-  return () => { if (active === editors) active = undefined; editors.dispose(); };
+  return () => {
+    if (active === editors) active = undefined;
+    editors.dispose();
+  };
 }
 
-export function destroyJsonEditors(root: Node | null): void { if (root) active?.destroy(root); }
-export function refreshJsonEditors(root: Node | null): void { if (root) active?.refresh(root); }
-export function mountJsonEditor(textarea: HTMLTextAreaElement, options: { parse: (text: string) => unknown; format: (text: string) => string; label: string }): Promise<void> {
+export function destroyJsonEditors(root: Node | null): void {
+  if (root) active?.destroy(root);
+}
+export function refreshJsonEditors(root: Node | null): void {
+  if (root) active?.refresh(root);
+}
+export function mountJsonEditor(
+  textarea: HTMLTextAreaElement,
+  options: { parse: (text: string) => unknown; format: (text: string) => string; label: string },
+): Promise<void> {
   return active?.mount(textarea, options) ?? Promise.resolve();
 }

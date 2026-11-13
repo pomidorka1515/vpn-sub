@@ -19,17 +19,21 @@ describe('chart series', () => {
     expect(readSeries({ used: '25', capacity: 100 }, spec)).toBe(25);
     expect(readSeries({ used: 0, total: 100 }, spec)).toBe(0);
     expect(readSeries({ used: 150, total: 100 }, spec)).toBe(150);
-    for (const total of [0, -1, '', Infinity, 'bad']) expect(readSeries({ used: 5, total, capacity: 100 }, spec)).toBeNull();
+    for (const total of [0, -1, '', Infinity, 'bad'])
+      expect(readSeries({ used: 5, total, capacity: 100 }, spec)).toBeNull();
   });
 });
 
 describe('chart axes', () => {
-  it.each(['percent', 'count', 'float', 'seconds', 'bytes', 'bytes_per_s', 'unknown'])('holds the floor and caps a raised %s axis', unit => {
-    expect(raisedMax(unit, NaN)).toBe(defaultMax(unit));
-    expect(raisedMax(unit, defaultMax(unit))).toBe(defaultMax(unit));
-    expect(raisedMax(unit, ceilingMax(unit) * 10)).toBe(ceilingMax(unit));
-    expect(axisMax(unit, 0, defaultMax(unit) * 2)).toBe(defaultMax(unit) * 2);
-  });
+  it.each(['percent', 'count', 'float', 'seconds', 'bytes', 'bytes_per_s', 'unknown'])(
+    'holds the floor and caps a raised %s axis',
+    (unit) => {
+      expect(raisedMax(unit, NaN)).toBe(defaultMax(unit));
+      expect(raisedMax(unit, defaultMax(unit))).toBe(defaultMax(unit));
+      expect(raisedMax(unit, ceilingMax(unit) * 10)).toBe(ceilingMax(unit));
+      expect(axisMax(unit, 0, defaultMax(unit) * 2)).toBe(defaultMax(unit) * 2);
+    },
+  );
 
   it('slides a live counter baseline at the ceiling but not a gauge or snapshot', () => {
     expect(windowedRange('count', 9500, 10000, 10000, true)).toEqual({ min: 8550, max: 10000 });
@@ -53,24 +57,51 @@ describe('history samples', () => {
     expect(parseSamples({})).toBeNull();
   });
   it('filters at UTC midnight inclusively and sorts without mutating input', () => {
-    const rows = [3, 1, 2, 0].map(day => ({ ...sample, ts: day * 86400 }));
-    expect(selectSamples(rows, 2, () => 3.5 * 86400 * 1000).map(row => row.ts)).toEqual([2 * 86400, 3 * 86400]);
-    expect(rows.map(row => row.ts)).toEqual([3 * 86400, 86400, 2 * 86400, 0]);
+    const rows = [3, 1, 2, 0].map((day) => ({ ...sample, ts: day * 86400 }));
+    expect(selectSamples(rows, 2, () => 3.5 * 86400 * 1000).map((row) => row.ts)).toEqual([2 * 86400, 3 * 86400]);
+    expect(rows.map((row) => row.ts)).toEqual([3 * 86400, 86400, 2 * 86400, 0]);
     expect(fmtDay(0)).toBe('1970-01-01 00:00:00 UTC');
   });
 });
 
 describe('dashboard stats', () => {
-  const stats = { displayname: 'Alice', link: '', uuid: 'u', fingerprint: 'f', token: 't', online: false, enabled: true, wl_enabled: false, time: 0,
-    bandwidth: { total: { upload: 0, download: 1 }, wl_total: { upload: 2, download: 3 }, monthly: 0, wl_monthly: 0, limit: 0, wl_limit: 0 } };
+  const stats = {
+    displayname: 'Alice',
+    link: '',
+    uuid: 'u',
+    fingerprint: 'f',
+    token: 't',
+    online: false,
+    enabled: true,
+    wl_enabled: false,
+    time: 0,
+    bandwidth: {
+      total: { upload: 0, download: 1 },
+      wl_total: { upload: 2, download: 3 },
+      monthly: 0,
+      wl_monthly: 0,
+      limit: 0,
+      wl_limit: 0,
+    },
+  };
   it('requires complete, finite data even when the rest is valid', () => {
     expect(parseStats(stats)).toEqual(stats);
-    for (const key of ['monthly', 'wl_monthly', 'limit', 'wl_limit']) expect(parseStats({ ...stats, bandwidth: { ...stats.bandwidth, [key]: Infinity } })).toBeNull();
+    for (const key of ['monthly', 'wl_monthly', 'limit', 'wl_limit'])
+      expect(parseStats({ ...stats, bandwidth: { ...stats.bandwidth, [key]: Infinity } })).toBeNull();
     expect(parseStats({ ...stats, time: NaN })).toBeNull();
     expect(parseStats({ ...stats, online: 1 })).toBeNull();
     expect(parseStats({ ...stats, bandwidth: { ...stats.bandwidth, total: { upload: 0, download: '0' } } })).toBeNull();
   });
-  it.each([[25, 'green'], [25.1, 'yellow'], [50, 'yellow'], [50.1, 'orange'], [75, 'orange'], [75.1, 'red'], [90, 'red'], [90.1, 'red-dark']])('colors %s%% at threshold', (pct, color) => {
+  it.each([
+    [25, 'green'],
+    [25.1, 'yellow'],
+    [50, 'yellow'],
+    [50.1, 'orange'],
+    [75, 'orange'],
+    [75.1, 'red'],
+    [90, 'red'],
+    [90.1, 'red-dark'],
+  ])('colors %s%% at threshold', (pct, color) => {
     expect(getBwColor(pct)).toBe(`var(--${color})`);
   });
 });

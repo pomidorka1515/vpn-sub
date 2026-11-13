@@ -10,11 +10,15 @@ export function initPermissionReasons(doc: Document, t: Translate) {
   let translations = { missing: t('permission_missing'), noPanels: t('no_panels'), root: t('auth_root_protected') };
   function isReason(text: string): boolean {
     const [before = '', after = ''] = t('permission_missing').split('{permission}');
-    return !!text && (text === t('no_panels') ||
-      (before || after) !== '' && text.startsWith(before) && text.endsWith(after));
+    return (
+      !!text &&
+      (text === t('no_panels') || ((before || after) !== '' && text.startsWith(before) && text.endsWith(after)))
+    );
   }
   function remove(target: HTMLElement, reason: HTMLElement): void {
-    const described = (target.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(id => id && id !== reason.id);
+    const described = (target.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .filter((id) => id && id !== reason.id);
     if (described.length) target.setAttribute('aria-describedby', described.join(' '));
     else target.removeAttribute('aria-describedby');
     reason.remove();
@@ -24,13 +28,37 @@ export function initPermissionReasons(doc: Document, t: Translate) {
     scheduled = false;
     if (stopped) return;
     const next = new Map<HTMLElement, string>();
-    doc.querySelectorAll<HTMLElement>('button[disabled][title], input[disabled][title], input[readonly][title], textarea[readonly][title], select[disabled][title]').forEach(target => {
-      const summarized = target.closest('#tab-auth, #tab-users, #tab-codes') && !target.closest('dialog');
-      if (!target.closest('#tab-config, #configEditorOverlay, .permission-restricted') && isReason(target.title) && (!summarized || target.title === t('no_panels'))) next.set(target, target.title);
-    });
-    doc.querySelectorAll<HTMLSelectElement>('select').forEach(select => {
-      if (select.closest('#tab-config, #configEditorOverlay') || select.closest('#tab-auth, #tab-users, #tab-codes') && !select.closest('dialog')) return;
-      const messages = [...new Set([...select.options].filter(option => option.disabled && isReason(option.title) && (!select.closest('#usersTableWrap') || option.title === t('no_panels'))).map(option => option.title))];
+    doc
+      .querySelectorAll<HTMLElement>(
+        'button[disabled][title], input[disabled][title], input[readonly][title], textarea[readonly][title], select[disabled][title]',
+      )
+      .forEach((target) => {
+        const summarized = target.closest('#tab-auth, #tab-users, #tab-codes') && !target.closest('dialog');
+        if (
+          !target.closest('#tab-config, #configEditorOverlay, .permission-restricted') &&
+          isReason(target.title) &&
+          (!summarized || target.title === t('no_panels'))
+        )
+          next.set(target, target.title);
+      });
+    doc.querySelectorAll<HTMLSelectElement>('select').forEach((select) => {
+      if (
+        select.closest('#tab-config, #configEditorOverlay') ||
+        (select.closest('#tab-auth, #tab-users, #tab-codes') && !select.closest('dialog'))
+      )
+        return;
+      const messages = [
+        ...new Set(
+          [...select.options]
+            .filter(
+              (option) =>
+                option.disabled &&
+                isReason(option.title) &&
+                (!select.closest('#usersTableWrap') || option.title === t('no_panels')),
+            )
+            .map((option) => option.title),
+        ),
+      ];
       if (messages.length) next.set(select, [next.get(select), ...messages].filter(Boolean).join(' · '));
     });
     for (const [target, reason] of reasons) if (!target.isConnected || !next.has(target)) remove(target, reason);
@@ -38,7 +66,9 @@ export function initPermissionReasons(doc: Document, t: Translate) {
       let reason = reasons.get(target);
       if (!reason) {
         reason = doc.createElement('span');
-        do { reason.id = 'permission-reason-' + String(++nextId); } while (doc.getElementById(reason.id));
+        do {
+          reason.id = 'permission-reason-' + String(++nextId);
+        } while (doc.getElementById(reason.id));
         reason.className = 'permission-reason';
         const anchor = target.closest('label') ?? target;
         anchor.insertAdjacentElement('afterend', reason);
@@ -51,20 +81,33 @@ export function initPermissionReasons(doc: Document, t: Translate) {
     }
   }
   const observer = new MutationObserver(() => {
-    if (!scheduled) { scheduled = true; queueMicrotask(update); }
+    if (!scheduled) {
+      scheduled = true;
+      queueMicrotask(update);
+    }
   });
-  observer.observe(doc.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled', 'readonly', 'title'] });
+  observer.observe(doc.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['disabled', 'readonly', 'title'],
+  });
   update();
   return {
     refreshLanguage: (): void => {
       const previous = translations;
       translations = { missing: t('permission_missing'), noPanels: t('no_panels'), root: t('auth_root_protected') };
       const [before = '', after = ''] = previous.missing.split('{permission}');
-      doc.querySelectorAll<HTMLElement>('[title]').forEach(target => {
+      doc.querySelectorAll<HTMLElement>('[title]').forEach((target) => {
         const title = target.title;
         if (title === previous.noPanels) target.title = translations.noPanels;
         else if (title === previous.root) target.title = translations.root;
-        else if (previous.missing.includes('{permission}') && title.startsWith(before) && title.endsWith(after) && title.length >= before.length + after.length) {
+        else if (
+          previous.missing.includes('{permission}') &&
+          title.startsWith(before) &&
+          title.endsWith(after) &&
+          title.length >= before.length + after.length
+        ) {
           const permission = title.slice(before.length, after ? -after.length : undefined);
           target.title = translations.missing.replace('{permission}', permission);
         }

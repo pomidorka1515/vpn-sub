@@ -6,7 +6,19 @@ export interface StorageAccess {
 // Privacy settings can deny even access to the browser's storage getter.
 export function safeStorage(getStorage: () => Pick<Storage, 'getItem' | 'setItem'>): StorageAccess {
   return {
-    getItem(key) { try { return getStorage().getItem(key); } catch { return null; } },
-    setItem(key, value) { try { getStorage().setItem(key, value); } catch { /* Storage is optional. */ } },
+    getItem(key) {
+      try {
+        return getStorage().getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    setItem(key, value) {
+      try {
+        getStorage().setItem(key, value);
+      } catch {
+        /* Storage is optional. */
+      }
+    },
   };
 }

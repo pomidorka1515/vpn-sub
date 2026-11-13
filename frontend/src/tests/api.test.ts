@@ -9,12 +9,13 @@ describe('parseApiEnvelope', () => {
     { success: true, msg: null, obj: null },
     { success: true, obj: {} },
     { success: false, msg: 'Invalid credentials', obj: null },
-  ])('accepts an envelope with message $msg', envelope => {
+  ])('accepts an envelope with message $msg', (envelope) => {
     expect(parseApiEnvelope(envelope)).toBe(envelope);
   });
 
   it.each([null, [], { success: 1 }, { msg: false }, { msg: 1 }, { msg: {} }, { msg: [] }])(
-    'rejects malformed envelope %j', envelope => {
+    'rejects malformed envelope %j',
+    (envelope) => {
       expect(() => parseApiEnvelope(envelope)).toThrow(sharedMessage('invalid_response'));
     },
   );
@@ -36,7 +37,9 @@ describe('createApi', () => {
     const result = await api(method, path);
 
     expect(request).toHaveBeenCalledExactlyOnceWith('/sub/webapi' + path, {
-      method, credentials: 'same-origin', headers: {},
+      method,
+      credentials: 'same-origin',
+      headers: {},
     });
     expect(result).toEqual({ ...envelope, status: 200 });
     expect(toast).not.toHaveBeenCalled();
@@ -45,9 +48,9 @@ describe('createApi', () => {
   it('does not let null messages bypass unauthorized handling', async () => {
     const on401 = vi.fn<() => void>();
     const toast = vi.fn<(message: string, type: string) => void>();
-    const request = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json({ success: false, msg: null, obj: null }, { status: 401 }),
-    );
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ success: false, msg: null, obj: null }, { status: 401 }));
     const api = createApi(() => ({ on401 }), translate, toast, request);
 
     expect(await api('GET', '/stats')).toBeNull();

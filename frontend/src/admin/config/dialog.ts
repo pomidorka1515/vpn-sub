@@ -6,15 +6,41 @@ import { destroyJsonEditors } from './editor-bridge';
 import { editor, INTEGER_RE } from './state';
 import { ConfigNumber, clone, isPlainObject, parseJsonField } from './json';
 import type { ConfigObject } from './json';
-import { passWrap, fieldError, setError, enhanceJsonInputs, rowList, readRows, bindRows, bilingual, nodeOptions, readText } from './controls';
+import {
+  passWrap,
+  fieldError,
+  setError,
+  enhanceJsonInputs,
+  rowList,
+  readRows,
+  bindRows,
+  bilingual,
+  nodeOptions,
+  readText,
+} from './controls';
 import { validateDraft } from './validation';
 
-let t: Translate = key => key;
-export function initConfigDialog(translate: Translate): () => void { t = translate; return () => { t = key => key; }; }
-const required = (id: string): HTMLElement => { const element = document.getElementById(id); if (!element) throw new Error(sharedMessage('missing_element', { id })); return element; };
+let t: Translate = (key) => key;
+export function initConfigDialog(translate: Translate): () => void {
+  t = translate;
+  return () => {
+    t = (key) => key;
+  };
+}
+const required = (id: string): HTMLElement => {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(sharedMessage('missing_element', { id }));
+  return element;
+};
 type Kind = 'inbounds' | 'panels';
 
-export function createConfigDialog({ markDirty, renderCards }: { markDirty: () => void; renderCards: (kind: Kind) => void }) {
+export function createConfigDialog({
+  markDirty,
+  renderCards,
+}: {
+  markDirty: () => void;
+  renderCards: (kind: Kind) => void;
+}) {
   let closeActive: ((created: boolean) => void) | null = null;
   function openNew(kind: Kind): void {
     closeActive?.(false);
@@ -32,24 +58,40 @@ export function createConfigDialog({ markDirty, renderCards }: { markDirty: () =
     if (kind === 'panels') {
       const repaintRows = (id: string, rows: Array<string | string[]>, rowKind: string): void => {
         const root = required(id);
-        root.innerHTML = new DOMParser().parseFromString(rowList('unused', rows, rowKind), 'text/html').getElementById('unused')?.innerHTML ?? '';
+        root.innerHTML =
+          new DOMParser().parseFromString(rowList('unused', rows, rowKind), 'text/html').getElementById('unused')
+            ?.innerHTML ?? '';
       };
-      bindRows('cfg-dlg-inbounds', 'int', (rows, live) => { if (!live) repaintRows('cfg-dlg-inbounds', rows, 'int'); });
+      bindRows('cfg-dlg-inbounds', 'int', (rows, live) => {
+        if (!live) repaintRows('cfg-dlg-inbounds', rows, 'int');
+      });
       const nested = (which: string): void => {
         const slot = body.querySelector<HTMLElement>(`[data-dialog-nested="${which}"]`);
         if (!slot) return;
         slot.innerHTML = rowList('cfg-dlg-headers', [], 'pair');
-        bindRows('cfg-dlg-headers', 'pair', (rows, live) => { if (!live) repaintRows('cfg-dlg-headers', rows, 'pair'); });
+        bindRows('cfg-dlg-headers', 'pair', (rows, live) => {
+          if (!live) repaintRows('cfg-dlg-headers', rows, 'pair');
+        });
         const remove = document.createElement('button');
-        remove.type = 'button'; remove.className = 'btn-tiny'; remove.textContent = t('config_remove');
-        remove.addEventListener('click', () => { slot.innerHTML = ''; addNestedButton(slot, which); });
+        remove.type = 'button';
+        remove.className = 'btn-tiny';
+        remove.textContent = t('config_remove');
+        remove.addEventListener('click', () => {
+          slot.innerHTML = '';
+          addNestedButton(slot, which);
+        });
         slot.appendChild(remove);
       };
       const addNestedButton = (slot: HTMLElement | null, which: string): void => {
         if (!slot) return;
         const add = document.createElement('button');
-        add.type = 'button'; add.className = 'btn-tiny'; add.textContent = t('config_add');
-        add.addEventListener('click', () => { nested(which); }); slot.appendChild(add);
+        add.type = 'button';
+        add.className = 'btn-tiny';
+        add.textContent = t('config_add');
+        add.addEventListener('click', () => {
+          nested(which);
+        });
+        slot.appendChild(add);
       };
       addNestedButton(body.querySelector('[data-dialog-nested="inject_headers"]'), 'inject_headers');
     }
@@ -81,14 +123,17 @@ export function createConfigDialog({ markDirty, renderCards }: { markDirty: () =
         return;
       }
       if (kind === 'panels') {
-        const keys = readRows('cfg-dlg-headers', 'pair').map(row => row[0]);
-        if (new Set(keys).size !== keys.length) { setError('cfg-dialog-err', t('config_err_unique')); return; }
+        const keys = readRows('cfg-dlg-headers', 'pair').map((row) => row[0]);
+        if (new Set(keys).size !== keys.length) {
+          setError('cfg-dialog-err', t('config_err_unique'));
+          return;
+        }
       }
       const stored: ConfigObject = { ...next };
       Reflect.deleteProperty(stored, 'id');
       Object.defineProperty(map, id, { value: stored, enumerable: true, writable: true, configurable: true });
       const prefix = (kind === 'inbounds' ? 'profiles.' : '3xui.') + id;
-      const issues = validateDraft(probe).filter(item => item.path === prefix || item.path.startsWith(prefix + '.'));
+      const issues = validateDraft(probe).filter((item) => item.path === prefix || item.path.startsWith(prefix + '.'));
       if (issues.length) {
         setError('cfg-dialog-err', issues[0]?.message ?? '');
         return;
@@ -104,18 +149,45 @@ export function createConfigDialog({ markDirty, renderCards }: { markDirty: () =
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') close(false);
       else if (event.key === 'Tab') {
-        const controls = [...overlay.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input:not([type="hidden"]), textarea, select, button')].filter(el => !el.disabled && el.getClientRects().length);
-        const first = controls[0], last = controls.at(-1);
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-      } else if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.tagName !== 'TEXTAREA' && event.target.tagName !== 'BUTTON') {
+        const controls = [
+          ...overlay.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>(
+            'input:not([type="hidden"]), textarea, select, button',
+          ),
+        ].filter((el) => !el.disabled && el.getClientRects().length);
+        const first = controls[0],
+          last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      } else if (
+        event.key === 'Enter' &&
+        event.target instanceof HTMLElement &&
+        event.target.tagName !== 'TEXTAREA' &&
+        event.target.tagName !== 'BUTTON'
+      ) {
         event.preventDefault();
         submit();
       }
     };
-    required('configEditorCancel').addEventListener('click', () => { close(false); }, { signal: listeners.signal });
+    required('configEditorCancel').addEventListener(
+      'click',
+      () => {
+        close(false);
+      },
+      { signal: listeners.signal },
+    );
     required('configEditorOk').addEventListener('click', submit, { signal: listeners.signal });
-    overlay.addEventListener('click', event => { if (event.target === overlay) close(false); }, { signal: listeners.signal });
+    overlay.addEventListener(
+      'click',
+      (event) => {
+        if (event.target === overlay) close(false);
+      },
+      { signal: listeners.signal },
+    );
     document.addEventListener('keydown', onKey, { signal: listeners.signal });
   }
   openNew.dispose = () => closeActive?.(false);
@@ -125,15 +197,31 @@ export function createConfigDialog({ markDirty, renderCards }: { markDirty: () =
 function newInbound() {
   const nodes = Object.keys(isPlainObject(editor.draft?.['nodes']) ? editor.draft['nodes'] : {});
   return {
-    id: '', flag: '', name: ['', ''], description: ['', ''], shortProfileDescription: ['', ''],
-    whitelist: false, node: nodes[0] || '', masterLink: '', json: {}, xhttpExtra: {},
+    id: '',
+    flag: '',
+    name: ['', ''],
+    description: ['', ''],
+    shortProfileDescription: ['', ''],
+    whitelist: false,
+    node: nodes[0] || '',
+    masterLink: '',
+    json: {},
+    xhttpExtra: {},
   };
 }
 
 function newPanel() {
   return {
-    id: '', name: '', address: '127.0.0.1', uri: '', port: '', token: '',
-    https: false, whitelist: false, mode: 'blacklist', inbounds_list: [],
+    id: '',
+    name: '',
+    address: '127.0.0.1',
+    uri: '',
+    port: '',
+    token: '',
+    https: false,
+    whitelist: false,
+    mode: 'blacklist',
+    inbounds_list: [],
   };
 }
 
@@ -170,7 +258,10 @@ function dialogPanel() {
   </div>`;
 }
 
-function dialogValue(body: HTMLElement, field: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null {
+function dialogValue(
+  body: HTMLElement,
+  field: string,
+): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null {
   return body.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[data-field="${field}"]`);
 }
 
@@ -191,7 +282,8 @@ function readDialogInbound(body: HTMLElement) {
     whitelist: dialogChecked(body, 'whitelist'),
     node: dialogValue(body, 'node')?.value ?? '',
     masterLink: dialogValue(body, 'masterLink')?.value ?? '',
-    json, xhttpExtra: extra,
+    json,
+    xhttpExtra: extra,
   };
 }
 
@@ -207,8 +299,16 @@ function readDialogPanel(body: HTMLElement): ConfigObject & { id: string } {
     https: dialogChecked(body, 'https'),
     whitelist: dialogChecked(body, 'whitelist'),
     mode: dialogValue(body, 'mode')?.value || 'blacklist',
-    inbounds_list: readRows('cfg-dlg-inbounds', 'int').map(raw => { const value = String(raw); return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value; }),
+    inbounds_list: readRows('cfg-dlg-inbounds', 'int').map((raw) => {
+      const value = String(raw);
+      return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value;
+    }),
   };
-  if (document.getElementById('cfg-dlg-headers')) result['inject_headers'] = Object.fromEntries(readRows('cfg-dlg-headers', 'pair').filter((row): row is string[] => Array.isArray(row)).map(row => [row[0] ?? '', row[1] ?? '']));
+  if (document.getElementById('cfg-dlg-headers'))
+    result['inject_headers'] = Object.fromEntries(
+      readRows('cfg-dlg-headers', 'pair')
+        .filter((row): row is string[] => Array.isArray(row))
+        .map((row) => [row[0] ?? '', row[1] ?? '']),
+    );
   return result;
 }

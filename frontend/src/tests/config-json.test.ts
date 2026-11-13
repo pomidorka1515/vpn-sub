@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { clone, ConfigNumber, isFiniteNumber, isInteger, jsonEqual, parseConfigJson, parseJsonField, stringifyConfig } from '../admin/config/json';
+import {
+  clone,
+  ConfigNumber,
+  isFiniteNumber,
+  isInteger,
+  jsonEqual,
+  parseConfigJson,
+  parseJsonField,
+  stringifyConfig,
+} from '../admin/config/json';
 
 describe('lossless config JSON', () => {
   it('round trips numeric spelling, integer-like keys, escapes and dangerous property names', () => {
     const raw = '{"10":900719925474099312345,"2":1.00,"__proto__":{"x":-0},"text":"a\\n\\u263a","a":[true,null,1e-3]}';
     const parsed = parseConfigJson(raw);
-    expect(stringifyConfig(parsed)).toBe('{"10":900719925474099312345,"2":1.00,"__proto__":{"x":-0},"text":"a\\n☺","a":[true,null,1e-3]}');
+    expect(stringifyConfig(parsed)).toBe(
+      '{"10":900719925474099312345,"2":1.00,"__proto__":{"x":-0},"text":"a\\n☺","a":[true,null,1e-3]}',
+    );
     expect(JSON.parse(stringifyConfig(parsed, true))).toEqual(JSON.parse(raw));
     expect(({} as { x?: number }).x).toBeUndefined();
     expect(jsonEqual(parsed, clone(parsed))).toBe(true);
@@ -16,9 +27,28 @@ describe('lossless config JSON', () => {
     expect(stringifyConfig(parseConfigJson('{"b":1,"a":2,"b":3}'))).toBe('{"b":3,"a":2}');
   });
 
-  it.each(['', '01', '-01', '1.', '.1', '1e', '1e9999', 'true false', '[1,]', '{"a":1,}', '{a:1}', '"\\u12xz"', '"\\q"', '"line\nfeed"', '"unterminated', '{"a" 1}'])('rejects invalid JSON %j with an error position', raw => {
-    try { parseConfigJson(raw); throw new Error('expected a syntax error'); }
-    catch (error) {
+  it.each([
+    '',
+    '01',
+    '-01',
+    '1.',
+    '.1',
+    '1e',
+    '1e9999',
+    'true false',
+    '[1,]',
+    '{"a":1,}',
+    '{a:1}',
+    '"\\u12xz"',
+    '"\\q"',
+    '"line\nfeed"',
+    '"unterminated',
+    '{"a" 1}',
+  ])('rejects invalid JSON %j with an error position', (raw) => {
+    try {
+      parseConfigJson(raw);
+      throw new Error('expected a syntax error');
+    } catch (error) {
       expect(error).toBeInstanceOf(SyntaxError);
       if (!(error instanceof SyntaxError)) throw error;
       const position: unknown = Reflect.get(error, 'position');

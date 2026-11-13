@@ -1,56 +1,56 @@
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, watch } from "node:fs";
-import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
-import JavaScriptObfuscator from "javascript-obfuscator";
-import { esbuildLang } from "./lang-plugin.ts";
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, watch } from 'node:fs';
+import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+import JavaScriptObfuscator from 'javascript-obfuscator';
+import { esbuildLang } from './lang-plugin.ts';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const source = join(root, "src");
-const output = join(root, "dist");
-const tsc = join(root, "node_modules/typescript/bin/tsc");
-const watching = process.argv.includes("--watch");
-if (process.argv.slice(2).some((arg) => arg !== "--watch")) {
-  throw new Error("Usage: node build.mjs [--watch]");
+const source = join(root, 'src');
+const output = join(root, 'dist');
+const tsc = join(root, 'node_modules/typescript/bin/tsc');
+const watching = process.argv.includes('--watch');
+if (process.argv.slice(2).some((arg) => arg !== '--watch')) {
+  throw new Error('Usage: node build.mjs [--watch]');
 }
 
 const moduleEntries = {
-  auth: "src/entries/auth.ts",
-  reset: "src/entries/reset.ts",
-  "admin-auth": "src/entries/admin-auth.ts",
-  "admin/main": "src/entries/admin.ts",
+  auth: 'src/entries/auth.ts',
+  reset: 'src/entries/reset.ts',
+  'admin-auth': 'src/entries/admin-auth.ts',
+  'admin/main': 'src/entries/admin.ts',
 };
 const classicEntries = {
-  dashboard: "src/entries/dashboard.ts",
-  history: "src/entries/history.ts",
+  dashboard: 'src/entries/dashboard.ts',
+  history: 'src/entries/history.ts',
 };
 const optionalModuleEntries = {
-  browser: "src/entries/browser.ts",
-  redirect: "src/entries/redirect.ts",
+  browser: 'src/entries/browser.ts',
+  redirect: 'src/entries/redirect.ts',
 };
 const optionalClassicEntries = {
-  error: "src/entries/error.ts",
+  error: 'src/entries/error.ts',
 };
 const copies = [
-  ["templates", "templates"],
-  ["fonts", "fonts"],
-  ["vendor", "vendor"],
+  ['templates', 'templates'],
+  ['fonts', 'fonts'],
+  ['vendor', 'vendor'],
 ];
 
 async function buildJavaScript(options) {
   const result = await build({
     ...options,
     bundle: true,
-    platform: "browser",
-    target: "es2020",
+    platform: 'browser',
+    target: 'es2020',
     treeShaking: true,
     minify: true,
     sourcemap: false,
-    legalComments: "none",
+    legalComments: 'none',
     write: false,
-    logLevel: "info",
+    logLevel: 'info',
   });
   for (const file of result.outputFiles) {
     const obfuscated = JavaScriptObfuscator.obfuscate(file.text, {
@@ -59,8 +59,8 @@ async function buildJavaScript(options) {
       controlFlowFlatteningThreshold: 0.35,
       deadCodeInjection: true,
       deadCodeInjectionThreshold: 0.15,
-      identifierNamesGenerator: "hexadecimal",
-      identifiersPrefix: relative(output, file.path).replace(/[^a-zA-Z0-9]/g, "_"),
+      identifierNamesGenerator: 'hexadecimal',
+      identifiersPrefix: relative(output, file.path).replace(/[^a-zA-Z0-9]/g, '_'),
       numbersToExpressions: true,
       renameGlobals: false,
       renameProperties: false,
@@ -73,9 +73,9 @@ async function buildJavaScript(options) {
       stringArray: true,
       stringArrayCallsTransform: true,
       stringArrayCallsTransformThreshold: 0.5,
-      stringArrayEncoding: ["base64"],
+      stringArrayEncoding: ['base64'],
       stringArrayThreshold: 1,
-      target: "browser-no-eval",
+      target: 'browser-no-eval',
     });
     await mkdir(dirname(file.path), { recursive: true });
     await writeFile(file.path, obfuscated.getObfuscatedCode());
@@ -106,14 +106,14 @@ async function rebuild() {
   // Apply the shared theme early, independently of the page bundles.
   await buildJavaScript({
     absWorkingDir: root,
-    entryPoints: { common: "src/entries/common.ts" },
-    outdir: join(output, "assets"),
-    format: "iife",
+    entryPoints: { common: 'src/entries/common.ts' },
+    outdir: join(output, 'assets'),
+    format: 'iife',
   });
   // Resolve optional entries on every rebuild so watch sees additions/deletions.
   for (const [format, required, optional] of [
-    ["esm", moduleEntries, optionalModuleEntries],
-    ["iife", classicEntries, optionalClassicEntries],
+    ['esm', moduleEntries, optionalModuleEntries],
+    ['iife', classicEntries, optionalClassicEntries],
   ]) {
     const entryPoints = { ...required };
     for (const [name, path] of Object.entries(optional)) {
@@ -123,31 +123,31 @@ async function rebuild() {
       absWorkingDir: root,
       entryPoints,
       plugins: [esbuildLang],
-      outdir: join(output, "assets"),
+      outdir: join(output, 'assets'),
       splitting: false,
       format,
     });
   }
   const styles = await build({
     absWorkingDir: root,
-    entryPoints: (await readdir(join(source, "styles")))
-      .filter((name) => name.endsWith(".css") && name !== "fonts.css")
-      .map((name) => join(source, "styles", name)),
-    outdir: join(output, "assets"),
-    target: "es2020",
+    entryPoints: (await readdir(join(source, 'styles')))
+      .filter((name) => name.endsWith('.css') && name !== 'fonts.css')
+      .map((name) => join(source, 'styles', name)),
+    outdir: join(output, 'assets'),
+    target: 'es2020',
     minify: true,
     sourcemap: false,
-    legalComments: "none",
+    legalComments: 'none',
     write: false,
-    logLevel: "info",
+    logLevel: 'info',
   });
   for (const file of styles.outputFiles) {
     // Python replaces this runtime marker with URI-prefixed font-face rules.
-    const marker = file.path === join(output, "assets", "common.css") ? "/* __FONTS__ */" : "";
+    const marker = file.path === join(output, 'assets', 'common.css') ? '/* __FONTS__ */' : '';
     await writeFile(file.path, marker + file.text);
   }
   // This is a server-side template, not a browser stylesheet. Keep its URL placeholders intact.
-  await cp(join(source, "styles", "fonts.css"), join(output, "assets", "fonts.css"));
+  await cp(join(source, 'styles', 'fonts.css'), join(output, 'assets', 'fonts.css'));
   for (const [from, to] of copies) {
     await cp(join(source, from), join(output, to), { recursive: true });
   }
@@ -157,20 +157,19 @@ async function rebuild() {
 
 if (!watching) {
   // esbuild strips types but does not check them. Do not touch output on failure.
-  const checked = spawnSync(process.execPath, [tsc, "--project", "tsconfig.json"], {
+  const checked = spawnSync(process.execPath, [tsc, '--project', 'tsconfig.json'], {
     cwd: root,
-    stdio: "inherit",
+    stdio: 'inherit',
   });
   if (checked.error) throw checked.error;
   if (checked.status !== 0) process.exit(checked.status ?? 1);
   await rebuild();
 } else {
   // Report ongoing semantic errors independently; watch output is not a release.
-  const checker = spawn(
-    process.execPath,
-    [tsc, "--project", "tsconfig.json", "--watch", "--preserveWatchOutput"],
-    { cwd: root, stdio: "inherit" },
-  );
+  const checker = spawn(process.execPath, [tsc, '--project', 'tsconfig.json', '--watch', '--preserveWatchOutput'], {
+    cwd: root,
+    stdio: 'inherit',
+  });
   let running = false;
   let pending = false;
   let timer;
@@ -184,7 +183,7 @@ if (!watching) {
         try {
           await rebuild();
         } catch (error) {
-          console.error("Frontend rebuild failed; waiting for changes:", error);
+          console.error('Frontend rebuild failed; waiting for changes:', error);
         }
       }
     } finally {
@@ -197,8 +196,8 @@ if (!watching) {
   }
   const watchers = [
     watch(source, { recursive: true }, schedule),
-    watch(join(root, "tsconfig.json"), schedule),
-    watch(join(root, "../lang.jsonc"), schedule),
+    watch(join(root, 'tsconfig.json'), schedule),
+    watch(join(root, '../lang.jsonc'), schedule),
   ];
   function stop(code) {
     clearTimeout(timer);
@@ -206,21 +205,19 @@ if (!watching) {
     checker.kill();
     process.exit(code);
   }
-  checker.on("error", (error) => {
+  checker.on('error', (error) => {
     console.error(error);
     stop(1);
   });
-  checker.on("exit", (code) => stop(code ?? 1));
+  checker.on('exit', (code) => stop(code ?? 1));
   for (const watcher of watchers) {
-    watcher.on("error", (error) => {
+    watcher.on('error', (error) => {
       console.error(error);
       stop(1);
     });
   }
-  process.on("SIGINT", () => stop(0));
-  process.on("SIGTERM", () => stop(0));
+  process.on('SIGINT', () => stop(0));
+  process.on('SIGTERM', () => stop(0));
   await drain();
-  console.log(
-    "Watching frontend/src and tsconfig.json; restart after editing build.mjs.",
-  );
+  console.log('Watching frontend/src and tsconfig.json; restart after editing build.mjs.');
 }

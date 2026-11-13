@@ -5,40 +5,71 @@ import { destroyJsonEditors, refreshJsonEditors } from './editor-bridge';
 import { editor, INTEGER_RE } from './state';
 import { ConfigNumber, isPlainObject, jsonText, parseJsonField } from './json';
 import type { ConfigObject, ConfigValue } from './json';
-import { attr, restartIcon, fieldError, passWrap, readText, enhanceJsonInputs, rowList, readRows, bindRows, bilingual, nodeOptions, cssId, cardRoot } from './controls';
+import {
+  attr,
+  restartIcon,
+  fieldError,
+  passWrap,
+  readText,
+  enhanceJsonInputs,
+  rowList,
+  readRows,
+  bindRows,
+  bilingual,
+  nodeOptions,
+  cssId,
+  cardRoot,
+} from './controls';
 import { validateCard, validateAll } from './validation';
 
 type Kind = 'inbounds' | 'panels';
 type Pair = [string, string];
-export function createCardEditor({ markDirty, openNew, t, language, confirm }: { markDirty: () => void; openNew: (kind: Kind) => void; t: Translate; language: () => string; confirm: (message: string, title: string) => Promise<boolean | string | null> }) {
-function mapOf(kind: Kind): ConfigObject {
-  const value = kind === 'inbounds' ? editor.draft?.['profiles'] : editor.draft?.['3xui'];
-  return isPlainObject(value) ? value : {};
-}
-function cardData(kind: Kind, id: string): ConfigObject { const value = mapOf(kind)[id]; return isPlainObject(value) ? value : {}; }
-function pairs(rows: Array<string | string[]>): Pair[] { return rows.filter((row): row is string[] => Array.isArray(row)).map(row => [row[0] ?? '', row[1] ?? '']); }
+export function createCardEditor({
+  markDirty,
+  openNew,
+  t,
+  language,
+  confirm,
+}: {
+  markDirty: () => void;
+  openNew: (kind: Kind) => void;
+  t: Translate;
+  language: () => string;
+  confirm: (message: string, title: string) => Promise<boolean | string | null>;
+}) {
+  function mapOf(kind: Kind): ConfigObject {
+    const value = kind === 'inbounds' ? editor.draft?.['profiles'] : editor.draft?.['3xui'];
+    return isPlainObject(value) ? value : {};
+  }
+  function cardData(kind: Kind, id: string): ConfigObject {
+    const value = mapOf(kind)[id];
+    return isPlainObject(value) ? value : {};
+  }
+  function pairs(rows: Array<string | string[]>): Pair[] {
+    return rows.filter((row): row is string[] => Array.isArray(row)).map((row) => [row[0] ?? '', row[1] ?? '']);
+  }
 
-function profileJsonKey(id: string, field: string): string {
-  return JSON.stringify([id, field]);
-}
+  function profileJsonKey(id: string, field: string): string {
+    return JSON.stringify([id, field]);
+  }
 
-function profileJsonText(id: string, field: string, value: ConfigValue | undefined): string {
-  return editor.jsonInputs.get(profileJsonKey(id, field)) ?? jsonText(value);
-}
+  function profileJsonText(id: string, field: string, value: ConfigValue | undefined): string {
+    return editor.jsonInputs.get(profileJsonKey(id, field)) ?? jsonText(value);
+  }
 
-function profileHeader(id: string, profile: ConfigObject): string {
-  const lang = language() === 'ru' ? 1 : 0;
-  const name = Array.isArray(profile['name']) ? (profile['name'][lang] || profile['name'][0] || '') : '';
-  return `${escapeHtml(profile['flag'] || '')} <span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(name)}</span>`;
-}
+  function profileHeader(id: string, profile: ConfigObject): string {
+    const lang = language() === 'ru' ? 1 : 0;
+    const name = Array.isArray(profile['name']) ? profile['name'][lang] || profile['name'][0] || '' : '';
+    return `${escapeHtml(profile['flag'] || '')} <span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(name)}</span>`;
+  }
 
-function panelHeader(id: string, panel: ConfigObject): string {
-  return `<span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(panel['name'] || '')}</span> <span class="badge config-panel-mode" data-mode="${attr(panel['mode'] || '')}">${escapeHtml(t(panel['mode'] === 'whitelist' ? 'config_whitelist_mode' : panel['mode'] === 'blacklist' ? 'config_blacklist_mode' : 'unknown'))}</span>`;
-}
+  function panelHeader(id: string, panel: ConfigObject): string {
+    return `<span class="panel-card-name">${escapeHtml(id)}</span> <span>${escapeHtml(panel['name'] || '')}</span> <span class="badge config-panel-mode" data-mode="${attr(panel['mode'] || '')}">${escapeHtml(t(panel['mode'] === 'whitelist' ? 'config_whitelist_mode' : panel['mode'] === 'blacklist' ? 'config_blacklist_mode' : 'unknown'))}</span>`;
+  }
 
-function cardShell(kind: Kind, id: string, titleHtml: string, body: string, open: boolean): string {
-  const safe = attr(id);
-  return `<div class="panel-card${open ? ' open' : ''}" data-kind="${kind}" data-id="${safe}">
+  function cardShell(kind: Kind, id: string, titleHtml: string, body: string, open: boolean): string {
+    const safe = attr(id);
+    return `<div class="panel-card${open ? ' open' : ''}" data-kind="${kind}" data-id="${safe}">
     <div class="panel-card-header">
       <div class="panel-card-title">${titleHtml}</div>
       <div class="panel-card-meta">
@@ -49,11 +80,11 @@ function cardShell(kind: Kind, id: string, titleHtml: string, body: string, open
     </div>
     <div class="panel-card-body">${body}</div>
   </div>`;
-}
+  }
 
-function inboundBody(id: string, profile: ConfigObject): string {
-  const p = profile;
-  return `<div class="form-grid">
+  function inboundBody(id: string, profile: ConfigObject): string {
+    const p = profile;
+    return `<div class="form-grid">
     <div class="form-row"><label>${escapeHtml(t('config_field_id'))}</label><div class="input-wrap"><input type="text" data-field="id" value="${attr(id)}" spellcheck="false">${fieldError('cfg-in-err-' + cssId(id) + '-id')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_flag'))}</label><div class="input-wrap"><input type="text" data-field="flag" value="${attr(p['flag'] ?? '')}">${fieldError('cfg-in-err-' + cssId(id) + '-flag')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_name'))}</label><div class="input-wrap">${bilingual('cfg-in-' + cssId(id) + '-name', p['name'])}${fieldError('cfg-in-err-' + cssId(id) + '-name')}</div></div>
@@ -65,12 +96,15 @@ function inboundBody(id: string, profile: ConfigObject): string {
     <div class="form-row"><label>${escapeHtml(t('config_field_json'))}</label><div class="input-wrap"><textarea class="config-json" data-field="json" spellcheck="false">${escapeHtml(profileJsonText(id, 'json', p['json']))}</textarea>${fieldError('cfg-in-err-' + cssId(id) + '-json')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_xhttpExtra'))}</label><div class="input-wrap"><textarea class="config-json" data-field="xhttpExtra" spellcheck="false">${escapeHtml(profileJsonText(id, 'xhttpExtra', p['xhttpExtra']))}</textarea>${fieldError('cfg-in-err-' + cssId(id) + '-xhttpExtra')}</div></div>
   </div>`;
-}
+  }
 
-function panelBody(id: string, panel: ConfigObject): string {
-  const p = panel;
-  const headers = isPlainObject(p['inject_headers']) ? editor.headerRows.get(id) || Object.entries(p['inject_headers']).map(([key, value]) => [key, displayValue(value)]) : null;
-  return `<div class="form-grid">
+  function panelBody(id: string, panel: ConfigObject): string {
+    const p = panel;
+    const headers = isPlainObject(p['inject_headers'])
+      ? editor.headerRows.get(id) ||
+        Object.entries(p['inject_headers']).map(([key, value]) => [key, displayValue(value)])
+      : null;
+    return `<div class="form-grid">
     <div class="form-row"><label>${escapeHtml(t('config_field_key'))}</label><div class="input-wrap"><input type="text" data-field="id" value="${attr(id)}" spellcheck="false">${fieldError('cfg-pn-err-' + cssId(id) + '-id')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_name'))}</label><div class="input-wrap"><input type="text" data-field="name" value="${attr(p['name'] ?? '')}">${fieldError('cfg-pn-err-' + cssId(id) + '-name')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_address'))}</label><div class="input-wrap"><input type="text" data-field="address" value="${attr(p['address'] ?? '')}" spellcheck="false">${fieldError('cfg-pn-err-' + cssId(id) + '-address')}</div></div>
@@ -83,55 +117,84 @@ function panelBody(id: string, panel: ConfigObject): string {
     <div class="form-row"><label>${escapeHtml(t('config_field_inbounds_list'))}</label><div class="input-wrap" id="cfg-pn-inbounds-${cssId(id)}">${rowList('cfg-pn-rows-' + cssId(id), (Array.isArray(p['inbounds_list']) ? p['inbounds_list'] : []).map(String), 'int')}${fieldError('cfg-pn-err-' + cssId(id) + '-inbounds_list')}</div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_inject_headers'))}</label><div class="input-wrap">${headers ? `${rowList('cfg-pn-headers-' + cssId(id), headers, 'pair')}<button type="button" class="btn-tiny danger" data-nested-remove="inject_headers">${escapeHtml(t('config_remove_headers'))}</button>` : `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-nested-add="inject_headers">${escapeHtml(t('config_add'))}</button></div>`}${fieldError('cfg-pn-err-' + cssId(id) + '-inject_headers')}</div></div>
   </div>`;
-}
+  }
 
   function renderCards(kind: Kind): void {
     const pane = document.getElementById('config-pane-' + kind);
     if (!pane) return;
     destroyJsonEditors(pane);
     // Pending invalid renames and duplicate header rows belong to the draft too.
-    const pendingIds = new Map([...pane.querySelectorAll<HTMLElement>('.panel-card')].map(card => [card.dataset['id'] ?? '', card.querySelector<HTMLInputElement>('[data-field="id"]')?.value]));
+    const pendingIds = new Map(
+      [...pane.querySelectorAll<HTMLElement>('.panel-card')].map((card) => [
+        card.dataset['id'] ?? '',
+        card.querySelector<HTMLInputElement>('[data-field="id"]')?.value,
+      ]),
+    );
     const map = mapOf(kind);
     const subtitle = kind === 'inbounds' ? t('config_inbounds_sub') : t('config_panels_sub');
-    const cards = Object.entries(isPlainObject(map) ? map : {}).map(([id, value]) => {
-      const open = editor.open[kind].has(id);
-      const item = isPlainObject(value) ? value : {};
-      const title = kind === 'inbounds' ? profileHeader(id, item) : panelHeader(id, item);
-      const body = kind === 'inbounds' ? inboundBody(id, item) : panelBody(id, item);
-      return cardShell(kind, id, title, body, open);
-    }).join('');
+    const cards = Object.entries(isPlainObject(map) ? map : {})
+      .map(([id, value]) => {
+        const open = editor.open[kind].has(id);
+        const item = isPlainObject(value) ? value : {};
+        const title = kind === 'inbounds' ? profileHeader(id, item) : panelHeader(id, item);
+        const body = kind === 'inbounds' ? inboundBody(id, item) : panelBody(id, item);
+        return cardShell(kind, id, title, body, open);
+      })
+      .join('');
     pane.innerHTML = `<div class="config-subtitle"><span>${escapeHtml(subtitle)}</span></div>
       <div class="toolbar"><button type="button" class="btn btn-secondary" id="cfg-new-${kind}">${escapeHtml(t('config_new'))}</button></div>
       <div class="panel-cards">${cards}</div>`;
-    document.getElementById('cfg-new-' + kind)?.addEventListener('click', () => { openNew(kind); });
-    Object.keys(isPlainObject(map) ? map : {}).forEach(id => { bindCard(kind, id); });
+    document.getElementById('cfg-new-' + kind)?.addEventListener('click', () => {
+      openNew(kind);
+    });
+    Object.keys(isPlainObject(map) ? map : {}).forEach((id) => {
+      bindCard(kind, id);
+    });
     pendingIds.forEach((raw, id) => {
       const input = cardRoot(kind, id)?.querySelector<HTMLInputElement>('[data-field="id"]');
       if (input && raw !== undefined) input.value = raw;
     });
     initPassToggles(document);
-    Object.keys(isPlainObject(map) ? map : {}).forEach(id => { validateCard(kind, id); });
+    Object.keys(isPlainObject(map) ? map : {}).forEach((id) => {
+      validateCard(kind, id);
+    });
   }
 
   function bindCard(kind: Kind, id: string): void {
     const card = cardRoot(kind, id);
     if (!card) return;
-    const commit = () => { commitCard(kind, id); };
-    card.querySelector('.config-card-delete')?.addEventListener('click', event => { void deleteConfigCard(event, kind, id); });
-    card.querySelector('.config-card-toggle')?.addEventListener('click', () => { toggleConfigCard(kind, id); });
-    card.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach(input => {
-      if (input.dataset['field'] === 'id') {
-        input.addEventListener('input', () => { validateCard(kind, id); markDirty(); });
-        input.addEventListener('blur', () => { renameCard(kind, id, input.value); });
-        return;
-      }
-      input.addEventListener('input', commit);
-      input.addEventListener('change', commit);
+    const commit = () => {
+      commitCard(kind, id);
+    };
+    card.querySelector('.config-card-delete')?.addEventListener('click', (event) => {
+      void deleteConfigCard(event, kind, id);
     });
+    card.querySelector('.config-card-toggle')?.addEventListener('click', () => {
+      toggleConfigCard(kind, id);
+    });
+    card
+      .querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select')
+      .forEach((input) => {
+        if (input.dataset['field'] === 'id') {
+          input.addEventListener('input', () => {
+            validateCard(kind, id);
+            markDirty();
+          });
+          input.addEventListener('blur', () => {
+            renameCard(kind, id, input.value);
+          });
+          return;
+        }
+        input.addEventListener('input', commit);
+        input.addEventListener('change', commit);
+      });
     if (kind === 'inbounds' && card.classList.contains('open')) enhanceJsonInputs(card);
     if (kind === 'panels') {
       bindRows('cfg-pn-rows-' + cssId(id), 'int', (rows, live) => {
-        cardData('panels', id)['inbounds_list'] = rows.map(row => { const raw = String(row); return INTEGER_RE.test(raw.trim()) ? new ConfigNumber(raw.trim()) : raw; });
+        cardData('panels', id)['inbounds_list'] = rows.map((row) => {
+          const raw = String(row);
+          return INTEGER_RE.test(raw.trim()) ? new ConfigNumber(raw.trim()) : raw;
+        });
         if (!live) renderCards('panels');
         else validateCard('panels', id);
         markDirty();
@@ -141,34 +204,41 @@ function panelBody(id: string, panel: ConfigObject): string {
         editor.headerRows.set(id, headerRows);
         const headers: ConfigObject = {};
         Object.setPrototypeOf(headers, null);
-        headerRows.forEach(([key, value]) => { headers[key] = value; });
+        headerRows.forEach(([key, value]) => {
+          headers[key] = value;
+        });
         cardData('panels', id)['inject_headers'] = headers;
         if (!live) renderCards('panels');
         else validateCard('panels', id);
         markDirty();
       });
-      card.querySelectorAll<HTMLElement>('[data-nested-add]').forEach(button => { button.addEventListener('click', () => {
-        cardData('panels', id)['inject_headers'] = {};
-        editor.open.panels.add(id);
-        renderCards('panels');
-        markDirty();
-      }); });
-      card.querySelectorAll<HTMLElement>('[data-nested-remove]').forEach(button => { button.addEventListener('click', () => {
-        const which = button.dataset['nestedRemove'];
-        if (!which) return;
-        if (which === 'inject_headers') editor.headerRows.delete(id);
-        Reflect.deleteProperty(cardData('panels', id), which);
-        editor.open.panels.add(id);
-        renderCards('panels');
-        markDirty();
-      }); });
+      card.querySelectorAll<HTMLElement>('[data-nested-add]').forEach((button) => {
+        button.addEventListener('click', () => {
+          cardData('panels', id)['inject_headers'] = {};
+          editor.open.panels.add(id);
+          renderCards('panels');
+          markDirty();
+        });
+      });
+      card.querySelectorAll<HTMLElement>('[data-nested-remove]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const which = button.dataset['nestedRemove'];
+          if (!which) return;
+          if (which === 'inject_headers') editor.headerRows.delete(id);
+          Reflect.deleteProperty(cardData('panels', id), which);
+          editor.open.panels.add(id);
+          renderCards('panels');
+          markDirty();
+        });
+      });
     }
   }
 
   function readCard(kind: Kind, id: string): ConfigObject | null {
     const card = cardRoot(kind, id);
     if (!card) return null;
-    const value = (input: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null => card.querySelector(`[data-field="${input}"]`);
+    const value = (input: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null =>
+      card.querySelector(`[data-field="${input}"]`);
     if (kind === 'inbounds') {
       const current = cardData('inbounds', id);
       const next: ConfigObject = { ...current };
@@ -178,8 +248,14 @@ function panelBody(id: string, panel: ConfigObject): string {
       next['node'] = value('node')?.value ?? '';
       next['masterLink'] = value('masterLink')?.value ?? '';
       next['name'] = [readText('cfg-in-' + cssId(id) + '-name-0'), readText('cfg-in-' + cssId(id) + '-name-1')];
-      next['description'] = [readText('cfg-in-' + cssId(id) + '-description-0'), readText('cfg-in-' + cssId(id) + '-description-1')];
-      next['shortProfileDescription'] = [readText('cfg-in-' + cssId(id) + '-short-0'), readText('cfg-in-' + cssId(id) + '-short-1')];
+      next['description'] = [
+        readText('cfg-in-' + cssId(id) + '-description-0'),
+        readText('cfg-in-' + cssId(id) + '-description-1'),
+      ];
+      next['shortProfileDescription'] = [
+        readText('cfg-in-' + cssId(id) + '-short-0'),
+        readText('cfg-in-' + cssId(id) + '-short-1'),
+      ];
       for (const field of ['json', 'xhttpExtra']) {
         const raw = value(field)?.value;
         if (raw !== undefined) editor.jsonInputs.set(profileJsonKey(id, field), raw);
@@ -193,7 +269,12 @@ function panelBody(id: string, panel: ConfigObject): string {
     next['address'] = value('address')?.value ?? '';
     next['uri'] = value('uri')?.value ?? '';
     const port = value('port')?.value ?? '';
-    next['port'] = port === displayValue(current['port']) ? current['port'] ?? null : INTEGER_RE.test(port) ? new ConfigNumber(port) : port;
+    next['port'] =
+      port === displayValue(current['port'])
+        ? (current['port'] ?? null)
+        : INTEGER_RE.test(port)
+          ? new ConfigNumber(port)
+          : port;
     const token = document.getElementById('cfg-pn-token-' + cssId(id));
     if (token instanceof HTMLInputElement) next['token'] = token.value;
     const https = value('https');
@@ -201,13 +282,18 @@ function panelBody(id: string, panel: ConfigObject): string {
     next['https'] = https instanceof HTMLInputElement && https.checked;
     next['whitelist'] = whitelist instanceof HTMLInputElement && whitelist.checked;
     next['mode'] = value('mode')?.value || 'blacklist';
-    next['inbounds_list'] = readRows('cfg-pn-rows-' + cssId(id), 'int').map(row => { const raw = String(row); return INTEGER_RE.test(raw.trim()) ? new ConfigNumber(raw.trim()) : raw; });
+    next['inbounds_list'] = readRows('cfg-pn-rows-' + cssId(id), 'int').map((row) => {
+      const raw = String(row);
+      return INTEGER_RE.test(raw.trim()) ? new ConfigNumber(raw.trim()) : raw;
+    });
     if (document.getElementById('cfg-pn-headers-' + cssId(id))) {
       const headers: ConfigObject = {};
       Object.setPrototypeOf(headers, null);
       const rows = pairs(readRows('cfg-pn-headers-' + cssId(id), 'pair'));
       editor.headerRows.set(id, rows);
-      rows.forEach(([key, item]) => { headers[key] = item; });
+      rows.forEach(([key, item]) => {
+        headers[key] = item;
+      });
       next['inject_headers'] = headers;
     }
     return next;
@@ -217,7 +303,10 @@ function panelBody(id: string, panel: ConfigObject): string {
     const next = readCard(kind, id);
     if (!next) return;
     mapOf(kind)[id] = next;
-    if (kind === 'panels') Object.keys(mapOf(kind)).forEach(key => { validateCard(kind, key); });
+    if (kind === 'panels')
+      Object.keys(mapOf(kind)).forEach((key) => {
+        validateCard(kind, key);
+      });
     else validateCard(kind, id);
     refreshCardTitle(kind, id);
     markDirty();
@@ -226,9 +315,9 @@ function panelBody(id: string, panel: ConfigObject): string {
   function refreshCardTitle(kind: Kind, id: string): void {
     const card = cardRoot(kind, id);
     const title = card?.querySelector('.panel-card-title');
-    if (title) title.innerHTML = kind === 'inbounds'
-      ? profileHeader(id, cardData(kind, id))
-      : panelHeader(id, cardData(kind, id));
+    if (title)
+      title.innerHTML =
+        kind === 'inbounds' ? profileHeader(id, cardData(kind, id)) : panelHeader(id, cardData(kind, id));
   }
 
   function renameCard(kind: Kind, oldId: string, raw: string): void {
@@ -242,7 +331,9 @@ function panelBody(id: string, panel: ConfigObject): string {
     const value = readCard(kind, oldId);
     const ordered: ConfigObject = {};
     Object.setPrototypeOf(ordered, null);
-    Object.keys(map).forEach(key => { ordered[key === oldId ? nextId : key] = (key === oldId ? value : map[key]) ?? null; });
+    Object.keys(map).forEach((key) => {
+      ordered[key === oldId ? nextId : key] = (key === oldId ? value : map[key]) ?? null;
+    });
     if (!editor.draft) return;
     if (kind === 'inbounds') editor.draft['profiles'] = ordered;
     else editor.draft['3xui'] = ordered;
@@ -264,7 +355,9 @@ function panelBody(id: string, panel: ConfigObject): string {
     }
     editor.open[kind].add(nextId);
     renderCards(kind);
-    Object.keys(ordered).forEach(key => { validateCard(kind, key); });
+    Object.keys(ordered).forEach((key) => {
+      validateCard(kind, key);
+    });
     markDirty();
   }
 
@@ -277,22 +370,27 @@ function panelBody(id: string, panel: ConfigObject): string {
       editor.open[kind].add(id);
       if (kind === 'inbounds') enhanceJsonInputs(card);
       refreshJsonEditors(card);
-    }
-    else editor.open[kind].delete(id);
+    } else editor.open[kind].delete(id);
   }
 
   function init(): () => void {
     const controller = new AbortController();
-    document.getElementById('tab-config')?.addEventListener('click', event => {
-      if (!(event.target instanceof Element)) return;
-      const header = event.target.closest('#tab-config .panel-card-header');
-      if (!header || event.target.closest('button')) return;
-      const card = header.closest<HTMLElement>('.panel-card');
-      const kind = card?.dataset['kind'];
-      const id = card?.getAttribute('data-id');
-      if ((kind === 'inbounds' || kind === 'panels') && id !== null && id !== undefined) toggleConfigCard(kind, id);
-    }, { signal: controller.signal });
-    return () => { controller.abort(); };
+    document.getElementById('tab-config')?.addEventListener(
+      'click',
+      (event) => {
+        if (!(event.target instanceof Element)) return;
+        const header = event.target.closest('#tab-config .panel-card-header');
+        if (!header || event.target.closest('button')) return;
+        const card = header.closest<HTMLElement>('.panel-card');
+        const kind = card?.dataset['kind'];
+        const id = card?.getAttribute('data-id');
+        if ((kind === 'inbounds' || kind === 'panels') && id !== null && id !== undefined) toggleConfigCard(kind, id);
+      },
+      { signal: controller.signal },
+    );
+    return () => {
+      controller.abort();
+    };
   }
 
   async function deleteConfigCard(event: Event, kind: Kind, id: string): Promise<void> {

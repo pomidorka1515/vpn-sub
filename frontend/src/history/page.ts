@@ -12,38 +12,103 @@ import { fmtDay, selectSamples } from './data';
 import type { Sample } from './data';
 import { createHistoryService } from './service';
 
-interface TooltipItem { dataset: { label: string }; parsed: { y: number } }
-interface ChartSample { ts: number; down?: number; up?: number; wl_down?: number; wl_up?: number }
+interface TooltipItem {
+  dataset: { label: string };
+  parsed: { y: number };
+}
+interface ChartSample {
+  ts: number;
+  down?: number;
+  up?: number;
+  wl_down?: number;
+  wl_up?: number;
+}
 interface ChartInstance {
   data: { datasets: { label: string }[] };
-  options: { scales: { x: { ticks: { color: string }; border: { color: string } }; y: { grid: { color: string }; ticks: { color: string } } }; plugins: { legend: { labels: { color: string } }; tooltip: { backgroundColor: string; borderColor: string; titleColor: string; bodyColor: string } } };
-  update(mode: string): void; destroy(): void;
+  options: {
+    scales: {
+      x: { ticks: { color: string }; border: { color: string } };
+      y: { grid: { color: string }; ticks: { color: string } };
+    };
+    plugins: {
+      legend: { labels: { color: string } };
+      tooltip: { backgroundColor: string; borderColor: string; titleColor: string; bodyColor: string };
+    };
+  };
+  update(mode: string): void;
+  destroy(): void;
 }
-interface ChartWindow extends Window { Chart?: new (ctx: CanvasRenderingContext2D | null, config: object) => ChartInstance }
+interface ChartWindow extends Window {
+  Chart?: new (ctx: CanvasRenderingContext2D | null, config: object) => ChartInstance;
+}
 
 export function initHistory(doc: Document = document, browser: Window = window): () => void {
   const document = doc;
   const win: ChartWindow = browser;
   const bootstrap = readBootstrap(doc);
   const local = safeStorage(() => win.localStorage);
-  const i18n = createI18n(bootstrap, doc, local, safeStorage(() => win.sessionStorage), win.location);
+  const i18n = createI18n(
+    bootstrap,
+    doc,
+    local,
+    safeStorage(() => win.sessionStorage),
+    win.location,
+  );
   const { t } = i18n;
   const theme = createTheme(doc, local);
   const notifications = createNotifications(doc, t, win.setTimeout.bind(win), win.clearTimeout.bind(win));
-  const toast = (message: string, type = 'success') => { if (!disposed) notifications.toast(message, type); };
-  const service = createHistoryService({ baseUrl: bootstrap.prefix + '/webapi', onUnauthorized: () => { if (!disposed) win.location.href = bootstrap.prefix + '/auth'; }, translate: t, toast, request: win.fetch.bind(win) });
+  const toast = (message: string, type = 'success') => {
+    if (!disposed) notifications.toast(message, type);
+  };
+  const service = createHistoryService({
+    baseUrl: bootstrap.prefix + '/webapi',
+    onUnauthorized: () => {
+      if (!disposed) win.location.href = bootstrap.prefix + '/auth';
+    },
+    translate: t,
+    toast,
+    request: win.fetch.bind(win),
+  });
   const loadGen = createLoadGeneration();
   const fmtBytes = (value: number) => bytes(value, t);
   const loadingHtml = () => loading(t);
   const abort = new AbortController();
   const timers = new Set<number>();
   let disposed = false;
-  function schedule(fn: () => void, delay: number): number { const id = win.setTimeout(() => { timers.delete(id); if (!disposed) fn(); }, delay); timers.add(id); return id; }
-  function cancelTimer(id: number | undefined): void { if (id !== undefined) { win.clearTimeout(id); timers.delete(id); } }
-  function el(id: string): HTMLElement { const node = doc.getElementById(id); if (!node) throw new Error(sharedMessage('missing_element', { id })); return node; }
-  function input(id: string): HTMLInputElement { const node = el(id); if (!(node instanceof HTMLInputElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
-  function button(id: string): HTMLButtonElement { const node = el(id); if (!(node instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
-  function canvas(id: string): HTMLCanvasElement { const node = el(id); if (!(node instanceof HTMLCanvasElement)) throw new Error(sharedMessage('missing_element', { id })); return node; }
+  function schedule(fn: () => void, delay: number): number {
+    const id = win.setTimeout(() => {
+      timers.delete(id);
+      if (!disposed) fn();
+    }, delay);
+    timers.add(id);
+    return id;
+  }
+  function cancelTimer(id: number | undefined): void {
+    if (id !== undefined) {
+      win.clearTimeout(id);
+      timers.delete(id);
+    }
+  }
+  function el(id: string): HTMLElement {
+    const node = doc.getElementById(id);
+    if (!node) throw new Error(sharedMessage('missing_element', { id }));
+    return node;
+  }
+  function input(id: string): HTMLInputElement {
+    const node = el(id);
+    if (!(node instanceof HTMLInputElement)) throw new Error(sharedMessage('missing_element', { id }));
+    return node;
+  }
+  function button(id: string): HTMLButtonElement {
+    const node = el(id);
+    if (!(node instanceof HTMLButtonElement)) throw new Error(sharedMessage('missing_element', { id }));
+    return node;
+  }
+  function canvas(id: string): HTMLCanvasElement {
+    const node = el(id);
+    if (!(node instanceof HTMLCanvasElement)) throw new Error(sharedMessage('missing_element', { id }));
+    return node;
+  }
   function handleChartJsError() {
     toast(t('chart_load_err'), 'error');
     for (const prefix of ['reg', 'wl']) {
@@ -90,9 +155,9 @@ export function initHistory(doc: Document = document, browser: Window = window):
     return chartJsPromise;
   }
 
-  let regChart: ChartInstance | null = null, wlChart: ChartInstance | null = null;
+  let regChart: ChartInstance | null = null,
+    wlChart: ChartInstance | null = null;
   let lastData: Sample[] | null = null;
-
 
   function cssVar(name: string) {
     return win.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -149,11 +214,11 @@ export function initHistory(doc: Document = document, browser: Window = window):
     return new win.Chart(ctx, {
       type: 'bar',
       data: {
-        labels: data.map(d => fmtDay(d.ts)),
+        labels: data.map((d) => fmtDay(d.ts)),
         datasets: [
           {
             label: t('download'),
-            data: data.map(d => d.down !== undefined ? d.down : d.wl_down),
+            data: data.map((d) => (d.down !== undefined ? d.down : d.wl_down)),
             backgroundColor: downColor,
             borderWidth: 0,
             borderRadius: 2,
@@ -161,7 +226,7 @@ export function initHistory(doc: Document = document, browser: Window = window):
           },
           {
             label: t('upload'),
-            data: data.map(d => d.up !== undefined ? d.up : d.wl_up),
+            data: data.map((d) => (d.up !== undefined ? d.up : d.wl_up)),
             backgroundColor: upColor,
             borderWidth: 0,
             borderRadius: 2,
@@ -205,9 +270,12 @@ export function initHistory(doc: Document = document, browser: Window = window):
             labels: {
               color: c.text,
               font: { family: 'Outfit', size: 12 },
-              boxWidth: 10, boxHeight: 10, boxPadding: 0,
+              boxWidth: 10,
+              boxHeight: 10,
+              boxPadding: 0,
               padding: narrow ? 10 : 14,
-              usePointStyle: true, pointStyle: 'rectRounded',
+              usePointStyle: true,
+              pointStyle: 'rectRounded',
             },
           },
           tooltip: {
@@ -256,11 +324,11 @@ export function initHistory(doc: Document = document, browser: Window = window):
   }
 
   function renderCharts(filled: Sample[]) {
-    const reg = filled.map(d => ({ ts: d.ts, down: d.down, up: d.up }));
-    const wl  = filled.map(d => ({ ts: d.ts, wl_down: d.wl_down, wl_up: d.wl_up }));
+    const reg = filled.map((d) => ({ ts: d.ts, down: d.down, up: d.up }));
+    const wl = filled.map((d) => ({ ts: d.ts, wl_down: d.wl_down, wl_up: d.wl_up }));
 
-    const regHasData = reg.some(d => d.down || d.up);
-    const wlHasData  = wl.some(d => d.wl_down || d.wl_up);
+    const regHasData = reg.some((d) => d.down || d.up);
+    const wlHasData = wl.some((d) => d.wl_down || d.wl_up);
 
     const regWrap = el('regWrap');
     const regEmpty = el('regEmpty');
@@ -274,52 +342,68 @@ export function initHistory(doc: Document = document, browser: Window = window):
     wlEmpty.textContent = t('no_data');
     wlEmpty.style.display = wlHasData ? 'none' : '';
 
-    if (regChart) { regChart.destroy(); regChart = null; }
-    if (wlChart)  { wlChart.destroy();  wlChart  = null; }
+    if (regChart) {
+      regChart.destroy();
+      regChart = null;
+    }
+    if (wlChart) {
+      wlChart.destroy();
+      wlChart = null;
+    }
 
     try {
       if (regHasData) {
-        regChart = makeChart(
-          canvas('regChart').getContext('2d'),
-          reg, cssVar('--accent'), cssVar('--accent-light')
-        );
+        regChart = makeChart(canvas('regChart').getContext('2d'), reg, cssVar('--accent'), cssVar('--accent-light'));
       }
       if (wlHasData) {
-        wlChart = makeChart(
-          canvas('wlChart').getContext('2d'),
-          wl, cssVar('--wl'), cssVar('--wl-light')
-        );
+        wlChart = makeChart(canvas('wlChart').getContext('2d'), wl, cssVar('--wl'), cssVar('--wl-light'));
       }
-    } catch  {
+    } catch {
       handleChartJsError();
     }
   }
 
   function renderSummaries(filled: Sample[]) {
-    let regUp = 0, regDown = 0, wlUp = 0, wlDown = 0;
+    let regUp = 0,
+      regDown = 0,
+      wlUp = 0,
+      wlDown = 0;
     for (const d of filled) {
-      regUp += d.up; regDown += d.down;
-      wlUp += d.wl_up; wlDown += d.wl_down;
+      regUp += d.up;
+      regDown += d.down;
+      wlUp += d.wl_up;
+      wlDown += d.wl_down;
     }
     const sumHtml = (up: number, down: number) =>
-      '↑ <span class="up-val">' + fmtBytes(up) + '</span>' +
-      ' <span class="sep">·</span> ↓ <span class="down-val">' + fmtBytes(down) + '</span>' +
-      ' <span class="sep">·</span> ' + escapeHtml(t('total')) + ' ' + fmtBytes(up + down);
+      '↑ <span class="up-val">' +
+      fmtBytes(up) +
+      '</span>' +
+      ' <span class="sep">·</span> ↓ <span class="down-val">' +
+      fmtBytes(down) +
+      '</span>' +
+      ' <span class="sep">·</span> ' +
+      escapeHtml(t('total')) +
+      ' ' +
+      fmtBytes(up + down);
     el('regSummary').innerHTML = sumHtml(regUp, regDown);
     el('wlSummary').innerHTML = sumHtml(wlUp, wlDown);
   }
 
   let resizeT: number | undefined;
   let narrowLayout = isNarrow();
-  win.addEventListener('resize', () => {
-    cancelTimer(resizeT);
-    resizeT = schedule(() => {
-      const next = isNarrow();
-      if (next === narrowLayout || !lastData) return;
-      narrowLayout = next;
-      renderCharts(lastData);
-    }, 200);
-  }, { signal: abort.signal });
+  win.addEventListener(
+    'resize',
+    () => {
+      cancelTimer(resizeT);
+      resizeT = schedule(() => {
+        const next = isNarrow();
+        if (next === narrowLayout || !lastData) return;
+        narrowLayout = next;
+        renderCharts(lastData);
+      }, 200);
+    },
+    { signal: abort.signal },
+  );
 
   async function loadHistory() {
     const btnRefresh = button('btnRefresh');
@@ -341,7 +425,11 @@ export function initHistory(doc: Document = document, browser: Window = window):
         handleChartJsError();
         return;
       }
-      if (!samples) { toast(t('invalid_response'), 'error'); setLoading(false); return; }
+      if (!samples) {
+        toast(t('invalid_response'), 'error');
+        setLoading(false);
+        return;
+      }
       const filled = selectSamples(samples, days);
       lastData = filled;
       renderCharts(filled);
@@ -353,17 +441,66 @@ export function initHistory(doc: Document = document, browser: Window = window):
   const range = input('daysRange');
   const updateLanguage = () => {
     range.setAttribute('aria-label', t('days_range_aria'));
-    if (lastData) { renderCharts(lastData); renderSummaries(lastData); }
+    if (lastData) {
+      renderCharts(lastData);
+      renderSummaries(lastData);
+    }
   };
   const stopLanguage = i18n.onChange(updateLanguage);
-  range.addEventListener('input', () => { loadGen('history'); el('daysValue').textContent = range.value; cancelTimer(dbT); dbT = schedule(() => { void loadHistory(); }, bootstrap.page.debounceMs); }, { signal: abort.signal });
-  el('btnBack').addEventListener('click', () => { win.location.href = bootstrap.prefix + '/panel'; }, { signal: abort.signal });
-  el('btnRefresh').addEventListener('click', () => { void loadHistory(); }, { signal: abort.signal });
+  range.addEventListener(
+    'input',
+    () => {
+      loadGen('history');
+      el('daysValue').textContent = range.value;
+      cancelTimer(dbT);
+      dbT = schedule(() => {
+        void loadHistory();
+      }, bootstrap.page.debounceMs);
+    },
+    { signal: abort.signal },
+  );
+  el('btnBack').addEventListener(
+    'click',
+    () => {
+      win.location.href = bootstrap.prefix + '/panel';
+    },
+    { signal: abort.signal },
+  );
+  el('btnRefresh').addEventListener(
+    'click',
+    () => {
+      void loadHistory();
+    },
+    { signal: abort.signal },
+  );
   el('themeBtn').addEventListener('click', theme.toggleTheme, { signal: abort.signal });
-  doc.querySelectorAll<HTMLElement>('[data-lang]').forEach(node => { node.addEventListener('click', () => { i18n.setLang(node.dataset['lang'] ?? ''); }, { signal: abort.signal }); });
+  doc.querySelectorAll<HTMLElement>('[data-lang]').forEach((node) => {
+    node.addEventListener(
+      'click',
+      () => {
+        i18n.setLang(node.dataset['lang'] ?? '');
+      },
+      { signal: abort.signal },
+    );
+  });
   const removeThemeListener = theme.onChange(repaintCharts);
-  theme.applyTheme(); i18n.initLang();
+  theme.applyTheme();
+  i18n.initLang();
   updateLanguage();
   void loadHistory();
-  return () => { disposed = true; stopLanguage(); loadGen('history'); abort.abort(); timers.forEach(id => { win.clearTimeout(id); }); cancelChartLoad?.(); chartScript?.remove(); removeThemeListener(); regChart?.destroy(); wlChart?.destroy(); notifications.dispose(); };
+  return () => {
+    disposed = true;
+    stopLanguage();
+    loadGen('history');
+    abort.abort();
+    timers.forEach((id) => {
+      win.clearTimeout(id);
+    });
+    cancelChartLoad?.();
+    chartScript?.remove();
+    removeThemeListener();
+    regChart?.destroy();
+    wlChart?.destroy();
+    notifications.dispose();
+  };
 }

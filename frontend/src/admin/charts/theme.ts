@@ -17,7 +17,13 @@ function cssVar(name: string, fallback: string): string {
 function withAlpha(color: string, alpha: number): string {
   if (color.startsWith('#')) {
     const hex = color.slice(1);
-    const full = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+    const full =
+      hex.length === 3
+        ? hex
+            .split('')
+            .map((c) => c + c)
+            .join('')
+        : hex;
     const n = parseInt(full, 16);
     if (Number.isNaN(n) || full.length !== 6) return color;
     const r = (n >> 16) & 255;
@@ -82,9 +88,18 @@ interface BaseOptions {
   now?: number;
   windowS?: number;
 }
-interface Tick { value: number }
-interface TooltipItem { datasetIndex: number; parsed: { x: number; y: number }; dataset: { label: string; unit?: string } }
-export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit, formatTick, formatTooltip, formatLabel, now, windowS }: BaseOptions) {
+interface Tick {
+  value: number;
+}
+interface TooltipItem {
+  datasetIndex: number;
+  parsed: { x: number; y: number };
+  dataset: { label: string; unit?: string };
+}
+export function baseOptions(
+  colors: ChartColors,
+  { live, yMax, yMin, dual, unit, formatTick, formatTooltip, formatLabel, now, windowS }: BaseOptions,
+) {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const y = {
     min: Number.isFinite(yMin) ? yMin : 0,
@@ -99,23 +114,54 @@ export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit,
       callback: formatTick,
     },
   };
-  const x: { type: string; grid: ReturnType<typeof dashedGrid> & { drawOnChartArea: boolean }; border: ReturnType<typeof axisBorder>; ticks: { color: string; font: ReturnType<typeof tickFont>; maxRotation: number; autoSkip: boolean; maxTicksLimit: number; callback: (value: number, index: number, ticks: Tick[]) => string | number }; min?: number; max?: number } = {
-      type: 'linear',
-      grid: Object.assign(dashedGrid(colors), { drawOnChartArea: true }),
-      border: axisBorder(colors),
-      ticks: {
-        color: colors.text2,
-        font: tickFont(),
-        maxRotation: 0,
-        autoSkip: true,
-        maxTicksLimit: narrow() ? 4 : 6,
-        callback: function (value: number, index: number, ticks: Tick[]) {
-          const ts = ticks[index]?.value ?? value;
-          return formatLabel ? formatLabel(ts) : ts;
-        },
-      },
+  const x: {
+    type: string;
+    grid: ReturnType<typeof dashedGrid> & { drawOnChartArea: boolean };
+    border: ReturnType<typeof axisBorder>;
+    ticks: {
+      color: string;
+      font: ReturnType<typeof tickFont>;
+      maxRotation: number;
+      autoSkip: boolean;
+      maxTicksLimit: number;
+      callback: (value: number, index: number, ticks: Tick[]) => string | number;
     };
-  const scales: { x: typeof x; y: typeof y; y1?: { position: string; beginAtZero: boolean; min: number; max: number; grid: { display: boolean }; ticks: { color: string; font: ReturnType<typeof tickFont>; maxTicksLimit: number; callback: (value: number) => string }; border: ReturnType<typeof axisBorder> } } = {
+    min?: number;
+    max?: number;
+  } = {
+    type: 'linear',
+    grid: Object.assign(dashedGrid(colors), { drawOnChartArea: true }),
+    border: axisBorder(colors),
+    ticks: {
+      color: colors.text2,
+      font: tickFont(),
+      maxRotation: 0,
+      autoSkip: true,
+      maxTicksLimit: narrow() ? 4 : 6,
+      callback: function (value: number, index: number, ticks: Tick[]) {
+        const ts = ticks[index]?.value ?? value;
+        return formatLabel ? formatLabel(ts) : ts;
+      },
+    },
+  };
+  const scales: {
+    x: typeof x;
+    y: typeof y;
+    y1?: {
+      position: string;
+      beginAtZero: boolean;
+      min: number;
+      max: number;
+      grid: { display: boolean };
+      ticks: {
+        color: string;
+        font: ReturnType<typeof tickFont>;
+        maxTicksLimit: number;
+        callback: (value: number) => string;
+      };
+      border: ReturnType<typeof axisBorder>;
+    };
+  } = {
     x,
     y,
   };
@@ -134,7 +180,7 @@ export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit,
         color: colors.text2,
         font: tickFont(),
         maxTicksLimit: narrow() ? 3 : 5,
-          callback: (v: number) => String(v) + '%',
+        callback: (v: number) => String(v) + '%',
       },
       border: axisBorder(colors),
     };
@@ -142,10 +188,13 @@ export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit,
   return {
     responsive: true,
     maintainAspectRatio: false,
-    animation: live && !reduced ? {
-      x: { duration: 0, easing: 'linear' },
-      y: { duration: 0, easing: 'easeOutQuad' },
-    } : { duration: live ? 0 : 250 },
+    animation:
+      live && !reduced
+        ? {
+            x: { duration: 0, easing: 'linear' },
+            y: { duration: 0, easing: 'easeOutQuad' },
+          }
+        : { duration: live ? 0 : 250 },
     interaction: { mode: 'index', intersect: false },
     scales,
     plugins: {
@@ -173,8 +222,9 @@ export function baseOptions(colors: ChartColors, { live, yMax, yMin, dual, unit,
         padding: narrow() ? 6 : 8,
         cornerRadius: 6,
         callbacks: {
-          title: (items: TooltipItem[]) => formatLabel && items[0] ? formatLabel(items[0].parsed.x) : '',
-          label: (item: TooltipItem) => ' ' + item.dataset.label + ': ' + formatTooltip(item.parsed.y, item.dataset.unit || unit),
+          title: (items: TooltipItem[]) => (formatLabel && items[0] ? formatLabel(items[0].parsed.x) : ''),
+          label: (item: TooltipItem) =>
+            ' ' + item.dataset.label + ': ' + formatTooltip(item.parsed.y, item.dataset.unit || unit),
         },
       },
     },

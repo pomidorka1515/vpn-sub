@@ -19,12 +19,22 @@ export const esbuildLang = {
   name: 'shared-lang',
   setup(build: import('esbuild').PluginBuild) {
     build.onResolve({ filter: /^virtual:shared-lang$/ }, () => ({ path: id, namespace: id }));
-    build.onLoad({ filter: /.*/, namespace: id }, () => ({ contents: source(), loader: 'js', watchFiles: [path.pathname] }));
+    build.onLoad({ filter: /.*/, namespace: id }, () => ({
+      contents: source(),
+      loader: 'js',
+      watchFiles: [path.pathname],
+    }));
   },
 };
 
 export const viteLang = {
   name: 'shared-lang',
-  resolveId(value: string) { if (value === id) return '\0' + id; return undefined; },
-  load(value: string) { if (value === '\0' + id) return source(); return undefined; },
+  resolveId(value: string) {
+    if (value === id) return '\0' + id;
+    return undefined;
+  },
+  load(value: string) {
+    if (value === '\0' + id) return source();
+    return undefined;
+  },
 };

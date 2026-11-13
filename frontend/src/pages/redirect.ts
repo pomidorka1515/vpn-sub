@@ -2,11 +2,21 @@ import { sharedMessage } from '../shared/messages';
 import { requiredElement } from '../shared/dom';
 import { safeStorage } from '../shared/storage';
 
-export function initRedirect(doc: Document = document, location: Pick<Location, 'search' | 'replace'> = window.location): () => void {
+export function initRedirect(
+  doc: Document = document,
+  location: Pick<Location, 'search' | 'replace'> = window.location,
+): () => void {
   const params = new URLSearchParams(location.search);
   const requested = params.get('lang');
   const stored = safeStorage(() => localStorage).getItem('lang');
-  const lang = requested === 'en' || requested === 'ru' ? requested : stored === 'en' || stored === 'ru' ? stored : navigator.language.startsWith('ru') ? 'ru' : 'en';
+  const lang =
+    requested === 'en' || requested === 'ru'
+      ? requested
+      : stored === 'en' || stored === 'ru'
+        ? stored
+        : navigator.language.startsWith('ru')
+          ? 'ru'
+          : 'en';
   doc.documentElement.lang = lang;
   doc.title = sharedMessage('opening', {}, lang);
   requiredElement(doc, 'redirect-label').textContent = sharedMessage('redirecting', {}, lang) + ' ';

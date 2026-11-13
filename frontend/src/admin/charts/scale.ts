@@ -110,7 +110,13 @@ export function axisMax(unit: string, peak: number, held: number): number {
 // Live range. Percent never slides. Below the ceiling the held max only grows.
 // Past it, gauges track the visible peak and counters get a windowed baseline
 // so a monotonically increasing series does not pin itself to the lid.
-export function windowedRange(unit: string, visibleMin: number, visibleMax: number, held: number, live: boolean): { min: number; max: number } {
+export function windowedRange(
+  unit: string,
+  visibleMin: number,
+  visibleMax: number,
+  held: number,
+  live: boolean,
+): { min: number; max: number } {
   const floor = defaultMax(unit);
   const ceiling = ceilingMax(unit);
   if (unit === 'percent' || !live) {
@@ -128,7 +134,7 @@ export function windowedRange(unit: string, visibleMin: number, visibleMax: numb
   // A counter that only climbs sits in the top quarter once it clears the
   // floor. Slide the baseline so the stroke keeps moving through the card.
   // A gauge that still reaches toward zero keeps y.min at 0.
-  if (low > floor && peak > 0 && (peak - low) <= peak * 0.25) {
+  if (low > floor && peak > 0 && peak - low <= peak * 0.25) {
     min = Math.max(0, roundFloor(unit, low * 0.9));
     max = cap(unit, Math.max(min + floor, roundCeil(unit, peak * 1.1)));
     if (max <= min) max = cap(unit, min + floor);

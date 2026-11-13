@@ -21,7 +21,8 @@ export function element(doc: Document, id: string): HTMLElement {
 
 export function input(doc: Document, id: string): HTMLInputElement | HTMLSelectElement {
   const result = element(doc, id);
-  if (!(result instanceof HTMLInputElement) && !(result instanceof HTMLSelectElement)) throw new Error(sharedMessage('missing_element', { id }));
+  if (!(result instanceof HTMLInputElement) && !(result instanceof HTMLSelectElement))
+    throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }
 
@@ -33,6 +34,7 @@ export function button(doc: Document, id: string): HTMLButtonElement {
 
 export function checkbox(doc: Document, id: string): HTMLInputElement {
   const result = element(doc, id);
-  if (!(result instanceof HTMLInputElement) || result.type !== 'checkbox') throw new Error(sharedMessage('missing_element', { id }));
+  if (!(result instanceof HTMLInputElement) || result.type !== 'checkbox')
+    throw new Error(sharedMessage('missing_element', { id }));
   return result;
 }

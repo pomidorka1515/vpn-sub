@@ -19,11 +19,14 @@ let eslint;
 
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'vpn-sub-eslint-'));
-  await writeFile(join(directory, 'tsconfig.json'), JSON.stringify({
-    extends: join(root, 'tsconfig.tests.json'),
-    include: ['*.ts'],
-    exclude: [],
-  }));
+  await writeFile(
+    join(directory, 'tsconfig.json'),
+    JSON.stringify({
+      extends: join(root, 'tsconfig.tests.json'),
+      include: ['*.ts'],
+      exclude: [],
+    }),
+  );
   await Promise.all(Object.entries(fixtures).map(([name, code]) => writeFile(join(directory, `${name}.ts`), code)));
   eslint = new ESLint({
     cwd: directory,
@@ -39,7 +42,10 @@ after(async () => {
 async function rulesFor(name) {
   const [result] = await eslint.lintFiles(`${name}.ts`);
   assert.ok(result);
-  assert.ok(result.messages.every((message) => !message.fatal), JSON.stringify(result.messages));
+  assert.ok(
+    result.messages.every((message) => !message.fatal),
+    JSON.stringify(result.messages),
+  );
   return result.messages.map((message) => message.ruleId);
 }
 

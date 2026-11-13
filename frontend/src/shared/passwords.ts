@@ -9,7 +9,7 @@ export function togglePass(doc: Document, id: string, button: HTMLElement): void
 }
 
 export function initPassToggles(doc: Document): void {
-  doc.querySelectorAll('.pass-toggle').forEach(button => {
+  doc.querySelectorAll('.pass-toggle').forEach((button) => {
     if (!button.querySelector('svg')) button.innerHTML = ICON_EYE;
   });
 }

@@ -22,7 +22,9 @@ export interface ApiConfig {
   networkError?: 'toast';
   networkMessage?: Dynamic<string>;
 }
-export interface ApiOptions { allow401?: (result: ApiResult) => boolean }
+export interface ApiOptions {
+  allow401?: (result: ApiResult) => boolean;
+}
 
 function resolve<T extends string | Record<string, string>>(value: Dynamic<T> | undefined): T | undefined {
   return typeof value === 'function' ? value() : value;
@@ -31,8 +33,11 @@ function resolve<T extends string | Record<string, string>>(value: Dynamic<T> | 
 // Validate the common envelope here. Page-specific `obj` data remains unknown
 // until its consuming page validates it; no assertion pretends it is a DTO.
 export function parseApiEnvelope(value: unknown): Record<string, unknown> {
-  if (!isRecord(value) || (value['success'] !== undefined && typeof value['success'] !== 'boolean') ||
-      (value['msg'] !== undefined && value['msg'] !== null && typeof value['msg'] !== 'string')) {
+  if (
+    !isRecord(value) ||
+    (value['success'] !== undefined && typeof value['success'] !== 'boolean') ||
+    (value['msg'] !== undefined && value['msg'] !== null && typeof value['msg'] !== 'string')
+  ) {
     throw new Error(sharedMessage('invalid_response'));
   }
   return value;
@@ -50,8 +55,18 @@ export function serializeBody(body: unknown): string | undefined {
   return JSON.stringify(body);
 }
 
-export function createApi(getConfig: () => ApiConfig, translate: Translate, toast: (message: string, type: string) => void, request: typeof fetch) {
-  return async function api(method: string, path: string, body?: unknown, options: ApiOptions = {}): Promise<ApiResult | null> {
+export function createApi(
+  getConfig: () => ApiConfig,
+  translate: Translate,
+  toast: (message: string, type: string) => void,
+  request: typeof fetch,
+) {
+  return async function api(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: ApiOptions = {},
+  ): Promise<ApiResult | null> {
     const config = getConfig();
     if (config.guard?.()) {
       if (config.guardMessage) toast(resolve(config.guardMessage) ?? '', 'error');
@@ -95,7 +110,8 @@ export function createApi(getConfig: () => ApiConfig, translate: Translate, toas
       return null;
     }
     Object.defineProperty(result, 'rawMsg', { value: result.msg });
-    if (result.msg && result.msg !== translate('invalid_response')) result.msg = serverMessage(result.msg, undefined, result.success === true);
+    if (result.msg && result.msg !== translate('invalid_response'))
+      result.msg = serverMessage(result.msg, undefined, result.success === true);
     Object.defineProperty(result, 'rawJson', { value: rawJson });
     const etag = response.headers.get('ETag');
     if (etag) result.etag = etag;

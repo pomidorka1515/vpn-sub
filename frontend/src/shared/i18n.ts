@@ -1,7 +1,13 @@
 import type { Bootstrap, Language } from './bootstrap';
 import type { StorageAccess } from './storage';
 
-export function createI18n(bootstrap: Bootstrap, doc: Document, local: StorageAccess, _session: StorageAccess, location: Pick<Location, 'search' | 'href'>) {
+export function createI18n(
+  bootstrap: Bootstrap,
+  doc: Document,
+  local: StorageAccess,
+  _session: StorageAccess,
+  location: Pick<Location, 'search' | 'href'>,
+) {
   let language = bootstrap.language;
   const listeners = new Set<() => void>();
   const t = (key: string): string => {
@@ -10,12 +16,20 @@ export function createI18n(bootstrap: Bootstrap, doc: Document, local: StorageAc
     return (typeof value === 'string' && value) || (typeof fallback === 'string' && fallback) || key;
   };
   function applyStaticLang(): void {
-    doc.querySelectorAll('.lang-btn').forEach(button => {
-      button.classList.toggle('active', (button.getAttribute('data-lang') || button.textContent.toLowerCase()) === language);
+    doc.querySelectorAll('.lang-btn').forEach((button) => {
+      button.classList.toggle(
+        'active',
+        (button.getAttribute('data-lang') || button.textContent.toLowerCase()) === language,
+      );
     });
-    for (const [attribute, target] of [['data-t', 'text'], ['data-t-title', 'title'], ['data-t-aria', 'aria-label'], ['data-t-ph', 'placeholder']]) {
+    for (const [attribute, target] of [
+      ['data-t', 'text'],
+      ['data-t-title', 'title'],
+      ['data-t-aria', 'aria-label'],
+      ['data-t-ph', 'placeholder'],
+    ]) {
       if (!attribute || !target) continue;
-      doc.querySelectorAll(`[${attribute}]`).forEach(element => {
+      doc.querySelectorAll(`[${attribute}]`).forEach((element) => {
         const value = t(element.getAttribute(attribute) ?? '');
         if (target === 'text') element.textContent = value;
         else element.setAttribute(target, value);
@@ -47,12 +61,19 @@ export function createI18n(bootstrap: Bootstrap, doc: Document, local: StorageAc
     while (walker.nextNode()) {
       const node = walker.currentNode;
       const parent = node.parentElement;
-      if (!parent || parent.closest('[data-t], script, style, textarea, input, select, option, [contenteditable], .mono, .info-value, .profile-name, .profile-desc') || parent.matches('td')) continue;
+      if (
+        !parent ||
+        parent.closest(
+          '[data-t], script, style, textarea, input, select, option, [contenteditable], .mono, .info-value, .profile-name, .profile-desc',
+        ) ||
+        parent.matches('td')
+      )
+        continue;
       const text = node.textContent ?? '';
       const translated = replacements.get(text.trim());
       if (translated) node.textContent = text.replace(text.trim(), translated);
     }
-    doc.querySelectorAll('[title], [aria-label], [placeholder]').forEach(element => {
+    doc.querySelectorAll('[title], [aria-label], [placeholder]').forEach((element) => {
       for (const attribute of ['title', 'aria-label', 'placeholder']) {
         const text = element.getAttribute(attribute);
         const translated = text && replacements.get(text);
@@ -69,8 +90,24 @@ export function createI18n(bootstrap: Bootstrap, doc: Document, local: StorageAc
     }
     doc.documentElement.lang = language;
     applyStaticLang();
-    listeners.forEach(listener => { listener(); });
+    listeners.forEach((listener) => {
+      listener();
+    });
   }
-  function onChange(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener); }; }
-  return { get language() { return language; }, t, applyStaticLang, initLang, setLang, onChange };
+  function onChange(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }
+  return {
+    get language() {
+      return language;
+    },
+    t,
+    applyStaticLang,
+    initLang,
+    setLang,
+    onChange,
+  };
 }

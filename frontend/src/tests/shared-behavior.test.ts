@@ -15,9 +15,19 @@ describe('busy controls', () => {
     const button = document.createElement('button');
     document.body.append(button);
     let finish!: () => void;
-    const outer = withBusy(button, () => new Promise<void>(resolve => { finish = resolve; }));
+    const outer = withBusy(
+      button,
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
     expect(busyDepth(button)).toBe(1);
-    await expect(withBusy(button, () => { throw new Error('failure'); })).rejects.toThrow('failure');
+    await expect(
+      withBusy(button, () => {
+        throw new Error('failure');
+      }),
+    ).rejects.toThrow('failure');
     expect(busyDepth(button)).toBe(1);
     expect(button.disabled).toBe(true);
     expect(button.getAttribute('aria-busy')).toBe('true');
@@ -43,8 +53,11 @@ describe('busy controls', () => {
 
 describe('dialogs', () => {
   function setup() {
-    document.body.innerHTML = '<button id="origin">origin</button><dialog id="modalOverlay"><div id="modalTitle"></div><div id="modalMsg"></div><input id="modalInput"><button id="modalOk"></button><button id="modalCancel"></button></dialog>';
-    const click = (id: string) => { required(document.getElementById(id)).click(); };
+    document.body.innerHTML =
+      '<button id="origin">origin</button><dialog id="modalOverlay"><div id="modalTitle"></div><div id="modalMsg"></div><input id="modalInput"><button id="modalOk"></button><button id="modalCancel"></button></dialog>';
+    const click = (id: string) => {
+      required(document.getElementById(id)).click();
+    };
     return { ...createDialogs(document, t), click };
   }
   it('submits input with Enter, treats empty input as null, and restores focus', async () => {
@@ -108,7 +121,12 @@ describe('notifications and state helpers', () => {
     const show = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'showPopover', { configurable: true, value: show });
     try {
-      const notifications = createNotifications(document, key => key, () => 1, vi.fn());
+      const notifications = createNotifications(
+        document,
+        (key) => key,
+        () => 1,
+        vi.fn(),
+      );
       notifications.toast('saved');
       expect(show).toHaveBeenCalledOnce();
       expect(required(document.querySelector('.toast')).getAttribute('popover')).toBe('manual');
@@ -120,7 +138,15 @@ describe('notifications and state helpers', () => {
   it('replaces and cancels toasts, escapes text, and reuses logout warning', () => {
     const callbacks: (() => void)[] = [];
     const cancel = vi.fn();
-    const notifications = createNotifications(document, t, callback => { callbacks.push(callback); return callbacks.length; }, cancel);
+    const notifications = createNotifications(
+      document,
+      t,
+      (callback) => {
+        callbacks.push(callback);
+        return callbacks.length;
+      },
+      cancel,
+    );
     notifications.toast('<b>first</b>');
     expect(required(document.querySelector('.toast')).children).toHaveLength(0);
     notifications.toast('second', 'error');
@@ -130,7 +156,8 @@ describe('notifications and state helpers', () => {
     required(document.querySelector<HTMLElement>('.toast')).click();
     expect(cancel).toHaveBeenCalledWith(2);
     expect(document.querySelector('.toast')).toBeNull();
-    notifications.logoutWarning(); notifications.logoutWarning();
+    notifications.logoutWarning();
+    notifications.logoutWarning();
     expect(document.querySelectorAll('#logoutWarning')).toHaveLength(1);
     expect(required(document.getElementById('logoutWarning')).textContent).toBe('logout_unconfirmed');
     notifications.dispose();
@@ -141,12 +168,25 @@ describe('notifications and state helpers', () => {
     const other = generation('b');
     const current = generation('a');
     expect([old(), other(), current()]).toEqual([false, true, true]);
-    const denied = safeStorage(() => { throw new Error('denied'); });
+    const denied = safeStorage(() => {
+      throw new Error('denied');
+    });
     expect(denied.getItem('x')).toBeNull();
-    expect(() => { denied.setItem('x', 'y'); }).not.toThrow();
-    const broken = safeStorage(() => ({ getItem: () => { throw new Error(); }, setItem: () => { throw new Error(); } }));
+    expect(() => {
+      denied.setItem('x', 'y');
+    }).not.toThrow();
+    const broken = safeStorage(() => ({
+      getItem: () => {
+        throw new Error();
+      },
+      setItem: () => {
+        throw new Error();
+      },
+    }));
     expect(broken.getItem('x')).toBeNull();
-    expect(() => { broken.setItem('x', 'y'); }).not.toThrow();
+    expect(() => {
+      broken.setItem('x', 'y');
+    }).not.toThrow();
   });
   it('persists theme changes and unregisters listeners', () => {
     document.body.innerHTML = '<button id="themeBtn"></button>';
@@ -159,7 +199,8 @@ describe('notifications and state helpers', () => {
     theme.toggleTheme();
     expect(localStorage.getItem('theme')).toBe('dark');
     expect(required(document.getElementById('themeIconDark')).style.display).toBe('block');
-    unsubscribe(); theme.toggleTheme();
+    unsubscribe();
+    theme.toggleTheme();
     expect(listener).toHaveBeenCalledTimes(2);
   });
   it('formats boundary and unavailable values', () => {

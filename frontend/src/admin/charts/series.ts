@@ -32,7 +32,7 @@ export function readSeries(obj: unknown, spec: SeriesSpec): number | null {
     if (rawTotal == null && spec.altTotalPath) rawTotal = readPath(obj, spec.altTotalPath);
     const total = asNumber(rawTotal);
     if (used == null || total == null || total <= 0) return null;
-    return used / total * 100;
+    return (used / total) * 100;
   }
   let value = readPath(obj, spec.path);
   if (value == null && spec.altPath) value = readPath(obj, spec.altPath);

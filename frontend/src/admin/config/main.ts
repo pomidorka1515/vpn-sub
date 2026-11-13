@@ -6,12 +6,32 @@ import { destroyJsonEditors } from './editor-bridge';
 import { editor, INTEGER_RE, OPTIONAL_KEYS, RESTART_KEYS, MAIN_SECTIONS } from './state';
 import { ConfigNumber, parseConfigJson, isPlainObject, jsonText } from './json';
 import type { ConfigObject } from './json';
-import { attr, restartIcon, fieldError, passWrap, readText, enhanceJsonInputs, rowList, bindRows, nodeOptions } from './controls';
+import {
+  attr,
+  restartIcon,
+  fieldError,
+  passWrap,
+  readText,
+  enhanceJsonInputs,
+  rowList,
+  bindRows,
+  nodeOptions,
+} from './controls';
 import { validateField, validateCard } from './validation';
 
-export function createMainEditor(markDirty: () => void, t: Translate, canAccess: (key: string) => boolean = () => true) {
-  function draft(): ConfigObject { if (!editor.draft) throw new Error(sharedMessage('config_not_loaded')); return editor.draft; }
-  function object(key: string): ConfigObject { const value = draft()[key]; return isPlainObject(value) ? value : {}; }
+export function createMainEditor(
+  markDirty: () => void,
+  t: Translate,
+  canAccess: (key: string) => boolean = () => true,
+) {
+  function draft(): ConfigObject {
+    if (!editor.draft) throw new Error(sharedMessage('config_not_loaded'));
+    return editor.draft;
+  }
+  function object(key: string): ConfigObject {
+    const value = draft()[key];
+    return isPlainObject(value) ? value : {};
+  }
   function commitMainField(key: string): void {
     if (!editor.draft) return;
     if (key === 'api_uri' || key === 'fallback_domain') {
@@ -30,13 +50,21 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
       const timeout = readText('cfg-redis-timeout').trim();
       const redis: ConfigObject = { url: readText('cfg-redis-url') };
       if (timeout !== '') {
-        try { redis['socket_timeout'] = parseConfigJson(timeout); } catch { redis['socket_timeout'] = timeout; }
+        try {
+          redis['socket_timeout'] = parseConfigJson(timeout);
+        } catch {
+          redis['socket_timeout'] = timeout;
+        }
       }
       editor.draft['redis'] = redis;
     } else if (key === 'json_template') {
       const raw = readText('cfg-json_template');
       editor.jsonInputs.set('json_template', raw);
-      try { editor.draft['json_template'] = parseConfigJson(raw); } catch { editor.draft['json_template'] = raw; }
+      try {
+        editor.draft['json_template'] = parseConfigJson(raw);
+      } catch {
+        editor.draft['json_template'] = raw;
+      }
     }
     validateField(key);
     markDirty();
@@ -57,15 +85,23 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
 
   function nodeRows(): string {
     const nodes = object('nodes');
-    return rowList('cfg-rows-nodes', editor.nodeRows || Object.entries(nodes).map(([key, value]) => [key, displayValue(value)]), 'pair');
+    return rowList(
+      'cfg-rows-nodes',
+      editor.nodeRows || Object.entries(nodes).map(([key, value]) => [key, displayValue(value)]),
+      'pair',
+    );
   }
 
   function applyNodeRows(rows: Array<string | string[]>, live?: boolean): void {
-    const pairs: Array<[string, string]> = rows.filter((row): row is string[] => Array.isArray(row)).map(row => [row[0] ?? '', row[1] ?? '']);
+    const pairs: Array<[string, string]> = rows
+      .filter((row): row is string[] => Array.isArray(row))
+      .map((row) => [row[0] ?? '', row[1] ?? '']);
     editor.nodeRows = pairs;
     const nodes: ConfigObject = {};
     Object.setPrototypeOf(nodes, null);
-    pairs.forEach(([key, value]) => { nodes[key] = value; });
+    pairs.forEach(([key, value]) => {
+      nodes[key] = value;
+    });
     draft()['nodes'] = nodes;
     if (!live) paintBox('nodes');
     refreshNodeSelects();
@@ -81,13 +117,18 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
     const expanded = slot.querySelector<HTMLDetailsElement>('.config-box-collapse')?.open;
     destroyJsonEditors(slot);
     slot.outerHTML = boxHtml(key);
-    if (expanded) document.getElementById('cfg-box-' + key.replace('$', ''))?.querySelector('.config-box-collapse')?.setAttribute('open', '');
+    if (expanded)
+      document
+        .getElementById('cfg-box-' + key.replace('$', ''))
+        ?.querySelector('.config-box-collapse')
+        ?.setAttribute('open', '');
     bindBox(key);
     if (focusId) document.getElementById(focusId)?.focus();
   }
 
   function boxHtml(key: string): string {
-    if (!canAccess(key)) return `<div class="config-box permission-disabled permission-action-disabled" id="cfg-box-${key.replace('$', '')}" inert><div class="config-box-label">${escapeHtml(t('config_field_' + key))}</div></div>`;
+    if (!canAccess(key))
+      return `<div class="config-box permission-disabled permission-action-disabled" id="cfg-box-${key.replace('$', '')}" inert><div class="config-box-label">${escapeHtml(t('config_field_' + key))}</div></div>`;
     const data = draft();
     const present = Object.prototype.hasOwnProperty.call(data, key);
     const optional = OPTIONAL_KEYS.includes(key);
@@ -98,7 +139,9 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
     let control = '';
     if (optional && !present) {
       control = `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-optional-add="${key}">${escapeHtml(t('config_add'))}</button></div>`;
-    } else if (['uri', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_uri', 'fallback_domain'].includes(key)) {
+    } else if (
+      ['uri', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_uri', 'fallback_domain'].includes(key)
+    ) {
       control = `<input type="text" id="cfg-${key}" value="${attr(data[key] ?? '')}" spellcheck="false">`;
     } else if (key === 'api_token' || key === 'salt') {
       control = passWrap('cfg-' + key, data[key] ?? '');
@@ -129,23 +172,37 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
       control += `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`;
     } else if (key === 'support_text') {
       const obj = object('support_text');
-      control = ['discord', 'telegram'].map(platform => {
-        const enabled = Object.hasOwn(obj, platform);
-        const pair = Array.isArray(obj[platform]) ? obj[platform] : ['', ''];
-        return `<label class="config-sub">${escapeHtml(t('config_field_' + platform))}</label>
-          ${enabled ? ['en', 'ru'].map((lang, index) => `<label for="cfg-support-${platform}-${String(index)}">${escapeHtml(t('config_' + lang))}</label>
-            <textarea id="cfg-support-${platform}-${String(index)}" spellcheck="false">${escapeHtml(pair[index] ?? '')}</textarea>`).join('') : `<div class="config-absent">${escapeHtml(t('config_not_set'))}</div>`}
+      control = ['discord', 'telegram']
+        .map((platform) => {
+          const enabled = Object.hasOwn(obj, platform);
+          const pair = Array.isArray(obj[platform]) ? obj[platform] : ['', ''];
+          return `<label class="config-sub">${escapeHtml(t('config_field_' + platform))}</label>
+          ${
+            enabled
+              ? ['en', 'ru']
+                  .map(
+                    (
+                      lang,
+                      index,
+                    ) => `<label for="cfg-support-${platform}-${String(index)}">${escapeHtml(t('config_' + lang))}</label>
+            <textarea id="cfg-support-${platform}-${String(index)}" spellcheck="false">${escapeHtml(pair[index] ?? '')}</textarea>`,
+                  )
+                  .join('')
+              : `<div class="config-absent">${escapeHtml(t('config_not_set'))}</div>`
+          }
           <button type="button" class="btn-tiny" data-support-platform="${platform}">${escapeHtml(t(enabled ? 'config_remove' : 'config_add'))}</button>`;
-      }).join('');
+        })
+        .join('');
     } else if (key === 'json_template') {
       const value = editor.jsonInputs.get('json_template') ?? jsonText(data['json_template']);
       control = `<textarea id="cfg-json_template" class="config-json" spellcheck="false">${escapeHtml(value)}</textarea>`;
     } else if (key === '$schema') {
       control = `<div class="config-locked">${escapeHtml(data['$schema'] ?? '')}</div>`;
     }
-    const remove = optional && present && !['bot', 'publicbot', 'discord'].includes(key)
-      ? `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`
-      : '';
+    const remove =
+      optional && present && !['bot', 'publicbot', 'discord'].includes(key)
+        ? `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`
+        : '';
     if (key === 'bypass_packages') {
       return `<div class="config-box" id="cfg-box-${safeKey}"><details class="config-box-collapse">
         <summary class="config-box-label">${escapeHtml(t('config_field_' + safeKey))}</summary>
@@ -159,15 +216,24 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
     const slot = document.getElementById('cfg-box-' + key.replace('$', ''));
     if (!slot) return;
     initPassToggles(document);
-    slot.querySelector('[data-optional-add]')?.addEventListener('click', () => { addOptional(key); });
-    slot.querySelector('[data-optional-remove]')?.addEventListener('click', () => { removeOptional(key); });
+    slot.querySelector('[data-optional-add]')?.addEventListener('click', () => {
+      addOptional(key);
+    });
+    slot.querySelector('[data-optional-remove]')?.addEventListener('click', () => {
+      removeOptional(key);
+    });
     if (['fingerprints', 'bypass_packages', 'funny_strings'].includes(key)) {
-      bindRows('cfg-rows-' + key, 'string', (rows, live) => { applyStringRows(key, rows, live); });
+      bindRows('cfg-rows-' + key, 'string', (rows, live) => {
+        applyStringRows(key, rows, live);
+      });
     }
     if (key === 'nodes') bindRows('cfg-rows-nodes', 'pair', applyNodeRows);
     if (key === 'bot' || key === 'discord') {
       bindRows('cfg-rows-' + key, 'int', (rows, live) => {
-        const ints = rows.map(row => { const value = String(row); return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value; });
+        const ints = rows.map((row) => {
+          const value = String(row);
+          return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value;
+        });
         object(key)['whitelist'] = ints;
         if (!live) paintBox(key);
         validateField(key);
@@ -187,7 +253,7 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
       });
     }
     if (key === 'support_text') {
-      slot.querySelectorAll<HTMLElement>('[data-support-platform]').forEach(button => {
+      slot.querySelectorAll<HTMLElement>('[data-support-platform]').forEach((button) => {
         button.addEventListener('click', () => {
           const platform = button.dataset['supportPlatform'];
           if (!platform) return;
@@ -199,9 +265,9 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
           markDirty();
         });
       });
-      ['discord', 'telegram'].forEach(platform => {
-        [0, 1].forEach(index => {
-          document.getElementById(`cfg-support-${platform}-${String(index)}`)?.addEventListener('input', event => {
+      ['discord', 'telegram'].forEach((platform) => {
+        [0, 1].forEach((index) => {
+          document.getElementById(`cfg-support-${platform}-${String(index)}`)?.addEventListener('input', (event) => {
             const pair = object('support_text')[platform];
             if (Array.isArray(pair) && event.target instanceof HTMLTextAreaElement) pair[index] = event.target.value;
             validateField(key);
@@ -212,13 +278,23 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
     }
     const input = document.getElementById('cfg-' + key);
     if (input && key !== 'json_template') {
-      input.addEventListener('input', () => { commitMainField(key); });
-      input.addEventListener('blur', () => { commitMainField(key); });
+      input.addEventListener('input', () => {
+        commitMainField(key);
+      });
+      input.addEventListener('blur', () => {
+        commitMainField(key);
+      });
     }
-    const related = key === 'api_admin_ui_auth' ? ['cfg-auth-0', 'cfg-auth-1']
-      : key === 'redis' ? ['cfg-redis-url', 'cfg-redis-timeout'] : [];
-    related.forEach(id => {
-      document.getElementById(id)?.addEventListener('input', () => { commitMainField(key); });
+    const related =
+      key === 'api_admin_ui_auth'
+        ? ['cfg-auth-0', 'cfg-auth-1']
+        : key === 'redis'
+          ? ['cfg-redis-url', 'cfg-redis-timeout']
+          : [];
+    related.forEach((id) => {
+      document.getElementById(id)?.addEventListener('input', () => {
+        commitMainField(key);
+      });
     });
     const template = key === 'json_template' ? document.getElementById('cfg-json_template') : null;
     if (template) {
@@ -251,19 +327,25 @@ export function createMainEditor(markDirty: () => void, t: Translate, canAccess:
     const pane = document.getElementById('config-pane-main');
     if (!pane) return;
     destroyJsonEditors(pane);
-    pane.innerHTML = MAIN_SECTIONS.map(([title, keys]) => `
+    pane.innerHTML = MAIN_SECTIONS.map(
+      ([title, keys]) => `
       <div class="section-title">${escapeHtml(t(title))}</div>
       ${keys.map(boxHtml).join('')}
-    `).join('');
-    MAIN_SECTIONS.forEach(([, keys]) => { keys.forEach(bindBox); });
+    `,
+    ).join('');
+    MAIN_SECTIONS.forEach(([, keys]) => {
+      keys.forEach(bindBox);
+    });
   }
 
   function refreshNodeSelects(): void {
-    document.querySelectorAll<HTMLSelectElement>('.cfg-node-select').forEach(select => {
+    document.querySelectorAll<HTMLSelectElement>('.cfg-node-select').forEach((select) => {
       const current = select.value;
       select.innerHTML = nodeOptions(current);
     });
-    Object.keys(object('profiles')).forEach(id => { validateCard('inbounds', id); });
+    Object.keys(object('profiles')).forEach((id) => {
+      validateCard('inbounds', id);
+    });
     validateField('nodes');
   }
 

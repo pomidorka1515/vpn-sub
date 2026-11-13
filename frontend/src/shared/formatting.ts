@@ -15,12 +15,36 @@ export function fmtUptime(seconds: number | null | undefined, translate: Transla
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
-  if (days > 0) return String(days) + translate('day_short') + ' ' + String(hours) + translate('hour_short') + ' ' + String(minutes) + translate('minute_short');
-  if (hours > 0) return String(hours) + translate('hour_short') + ' ' + String(minutes) + translate('minute_short') + ' ' + String(rest) + translate('second_short');
+  if (days > 0)
+    return (
+      String(days) +
+      translate('day_short') +
+      ' ' +
+      String(hours) +
+      translate('hour_short') +
+      ' ' +
+      String(minutes) +
+      translate('minute_short')
+    );
+  if (hours > 0)
+    return (
+      String(hours) +
+      translate('hour_short') +
+      ' ' +
+      String(minutes) +
+      translate('minute_short') +
+      ' ' +
+      String(rest) +
+      translate('second_short')
+    );
   return String(minutes) + translate('minute_short') + ' ' + String(rest) + translate('second_short');
 }
 
-export function fmtTime(timestamp: number | null | undefined, translate: Translate = key => key, now: () => number = Date.now): string {
+export function fmtTime(
+  timestamp: number | null | undefined,
+  translate: Translate = (key) => key,
+  now: () => number = Date.now,
+): string {
   if (!timestamp) return translate('unlimited');
   const time = timestamp * 1000;
   const current = now();
