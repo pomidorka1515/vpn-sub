@@ -68,7 +68,10 @@ def test_programmatic_validation_and_commit_reject_nested_nonfinite(
     schema.write_text('{"type": "object", "additionalProperties": true}', encoding="utf-8")
     path = tmp_path / "config.json"
     cfg = Config(
-        path=path, schema_path=schema if with_schema else None, strict_schema=strict, sync_mode="none"
+        path=path,
+        schema_path=schema if with_schema else None,
+        strict_schema=strict,
+        sync_mode="none",
     )
     try:
         cfg["valid"] = 1

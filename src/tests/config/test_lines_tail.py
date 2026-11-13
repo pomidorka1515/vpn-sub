@@ -24,7 +24,10 @@ from config import LinesConfig
     ],
 )
 def test_tail_line_selection(
-    tmp_path: Path, content: str, n: int, expected: list[dict[str, int]],
+    tmp_path: Path,
+    content: str,
+    n: int,
+    expected: list[dict[str, int]],
 ) -> None:
     path = tmp_path / "log.jsonl"
     path.write_text(content, encoding="utf-8")
@@ -71,7 +74,9 @@ def test_tail_handles_utf8_across_chunk_boundaries(tmp_path: Path) -> None:
     path = tmp_path / "log.jsonl"
     # The read boundary falls within a multibyte character of the selected line.
     value = "é" + "x" * 8189
-    path.write_text('{"id": 1}\n' + json.dumps({"text": value}, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        '{"id": 1}\n' + json.dumps({"text": value}, ensure_ascii=False), encoding="utf-8"
+    )
     with LinesConfig(path, sync_mode="none") as lines:
         assert list(lines.tail(1)) == [{"text": value}]
 

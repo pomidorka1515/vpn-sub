@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import qrcode
 
 from errors import ValidationError
+from regexes import BROWSER_UA
 
 if TYPE_CHECKING:
     from quart import Response
@@ -37,10 +38,6 @@ __all__ = [
     "truncate_utf8",
     "tuple_hook",
 ]
-
-_BROWSER_UA = re.compile(
-    r"(MSIE|Trident|(?!Gecko.+)Firefox|(?!AppleWebKit.+Chrome.+)Safari(?!.+Edge)|(?!AppleWebKit.+)Chrome(?!.+Edge)|(?!AppleWebKit.+Chrome.+Safari.+)Edge|AppleWebKit(?!.+Chrome|.+Safari)|Gecko(?!.+Firefox))(?: |\/)([\d\.apre]+)",
-)
 
 
 def fmt_timestamp(timestamp: int) -> str:
@@ -92,7 +89,7 @@ def generate_token(kind: Literal["sub", "auth"], /) -> str:
 
 
 def isbrowser(ua: str) -> bool:
-    return bool(_BROWSER_UA.search(ua))
+    return bool(BROWSER_UA.search(ua))
 
 
 def compare(a: str, b: str) -> bool:

@@ -121,7 +121,11 @@ def atomic_write_json(
         with Path(temp_path).open("w", encoding="utf-8") as handle:
             if minify:
                 json.dump(
-                    data, handle, indent=None, separators=(",", ":"), ensure_ascii=False,
+                    data,
+                    handle,
+                    indent=None,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
                     allow_nan=False,
                 )
             else:
