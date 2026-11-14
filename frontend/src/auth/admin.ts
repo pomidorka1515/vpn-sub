@@ -66,23 +66,6 @@ export function initAdminAuth(
   i18n.applyStaticLang();
   title.textContent = i18n.t('sign_in');
   doc.title = title.textContent;
-  void (async () => {
-    try {
-      const response = await request(panel + '/token', { credentials: 'same-origin' });
-      const data: unknown = await response.json().catch(() => null);
-      if (
-        !signal.aborted &&
-        response.ok &&
-        isRecord(data) &&
-        data['success'] &&
-        isRecord(data['obj']) &&
-        data['obj']['token']
-      )
-        navigate(panel);
-    } catch {
-      /* An unavailable session check leaves the login form usable. */
-    }
-  })();
   return () => {
     controller.abort();
   };

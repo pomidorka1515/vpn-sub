@@ -267,6 +267,12 @@ describe('user authentication', () => {
 });
 
 describe('admin authentication', () => {
+  it('does not request a token or check the session when the login page opens', async () => {
+    const { request, navigate } = setup(true);
+    await Promise.resolve();
+    expect(request).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
   it('requires both HTTP success and a valid success envelope', async () => {
     const { request, navigate, field, click } = setup(true);
     field('loginUser').value = 'admin';
@@ -286,6 +292,7 @@ describe('admin authentication', () => {
       '/sub/admin/session',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ username: 'admin', password: 'secret' }) }),
     );
+    expect(request).toHaveBeenCalledTimes(2);
   });
   it('does not redirect on a successful response after disposal', async () => {
     const { request, navigate, click } = setup(true);
