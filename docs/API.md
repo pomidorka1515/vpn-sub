@@ -5,10 +5,10 @@ Authentication: a cookie named 'auth_token'.
 Cookie is httponly, samesite=lax, secure=True  
   
 ## Root URI (subject to change)  
-`{domain}/sub/webapi` where `domain` is your domain  
+`{domain}/{uri}/webapi` where `domain` is your domain and `uri` is the configured subscription root (for example, `sub`).  
   
 ## Response format  
-Every response follows this pattern:  
+Except for the successful `GET /updates` SSE stream, responses follow this pattern:  
 ```jsonc  
 // HTTP x  
 {  
@@ -218,6 +218,25 @@ Response (error):
 // HTTP 404  
 {"success": false, "msg": "Unknown username", "obj": null}  
 ```  
+  
+---  
+  
+### GET /updates  
+Description: Live updates for the user-facing dashboard.  
+Rate limit: 20 connection requests per minute, per client IP; frames do not consume additional requests.  
+Authentication: `auth_token` cookie  
+Body: none  
+Response (success): HTTP 200, `Content-Type: text/event-stream`, `Cache-Control: no-store`, `X-Accel-Buffering: no`. Reverse proxies must allow streaming without buffering.  
+  
+The first successful sample sends the current account state. Each subsequent changed sample sends one complete JSON object as `data: {...}\n\n`; unchanged samples send nothing. The object uses the `/stats` `obj` schema directly, without the `success`/`msg`/`obj` envelope:  
+  
+```text
+data: {"token":"subscription-token","link":"https://example.test/sub?token=subscription-token","displayname":"Alice","uuid":"account-uuid","fingerprint":"chrome","enabled":true,"wl_enabled":true,"time":0,"online":false,"bandwidth":{"total":{"upload":1000,"download":2000,"total":3000},"wl_total":{"upload":100,"download":200,"total":300},"monthly":3000,"wl_monthly":300,"limit":10,"wl_limit":5}}
+
+```
+  
+Fields include online status, subscription link, expiry (`time`, Unix seconds; 0 means unlimited), regular/whitelist enabled status, regular/whitelist total upload and download bytes, monthly used bytes and quotas in decimal GB, display name, UUID, fingerprint and subscription token. Monthly usage comes from SQLite's bandwidth watcher accounting; this stream does not run quota mutations or force watcher jobs.    
+Authentication and rate-limit failures before streaming use the normal JSON error responses and HTTP status codes.  
   
 ---  
   

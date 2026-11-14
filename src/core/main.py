@@ -16,6 +16,7 @@ from .services.panel import PanelService
 from .services.password import PasswordService
 from .services.refresh import RefreshService
 from .services.telegram import TelegramService
+from .services.updates import UpdateService
 from .services.user import BusinessUserService, CommonUserService
 
 if TYPE_CHECKING:
@@ -68,6 +69,7 @@ class Subscription:
         )
         self.audit_svc = audit_svc
         self.panel_svc = PanelService(self.res)
+        self.update_svc = UpdateService(self.res, panel_svc=self.panel_svc)
         self.password_svc = PasswordService(self.res)
         self.user_svc = CommonUserService(self.res)
         self.bandwidth_svc = BandwidthService(
@@ -134,5 +136,6 @@ class Subscription:
         await asyncio.shield(self._close_task)
 
     async def _close(self) -> None:
+        await self.update_svc.close()
         await self.res.coordinator.registry.drain()
         await self.panel_svc.close()

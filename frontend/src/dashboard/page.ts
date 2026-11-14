@@ -14,6 +14,7 @@ import { readBootstrap } from '../shared/bootstrap';
 import { getBwColor } from './data';
 import type { Stats } from './data';
 import { createDashboardService } from './service';
+import { startDashboardUpdates } from './updates';
 
 export function initDashboard(doc: Document = document, win: Window = window): () => void {
   const document = doc;
@@ -115,18 +116,17 @@ export function initDashboard(doc: Document = document, win: Window = window): (
           toast(t('invalid_response'), 'error');
           return;
         }
-        if (currentStats && currentStats.link !== stats.link) {
-          ++qrGen;
-          el('qrSection').style.display = 'none';
-          const canvas = getCanvas('qrCanvas');
-          canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        currentStats = stats;
-        renderStats(stats);
+        acceptStats(stats);
       });
     } finally {
       if (--statsLoads === 0) dash.setAttribute('aria-busy', 'false');
     }
+  }
+
+  function acceptStats(stats: Stats) {
+    if (currentStats && currentStats.link !== stats.link) hideQrCode();
+    currentStats = stats;
+    renderStats(stats);
   }
 
   function renderStats(s: Stats) {
@@ -633,8 +633,22 @@ export function initDashboard(doc: Document = document, win: Window = window): (
   i18n.initLang();
   void loadStats();
   void loadFingerprints();
+  const stopUpdates = startDashboardUpdates({
+    url: apiBase + '/updates',
+    request: win.fetch.bind(win),
+    schedule,
+    cancel: cancelTimer,
+    onStats: (stats) => {
+      loadGen('stats'); // An older HTTP refresh must not overwrite a streamed update.
+      acceptStats(stats);
+    },
+    onUnauthorized: () => {
+      if (!disposed) win.location.href = authPage;
+    },
+  });
   return () => {
     disposed = true;
+    stopUpdates();
     stopLanguage();
     abort.abort();
     ++qrGen;

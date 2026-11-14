@@ -29,6 +29,7 @@ const stats = {
 };
 const ok = (obj: unknown) => Response.json({ success: true, obj });
 function setup() {
+  let updates: ReadableStreamDefaultController<Uint8Array> | undefined;
   const html = readFileSync('src/templates/dashboard.html', 'utf8');
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'));
   const bootstrap = document.createElement('script');
@@ -46,6 +47,17 @@ function setup() {
     const path = url instanceof Request ? url.url : url.toString();
     if (path.endsWith('/stats')) return Promise.resolve(ok(stats));
     if (path.endsWith('/fingerprints')) return Promise.resolve(ok(['chrome', 'firefox']));
+    if (path === '/sub/webapi/updates')
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              updates = controller;
+            },
+          }),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      );
     return Promise.resolve(ok(null));
   });
   vi.stubGlobal('fetch', request);
@@ -60,10 +72,44 @@ function setup() {
     vi.waitFor(() => {
       expect(input('setName').value).toBe('Alice');
     });
-  return { request, clipboard, click, input, loaded };
+  const sendUpdate = (value: unknown) => {
+    required(updates).enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`));
+  };
+  return { request, clipboard, click, input, loaded, sendUpdate };
 }
 
 describe('dashboard page', () => {
+  it('streams account changes every two seconds while preserving unsaved settings', async () => {
+    vi.useFakeTimers();
+    const { loaded, sendUpdate, input, request } = setup();
+    await loaded();
+    expect(request).toHaveBeenCalledWith(
+      '/sub/webapi/updates',
+      expect.objectContaining({
+        headers: { Accept: 'text/event-stream' },
+      }),
+    );
+    sendUpdate({ ...stats, displayname: 'Remote', fingerprint: 'firefox', uuid: 'new-id', token: 'new-token' });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(input('setName').value).toBe('Remote');
+    const fingerprint = requiredInstance(document.getElementById('setFp'), HTMLSelectElement);
+    expect(fingerprint.value).toBe('firefox');
+    expect(required(document.getElementById('infoUuid')).textContent).toBe('new-id');
+    expect(required(document.getElementById('infoToken')).textContent).toBe('new-token');
+    input('setName').value = 'Draft';
+    input('setName').dispatchEvent(new Event('input'));
+    fingerprint.value = 'chrome';
+    fingerprint.dispatchEvent(new Event('change'));
+    sendUpdate({ ...stats, displayname: 'Another update', fingerprint: 'firefox', online: false });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(input('setName').value).toBe('Draft');
+    expect(fingerprint.value).toBe('chrome');
+    expect(required(document.getElementById('infoFp')).textContent).toBe('firefox');
+    expect(required(document.getElementById('statusText')).textContent).toBe('offline');
+    expect(
+      request.mock.calls.filter(([url]) => (url instanceof Request ? url.url : url.toString()).endsWith('/stats')),
+    ).toHaveLength(1);
+  });
   it('renders status and capped quota bars and copies the localized link', async () => {
     const { click, loaded, clipboard } = setup();
     await loaded();
@@ -127,7 +173,7 @@ describe('dashboard page', () => {
     expect(request).toHaveBeenCalledWith('/sub/webapi/bonus', expect.objectContaining({ body: '{"code":"GIFT"}' }));
     expect(input('bonusInput').value).toBe('');
     await vi.waitFor(() => {
-      expect(request).toHaveBeenCalledTimes(4);
+      expect(request).toHaveBeenCalledTimes(5);
     });
   });
   it('escapes profile names and descriptions and discards responses after closing', async () => {
@@ -281,7 +327,7 @@ describe('dashboard page', () => {
     await loaded();
     input('bonusInput').value = '   ';
     click('btnApply');
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(3);
     input('bonusInput').value = ' bad ';
     request.mockResolvedValueOnce(Response.json({ success: false, msg: 'invalid code' }, { status: 400 }));
     input('bonusInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
@@ -290,7 +336,7 @@ describe('dashboard page', () => {
     });
     expect(required(document.getElementById('bonusMsg')).className).toBe('bonus-msg err');
     expect(input('bonusInput').value).toBe(' bad ');
-    expect(request).toHaveBeenCalledTimes(3);
+    expect(request).toHaveBeenCalledTimes(4);
   });
   it('debounces username validation and ignores a stale result', async () => {
     const { request, input, loaded } = setup();

@@ -33,7 +33,7 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
   separate WebAPI route.
 - **Public web UI.** `frontend/` dashboard, history, and charts. WebAPI: register,
   login, bonus, stats, history, settings, logout, account delete. Cookie
-  `auth_token`.
+  `auth_token`. The user dashboard self-updates through a SSE endpoint.
 - **Admin UI and API.** Browser admin at `/{uri}/admin` (username/password
   session). Token API at `/{uri}/{api_uri}/api/...`: users, codes, panel health,
   audit log, snapshots, leaderboard, system status, and stuck-rollback markers.

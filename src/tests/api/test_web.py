@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 import uuid
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock, patch
+from collections.abc import AsyncIterable
+from contextlib import AbstractAsyncContextManager
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import pytest_asyncio
 from argon2 import PasswordHasher
+from quart import Response
 
 from api import AsyncApi, AsyncWebApi
 from config.store import AsyncLinesConfig
+from core.services.updates import UpdateSnapshot
 from fonts import FONT_FILES, font_version
 from paths import frontend_root
 from tests.support.api import api_app, config_snapshot, make_subscription, make_watch
@@ -52,7 +58,12 @@ async def test_password_reset_invalid_token_is_404(
 async def test_sensitive_web_responses_are_not_stored(web_api: tuple[Quart, Database]) -> None:
     app, db = web_api
     client = app.test_client()
-    for path in ("/custom/auth", "/custom/panel", "/custom/redirect?prefix=happ://test"):
+    for path in (
+        "/custom/auth",
+        "/custom/panel",
+        "/custom/webapi/updates",
+        "/custom/redirect?prefix=happ://test",
+    ):
         response = await client.get(path)
         assert response.headers["Cache-Control"] == "no-store"
 
@@ -152,6 +163,59 @@ async def web_api(
             limiter=app.extensions["limiter"],
         )
         yield app, database
+
+
+async def test_panel_updates_silence_ping_changes_and_revocation(
+    web_api: tuple[Quart, Database], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, db = web_api
+    api = app.extensions["frontend_web_api"]
+    sub = app.extensions["subscriptions"][0]
+    await db.set_auth_token("alice", "a" * 100)
+    assert (await app.test_client().get("/custom/webapi/updates")).status_code == 401
+    assert (await app.test_client().get("/custom/updates")).status_code == 404
+    snapshot = await sub.update_svc.snapshot()
+    sample = AsyncMock(return_value=snapshot)
+    monkeypatch.setattr(sub.update_svc, "snapshot", sample)
+    clock = [0.0]
+
+    async def tick(delay: float) -> None:
+        assert delay == 2
+        clock[0] += delay
+
+    monkeypatch.setattr("api.web.account.asyncio", Mock(wraps=asyncio, sleep=tick))
+    monkeypatch.setattr("api.web.account.time", Mock(wraps=time, monotonic=lambda: clock[0]))
+    async with app.test_request_context(  # pyright: ignore[reportUnknownMemberType]  # Quart's auth parameter is untyped.
+        "/custom/webapi/updates", headers={"Cookie": "auth_token=" + "a" * 100}
+    ):
+        response = await api.updates()
+    assert isinstance(response, Response)
+    assert response.mimetype == "text/event-stream"
+    assert response.timeout is None
+    assert response.headers["X-Accel-Buffering"] == "no"
+    async with cast(AbstractAsyncContextManager[AsyncIterable[bytes]], response.response) as body:
+        iterator = aiter(body)
+        first = await anext(iterator)
+        assert first == snapshot.frames["alice"]
+        assert json.loads(first.removeprefix(b"data: "))["displayname"] == "Alice"
+        assert await anext(iterator) == b": ping\n\n"
+        assert clock[0] == 20
+        assert sample.await_count == 11  # No data frames during ten unchanged polls.
+        sample.return_value = UpdateSnapshot(snapshot.users, {"alice": b"data: {}\n\n"})
+        assert await anext(iterator) == b"data: {}\n\n"
+        # Panel outages keep the same stream alive, without per-viewer reauthentication.
+        sample.side_effect = RuntimeError("panel unavailable")
+        assert await anext(iterator) == b": ping\n\n"
+        assert clock[0] == 42
+        sample.side_effect = None
+        sample.return_value = snapshot
+        assert await anext(iterator) == first
+        await db.set_auth_token("alice", None)
+        user = await db.get_user("alice")
+        assert user is not None
+        sample.return_value = UpdateSnapshot({"alice": user}, snapshot.frames)
+        with pytest.raises(StopAsyncIteration):
+            await anext(iterator)
 
 
 @pytest.mark.parametrize("field", ["username", "password", "code", "name"])

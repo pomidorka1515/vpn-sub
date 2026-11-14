@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import asdict
 from typing import TYPE_CHECKING, ClassVar, cast
 
-from quart import g, make_response, request, send_file  # pyright: ignore[reportUnknownVariableType]  # Upstream PathLike lacks a type argument.
+from quart import Response, g, make_response, request, send_file  # pyright: ignore[reportUnknownVariableType]  # Upstream PathLike lacks a type argument.
 
 from api.common import Route
 from api.decorators import requires_fields, requires_fields_strict, requires_webapi_auth
 from api.web._base import AsyncWebApiMixin
+from core.services.updates import UPDATE_INTERVAL
 from util import err, make_qr, ok, parse_bool
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from api.common import ResponseType
 
 
@@ -18,6 +23,7 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
     """Authenticated account, stats, and subscription helpers."""
 
     ROUTES: ClassVar[tuple[Route, ...]] = (
+        Route("GET", "/webapi/updates", "updates", 20),
         Route("POST", "/webapi/bonus", "bonus", 15),
         Route("GET", "/webapi/stats", "stats", 20),
         Route("POST", "/webapi/reset", "reset", 3),
@@ -28,6 +34,41 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
         Route("GET", "/webapi/history", "bandwidth_history", 30),
         Route("GET", "/webapi/qr", "qr", 80),
     )
+
+    @requires_webapi_auth
+    async def updates(self, username: str) -> ResponseType:
+        auth_token = request.cookies.get("auth_token", "")
+
+        async def events() -> AsyncIterator[bytes]:
+            previous: bytes | None = None
+            last_sent = time.monotonic()
+            while True:
+                started = time.monotonic()
+                try:
+                    async with asyncio.timeout(UPDATE_INTERVAL):
+                        snapshot = await self.sub.update_svc.snapshot()
+                except Exception:
+                    # Keep heartbeats during outages, but never resend stale secrets.
+                    # Reconnecting every viewer would create an authentication SQL storm.
+                    frame = previous
+                else:
+                    frame = snapshot.authorized_frame(username, auth_token)
+                    if frame is None:
+                        return
+                if frame is not None and frame != previous:
+                    previous = frame
+                    last_sent = time.monotonic()
+                    yield frame
+                elif time.monotonic() - last_sent >= 20:
+                    last_sent = time.monotonic()
+                    yield b": ping\n\n"
+                await asyncio.sleep(max(0, UPDATE_INTERVAL - (time.monotonic() - started)))
+
+        response = Response(events(), mimetype="text/event-stream")
+        response.timeout = None
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Accel-Buffering"] = "no"
+        return response
 
     async def password_reset(self) -> ResponseType:
         token = request.args.get("token")

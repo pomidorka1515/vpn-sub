@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+
+from core.services.updates import UpdateSnapshot
+from tests.support.panels import FakePanel, make_panel_client
+from tests.support.subscriptions import make_subscription
+
+if TYPE_CHECKING:
+    from db import Database
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_updates_batch_is_shared_and_identity_filtered(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await database.create_user(
+        username="alice",
+        uuid="alice-id",
+        token="alice-token",
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=10,
+        wl_limit_gb=20,
+        expires_at=123,
+    )
+    await database.create_user(
+        username="bob",
+        uuid="bob-id",
+        token="bob-token",
+        fingerprint="firefox",
+        displayname="Bob",
+    )
+    await database.set_auth_token("alice", "a" * 100)
+    await database.increment_usage("alice", regular=1234, whitelist=5678)
+    panel = FakePanel(
+        clients=[make_panel_client("alice", [1], 10, 20, uuid="alice-id")],
+        post_payload={"success": True, "obj": ["alice"]},
+    )
+    wl = FakePanel(name="wl", clients=[make_panel_client("alice", [1], 30, 40, uuid="alice-id")])
+    sub = await make_subscription(database, panels=[panel], whitelist_panel=wl)
+    records = AsyncMock(wraps=database.list_user_records)
+    monkeypatch.setattr(database, "list_user_records", records)
+    usernames = AsyncMock(wraps=database.usernames)
+    monkeypatch.setattr(database, "usernames", usernames)
+    clients = AsyncMock(wraps=sub.panel_svc.list_clients)
+    monkeypatch.setattr(sub.panel_svc, "list_clients", clients)
+    clock = [0.0]
+    monkeypatch.setattr("core.services.updates.time", Mock(wraps=time, monotonic=lambda: clock[0]))
+
+    snapshots = await asyncio.gather(*(sub.update_svc.snapshot() for _ in range(100)))
+    assert all(snapshot is snapshots[0] for snapshot in snapshots)
+    assert records.await_count == 1
+    assert usernames.await_count == 1
+    assert clients.await_count == 2  # One call per panel, not per viewer.
+    snapshot = snapshots[0]
+    frame = snapshot.authorized_frame("alice", "a" * 100)
+    assert frame is not None
+    info = json.loads(frame.removeprefix(b"data: "))
+    assert info["displayname"] == "Alice"
+    assert info["time"] == 123
+    assert info["fingerprint"] == "chrome"
+    assert info["online"] is True
+    assert info["token"] == "alice-token"
+    assert "bob-token" not in frame.decode()
+    assert "auth_token" not in info
+    assert info["bandwidth"] == {
+        "total": {"upload": 10, "download": 20, "total": 30},
+        "wl_total": {"upload": 30, "download": 40, "total": 70},
+        "monthly": 1234,
+        "wl_monthly": 5678,
+        "limit": 10,
+        "wl_limit": 20,
+    }
+    assert snapshot.authorized_frame("alice", "b" * 100) is None
+    assert snapshot.authorized_frame("missing", "a" * 100) is None
+    expired = snapshot.users["alice"].copy()
+    expired["auth_token_expires_at"] = int(time.time()) - 1
+    assert (
+        UpdateSnapshot({"alice": expired}, snapshot.frames).authorized_frame("alice", "a" * 100)
+        is None
+    )
+
+    await database.set_user("alice", displayname="Updated", uuid="new-id", fingerprint="firefox")
+    assert await sub.update_svc.snapshot() is snapshot
+    clock[0] = 2
+    updated = await sub.update_svc.snapshot()
+    assert records.await_count == 2
+    changed = updated.authorized_frame("alice", "a" * 100)
+    assert changed is not None
+    info = json.loads(changed.removeprefix(b"data: "))
+    assert info["displayname"] == "Updated"
+    assert info["uuid"] == "new-id"
+    assert info["fingerprint"] == "firefox"
+    assert info["bandwidth"]["total"]["upload"] == 0
+    assert info["bandwidth"]["wl_total"]["download"] == 0
+
+    await database.set_auth_token("alice", None)
+    clock[0] = 4
+    assert (await sub.update_svc.snapshot()).authorized_frame("alice", "a" * 100) is None
+
+
+async def test_updates_failure_and_cancellation_are_shared(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sub = await make_subscription(database)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def fail() -> None:
+        entered.set()
+        await release.wait()
+        raise RuntimeError("unavailable")
+
+    load = AsyncMock(side_effect=fail)
+    monkeypatch.setattr(sub.update_svc, "_collect", load)
+    first = asyncio.create_task(sub.update_svc.snapshot())
+    await entered.wait()
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    release.set()
+    for _ in range(10):
+        with pytest.raises(RuntimeError, match="unavailable"):
+            await sub.update_svc.snapshot()
+    assert load.await_count == 1
