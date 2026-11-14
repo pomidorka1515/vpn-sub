@@ -88,8 +88,15 @@ def generate_token(kind: Literal["sub", "auth"], /) -> str:
             return secrets.token_hex(50)
 
 
+_LEGACY_BROWSER_UA = re.compile(
+    r"\b(?:MSIE|Trident|Firefox|Safari|Chrome|Chromium|Edge|Edg|AppleWebKit|Gecko)[ /][\d.apre]+"
+)
+
+
 def isbrowser(ua: str) -> bool:
-    return bool(BROWSER_UA.search(ua))
+    # Browser identification is not a minimum-version check: older browsers
+    # must not receive VPN subscription data as if they were client apps.
+    return bool(BROWSER_UA.search(ua) or _LEGACY_BROWSER_UA.search(ua))
 
 
 def compare(a: str, b: str) -> bool:

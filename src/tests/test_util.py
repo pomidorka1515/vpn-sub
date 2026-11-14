@@ -11,11 +11,32 @@ from quart import Quart
 
 from errors import ValidationError
 from sysutil import SysUtil
-from util import err, fmt_bytes, format_usage, ok, sanitize
+from util import err, fmt_bytes, format_usage, isbrowser, ok, sanitize
 
 if TYPE_CHECKING:
     from pathlib import Path
     from typing import Literal
+
+
+@pytest.mark.parametrize(
+    ("agent", "expected"),
+    [
+        ("Firefox/120.0", True),
+        ("Mozilla/5.0 Firefox/131.0", True),
+        ("Mozilla/5.0 Firefox/153.0", True),
+        ("Mozilla/5.0 Chrome/108.0 Safari/537.36", True),
+        ("Mozilla/5.0 Version/16.0 Safari/605.1.15", True),
+        ("Mozilla/5.0 Edg/120.0", True),
+        ("Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1)", True),
+        ("Opera Mini", True),
+        ("Happ/1.0", False),
+        ("v2rayN/7.0", False),
+        ("curl/8.0", False),
+        ("", False),
+    ],
+)
+def test_isbrowser(agent: str, *, expected: bool) -> None:
+    assert isbrowser(agent) is expected
 
 
 @pytest.mark.parametrize("used", [0, 2_000_000_000])
