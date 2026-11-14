@@ -65,6 +65,32 @@ test('release strings and object keys are not exposed as plaintext or simple Bas
   }
 });
 
+test('dashboard scripts and dropdown arrows do not require inline scripts or data images', async () => {
+  const template = await readFile(new URL('templates/dashboard.html', output), 'utf8');
+  const bootstrap = await readFile(new URL('templates/shared-bootstrap.html', output), 'utf8');
+  const dom = new JSDOM(template.replace("{% include 'shared-bootstrap.html' %}", bootstrap));
+  try {
+    const scripts = [...dom.window.document.scripts];
+    assert.equal(scripts.length, 3);
+    for (const script of scripts) {
+      if (script.type === 'application/json') continue;
+      assert.match(script.getAttribute('src') ?? '', /^\{\{ prefix \}\}\//);
+      assert.equal(script.textContent.trim(), '');
+    }
+    for (const element of dom.window.document.querySelectorAll('*')) {
+      assert.equal(
+        [...element.attributes].some((attribute) => /^on/i.test(attribute.name)),
+        false,
+      );
+    }
+  } finally {
+    dom.window.close();
+  }
+  const css = await readFile(new URL('assets/dashboard.css', output), 'utf8');
+  assert.doesNotMatch(css, /url\(\s*['"]?data:/i);
+  assert.match(css, /\.settings-row select\{[^}]*background-image:linear-gradient\(/);
+});
+
 test('all pages use the soft sage accent instead of the old blue palette', async () => {
   const common = await readFile(new URL('assets/common.css', output), 'utf8');
   assert.match(common, /--accent:\s*#a8c9bc/);
