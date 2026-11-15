@@ -72,6 +72,9 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
   verify). JSONL audit trail: mutation audits wait for durability; subscription
   hits use a bounded best-effort batch writer, drained on orderly shutdown.
   Overflow or disk failures may lose hit records without failing subscriptions.
+  `LinesConfig(max_size_mb=100)` purges the entire JSONL file when an append
+  exceeds 100 MB (decimal), including the triggering batch; no rotated copy is
+  created. The limit is configurable per instance; existing backups are retained.
   Subscription traffic displays share panel samples for up to 15 seconds;
   watcher/dashboard samples replenish them, and panel-list parsing runs off-loop.
   Quota accounting continues to use fresh reads. `config.json` validated against

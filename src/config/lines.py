@@ -32,8 +32,9 @@ class LinesConfig:
     """
     Thread-safe, process-safe line-based config manager.
 
-    Each line is a JSON object. The file is append-only for writes; reads
-    can iterate from the beginning or tail. Suitable for JSONL/NDJSON logs.
+    Each line is a JSON object. Writes append until the size limit is exceeded,
+    then purge the entire file. Reads can iterate from the beginning or tail.
+    Suitable for JSONL/NDJSON logs.
 
     Notes:
     - Uses a dedicated lock file for inter-process locking.
@@ -51,6 +52,7 @@ class LinesConfig:
         backup_retention: int = 3,
         lockfile_path: str | Path | None = None,
         start_backup: bool = True,
+        max_size_mb: int = 100,
     ) -> None:
         """
         Args:
@@ -63,6 +65,10 @@ class LinesConfig:
             backup_retention: Amount of concurrent backups kept on disk.
             start_backup: Start the scheduled backup thread. False keeps
                 backup_dir configured so backup_now() still works.
+            max_size_mb: Positive size limit in decimal megabytes (1 MB =
+                1,000,000 bytes). After an append exceeds it, purge the entire
+                file, including the triggering record/batch, under the write
+                lock. No rotated copy is created; existing backups are retained.
             lockfile_path: Inter-process lock location. None keeps it beside the
                 data file as ``{path}.lock``. A directory places
                 ``{basename}.{sha1(abspath)[:8]}.lock`` inside it so same-named
@@ -70,6 +76,9 @@ class LinesConfig:
                 (``/x/lock.file`` -> ``/x/lock.file``).
 
         """
+        if max_size_mb < 1:
+            raise ValueError("max_size_mb must be positive")
+        self._max_size_mb = max_size_mb
         self.log = Logger(type(self).__name__)
         path_str = str(path)
         with self.log.loading():
@@ -121,6 +130,10 @@ class LinesConfig:
         return Path(self.path).stat().st_size
 
     @property
+    def max_size_mb(self) -> int:
+        return self._max_size_mb
+
+    @property
     def backup_dir(self) -> str | None:
         return self._backup_dir
 
@@ -131,15 +144,7 @@ class LinesConfig:
     def append(self, record: Mapping[str, JsonValue]) -> None:
         """Append a JSON object as a new line. Thread-safe."""
         line = json.dumps(record, ensure_ascii=False) + "\n"
-        with self._lock:
-            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
-                with Path(self._path).open("a", encoding="utf-8") as f:
-                    f.write(line)
-                    if self._sync_mode != "none":
-                        f.flush()
-                        os.fsync(f.fileno())
-                if self._sync_mode == "full":
-                    fsync_parent_dir(self._path)
+        self._append_lines(line)
 
     def append_many(self, records: Sequence[Mapping[str, JsonValue]]) -> None:
         """Append multiple records in a single atomic write. Thread-safe.
@@ -148,12 +153,20 @@ class LinesConfig:
         because the entire collection is materialized before writing.
         """
         lines = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+        self._append_lines(lines)
+
+    def _append_lines(self, lines: str) -> None:
         with self._lock:
             with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=True):
                 with Path(self._path).open("a", encoding="utf-8") as f:
                     f.write(lines)
+                    # Check actual UTF-8 bytes, including external writers, while
+                    # still holding both locks. Purge before the same fsync so
+                    # rotation does not add another durability round trip.
+                    f.flush()
+                    if os.fstat(f.fileno()).st_size > self._max_size_mb * 1_000_000:
+                        f.truncate(0)
                     if self._sync_mode != "none":
-                        f.flush()
                         os.fsync(f.fileno())
                 if self._sync_mode == "full":
                     fsync_parent_dir(self._path)
