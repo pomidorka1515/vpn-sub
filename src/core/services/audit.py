@@ -9,12 +9,12 @@ from errors import CommittedAuditError
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from config import JsonValue
+    from config import JsonDict, JsonValue
     from config.store import AsyncLinesConfig
 
 
 class AuditService:
-    """Return only after durable append; failures propagate to the caller."""
+    """Durable mutation auditing; subscription hits are buffered best-effort."""
 
     def __init__(self, store: AsyncLinesConfig | None) -> None:
         self._store = store
@@ -27,15 +27,22 @@ class AuditService:
     ) -> None:
         if self._store is None:
             return
+        await self._store.append(self._record(name, info))
+
+    def audit_hit(self, *, info: Mapping[str, JsonValue]) -> None:
+        """Never make subscription availability depend on audit disk throughput."""
+        if self._store is not None:
+            self._store.enqueue(self._record("sub_hit", info))
+
+    @staticmethod
+    def _record(name: AUDIT_VALUES, info: Mapping[str, JsonValue] | None) -> JsonDict:
         now = datetime.now(UTC)
-        await self._store.append(
-            {
-                "ts": now.timestamp(),
-                "date": now.strftime("%d.%m.%Y %H:%M:%S"),
-                "action": name,
-                "info": copy.deepcopy(dict(info)) if info is not None else None,
-            },
-        )
+        return {
+            "ts": now.timestamp(),
+            "date": now.strftime("%d.%m.%Y %H:%M:%S"),
+            "action": name,
+            "info": copy.deepcopy(dict(info)) if info is not None else None,
+        }
 
     async def audit_committed(
         self,

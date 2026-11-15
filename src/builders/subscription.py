@@ -73,8 +73,7 @@ async def get_subscription(
             return await _browser_response(obj, lang, token_required=True, auth_token=auth_token)
         return _private_response(*err("Invalid token.", 401))
     username = await obj.user_svc.usertotoken(token)
-    await obj.audit_svc.audit(
-        name="sub_hit",
+    obj.audit_svc.audit_hit(
         info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json},
     )
 
@@ -87,7 +86,7 @@ async def get_subscription(
     if lang not in {"ru", "en"}:
         return _private_response(*err("Language can be either 'ru' or 'en'", 400))
 
-    bandwidths = await obj.bandwidth_svc.bandwidth(username)
+    bandwidths = await obj.bandwidth_svc.subscription_bandwidth(username)
 
     cfg = obj.res.cfg.view()
     lang_cfg = obj.res.lang_cfg.view()

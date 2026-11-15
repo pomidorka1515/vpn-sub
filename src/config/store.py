@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+from collections import deque
 from typing import TYPE_CHECKING, cast
 
 from app_runtime.tasks import AdmissionClosedError, TaskRegistry
@@ -170,9 +171,19 @@ class AsyncConfig[Doc = JsonDict]:
 
 
 class AsyncLinesConfig:
-    """Acknowledged durable append boundary, separate from best-effort logs."""
+    """Durable appends plus a bounded, batched best-effort enqueue boundary."""
 
-    def __init__(self, factory: Callable[[], LinesConfig], *, files: BoundedOffload) -> None:
+    def __init__(
+        self,
+        factory: Callable[[], LinesConfig],
+        *,
+        files: BoundedOffload,
+        buffer_capacity: int = 4096,
+        batch_size: int = 256,
+        flush_interval: float = 0.05,
+    ) -> None:
+        if buffer_capacity < 1 or batch_size < 1 or flush_interval <= 0:
+            raise ValueError("lines buffer limits must be positive")
         self._factory = factory
         self._files = files
         self._store: LinesConfig | None = None
@@ -181,6 +192,13 @@ class AsyncLinesConfig:
         self._lock = asyncio.Lock()
         self._start_task: asyncio.Task[None] | None = None
         self._close_task: asyncio.Task[None] | None = None
+        self._pending: deque[JsonDict] = deque()
+        self._buffer_capacity = buffer_capacity
+        self._batch_size = batch_size
+        self._flush_interval = flush_interval
+        self._buffer_task: asyncio.Task[None] | None = None
+        self.dropped = 0
+        self.failed = 0
 
     async def start(self) -> None:
         if self._close_task is not None:
@@ -216,6 +234,38 @@ class AsyncLinesConfig:
 
         await asyncio.shield(self._operations.create(operation, name="lines:append"))
 
+    def enqueue(self, record: JsonDict) -> bool:
+        """Accept best-effort data without waiting for disk; never spawn per-record tasks.
+
+        Overflow/closing drops the new record, not a request. Accepted records are
+        drained on orderly close, but may be lost on process or disk failure.
+        Call append() instead when the caller requires durable acknowledgement.
+        """
+        self._require_store()
+        if self._close_task is not None or len(self._pending) >= self._buffer_capacity:
+            self.dropped += 1
+            if self.dropped & (self.dropped - 1) == 0:
+                log.warning("lines buffer full or closed; dropped %d records", self.dropped)
+            return False
+        self._pending.append(copy.deepcopy(record))
+        if self._buffer_task is None or self._buffer_task.done():
+            self._buffer_task = asyncio.create_task(self._flush_pending(), name="lines:buffer")
+        return True
+
+    async def _flush_pending(self) -> None:
+        while self._pending:
+            if self._close_task is None:
+                await asyncio.sleep(self._flush_interval)
+            batch = [
+                self._pending.popleft() for _ in range(min(len(self._pending), self._batch_size))
+            ]
+            try:
+                async with self._lock:
+                    await self._files.run(self._require_store().append_many, batch)
+            except Exception:
+                self.failed += len(batch)
+                log.exception("buffered lines append failed; lost %d records", len(batch))
+
     async def backup_now(self) -> None:
         async def operation() -> None:
             async with self._lock:
@@ -239,6 +289,8 @@ class AsyncLinesConfig:
         if self._start_task is not None:
             await asyncio.gather(self._start_task, return_exceptions=True)
         await self._schedules.close()
+        if self._buffer_task is not None:
+            await self._buffer_task
         await self._operations.drain()
         async with self._lock:
             if self._store is not None:

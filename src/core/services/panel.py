@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 
 type WorkClass = Literal["foreground", "background"]
 type Health = Literal["ok", "unavailable", "invalid"]
+type TrafficRow = tuple[str, str, str, str, int, int]
+type TrafficSnapshot = dict[str, TrafficRow]
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +96,12 @@ class PanelService(BaseService):
         )
         self._online_epoch = 0
         self._online_task_epoch = -1
+        # Immutable rows, private maps: hits only look up their own row, never
+        # copy or parse the full panel inventory. One refresh per panel at most.
+        self._traffic: dict[str, tuple[float, TrafficSnapshot]] = {}
+        self._traffic_epoch: dict[str, int] = {}
+        self._traffic_tasks: dict[str, asyncio.Task[TrafficSnapshot]] = {}
+        self._traffic_refreshes = TaskRegistry()
 
     async def outcomes[T](
         self,
@@ -199,29 +207,70 @@ class PanelService(BaseService):
         return await self._inbounds[panel.name].get(2 if panel.local else 15, load)
 
     async def list_clients(self, panel: XUiSession) -> list[PanelClient]:
-        data = self.response_data(panel, await panel.get("panel/api/clients/list"), "client list")
+        epoch = self._traffic_epoch.get(panel.name, 0)
+        response = await panel.get("panel/api/clients/list")
+        clients, snapshot = await self.res.offloads.rendering.run(
+            self._parse_clients, panel, response
+        )
+        self._publish_traffic(panel, epoch, snapshot)
+        return clients
+
+    @classmethod
+    def _parse_clients(
+        cls, panel: XUiSession, response: PanelResponse
+    ) -> tuple[list[PanelClient], TrafficSnapshot]:
+        data = cls.response_data(panel, response, "client list")
         if not data.get("success"):
             raise PanelRejectedError(f"Panel {panel.name} client list failed: {data.get('msg')}")
         try:
             for item in cast(list[dict[str, object]], data["obj"]):
                 if item.get("inboundIds") is None:
                     item["inboundIds"] = []
-            return from_dict(ClientListResponse, data).obj
+            clients = from_dict(ClientListResponse, data).obj
+            snapshot = {
+                client.email: (
+                    client.email,
+                    client.uuid,
+                    client.traffic.email,
+                    client.traffic.uuid,
+                    client.traffic.up,
+                    client.traffic.down,
+                )
+                for client in clients
+                if client.traffic is not None
+            }
+            return clients, snapshot
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
 
-    async def list_update_traffic(
-        self, panel: XUiSession
-    ) -> list[tuple[str, str, str, str, int, int]]:
+    async def list_update_traffic(self, panel: XUiSession) -> list[TrafficRow]:
         """Read only the identity and counters needed by dashboard updates."""
-        data = self.response_data(panel, await panel.get("panel/api/clients/list"), "client list")
+        rows, _ = await self._load_traffic(panel)
+        return rows
+
+    async def _load_traffic(self, panel: XUiSession) -> tuple[list[TrafficRow], TrafficSnapshot]:
+        epoch = self._traffic_epoch.get(panel.name, 0)
+        response = await panel.get("panel/api/clients/list")
+        rows, snapshot = await self.res.offloads.rendering.run(self._parse_traffic, panel, response)
+        self._publish_traffic(panel, epoch, snapshot)
+        return rows, snapshot
+
+    def _publish_traffic(self, panel: XUiSession, epoch: int, snapshot: TrafficSnapshot) -> None:
+        if epoch == self._traffic_epoch.get(panel.name, 0):
+            self._traffic[panel.name] = (monotonic(), snapshot)
+
+    @classmethod
+    def _parse_traffic(
+        cls, panel: XUiSession, response: PanelResponse
+    ) -> tuple[list[TrafficRow], TrafficSnapshot]:
+        data = cls.response_data(panel, response, "client list")
         if not data.get("success"):
             raise PanelRejectedError(f"Panel {panel.name} client list failed: {data.get('msg')}")
         try:
             rows = data["obj"]
             if not isinstance(rows, list):
                 raise ValueError("invalid client list")
-            result: list[tuple[str, str, str, str, int, int]] = []
+            result: list[TrafficRow] = []
             for raw in cast(list[object], rows):
                 if not isinstance(raw, dict):
                     raise ValueError("invalid client")
@@ -244,9 +293,30 @@ class PanelService(BaseService):
                 ):
                     raise ValueError("invalid traffic fields")
                 result.append((email, uuid, traffic_email, traffic_uuid, up, down))
-            return result
+            return result, {row[0]: row for row in result}
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
+
+    async def subscription_traffic(self, panel: XUiSession, email: str) -> TrafficRow | None:
+        """Share a 15-second sample across all subscriptions and background readers.
+
+        Cold/expired reads coalesce before fanout admission, so reconnect storms
+        cannot consume one fanout slot (or panel request) per subscription hit.
+        Mutation invalidation prevents an in-flight old generation being reused.
+        """
+        cached = self._traffic.get(panel.name)
+        if cached is not None and monotonic() - cached[0] < 15:
+            return cached[1].get(email)
+        task = self._traffic_tasks.get(panel.name)
+        if task is None or task.done():
+
+            async def refresh() -> TrafficSnapshot:
+                results = await self.map_panels([panel], self._load_traffic, work="background")
+                return results[0][1]
+
+            task = self._traffic_refreshes.create(refresh, name="panel:subscription-traffic")
+            self._traffic_tasks[panel.name] = task
+        return (await asyncio.shield(task)).get(email)
 
     async def clients_snapshot(self, panel: XUiSession) -> Mapping[str, PanelClient]:
         async def load() -> dict[str, PanelClient]:
@@ -266,6 +336,9 @@ class PanelService(BaseService):
     async def invalidate_clients(self, panel: XUiSession) -> None:
         self._online_epoch += 1
         self._online = None
+        self._traffic_epoch[panel.name] = self._traffic_epoch.get(panel.name, 0) + 1
+        self._traffic.pop(panel.name, None)
+        self._traffic_tasks.pop(panel.name, None)
         await self._clients[panel.name].clear()
 
     async def invalidate_inbounds(self, panel: XUiSession) -> None:
@@ -395,6 +468,7 @@ class PanelService(BaseService):
 
     async def close(self) -> None:
         # Refreshes may own fanout work, so settle them before closing admission.
+        await self._traffic_refreshes.drain()
         await self._refreshes.drain()
         for registry in self._fanouts.values():
             await registry.drain()

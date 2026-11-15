@@ -69,7 +69,12 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
    successful readings, not calendar-day totals (downtime cannot be split across
    days from cumulative counters). Missing readings are not zero-traffic days.
 - **Auth, audit, backups.** Argon2id passwords (legacy salted hashes still
-  verify). JSONL audit trail. `config.json` validated against
+  verify). JSONL audit trail: mutation audits wait for durability; subscription
+  hits use a bounded best-effort batch writer, drained on orderly shutdown.
+  Overflow or disk failures may lose hit records without failing subscriptions.
+  Subscription traffic displays share panel samples for up to 15 seconds;
+  watcher/dashboard samples replenish them, and panel-list parsing runs off-loop.
+  Quota accounting continues to use fresh reads. `config.json` validated against
   `config.schema.json` on load and commit; remote schemas are rejected.
   Scheduled backups of config and the SQLite database.
 - **Shared rate limits.** Redis sliding window. Every request uses the

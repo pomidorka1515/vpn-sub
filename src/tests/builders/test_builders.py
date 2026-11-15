@@ -18,6 +18,7 @@ from app_runtime.rate_limit import AsyncRateLimiter
 from builders import build_description, build_json, build_link_array, get_subscription
 from config.documents import ProfileOutbound, ProfileTemplate
 from core import Subscription
+from core.services.audit import AuditService
 from custom_types import BandwidthInfo
 from tests.support.config import config_mock, language_config, subscription_config
 
@@ -482,7 +483,7 @@ def _subscription(
     subscription = MagicMock(
         spec=Subscription,
         user_svc=AsyncMock(),
-        audit_svc=AsyncMock(),
+        audit_svc=MagicMock(spec=AuditService),
         bandwidth_svc=AsyncMock(),
         res=SimpleNamespace(
             cfg=MagicMock(),
@@ -492,7 +493,7 @@ def _subscription(
     )
     subscription.user_svc.usertotoken.return_value = username
     subscription.user_svc.user.return_value = user_data
-    subscription.bandwidth_svc.bandwidth.return_value = _bandwidth()
+    subscription.bandwidth_svc.subscription_bandwidth.return_value = _bandwidth()
     subscription.res.cfg = config_mock(config)
     language = _lang()
     language["web"] = {"shared": {"en": {"forbidden_title": "No browser"}}}
@@ -546,6 +547,9 @@ async def test_subscription_json_respects_profile_eligibility(
         force_json=force_json,
     )
     assert status == 200
+    subscription.audit_svc.audit_hit.assert_called_once()
+    subscription.audit_svc.audit.assert_not_called()
+    subscription.bandwidth_svc.bandwidth.assert_not_called()
     assert response.mimetype == "application/json"
     assert response.headers["Cache-Control"] == "private, no-store"
     profiles = cast(list[ProfileTemplate], json.loads(await response.get_data(as_text=True)))
@@ -598,7 +602,7 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
         )
         assert status == 401
         assert response.headers["Cache-Control"] == "private, no-store"
-        subscription.audit_svc.audit.assert_called()
+        subscription.audit_svc.audit_hit.assert_called()
 
         subscription = _subscription()
         response, status = await get_subscription(

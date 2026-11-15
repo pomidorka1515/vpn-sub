@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING
 
@@ -86,6 +87,29 @@ class BandwidthService(BaseService):
                     old.total + traffic.total,
                 )
         return totals
+
+    async def subscription_bandwidth(self, username: str) -> BandwidthInfo:
+        """Display-only sampled counters; quota accounting still uses fresh reads."""
+        self.require_panels()
+        rows = await asyncio.gather(
+            *(
+                self.panel_svc.subscription_traffic(panel, username)
+                for panel in self._target_panels(False)
+            )
+        )
+        # Check identity after I/O, just like the uncached bandwidth read.
+        user = await self.db.get_user(username)
+        owned = [
+            row
+            for row in rows
+            if user is not None
+            and row is not None
+            and row[0] == row[2] == username
+            and row[1] == row[3] == user["uuid"]
+        ]
+        up = sum(row[4] for row in owned)
+        down = sum(row[5] for row in owned)
+        return BandwidthInfo(up, down, up + down)
 
     async def panel_traffic(
         self,
