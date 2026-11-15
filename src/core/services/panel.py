@@ -210,6 +210,44 @@ class PanelService(BaseService):
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
 
+    async def list_update_traffic(
+        self, panel: XUiSession
+    ) -> list[tuple[str, str, str, str, int, int]]:
+        """Read only the identity and counters needed by dashboard updates."""
+        data = self.response_data(panel, await panel.get("panel/api/clients/list"), "client list")
+        if not data.get("success"):
+            raise PanelRejectedError(f"Panel {panel.name} client list failed: {data.get('msg')}")
+        try:
+            rows = data["obj"]
+            if not isinstance(rows, list):
+                raise ValueError("invalid client list")
+            result: list[tuple[str, str, str, str, int, int]] = []
+            for raw in cast(list[object], rows):
+                if not isinstance(raw, dict):
+                    raise ValueError("invalid client")
+                client = cast(dict[str, object], raw)
+                email, uuid, traffic = client["email"], client["uuid"], client.get("traffic")
+                if not isinstance(email, str) or not isinstance(uuid, str):
+                    raise ValueError("invalid client identity")
+                if traffic is None:
+                    continue
+                if not isinstance(traffic, dict):
+                    raise ValueError("invalid traffic")
+                values = cast(dict[str, object], traffic)
+                traffic_email, traffic_uuid = values["email"], values["uuid"]
+                up, down = values["up"], values["down"]
+                if not (
+                    isinstance(traffic_email, str)
+                    and isinstance(traffic_uuid, str)
+                    and isinstance(up, int)
+                    and isinstance(down, int)
+                ):
+                    raise ValueError("invalid traffic fields")
+                result.append((email, uuid, traffic_email, traffic_uuid, up, down))
+            return result
+        except Exception as exc:
+            raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
+
     async def clients_snapshot(self, panel: XUiSession) -> Mapping[str, PanelClient]:
         async def load() -> dict[str, PanelClient]:
             return {client.email: client for client in await self.list_clients(panel)}
@@ -277,6 +315,17 @@ class PanelService(BaseService):
         work: WorkClass,
     ) -> tuple[dict[str, None], dict[str, Health], float]:
         known = await self.db.usernames()
+        users, health = await self.unfiltered_onlines(work=work)
+        users = {user: None for user in users if user in known}
+        snapshot = users, health, monotonic()
+        if epoch == self._online_epoch:
+            self._online = snapshot
+        return snapshot
+
+    async def unfiltered_onlines(
+        self, *, work: WorkClass = "foreground"
+    ) -> tuple[dict[str, None], dict[str, Health]]:
+        """Query panel online lists; callers must filter against known users."""
 
         async def fetch(panel: XUiSession) -> dict[str, object]:
             return self.response_data(
@@ -302,14 +351,10 @@ class PanelService(BaseService):
                 if not isinstance(email, str):
                     health[result.panel] = "invalid"
                     break
-                if email in known:
-                    users.setdefault(email, None)
+                users.setdefault(email, None)
         if health and all(value == "unavailable" for value in health.values()):
             raise PanelUnavailableError("No panel could be queried for online users")
-        snapshot = users, health, monotonic()
-        if epoch == self._online_epoch:
-            self._online = snapshot
-        return snapshot
+        return users, health
 
     async def get_online_status(
         self,

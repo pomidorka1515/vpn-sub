@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from core.services.updates import UpdateSnapshot
+from errors import PanelUnavailableError
 from tests.support.panels import FakePanel, make_panel_client
 from tests.support.subscriptions import make_subscription
 
@@ -50,25 +52,31 @@ async def test_updates_batch_is_shared_and_identity_filtered(
     monkeypatch.setattr(database, "list_user_records", records)
     usernames = AsyncMock(wraps=database.usernames)
     monkeypatch.setattr(database, "usernames", usernames)
-    clients = AsyncMock(wraps=sub.panel_svc.list_clients)
-    monkeypatch.setattr(sub.panel_svc, "list_clients", clients)
+    clients = AsyncMock(wraps=sub.panel_svc.list_update_traffic)
+    monkeypatch.setattr(sub.panel_svc, "list_update_traffic", clients)
     clock = [0.0]
     monkeypatch.setattr("core.services.updates.time", Mock(wraps=time, monotonic=lambda: clock[0]))
 
     snapshots = await asyncio.gather(*(sub.update_svc.snapshot() for _ in range(100)))
     assert all(snapshot is snapshots[0] for snapshot in snapshots)
     assert records.await_count == 1
-    assert usernames.await_count == 1
+    assert usernames.await_count == 0
     assert clients.await_count == 2  # One call per panel, not per viewer.
     snapshot = snapshots[0]
+    assert snapshot.frames == {}
+    assert snapshot.authorized_frame("alice", "wrong") is None
+    assert snapshot.frames == {}
     frame = snapshot.authorized_frame("alice", "a" * 100)
     assert frame is not None
+    assert snapshot.authorized_frame("alice", "a" * 100) is frame
+    assert set(snapshot.frames) == {"alice"}
     info = json.loads(frame.removeprefix(b"data: "))
     assert info["displayname"] == "Alice"
     assert info["time"] == 123
     assert info["fingerprint"] == "chrome"
     assert info["online"] is True
     assert info["token"] == "alice-token"
+    assert info["link"].endswith("?token=alice-token")
     assert "bob-token" not in frame.decode()
     assert "auth_token" not in info
     assert info["bandwidth"] == {
@@ -105,6 +113,42 @@ async def test_updates_batch_is_shared_and_identity_filtered(
     await database.set_auth_token("alice", None)
     clock[0] = 4
     assert (await sub.update_svc.snapshot()).authorized_frame("alice", "a" * 100) is None
+
+
+async def test_updates_reject_invalid_traffic(database: Database) -> None:
+    panel = FakePanel(
+        get_payload={
+            "success": True,
+            "obj": [{"email": "alice", "uuid": "id", "traffic": {"up": "invalid"}}],
+        }
+    )
+    sub = await make_subscription(database, panels=[panel])
+    with pytest.raises(PanelUnavailableError, match="invalid client list"):
+        await sub.update_svc.snapshot()
+
+
+async def test_updates_ignore_mismatched_traffic_and_unknown_online_users(
+    database: Database,
+) -> None:
+    await database.create_user(
+        username="alice", uuid="alice-id", token="token", fingerprint="chrome", displayname="Alice"
+    )
+    await database.set_auth_token("alice", "a" * 100)
+    client = make_panel_client("alice", [1], 10, 20, uuid="alice-id")
+    assert client.traffic is not None
+    panel = FakePanel(
+        clients=[replace(client, traffic=replace(client.traffic, email="other"))],
+        post_payload={"success": True, "obj": ["unknown"]},
+    )
+    sub = await make_subscription(database, panels=[panel])
+    snapshot = await sub.update_svc.snapshot()
+    frame = snapshot.authorized_frame("alice", "a" * 100)
+    assert frame is not None
+    info = json.loads(frame.removeprefix(b"data: "))
+    assert info["online"] is False
+    assert not snapshot.online
+    assert info["bandwidth"]["total"] == {"upload": 0, "download": 0, "total": 0}
+    assert snapshot.authorized_frame("unknown", "a" * 100) is None
 
 
 async def test_updates_failure_and_cancellation_are_shared(
