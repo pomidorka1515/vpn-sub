@@ -47,3 +47,6 @@ class WatchJobs:
 
     async def _quota(self, username: str, *, recover: bool) -> None:
         raise NotImplementedError
+
+    async def _recover_quotas(self) -> None:
+        raise NotImplementedError

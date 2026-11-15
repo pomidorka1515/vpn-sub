@@ -63,7 +63,7 @@ class QuotaJobs(WatchJobs):
             return
         self._notice_enqueued.add(username)
 
-    async def _scan_notifications(self) -> None:
+    async def _scan_notifications(self, *, exclude: set[str] | None = None) -> None:
         if self.notifier is None or self._notice_closed:
             return
         self._start_notifications()
@@ -72,7 +72,7 @@ class QuotaJobs(WatchJobs):
         start = bisect_right(keys, self._notice_cursor) if self._notice_cursor is not None else 0
         for key in keys[start:] + keys[:start]:
             username = key[len(prefix) :]
-            if username in self._notice_enqueued:
+            if username in self._notice_enqueued or (exclude is not None and username in exclude):
                 continue
             if self._notice_queue.full():
                 break
@@ -317,34 +317,59 @@ class QuotaJobs(WatchJobs):
             finally:
                 self._notice_inflight.pop(username, None)
 
+    @staticmethod
+    def _recovery(
+        state: UserRecord, now: int
+    ) -> tuple[bool | None, bool | None, bool | None, tuple[Notice, ...]]:
+        time_ok = state["expires_at"] == 0 or state["expires_at"] > now
+        main_ok = state["bw_limit_gb"] == 0 or state["bw_used"] < state["bw_limit_gb"] * 10**9
+        wl_ok = state["wl_limit_gb"] == 0 or state["wl_used"] < state["wl_limit_gb"] * 10**9
+        main = (
+            True
+            if time_ok and main_ok and not state["enabled"] and not state["admin_disabled"]
+            else None
+        )
+        restored_main = main is True
+        timing = True if time_ok and not state["enabled_time"] else None
+        if timing is not None:
+            restored_main = False
+        whitelist = (
+            True if wl_ok and not state["enabled_wl"] and not state["admin_disabled_wl"] else None
+        )
+        if timing is not None and main is None:
+            main = main_ok and not state["admin_disabled"]
+        notices = restored(main=restored_main, whitelist=whitelist is True, time=timing is True)
+        return main, timing, whitelist, notices
+
+    async def _recover_quotas(self) -> None:
+        # Read committed counters once, including rollover and concurrent admin
+        # edits. No-op users need no locks or per-user database round-trips.
+        states = await self.sub.user_svc.list_user_states()
+        pending = await self.db.list_metadata("user_sync_pending:")
+        now = int(time.time())
+        attempted: set[str] = set()
+        for state in states:
+            main, _, whitelist, _ = self._recovery(state, now)
+            if (
+                main is not None
+                or whitelist is not None
+                or f"user_sync_pending:{state['username']}" in pending
+            ):
+                # Selection is only a hint: _quota rereads under the user lock.
+                attempted.add(state["username"])
+                await self._quota(state["username"], recover=True)
+        # Delivery has its own durable dirty set; unchanged users with unsent
+        # notices must still retry, without probing every user's metadata.
+        await self._scan_notifications(exclude=attempted)
+
     async def _quota(self, username: str, *, recover: bool) -> None:
         async def operation() -> None:
             state = await self.sub.user_svc.get_user_state(username)
             now = int(time.time())
             time_ok = state["expires_at"] == 0 or state["expires_at"] > now
-            main_ok = state["bw_limit_gb"] == 0 or state["bw_used"] < state["bw_limit_gb"] * 10**9
-            wl_ok = state["wl_limit_gb"] == 0 or state["wl_used"] < state["wl_limit_gb"] * 10**9
             # Poll re-enables only; the 120s job handles terminal disables.
             if recover:
-                main = (
-                    True
-                    if time_ok and main_ok and not state["enabled"] and not state["admin_disabled"]
-                    else None
-                )
-                restored_main = main is True
-                timing = True if time_ok and not state["enabled_time"] else None
-                if timing is not None:
-                    restored_main = False
-                whitelist = (
-                    True
-                    if wl_ok and not state["enabled_wl"] and not state["admin_disabled_wl"]
-                    else None
-                )
-                if timing is not None and main is None:
-                    main = main_ok and not state["admin_disabled"]
-                notices = restored(
-                    main=restored_main, whitelist=whitelist is True, time=timing is True
-                )
+                main, timing, whitelist, notices = self._recovery(state, now)
                 if main is not None or whitelist is not None:
                     await self.sub.business_svc.update_user(
                         username,

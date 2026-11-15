@@ -89,11 +89,13 @@ async def test_poll_preserves_explicit_disable(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reason", ["expiry", "traffic", "whitelist", "combined"])
 @pytest.mark.parametrize("restart", [False, True])
+@pytest.mark.parametrize("job", ["check", "bandwidth_check"])
 async def test_quota_check_retries_failed_disable_without_terminal_notice(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     reason: str,
     restart: bool,
+    job: str,
 ) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -139,18 +141,18 @@ async def test_quota_check_retries_failed_disable_without_terminal_notice(
         reconcile = AsyncMock(wraps=sub.business_svc.reconcile_user)
         monkeypatch.setattr(sub.business_svc, "reconcile_user", reconcile)
         # A second failed check must retain the marker for another retry.
-        await watch.check()
+        await getattr(watch, job)()
         assert reconcile.await_count == 1
         assert await db.get_metadata("user_sync_pending:alice") is not None
         assert failed_panel.clients[0].enable
 
         monkeypatch.setattr(failed_panel, "_post_payload", None)
-        await watch.check()
+        await getattr(watch, job)()
         assert reconcile.await_count == 2
         assert await db.get_metadata("user_sync_pending:alice") is None
         assert main.clients[0].enable is not (expired or exhausted)
         assert whitelist.clients[0].enable is not wl_exhausted
-        await watch.check()
+        await getattr(watch, job)()
         assert reconcile.await_count == 2
     finally:
         await watch.close()

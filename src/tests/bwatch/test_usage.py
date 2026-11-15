@@ -183,6 +183,8 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
         for panel in panels:
             if panel.name in failed:
                 panel._get_error = RuntimeError("offline")
+        # Keep a real recovery candidate so outages cannot hide recovery work.
+        await db.update_user("alice", status=False)
         recovery.reset_mock()
         await watch.bandwidth_check()
         recovery.assert_awaited_once_with("alice", recover=True)

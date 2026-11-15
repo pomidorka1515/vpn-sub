@@ -98,6 +98,11 @@ async def test_month_rollover_preserves_notification_episodes(
         with monkeypatch.context() as patch:
             if boundary == "after_reenable":
                 patch.setattr(watch, "_deliver", AsyncMock(side_effect=asyncio.CancelledError))
+                # An unchanged expired account no longer enters the per-user
+                # recovery path; interrupt its bulk outbox scan instead.
+                patch.setattr(
+                    watch, "_scan_notifications", AsyncMock(side_effect=asyncio.CancelledError)
+                )
             else:
                 patch.setattr(db, "increment_usages", reset)
             with pytest.raises(asyncio.CancelledError):

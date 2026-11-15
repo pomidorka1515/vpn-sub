@@ -132,7 +132,8 @@ class UsageJobs(WatchJobs):
                                 else:
                                     pending[key] = current
                         deltas.append(delta)
-                    usage[name] = (deltas[0], deltas[1])
+                    if any(deltas):
+                        usage[name] = (deltas[0], deltas[1])
                 identities = {state["username"]: state["uuid"] for state in current_states}
                 baselines = json.dumps(
                     {
@@ -166,8 +167,7 @@ class UsageJobs(WatchJobs):
                 commit,
                 name="watcher:usage",
             )
-            for username in await self.sub.user_svc.list_users():
-                await self._quota(username, recover=True)
+            await self._recover_quotas()
 
         await self._job("bandwidth", operation)
 
