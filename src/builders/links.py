@@ -8,6 +8,7 @@ import urllib.parse
 from collections import deque
 from typing import TYPE_CHECKING
 
+from config.snapshot import thaw
 from util import fmt_bytes
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ def build_link_array(
         if "EXTRA" in link:
             extra_data = profile["xhttpExtra"]
             if extra_data:
-                json_str = json.dumps(extra_data, separators=(",", ":"))
+                json_str = json.dumps(thaw(extra_data), separators=(",", ":"))
                 encoded_extra = urllib.parse.quote(json_str)
                 link = link.replace("EXTRA", encoded_extra)
             else:

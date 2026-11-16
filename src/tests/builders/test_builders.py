@@ -17,6 +17,7 @@ from app_runtime.offload import OffloadServices
 from app_runtime.rate_limit import AsyncRateLimiter
 from builders import build_description, build_json, build_link_array, get_subscription
 from config.documents import ProfileOutbound, ProfileTemplate
+from config.snapshot import thaw
 from core import Subscription
 from core.services.audit import AuditService
 from custom_types import BandwidthInfo
@@ -269,9 +270,15 @@ def _link_config() -> AppConfig:
     return config
 
 
-def test_link_array_filters_profiles_and_encodes_extra() -> None:
+@pytest.mark.parametrize("shared", [False, True], ids=["mutable", "snapshot"])
+def test_link_array_filters_profiles_and_encodes_extra(shared: bool) -> None:
+    config = _link_config()
+    language = _lang({"ru": DESC["en"], "en": DESC["en"]})
+    if shared:
+        config = config_mock(config).snapshot()
+        language = config_mock(language).snapshot()
     encoded = build_link_array(
-        _link_config(),
+        config,
         status=True,
         statusWl=False,
         lang="ru",
@@ -280,7 +287,7 @@ def test_link_array_filters_profiles_and_encodes_extra() -> None:
         bandwidths=_bandwidth(),
         need_dummy_link=True,
         fingerprint="chrome",
-        lang_cfg=_lang({"ru": DESC["en"], "en": DESC["en"]}),
+        lang_cfg=language,
     )
     lines = base64.b64decode(encoded).decode("utf-8").splitlines()
     assert lines[0].startswith("vless://0@localhost:1")
@@ -387,7 +394,8 @@ def _profile(stream: ProfileStream) -> ProfileOutbound:
     return profile
 
 
-def test_json_profiles_fill_transport_hosts() -> None:
+@pytest.mark.parametrize("shared", [False, True], ids=["mutable", "snapshot"])
+def test_json_profiles_fill_transport_hosts(shared: bool) -> None:
     cfg = subscription_config()
     profiles: dict[str, ProfileConfig] = {
         "tls": {
@@ -427,6 +435,9 @@ def test_json_profiles_fill_transport_hosts() -> None:
             "nodes": {"edge": "edge.example"},
         },
     )
+    original = json.dumps(cfg)
+    if shared:
+        cfg = config_mock(cfg).snapshot()
     built = build_json(cfg, "user-uuid", "en", "chrome", status=True, statusWl=True)
     tls = built[0]["outbounds"]
     assert isinstance(tls, list)
@@ -446,6 +457,19 @@ def test_json_profiles_fill_transport_hosts() -> None:
     assert ws["wsSettings"]["headers"]["Host"] == "edge.example"
     assert ws["httpupgradeSettings"]["host"] == "edge.example"
     assert built[0]["meta"] == {"serverDescription": "tls en"}
+    second = build_json(cfg, "other-uuid", "ru", "firefox", status=True, statusWl=True)
+    assert json.loads(json.dumps(second)) == second
+    first_outbound = cast(ProfileTemplate, built[0])["outbounds"][0]
+    second_outbound = cast(ProfileTemplate, second[0])["outbounds"][0]
+    assert first_outbound["settings"]["vnext"][0]["users"][0]["id"] == "user-uuid"
+    assert second_outbound["settings"]["vnext"][0]["users"][0]["id"] == "other-uuid"
+    first_stream = first_outbound["streamSettings"]
+    second_stream = second_outbound["streamSettings"]
+    assert "tlsSettings" in first_stream
+    assert "tlsSettings" in second_stream
+    assert first_stream["tlsSettings"]["fingerprint"] == "chrome"
+    assert second_stream["tlsSettings"]["fingerprint"] == "firefox"
+    assert json.dumps(thaw(cfg)) == original
 
 
 def _subscription(
@@ -568,6 +592,8 @@ async def test_subscription_json_respects_profile_eligibility(
         force_json="",
     )
     assert link_status == 200
+    subscription.res.cfg.view.assert_not_called()
+    subscription.res.lang_cfg.view.assert_not_called()
     assert link_response.headers["Cache-Control"] == "private, no-store"
     links = base64.b64decode(await link_response.get_data()).decode("utf-8").splitlines()
     assert [link.rsplit("#", 1)[1] for link in links] == expected_names

@@ -33,7 +33,7 @@ async def _browser_response(
     # Keep the package-level hooks used by subscription response callers.
     import builders
 
-    cfg = obj.res.cfg.view()
+    cfg = obj.res.cfg.snapshot()
     prefix = "/" + "/".join(p for p in cfg["uri"].split("/") if p)
     if not dashboard and len(auth_token) == 100:
         dashboard = bool(await obj.user_svc.auth_token_to_user(auth_token))
@@ -88,8 +88,8 @@ async def get_subscription(
 
     bandwidths = await obj.bandwidth_svc.subscription_bandwidth(username)
 
-    cfg = obj.res.cfg.view()
-    lang_cfg = obj.res.lang_cfg.view()
+    cfg = obj.res.cfg.snapshot()
+    lang_cfg = obj.res.lang_cfg.snapshot()
     user = await obj.user_svc.user(username)
 
     displayname = str(user["displayname"])

@@ -4,14 +4,15 @@ import asyncio
 import copy
 import logging
 from collections import deque
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from app_runtime.tasks import AdmissionClosedError, TaskRegistry
 
 from .constants import JsonDict
+from .snapshot import thaw
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, MutableMapping
+    from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 
     from app_runtime.offload import BoundedOffload
 
@@ -53,7 +54,7 @@ class FileSchedules:
 
 
 class AsyncConfig[Doc = JsonDict]:
-    """Detached memory reads; complete locked file operations run off-loop.
+    """Immutable shared or detached memory reads; file operations run off-loop.
 
     The factory must disable Config's backup thread (start_backup=False).
     Once admitted, operations finish and publish even if their waiter cancels.
@@ -94,7 +95,7 @@ class AsyncConfig[Doc = JsonDict]:
             if self._store is not None:
                 return
             self._store = await self._files.run(self._factory)
-            self._snapshot = await self._files.run(self._store.view)
+            self._snapshot = await self._files.run(self._store.snapshot)
             self._schedules.add(self.reload, interval=self._reload_interval, name="config:reload")
             if self._store.backup_dir is not None:
                 self._schedules.add(
@@ -104,9 +105,18 @@ class AsyncConfig[Doc = JsonDict]:
                 )
 
     def view(self) -> Doc:
+        """Return a detached, mutable copy of the current document."""
+        return thaw(self.snapshot())
+
+    def snapshot(self) -> Doc:
+        """Return the shared immutable document without copying or file I/O.
+
+        Retains the field contract, but containers are read-only mappings and
+        tuples at runtime. Publication replaces the snapshot, never mutates it.
+        """
         if self._snapshot is None:
             raise RuntimeError("config has not started")
-        return copy.deepcopy(self._snapshot)
+        return self._snapshot
 
     def _require_store(self) -> Config[Doc]:
         if self._store is None:
@@ -120,7 +130,7 @@ class AsyncConfig[Doc = JsonDict]:
 
                 def load() -> tuple[bool, Doc]:
                     changed = store.reload()
-                    return changed, store.view()
+                    return changed, store.snapshot()
 
                 changed, snapshot = await self._files.run(load)
                 self._snapshot = snapshot
@@ -135,10 +145,10 @@ class AsyncConfig[Doc = JsonDict]:
 
                 def commit() -> tuple[T, Doc]:
                     result = store.mutate(callback)
-                    # Copy committed memory without another freshness check:
+                    # Freeze committed memory without another freshness check:
                     # publication must describe this successful commit.
                     with store.lock:
-                        return result, copy.deepcopy(cast(Doc, store.data))
+                        return result, store.snapshot_locked()
 
                 result, snapshot = await self._files.run(commit)
                 self._snapshot = snapshot
@@ -275,6 +285,10 @@ class AsyncLinesConfig:
 
     async def read_all(self) -> list[JsonDict]:
         return await self._files.run(self._require_store().read_all)
+
+    async def snapshot(self) -> tuple[Mapping[str, JsonValue], ...]:
+        """Return cached immutable records; freshness checks run off-loop."""
+        return await self._files.run(self._require_store().snapshot)
 
     async def tail(self, count: int) -> list[JsonDict]:
         return await self._files.run(lambda: list(self._require_store().tail(count)))

@@ -178,14 +178,14 @@ async def test_discord_startup_and_language_snapshots_without_api_routes(
     language = tmp_path / "lang.jsonc"
     language.write_bytes(LANG_PATH.read_bytes())
     loop_thread = threading.get_ident()
-    original_view = Config[LangConfig].view
+    original_snapshot = Config[LangConfig].snapshot
 
-    def off_loop_view(self: Config[LangConfig]) -> LangConfig:
+    def off_loop_snapshot(self: Config[LangConfig]) -> LangConfig:
         assert threading.get_ident() != loop_thread
-        return original_view(self)
+        return original_snapshot(self)
 
     public, _, _, sub = make_bots()
-    monkeypatch.setattr(Config, "view", off_loop_view)
+    monkeypatch.setattr(Config, "snapshot", off_loop_snapshot)
     monkeypatch.setattr(SharedDiscordClient, "login", AsyncMock())
     monkeypatch.setattr(SharedDiscordClient, "connect", AsyncMock())
     files = BoundedOffload(capacity=2, name="test-files")

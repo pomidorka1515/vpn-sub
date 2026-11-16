@@ -19,6 +19,7 @@ from .atomic import (
 from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
 from .constants import MISSING, JsonDict, JsonValue
 from .schema import load_schema, read_json_object, validate_schema
+from .snapshot import freeze
 from .transaction import ConfigTransaction
 
 if TYPE_CHECKING:
@@ -128,6 +129,8 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
         self.data: dict[str, JsonValue] = {}
         self.last_signature: FileSignature | None = None
+        self._shared_snapshot: Doc | None = None
+        self._shared_signature: FileSignature | None = None
 
         self.lock = threading.RLock()
         self.active_transaction: ConfigTransaction[Doc] | None = None
@@ -407,6 +410,25 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
             self.raise_if_used_inside_transaction()
             self.ensure_recent_locked()
             return self.detach(cast(Doc, self.data))
+
+    def snapshot(self) -> Doc:
+        """Return a cached, recursively immutable snapshot of the current document.
+
+        Keeps the caller's field contract, but runtime objects are read-only
+        mappings and tuples, not dicts and lists. Use view() for mutable data.
+        Old snapshots remain valid after commits and external reloads.
+        """
+        with self.lock:
+            self.raise_if_used_inside_transaction()
+            self.ensure_recent_locked()
+            return self.snapshot_locked()
+
+    def snapshot_locked(self) -> Doc:
+        """Snapshot committed memory without I/O; caller must hold self.lock."""
+        if self._shared_snapshot is None or self._shared_signature != self.last_signature:
+            self._shared_snapshot = cast(Doc, freeze(self.data))
+            self._shared_signature = self.last_signature
+        return self._shared_snapshot
 
     def copy(self) -> JsonDict:
         """Return a deep copy of the current config data as a plain dict."""

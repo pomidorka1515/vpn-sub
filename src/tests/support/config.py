@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, Unpack
+from typing import TYPE_CHECKING, Unpack, cast
 from unittest.mock import MagicMock
 
-from config import Config
+from config import Config, JsonValue
+from config.snapshot import freeze
 
 if TYPE_CHECKING:
     from config import AppConfig, LangConfig, ProfileConfig
@@ -38,6 +39,7 @@ def subscription_config(**overrides: Unpack[AppOverrides]) -> AppConfig:
 def config_mock[Doc](document: Doc) -> Config[Doc]:
     mock = MagicMock(spec=Config)
     mock.view.side_effect = lambda: deepcopy(document)
+    mock.snapshot.return_value = freeze(cast(JsonValue, document))
     return mock
 
 

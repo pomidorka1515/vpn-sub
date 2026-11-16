@@ -29,7 +29,7 @@ def _section(web: Mapping[str, object], name: str) -> Mapping[str, object]:
 def _browser_strings(
     obj: Subscription, lang: str, *, token_required: bool = False, dashboard: bool = False
 ) -> dict[str, str]:
-    language = obj.res.lang_cfg.view()
+    language = obj.res.lang_cfg.snapshot()
     raw = cast(object, language.get("web"))
     web: Mapping[str, object] = cast(Mapping[str, object], raw) if isinstance(raw, Mapping) else {}
     langs = _section(web, "shared")

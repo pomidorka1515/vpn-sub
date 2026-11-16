@@ -9,6 +9,7 @@ from bots.discord.admin import DiscordAdminBot
 from bots.discord.host import SharedDiscordClient
 from bots.discord.public import DiscordPublicBot
 from bots.discord.sessions import DatabaseSessionStore
+from config.snapshot import thaw
 
 if TYPE_CHECKING:
     import asyncio
@@ -27,7 +28,10 @@ class DiscordLanguage:
         self.language = language
 
     def view(self) -> DiscordLangConfig:
-        language = self.language.view().get("discord")
+        return thaw(self.snapshot())
+
+    def snapshot(self) -> DiscordLangConfig:
+        language = self.language.snapshot().get("discord")
         if language is None:
             raise ValueError("Discord language section missing from lang.jsonc")
         return language

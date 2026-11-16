@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import copy
 from typing import TYPE_CHECKING
+
+from config.snapshot import thaw
 
 if TYPE_CHECKING:
     from config import AppConfig
@@ -19,8 +20,8 @@ def build_json(
 ) -> list[dict[str, object]]:
     """Build an array of profiles for Happ.
 
-    ``cfg`` is already an independent copy, so each outbound is filled in
-    place. The template is copied per profile because remarks and meta differ.
+    Accepts shared immutable config: only the outbound and template being
+    personalized are copied into mutable JSON containers.
     """
     index = 0 if lang == "en" else 1
     profiles: list[dict[str, object]] = []
@@ -32,7 +33,7 @@ def build_json(
             break
         node = profile["node"]
         domain = cfg["nodes"][node]
-        outbound = profile["json"]
+        outbound = thaw(profile["json"])
         vnext = outbound["settings"]["vnext"][0]
         vnext["users"][0]["id"] = user_uuid
         vnext["address"] = domain
@@ -57,7 +58,7 @@ def build_json(
         if (upgrade := stream.get("httpupgradeSettings")) is not None:
             upgrade["host"] = domain
 
-        result = copy.deepcopy(cfg["json_template"])
+        result = thaw(cfg["json_template"])
         result["remarks"] = profile["flag"] + profile["name"][index]
         result["outbounds"][0] = outbound
         # only shown when a provider id is set, but written regardless

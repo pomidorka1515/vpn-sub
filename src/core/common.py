@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 class Snapshot[Doc](Protocol):
     def view(self) -> Doc: ...
 
+    def snapshot(self) -> Doc: ...
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SharedCoreResources:

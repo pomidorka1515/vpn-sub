@@ -6,8 +6,9 @@ import json
 import os
 import tempfile
 import threading
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Literal, Self, cast
 
 from errors import ConfigError
 from loggers import Logger
@@ -15,17 +16,21 @@ from loggers import Logger
 from .atomic import (
     CompactReturn,
     ensure_parent_dir,
+    file_signature,
     fsync_parent_dir,
     locked_file,
     resolve_lockfile_path,
 )
 from .backup import do_backup, instance_backup_dir, make_backup_thread, prune_backups
+from .constants import JsonValue
+from .snapshot import freeze
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Sequence
     from types import TracebackType
 
-    from .constants import SYNC_MODES, JsonDict, JsonValue
+    from .atomic import FileSignature
+    from .constants import SYNC_MODES, JsonDict
 
 
 class LinesConfig:
@@ -91,6 +96,8 @@ class LinesConfig:
             )
             self._sync_mode: SYNC_MODES = sync_mode
             self._lock = threading.RLock()
+            self._snapshot: tuple[Mapping[str, JsonValue], ...] | None = None
+            self._snapshot_signature: FileSignature | None = None
 
             self._backup_dir: str | None = str(backup_dir) if backup_dir else None
             self._backup_interval: int | float = backup_interval
@@ -231,6 +238,30 @@ class LinesConfig:
         the file is large and you don't need everything in memory at once.
         """
         return list(self)
+
+    def snapshot(self) -> tuple[Mapping[str, JsonValue], ...]:
+        """Return shared, recursively immutable records, refreshed on file changes.
+
+        Reads and freezes the file only when its signature changes. Existing
+        snapshots remain valid after appends, purges, clears and compaction.
+        """
+        with self._lock:
+            with locked_file(self._path, lockfile_path=self._lockfile_path, exclusive=False):
+                signature = file_signature(self._path)
+                if self._snapshot is not None and signature == self._snapshot_signature:
+                    return self._snapshot
+                try:
+                    with Path(self._path).open(encoding="utf-8") as file:
+                        records = tuple(
+                            cast(Mapping[str, JsonValue], freeze(json.loads(line)))
+                            for line in file
+                            if line.strip()
+                        )
+                except FileNotFoundError:
+                    records = ()
+                self._snapshot = records
+                self._snapshot_signature = signature
+                return records
 
     def first(self, n: int = 1) -> list[JsonDict]:
         """Return the first n records without reading the whole file. Thread-safe.
