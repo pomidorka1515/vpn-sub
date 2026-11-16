@@ -360,6 +360,11 @@ class UsersMixin(ConnectionMixin):
             row = await conn.row("SELECT username FROM users WHERE token = ?", (token,))
             return str(row[0]) if row else None
 
+    async def user_by_token(self, token: str) -> UserRecord | None:
+        async with self.connection() as conn:
+            row = await conn.row("SELECT * FROM users WHERE token = ?", (token,))
+            return cast(UserRecord, dict(row)) if row is not None else None
+
     async def auth_token_to_user(self, auth_token: str) -> str | None:
         async with self.connection() as conn:
             row = await conn.row(

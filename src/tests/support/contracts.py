@@ -113,6 +113,7 @@ AppOverrides = TypedDict(
         "discord": DiscordSection,
         "support_text": SupportTextConfig,
         "api_uri": str,
+        "db_connections": int,
         "fallback_domain": str,
         "$schema": str,
         "funny_strings": list[str],

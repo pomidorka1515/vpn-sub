@@ -4,6 +4,7 @@ export const RESTART_KEYS = [
   'uri',
   'api_uri',
   'api_token',
+  'db_connections',
   '3xui',
   'redis',
   'bot',
@@ -14,6 +15,7 @@ export const RESTART_KEYS = [
 ];
 export const OPTIONAL_KEYS = [
   'api_uri',
+  'db_connections',
   'fallback_domain',
   'funny_strings',
   'bot',
@@ -58,7 +60,7 @@ export const INTEGER_RE = /^(0|-?[1-9]\d*)$/;
 
 export const MAIN_SECTIONS: Array<[string, string[]]> = [
   ['config_sec_service', ['uri', 'api_uri', 'domain', 'fallback_domain', 'ping_check_url', 'provider_id', 'sub_name']],
-  ['config_sec_auth', ['api_token', 'api_admin_ui_auth', 'salt']],
+  ['config_sec_auth', ['api_token', 'api_admin_ui_auth', 'db_connections', 'salt']],
   ['config_sec_lists', ['panel_alert_cooldown', 'fingerprints', 'bypass_packages', 'funny_strings', 'nodes']],
   ['config_sec_integrations', ['redis', 'bot', 'publicbot', 'discord', 'support_text']],
   ['config_sec_template', ['json_template', '$schema']],

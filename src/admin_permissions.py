@@ -69,7 +69,16 @@ USER_FIELDS = {
     "wl_limit": "user.edit.bandwidth.wl_monthly.limit",
 }
 ROOT_CONFIG_KEYS = frozenset(
-    ("api_token", "api_admin_ui_auth", "salt", "bot", "publicbot", "discord", "redis")
+    (
+        "api_token",
+        "api_admin_ui_auth",
+        "db_connections",
+        "salt",
+        "bot",
+        "publicbot",
+        "discord",
+        "redis",
+    )
 )
 
 

@@ -72,12 +72,13 @@ async def get_subscription(
         if builders.isbrowser(ua=ua):
             return await _browser_response(obj, lang, token_required=True, auth_token=auth_token)
         return _private_response(*err("Invalid token.", 401))
-    username = await obj.user_svc.usertotoken(token)
+    user = await obj.user_svc.user_by_token(token)
+    username = user["username"] if user else None
     obj.audit_svc.audit_hit(
         info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json},
     )
 
-    if not username:
+    if user is None or not username:
         if builders.isbrowser(ua=ua):
             return await _browser_response(obj, lang, token_required=True, auth_token=auth_token)
         return _private_response(*err("Invalid token.", 401))
@@ -86,12 +87,10 @@ async def get_subscription(
     if lang not in {"ru", "en"}:
         return _private_response(*err("Language can be either 'ru' or 'en'", 400))
 
-    bandwidths = await obj.bandwidth_svc.subscription_bandwidth(username)
+    bandwidths = await obj.bandwidth_svc.subscription_bandwidth(username, user["uuid"])
 
     cfg = obj.res.cfg.snapshot()
     lang_cfg = obj.res.lang_cfg.snapshot()
-    user = await obj.user_svc.user(username)
-
     displayname = str(user["displayname"])
     need_dummy_link = "v2rayn" in ua.lower()  # catches both v2rayn and v2rayng
     is_happ = ua.startswith("Happ/")

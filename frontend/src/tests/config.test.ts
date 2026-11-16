@@ -16,6 +16,38 @@ afterEach(() => {
 const discordIssues = (discord: ConfigValue) => validateDraft({ discord }).filter((issue) => issue.path === 'discord');
 const discordToken = 'A'.repeat(26) + '.' + 'B'.repeat(6) + '.' + 'C'.repeat(38);
 
+describe('database read connections', () => {
+  it('validates the optional integer range', () => {
+    const issues = (value: ConfigValue) =>
+      validateDraft({ db_connections: value }).filter((i) => i.path === 'db_connections');
+    expect(validateDraft({}).filter((i) => i.path === 'db_connections')).toEqual([]);
+    for (const value of [1, 2, 10, new ConfigNumber('4')]) expect(issues(value)).toEqual([]);
+    for (const value of [0, 11, 1.5, true, '2', null]) expect(issues(value)).not.toEqual([]);
+  });
+
+  it('keeps an empty restart-required input when unset and removes the value when cleared', () => {
+    document.body.innerHTML = '<div id="config-pane-main"></div>';
+    editor.draft = {};
+    createMainEditor(vi.fn(), (key) => key).renderMain();
+    const input = requiredInstance(document.getElementById('cfg-db_connections'), HTMLInputElement);
+    expect(input.value).toBe('');
+    expect(document.querySelector('#cfg-box-db_connections .config-restart-icon')).not.toBeNull();
+    input.value = '4';
+    input.dispatchEvent(new Event('input'));
+    expect(stringifyConfig(required(editor.draft['db_connections']))).toBe('4');
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    expect(Object.hasOwn(editor.draft, 'db_connections')).toBe(false);
+    createMainEditor(
+      vi.fn(),
+      (key) => key,
+      (key) => key !== 'db_connections',
+    ).renderMain();
+    expect(document.getElementById('cfg-db_connections')).toBeNull();
+    expect(document.querySelector('#cfg-box-db_connections[inert]')).not.toBeNull();
+  });
+});
+
 it('describes Master Link placeholders beside the inbound field', () => {
   document.body.innerHTML = '<div id="tab-config"><div id="config-pane-inbounds"></div></div>';
   editor.draft = { profiles: { local: {} } };

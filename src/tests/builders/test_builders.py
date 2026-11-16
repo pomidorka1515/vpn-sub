@@ -479,6 +479,7 @@ def _subscription(
     username: str = "alice",
 ) -> MagicMock:
     user_data: UserRecordOverrides = {
+        "username": username,
         "displayname": "Alice",
         "enabled": 1,
         "enabled_time": 1,
@@ -515,8 +516,7 @@ def _subscription(
             offloads=OffloadServices(),
         ),
     )
-    subscription.user_svc.usertotoken.return_value = username
-    subscription.user_svc.user.return_value = user_data
+    subscription.user_svc.user_by_token.return_value = user_data
     subscription.bandwidth_svc.subscription_bandwidth.return_value = _bandwidth()
     subscription.res.cfg = config_mock(config)
     language = _lang()
@@ -571,6 +571,9 @@ async def test_subscription_json_respects_profile_eligibility(
         force_json=force_json,
     )
     assert status == 200
+    subscription.user_svc.user_by_token.assert_awaited_once_with("tok")
+    subscription.user_svc.user.assert_not_awaited()
+    subscription.bandwidth_svc.subscription_bandwidth.assert_awaited_once_with("alice", "user-uuid")
     subscription.audit_svc.audit_hit.assert_called_once()
     subscription.audit_svc.audit.assert_not_called()
     subscription.bandwidth_svc.bandwidth.assert_not_called()
@@ -617,7 +620,7 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
         assert status == 401
         assert response.headers["Cache-Control"] == "private, no-store"
 
-        subscription.user_svc.usertotoken.return_value = ""
+        subscription.user_svc.user_by_token.return_value = None
         response, status = await get_subscription(
             subscription,
             token="bad",
@@ -698,7 +701,8 @@ async def test_browser_subscription_navigation(
     label: str,
 ) -> None:
     subscription = _subscription(cfg={"uri": "/nested/sub/"})
-    subscription.user_svc.usertotoken.return_value = "alice" if token == "valid" else ""
+    if token != "valid":
+        subscription.user_svc.user_by_token.return_value = None
     subscription.user_svc.auth_token_to_user.return_value = "alice" if valid_session else None
     language = _lang()
     language["web"] = {

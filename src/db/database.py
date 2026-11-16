@@ -74,8 +74,10 @@ class Database(
         backup_retention: int = 3,
         start_backup: bool = True,
     ) -> None:
-        if read_connections < 1 or backup_interval <= 0 or backup_retention < 1:
-            raise ValueError("connection count, backup interval and retention must be positive")
+        if type(read_connections) is not int or not 1 <= read_connections <= 10:
+            raise ValueError("read_connections must be an integer from 1 to 10")
+        if backup_interval <= 0 or backup_retention < 1:
+            raise ValueError("backup interval and retention must be positive")
         self.path = os.path.normpath(Path(path).absolute())
         self.timeout = timeout
         self.log = Logger(type(self).__name__)

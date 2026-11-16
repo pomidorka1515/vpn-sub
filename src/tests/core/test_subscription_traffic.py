@@ -99,8 +99,10 @@ async def test_subscription_bandwidth_filters_both_identities(database: Database
         ),
     ]
     sub = await make_subscription(database, panels=panels)
+    user = await database.get_user("alice")
+    assert user is not None
     results = await asyncio.gather(
-        *(sub.bandwidth_svc.subscription_bandwidth("alice") for _ in range(64))
+        *(sub.bandwidth_svc.subscription_bandwidth("alice", user["uuid"]) for _ in range(64))
     )
     assert results == [BandwidthInfo(5, 6, 11)] * 64
     assert all(panel.gets == ["panel/api/clients/list"] for panel in panels)

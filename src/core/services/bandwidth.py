@@ -88,8 +88,8 @@ class BandwidthService(BaseService):
                 )
         return totals
 
-    async def subscription_bandwidth(self, username: str) -> BandwidthInfo:
-        """Display-only sampled counters; quota accounting still uses fresh reads."""
+    async def subscription_bandwidth(self, username: str, uuid: str) -> BandwidthInfo:
+        """Display-only counters filtered against the subscription's user snapshot."""
         self.require_panels()
         rows = await asyncio.gather(
             *(
@@ -97,15 +97,10 @@ class BandwidthService(BaseService):
                 for panel in self._target_panels(False)
             )
         )
-        # Check identity after I/O, just like the uncached bandwidth read.
-        user = await self.db.get_user(username)
         owned = [
             row
             for row in rows
-            if user is not None
-            and row is not None
-            and row[0] == row[2] == username
-            and row[1] == row[3] == user["uuid"]
+            if row is not None and row[0] == row[2] == username and row[1] == row[3] == uuid
         ]
         up = sum(row[4] for row in owned)
         down = sum(row[5] for row in owned)

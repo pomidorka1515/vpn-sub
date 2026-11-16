@@ -138,6 +138,7 @@ AppConfig = TypedDict(
         "discord": NotRequired[DiscordSection],
         "support_text": NotRequired[SupportTextConfig],
         "api_uri": NotRequired[str],
+        "db_connections": NotRequired[int],
         "fallback_domain": NotRequired[str],
         "$schema": NotRequired[str],
         "funny_strings": NotRequired[list[str]],

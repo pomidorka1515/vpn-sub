@@ -30,6 +30,9 @@ class CommonUserService(BaseService):
     async def usertotoken(self, token: str) -> str | None:
         return await self.db.token_to_user(token) if valid_subscription_token(token) else None
 
+    async def user_by_token(self, token: str) -> UserRecord | None:
+        return await self.db.user_by_token(token) if valid_subscription_token(token) else None
+
     async def get_user_state(self, username: str) -> UserRecord:
         return await self.user(username)
 

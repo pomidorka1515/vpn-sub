@@ -49,6 +49,7 @@ export function foldPermissions(
 export const ROOT_CONFIG_KEYS = new Set([
   'api_token',
   'api_admin_ui_auth',
+  'db_connections',
   'salt',
   'bot',
   'publicbot',

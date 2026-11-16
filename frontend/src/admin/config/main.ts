@@ -37,9 +37,10 @@ export function createMainEditor(
     if (key === 'api_uri' || key === 'fallback_domain') {
       if (!Object.prototype.hasOwnProperty.call(editor.draft, key)) return;
       editor.draft[key] = readText('cfg-' + key);
-    } else if (key === 'panel_alert_cooldown') {
-      const raw = readText('cfg-panel_alert_cooldown').trim();
-      editor.draft['panel_alert_cooldown'] = INTEGER_RE.test(raw) ? new ConfigNumber(raw) : raw;
+    } else if (key === 'panel_alert_cooldown' || key === 'db_connections') {
+      const raw = readText('cfg-' + key).trim();
+      if (key === 'db_connections' && raw === '') Reflect.deleteProperty(editor.draft, key);
+      else editor.draft[key] = INTEGER_RE.test(raw) ? new ConfigNumber(raw) : raw;
     } else if (['uri', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_token', 'salt'].includes(key)) {
       const value = readText('cfg-' + key);
       if (key === 'api_token' && value === '') Reflect.deleteProperty(editor.draft, key);
@@ -137,7 +138,7 @@ export function createMainEditor(
     const label = `<div class="config-box-label"><span>${escapeHtml(t('config_field_' + safeKey))}</span>${restart ? restartIcon() : ''}</div>`;
     const hint = `<div class="form-hint">${escapeHtml(t('config_hint_' + safeKey))}</div>`;
     let control = '';
-    if (optional && !present) {
+    if (optional && !present && key !== 'db_connections') {
       control = `<div class="config-absent">${escapeHtml(t('config_not_set'))} <button type="button" class="btn-tiny" data-optional-add="${key}">${escapeHtml(t('config_add'))}</button></div>`;
     } else if (
       ['uri', 'domain', 'ping_check_url', 'provider_id', 'sub_name', 'api_uri', 'fallback_domain'].includes(key)
@@ -151,6 +152,8 @@ export function createMainEditor(
         ${passWrap('cfg-auth-1', auth[1] ?? '')}`;
     } else if (key === 'panel_alert_cooldown') {
       control = `<input type="number" id="cfg-panel_alert_cooldown" min="0" step="1" value="${attr(data['panel_alert_cooldown'] ?? '')}">`;
+    } else if (key === 'db_connections') {
+      control = `<input type="number" id="cfg-db_connections" min="1" max="10" step="1" value="${attr(data['db_connections'] ?? '')}">`;
     } else if (['fingerprints', 'bypass_packages', 'funny_strings'].includes(key)) {
       control = stringRows(key);
     } else if (key === 'nodes') {
@@ -200,7 +203,7 @@ export function createMainEditor(
       control = `<div class="config-locked">${escapeHtml(data['$schema'] ?? '')}</div>`;
     }
     const remove =
-      optional && present && !['bot', 'publicbot', 'discord'].includes(key)
+      optional && present && !['bot', 'publicbot', 'discord', 'db_connections'].includes(key)
         ? `<button type="button" class="btn-tiny danger" data-optional-remove="${key}">${escapeHtml(t('config_remove'))}</button>`
         : '';
     if (key === 'bypass_packages') {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 from quart import request
@@ -30,6 +31,30 @@ def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert verbose_overrides("bwatch,nope") == frozenset({"bwatch", "nope"})
     monkeypatch.delenv("VERBOSE_LOGGING_OVERRIDES")
     assert verbose_overrides() == frozenset()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("configured", "expected"), [(None, 2), (1, 1), (10, 10)])
+async def test_database_reader_count_at_startup(
+    paths: AppPaths, configured: int | None, expected: int
+) -> None:
+    document = json.loads(paths.config.read_text())
+    if configured is not None:
+        document["db_connections"] = configured
+    paths.config.write_text(json.dumps(document))
+    runtime = await create_application(
+        paths,
+        AppOptions(
+            start_background=False,
+            start_bots=False,
+            limiter=AsyncRateLimiter("redis://test", client=OpenRedis()),
+        ),
+    )
+    try:
+        assert runtime.dependencies.db._read_count == expected
+        assert len(runtime.dependencies.db._readers) == expected
+    finally:
+        await runtime.stop()
 
 
 @pytest.mark.asyncio
@@ -157,6 +182,14 @@ async def test_factory_schema_verbose_and_browser_assets(
             fingerprint="chrome",
             displayname="Alice",
         )
+        connection = MagicMock(wraps=deps.db.connection)
+        monkeypatch.setattr(deps.db, "connection", connection)
+        client_response = await client.get(
+            f"/sub?token={token}&lang=en",
+            headers={"User-Agent": "v2ray"},
+        )
+        assert client_response.status_code == 200
+        assert connection.call_count == 1
         response = await client.get(
             f"/sub?token={token}&lang=en",
             headers={"User-Agent": "Mozilla/5.0 Chrome/122.0.0.0"},

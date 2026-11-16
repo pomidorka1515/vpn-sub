@@ -165,6 +165,12 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   ) {
     issues.push(issue('panel_alert_cooldown', t('config_err_positive_integer')));
   }
+  if (
+    Object.hasOwn(draft, 'db_connections') &&
+    (!isInteger(draft['db_connections']) || Number(draft['db_connections']) < 1 || Number(draft['db_connections']) > 10)
+  ) {
+    issues.push(issue('db_connections', t('config_err_db_connections')));
+  }
   ['fingerprints', 'bypass_packages'].forEach((key) => {
     const list = draft[key];
     if (!Array.isArray(list) || list.some((item) => typeof item !== 'string'))

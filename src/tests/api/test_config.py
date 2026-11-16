@@ -154,6 +154,26 @@ def base_for(path: Path) -> str:
 
 
 @pytest.mark.asyncio
+async def test_db_connections_schema_restart_and_removal(
+    config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
+) -> None:
+    app, cfg, path, _ = config_api
+    assert "db_connections" not in cfg.view()
+    for value in (0, 11, 1.5, True, "2"):
+        response = await set_config(app, base_for(path), {"db_connections": value})
+        assert response.status_code == 400
+    for value in (1, 10):
+        response = await set_config(app, base_for(path), {"db_connections": value})
+        assert response.status_code == 200
+        assert (await response.get_json())["obj"]["restart"] == ["db_connections"]
+        assert cfg.view().get("db_connections") == value
+    response = await set_config(app, base_for(path), {"db_connections": None})
+    assert response.status_code == 200
+    assert (await response.get_json())["obj"]["restart"] == ["db_connections"]
+    assert "db_connections" not in cfg.view()
+
+
+@pytest.mark.asyncio
 async def test_config_rejects_multiple_whitelist_panels(
     config_api: tuple[Quart, AsyncConfig[AppConfig], Path, RecordingAudit],
 ) -> None:

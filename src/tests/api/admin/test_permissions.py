@@ -387,6 +387,7 @@ async def test_field_permissions_checked_before_mutation(
         ("/code/add", {"action": "register"}, "code.add.register"),
         ("/config/set", {"values": {"3xui": {}}}, "config.write.panels"),
         ("/config/set", {"values": {"api_admin_ui_auth": ["new", "password"]}}, "*"),
+        ("/config/set", {"values": {"db_connections": 4}}, "*"),
         ("/operations/rollback/resolve", {}, "*"),
     ],
 )

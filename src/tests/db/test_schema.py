@@ -4,7 +4,7 @@ import sqlite3
 import time
 import uuid
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -335,6 +335,8 @@ async def test_user_constraints_reverse_lookups_and_deletion(database: Database)
     (await create_user(database, token=token))
     (await database.set_telegram("alice", "123"))
     assert (await database.token_to_user(token)) == "alice"
+    assert await database.user_by_token(token) == await database.get_user("alice")
+    assert await database.user_by_token("missing") is None
     assert (await database.ext_to_user("alice@example.test")) == "alice"
     assert (await database.tgid_to_user(123)) == "alice"
     with pytest.raises(DuplicateError):
@@ -342,6 +344,12 @@ async def test_user_constraints_reverse_lookups_and_deletion(database: Database)
     (await database.delete_user("alice"))
     assert (await database.tgid_to_user(123)) is None
     assert (await database.ext_to_user("alice@example.test")) is None
+
+
+@pytest.mark.parametrize("count", [0, -1, 11, 1.5, True, "2"])
+def test_invalid_reader_counts(count: object, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="read_connections"):
+        Database(path=tmp_path / "invalid.sqlite", read_connections=cast(int, count))
 
 
 @pytest.mark.asyncio
