@@ -248,7 +248,7 @@ async def test_quota_applies_combined_terminal_state_once(
         if whitelist_exhausted:
             expected_terminal.add(Kind.WHITELIST_EXHAUSTED)
         assert update.await_count == int(bool(expected_terminal))
-        delivered = {notice.kind for notice in notices.await_args_list[0].args[1]}
+        delivered = {notice.kind for call in notices.await_args_list for notice in call.args[1]}
         assert (
             delivered
             & {

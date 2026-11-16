@@ -417,7 +417,16 @@ class QuotaJobs(WatchJobs):
 
     async def check(self) -> None:
         async def operation() -> None:
-            for username in await self.sub.user_svc.list_users():
-                await self._quota(username, recover=False)
+            states = await self.sub.user_svc.list_user_states()
+            pending = await self.db.list_metadata("user_sync_pending:")
+            now = int(time.time())
+            attempted: set[str] = set()
+            for state in states:
+                username = state["username"]
+                if classify(state, now) or f"user_sync_pending:{username}" in pending:
+                    # The snapshot only selects candidates; _quota rereads under the lock.
+                    attempted.add(username)
+                    await self._quota(username, recover=False)
+            await self._scan_notifications(exclude=attempted)
 
         await self._job("quota", operation)

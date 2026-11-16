@@ -84,6 +84,113 @@ async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
             states.reset_mock()
             metadata.reset_mock()
             bulk_metadata.reset_mock()
+        await watch.check()
+        quota.assert_not_awaited()
+        get_user.assert_not_awaited()
+        metadata.assert_not_awaited()
+        states.assert_awaited_once()
+        assert [call.args[0] for call in bulk_metadata.await_args_list] == [
+            "user_sync_pending:",
+            *(["user_notifications_pending:"] if notifications else []),
+        ]
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_check_selects_warnings_terminals_and_pending_sync(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for number, (name, used) in enumerate(
+        (("quiet", 0), ("warning", 810_000_000), ("terminal", 10**9), ("sync", 0)), 1
+    ):
+        await database.create_user(
+            username=name,
+            uuid=f"00000000-0000-4000-8000-{number:012d}",
+            token=f"{number:040d}",
+            fingerprint="chrome",
+            displayname=name,
+            bw_limit_gb=1,
+        )
+        await database.increment_usage(name, regular=used)
+    await database.set_metadata("user_sync_pending:sync", "reconcile")
+    sub = await make_subscription(database)
+    watch = BWatch(sub.res.cfg, database, sub, scheduled=False)
+    quota = AsyncMock(wraps=watch._quota)
+    monkeypatch.setattr(watch, "_quota", quota)
+    try:
+        await watch.check()
+        assert {call.args[0] for call in quota.await_args_list} == {"warning", "terminal", "sync"}
+        assert all(call.kwargs == {"recover": False} for call in quota.await_args_list)
+        state = await database.get_user("terminal")
+        assert state is not None
+        assert not state["enabled"]
+        assert await database.get_metadata("user_sync_pending:sync") is None
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_check_candidate_is_revalidated_after_admin_edit(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await create_alice(database, bw_limit_gb=1)
+    await database.increment_usage("alice", regular=10**9)
+    sub = await make_subscription(database)
+    watch = BWatch(sub.res.cfg, database, sub, scheduled=False)
+    quota = watch._quota
+
+    async def admin_then_quota(username: str, *, recover: bool) -> None:
+        await sub.business_svc.update_params(username, limit=2)
+        await quota(username, recover=recover)
+
+    selected = AsyncMock(side_effect=admin_then_quota)
+    monkeypatch.setattr(watch, "_quota", selected)
+    try:
+        await watch.check()
+        selected.assert_awaited_once_with("alice", recover=False)
+        state = await database.get_user("alice")
+        assert state is not None
+        assert state["enabled"]
+        assert state["bw_limit_gb"] == 2
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_check_retries_quiet_outbox_without_duplicate_attempts(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await create_alice(database, bw_limit_gb=1)
+    await database.set_telegram("alice", "7")
+    await database.increment_usage("alice", regular=10**9)
+    sub = await make_subscription(database)
+    send = AsyncMock(side_effect=RuntimeError("offline"))
+    notifier = Notifier(
+        texts={"en": {kind.text_key: kind.kind_id for kind in Kind}},
+        send=send,
+        language=AsyncMock(return_value="en"),
+    )
+    watch = BWatch(sub.res.cfg, database, sub, notifier=notifier, scheduled=False)
+    scan = watch._scan_notifications
+
+    async def drain_then_scan(*, exclude: set[str] | None = None) -> None:
+        await watch.drain_notifications()
+        await scan(exclude=exclude)
+
+    monkeypatch.setattr(watch, "_scan_notifications", drain_then_scan)
+    try:
+        await watch.check()
+        assert send.await_count == 1
+        assert await database.get_metadata("user_notifications_pending:alice") is not None
+        send.side_effect = None
+        await watch.check()
+        await watch.drain_notifications()
+        assert send.await_count == 2
+        assert await database.get_metadata("user_notifications_pending:alice") is None
     finally:
         await watch.close()
         await close_subscription(sub)
