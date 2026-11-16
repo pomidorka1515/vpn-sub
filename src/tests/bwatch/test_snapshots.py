@@ -18,6 +18,7 @@ from tests.support.subscriptions import close_subscription, make_subscription
 from tests.support.users import USER_UUID
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
 
@@ -243,6 +244,7 @@ async def test_daily_history_survives_repeated_scheduled_restarts(
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": await traffic(whitelist, work=work)}
 
@@ -300,6 +302,7 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": {"alice": BandwidthInfo(total, total * 2, total * 3)}}
 
@@ -375,6 +378,7 @@ async def test_daily_snapshot_reset_confirmation_survives_restart(
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return (
             {}
@@ -429,6 +433,7 @@ async def test_daily_history_keeps_panel_reset_domains_independent(
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         if require_complete and "a" not in readings:
             raise PanelUnavailableError("panel a unavailable")

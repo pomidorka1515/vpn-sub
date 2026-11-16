@@ -14,6 +14,8 @@ from sysutil import StateSnapshot
 from ..common import BaseService
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from session.client import XUiSession
 
     from ..common import SharedCoreResources
@@ -112,6 +114,7 @@ class BandwidthService(BaseService):
         *,
         work: WorkClass = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         """Return independent counters, omitting unavailable panels unless completeness is required.
 
@@ -122,7 +125,8 @@ class BandwidthService(BaseService):
         panels = self._target_panels(whitelist)
         if not panels:
             return {}
-        known = {user["username"]: user["uuid"] for user in await self.db.list_user_records()}
+        if known is None:
+            known = {user["username"]: user["uuid"] for user in await self.db.list_sweep_users()}
         outcomes = await self.panel_svc.outcomes(panels, self.panel_svc.list_clients, work=work)
         result: dict[str, dict[str, BandwidthInfo]] = {}
         for outcome in outcomes:

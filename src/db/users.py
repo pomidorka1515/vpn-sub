@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from typing import TYPE_CHECKING, Unpack, cast
 
 from constants import SESSION_MAX_AGE
-from custom_types import UserRecord
+from custom_types import SweepUser, UpdateUser, UserRecord
 from errors import DatabaseError, DuplicateError
 
 from .common import ConnectionMixin
@@ -13,6 +14,8 @@ from .notification_episodes import clear_notification_episodes
 from .telegram import set_telegram_mapping
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from custom_types import UserFields
 
     from .common import Connection
@@ -49,6 +52,43 @@ class UsersMixin(ConnectionMixin):
             return [
                 cast(UserRecord, dict(row))
                 for row in await conn.rows("SELECT * FROM users ORDER BY username")
+            ]
+
+    async def list_sweep_users(self) -> list[SweepUser]:
+        async with self.connection() as conn:
+            return [
+                cast(SweepUser, dict(row))
+                for row in await conn.rows(
+                    "SELECT username, uuid, enabled, enabled_time, enabled_wl, admin_disabled, "
+                    "admin_disabled_wl, expires_at, bw_limit_gb, bw_used, wl_limit_gb, wl_used "
+                    "FROM users ORDER BY username"
+                )
+            ]
+
+    async def list_sweep_users_for(self, names: Collection[str]) -> list[SweepUser]:
+        if not names:
+            return []
+        async with self.connection() as conn:
+            return [
+                cast(SweepUser, dict(row))
+                for row in await conn.rows(
+                    "SELECT username, uuid, enabled, enabled_time, enabled_wl, admin_disabled, "
+                    "admin_disabled_wl, expires_at, bw_limit_gb, bw_used, wl_limit_gb, wl_used "
+                    "FROM users WHERE username IN (SELECT value FROM json_each(?))",
+                    (json.dumps(list(names)),),
+                )
+            ]
+
+    async def list_update_users(self) -> list[UpdateUser]:
+        async with self.connection() as conn:
+            return [
+                cast(UpdateUser, dict(row))
+                for row in await conn.rows(
+                    "SELECT username, uuid, enabled, enabled_time, enabled_wl, admin_disabled, "
+                    "admin_disabled_wl, expires_at, bw_limit_gb, bw_used, wl_limit_gb, wl_used, "
+                    "token, auth_token, auth_token_expires_at, fingerprint, displayname "
+                    "FROM users ORDER BY username"
+                )
             ]
 
     async def all_users(self) -> list[str]:

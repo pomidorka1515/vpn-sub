@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from config import AppConfig
     from core import Subscription
     from core.common import Snapshot
+    from custom_types import SweepUser
     from db import Database
     from loggers import Logger
     from notify.notifier import Notifier
@@ -48,5 +49,5 @@ class WatchJobs:
     async def _quota(self, username: str, *, recover: bool) -> None:
         raise NotImplementedError
 
-    async def _recover_quotas(self) -> None:
+    async def _recover_quotas(self, states: list[SweepUser]) -> None:
         raise NotImplementedError

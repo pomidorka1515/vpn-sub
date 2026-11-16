@@ -48,8 +48,8 @@ async def test_updates_batch_is_shared_and_identity_filtered(
     )
     wl = FakePanel(name="wl", clients=[make_panel_client("alice", [1], 30, 40, uuid="alice-id")])
     sub = await make_subscription(database, panels=[panel], whitelist_panel=wl)
-    records = AsyncMock(wraps=database.list_user_records)
-    monkeypatch.setattr(database, "list_user_records", records)
+    records = AsyncMock(wraps=database.list_update_users)
+    monkeypatch.setattr(database, "list_update_users", records)
     usernames = AsyncMock(wraps=database.usernames)
     monkeypatch.setattr(database, "usernames", usernames)
     clients = AsyncMock(wraps=sub.panel_svc.list_update_traffic)
@@ -63,6 +63,8 @@ async def test_updates_batch_is_shared_and_identity_filtered(
     assert usernames.await_count == 0
     assert clients.await_count == 2  # One call per panel, not per viewer.
     snapshot = snapshots[0]
+    assert "ext_password_hash" not in snapshot.users["alice"]
+    assert "created_at" not in snapshot.users["alice"]
     assert snapshot.frames == {}
     assert snapshot.authorized_frame("alice", "wrong") is None
     assert snapshot.frames == {}

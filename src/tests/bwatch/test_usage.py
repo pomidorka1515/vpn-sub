@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
@@ -15,6 +17,7 @@ from tests.support.subscriptions import close_subscription, make_subscription
 from tests.support.users import USER_UUID
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
 
@@ -85,6 +88,7 @@ async def test_month_rollover_rebaselines_atomically(
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {} if missing else {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
@@ -271,6 +275,7 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
             *,
             work: str = "foreground",
             require_complete: bool = False,
+            known: Mapping[str, str] | None = None,
         ) -> dict[str, dict[str, BandwidthInfo]]:
             return {"panel": await traffic(whitelist, work=work)}
 
@@ -318,6 +323,7 @@ async def test_counter_reset_confirmation_and_restart(tmp_path: Path) -> None:
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         total = totals["whitelist" if whitelist else "main"]
         return {"panel": {} if total is None else {"alice": BandwidthInfo(total, 0, total)}}
@@ -388,6 +394,7 @@ async def test_panel_resets_account_full_confirmed_traffic(
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {
             panel: {} if total is None else {"alice": BandwidthInfo(total, 0, total)}
@@ -432,6 +439,7 @@ async def test_usage_baselines_do_not_cross_account_identities(tmp_path: Path) -
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
@@ -466,6 +474,114 @@ async def test_usage_baselines_do_not_cross_account_identities(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+async def test_usage_revalidates_identity_changed_during_panel_read(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await database.create_user(
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=1,
+    )
+    sub = await make_subscription(database)
+    watch = BWatch(sub.res.cfg, database, sub, scheduled=False)
+    total = 100
+    changed = False
+
+    async def traffic(
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
+        require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        if changed:
+            await database.update_user("alice", uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+        return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
+
+    monkeypatch.setattr(sub.bandwidth_svc, "panel_traffic", traffic)
+    try:
+        await watch.bandwidth_check()
+        total, changed = 200, True
+        await watch.bandwidth_check()
+        state = await database.get_user("alice")
+        assert state is not None
+        assert state["bw_used"] == 0
+        saved = json.loads((await database.get_metadata("watcher_usage_baselines")) or "{}")
+        assert all(item[2] != USER_UUID for item in saved["counters"]["main"])
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_usage_commit_locks_only_users_with_deltas(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ("alice", "bob"):
+        await database.create_user(
+            username=name,
+            uuid=f"{name}-uuid",
+            token=name * 8,
+            fingerprint="chrome",
+            displayname=name,
+            bw_limit_gb=1,
+        )
+    sub = await make_subscription(database)
+    watch = BWatch(sub.res.cfg, database, sub, scheduled=False)
+    total = 100
+
+    async def traffic(
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
+        require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
+
+    monkeypatch.setattr(sub.bandwidth_svc, "panel_traffic", traffic)
+    entered, release = asyncio.Event(), asyncio.Event()
+    increment = database.increment_usages
+
+    async def delayed_increment(
+        updates: Mapping[str, tuple[int, int]],
+        *,
+        baselines: str | None = None,
+        period: tuple[str, str] | None = None,
+    ) -> None:
+        entered.set()
+        await release.wait()
+        await increment(updates, baselines=baselines, period=period)
+
+    try:
+        await watch.bandwidth_check()
+        total = 150
+        monkeypatch.setattr(database, "increment_usages", delayed_increment)
+        poll = asyncio.create_task(watch.bandwidth_check())
+        await asyncio.wait_for(entered.wait(), 2)
+        mutated = asyncio.Event()
+
+        async def mark() -> None:
+            mutated.set()
+
+        await asyncio.wait_for(sub.res.coordinator.run(["bob"], mark, name="test:unrelated"), 2)
+        blocked = asyncio.create_task(sub.res.coordinator.run(["alice"], mark, name="test:delta"))
+        await asyncio.sleep(0)
+        assert not blocked.done()
+        release.set()
+        await poll
+        await blocked
+        assert mutated.is_set()
+    finally:
+        release.set()
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
 async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()
@@ -479,6 +595,7 @@ async def test_restart_counts_offline_traffic_once(tmp_path: Path) -> None:
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
@@ -531,6 +648,7 @@ async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Pat
         *,
         work: str = "foreground",
         require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         if offline:
             raise PanelUnavailableError("panel offline")

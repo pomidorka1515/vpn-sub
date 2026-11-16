@@ -117,14 +117,9 @@ class SupportsKeysAndGetItem[KT, VT](Protocol):
 # db.py ###
 
 
-class UserRecord(TypedDict):
+class SweepUser(TypedDict):
     username: str
     uuid: str
-    token: str
-    auth_token: str | None
-    auth_token_expires_at: int | None
-    fingerprint: str
-    displayname: str
     enabled: int
     enabled_time: int
     enabled_wl: int
@@ -135,6 +130,17 @@ class UserRecord(TypedDict):
     bw_used: int
     wl_limit_gb: int
     wl_used: int
+
+
+class UpdateUser(SweepUser):
+    token: str
+    auth_token: str | None
+    auth_token_expires_at: int | None
+    fingerprint: str
+    displayname: str
+
+
+class UserRecord(UpdateUser):
     ext_username: str | None
     ext_password_hash: str | None
     created_at: int

@@ -9,6 +9,7 @@ import pytest
 from bwatch.watch import BWatch
 from custom_types import BandwidthInfo
 from notify import Kind, Notifier
+from tests.support.panels import FakePanel, make_panel_client
 from tests.support.subscriptions import close_subscription, make_subscription
 from tests.support.users import create_alice
 
@@ -57,20 +58,24 @@ async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
         get_user = AsyncMock(wraps=database.get_user)
         metadata = AsyncMock(wraps=database.get_metadata)
         bulk_metadata = AsyncMock(wraps=database.list_metadata)
-        states = AsyncMock(wraps=sub.user_svc.list_user_states)
+        states = AsyncMock(wraps=database.list_sweep_users)
         increment = AsyncMock(wraps=database.increment_usages)
         monkeypatch.setattr(watch, "_quota", quota)
         monkeypatch.setattr(database, "get_user", get_user)
         monkeypatch.setattr(database, "get_metadata", metadata)
         monkeypatch.setattr(database, "list_metadata", bulk_metadata)
-        monkeypatch.setattr(sub.user_svc, "list_user_states", states)
+        monkeypatch.setattr(database, "list_sweep_users", states)
         monkeypatch.setattr(database, "increment_usages", increment)
         for total, updates in ((100, {}), (140, {"user00000": (40, 0)}), (140, {})):
             traffic.return_value = {"panel": {"user00000": BandwidthInfo(total, 0, total)}}
             await watch.bandwidth_check()
             quota.assert_not_awaited()
             get_user.assert_not_awaited()
-            assert states.await_count == 3
+            states.assert_awaited_once()
+            assert traffic.await_args is not None
+            known = traffic.await_args.kwargs["known"]
+            assert len(known) == 10_000
+            assert known["user00000"] == "00000000-0000-0000-0000-000000000000"
             assert [call.args[0] for call in metadata.await_args_list] == [
                 "last_reset_month",
                 "watcher_usage_baselines",
@@ -88,11 +93,41 @@ async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
         quota.assert_not_awaited()
         get_user.assert_not_awaited()
         metadata.assert_not_awaited()
-        states.assert_awaited_once()
+        states.assert_not_awaited()
         assert [call.args[0] for call in bulk_metadata.await_args_list] == [
             "user_sync_pending:",
             *(["user_notifications_pending:"] if notifications else []),
         ]
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_both_panel_pools_share_one_projected_user_scan(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await create_alice(database, bw_limit_gb=1, wl_limit_gb=1)
+    state = await database.get_user("alice")
+    assert state is not None
+    main = FakePanel(
+        name="main", clients=[make_panel_client("alice", [1], 5, 0, uuid=state["uuid"])]
+    )
+    wl = FakePanel(name="wl", clients=[make_panel_client("alice", [1], 7, 0, uuid=state["uuid"])])
+    sub = await make_subscription(database, panels=[main], whitelist_panel=wl)
+    watch = BWatch(sub.res.cfg, database, sub, scheduled=False)
+    scans = AsyncMock(wraps=database.list_sweep_users)
+    records = AsyncMock(wraps=database.list_user_records)
+    monkeypatch.setattr(database, "list_sweep_users", scans)
+    monkeypatch.setattr(database, "list_user_records", records)
+    try:
+        await watch.bandwidth_check()
+        scans.assert_awaited_once()
+        records.assert_not_awaited()
+        assert len(watch.mem) == len(watch.wl_mem) == 1
+        projected = await scans()
+        assert "ext_password_hash" not in projected[0]
+        assert "auth_token" not in projected[0]
     finally:
         await watch.close()
         await close_subscription(sub)

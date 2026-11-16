@@ -16,7 +16,7 @@ from notify.kinds import Kind, Scope
 from ._base import WatchJobs
 
 if TYPE_CHECKING:
-    from custom_types import UserRecord
+    from custom_types import SweepUser, UserRecord
 
 
 class QuotaJobs(WatchJobs):
@@ -319,7 +319,7 @@ class QuotaJobs(WatchJobs):
 
     @staticmethod
     def _recovery(
-        state: UserRecord, now: int
+        state: SweepUser, now: int
     ) -> tuple[bool | None, bool | None, bool | None, tuple[Notice, ...]]:
         time_ok = state["expires_at"] == 0 or state["expires_at"] > now
         main_ok = state["bw_limit_gb"] == 0 or state["bw_used"] < state["bw_limit_gb"] * 10**9
@@ -341,10 +341,8 @@ class QuotaJobs(WatchJobs):
         notices = restored(main=restored_main, whitelist=whitelist is True, time=timing is True)
         return main, timing, whitelist, notices
 
-    async def _recover_quotas(self) -> None:
-        # Read committed counters once, including rollover and concurrent admin
-        # edits. No-op users need no locks or per-user database round-trips.
-        states = await self.sub.user_svc.list_user_states()
+    async def _recover_quotas(self, states: list[SweepUser]) -> None:
+        # This snapshot selects candidates only; _quota revalidates under the lock.
         pending = await self.db.list_metadata("user_sync_pending:")
         now = int(time.time())
         attempted: set[str] = set()

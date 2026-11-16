@@ -13,7 +13,7 @@ from util import compare
 from ..common import BaseService
 
 if TYPE_CHECKING:
-    from custom_types import UserRecord
+    from custom_types import UpdateUser
 
     from ..common import SharedCoreResources
     from .panel import PanelService
@@ -23,7 +23,7 @@ UPDATE_INTERVAL = 2
 
 @dataclass(frozen=True, slots=True)
 class UpdateSnapshot:
-    users: dict[str, UserRecord]
+    users: dict[str, UpdateUser]
     frames: dict[str, bytes]
     totals: dict[str, list[int]] = field(default_factory=dict[str, list[int]])
     online: frozenset[str] = frozenset()
@@ -103,7 +103,7 @@ class UpdateService(BaseService):
             self.panel_svc.unfiltered_onlines(work="background"),
         )
         # Sample identity after panel I/O; never attach old counters to a reset UUID.
-        users = {user["username"]: user for user in await self.db.list_user_records()}
+        users = {user["username"]: user for user in await self.db.list_update_users()}
         totals: dict[str, list[int]] = {}
         for panel, rows in zip(self.panels, clients, strict=True):
             offset = 2 if panel is self.whitelist_panel else 0
