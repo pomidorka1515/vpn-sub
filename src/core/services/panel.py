@@ -34,7 +34,12 @@ if TYPE_CHECKING:
 type WorkClass = Literal["foreground", "background"]
 type Health = Literal["ok", "unavailable", "invalid"]
 type TrafficRow = tuple[str, str, str, str, int, int]
-type TrafficSnapshot = dict[str, TrafficRow]
+
+
+@dataclass(frozen=True, slots=True)
+class TrafficSnapshot:
+    rows: tuple[TrafficRow, ...]
+    by_email: dict[str, TrafficRow]
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,8 +232,8 @@ class PanelService(BaseService):
                 if item.get("inboundIds") is None:
                     item["inboundIds"] = []
             clients = from_dict(ClientListResponse, data).obj
-            snapshot = {
-                client.email: (
+            rows = [
+                (
                     client.email,
                     client.uuid,
                     client.traffic.email,
@@ -238,15 +243,14 @@ class PanelService(BaseService):
                 )
                 for client in clients
                 if client.traffic is not None
-            }
-            return clients, snapshot
+            ]
+            return clients, TrafficSnapshot(tuple(rows), {row[0]: row for row in rows})
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
 
     async def list_update_traffic(self, panel: XUiSession) -> list[TrafficRow]:
         """Read only the identity and counters needed by dashboard updates."""
-        rows, _ = await self._load_traffic(panel)
-        return rows
+        return list((await self.traffic_snapshot(panel)).rows)
 
     async def _load_traffic(self, panel: XUiSession) -> tuple[list[TrafficRow], TrafficSnapshot]:
         epoch = self._traffic_epoch.get(panel.name, 0)
@@ -293,12 +297,14 @@ class PanelService(BaseService):
                 ):
                     raise ValueError("invalid traffic fields")
                 result.append((email, uuid, traffic_email, traffic_uuid, up, down))
-            return result, {row[0]: row for row in result}
+            return result, TrafficSnapshot(tuple(result), {row[0]: row for row in result})
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
 
-    async def subscription_traffic(self, panel: XUiSession, email: str) -> TrafficRow | None:
-        """Share a 15-second sample across all subscriptions and background readers.
+    async def traffic_snapshot(
+        self, panel: XUiSession, *, work: WorkClass = "background"
+    ) -> TrafficSnapshot:
+        """Share a 15-second sample across traffic consumers.
 
         Cold/expired reads coalesce before fanout admission, so reconnect storms
         cannot consume one fanout slot (or panel request) per subscription hit.
@@ -306,17 +312,20 @@ class PanelService(BaseService):
         """
         cached = self._traffic.get(panel.name)
         if cached is not None and monotonic() - cached[0] < 15:
-            return cached[1].get(email)
+            return cached[1]
         task = self._traffic_tasks.get(panel.name)
         if task is None or task.done():
 
             async def refresh() -> TrafficSnapshot:
-                results = await self.map_panels([panel], self._load_traffic, work="background")
+                results = await self.map_panels([panel], self._load_traffic, work=work)
                 return results[0][1]
 
             task = self._traffic_refreshes.create(refresh, name="panel:subscription-traffic")
             self._traffic_tasks[panel.name] = task
-        return (await asyncio.shield(task)).get(email)
+        return await asyncio.shield(task)
+
+    async def subscription_traffic(self, panel: XUiSession, email: str) -> TrafficRow | None:
+        return (await self.traffic_snapshot(panel)).by_email.get(email)
 
     async def clients_snapshot(self, panel: XUiSession) -> Mapping[str, PanelClient]:
         async def load() -> dict[str, PanelClient]:
@@ -387,18 +396,34 @@ class PanelService(BaseService):
         epoch: int,
         work: WorkClass,
     ) -> tuple[dict[str, None], dict[str, Health], float]:
-        known = await self.db.usernames()
-        users, health = await self.unfiltered_onlines(work=work)
-        users = {user: None for user in users if user in known}
+        users, health = await self._query_onlines(work=work)
         snapshot = users, health, monotonic()
         if epoch == self._online_epoch:
             self._online = snapshot
         return snapshot
 
     async def unfiltered_onlines(
-        self, *, work: WorkClass = "foreground"
+        self, *, work: WorkClass = "foreground", fresh: bool = False
     ) -> tuple[dict[str, None], dict[str, Health]]:
-        """Query panel online lists; callers must filter against known users."""
+        """Share online lists; callers must filter against known users."""
+        snapshot = self._online
+        if fresh or snapshot is None or monotonic() - snapshot[2] >= 5:
+            if (
+                self._online_task is None
+                or self._online_task.done()
+                or self._online_task_epoch != self._online_epoch
+            ):
+                epoch = self._online_epoch
+                self._online_task_epoch = epoch
+                self._online_task = self._refreshes.create(
+                    lambda: self._load_onlines(epoch, work),
+                    name="panel:online-refresh",
+                )
+            snapshot = await asyncio.shield(self._online_task)
+        users, health, _ = snapshot
+        return dict(users), dict(health)
+
+    async def _query_onlines(self, *, work: WorkClass) -> tuple[dict[str, None], dict[str, Health]]:
 
         async def fetch(panel: XUiSession) -> dict[str, object]:
             return self.response_data(
@@ -437,21 +462,9 @@ class PanelService(BaseService):
         work: WorkClass = "foreground",
     ) -> OnlineStatus:
         self.require_panels()
-        snapshot = self._online
-        if fresh or snapshot is None or monotonic() - snapshot[2] >= 4:
-            if (
-                self._online_task is None
-                or self._online_task.done()
-                or self._online_task_epoch != self._online_epoch
-            ):
-                epoch = self._online_epoch
-                self._online_task_epoch = epoch
-                self._online_task = self._refreshes.create(
-                    lambda: self._load_onlines(epoch, work),
-                    name="panel:online-refresh",
-                )
-            snapshot = await asyncio.shield(self._online_task)
-        users, health, _ = snapshot
+        users, health = await self.unfiltered_onlines(work=work, fresh=fresh)
+        known = await self.db.usernames()
+        users = {user: None for user in users if user in known}
         if new:
             exts = await self.db.username_exts()
             return OnlineStatus({user: exts.get(user) for user in users}, dict(health))

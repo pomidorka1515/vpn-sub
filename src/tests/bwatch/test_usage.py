@@ -160,6 +160,13 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     recovery = AsyncMock()
     watch._quota = recovery  # type: ignore[method-assign]
+    sample_clock = 0.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: sample_clock)
+
+    async def sample() -> None:
+        nonlocal sample_clock
+        sample_clock += 15
+        await watch.bandwidth_check()
 
     def readings(total: int) -> None:
         for panel in panels:
@@ -182,7 +189,7 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
             wl_limit_gb=1,
         )
         readings(100)
-        await watch.bandwidth_check()
+        await sample()
         readings(140)
         for panel in panels:
             if panel.name in failed:
@@ -190,7 +197,7 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
         # Keep a real recovery candidate so outages cannot hide recovery work.
         await db.update_user("alice", status=False)
         recovery.reset_mock()
-        await watch.bandwidth_check()
+        await sample()
         recovery.assert_awaited_once_with("alice", recover=True)
         expected = (40 * len({"one", "two"} - failed), 0 if "whitelist" in failed else 40)
         state = await db.get_user("alice")
@@ -206,11 +213,11 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
         await watch.close()
         watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
         watch._quota = recovery  # type: ignore[method-assign]
-        await watch.bandwidth_check()
+        await sample()
         for panel in panels:
             panel._get_error = None
         readings(160)
-        await watch.bandwidth_check()
+        await sample()
         state = await db.get_user("alice")
         assert state is not None
         assert (state["bw_used"], state["wl_used"]) == (120, 60)
@@ -222,7 +229,7 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
         now = datetime(2026, 10, 1, tzinfo=UTC)
         readings(900)
         recovery.reset_mock()
-        await watch.bandwidth_check()
+        await sample()
         recovery.assert_awaited_once_with("alice", recover=True)
         state = await db.get_user("alice")
         assert state is not None
@@ -230,9 +237,9 @@ async def test_panel_outage_keeps_healthy_metering_and_rollover_running(
         assert await db.get_metadata("last_reset_month") == "2026-10"
         for panel in panels:
             panel._get_error = None
-        await watch.bandwidth_check()  # Returning panels need new-month baselines.
+        await sample()  # Returning panels need new-month baselines.
         readings(925)
-        await watch.bandwidth_check()
+        await sample()
         state = await db.get_user("alice")
         assert state is not None
         assert (state["bw_used"], state["wl_used"]) == (50, 25)

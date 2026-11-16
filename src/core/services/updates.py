@@ -69,9 +69,9 @@ class UpdateSnapshot:
 class UpdateService(BaseService):
     """One demand-driven batch per interval, independent of connected browsers.
 
-    A single SQLite read and one request of each kind per panel are shared by
-    all viewers. Frames are built only for authorized viewers and cached within
-    the batch. Failed batches are shared until the interval expires.
+    Panel traffic and online snapshots are shared with other consumers. Frames
+    are built only for authorized viewers and cached within the batch. Failed
+    batches are shared until the interval expires.
     """
 
     def __init__(self, res: SharedCoreResources, *, panel_svc: PanelService) -> None:
@@ -97,9 +97,7 @@ class UpdateService(BaseService):
     async def _collect(self) -> UpdateSnapshot:
         self.require_panels()
         clients, online = await asyncio.gather(
-            self.panel_svc.map_panels(
-                self.panels, self.panel_svc.list_update_traffic, work="background"
-            ),
+            asyncio.gather(*(self.panel_svc.traffic_snapshot(panel) for panel in self.panels)),
             self.panel_svc.unfiltered_onlines(work="background"),
         )
         # Sample identity after panel I/O; never attach old counters to a reset UUID.
@@ -107,7 +105,7 @@ class UpdateService(BaseService):
         totals: dict[str, list[int]] = {}
         for panel, rows in zip(self.panels, clients, strict=True):
             offset = 2 if panel is self.whitelist_panel else 0
-            for email, uuid, traffic_email, traffic_uuid, up, down in rows:
+            for email, uuid, traffic_email, traffic_uuid, up, down in rows.rows:
                 user = users.get(email)
                 if (
                     user is not None

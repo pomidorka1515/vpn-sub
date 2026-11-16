@@ -84,6 +84,35 @@ async def test_subscription_sample_expires_and_invalidates(
     assert panel.gets == ["panel/api/clients/list"] * 3
 
 
+async def test_traffic_consumers_share_refresh_and_expiry(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await create_alice(database)
+    panel = FakePanel(clients=[make_panel_client("alice", [1], up=3, down=4)])
+    sub = await make_subscription(database, panels=[panel])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    client = sub.panels[0]
+
+    rows, accounting, update = await asyncio.gather(
+        sub.panel_svc.subscription_traffic(client, "alice"),
+        sub.bandwidth_svc.panel_traffic(work="background"),
+        sub.update_svc.snapshot(),
+    )
+    assert rows is not None
+    assert rows[4:] == (3, 4)
+    assert accounting[client.name]["alice"] == BandwidthInfo(3, 4, 7)
+    assert update.totals["alice"] == [3, 4, 0, 0]
+    assert panel.gets.count("panel/api/clients/list") == 1
+
+    panel.clients = [make_panel_client("alice", [1], up=8, down=9)]
+    clock += 14
+    assert (await sub.bandwidth_svc.panel_traffic())[client.name]["alice"].upload == 3
+    clock += 1
+    assert (await sub.bandwidth_svc.panel_traffic())[client.name]["alice"].upload == 8
+    assert panel.gets.count("panel/api/clients/list") == 2
+
+
 async def test_subscription_bandwidth_filters_both_identities(database: Database) -> None:
     await create_alice(database)
     good = make_panel_client("alice", [1], up=5, down=6)

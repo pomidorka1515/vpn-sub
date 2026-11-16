@@ -127,26 +127,26 @@ class BandwidthService(BaseService):
             return {}
         if known is None:
             known = {user["username"]: user["uuid"] for user in await self.db.list_sweep_users()}
-        outcomes = await self.panel_svc.outcomes(panels, self.panel_svc.list_clients, work=work)
+        snapshots = await asyncio.gather(
+            *(self.panel_svc.traffic_snapshot(panel, work=work) for panel in panels),
+            return_exceptions=True,
+        )
         result: dict[str, dict[str, BandwidthInfo]] = {}
-        for outcome in outcomes:
-            if outcome.error is not None:
-                self.log.error("client traffic listing failed for panel %s", outcome.panel)
+        for panel, snapshot in zip(panels, snapshots, strict=True):
+            if isinstance(snapshot, BaseException):
+                if not isinstance(snapshot, Exception):
+                    raise snapshot
+                self.log.error("client traffic listing failed for panel %s", panel.name)
                 if require_complete:
                     raise PanelUnavailableError(
-                        f"Could not query client traffic for panel {outcome.panel}",
-                    ) from outcome.error
+                        f"Could not query client traffic for panel {panel.name}",
+                    ) from snapshot
                 continue
-            values = result[outcome.panel] = {}
-            for client in outcome.value or []:
-                traffic = client.traffic
-                if traffic is None or known.get(client.email) != client.uuid:
+            values = result[panel.name] = {}
+            for email, uuid, _traffic_email, _traffic_uuid, up, down in snapshot.rows:
+                if known.get(email) != uuid:
                     continue
-                values[client.email] = BandwidthInfo(
-                    traffic.up,
-                    traffic.down,
-                    traffic.up + traffic.down,
-                )
+                values[email] = BandwidthInfo(up, down, up + down)
         return result
 
     async def get_bw_history(self, username: str, days: int = 30) -> list[BandwidthSnapshot]:

@@ -15,6 +15,7 @@ from tests.support.panels import FakePanel, make_panel_client
 from tests.support.subscriptions import make_subscription
 
 if TYPE_CHECKING:
+    from config import JsonValue
     from db import Database
 
 pytestmark = pytest.mark.asyncio
@@ -52,8 +53,8 @@ async def test_updates_batch_is_shared_and_identity_filtered(
     monkeypatch.setattr(database, "list_update_users", records)
     usernames = AsyncMock(wraps=database.usernames)
     monkeypatch.setattr(database, "usernames", usernames)
-    clients = AsyncMock(wraps=sub.panel_svc.list_update_traffic)
-    monkeypatch.setattr(sub.panel_svc, "list_update_traffic", clients)
+    clients = AsyncMock(wraps=sub.panel_svc.traffic_snapshot)
+    monkeypatch.setattr(sub.panel_svc, "traffic_snapshot", clients)
     clock = [0.0]
     monkeypatch.setattr("core.services.updates.time", Mock(wraps=time, monotonic=lambda: clock[0]))
 
@@ -127,6 +128,35 @@ async def test_updates_reject_invalid_traffic(database: Database) -> None:
     sub = await make_subscription(database, panels=[panel])
     with pytest.raises(PanelUnavailableError, match="invalid client list"):
         await sub.update_svc.snapshot()
+
+
+async def test_updates_and_online_status_share_ttl_and_invalidation(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await database.create_user(
+        username="alice", uuid="alice-id", token="token", fingerprint="chrome", displayname="Alice"
+    )
+    panel = FakePanel(post_payload={"success": True, "obj": ["alice", "foreign"]})
+    sub = await make_subscription(database, panels=[panel])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    first, status = await asyncio.gather(
+        sub.update_svc.snapshot(), sub.panel_svc.get_online_status()
+    )
+    assert first.online == frozenset({"alice"})
+    assert status.users == ["alice"]
+    assert len(panel.posts) == 1
+    empty_online: dict[str, JsonValue] = {"success": True, "obj": []}
+    panel._post_payload = empty_online
+    clock += 4
+    assert (await sub.panel_svc.get_online_status()).users == ["alice"]
+    assert len(panel.posts) == 1
+    clock += 1
+    assert (await sub.panel_svc.get_online_status()).users == []
+    assert len(panel.posts) == 2
+    await sub.panel_svc.invalidate_clients(sub.panels[0])
+    await sub.panel_svc.unfiltered_onlines()
+    assert len(panel.posts) == 3
 
 
 async def test_updates_ignore_mismatched_traffic_and_unknown_online_users(

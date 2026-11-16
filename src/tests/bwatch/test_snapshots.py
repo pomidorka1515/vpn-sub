@@ -36,6 +36,7 @@ async def test_snapshot_does_not_guess_incompatible_or_unknown_starts(
     watch = BWatch(sub.res.cfg, db, sub, scheduled=False)
     now = int(time.time())
     monkeypatch.setattr("bwatch.snapshots.time", SimpleNamespace(time=lambda: now))
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: float(now))
 
     async def sample(value: int | None) -> None:
         nonlocal now
@@ -90,6 +91,7 @@ async def test_daily_snapshot_outage_retries_complete_sample(
     now = int(time.time()) // 86400 * 86400 + 3600
     first = now
     monkeypatch.setattr("bwatch.snapshots.time", SimpleNamespace(time=lambda: now))
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: float(now))
     failed = {
         "one": {"one"},
         "main": {"one", "two"},
