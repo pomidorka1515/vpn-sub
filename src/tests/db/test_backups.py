@@ -505,6 +505,9 @@ async def test_supported_schema_snapshot_can_be_restored(tmp_path: Path, version
     await database.set_metadata("saved", "value")
     await database.close()
     with sqlite3.connect(source) as connection:
+        if version < 9:
+            connection.execute("DROP TRIGGER usage_baselines_identity")
+            connection.execute("DROP TABLE usage_baselines")
         if version < 8:
             connection.execute("DROP TABLE admin_sessions")
             connection.execute("DROP TABLE admin_identities")

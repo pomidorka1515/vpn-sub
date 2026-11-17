@@ -25,6 +25,8 @@ async def test_schema_7_upgrade_preserves_users_codes_and_root_session(
     await database.set_admin_ui_session("legacy-root-session")
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TRIGGER usage_baselines_identity")
+        conn.execute("DROP TABLE usage_baselines")
         conn.execute("DROP TABLE admin_sessions")
         conn.execute("DROP TABLE admin_identities")
         conn.execute("UPDATE schema_version SET version = 7")

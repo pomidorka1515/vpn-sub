@@ -5,7 +5,7 @@ import time
 from typing import TYPE_CHECKING, TypedDict, cast
 
 from constants import SESSION_MAX_AGE
-from custom_types import BandwidthSnapshotPayload
+from custom_types import BandwidthInfo, BandwidthSnapshotPayload
 from notify import Kind, Scope, split_key
 
 from .common import ConnectionMixin
@@ -23,6 +23,10 @@ class StateSnapshot(TypedDict):
     ts: int
     panels: dict[str, JsonDict]
     host: JsonDict
+
+
+type UsageBaselineKey = tuple[str, str, str, str]  # kind, panel, username, uuid
+type UsageBaselines = dict[UsageBaselineKey, BandwidthInfo]
 
 
 class StateMixin(ConnectionMixin):
@@ -64,11 +68,28 @@ class StateMixin(ConnectionMixin):
     async def increment_usage(self, username: str, *, regular: int = 0, whitelist: int = 0) -> None:
         await self.increment_usages({username: (regular, whitelist)})
 
+    async def load_usage_baselines(self) -> tuple[str | None, UsageBaselines]:
+        async with self.connection() as conn:
+            month = await conn.row(
+                "SELECT value FROM app_metadata WHERE key = 'watcher_usage_month'"
+            )
+            rows = await conn.rows(
+                "SELECT kind, panel, username, uuid, up, down, total FROM usage_baselines"
+            )
+        return (str(month[0]) if month else None), {
+            (str(row[0]), str(row[1]), str(row[2]), str(row[3])): BandwidthInfo(
+                int(row[4]), int(row[5]), int(row[6])
+            )
+            for row in rows
+        }
+
     async def increment_usages(
         self,
         updates: Mapping[str, tuple[int, int]],
         *,
-        baselines: str | None = None,
+        baselines: UsageBaselines | None = None,
+        removed_baselines: set[UsageBaselineKey] | None = None,
+        clear_baselines: bool = False,
         period: tuple[str, str] | None = None,
     ) -> None:
         rows = [
@@ -76,7 +97,7 @@ class StateMixin(ConnectionMixin):
             for username, (regular, whitelist) in updates.items()
             if regular or whitelist
         ]
-        if rows or baselines is not None or period is not None:
+        if rows or baselines or removed_baselines or clear_baselines or period is not None:
             async with self.transaction(immediate=True) as conn:
                 if period is not None:
                     month, today = period
@@ -109,11 +130,38 @@ class StateMixin(ConnectionMixin):
                     }
                     if await conn.row("SELECT 1 FROM users WHERE username = ?", (username,)):
                         await clear_notification_episodes(conn, username, sides=sides)
-                if baselines is not None:
+                if clear_baselines:
+                    await conn.execute("DELETE FROM usage_baselines")
+                elif removed_baselines:
+                    await conn.executemany(
+                        "DELETE FROM usage_baselines WHERE kind = ? AND panel = ? AND username = ? AND uuid = ?",
+                        removed_baselines,
+                    )
+                if baselines:
+                    await conn.executemany(
+                        "INSERT INTO usage_baselines(kind, panel, username, uuid, up, down, total) "
+                        "SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS "
+                        "(SELECT 1 FROM users WHERE username = ? AND uuid = ?) "
+                        "ON CONFLICT(kind, panel, username, uuid) DO UPDATE SET "
+                        "up = excluded.up, down = excluded.down, total = excluded.total",
+                        [
+                            (
+                                *key,
+                                int(value.upload),
+                                int(value.download),
+                                int(value.total),
+                                key[2],
+                                key[3],
+                            )
+                            for key, value in baselines.items()
+                        ],
+                    )
+                if period is not None:
                     await conn.execute(
-                        "INSERT INTO app_metadata(key, value) VALUES ('watcher_usage_baselines', ?) "
-                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                        (baselines,),
+                        "INSERT INTO app_metadata(key, value) VALUES ('watcher_usage_month', ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value "
+                        "WHERE value != excluded.value",
+                        (period[0],),
                     )
 
     async def reset_monthly(self, month: str, today: str) -> bool:

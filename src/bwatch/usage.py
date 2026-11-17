@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
-
-from custom_types import BandwidthInfo
+from typing import TYPE_CHECKING
 
 from ._base import WatchJobs
 
@@ -12,6 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from custom_types import SweepUser
+    from db.state import UsageBaselines
 
     from ._base import CounterKey
 
@@ -21,28 +19,21 @@ class UsageJobs(WatchJobs):
 
     async def _load_usage_baselines(self, states: Sequence[SweepUser]) -> str | None:
         reset_month = await self.db.get_metadata("last_reset_month")
-        self._usage_month = reset_month
-        raw_baselines = await self.db.get_metadata("watcher_usage_baselines")
-        if raw_baselines is not None:
-            saved = json.loads(raw_baselines)
-            self._usage_month = saved.get("month", self._usage_month)
+        month, saved = await self.db.load_usage_baselines()
+        self._usage_month = month or reset_month
+        if month is not None:
             self.mem, self.wl_mem = {}, {}
             self._reset_mem, self._reset_wl_mem = {}, {}
-            # Legacy aggregate counters cannot be split reliably between panels.
-            # Rebaseline once on upgrade rather than invent usage or reset evidence.
-            if saved.get("version") != 2 or self._usage_month is None:
-                return reset_month
             identities = {state["username"]: state["uuid"] for state in states}
-            records = cast(dict[str, list[tuple[str, str, str, int, int, int]]], saved["counters"])
-            for kind, target in (
-                ("main", self.mem),
-                ("whitelist", self.wl_mem),
-                ("main_reset", self._reset_mem),
-                ("whitelist_reset", self._reset_wl_mem),
-            ):
-                for panel, name, uuid, up, down, total in records.get(kind, []):
-                    if identities.get(name) == uuid:
-                        target[panel, name, uuid] = BandwidthInfo(up, down, total)
+            targets = {
+                "main": self.mem,
+                "whitelist": self.wl_mem,
+                "main_reset": self._reset_mem,
+                "whitelist_reset": self._reset_wl_mem,
+            }
+            for (kind, panel, name, uuid), value in saved.items():
+                if identities.get(name) == uuid:
+                    targets[kind][panel, name, uuid] = value
         return reset_month
 
     async def bandwidth_check(self) -> None:
@@ -185,28 +176,37 @@ class UsageJobs(WatchJobs):
                     if any(deltas):
                         usage[name] = (deltas[0], deltas[1])
                 identities = {state["username"]: state["uuid"] for state in current_states}
-                baselines = json.dumps(
-                    {
-                        "version": 2,
-                        "month": month,
-                        "counters": {
-                            kind: [
-                                [*key, int(value.upload), int(value.download), int(value.total)]
-                                for key, value in values.items()
-                                if identities.get(key[1]) == key[2]
-                            ]
-                            for kind, values in (
-                                ("main", next_main),
-                                ("whitelist", next_wl),
-                                ("main_reset", reset_main),
-                                ("whitelist_reset", reset_wl),
-                            )
-                        },
-                    },
-                )
+                previous_baselines: UsageBaselines = {
+                    (kind, *key): value
+                    for kind, values in (
+                        ("main", self.mem),
+                        ("whitelist", self.wl_mem),
+                        ("main_reset", self._reset_mem),
+                        ("whitelist_reset", self._reset_wl_mem),
+                    )
+                    for key, value in values.items()
+                }
+                current_baselines: UsageBaselines = {
+                    (kind, *key): value
+                    for kind, values in (
+                        ("main", next_main),
+                        ("whitelist", next_wl),
+                        ("main_reset", reset_main),
+                        ("whitelist_reset", reset_wl),
+                    )
+                    for key, value in values.items()
+                    if identities.get(key[1]) == key[2]
+                }
+                clear = self._usage_month is not None and self._usage_month != month
                 await self.db.increment_usages(
                     usage,
-                    baselines=baselines,
+                    baselines={
+                        key: value
+                        for key, value in current_baselines.items()
+                        if clear or previous_baselines.get(key) != value
+                    },
+                    removed_baselines=previous_baselines.keys() - current_baselines.keys(),
+                    clear_baselines=clear,
                     period=(month, sampled_at.strftime("%Y-%m-%d")),
                 )
                 self.mem, self.wl_mem = next_main, next_wl

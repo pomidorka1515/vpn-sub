@@ -1,9 +1,30 @@
 from __future__ import annotations
 
+import json
+from typing import cast
+
 from errors import MigrationError
 
 from .admin import ADMIN_SCHEMA
 from .common import ConnectionMixin
+
+USAGE_BASELINES_SCHEMA = (
+    """CREATE TABLE usage_baselines (
+        kind TEXT NOT NULL CHECK (kind IN ('main', 'whitelist', 'main_reset', 'whitelist_reset')),
+        panel TEXT NOT NULL,
+        username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+        uuid TEXT NOT NULL,
+        up INTEGER NOT NULL,
+        down INTEGER NOT NULL,
+        total INTEGER NOT NULL,
+        PRIMARY KEY(kind, panel, username, uuid)
+    )""",
+    "CREATE INDEX idx_usage_baselines_username ON usage_baselines(username)",
+    """CREATE TRIGGER usage_baselines_identity AFTER UPDATE OF uuid ON users
+       WHEN OLD.uuid != NEW.uuid BEGIN
+           DELETE FROM usage_baselines WHERE username = NEW.username;
+       END""",
+)
 
 SCHEMA_STATEMENTS = (
     """CREATE TABLE users (
@@ -64,6 +85,7 @@ SCHEMA_STATEMENTS = (
         value TEXT NOT NULL
     )""",
     "INSERT INTO app_metadata(key, value) VALUES ('admin_ui_session', '')",
+    *USAGE_BASELINES_SCHEMA,
     """CREATE TABLE bandwidth_snapshots (
         username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
         ts INTEGER NOT NULL,
@@ -84,7 +106,7 @@ SCHEMA_STATEMENTS = (
 
 
 class SchemaMixin(ConnectionMixin):
-    SCHEMA_VERSION = 8
+    SCHEMA_VERSION = 9
 
     async def initialize(self) -> None:
         async with self.transaction(immediate=True) as conn:
@@ -165,6 +187,81 @@ class SchemaMixin(ConnectionMixin):
             if version == 7:
                 for statement in ADMIN_SCHEMA:
                     await conn.execute(statement)
+                version = 8
+            if version == 8:
+                for statement in USAGE_BASELINES_SCHEMA:
+                    await conn.execute(statement)
+                row = await conn.row(
+                    "SELECT value FROM app_metadata WHERE key = 'watcher_usage_baselines'"
+                )
+                if row is not None:
+                    try:
+                        loaded: object = json.loads(str(row[0]))
+                        if not isinstance(loaded, dict):
+                            raise ValueError("legacy usage baselines are not an object")
+                        saved = cast(dict[str, object], loaded)
+                        reset = await conn.row(
+                            "SELECT value FROM app_metadata WHERE key = 'last_reset_month'"
+                        )
+                        month_value = saved.get("month")
+                        month = (
+                            month_value
+                            if month_value is not None
+                            else str(reset[0])
+                            if reset
+                            else None
+                        )
+                        if month is not None and not isinstance(month, str):
+                            raise ValueError("legacy usage baseline month is not a string")
+                        counters: dict[str, object] | None = None
+                        if saved.get("version") == 2:
+                            raw_counters = saved.get("counters")
+                            if not isinstance(raw_counters, dict):
+                                raise ValueError("legacy usage baseline counters are not an object")
+                            counters = cast(dict[str, object], raw_counters)
+                        if month is not None:
+                            await conn.execute(
+                                "INSERT INTO app_metadata(key, value) VALUES ('watcher_usage_month', ?) "
+                                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                                (month,),
+                            )
+                        if counters is not None and month is not None:
+                            for kind in ("main", "whitelist", "main_reset", "whitelist_reset"):
+                                raw_records = counters.get(kind, [])
+                                records = raw_records
+                                if not isinstance(records, list):
+                                    raise ValueError(f"legacy {kind} baselines are not a list")
+                                record_items = cast(list[object], records)
+                                for record in record_items:
+                                    if (
+                                        not isinstance(record, list)
+                                        or len(cast(list[object], record)) != 6
+                                    ):
+                                        raise ValueError(
+                                            f"legacy {kind} baseline has an invalid shape"
+                                        )
+                                records = cast(list[list[object]], records)
+                                await conn.executemany(
+                                    "INSERT OR REPLACE INTO usage_baselines "
+                                    "(kind, panel, username, uuid, up, down, total) "
+                                    "SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS "
+                                    "(SELECT 1 FROM users WHERE username = ? AND uuid = ?)",
+                                    [
+                                        (kind, panel, name, uuid, up, down, total, name, uuid)
+                                        for panel, name, uuid, up, down, total in records
+                                    ],
+                                )
+                        await conn.execute(
+                            "DELETE FROM app_metadata WHERE key = 'watcher_usage_baselines'"
+                        )
+                    except (
+                        AttributeError,
+                        KeyError,
+                        TypeError,
+                        ValueError,
+                        json.JSONDecodeError,
+                    ) as exc:
+                        raise MigrationError("invalid legacy usage baselines metadata") from exc
             await conn.execute(
                 "UPDATE schema_version SET version = ? WHERE id = 1",
                 (self.SCHEMA_VERSION,),

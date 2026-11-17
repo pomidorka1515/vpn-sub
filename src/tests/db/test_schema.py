@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 import uuid
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from constants import SESSION_MAX_AGE
+from custom_types import BandwidthInfo
 from db import Database
 from errors import DuplicateError, MigrationError
 
@@ -31,6 +33,63 @@ async def create_user(db: Database, username: str = "alice", *, token: str | Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("version", [1, 2])
+async def test_usage_baseline_blob_migration(
+    database: Database, db_path: Path, version: int
+) -> None:
+    await create_user(database)
+    user = await database.get_user("alice")
+    assert user is not None
+    uuid = user["uuid"]
+    saved = {
+        "version": version,
+        "month": "2026-10",
+        "counters": {
+            "main": [["panel", "alice", uuid, 1, 2, 3], ["panel", "alice", "old", 4, 5, 9]],
+            "whitelist_reset": [["panel", "alice", uuid, 7, 8, 15]],
+        },
+    }
+    await database.set_metadata("watcher_usage_baselines", json.dumps(saved))
+    await database.set_metadata("watcher_usage_month", "2026-09")
+    await database.close()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TRIGGER usage_baselines_identity")
+        conn.execute("DROP TABLE usage_baselines")
+        conn.execute("UPDATE schema_version SET version = 8")
+    db = Database(path=db_path, start_backup=False)
+    await db.start()
+    try:
+        month, baselines = await db.load_usage_baselines()
+        assert month == "2026-10"
+        assert baselines == (
+            {
+                ("main", "panel", "alice", uuid): BandwidthInfo(1, 2, 3),
+                ("whitelist_reset", "panel", "alice", uuid): BandwidthInfo(7, 8, 15),
+            }
+            if version == 2
+            else {}
+        )
+        assert await db.get_metadata("watcher_usage_baselines") is None
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["not-json", "[]", '{"version": 2}'])
+async def test_invalid_usage_baseline_blob_is_a_migration_error(
+    database: Database, db_path: Path, value: str
+) -> None:
+    await database.set_metadata("watcher_usage_baselines", value)
+    await database.close()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TRIGGER usage_baselines_identity")
+        conn.execute("DROP TABLE usage_baselines")
+        conn.execute("UPDATE schema_version SET version = 8")
+    with pytest.raises(MigrationError, match="invalid legacy usage baselines metadata"):
+        await Database(path=db_path, start_backup=False).start()
+
+
+@pytest.mark.asyncio
 async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
     first = Database(path=db_path)
     await first.start()
@@ -43,7 +102,7 @@ async def test_schema_initialization_is_idempotent(db_path: Path) -> None:
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 8
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 9
             )
             assert (
                 conn.execute(
@@ -106,6 +165,8 @@ async def test_session_expiry_migration_revokes_legacy_sessions(
     await database.set_admin_ui_session("legacy-admin")
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TRIGGER usage_baselines_identity")
+        conn.execute("DROP TABLE usage_baselines")
         conn.execute("DROP TABLE admin_sessions")
         conn.execute("DROP TABLE admin_identities")
         conn.execute("ALTER TABLE users DROP COLUMN auth_token_expires_at")
@@ -146,7 +207,9 @@ async def test_migration_repairs_negative_bandwidth_snapshot_values(
     (await database.close())
     connection = sqlite3.connect(db_path)
     connection.executescript(
-        """DROP TABLE admin_sessions;
+        """DROP TRIGGER usage_baselines_identity;
+        DROP TABLE usage_baselines;
+        DROP TABLE admin_sessions;
         DROP TABLE admin_identities;
         ALTER TABLE users RENAME TO old_users;
         CREATE TABLE users (
@@ -203,7 +266,9 @@ async def test_auth_token_migration_and_lookup(database: Database, db_path: Path
     (await database.close())
     connection = sqlite3.connect(db_path)
     connection.executescript(
-        """DROP TABLE admin_sessions;
+        """DROP TRIGGER usage_baselines_identity;
+        DROP TABLE usage_baselines;
+        DROP TABLE admin_sessions;
         DROP TABLE admin_identities;
         ALTER TABLE users RENAME TO old_users;
         CREATE TABLE users (
@@ -255,6 +320,8 @@ async def test_auth_token_migration_and_lookup(database: Database, db_path: Path
 async def test_admin_ui_session_migration_from_version_3(database: Database, db_path: Path) -> None:
     (await database.close())
     connection = sqlite3.connect(db_path)
+    connection.execute("DROP TRIGGER usage_baselines_identity")
+    connection.execute("DROP TABLE usage_baselines")
     connection.execute("DELETE FROM app_metadata WHERE key = 'admin_ui_session'")
     connection.execute("DROP TABLE admin_sessions")
     connection.execute("DROP TABLE admin_identities")
@@ -272,7 +339,7 @@ async def test_admin_ui_session_migration_from_version_3(database: Database, db_
         assert (await db.admin_ui_session()) is None
         with sqlite3.connect(db_path) as conn:
             assert (
-                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 8
+                conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0] == 9
             )
             assert (
                 conn.execute(
@@ -299,6 +366,8 @@ async def test_disable_intent_migration_preserves_legacy_flags(
     await database.set_user("alice", status=enabled, status_wl=enabled_wl)
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TRIGGER usage_baselines_identity")
+        conn.execute("DROP TABLE usage_baselines")
         conn.execute("DROP TABLE admin_sessions")
         conn.execute("DROP TABLE admin_identities")
         conn.execute("ALTER TABLE users DROP COLUMN admin_disabled")
@@ -458,6 +527,8 @@ async def test_bandwidth_interval_migration_and_end_filtered_history(
     await database.add_bandwidth_snapshot("alice", 100, 1, 2, 3, 4)
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TRIGGER usage_baselines_identity")
+        conn.execute("DROP TABLE usage_baselines")
         conn.execute("DROP TABLE admin_sessions")
         conn.execute("DROP TABLE admin_identities")
         conn.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")

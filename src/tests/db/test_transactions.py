@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 
 from api.application import create_api_application
+from custom_types import BandwidthInfo
 from db import Database
 from db.backup import instance_backup_dir
 from db.common import Connection
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from _pytest.monkeypatch import MonkeyPatch
 
     from db.common import Parameters
+    from db.state import UsageBaselines
 
 
 @pytest_asyncio.fixture
@@ -363,15 +365,18 @@ async def test_usage_and_baselines_roll_back_together(repository: Database) -> N
     await create_user(repository)
     async with repository.transaction(immediate=True) as conn:
         await conn.execute(
-            "CREATE TRIGGER reject_baseline BEFORE INSERT ON app_metadata "
-            "WHEN NEW.key = 'watcher_usage_baselines' BEGIN SELECT RAISE(ABORT, 'failed'); END",
+            "CREATE TRIGGER reject_baseline BEFORE INSERT ON usage_baselines "
+            "BEGIN SELECT RAISE(ABORT, 'failed'); END",
         )
     with pytest.raises(DatabaseError, match="failed"):
-        await repository.increment_usages({"alice": (5, 6)}, baselines="{}")
+        await repository.increment_usages(
+            {"alice": (5, 6)},
+            baselines={("main", "panel", "alice", "uuid-alice"): BandwidthInfo(1, 2, 3)},
+        )
     user = await repository.get_user("alice")
     assert user is not None
     assert (user["bw_used"], user["wl_used"]) == (0, 0)
-    assert await repository.get_metadata("watcher_usage_baselines") is None
+    assert (await repository.load_usage_baselines())[1] == {}
 
 
 @pytest.mark.asyncio
@@ -409,10 +414,20 @@ async def test_monthly_reset_preserves_episodes_and_pending_recovery(
 
 
 @pytest.mark.asyncio
+async def test_period_persists_usage_month_without_baselines(repository: Database) -> None:
+    await repository.increment_usages({}, period=("2026-10", "2026-10-01"))
+    assert await repository.get_metadata("watcher_usage_month") == "2026-10"
+
+
+@pytest.mark.asyncio
 async def test_month_rollover_rolls_back_with_baselines(repository: Database) -> None:
     await create_user(repository)
     await repository.reset_monthly("2026-09", "2026-09-01")
-    await repository.increment_usages({"alice": (50, 60)}, baselines="old")
+    user = await repository.get_user("alice")
+    assert user is not None
+    key = ("main", "panel", "alice", user["uuid"])
+    old: UsageBaselines = {key: BandwidthInfo(1, 2, 3)}
+    await repository.increment_usages({"alice": (50, 60)}, baselines=old)
     await repository.mark_notification("legacy", 12)
     markers = {"alice:traffic_soon:80", "alice:traffic_exhausted:1"}
     await repository.sync_notifications(set(), markers)
@@ -420,20 +435,21 @@ async def test_month_rollover_rolls_back_with_baselines(repository: Database) ->
     await repository.set_metadata("user_notifications_pending:alice", intent)
     async with repository.transaction(immediate=True) as conn:
         await conn.execute(
-            "CREATE TRIGGER reject_rollover BEFORE INSERT ON app_metadata "
-            "WHEN NEW.key = 'watcher_usage_baselines' BEGIN SELECT RAISE(ABORT, 'failed'); END",
+            "CREATE TRIGGER reject_rollover BEFORE INSERT ON usage_baselines "
+            "BEGIN SELECT RAISE(ABORT, 'failed'); END",
         )
     with pytest.raises(DatabaseError, match="failed"):
         await repository.increment_usages(
             {"alice": (0, 0)},
-            baselines="new",
+            baselines={key: BandwidthInfo(4, 5, 9)},
+            clear_baselines=True,
             period=("2026-10", "2026-10-01"),
         )
     user = await repository.get_user("alice")
     assert user is not None
     assert (user["bw_used"], user["wl_used"]) == (50, 60)
     assert await repository.get_metadata("last_reset_month") == "2026-09"
-    assert await repository.get_metadata("watcher_usage_baselines") == "old"
+    assert (await repository.load_usage_baselines())[1] == old
     assert await repository.notification_seen("legacy", 12)
     assert await repository.notification_markers() == markers
     assert await repository.get_metadata("user_notifications_pending:alice") == intent

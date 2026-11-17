@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from db.state import UsageBaselineKey, UsageBaselines
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -88,11 +90,19 @@ async def test_month_rollover_preserves_notification_episodes(
         async def reset(
             updates: Mapping[str, tuple[int, int]],
             *,
-            baselines: str | None = None,
+            baselines: UsageBaselines | None = None,
+            removed_baselines: set[UsageBaselineKey] | None = None,
+            clear_baselines: bool = False,
             period: tuple[str, str] | None = None,
         ) -> None:
             if boundary == "after_reset":
-                await increment(updates, baselines=baselines, period=period)
+                await increment(
+                    updates,
+                    baselines=baselines,
+                    removed_baselines=removed_baselines,
+                    clear_baselines=clear_baselines,
+                    period=period,
+                )
             raise asyncio.CancelledError
 
         with monkeypatch.context() as patch:

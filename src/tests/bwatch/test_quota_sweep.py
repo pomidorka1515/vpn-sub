@@ -78,7 +78,6 @@ async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
             assert known["user00000"] == "00000000-0000-0000-0000-000000000000"
             assert [call.args[0] for call in metadata.await_args_list] == [
                 "last_reset_month",
-                "watcher_usage_baselines",
             ]
             assert [call.args[0] for call in bulk_metadata.await_args_list] == [
                 "user_sync_pending:",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
@@ -19,6 +18,8 @@ from tests.support.users import USER_UUID
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
+
+    from db.state import UsageBaselineKey, UsageBaselines
 
 
 @pytest.mark.asyncio
@@ -292,7 +293,9 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
         async def failed_commit(
             updates: object,
             *,
-            baselines: str | None = None,
+            baselines: UsageBaselines | None = None,
+            removed_baselines: set[UsageBaselineKey] | None = None,
+            clear_baselines: bool = False,
             period: tuple[str, str] | None = None,
         ) -> None:
             raise RuntimeError("disk unavailable")
@@ -516,8 +519,60 @@ async def test_usage_revalidates_identity_changed_during_panel_read(
         state = await database.get_user("alice")
         assert state is not None
         assert state["bw_used"] == 0
-        saved = json.loads((await database.get_metadata("watcher_usage_baselines")) or "{}")
-        assert all(item[2] != USER_UUID for item in saved["counters"]["main"])
+        _, saved = await database.load_usage_baselines()
+        assert all(key[3] != USER_UUID for key in saved)
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_usage_only_writes_changed_baselines(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ("alice", "bob"):
+        await database.create_user(
+            username=name,
+            uuid=f"{name}-uuid",
+            token=name * 8,
+            fingerprint="chrome",
+            displayname=name,
+            bw_limit_gb=1,
+        )
+    sub = await make_subscription(database)
+    watch = BWatch(sub.res.cfg, database, sub, scheduled=False)
+    totals = {"alice": 100, "bob": 200}
+
+    async def traffic(
+        whitelist: bool = False,
+        *,
+        work: str = "foreground",
+        require_complete: bool = False,
+        known: Mapping[str, str] | None = None,
+    ) -> dict[str, dict[str, BandwidthInfo]]:
+        return {"panel": {name: BandwidthInfo(total, 0, total) for name, total in totals.items()}}
+
+    monkeypatch.setattr(sub.bandwidth_svc, "panel_traffic", traffic)
+    try:
+        await watch.bandwidth_check()
+        async with database.transaction(immediate=True) as conn:
+            await conn.execute("CREATE TABLE baseline_writes (username TEXT NOT NULL)")
+            await conn.execute(
+                "CREATE TRIGGER audit_baseline_update AFTER UPDATE ON usage_baselines "
+                "BEGIN INSERT INTO baseline_writes VALUES (NEW.username); END"
+            )
+            await conn.execute(
+                "CREATE TRIGGER audit_baseline_insert AFTER INSERT ON usage_baselines "
+                "BEGIN INSERT INTO baseline_writes VALUES (NEW.username); END"
+            )
+        await watch.bandwidth_check()
+        totals["alice"] = 120
+        await watch.bandwidth_check()
+        await watch.bandwidth_check()
+        async with database.connection() as conn:
+            rows = await conn.rows("SELECT username FROM baseline_writes")
+        assert [row[0] for row in rows] == ["alice"]
+        assert (await database.get_user("alice"))["bw_used"] == 20  # type: ignore[index]
     finally:
         await watch.close()
         await close_subscription(sub)
@@ -556,12 +611,20 @@ async def test_usage_commit_locks_only_users_with_deltas(
     async def delayed_increment(
         updates: Mapping[str, tuple[int, int]],
         *,
-        baselines: str | None = None,
+        baselines: UsageBaselines | None = None,
+        removed_baselines: set[UsageBaselineKey] | None = None,
+        clear_baselines: bool = False,
         period: tuple[str, str] | None = None,
     ) -> None:
         entered.set()
         await release.wait()
-        await increment(updates, baselines=baselines, period=period)
+        await increment(
+            updates,
+            baselines=baselines,
+            removed_baselines=removed_baselines,
+            clear_baselines=clear_baselines,
+            period=period,
+        )
 
     try:
         await watch.bandwidth_check()
