@@ -345,7 +345,8 @@ async def test_admin_auth_rate_limit_responses_are_not_stored(
 
     response = await app.test_client().post(f"/sub/admin/{endpoint}")
 
-    assert response.status_code == 429
+    expected_status = (400 if endpoint == "session" else 401) if store_failed else 429
+    assert response.status_code == expected_status
     assert response.headers.get("Retry-After") == (None if store_failed else "60")
     assert response.headers["Cache-Control"] == "no-store"
 

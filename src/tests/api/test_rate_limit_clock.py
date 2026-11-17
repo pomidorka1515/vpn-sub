@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
-from app_runtime import rate_limit
 from app_runtime.rate_limit import _RATE_LIMIT_SCRIPT, AsyncRateLimiter
 
 if TYPE_CHECKING:
@@ -57,87 +55,45 @@ async def redis_store(tmp_path: Path) -> AsyncIterator[tuple[AsyncRateLimiter, R
 
 
 @pytest.mark.asyncio
-async def test_app_clock_jumps_do_not_affect_real_redis_windows(
-    redis_store: tuple[AsyncRateLimiter, Redis],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    limiter, client = redis_store
-    now = 100.0
-    # The limiter needs no app clock. Guard against reintroducing a module-local
-    # wall-clock dependency without changing Redis client's or asyncio's clocks.
-    monkeypatch.setattr(rate_limit, "time", SimpleNamespace(time=lambda: now), raising=False)
-    assert await limiter.allow("route", "ip", 1)
-    now = 10_000_000_000.0
-    assert not await limiter.allow("route", "ip", 1)
-    now = 1.0
-    assert not await limiter.allow("route", "ip", 1)
-    key = "ratelimit:route:ip"
-    await client.expire(key, 5)
-    assert not await limiter.allow("route", "ip", 1)
-    assert 0 < await client.ttl(key) <= 5
-    assert await limiter.allow("route", "other", 1)
-
-
-@pytest.mark.asyncio
-async def test_simultaneous_requests_are_counted_once_each(
-    redis_store: tuple[AsyncRateLimiter, Redis],
-) -> None:
-    limiter, client = redis_store
-    results = await asyncio.gather(*(limiter.allow("route", "concurrent", 10) for _ in range(30)))
-    assert results.count(True) == 10
-    assert await client.zcard("ratelimit:route:concurrent") == 10
-
-
-@pytest.mark.asyncio
-async def test_redis_clock_discontinuities_rebase_and_expire_atomically(
+async def test_fixed_window_script_uses_increment_and_expiry(
     redis_store: tuple[AsyncRateLimiter, Redis],
 ) -> None:
     _, client = redis_store
-    # Run the production Lua unchanged except for injecting TIME's two values.
-    clock_call = "local clock = redis.call('TIME')"
-    assert _RATE_LIMIT_SCRIPT.count(clock_call) == 1
-    script = client.register_script(
-        _RATE_LIMIT_SCRIPT.replace(clock_call, "local clock = {ARGV[6], ARGV[7]}")
-    )
-    key = "ratelimit:route:clock"
+    script = client.register_script(_RATE_LIMIT_SCRIPT)
+    key = "ratelimit:test:fixed"
 
-    async def allow(seconds: int, micros: int, member: str) -> int:
-        return int(await script(keys=[key], args=[0, 60, member, 2, 60, seconds, micros]))
+    async def check(increment: int, limit: int = 2) -> int:
+        return int(await script(keys=[key], args=[increment, 60, "", limit, 60]))
 
-    assert await allow(1_000, 500_000, "a") == 1
-    assert await allow(1_001, 0, "b") == 1
-    await client.expire(key, 5)
-    assert await allow(900, 250_000, "denied") == -60
-    assert await client.zcard(key) == 2
-    assert await client.zscore(key, "a") == 900.25
-    assert await client.zscore(key, "b") == 900.25
-    assert await client.ttl(key) > 5
-    await client.expire(key, 5)
-    assert await allow(960, 249_999, "still-denied") == -1
-    assert 0 < await client.ttl(key) <= 5
-    assert await allow(960, 250_000, "c") == 1
-    assert await allow(10_000, 0, "d") == 1
-    assert await client.zcard(key) == 1
-    assert await client.zscore(key, "d") == 10_000.0
+    assert await check(1) == 1
+    assert await check(1) == 2
+    assert await check(1) < 0
+    assert await client.get(key) == "3"
+    assert 0 < await client.ttl(key) <= 60
 
 
 @pytest.mark.asyncio
-async def test_retry_delay_tracks_next_available_slot(
+async def test_simultaneous_fixed_window_increments_are_atomic(
     redis_store: tuple[AsyncRateLimiter, Redis],
 ) -> None:
     _, client = redis_store
-    clock_call = "local clock = redis.call('TIME')"
-    script = client.register_script(
-        _RATE_LIMIT_SCRIPT.replace(clock_call, "local clock = {ARGV[6], ARGV[7]}")
-    )
-    key = "ratelimit:route:delays"
+    script = client.register_script(_RATE_LIMIT_SCRIPT)
+    key = "ratelimit:test:concurrent"
 
-    async def check(seconds: int, micros: int, member: str, limit: int = 2) -> int:
-        return int(await script(keys=[key], args=[0, 60, member, limit, 60, seconds, micros]))
+    async def check() -> int:
+        return int(await script(keys=[key], args=[1, 60, "", 10, 60]))
 
-    assert await check(100, 250_000, "a") == 1
-    assert await check(110, 500_000, "b") == 1
-    assert await check(115, 0, "denied") == -46
-    assert await check(115, 0, "lower-limit", limit=1) == -56
-    assert await check(160, 249_999, "almost") == -1
-    assert await check(160, 250_000, "admitted") == 1
+    results = await asyncio.gather(*(check() for _ in range(30)))
+    assert sum(result > 0 for result in results) == 10
+    assert await client.get(key) == "30"
+
+
+@pytest.mark.asyncio
+async def test_local_requests_do_not_touch_redis_before_reconciliation(
+    redis_store: tuple[AsyncRateLimiter, Redis],
+) -> None:
+    limiter, client = redis_store
+    limiter.redis_check_interval = 60
+    for _ in range(3):
+        assert await limiter.allow("route", "local", 10)
+    assert await client.keys("ratelimit:*") == []  # pyright: ignore[reportUnknownMemberType]  # Upstream Redis typing is partial.

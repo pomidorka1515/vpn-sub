@@ -64,7 +64,7 @@ class PublicLoginMixin(PublicFeatureMixin):
             allowed = await self.limiter.allow("telegram:login", str(uid), 10)
         except Exception:
             self.log.error("Telegram login rate limit store failed")  # ruff: ignore[error-instead-of-exception] avoid logging Redis credentials
-            allowed = False
+            allowed = True
         if not allowed:
             await self.bot.send_message(
                 message.chat.id,

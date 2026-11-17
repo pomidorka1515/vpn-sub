@@ -32,8 +32,8 @@ Missing authorization:
 ```  
 Rate limiting:  
 Every `Rate limit` field in routes are in requests / min.  
-Limits apply per route and client IP in a sliding one-minute window. A limit-exceeded response includes `Retry-After` with the number of seconds until a slot opens, rounded up. Concurrent requests may consume that slot first. The subscription endpoint uses the same behavior.  
-Rate-limit store failures also return HTTP 429, but without `Retry-After` because the recovery time is unknown.  
+These limits apply per route and client IP in a fixed one-minute window. A limit-exceeded response includes `Retry-After` with the number of seconds until the next window, rounded up. The subscription endpoint has separate buckets: 60 requests per minute per `token` query parameter, plus a 600-request-per-minute aggregate per client IP. Missing tokens share one token bucket.  
+Rate-limit store failures do not produce a store-generated HTTP 429; the process-local limiter remains active and the request proceeds when its local bucket allows it.  
 Response:  
 ```jsonc  
 // HTTP 429  

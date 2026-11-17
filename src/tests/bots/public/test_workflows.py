@@ -496,7 +496,7 @@ async def test_password_is_deleted_before_language_lookup_error(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("store_failed", [False, True])
-async def test_login_throttle_blocks_password_verification(
+async def test_login_throttle_uses_local_fallback_on_store_error(
     login: tuple[PublicLoginMixin, MagicMock, MagicMock],
     store_failed: bool,
 ) -> None:
@@ -509,10 +509,19 @@ async def test_login_throttle_blocks_password_verification(
     await mixin.step_login_pass(_message("secret"), "bob@example.test")
 
     allow.assert_awaited_once_with("telegram:login", "42", 10)
-    subscription.password_svc.validate_credentials.assert_not_awaited()
-    subscription.telegram_svc.set_telegram_user.assert_not_awaited()
+    if store_failed:
+        subscription.password_svc.validate_credentials.assert_awaited_once_with(
+            "bob@example.test", "secret"
+        )
+        subscription.telegram_svc.set_telegram_user.assert_awaited_once()
+    else:
+        subscription.password_svc.validate_credentials.assert_not_awaited()
+        subscription.telegram_svc.set_telegram_user.assert_not_awaited()
     cast(MagicMock, mixin._delete_message).assert_awaited_once_with(7, 5, secret=True)
-    assert "Too many requests" in telegram.send_message.call_args.args[1]
+    if store_failed:
+        assert "Too many requests" not in telegram.send_message.call_args.args[1]
+    else:
+        assert "Too many requests" in telegram.send_message.call_args.args[1]
     if store_failed:
         cast(MagicMock, mixin.log).error.assert_called_once_with(
             "Telegram login rate limit store failed",

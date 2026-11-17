@@ -80,8 +80,10 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
   Quota accounting continues to use fresh reads. `config.json` validated against
   `config.schema.json` on load and commit; remote schemas are rejected.
   Scheduled backups of config and the SQLite database.
-- **Shared rate limits.** Redis sliding window. Every request uses the
-  same counters.
+- **Shared rate limits.** Process-local fixed-window counters keep the hot path
+  free of Redis round trips; batched Redis reconciliation preserves shared state.
+  Subscription downloads allow 60 requests/minute per token and 600/minute per
+  client IP aggregate.
 
 ## Requirements
 
@@ -111,8 +113,8 @@ apt install redis-server && systemctl enable --now redis-server
 
 ### Redis
 
-Rate limits are stored in Redis, not in process memory. One local instance is
-enough; do not expose it.
+Rate limits are enforced in process memory first and periodically reconciled to
+Redis. One local instance is enough; do not expose it.
 
 ```bash
 apt install redis-server
@@ -128,12 +130,12 @@ default port, not something this app chooses:
 }
 ```
 
-Start Redis before the HTTP service. If Redis dies later, rate-limited routes
-return 429 without `Retry-After` because recovery time is unknown. When a
-sliding-window limit is exceeded, HTTP 429 includes `Retry-After` in seconds
-until a slot opens (rounded up); another request may consume it first. Admin
-authentication lockouts also return 429 with `Retry-After` in seconds, while
-authentication store failures return 503.
+Start Redis before the HTTP service. If Redis dies later, ordinary rate-limited
+routes continue with their local fallback and do not return a store-generated
+429. When a fixed-window limit is exceeded, HTTP 429 includes `Retry-After` in
+seconds until the next window (rounded up). Admin authentication lockouts also
+return 429 with `Retry-After` in seconds, while authentication store failures
+return 503.
 
 ### 3x-ui panel auth
 
@@ -405,15 +407,17 @@ Discord starts and stops with the main systemd unit.
 - Single VPS, Linux only. `Subscription` refuses to import on anything else.
 - One Hypercorn serving process and one event loop. A file lock  
   (`<DIR_RUNTIME>/.primary.lock`) rejects secondary instances. Single-node design.  
-- Local Redis is required. If it dies after startup, rate-limited routes fail
-  closed with 429 and no `Retry-After`.
+- Local Redis is required at startup. If it dies after startup, ordinary
+  rate-limited routes use their local fallback; admin authentication storage
+  failures still return 503.
 - Not highly available. Panel, database, and bots all live on the same box. A
   dead panel stays dead until you reissue the token and update config.
 - 3x-ui v3 clients-first API only (`/panel/api/clients/*`, `email == username`).
   Earlier panel versions are not supported. No other panel software.
 - Personal project. Untagged `main` is rolling development.
 - Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure
-  belong on the reverse proxy. Application rate limits live in Redis.
+  belong on the reverse proxy. Application rate limits use local counters with
+  periodic Redis reconciliation.
 - Python 3.14 for development and release builds; release binaries require the normal GIL ABI.
 
 ## Architecture
@@ -437,8 +441,8 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 - `src/db/`: aiosqlite repository with write transaction ownership and leased reads. Users, codes, quotas, and bandwidth live here.  
   `config.json` is deployment and presentation only
 - `src/api/`: Quart routes (`AsyncApi` for admin, `AsyncWebApi` for end users)
-- `src/api/decorators/rate_limit.py`: Redis sliding-window limiter, shared by
-  async HTTP caller
+- `src/api/decorators/rate_limit.py`: local-first fixed-window limiter with
+  periodic Redis reconciliation, shared by async HTTP callers
 - `src/bots/telegram/`: Telegram `TelegramAdminBot` (management), `TelegramPublicBot` (user
   self-service)
 - `src/bots/discord/`: optional Discord client owned by `create_application()`. One token serves public commands and

@@ -83,7 +83,7 @@ class SharedDiscordClient(discord.Client):
                 )
             except Exception:
                 log.error("Discord rate limit store failed")  # ruff: ignore[error-instead-of-exception] avoid logging Redis credentials
-                allowed = False
+                allowed = True
             if not allowed:
                 if admin:
                     await feature._respond(

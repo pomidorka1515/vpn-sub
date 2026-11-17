@@ -119,7 +119,7 @@ async def test_host_rate_limits_and_dispatches_components_and_modals(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failed", [False, True])
-async def test_explicit_rate_limit_is_fail_closed(failed: bool) -> None:
+async def test_explicit_rate_limit_fails_open_on_store_error(failed: bool) -> None:
     public, _, _, _ = make_bots()
     host = cast(SharedDiscordClient, public.bot)
     limiter = cast(MagicMock, public.limiter)
@@ -129,9 +129,15 @@ async def test_explicit_rate_limit_is_fail_closed(failed: bool) -> None:
     fake = FakeInteraction()
     callback = AsyncMock()
     await host.interact(cast(discord.Interaction, fake), callback, operation="login_modal")
-    callback.assert_not_awaited()
+    if failed:
+        callback.assert_awaited_once()
+    else:
+        callback.assert_not_awaited()
     limiter.allow.assert_awaited_once_with("discord:login", "7", 10)
-    assert fake.response.messages
+    if failed:
+        assert not fake.response.messages
+    else:
+        assert fake.response.messages
     await host.close()
 
 
