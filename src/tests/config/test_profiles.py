@@ -136,7 +136,7 @@ def test_json_profile_schema_preserves_supported_transports(
     with app_cfg.edit() as tx:
         for key, item in document.items():
             tx[key] = item
-    result = build_json(cast(AppConfig, app_cfg.copy()), "user-uuid", "en", "chrome")
+    result = json.loads(build_json(cast(AppConfig, app_cfg.copy()), "user-uuid", "en", "chrome"))
     assert result[0]["remarks"] == "local"
     outbound = cast(JsonDict, cast(list[object], result[0]["outbounds"])[0])
     assert outbound["customExtension"] == {"enabled": True}

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import json
 from typing import TYPE_CHECKING
 
 from quart import Response
@@ -171,16 +170,13 @@ async def get_subscription(
         headers["Content-Type"] = "application/json"
         return _private_response(
             Response(
-                response=json.dumps(
-                    builders.build_json(
-                        cfg=cfg,
-                        user_uuid=user_uuid,
-                        lang=lang,
-                        fingerprint=str(user["fingerprint"]),
-                        status=status,
-                        statusWl=statusWl,
-                    ),
-                    ensure_ascii=False,
+                response=builders.build_json(
+                    cfg=cfg,
+                    user_uuid=user_uuid,
+                    lang=lang,
+                    fingerprint=str(user["fingerprint"]),
+                    status=status,
+                    statusWl=statusWl,
                 ),
                 mimetype="application/json; charset=utf-8",
                 headers=headers,

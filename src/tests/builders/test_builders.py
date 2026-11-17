@@ -438,7 +438,7 @@ def test_json_profiles_fill_transport_hosts(shared: bool) -> None:
     original = json.dumps(cfg)
     if shared:
         cfg = config_mock(cfg).snapshot()
-    built = build_json(cfg, "user-uuid", "en", "chrome", status=True, statusWl=True)
+    built = json.loads(build_json(cfg, "user-uuid", "en", "chrome", status=True, statusWl=True))
     tls = built[0]["outbounds"]
     assert isinstance(tls, list)
     stream = cast(ProfileOutbound, tls[0])["streamSettings"]
@@ -457,7 +457,7 @@ def test_json_profiles_fill_transport_hosts(shared: bool) -> None:
     assert ws["wsSettings"]["headers"]["Host"] == "edge.example"
     assert ws["httpupgradeSettings"]["host"] == "edge.example"
     assert built[0]["meta"] == {"serverDescription": "tls en"}
-    second = build_json(cfg, "other-uuid", "ru", "firefox", status=True, statusWl=True)
+    second = json.loads(build_json(cfg, "other-uuid", "ru", "firefox", status=True, statusWl=True))
     assert json.loads(json.dumps(second)) == second
     first_outbound = cast(ProfileTemplate, built[0])["outbounds"][0]
     second_outbound = cast(ProfileTemplate, second[0])["outbounds"][0]
@@ -470,6 +470,67 @@ def test_json_profiles_fill_transport_hosts(shared: bool) -> None:
     assert first_stream["tlsSettings"]["fingerprint"] == "chrome"
     assert second_stream["tlsSettings"]["fingerprint"] == "firefox"
     assert json.dumps(thaw(cfg)) == original
+
+
+@pytest.mark.parametrize("shared", [False, True], ids=["mutable", "snapshot"])
+def test_json_template_escapes_values_and_preserves_extras(shared: bool) -> None:
+    cfg = _link_config()
+    cfg["json_template"] = _json_template()
+    cfg["json_template"]["dns"] = {"extra": {"text": '"\\\n UUID FINGERPRINT DOMAIN 雪'}}
+    cfg["nodes"]["edge"] = 'host"\\\n雪'
+    for item in cfg["profiles"].values():
+        item["json"] = _profile({})
+    profile = next(iter(cfg["profiles"].values()))
+    profile["node"] = "edge"
+    profile["name"] = ['Name "雪', "Имя"]
+    profile["shortProfileDescription"] = ['Extra "\\\n', "описание"]
+    profile["json"] = _profile(
+        {
+            "tlsSettings": {"serverName": "", "fingerprint": ""},
+            "xhttpSettings": {},
+            "grpcSettings": {"authority": ""},
+            "wsSettings": {"headers": {"Custom": '"extra"'}},
+            "httpupgradeSettings": {},
+        }
+    )
+    if shared:
+        cfg = config_mock(cfg).snapshot()
+    user_uuid = 'id "\\\n FINGERPRINT 雪'
+    fingerprint = 'fp "\\\n UUID 雪'
+    result = cast(list[ProfileTemplate], json.loads(build_json(cfg, user_uuid, "en", fingerprint)))
+    first = result[0]
+    assert first["remarks"] == profile["flag"] + 'Name "雪'
+    assert first.get("meta") == {"serverDescription": 'Extra "\\\n'}
+    assert first.get("dns") == {"extra": {"text": '"\\\n UUID FINGERPRINT DOMAIN 雪'}}
+    outbound = first["outbounds"][0]
+    assert outbound["settings"]["vnext"][0] == {
+        "address": 'host"\\\n雪',
+        "users": [{"id": user_uuid}],
+    }
+    stream = outbound["streamSettings"]
+    assert stream.get("tlsSettings") == {"serverName": 'host"\\\n雪', "fingerprint": fingerprint}
+    assert stream.get("xhttpSettings") == {"host": 'host"\\\n雪'}
+    assert stream.get("grpcSettings") == {"authority": 'host"\\\n雪'}
+    assert stream.get("wsSettings") == {
+        "headers": {"Custom": '"extra"', "Host": 'host"\\\n雪'},
+        "host": 'host"\\\n雪',
+    }
+    assert stream.get("httpupgradeSettings") == {"host": 'host"\\\n雪'}
+    again = cast(list[ProfileTemplate], json.loads(build_json(cfg, "second", "ru", "other")))
+    assert again[0]["remarks"] == profile["flag"] + "Имя"
+    assert again[0]["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"] == "second"
+
+
+def test_json_templates_rebuild_for_mutable_config() -> None:
+    cfg = _link_config()
+    cfg["json_template"] = _json_template()
+    for profile in cfg["profiles"].values():
+        profile["json"] = _profile({})
+    before = cast(list[ProfileTemplate], json.loads(build_json(cfg, "id", "en", "fp")))
+    cfg["profiles"][next(iter(cfg["profiles"]))]["name"][0] = "Changed"
+    after = cast(list[ProfileTemplate], json.loads(build_json(cfg, "id", "en", "fp")))
+    assert before[0]["remarks"] != after[0]["remarks"]
+    assert after[0]["remarks"].endswith("Changed")
 
 
 def _subscription(
@@ -747,8 +808,8 @@ async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.Monke
         del kwargs
         return "links"
 
-    def happ_json(**kwargs: object) -> list[dict[str, object]]:
-        return [{"remarks": kwargs["lang"]}]
+    def happ_json(**kwargs: object) -> str:
+        return json.dumps([{"remarks": kwargs["lang"]}])
 
     monkeypatch.setattr("builders.isbrowser", not_browser)
     monkeypatch.setattr("builders.build_description", description)
