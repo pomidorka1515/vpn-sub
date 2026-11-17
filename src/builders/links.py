@@ -6,7 +6,9 @@ import base64
 import json
 import urllib.parse
 from collections import deque
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import TYPE_CHECKING, cast
 
 from config.snapshot import thaw
 from util import fmt_bytes
@@ -14,6 +16,59 @@ from util import fmt_bytes
 if TYPE_CHECKING:
     from config import AppConfig, LangConfig
     from custom_types import BandwidthInfo
+
+
+@dataclass(frozen=True, slots=True)
+class _LinkTemplate:
+    whitelist: bool
+    domain: str
+    link: str
+
+
+# Config snapshots are immutable and are reused for their whole generation.
+# Keep templates, not rendered per-user arrays, so this cache stays small.
+_templates: dict[int, tuple[object, tuple[tuple[_LinkTemplate, ...], ...]]] = {}
+
+
+def _build_templates(cfg: AppConfig) -> tuple[tuple[_LinkTemplate, ...], ...]:
+    variants: list[tuple[_LinkTemplate, ...]] = []
+    for lang_index in (0, 1):
+        for is_happ in (False, True):
+            profiles: list[_LinkTemplate] = []
+            for profile in cfg["profiles"].values():
+                link = profile["masterLink"]
+                name = (profile["flag"] if is_happ else "") + profile["name"][lang_index]
+                link = link.replace("NAME", urllib.parse.quote(name, safe=""))
+                if "EXTRA" in link:
+                    extra_data = profile["xhttpExtra"]
+                    if extra_data:
+                        encoded_extra = urllib.parse.quote(
+                            json.dumps(thaw(extra_data), separators=(",", ":"))
+                        )
+                        link = link.replace("EXTRA", encoded_extra)
+                    else:
+                        link = (
+                            link.replace("extra=EXTRA&", "")
+                            .replace("&extra=EXTRA", "")
+                            .replace("extra=EXTRA", "")
+                        )
+                profiles.append(
+                    _LinkTemplate(profile["whitelist"], cfg["nodes"][profile["node"]], link)
+                )
+            variants.append(tuple(profiles))
+    return tuple(variants)
+
+
+def _template_variants(cfg: AppConfig) -> tuple[tuple[_LinkTemplate, ...], ...] | None:
+    if not isinstance(cast(object, cfg), MappingProxyType):
+        return None
+    key = id(cfg)
+    cached = _templates.get(key)
+    if cached is not None and cached[0] is cfg:
+        return cached[1]
+    result = _build_templates(cfg)
+    _templates[key] = (cfg, result)
+    return result
 
 
 def build_link_array(
@@ -30,33 +85,21 @@ def build_link_array(
 ) -> str:
     """Build a base64-encoded link array."""
     generated_links: deque[str] = deque()
+    templates = _template_variants(cfg)
+    if templates is None:
+        templates = _build_templates(cfg)
+    profiles = templates[(0 if lang == "en" else 1) * 2 + int(is_happ)]
 
-    for profile in cfg["profiles"].values():
-        if profile["whitelist"] and not statusWl:
+    for profile in profiles:
+        if profile.whitelist and not statusWl:
             continue
         if not status:
             break
-        link: str = profile["masterLink"]
-        flag: str = profile["flag"] if is_happ else ""
-        node: str = profile["node"]
-        domain: str = cfg["nodes"][node]
-        name: str = flag + profile["name"][0 if lang == "en" else 1]
-        link = link.replace("DOMAIN", domain)
+        link = profile.link
+        # These are the only values that vary between users.
+        link = link.replace("DOMAIN", profile.domain)
         link = link.replace("FINGERPRINT", fingerprint)
         link = link.replace("UUID", user_uuid)
-        link = link.replace("NAME", urllib.parse.quote(name, safe=""))
-        if "EXTRA" in link:
-            extra_data = profile["xhttpExtra"]
-            if extra_data:
-                json_str = json.dumps(thaw(extra_data), separators=(",", ":"))
-                encoded_extra = urllib.parse.quote(json_str)
-                link = link.replace("EXTRA", encoded_extra)
-            else:
-                link = (
-                    link.replace("extra=EXTRA&", "")
-                    .replace("&extra=EXTRA", "")
-                    .replace("extra=EXTRA", "")
-                )
         generated_links.append(link)
 
     if need_dummy_link:
