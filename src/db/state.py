@@ -12,7 +12,7 @@ from .common import ConnectionMixin
 from .notification_episodes import clear_notification_episodes
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Collection, Mapping
 
     from config.constants import JsonDict
 
@@ -72,14 +72,19 @@ class StateMixin(ConnectionMixin):
     async def increment_usage(self, username: str, *, regular: int = 0, whitelist: int = 0) -> None:
         await self.increment_usages({username: (regular, whitelist)})
 
-    async def load_usage_baselines(self) -> tuple[str | None, UsageBaselines]:
+    async def load_usage_baselines(
+        self, names: Collection[str] | None = None
+    ) -> tuple[str | None, UsageBaselines]:
         async with self.connection() as conn:
             month = await conn.row(
                 "SELECT value FROM app_metadata WHERE key = 'watcher_usage_month'"
             )
-            rows = await conn.rows(
-                "SELECT kind, panel, username, uuid, up, down, total FROM usage_baselines"
-            )
+            query = "SELECT kind, panel, username, uuid, up, down, total FROM usage_baselines"
+            params: tuple[str, ...] = ()
+            if names is not None:
+                query += " WHERE username IN (SELECT value FROM json_each(?))"
+                params = (json.dumps(list(names)),)
+            rows = await conn.rows(query, params)
         return (str(month[0]) if month else None), {
             (str(row[0]), str(row[1]), str(row[2]), str(row[3])): BandwidthInfo(
                 int(row[4]), int(row[5]), int(row[6])

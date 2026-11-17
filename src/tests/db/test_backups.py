@@ -514,6 +514,7 @@ async def test_supported_schema_snapshot_can_be_restored(tmp_path: Path, version
         if version < 7:
             connection.execute("ALTER TABLE bandwidth_snapshots DROP COLUMN start_ts")
         if version < 6:
+            connection.execute("DROP INDEX idx_users_usage_sweep")
             connection.execute("ALTER TABLE users DROP COLUMN admin_disabled")
             connection.execute("ALTER TABLE users DROP COLUMN admin_disabled_wl")
         if version < 5:

@@ -23,6 +23,49 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
+async def test_usage_reads_only_metered_or_recovery_users(database: Database) -> None:
+    for name in ("metered", "unlimited", "disabled", "pending"):
+        await database.create_user(
+            username=name,
+            uuid=f"{name}-uuid",
+            token=name * 8,
+            fingerprint="chrome",
+            displayname=name,
+            bw_limit_gb=int(name == "metered"),
+        )
+    await database.update_user("disabled", status=False)
+    await database.set_metadata("user_sync_pending:pending", "{}")
+    states = await database.list_sweep_users(active=True)
+    assert {state["username"] for state in states} == {"metered", "disabled", "pending"}
+    assert len(await database.list_sweep_users()) == 4
+    baselines = {
+        ("main", "panel", name, f"{name}-uuid"): BandwidthInfo(100, 0, 100)
+        for name in ("metered", "unlimited")
+    }
+    await database.increment_usages({}, baselines=baselines)
+    assert (await database.load_usage_baselines({"metered"}))[1] == {
+        key: value for key, value in baselines.items() if key[2] == "metered"
+    }
+    assert (await database.load_usage_baselines(set()))[1] == {}
+    assert (await database.load_usage_baselines())[1] == baselines
+    await database.increment_usages(
+        {}, baselines={("main", "panel", "unlimited", "unlimited-uuid"): BandwidthInfo(1, 0, 1)}
+    )
+    # Previously metered users must be visited once more to discard old counters.
+    assert "unlimited" in {
+        state["username"] for state in await database.list_sweep_users(active=True)
+    }
+    async with database.connection() as conn:
+        plans = await conn.rows(
+            "EXPLAIN QUERY PLAN SELECT username FROM users WHERE "
+            "bw_limit_gb > 0 OR wl_limit_gb > 0 "
+            "OR enabled = 0 OR enabled_time = 0 OR enabled_wl = 0 "
+            "OR admin_disabled = 1 OR admin_disabled_wl = 1"
+        )
+    assert any("idx_users_usage_sweep" in str(row[3]) for row in plans)
+
+
+@pytest.mark.asyncio
 async def test_monthly_reset_catches_up_once_after_outage(
     database: Database,
     watch: BWatch,

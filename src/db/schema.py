@@ -7,6 +7,7 @@ from errors import MigrationError
 
 from .admin import ADMIN_SCHEMA
 from .common import ConnectionMixin
+from .users import USAGE_SWEEP_PREDICATE
 
 USAGE_BASELINES_SCHEMA = (
     """CREATE TABLE usage_baselines (
@@ -262,6 +263,11 @@ class SchemaMixin(ConnectionMixin):
                         json.JSONDecodeError,
                     ) as exc:
                         raise MigrationError("invalid legacy usage baselines metadata") from exc
+            # Additive query acceleration, also installed for restored databases.
+            await conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_users_usage_sweep ON users(username) WHERE "
+                + USAGE_SWEEP_PREDICATE
+            )
             await conn.execute(
                 "UPDATE schema_version SET version = ? WHERE id = 1",
                 (self.SCHEMA_VERSION,),

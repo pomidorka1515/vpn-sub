@@ -13,6 +13,12 @@ from .common import ConnectionMixin
 from .notification_episodes import clear_notification_episodes
 from .telegram import set_telegram_mapping
 
+USAGE_SWEEP_PREDICATE = (
+    "bw_limit_gb > 0 OR wl_limit_gb > 0 "
+    "OR enabled = 0 OR enabled_time = 0 OR enabled_wl = 0 "
+    "OR admin_disabled = 1 OR admin_disabled_wl = 1"
+)
+
 if TYPE_CHECKING:
     from collections.abc import Collection
 
@@ -54,16 +60,24 @@ class UsersMixin(ConnectionMixin):
                 for row in await conn.rows("SELECT * FROM users ORDER BY username")
             ]
 
-    async def list_sweep_users(self) -> list[SweepUser]:
+    async def list_sweep_users(self, *, active: bool = False) -> list[SweepUser]:
         async with self.connection() as conn:
-            return [
-                cast(SweepUser, dict(row))
-                for row in await conn.rows(
-                    "SELECT username, uuid, enabled, enabled_time, enabled_wl, admin_disabled, "
-                    "admin_disabled_wl, expires_at, bw_limit_gb, bw_used, wl_limit_gb, wl_used "
-                    "FROM users ORDER BY username"
+            query = (
+                "SELECT username, uuid, enabled, enabled_time, enabled_wl, admin_disabled, "
+                "admin_disabled_wl, expires_at, bw_limit_gb, bw_used, wl_limit_gb, wl_used "
+                "FROM users"
+            )
+            if active:
+                query += (
+                    " WHERE username IN (SELECT username FROM users WHERE "
+                    + USAGE_SWEEP_PREDICATE
+                    + " UNION SELECT substr(key, 19) FROM app_metadata "
+                    "WHERE key GLOB 'user_sync_pending:*' "
+                    "UNION SELECT username FROM usage_baselines) ORDER BY username"
                 )
-            ]
+            else:
+                query += " ORDER BY username"
+            return [cast(SweepUser, dict(row)) for row in await conn.rows(query)]
 
     async def list_sweep_users_for(self, names: Collection[str]) -> list[SweepUser]:
         if not names:

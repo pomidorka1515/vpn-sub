@@ -19,7 +19,7 @@ class UsageJobs(WatchJobs):
 
     async def _load_usage_baselines(self, states: Sequence[SweepUser]) -> str | None:
         reset_month = await self.db.get_metadata("last_reset_month")
-        month, saved = await self.db.load_usage_baselines()
+        month, saved = await self.db.load_usage_baselines({state["username"] for state in states})
         self._usage_month = month or reset_month
         if month is not None:
             self.mem, self.wl_mem = {}, {}
@@ -40,7 +40,7 @@ class UsageJobs(WatchJobs):
         async def operation() -> None:
             sampled_at = datetime.now(UTC)
             month = sampled_at.strftime("%Y-%m")
-            states = await self.db.list_sweep_users()
+            states = await self.db.list_sweep_users(active=True)
             known = {s["username"]: s["uuid"] for s in states}
             # Per-panel reads omit outages so healthy panels and the independent
             # whitelist pool can still commit, roll over, and run recovery checks.
@@ -98,7 +98,7 @@ class UsageJobs(WatchJobs):
                 if rollover:
                     # Rollover changes every account, so serialize it against all
                     # sampled users and refresh their state before recovery.
-                    current_states = await self.db.list_sweep_users()
+                    current_states = await self.db.list_sweep_users(active=True)
                 else:
                     current_states = list(states)
                     refreshed = {
