@@ -132,7 +132,7 @@ async def create_application(
             await open_resource(OwnedResource(name, store))
         db = Database(
             path=paths.database,
-            read_connections=cfg.snapshot().get("db_connections", 2),
+            read_connections=cfg.snapshot().get("db_connections", 4),
             backup_dir=paths.backups,
             start_backup=options.start_background,
         )

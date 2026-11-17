@@ -68,7 +68,7 @@ class Database(
         *,
         path: str | Path,
         timeout: float = 5.0,
-        read_connections: int = 2,
+        read_connections: int = 4,
         backup_dir: str | Path | None = None,
         backup_interval: float = 7200,
         backup_retention: int = 3,

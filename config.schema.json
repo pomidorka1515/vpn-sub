@@ -13,7 +13,7 @@
         "$schema": { "type": "string", "description": "Schema file." },
         "uri": { "type": "string", "description": "Main URI for the service.", "default": "sub" },
         "api_uri": { "type": "string", "description": "Admin API URI." },
-        "db_connections": { "type": "integer", "minimum": 1, "maximum": 10, "description": "Number of SQLite read connections (1–10). Defaults to 2 when unset. Changes require a restart." },
+        "db_connections": { "type": "integer", "minimum": 1, "maximum": 10, "description": "Number of SQLite read connections (1–10). Defaults to 4 when unset. Changes require a restart." },
         "api_admin_ui_auth": {
             "description": "Non-deletable root administrator account [username, password], always granted *. Additional scoped accounts live in SQLite.",
         	"type": "array",

@@ -34,7 +34,7 @@ def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("configured", "expected"), [(None, 2), (1, 1), (10, 10)])
+@pytest.mark.parametrize(("configured", "expected"), [(None, 4), (1, 1), (10, 10)])
 async def test_database_reader_count_at_startup(
     paths: AppPaths, configured: int | None, expected: int
 ) -> None:

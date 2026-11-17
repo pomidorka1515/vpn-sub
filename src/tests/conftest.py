@@ -107,7 +107,7 @@ def db_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def database_read_connections() -> int:
-    return 2
+    return 4
 
 
 @pytest.fixture(scope="session")
