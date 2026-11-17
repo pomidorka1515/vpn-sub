@@ -35,6 +35,9 @@ type WorkClass = Literal["foreground", "background"]
 type Health = Literal["ok", "unavailable", "invalid"]
 type TrafficRow = tuple[str, str, str, str, int, int]
 
+TRAFFIC_TTL = 15
+TRAFFIC_STALE_GRACE = 60
+
 
 @dataclass(frozen=True, slots=True)
 class TrafficSnapshot:
@@ -310,16 +313,17 @@ class PanelService(BaseService):
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
 
     async def traffic_snapshot(
-        self, panel: XUiSession, *, work: WorkClass = "background"
+        self, panel: XUiSession, *, work: WorkClass = "background", allow_stale: bool = True
     ) -> TrafficSnapshot:
         """Share a 15-second sample across traffic consumers.
 
         Cold/expired reads coalesce before fanout admission, so reconnect storms
         cannot consume one fanout slot (or panel request) per subscription hit.
+        On refresh failure, optionally serve a sample for up to 60 seconds past expiry.
         Mutation invalidation prevents an in-flight old generation being reused.
         """
         cached = self._traffic.get(panel.name)
-        if cached is not None and monotonic() - cached[0] < 15:
+        if cached is not None and monotonic() - cached[0] < TRAFFIC_TTL:
             return cached[1]
         task = self._traffic_tasks.get(panel.name)
         if task is None or task.done():
@@ -330,7 +334,17 @@ class PanelService(BaseService):
 
             task = self._traffic_refreshes.create(refresh, name="panel:subscription-traffic")
             self._traffic_tasks[panel.name] = task
-        return await asyncio.shield(task)
+        try:
+            return await asyncio.shield(task)
+        except Exception:
+            cached = self._traffic.get(panel.name)
+            if (
+                allow_stale
+                and cached is not None
+                and monotonic() - cached[0] < TRAFFIC_TTL + TRAFFIC_STALE_GRACE
+            ):
+                return cached[1]
+            raise
 
     async def subscription_traffic(self, panel: XUiSession, email: str) -> TrafficRow | None:
         return (await self.traffic_snapshot(panel)).by_email.get(email)

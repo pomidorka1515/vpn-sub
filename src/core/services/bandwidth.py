@@ -119,7 +119,8 @@ class BandwidthService(BaseService):
         """Return independent counters, omitting unavailable panels unless completeness is required.
 
         Omitted panels must keep their previous accounting baselines, not advance
-        to zero. Aggregate consumers require a complete sample instead.
+        to zero. Aggregate consumers require a complete sample instead. Stale
+        samples cannot be used as accounting baselines across a rollover.
         """
         self.require_panels()
         panels = self._target_panels(whitelist)
@@ -128,7 +129,10 @@ class BandwidthService(BaseService):
         if known is None:
             known = {user["username"]: user["uuid"] for user in await self.db.list_sweep_users()}
         snapshots = await asyncio.gather(
-            *(self.panel_svc.traffic_snapshot(panel, work=work) for panel in panels),
+            *(
+                self.panel_svc.traffic_snapshot(panel, work=work, allow_stale=False)
+                for panel in panels
+            ),
             return_exceptions=True,
         )
         result: dict[str, dict[str, BandwidthInfo]] = {}

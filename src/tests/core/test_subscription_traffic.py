@@ -148,6 +148,105 @@ async def test_failed_sample_is_not_cached(database: Database) -> None:
     assert await sub.panel_svc.subscription_traffic(sub.panels[0], "alice") is not None
 
 
+@pytest.mark.parametrize(("age", "usable"), [(15, True), (74.999, True), (75, False)])
+async def test_failed_refresh_uses_stale_sample_only_within_grace(
+    database: Database, monkeypatch: pytest.MonkeyPatch, age: float, usable: bool
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1], up=1, down=2)])
+    sub = await make_subscription(database, panels=[panel])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    client = sub.panels[0]
+    snapshot = await sub.panel_svc.traffic_snapshot(client)
+    clock += age
+    panel._get_error = PanelUnavailableError("offline")
+
+    if usable:
+        assert await sub.panel_svc.traffic_snapshot(client) is snapshot
+        assert sub.panel_svc._traffic[client.name] == (100.0, snapshot)
+        panel._get_error = None
+        panel.clients = [make_panel_client("alice", [1], up=5, down=6)]
+        refreshed = await sub.panel_svc.traffic_snapshot(client)
+        assert refreshed.by_email["alice"][4:] == (5, 6)
+    else:
+        with pytest.raises(PanelUnavailableError, match="offline"):
+            await sub.panel_svc.traffic_snapshot(client)
+
+
+@pytest.mark.parametrize("change", ["none", "expire", "invalidate"])
+async def test_failed_shared_refresh_checks_current_cache(
+    database: Database, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1], up=1, down=2)])
+    sub = await make_subscription(database, panels=[panel])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    client = sub.panels[0]
+    snapshot = await sub.panel_svc.traffic_snapshot(client)
+    clock += 15
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def fail(_panel: XUiSession) -> tuple[list[TrafficRow], TrafficSnapshot]:
+        nonlocal calls
+        calls += 1
+        entered.set()
+        await release.wait()
+        raise PanelUnavailableError("offline")
+
+    monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail)
+    waiters = [asyncio.create_task(sub.panel_svc.traffic_snapshot(client)) for _ in range(20)]
+    strict = asyncio.create_task(sub.panel_svc.traffic_snapshot(client, allow_stale=False))
+    try:
+        await entered.wait()
+        if change == "expire":
+            clock += 60
+        elif change == "invalidate":
+            await sub.panel_svc.invalidate_clients(client)
+    finally:
+        release.set()
+    results = await asyncio.gather(*waiters, return_exceptions=True)
+    strict_result = (await asyncio.gather(strict, return_exceptions=True))[0]
+    assert calls == 1
+    assert isinstance(strict_result, PanelUnavailableError)
+    if change == "none":
+        assert all(result is snapshot for result in results)
+    else:
+        assert all(isinstance(result, PanelUnavailableError) for result in results)
+
+
+async def test_cancelling_waiter_does_not_return_stale_or_cancel_refresh(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1], up=1, down=2)])
+    sub = await make_subscription(database, panels=[panel])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    client = sub.panels[0]
+    snapshot = await sub.panel_svc.traffic_snapshot(client)
+    clock += 15
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fail(_panel: XUiSession) -> tuple[list[TrafficRow], TrafficSnapshot]:
+        entered.set()
+        await release.wait()
+        raise PanelUnavailableError("offline")
+
+    monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail)
+    waiter = asyncio.create_task(sub.panel_svc.traffic_snapshot(client))
+    try:
+        await entered.wait()
+        other = asyncio.create_task(sub.panel_svc.traffic_snapshot(client))
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+    finally:
+        release.set()
+    assert await other is snapshot
+
+
 async def test_invalidated_inflight_sample_cannot_repopulate_cache(
     database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
