@@ -7,6 +7,7 @@ import pytest
 import pytest_asyncio
 
 from db import Database
+from db.state import _USER_NOTIFICATION_MARKERS_SQL
 from errors import DatabaseError
 
 if TYPE_CHECKING:
@@ -32,6 +33,33 @@ async def create_user(db: Database) -> None:
         fingerprint="chrome",
         displayname="Alice",
     )
+
+
+@pytest.mark.asyncio
+async def test_notification_markers_use_indexed_exact_username_prefix(db: Database) -> None:
+    markers = {
+        "alice:expired:1",
+        "alice:restored",
+        "alice2:expired:1",
+        "alice;expired:1",
+        "alic:expired:1",
+        "a_%:expired:1",
+        "é:expired:1",
+    }
+    await db.sync_notifications(set(), markers)
+    await db.mark_notification("alice:other", 42)
+
+    assert await db.notification_markers() == markers
+    assert await db.notification_markers("alice") == {"alice:expired:1", "alice:restored"}
+    assert await db.notification_markers("a_%") == {"a_%:expired:1"}
+    assert await db.notification_markers("é") == {"é:expired:1"}
+    assert not await db.notification_markers("missing")
+
+    async with db.connection() as conn:
+        plan = await conn.rows(
+            "EXPLAIN QUERY PLAN " + _USER_NOTIFICATION_MARKERS_SQL, ("alice:", "alice;")
+        )
+    assert any("SEARCH" in str(row[3]) and "kind>? AND kind<?" in str(row[3]) for row in plan)
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,10 @@ class StateSnapshot(TypedDict):
 type UsageBaselineKey = tuple[str, str, str, str]  # kind, panel, username, uuid
 type UsageBaselines = dict[UsageBaselineKey, BandwidthInfo]
 
+_USER_NOTIFICATION_MARKERS_SQL = (
+    "SELECT kind FROM notification_state WHERE kind >= ? AND kind < ? AND telegram_id = ''"
+)
+
 
 class StateMixin(ConnectionMixin):
     @staticmethod
@@ -181,14 +185,15 @@ class StateMixin(ConnectionMixin):
         async with self.transaction(immediate=True) as conn:
             await conn.execute("DELETE FROM notification_state")
 
-    async def notification_markers(self) -> set[str]:
+    async def notification_markers(self, username: str | None = None) -> set[str]:
         async with self.connection() as conn:
-            return {
-                str(row[0])
-                for row in await conn.rows(
-                    "SELECT kind FROM notification_state WHERE telegram_id = ''",
+            if username is None:
+                rows = await conn.rows("SELECT kind FROM notification_state WHERE telegram_id = ''")
+            else:
+                rows = await conn.rows(
+                    _USER_NOTIFICATION_MARKERS_SQL, (f"{username}:", f"{username};")
                 )
-            }
+            return {str(row[0]) for row in rows}
 
     async def sync_notifications(self, before: set[str], after: set[str]) -> None:
         added, removed = after - before, before - after

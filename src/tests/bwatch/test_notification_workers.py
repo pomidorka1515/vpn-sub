@@ -44,6 +44,41 @@ def _notifier(
 
 
 @pytest.mark.asyncio
+async def test_notice_delivery_only_loads_account_markers(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sub = await make_subscription(database)
+    send = AsyncMock()
+    watch = BWatch(
+        sub.res.cfg,
+        database,
+        sub,
+        notifier=_notifier(send, AsyncMock(return_value="en")),
+        scheduled=False,
+    )
+    original = database.notification_markers
+    usernames: list[str] = []
+
+    async def scoped_markers(username: str) -> set[str]:
+        usernames.append(username)
+        return await original(username)
+
+    monkeypatch.setattr(database, "notification_markers", scoped_markers)
+    try:
+        await _user(database, "alice", 1, used=10**9)
+        await database.sync_notifications(set(), {"alice2:expired:1"})
+        await watch.check()
+        await asyncio.wait_for(watch.drain_notifications(), 3)
+        send.assert_awaited_once()
+        assert len(usernames) >= 5
+        assert set(usernames) == {"alice"}
+        assert await original() == {"alice:traffic_exhausted:1", "alice2:expired:1"}
+    finally:
+        await watch.close()
+        await close_subscription(sub)
+
+
+@pytest.mark.asyncio
 async def test_stalled_language_does_not_block_quota_or_mutations(database: Database) -> None:
     sub = await make_subscription(database)
     started, release, bob_sent = asyncio.Event(), asyncio.Event(), asyncio.Event()

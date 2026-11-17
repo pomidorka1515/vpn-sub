@@ -172,7 +172,7 @@ class QuotaJobs(WatchJobs):
     ) -> str | None:
         if self.notifier is None:
             return None
-        seen = await self.db.notification_markers()
+        seen = await self.db.notification_markers(state["username"])
         return self._serialize_intent(state, await self._pending_notices(state, notices, seen))
 
     async def _deliver(self, state: UserRecord, notices: tuple[Notice, ...]) -> None:
@@ -181,7 +181,7 @@ class QuotaJobs(WatchJobs):
         storage_key = f"user_notifications_pending:{state['username']}"
         if not notices and await self.db.get_metadata(storage_key) is None:
             return
-        seen = await self.db.notification_markers()
+        seen = await self.db.notification_markers(state["username"])
         pending = await self._pending_notices(state, notices, seen)
         await self._save_notices(state, pending)
         if pending:
@@ -221,7 +221,7 @@ class QuotaJobs(WatchJobs):
                 or await self.db.get_metadata(f"user_sync_pending:{username}") is not None
             ):
                 return None
-            seen = await self.db.notification_markers()
+            seen = await self.db.notification_markers(username)
             pending = await self._pending_notices(state, (), seen)
             valid = {
                 key: notice
@@ -254,7 +254,7 @@ class QuotaJobs(WatchJobs):
                 return False
             if await self.db.get_metadata(f"user_sync_pending:{username}") is not None:
                 return False
-            seen = await self.db.notification_markers()
+            seen = await self.db.notification_markers(username)
             pending = await self._pending_notices(state, (), seen)
             mapped = (await self.db.user_tgids()).get(username)
             return (
@@ -278,7 +278,7 @@ class QuotaJobs(WatchJobs):
             mapped = (await self.db.user_tgids()).get(username)
             if mapped is None or int(mapped) != tgid:
                 return
-            current = await self.db.notification_markers()
+            current = await self.db.notification_markers(username)
             pending = await self._pending_notices(state, (), current)
             recovery = notice.kind.opens_recovery
             superseded_by_recovery = recovery is not None and any(
