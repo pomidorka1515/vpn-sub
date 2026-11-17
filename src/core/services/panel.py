@@ -40,6 +40,14 @@ type TrafficRow = tuple[str, str, str, str, int, int]
 class TrafficSnapshot:
     rows: tuple[TrafficRow, ...]
     by_email: dict[str, TrafficRow]
+    all_by_email: dict[str, list[TrafficRow]]
+
+    @classmethod
+    def from_rows(cls, rows: list[TrafficRow]) -> TrafficSnapshot:
+        grouped: dict[str, list[TrafficRow]] = {}
+        for row in rows:
+            grouped.setdefault(row[0], []).append(row)
+        return cls(tuple(rows), {row[0]: row for row in rows}, grouped)
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,7 +252,7 @@ class PanelService(BaseService):
                 for client in clients
                 if client.traffic is not None
             ]
-            return clients, TrafficSnapshot(tuple(rows), {row[0]: row for row in rows})
+            return clients, TrafficSnapshot.from_rows(rows)
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
 
@@ -297,7 +305,7 @@ class PanelService(BaseService):
                 ):
                     raise ValueError("invalid traffic fields")
                 result.append((email, uuid, traffic_email, traffic_uuid, up, down))
-            return result, TrafficSnapshot(tuple(result), {row[0]: row for row in result})
+            return result, TrafficSnapshot.from_rows(result)
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc
 
@@ -406,6 +414,13 @@ class PanelService(BaseService):
         self, *, work: WorkClass = "foreground", fresh: bool = False
     ) -> tuple[dict[str, None], dict[str, Health]]:
         """Share online lists; callers must filter against known users."""
+        users, health = await self.online_snapshot(work=work, fresh=fresh)
+        return dict(users), dict(health)
+
+    async def online_snapshot(
+        self, *, work: WorkClass = "foreground", fresh: bool = False
+    ) -> tuple[Mapping[str, None], Mapping[str, Health]]:
+        """Return the shared online sample without copying its user index."""
         snapshot = self._online
         if fresh or snapshot is None or monotonic() - snapshot[2] >= 5:
             if (
@@ -421,7 +436,7 @@ class PanelService(BaseService):
                 )
             snapshot = await asyncio.shield(self._online_task)
         users, health, _ = snapshot
-        return dict(users), dict(health)
+        return users, health
 
     async def _query_onlines(self, *, work: WorkClass) -> tuple[dict[str, None], dict[str, Health]]:
 

@@ -28,6 +28,7 @@ class UpdateSnapshot:
     totals: dict[str, list[int]] = field(default_factory=dict[str, list[int]])
     online: frozenset[str] = frozenset()
     link_prefix: str = ""
+    covered: frozenset[str] = frozenset()
 
     def authorized_frame(self, username: str, auth_token: str) -> bytes | None:
         user = self.users.get(username)
@@ -69,9 +70,9 @@ class UpdateSnapshot:
 class UpdateService(BaseService):
     """One demand-driven batch per interval, independent of connected browsers.
 
-    Panel traffic and online snapshots are shared with other consumers. Frames
-    are built only for authorized viewers and cached within the batch. Failed
-    batches are shared until the interval expires.
+    Only connected users are loaded; panel traffic and online indexes are shared
+    with other consumers. Frames are built only for authorized viewers and
+    cached within the batch. Failed batches are shared until the interval expires.
     """
 
     def __init__(self, res: SharedCoreResources, *, panel_svc: PanelService) -> None:
@@ -80,13 +81,37 @@ class UpdateService(BaseService):
         self._tasks = TaskRegistry(report_failures=False)
         self._task: asyncio.Task[UpdateSnapshot] | None = None
         self._stored_at = 0.0
+        self._viewers: dict[str, int] = {}
 
-    async def snapshot(self) -> UpdateSnapshot:
-        if self._task is None or (
-            self._task.done() and time.monotonic() - self._stored_at >= UPDATE_INTERVAL
-        ):
-            self._task = self._tasks.create(self._load, name="core:panel-updates")
-        return await asyncio.shield(self._task)
+    def add_viewer(self, username: str) -> None:
+        self._viewers[username] = self._viewers.get(username, 0) + 1
+
+    def remove_viewer(self, username: str) -> None:
+        count = self._viewers[username] - 1
+        if count:
+            self._viewers[username] = count
+        else:
+            del self._viewers[username]
+
+    async def snapshot(self, username: str) -> UpdateSnapshot:
+        while True:
+            if username not in self._viewers:
+                raise RuntimeError("update viewer is not registered")
+            if self._task is None or (
+                self._task.done()
+                and (
+                    time.monotonic() - self._stored_at >= UPDATE_INTERVAL
+                    or (
+                        not self._task.cancelled()
+                        and self._task.exception() is None
+                        and username not in self._task.result().covered
+                    )
+                )
+            ):
+                self._task = self._tasks.create(self._load, name="core:panel-updates")
+            snapshot = await asyncio.shield(self._task)
+            if username in snapshot.covered:
+                return snapshot
 
     async def _load(self) -> UpdateSnapshot:
         try:
@@ -98,31 +123,34 @@ class UpdateService(BaseService):
         self.require_panels()
         clients, online = await asyncio.gather(
             asyncio.gather(*(self.panel_svc.traffic_snapshot(panel) for panel in self.panels)),
-            self.panel_svc.unfiltered_onlines(work="background"),
+            self.panel_svc.online_snapshot(work="background"),
         )
         # Sample identity after panel I/O; never attach old counters to a reset UUID.
-        users = {user["username"]: user for user in await self.db.list_update_users()}
+        covered = frozenset(self._viewers)
+        users = {user["username"]: user for user in await self.db.list_update_users(covered)}
         totals: dict[str, list[int]] = {}
         for panel, rows in zip(self.panels, clients, strict=True):
             offset = 2 if panel is self.whitelist_panel else 0
-            for email, uuid, traffic_email, traffic_uuid, up, down in rows.rows:
-                user = users.get(email)
-                if (
-                    user is not None
-                    and uuid == user["uuid"]
-                    and traffic_uuid == user["uuid"]
-                    and traffic_email == email
+            for email, user in users.items():
+                for _, uuid, traffic_email, traffic_uuid, up, down in rows.all_by_email.get(
+                    email, ()
                 ):
-                    total = totals.setdefault(email, [0, 0, 0, 0])
-                    total[offset] += up
-                    total[offset + 1] += down
+                    if (
+                        uuid == user["uuid"]
+                        and traffic_uuid == user["uuid"]
+                        and traffic_email == email
+                    ):
+                        total = totals.setdefault(email, [0, 0, 0, 0])
+                        total[offset] += up
+                        total[offset + 1] += down
         conf = self.cfg.view()
         return UpdateSnapshot(
             users,
             {},
             totals,
-            frozenset(name for name in online[0] if name in users),
+            frozenset(name for name in users if name in online[0]),
             f"{conf['domain']}/{conf['uri'].strip('/')}?token=",
+            covered,
         )
 
     async def close(self) -> None:

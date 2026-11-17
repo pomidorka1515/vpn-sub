@@ -94,10 +94,11 @@ async def test_traffic_consumers_share_refresh_and_expiry(
     monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
     client = sub.panels[0]
 
+    sub.update_svc.add_viewer("alice")
     rows, accounting, update = await asyncio.gather(
         sub.panel_svc.subscription_traffic(client, "alice"),
         sub.bandwidth_svc.panel_traffic(work="background"),
-        sub.update_svc.snapshot(),
+        sub.update_svc.snapshot("alice"),
     )
     assert rows is not None
     assert rows[4:] == (3, 4)

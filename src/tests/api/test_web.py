@@ -174,7 +174,9 @@ async def test_panel_updates_silence_ping_changes_and_revocation(
     await db.set_auth_token("alice", "a" * 100)
     assert (await app.test_client().get("/custom/webapi/updates")).status_code == 401
     assert (await app.test_client().get("/custom/updates")).status_code == 404
-    snapshot = await sub.update_svc.snapshot()
+    sub.update_svc.add_viewer("alice")
+    snapshot = await sub.update_svc.snapshot("alice")
+    sub.update_svc.remove_viewer("alice")
     sample = AsyncMock(return_value=snapshot)
     monkeypatch.setattr(sub.update_svc, "snapshot", sample)
     clock = [0.0]
@@ -216,6 +218,7 @@ async def test_panel_updates_silence_ping_changes_and_revocation(
         sample.return_value = UpdateSnapshot({"alice": user}, snapshot.frames)
         with pytest.raises(StopAsyncIteration):
             await anext(iterator)
+    assert not sub.update_svc._viewers
 
 
 @pytest.mark.parametrize("field", ["username", "password", "code", "name"])

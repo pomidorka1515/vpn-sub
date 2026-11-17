@@ -40,13 +40,21 @@ class AsyncAccountRoutes(AsyncWebApiMixin):
         auth_token = request.cookies.get("auth_token", "")
 
         async def events() -> AsyncIterator[bytes]:
+            self.sub.update_svc.add_viewer(username)
+            try:
+                async for frame in account_events():
+                    yield frame
+            finally:
+                self.sub.update_svc.remove_viewer(username)
+
+        async def account_events() -> AsyncIterator[bytes]:
             previous: bytes | None = None
             last_sent = time.monotonic()
             while True:
                 started = time.monotonic()
                 try:
                     async with asyncio.timeout(UPDATE_INTERVAL):
-                        snapshot = await self.sub.update_svc.snapshot()
+                        snapshot = await self.sub.update_svc.snapshot(username)
                 except Exception:
                     # Keep heartbeats during outages, but never resend stale secrets.
                     # Reconnecting every viewer would create an authentication SQL storm.

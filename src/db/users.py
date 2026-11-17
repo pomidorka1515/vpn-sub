@@ -79,7 +79,9 @@ class UsersMixin(ConnectionMixin):
                 )
             ]
 
-    async def list_update_users(self) -> list[UpdateUser]:
+    async def list_update_users(self, names: Collection[str]) -> list[UpdateUser]:
+        if not names:
+            return []
         async with self.connection() as conn:
             return [
                 cast(UpdateUser, dict(row))
@@ -87,7 +89,8 @@ class UsersMixin(ConnectionMixin):
                     "SELECT username, uuid, enabled, enabled_time, enabled_wl, admin_disabled, "
                     "admin_disabled_wl, expires_at, bw_limit_gb, bw_used, wl_limit_gb, wl_used, "
                     "token, auth_token, auth_token_expires_at, fingerprint, displayname "
-                    "FROM users ORDER BY username"
+                    "FROM users WHERE username IN (SELECT value FROM json_each(?))",
+                    (json.dumps(list(names)),),
                 )
             ]
 
