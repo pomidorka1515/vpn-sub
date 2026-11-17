@@ -37,6 +37,7 @@ type TrafficRow = tuple[str, str, str, str, int, int]
 
 TRAFFIC_TTL = 15
 TRAFFIC_STALE_GRACE = 60
+TRAFFIC_RETRY_DELAY = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +118,7 @@ class PanelService(BaseService):
         self._traffic: dict[str, tuple[float, TrafficSnapshot]] = {}
         self._traffic_epoch: dict[str, int] = {}
         self._traffic_tasks: dict[str, asyncio.Task[TrafficSnapshot]] = {}
+        self._traffic_retry_at: dict[str, float] = {}
         self._traffic_refreshes = TaskRegistry()
 
     async def outcomes[T](
@@ -273,6 +275,7 @@ class PanelService(BaseService):
     def _publish_traffic(self, panel: XUiSession, epoch: int, snapshot: TrafficSnapshot) -> None:
         if epoch == self._traffic_epoch.get(panel.name, 0):
             self._traffic[panel.name] = (monotonic(), snapshot)
+            self._traffic_retry_at.pop(panel.name, None)
 
     @classmethod
     def _parse_traffic(
@@ -319,18 +322,27 @@ class PanelService(BaseService):
 
         Cold/expired reads coalesce before fanout admission, so reconnect storms
         cannot consume one fanout slot (or panel request) per subscription hit.
-        On refresh failure, optionally serve a sample for up to 60 seconds past expiry.
+        On refresh failure, optionally serve a sample for up to 60 seconds past expiry,
+        and reuse the failure for five seconds before retrying.
         Mutation invalidation prevents an in-flight old generation being reused.
         """
         cached = self._traffic.get(panel.name)
         if cached is not None and monotonic() - cached[0] < TRAFFIC_TTL:
             return cached[1]
         task = self._traffic_tasks.get(panel.name)
-        if task is None or task.done():
+        if task is None or (
+            task.done() and monotonic() >= self._traffic_retry_at.get(panel.name, 0)
+        ):
+            epoch = self._traffic_epoch.get(panel.name, 0)
 
             async def refresh() -> TrafficSnapshot:
-                results = await self.map_panels([panel], self._load_traffic, work=work)
-                return results[0][1]
+                try:
+                    results = await self.map_panels([panel], self._load_traffic, work=work)
+                    return results[0][1]
+                except Exception:
+                    if epoch == self._traffic_epoch.get(panel.name, 0):
+                        self._traffic_retry_at[panel.name] = monotonic() + TRAFFIC_RETRY_DELAY
+                    raise
 
             task = self._traffic_refreshes.create(refresh, name="panel:subscription-traffic")
             self._traffic_tasks[panel.name] = task
@@ -369,7 +381,8 @@ class PanelService(BaseService):
         self._online = None
         self._traffic_epoch[panel.name] = self._traffic_epoch.get(panel.name, 0) + 1
         self._traffic.pop(panel.name, None)
-        self._traffic_tasks.pop(panel.name, None)
+        if monotonic() >= self._traffic_retry_at.get(panel.name, 0):
+            self._traffic_tasks.pop(panel.name, None)
         await self._clients[panel.name].clear()
 
     async def invalidate_inbounds(self, panel: XUiSession) -> None:

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.services.panel import PanelService
+from core.services.panel import TRAFFIC_RETRY_DELAY, PanelService
 from custom_types import BandwidthInfo
 from errors import PanelUnavailableError
 from tests.support.panels import FakePanel, make_panel_client
@@ -138,13 +138,20 @@ async def test_subscription_bandwidth_filters_both_identities(database: Database
     assert all(panel.gets == ["panel/api/clients/list"] for panel in panels)
 
 
-async def test_failed_sample_is_not_cached(database: Database) -> None:
+async def test_failed_sample_retries_after_cooldown(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
     panel = FakePanel(get_error=PanelUnavailableError("offline"))
     sub = await make_subscription(database, panels=[panel])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
     with pytest.raises(PanelUnavailableError):
         await sub.panel_svc.subscription_traffic(sub.panels[0], "alice")
     panel._get_error = None
     panel.clients = [make_panel_client("alice", [1], up=1, down=2)]
+    with pytest.raises(PanelUnavailableError):
+        await sub.panel_svc.subscription_traffic(sub.panels[0], "alice")
+    clock += TRAFFIC_RETRY_DELAY
     assert await sub.panel_svc.subscription_traffic(sub.panels[0], "alice") is not None
 
 
@@ -166,11 +173,67 @@ async def test_failed_refresh_uses_stale_sample_only_within_grace(
         assert sub.panel_svc._traffic[client.name] == (100.0, snapshot)
         panel._get_error = None
         panel.clients = [make_panel_client("alice", [1], up=5, down=6)]
+        assert await sub.panel_svc.traffic_snapshot(client) is snapshot
+        clock += TRAFFIC_RETRY_DELAY
         refreshed = await sub.panel_svc.traffic_snapshot(client)
         assert refreshed.by_email["alice"][4:] == (5, 6)
     else:
         with pytest.raises(PanelUnavailableError, match="offline"):
             await sub.panel_svc.traffic_snapshot(client)
+
+
+async def test_retry_cooldown_is_per_panel_and_respects_stale_expiry(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panels = [
+        FakePanel(name="one", clients=[make_panel_client("alice", [1])]),
+        FakePanel(name="two", clients=[make_panel_client("alice", [1])]),
+    ]
+    sub = await make_subscription(database, panels=panels)
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    one, two = sub.panels
+    snapshot = await sub.panel_svc.traffic_snapshot(one)
+    await sub.panel_svc.traffic_snapshot(two)
+    clock += 74
+    panels[0]._get_error = PanelUnavailableError("offline")
+    assert await sub.panel_svc.traffic_snapshot(one) is snapshot
+    assert await sub.panel_svc.traffic_snapshot(one) is snapshot
+    with pytest.raises(PanelUnavailableError, match="offline"):
+        await sub.panel_svc.traffic_snapshot(one, allow_stale=False)
+    assert len(panels[0].gets) == 2
+    await sub.panel_svc.traffic_snapshot(two)
+    assert len(panels[1].gets) == 2
+    clock += 1
+    with pytest.raises(PanelUnavailableError, match="offline"):
+        await sub.panel_svc.traffic_snapshot(one)
+    assert len(panels[0].gets) == 2
+    clock += TRAFFIC_RETRY_DELAY - 1
+    with pytest.raises(PanelUnavailableError, match="offline"):
+        await sub.panel_svc.traffic_snapshot(one)
+    assert len(panels[0].gets) == 3
+
+
+async def test_invalidation_preserves_cooldown_without_serving_old_sample(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel = FakePanel(clients=[make_panel_client("alice", [1])])
+    sub = await make_subscription(database, panels=[panel])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    client = sub.panels[0]
+    await sub.panel_svc.traffic_snapshot(client)
+    clock += 15
+    panel._get_error = PanelUnavailableError("offline")
+    await sub.panel_svc.traffic_snapshot(client)
+    await sub.panel_svc.invalidate_clients(client)
+    with pytest.raises(PanelUnavailableError, match="offline"):
+        await sub.panel_svc.traffic_snapshot(client)
+    assert len(panel.gets) == 2
+    clock += TRAFFIC_RETRY_DELAY
+    panel._get_error = None
+    await sub.panel_svc.traffic_snapshot(client)
+    assert len(panel.gets) == 3
 
 
 @pytest.mark.parametrize("change", ["none", "expire", "invalidate"])
@@ -245,6 +308,78 @@ async def test_cancelling_waiter_does_not_return_stale_or_cancel_refresh(
     finally:
         release.set()
     assert await other is snapshot
+
+
+async def test_failed_refresh_after_all_waiters_cancel_still_backs_off(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sub = await make_subscription(database, panels=[FakePanel()])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    client = sub.panels[0]
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def fail(_panel: XUiSession) -> tuple[list[TrafficRow], TrafficSnapshot]:
+        nonlocal calls
+        calls += 1
+        entered.set()
+        await release.wait()
+        raise PanelUnavailableError("offline")
+
+    monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail)
+    waiter = asyncio.create_task(sub.panel_svc.traffic_snapshot(client))
+    try:
+        await entered.wait()
+        refresh = sub.panel_svc._traffic_tasks[client.name]
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+    finally:
+        release.set()
+    with pytest.raises(PanelUnavailableError, match="offline"):
+        await refresh
+    with pytest.raises(PanelUnavailableError, match="offline"):
+        await sub.panel_svc.traffic_snapshot(client)
+    assert calls == 1
+
+
+async def test_invalidated_old_failure_does_not_back_off_new_generation(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sub = await make_subscription(database, panels=[FakePanel()])
+    clock = 100.0
+    monkeypatch.setattr("core.services.panel.monotonic", lambda: clock)
+    client = sub.panels[0]
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    load = sub.panel_svc._load_traffic
+    calls = 0
+
+    async def fail_old(panel: XUiSession) -> tuple[list[TrafficRow], TrafficSnapshot]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            entered.set()
+            await release.wait()
+            raise PanelUnavailableError("offline")
+        return await load(panel)
+
+    monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail_old)
+    old = asyncio.create_task(sub.panel_svc.traffic_snapshot(client, allow_stale=False))
+    try:
+        await entered.wait()
+        await sub.panel_svc.invalidate_clients(client)
+        await sub.panel_svc.traffic_snapshot(client)
+    finally:
+        release.set()
+    with pytest.raises(PanelUnavailableError, match="offline"):
+        await old
+    assert client.name not in sub.panel_svc._traffic_retry_at
+    clock += 15
+    await sub.panel_svc.traffic_snapshot(client)
+    assert calls == 3
 
 
 async def test_invalidated_inflight_sample_cannot_repopulate_cache(
