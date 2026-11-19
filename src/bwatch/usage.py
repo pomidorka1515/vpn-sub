@@ -6,226 +6,203 @@ from typing import TYPE_CHECKING
 from ._base import WatchJobs
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from db.state import UsageBaselineKey, UsageBaselines
 
-    from custom_types import SweepUser
-    from db.state import UsageBaselines
-
-    from ._base import CounterKey
+    from ._base import Counters
 
 
 class UsageJobs(WatchJobs):
     """Durable per-panel bandwidth accounting and monthly rollover."""
 
-    async def _load_usage_baselines(self, states: Sequence[SweepUser]) -> str | None:
-        reset_month = await self.db.get_metadata("last_reset_month")
-        month, saved = await self.db.load_usage_baselines({state["username"] for state in states})
-        self._usage_month = month or reset_month
-        if month is not None:
-            self.mem, self.wl_mem = {}, {}
-            self._reset_mem, self._reset_wl_mem = {}, {}
-            identities = {state["username"]: state["uuid"] for state in states}
-            targets = {
-                "main": self.mem,
-                "whitelist": self.wl_mem,
-                "main_reset": self._reset_mem,
-                "whitelist_reset": self._reset_wl_mem,
-            }
-            for (kind, panel, name, uuid), value in saved.items():
-                if identities.get(name) == uuid:
-                    targets[kind][panel, name, uuid] = value
-        return reset_month
+    def _init_usage(self) -> None:
+        self.mem, self.wl_mem = {}, {}
+        self._reset_mem, self._reset_wl_mem = {}, {}
+        self._usage_month = None
+        self._usage_ready = False
+        self._usage_known: dict[str, str] = {}
+        self._usage_main: set[str] = set()
+        self._usage_wl: set[str] = set()
+        self._usage_keys: dict[str, set[UsageBaselineKey]] = {}
+        self._usage_stale: set[UsageBaselineKey] = set()
+
+    def _usage_counters(self) -> dict[str, Counters]:
+        return {
+            "main": self.mem,
+            "whitelist": self.wl_mem,
+            "main_reset": self._reset_mem,
+            "whitelist_reset": self._reset_wl_mem,
+        }
+
+    def _clear_usage_counters(self) -> None:
+        for counters in self._usage_counters().values():
+            counters.clear()
+        self._usage_keys.clear()
+        self._usage_stale.clear()
+
+    def _apply_usage_baselines(
+        self, changed: UsageBaselines, removed: set[UsageBaselineKey]
+    ) -> None:
+        targets = self._usage_counters()
+        for kind, panel, name, uuid in removed:
+            targets[kind].pop((panel, name, uuid), None)
+            if (keys := self._usage_keys.get(name)) is not None:
+                keys.discard((kind, panel, name, uuid))
+                if not keys:
+                    del self._usage_keys[name]
+        for (kind, panel, name, uuid), value in changed.items():
+            targets[kind][panel, name, uuid] = value
+            self._usage_keys.setdefault(name, set()).add((kind, panel, name, uuid))
+
+    async def _refresh_usage_cache(self, reset_month: str | None, *, full: bool = False) -> None:
+        full = full or not self._usage_ready
+        # Draining the dirty set is a commit too. If interrupted before the cache
+        # reflects it, the next poll must rebuild instead of losing invalidations.
+        self._usage_ready = False
+        dirty = await self.db.take_usage_changes()
+        if full or dirty:
+            if full:
+                states = await self.db.list_sweep_users(active=True)
+                saved_month, saved = await self.db.load_usage_baselines()
+                self._usage_month = saved_month or reset_month
+                self._clear_usage_counters()
+                self._usage_known.clear()
+                self._usage_main.clear()
+                self._usage_wl.clear()
+            else:
+                states = await self.db.list_sweep_users_for(dirty)
+                _, saved = await self.db.load_usage_baselines(dirty)
+                self._apply_usage_baselines(
+                    {}, {key for name in dirty for key in self._usage_keys.get(name, ())}
+                )
+                self._usage_main.difference_update(dirty)
+                self._usage_wl.difference_update(dirty)
+                for name in dirty:
+                    self._usage_known.pop(name, None)
+            for state in states:
+                name = state["username"]
+                if state["bw_limit_gb"]:
+                    self._usage_main.add(name)
+                if state["wl_limit_gb"]:
+                    self._usage_wl.add(name)
+                if name in self._usage_main or name in self._usage_wl:
+                    self._usage_known[name] = state["uuid"]
+            accepted: UsageBaselines = {}
+            for key, value in saved.items():
+                kind, _, name, uuid = key
+                metered = self._usage_main if kind.startswith("main") else self._usage_wl
+                if name in metered and self._usage_known[name] == uuid:
+                    accepted[key] = value
+                    self._usage_stale.discard(key)
+                else:
+                    self._usage_stale.add(key)
+            self._apply_usage_baselines(accepted, set())
+        self._usage_ready = True
 
     async def bandwidth_check(self) -> None:
         async def operation() -> None:
             sampled_at = datetime.now(UTC)
             month = sampled_at.strftime("%Y-%m")
-            states = await self.db.list_sweep_users(active=True)
-            known = {s["username"]: s["uuid"] for s in states}
-            # Per-panel reads omit outages so healthy panels and the independent
-            # whitelist pool can still commit, roll over, and run recovery checks.
-            main = (
-                await self.sub.bandwidth_svc.panel_traffic(work="background", known=known)
-                if any(s["bw_limit_gb"] for s in states)
-                else {}
-            )
-            wl = (
-                await self.sub.bandwidth_svc.panel_traffic(
-                    whitelist=True, work="background", known=known
-                )
-                if any(s["wl_limit_gb"] for s in states)
-                else {}
-            )
-            sampled = {s["username"]: s for s in states}
-            # A cancelled commit may have reached SQLite before cancellation.
-            reset_month = await self._load_usage_baselines(states)
+            reset_month = await self.db.get_metadata("last_reset_month")
             rollover = reset_month is not None and reset_month != month
-            candidates: set[str] = set()
-            if self._usage_month is None or self._usage_month == month:
-                for values, baseline, pending, limit in (
-                    (main, self.mem, self._reset_mem, False),
-                    (wl, self.wl_mem, self._reset_wl_mem, True),
-                ):
-                    for panel, readings in values.items():
-                        for name, current in readings.items():
-                            state = sampled.get(name)
-                            if state is None or not (
-                                state["wl_limit_gb"] if limit else state["bw_limit_gb"]
-                            ):
-                                continue
-                            key = (panel, name, state["uuid"])
-                            previous = baseline.get(key)
-                            candidate = pending.get(key)
-                            if previous is not None and (
-                                current.total > previous.total
-                                or (
-                                    current.total < previous.total
-                                    and candidate is not None
-                                    and current.total >= candidate.total
-                                    and current.total > 0
-                                )
-                            ):
-                                candidates.add(name)
+            await self._refresh_usage_cache(reset_month, full=rollover)
+            clear = self._usage_month is not None and self._usage_month != month
+            known = self._usage_known
+            changes: UsageBaselines = {}
+            removals: set[UsageBaselineKey] = set()
+            deltas: dict[str, list[int]] = {}
 
-            recovery_states: list[SweepUser] = states
+            for index, (kind, metered, baseline, pending) in enumerate(
+                (
+                    ("main", self._usage_main, self.mem, self._reset_mem),
+                    ("whitelist", self._usage_wl, self.wl_mem, self._reset_wl_mem),
+                )
+            ):
+                if not metered:
+                    continue
+                values = await self.sub.bandwidth_svc.panel_traffic(
+                    whitelist=index == 1, work="background", known=known
+                )
+                reset_kind = kind + "_reset"
+                if not clear:
+                    # Missing samples retain the baseline, but interrupt a reset
+                    # confirmation. Only outstanding reset keys need this check.
+                    removals.update(
+                        (reset_kind, panel, name, uuid)
+                        for panel, name, uuid in pending
+                        if name not in values.get(panel, {})
+                    )
+                for panel, readings in values.items():
+                    for name, current in readings.items():
+                        if name not in metered:
+                            continue
+                        key = (panel, name, known[name])
+                        previous = None if clear else baseline.get(key)
+                        candidate = None if clear else pending.get(key)
+                        delta = 0
+                        if previous is None or current.total >= previous.total:
+                            delta = int(current.total - previous.total) if previous else 0
+                        elif candidate is not None and current.total >= candidate.total:
+                            # Include all traffic since the reset, even bytes from
+                            # before the first low reading.
+                            delta = int(current.total)
+                        else:
+                            if current != candidate:
+                                changes[reset_kind, *key] = current
+                            continue
+                        if current != previous:
+                            changes[kind, *key] = current
+                        if candidate is not None:
+                            removals.add((reset_kind, *key))
+                        if delta:
+                            deltas.setdefault(name, [0, 0])[index] += delta
+
+            candidates = {key[2] for key in changes.keys() | removals}
+            period = (
+                (month, sampled_at.strftime("%Y-%m-%d"))
+                if reset_month != month or self._usage_month != month
+                else None
+            )
 
             async def commit() -> None:
-                nonlocal recovery_states
-                # A poll spanning midnight has no reliable monthly attribution.
-                # Leave its baselines untouched and rebaseline on the next poll.
+                # Cumulative counters cannot be attributed across midnight.
                 if datetime.now(UTC).strftime("%Y-%m") != month:
                     return
-                if rollover:
-                    # Rollover changes every account, so serialize it against all
-                    # sampled users and refresh their state before recovery.
-                    current_states = await self.db.list_sweep_users(active=True)
-                else:
-                    current_states = list(states)
-                    refreshed = {
-                        state["username"]: state
-                        for state in await self.db.list_sweep_users_for(candidates)
-                    }
-                    for name in candidates:
-                        current_states[next_index[name]] = refreshed.get(
-                            name, {**sampled[name], "uuid": ""}
-                        )
-                usage: dict[str, tuple[int, int]] = {}
-                next_main, next_wl = dict(self.mem), dict(self.wl_mem)
-                reset_main, reset_wl = dict(self._reset_mem), dict(self._reset_wl_mem)
-                if self._usage_month is not None and self._usage_month != month:
-                    # Cumulative counters cannot split cross-month traffic. Drop
-                    # old baselines (including missing panels and reset evidence)
-                    # instead of billing an outage's traffic to the new month.
-                    next_main, next_wl, reset_main, reset_wl = {}, {}, {}, {}
-                keys_by_name: dict[str, set[CounterKey]] = {}
-                for key in next_main.keys() | next_wl.keys() | reset_main.keys() | reset_wl.keys():
-                    keys_by_name.setdefault(key[1], set()).add(key)
-                for state in current_states:
-                    name = state["username"]
-                    if name not in sampled or sampled[name]["uuid"] != state["uuid"]:
-                        continue
-                    deltas: list[int] = []
-                    for limit, values, baseline, pending in (
-                        (
-                            state["bw_limit_gb"] and sampled[name]["bw_limit_gb"],
-                            main,
-                            next_main,
-                            reset_main,
-                        ),
-                        (
-                            state["wl_limit_gb"] and sampled[name]["wl_limit_gb"],
-                            wl,
-                            next_wl,
-                            reset_wl,
-                        ),
-                    ):
-                        delta = 0
-                        # Retain baselines across missing samples, but require two
-                        # consecutive low samples to confirm a reset.
-                        for key in keys_by_name.get(name, ()):
-                            if key[1] == name and (not limit or key[2] != state["uuid"]):
-                                baseline.pop(key, None)
-                                pending.pop(key, None)
-                            elif key[1] == name and values.get(key[0], {}).get(name) is None:
-                                pending.pop(key, None)
-                        for panel, readings in values.items() if limit else ():
-                            current = readings.get(name)
-                            if current is None:
-                                continue
-                            key = (panel, name, state["uuid"])
-                            previous = baseline.get(key)
-                            if previous is None or current.total >= previous.total:
-                                delta += (
-                                    int(current.total - previous.total)
-                                    if previous is not None
-                                    else 0
-                                )
-                                baseline[key] = current
-                                pending.pop(key, None)
-                            else:
-                                candidate = pending.get(key)
-                                if candidate is not None and current.total >= candidate.total:
-                                    # The reset zeroed this panel's counter. Include
-                                    # traffic already present in the first low read.
-                                    delta += int(current.total)
-                                    baseline[key] = current
-                                    pending.pop(key, None)
-                                else:
-                                    pending[key] = current
-                        deltas.append(delta)
-                    if any(deltas):
-                        usage[name] = (deltas[0], deltas[1])
-                identities = {state["username"]: state["uuid"] for state in current_states}
-                previous_baselines: UsageBaselines = {
-                    (kind, *key): value
-                    for kind, values in (
-                        ("main", self.mem),
-                        ("whitelist", self.wl_mem),
-                        ("main_reset", self._reset_mem),
-                        ("whitelist_reset", self._reset_wl_mem),
-                    )
-                    for key, value in values.items()
+                # A UUID or metering change during panel I/O stays dirty until
+                # the next poll. This also catches change-away-and-back races.
+                valid = {
+                    state["username"]
+                    for state in await self.db.list_sweep_users_for(candidates, clean_usage=True)
+                    if known.get(state["username"]) == state["uuid"]
                 }
-                current_baselines: UsageBaselines = {
-                    (kind, *key): value
-                    for kind, values in (
-                        ("main", next_main),
-                        ("whitelist", next_wl),
-                        ("main_reset", reset_main),
-                        ("whitelist_reset", reset_wl),
-                    )
-                    for key, value in values.items()
-                    if identities.get(key[1]) == key[2]
+                baselines = {key: value for key, value in changes.items() if key[2] in valid}
+                removed = {key for key in removals if key[2] in valid} | self._usage_stale
+                usage = {
+                    name: (delta[0], delta[1]) for name, delta in deltas.items() if name in valid
                 }
-                clear = self._usage_month is not None and self._usage_month != month
-                await self.db.increment_usages(
-                    usage,
-                    baselines={
-                        key: value
-                        for key, value in current_baselines.items()
-                        if clear or previous_baselines.get(key) != value
-                    },
-                    removed_baselines=previous_baselines.keys() - current_baselines.keys(),
-                    clear_baselines=clear,
-                    period=(month, sampled_at.strftime("%Y-%m-%d")),
-                )
-                self.mem, self.wl_mem = next_main, next_wl
-                self._reset_mem, self._reset_wl_mem = reset_main, reset_wl
-                for state in current_states:
-                    if rollover:
-                        state["bw_used"] = state["wl_used"] = 0
-                    regular, whitelist = usage.get(state["username"], (0, 0))
-                    state["bw_used"] += regular
-                    state["wl_used"] += whitelist
-                recovery_states = current_states
+                try:
+                    await self.db.increment_usages(
+                        usage,
+                        baselines=baselines,
+                        removed_baselines=removed,
+                        clear_baselines=clear,
+                        period=period,
+                    )
+                except BaseException:
+                    # Any failed acknowledgement (including cancellation) can
+                    # leave the commit outcome uncertain. SQLite is authoritative.
+                    self._usage_ready = False
+                    raise
+                if clear:
+                    self._clear_usage_counters()
+                self._apply_usage_baselines(baselines, removed)
+                self._usage_stale.clear()
+                self._usage_month = month
 
-            next_index = {state["username"]: index for index, state in enumerate(states)}
-            await self.sub.res.coordinator.run(
-                list(known) if rollover else sorted(candidates),
-                commit,
-                name="watcher:usage",
-            )
-            await self._recover_quotas(recovery_states)
+            if candidates or period is not None or self._usage_stale:
+                await self.sub.res.coordinator.run(
+                    list(known) if rollover else sorted(candidates), commit, name="watcher:usage"
+                )
+            await self._recover_quotas()
 
         await self._job("bandwidth", operation)
 

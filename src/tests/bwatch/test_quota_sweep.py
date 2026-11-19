@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from itertools import product
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
@@ -8,6 +9,7 @@ import pytest
 
 from bwatch.watch import BWatch
 from custom_types import BandwidthInfo
+from db.users import USAGE_RECOVERY_SQL
 from notify import Kind, Notifier
 from tests.support.panels import FakePanel, make_panel_client
 from tests.support.subscriptions import close_subscription, make_subscription
@@ -18,8 +20,40 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
+async def test_indexed_recovery_matches_quota_rules(database: Database) -> None:
+    now = 1_800_000_000
+    quotas = ((0, 10**9), (1, 10**9 - 1), (1, 10**9), (1, 10**9 + 1))
+    combinations = product(product((0, 1), repeat=5), (0, now - 1, now, now + 1), quotas, quotas)
+    rows: list[tuple[object, ...]] = []
+    pending: set[str] = set()
+    for number, (flags, expiry, main, whitelist) in enumerate(combinations):
+        name = f"user{number:05}"
+        rows.append((name, name, name, *flags, expiry, *main, *whitelist))
+        if number % 13 == 0:
+            pending.add(name)
+    async with database.transaction(immediate=True) as conn:
+        await conn.executemany(
+            "INSERT INTO users (username, uuid, token, enabled, enabled_time, enabled_wl, "
+            "admin_disabled, admin_disabled_wl, expires_at, bw_limit_gb, bw_used, "
+            "wl_limit_gb, wl_used, fingerprint, displayname) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'chrome', 'User')",
+            rows,
+        )
+        await conn.executemany(
+            "INSERT INTO app_metadata(key, value) VALUES (?, '{}')",
+            [(f"user_sync_pending:{name}",) for name in pending | {"deleted-user"}],
+        )
+    expected = set(pending)
+    for state in await database.list_sweep_users():
+        main_recovery, _, wl_recovery, _ = BWatch._recovery(state, now)
+        if main_recovery is not None or wl_recovery is not None:
+            expected.add(state["username"])
+    assert await database.usage_recovery_users(now) == sorted(expected)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("notifications", [False, True])
-async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
+async def test_steady_poll_skips_bulk_reads_at_10k_users(
     database: Database, monkeypatch: pytest.MonkeyPatch, notifications: bool
 ) -> None:
     # Active, expired, exhausted and explicitly disabled accounts are all no-ops.
@@ -49,8 +83,14 @@ async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
         if notifications
         else None
     )
+    async with database.connection() as conn:
+        plan = await conn.rows(f"EXPLAIN QUERY PLAN {USAGE_RECOVERY_SQL}", (now,))
+    steps = [str(row[3]) for row in plan]
+    assert sum("idx_users_usage_main_recovery" in step for step in steps) == 2, steps
+    assert any("idx_users_usage_wl_recovery" in step for step in steps), steps
     watch = BWatch(sub.res.cfg, database, sub, notifier=notifier, scheduled=False)
-    traffic = AsyncMock(return_value={"panel": {"user00000": BandwidthInfo(100, 0, 100)}})
+    readings = {f"user{number:05}": BandwidthInfo(100, 0, 100) for number in range(10_000)}
+    traffic = AsyncMock(return_value={"panel": readings})
     monkeypatch.setattr(sub.bandwidth_svc, "panel_traffic", traffic)
     try:
         await watch.bandwidth_check()
@@ -59,19 +99,24 @@ async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
         metadata = AsyncMock(wraps=database.get_metadata)
         bulk_metadata = AsyncMock(wraps=database.list_metadata)
         states = AsyncMock(wraps=database.list_sweep_users)
+        targeted = AsyncMock(wraps=database.list_sweep_users_for)
+        baselines = AsyncMock(wraps=database.load_usage_baselines)
         increment = AsyncMock(wraps=database.increment_usages)
         monkeypatch.setattr(watch, "_quota", quota)
         monkeypatch.setattr(database, "get_user", get_user)
         monkeypatch.setattr(database, "get_metadata", metadata)
         monkeypatch.setattr(database, "list_metadata", bulk_metadata)
         monkeypatch.setattr(database, "list_sweep_users", states)
+        monkeypatch.setattr(database, "list_sweep_users_for", targeted)
+        monkeypatch.setattr(database, "load_usage_baselines", baselines)
         monkeypatch.setattr(database, "increment_usages", increment)
         for total, updates in ((100, {}), (140, {"user00000": (40, 0)}), (140, {})):
-            traffic.return_value = {"panel": {"user00000": BandwidthInfo(total, 0, total)}}
+            readings["user00000"] = BandwidthInfo(total, 0, total)
             await watch.bandwidth_check()
             quota.assert_not_awaited()
             get_user.assert_not_awaited()
-            states.assert_awaited_once()
+            states.assert_not_awaited()
+            baselines.assert_not_awaited()
             assert traffic.await_args is not None
             known = traffic.await_args.kwargs["known"]
             assert len(known) == 10_000
@@ -80,12 +125,18 @@ async def test_quiet_sweep_has_constant_database_calls_at_10k_users(
                 "last_reset_month",
             ]
             assert [call.args[0] for call in bulk_metadata.await_args_list] == [
-                "user_sync_pending:",
                 *(["user_notifications_pending:"] if notifications else []),
             ]
-            assert increment.await_args is not None
-            assert increment.await_args.args[0] == updates
-            states.reset_mock()
+            if updates:
+                targeted.assert_awaited_once_with({"user00000"}, clean_usage=True)
+                assert increment.await_count == 1
+                assert increment.await_args is not None
+                assert increment.await_args.args[0] == updates
+            else:
+                targeted.assert_not_awaited()
+                increment.assert_not_awaited()
+            targeted.reset_mock()
+            increment.reset_mock()
             metadata.reset_mock()
             bulk_metadata.reset_mock()
         await watch.check()

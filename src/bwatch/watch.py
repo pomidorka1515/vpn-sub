@@ -63,11 +63,7 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
         self.notifier, self.alert = notifier, alert
         self.scheduled, self.verbose = scheduled, verbose
         self.log = Logger(type(self).__name__)
-        self.mem: Counters = {}
-        self.wl_mem: Counters = {}
-        self._reset_mem: Counters = {}
-        self._reset_wl_mem: Counters = {}
-        self._usage_month: str | None = None
+        self._init_usage()
         self.snap_mem: Counters = {}
         self.snap_wl_mem: Counters = {}
         self._snap_reset_mem: Counters = {}
@@ -94,7 +90,7 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
         self._failure = await self._load_failure()
         await self._scan_notifications()
         states = await self.sub.user_svc.list_user_states()
-        await self._load_usage_baselines(states)
+        await self._refresh_usage_cache(await self.db.get_metadata("last_reset_month"))
         has_snapshot_baselines = await self._load_snapshot_baselines(states)
         if not self.scheduled:
             self._started = True

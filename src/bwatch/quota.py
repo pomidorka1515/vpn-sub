@@ -341,24 +341,14 @@ class QuotaJobs(WatchJobs):
         notices = restored(main=restored_main, whitelist=whitelist is True, time=timing is True)
         return main, timing, whitelist, notices
 
-    async def _recover_quotas(self, states: list[SweepUser]) -> None:
-        # This snapshot selects candidates only; _quota revalidates under the lock.
-        pending = await self.db.list_metadata("user_sync_pending:")
-        now = int(time.time())
-        attempted: set[str] = set()
-        for state in states:
-            main, _, whitelist, _ = self._recovery(state, now)
-            if (
-                main is not None
-                or whitelist is not None
-                or f"user_sync_pending:{state['username']}" in pending
-            ):
-                # Selection is only a hint: _quota rereads under the user lock.
-                attempted.add(state["username"])
-                await self._quota(state["username"], recover=True)
+    async def _recover_quotas(self) -> None:
+        # Selection is only a hint: _quota rereads under the user lock.
+        candidates = await self.db.usage_recovery_users(int(time.time()))
+        for name in candidates:
+            await self._quota(name, recover=True)
         # Delivery has its own durable dirty set; unchanged users with unsent
         # notices must still retry, without probing every user's metadata.
-        await self._scan_notifications(exclude=attempted)
+        await self._scan_notifications(exclude=set(candidates))
 
     async def _quota(self, username: str, *, recover: bool) -> None:
         async def operation() -> None:

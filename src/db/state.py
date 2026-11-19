@@ -72,6 +72,17 @@ class StateMixin(ConnectionMixin):
     async def increment_usage(self, username: str, *, regular: int = 0, whitelist: int = 0) -> None:
         await self.increment_usages({username: (regular, whitelist)})
 
+    async def take_usage_changes(self) -> set[str]:
+        # Keep quiet polls off the writer entirely. A write after the empty
+        # check stays queued and changed samples revalidate against the queue.
+        async with self.connection() as conn:
+            if await conn.row("SELECT 1 FROM usage_dirty LIMIT 1") is None:
+                return set()
+        async with self.transaction(immediate=True) as conn:
+            return {
+                str(row[0]) for row in await conn.rows("DELETE FROM usage_dirty RETURNING username")
+            }
+
     async def load_usage_baselines(
         self, names: Collection[str] | None = None
     ) -> tuple[str | None, UsageBaselines]:

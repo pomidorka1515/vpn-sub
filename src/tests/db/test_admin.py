@@ -9,6 +9,7 @@ import pytest
 
 from db import Database
 from db.admin import AdminIdentity
+from tests.support.schema import drop_usage_cache_schema
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -25,6 +26,7 @@ async def test_schema_7_upgrade_preserves_users_codes_and_root_session(
     await database.set_admin_ui_session("legacy-root-session")
     await database.close()
     with sqlite3.connect(db_path) as conn:
+        drop_usage_cache_schema(conn)
         conn.execute("DROP TRIGGER usage_baselines_identity")
         conn.execute("DROP TABLE usage_baselines")
         conn.execute("DROP TABLE admin_sessions")

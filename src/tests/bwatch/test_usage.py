@@ -309,8 +309,10 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
             bw_limit_gb=10,
             wl_limit_gb=0,
         )
+        await db.increment_usages(
+            {}, baselines={("main", "panel", "alice", USER_UUID): BandwidthInfo(10, 20, 30)}
+        )
         await watch.start()
-        watch.mem["panel", "alice", USER_UUID] = BandwidthInfo(10, 20, 30)
 
         async def traffic(
             whitelist: bool = False,
@@ -527,8 +529,9 @@ async def test_usage_baselines_do_not_cross_account_identities(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("restore_identity", [False, True])
 async def test_usage_revalidates_identity_changed_during_panel_read(
-    database: Database, monkeypatch: pytest.MonkeyPatch
+    database: Database, monkeypatch: pytest.MonkeyPatch, restore_identity: bool
 ) -> None:
     await database.create_user(
         username="alice",
@@ -552,6 +555,8 @@ async def test_usage_revalidates_identity_changed_during_panel_read(
     ) -> dict[str, dict[str, BandwidthInfo]]:
         if changed:
             await database.update_user("alice", uuid="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+            if restore_identity:
+                await database.update_user("alice", uuid=USER_UUID)
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
     monkeypatch.setattr(sub.bandwidth_svc, "panel_traffic", traffic)
@@ -567,6 +572,115 @@ async def test_usage_revalidates_identity_changed_during_panel_read(
     finally:
         await watch.close()
         await close_subscription(sub)
+
+
+@pytest.mark.asyncio
+async def test_usage_refreshes_metering_membership_without_full_scan(
+    database: Database, watch: BWatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await database.create_user(
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=1,
+        wl_limit_gb=1,
+    )
+    traffic = AsyncMock(return_value={"panel": {"alice": BandwidthInfo(100, 0, 100)}})
+    monkeypatch.setattr(watch.sub.bandwidth_svc, "panel_traffic", traffic)
+    await watch.bandwidth_check()
+    scans = AsyncMock(wraps=database.list_sweep_users)
+    monkeypatch.setattr(database, "list_sweep_users", scans)
+    await database.update_user("alice", bw_limit=0)
+    await database.update_user("alice", bw_limit=1)
+    traffic.return_value = {"panel": {"alice": BandwidthInfo(200, 0, 200)}}
+    await watch.bandwidth_check()
+    state = await database.get_user("alice")
+    assert state is not None
+    assert (state["bw_used"], state["wl_used"]) == (0, 100)
+    await database.delete_user("alice")
+    await watch.bandwidth_check()
+    assert not watch.mem
+    assert not watch.wl_mem
+    scans.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [asyncio.CancelledError, RuntimeError])
+async def test_usage_reloads_after_failed_commit_acknowledgement(
+    database: Database,
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: type[BaseException],
+) -> None:
+    await database.create_user(
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=1,
+    )
+    traffic = AsyncMock(return_value={"panel": {"alice": BandwidthInfo(100, 0, 100)}})
+    monkeypatch.setattr(watch.sub.bandwidth_svc, "panel_traffic", traffic)
+    await watch.bandwidth_check()
+    increment = database.increment_usages
+
+    async def commit_then_fail(*args: object, **kwargs: object) -> None:
+        await increment(*args, **kwargs)  # type: ignore[arg-type]
+        raise failure
+
+    traffic.return_value = {"panel": {"alice": BandwidthInfo(140, 0, 140)}}
+    with monkeypatch.context() as patch:
+        patch.setattr(database, "increment_usages", commit_then_fail)
+        with pytest.raises(failure):
+            await watch.bandwidth_check()
+    await watch.bandwidth_check()
+    traffic.return_value = {"panel": {"alice": BandwidthInfo(150, 0, 150)}}
+    await watch.bandwidth_check()
+    state = await database.get_user("alice")
+    assert state is not None
+    assert state["bw_used"] == 50
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [asyncio.CancelledError, RuntimeError])
+async def test_usage_rebuilds_after_interrupted_dirty_refresh(
+    database: Database,
+    watch: BWatch,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: type[BaseException],
+) -> None:
+    await database.create_user(
+        username="alice",
+        uuid=USER_UUID,
+        token="a" * 40,
+        fingerprint="chrome",
+        displayname="Alice",
+        bw_limit_gb=1,
+    )
+    traffic = AsyncMock(return_value={"panel": {"alice": BandwidthInfo(100, 0, 100)}})
+    monkeypatch.setattr(watch.sub.bandwidth_svc, "panel_traffic", traffic)
+    await watch.bandwidth_check()
+    await database.update_user("alice", bw_limit=0)
+    await database.update_user("alice", bw_limit=1)
+    with monkeypatch.context() as patch:
+        patch.setattr(database, "load_usage_baselines", AsyncMock(side_effect=failure))
+        with pytest.raises(failure):
+            await watch.bandwidth_check()
+    # The invalidation has already been drained; a targeted retry would lose it.
+    assert await database.take_usage_changes() == set()
+    scans = AsyncMock(wraps=database.list_sweep_users)
+    monkeypatch.setattr(database, "list_sweep_users", scans)
+    traffic.return_value = {"panel": {"alice": BandwidthInfo(200, 0, 200)}}
+    await watch.bandwidth_check()
+    scans.assert_awaited_once_with(active=True)
+    traffic.return_value = {"panel": {"alice": BandwidthInfo(230, 0, 230)}}
+    await watch.bandwidth_check()
+    state = await database.get_user("alice")
+    assert state is not None
+    assert state["bw_used"] == 30
 
 
 @pytest.mark.asyncio

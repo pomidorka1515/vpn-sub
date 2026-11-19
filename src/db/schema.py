@@ -7,7 +7,7 @@ from errors import MigrationError
 
 from .admin import ADMIN_SCHEMA
 from .common import ConnectionMixin
-from .users import USAGE_SWEEP_PREDICATE
+from .users import USAGE_MAIN_RECOVERY, USAGE_SWEEP_PREDICATE, USAGE_WHITELIST_RECOVERY
 
 USAGE_BASELINES_SCHEMA = (
     """CREATE TABLE usage_baselines (
@@ -25,6 +25,28 @@ USAGE_BASELINES_SCHEMA = (
        WHEN OLD.uuid != NEW.uuid BEGIN
            DELETE FROM usage_baselines WHERE username = NEW.username;
        END""",
+)
+
+USAGE_CACHE_SCHEMA = (
+    "CREATE TABLE usage_dirty (username TEXT PRIMARY KEY) WITHOUT ROWID",
+    """CREATE TRIGGER usage_dirty_insert AFTER INSERT ON users BEGIN
+           INSERT INTO usage_dirty VALUES (NEW.username) ON CONFLICT DO NOTHING;
+       END""",
+    """CREATE TRIGGER usage_dirty_delete AFTER DELETE ON users BEGIN
+           INSERT INTO usage_dirty VALUES (OLD.username) ON CONFLICT DO NOTHING;
+       END""",
+    """CREATE TRIGGER usage_dirty_update AFTER UPDATE OF uuid, bw_limit_gb, wl_limit_gb ON users
+       WHEN OLD.uuid != NEW.uuid OR (OLD.bw_limit_gb = 0) != (NEW.bw_limit_gb = 0)
+           OR (OLD.wl_limit_gb = 0) != (NEW.wl_limit_gb = 0) BEGIN
+           INSERT INTO usage_dirty VALUES (NEW.username) ON CONFLICT DO NOTHING;
+           DELETE FROM usage_baselines WHERE username = NEW.username AND (
+               (NEW.bw_limit_gb = 0 AND kind IN ('main', 'main_reset')) OR
+               (NEW.wl_limit_gb = 0 AND kind IN ('whitelist', 'whitelist_reset'))
+           );
+       END""",
+    "CREATE INDEX idx_users_usage_main_recovery ON users(expires_at, username) WHERE "
+    + USAGE_MAIN_RECOVERY,
+    "CREATE INDEX idx_users_usage_wl_recovery ON users(username) WHERE " + USAGE_WHITELIST_RECOVERY,
 )
 
 SCHEMA_STATEMENTS = (
@@ -87,6 +109,7 @@ SCHEMA_STATEMENTS = (
     )""",
     "INSERT INTO app_metadata(key, value) VALUES ('admin_ui_session', '')",
     *USAGE_BASELINES_SCHEMA,
+    *USAGE_CACHE_SCHEMA,
     """CREATE TABLE bandwidth_snapshots (
         username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
         ts INTEGER NOT NULL,
@@ -107,7 +130,7 @@ SCHEMA_STATEMENTS = (
 
 
 class SchemaMixin(ConnectionMixin):
-    SCHEMA_VERSION = 9
+    SCHEMA_VERSION = 10
 
     async def initialize(self) -> None:
         async with self.transaction(immediate=True) as conn:
@@ -263,6 +286,10 @@ class SchemaMixin(ConnectionMixin):
                         json.JSONDecodeError,
                     ) as exc:
                         raise MigrationError("invalid legacy usage baselines metadata") from exc
+                version = 9
+            if version == 9:
+                for statement in USAGE_CACHE_SCHEMA:
+                    await conn.execute(statement)
             # Additive query acceleration, also installed for restored databases.
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_users_usage_sweep ON users(username) WHERE "

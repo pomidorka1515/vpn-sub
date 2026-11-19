@@ -18,6 +18,22 @@ USAGE_SWEEP_PREDICATE = (
     "OR enabled = 0 OR enabled_time = 0 OR enabled_wl = 0 "
     "OR admin_disabled = 1 OR admin_disabled_wl = 1"
 )
+USAGE_WHITELIST_RECOVERY = (
+    "(enabled_wl = 0 AND admin_disabled_wl = 0 "
+    "AND (wl_limit_gb = 0 OR wl_used < wl_limit_gb * 1000000000))"
+)
+USAGE_MAIN_RECOVERY = (
+    "enabled_time = 0 OR (enabled = 0 AND admin_disabled = 0 "
+    "AND (bw_limit_gb = 0 OR bw_used < bw_limit_gb * 1000000000))"
+)
+USAGE_RECOVERY_SQL = (
+    f"SELECT username FROM users WHERE ({USAGE_MAIN_RECOVERY}) AND expires_at = 0 "
+    f"UNION SELECT username FROM users WHERE ({USAGE_MAIN_RECOVERY}) AND expires_at > ? "
+    "UNION SELECT username FROM users INDEXED BY idx_users_usage_wl_recovery "
+    f"WHERE {USAGE_WHITELIST_RECOVERY} "
+    "UNION SELECT username FROM users WHERE username IN ("
+    "SELECT substr(key, 19) FROM app_metadata WHERE key GLOB 'user_sync_pending:*')"
+)
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -79,7 +95,9 @@ class UsersMixin(ConnectionMixin):
                 query += " ORDER BY username"
             return [cast(SweepUser, dict(row)) for row in await conn.rows(query)]
 
-    async def list_sweep_users_for(self, names: Collection[str]) -> list[SweepUser]:
+    async def list_sweep_users_for(
+        self, names: Collection[str], *, clean_usage: bool = False
+    ) -> list[SweepUser]:
         if not names:
             return []
         async with self.connection() as conn:
@@ -88,10 +106,22 @@ class UsersMixin(ConnectionMixin):
                 for row in await conn.rows(
                     "SELECT username, uuid, enabled, enabled_time, enabled_wl, admin_disabled, "
                     "admin_disabled_wl, expires_at, bw_limit_gb, bw_used, wl_limit_gb, wl_used "
-                    "FROM users WHERE username IN (SELECT value FROM json_each(?))",
+                    "FROM users WHERE username IN (SELECT value FROM json_each(?))"
+                    + (
+                        " AND NOT EXISTS (SELECT 1 FROM usage_dirty WHERE username = users.username)"
+                        if clean_usage
+                        else ""
+                    ),
                     (json.dumps(list(names)),),
                 )
             ]
+
+    async def usage_recovery_users(self, now: int) -> list[str]:
+        async with self.connection() as conn:
+            rows = await conn.rows(USAGE_RECOVERY_SQL, (now,))
+        # ORDER BY on the compound query can make SQLite scan the username
+        # index instead of using the expiry range on the sparse recovery index.
+        return sorted(str(row[0]) for row in rows)
 
     async def list_update_users(self, names: Collection[str]) -> list[UpdateUser]:
         if not names:

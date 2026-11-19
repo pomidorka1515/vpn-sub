@@ -24,6 +24,7 @@ from db import Database
 from db.backup import do_backup, instance_backup_dir, prune_backups
 from db.schema import SCHEMA_STATEMENTS, SchemaMixin
 from loggers import Logger
+from tests.support.schema import drop_usage_cache_schema
 
 type BackupKind = Literal["json", "jsonl", "sqlite3"]
 
@@ -505,6 +506,8 @@ async def test_supported_schema_snapshot_can_be_restored(tmp_path: Path, version
     await database.set_metadata("saved", "value")
     await database.close()
     with sqlite3.connect(source) as connection:
+        if version < 10:
+            drop_usage_cache_schema(connection)
         if version < 9:
             connection.execute("DROP TRIGGER usage_baselines_identity")
             connection.execute("DROP TABLE usage_baselines")

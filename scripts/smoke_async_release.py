@@ -204,7 +204,9 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                         if response.status != 200 or "<html" not in (await response.text()).lower():
                             raise RuntimeError("bundled admin template did not render")
                     for path, content_type, signature in (
-                        ("/sub/admin/main.js", "text/javascript", b"bootstrap"),
+                        # Application identifiers are intentionally obfuscated;
+                        # build tests validate the generated JavaScript itself.
+                        ("/sub/admin/main.js", "text/javascript", None),
                         ("/sub/admin/chart.umd.min.js", "text/javascript", b"Chart.js"),
                         ("/sub/admin/main.css", "text/css", b".tab"),
                         ("/sub/admin/charts.css", "text/css", b".chart"),
@@ -233,10 +235,12 @@ async def smoke(command: Sequence[str], directory: Path, *, checkout: bool) -> N
                             f"http://127.0.0.1:{http_port}{path}",
                             cookies={"admin_ui": cookie} if private else {},
                         ) as response:
+                            body = await response.read()
                             if (
                                 response.status != 200
                                 or response.content_type != content_type
-                                or signature not in await response.read()
+                                or not body
+                                or (signature is not None and signature not in body)
                             ):
                                 raise RuntimeError(f"bundled frontend asset failed: {path}")
                             if private and response.headers.get("Cache-Control") != "no-store":
