@@ -197,7 +197,7 @@ class AdminCodesMixin(AdminFeatureMixin):
             gb = int(values.get(f"gb:{generation}", "").strip())
             wl_gb = int(values.get(f"wl_gb:{generation}", "").strip())
             if min(days, gb, wl_gb) < 0:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(
                 interaction, "❌ Введите число.", view=self._code_retry_view(generation, "days")
@@ -216,7 +216,7 @@ class AdminCodesMixin(AdminFeatureMixin):
         try:
             uses = int(self.modal_values(interaction).get(f"uses:{generation}", "").strip())
             if uses < 1:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(
                 interaction,
@@ -270,10 +270,10 @@ class AdminCodesMixin(AdminFeatureMixin):
                 interaction, "⚠️ Не удалось создать код. Повторите попытку.", view=view
             )
             return
-        except BaseException:
+        except BaseException as exc:
             if self._pending_codes.get(interaction.user.id) is pending:
                 pending["stage"] = previous_stage
-            raise
+            raise exc from None
         if self._pending_codes.get(interaction.user.id) is pending:
             self._pending_codes.pop(interaction.user.id, None)
         await self._respond(

@@ -33,7 +33,7 @@ class DiscordLanguage:
     def snapshot(self) -> DiscordLangConfig:
         language = self.language.snapshot().get("discord")
         if language is None:
-            raise ValueError("Discord language section missing from lang.jsonc")
+            raise ValueError("Discord language section missing from lang.jsonc") from None
         return language
 
 
@@ -91,7 +91,7 @@ class DiscordApplication:
         self.client.attach(public, admin)
         section = conf.get("discord")
         if section is None:
-            raise RuntimeError("Discord configuration missing")
+            raise RuntimeError("Discord configuration missing") from None
         await self.client.login(section["token"])
         self.runner = self.tasks.create(lambda: self.client.connect(reconnect=True), name="discord")
 

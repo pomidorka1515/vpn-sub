@@ -122,7 +122,7 @@ class PublicLoginMixin(PublicFeatureMixin):
             token = await self.sub.account_svc.login(username, password)
         except AppError as error:
             if error.status != 401:
-                raise
+                raise error from None
             await self._reply_key(interaction, "login_fail")
             return
         self.sessions.set_token(uid, token)
@@ -157,7 +157,7 @@ class PublicLoginMixin(PublicFeatureMixin):
             ("code", code, 64),
         ):
             if not 1 <= len(value) <= maximum:
-                raise ValidationError(f"'{field}' must be 1-{maximum} characters")
+                raise ValidationError(f"'{field}' must be 1-{maximum} characters") from None
         await self.sub.business_code_svc.register_with_code(
             code=code,
             username=f"web_{uuid4().hex[:16]}",

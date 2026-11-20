@@ -117,5 +117,5 @@ class DiscordIOMixin(PublicFeatureMixin):
         if username is None:
             if session.token and self.sessions.get(user_id).generation is session.generation:
                 self.sessions.clear_token(user_id)
-            raise SessionExpiredError
+            raise SessionExpiredError from None
         return username

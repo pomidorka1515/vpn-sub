@@ -39,7 +39,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
         try:
             days = int(values.get("days", "").strip())
             if not 1 <= days <= 90:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(
                 interaction,

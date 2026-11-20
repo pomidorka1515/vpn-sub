@@ -57,7 +57,7 @@ class DiscordAdminBot(
             conf = cfg.view()
             section = conf.get("discord")
             if section is None:
-                raise RuntimeError("Discord configuration missing")
+                raise RuntimeError("Discord configuration missing") from None
             whitelist = section["whitelist"]
             self.admin_uids = [int(item) for item in whitelist]
             self._pending_codes: dict[int, dict[str, str | int | bool]] = {}

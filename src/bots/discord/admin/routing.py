@@ -303,10 +303,10 @@ class AdminRoutingMixin(AdminFeatureMixin):
         self._pending_codes[interaction.user.id] = pending
         try:
             await self._send_code_modal(interaction, generation, "name")
-        except BaseException:
+        except BaseException as exc:
             if self._pending_codes.get(interaction.user.id) is pending:
                 self._pending_codes.pop(interaction.user.id, None)
-            raise
+            raise exc from None
 
     async def _handle_panel_status(self, data: str, interaction: discord.Interaction) -> None:
         del data
@@ -325,13 +325,13 @@ class AdminRoutingMixin(AdminFeatureMixin):
         pending.update(type=code_type, stage="days")
         try:
             await self._send_code_modal(interaction, generation, "days")
-        except BaseException:
+        except BaseException as exc:
             if (
                 self._pending_codes.get(interaction.user.id) is pending
                 and pending.get("stage") == "days"
             ):
                 pending["stage"] = "type"
-            raise
+            raise exc from None
 
     async def _handle_code_perma(self, data: str, interaction: discord.Interaction) -> None:
         selection, _, generation = data.removeprefix("admin:code_perma:").partition(":")
@@ -352,13 +352,13 @@ class AdminRoutingMixin(AdminFeatureMixin):
         pending["stage"] = "uses"
         try:
             await self._send_code_modal(interaction, generation, "uses")
-        except BaseException:
+        except BaseException as exc:
             if (
                 self._pending_codes.get(interaction.user.id) is pending
                 and pending.get("stage") == "uses"
             ):
                 pending["stage"] = "perma"
-            raise
+            raise exc from None
 
     async def _handle_code_cancel(self, data: str, interaction: discord.Interaction) -> None:
         stage, _, generation = data.removeprefix("admin:code_cancel:").partition(":")

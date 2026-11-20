@@ -89,7 +89,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         try:
             window = int(self.modal_values(interaction).get("window", "").strip())
             if window < 0:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(
                 interaction,

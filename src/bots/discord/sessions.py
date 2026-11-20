@@ -66,7 +66,7 @@ class DatabaseSessionStore:
             )
         raw: object = json.loads(payload or "{}")
         if not isinstance(raw, dict):
-            raise ValueError("Discord sessions must be an object")
+            raise ValueError("Discord sessions must be an object") from None
         for key, value in cast(dict[str, object], raw).items():
             if isinstance(value, dict):
                 value = cast(dict[str, object], value)

@@ -605,7 +605,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             limit = int(values.get("limit", "0").strip())
             days = int(values.get("days", "0").strip())
             if min(limit, days) < 0:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(
                 interaction,
@@ -640,7 +640,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             limit = int(self.modal_values(interaction).get("limit", "").strip())
             if limit < 0:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
@@ -665,7 +665,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             wl_limit = int(self.modal_values(interaction).get("wl_limit", "").strip())
             if wl_limit < 0:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
@@ -690,7 +690,7 @@ class AdminUsersMixin(AdminFeatureMixin):
         try:
             days = int(self.modal_values(interaction).get("days", "").strip())
             if days < 0:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self._respond(interaction, "❌ Введите число.", view=self.main_menu_view())
             return
