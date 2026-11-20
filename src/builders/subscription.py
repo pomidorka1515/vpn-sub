@@ -245,7 +245,7 @@ async def get_subscription(
 
     if is_happ or force_json == "1":
         headers["Content-Type"] = "application/json"
-        response, status = _private_response(
+        response, response_status = _private_response(
             Response(
                 response=builders.build_json(
                     cfg=cfg,
@@ -260,9 +260,9 @@ async def get_subscription(
             ),
             200,
         )
-        return await _store_response(obj, cache_key, response, status)
+        return await _store_response(obj, cache_key, response, response_status)
 
-    response, status = _private_response(
+    response, response_status = _private_response(
         Response(
             builders.build_link_array(
                 cfg=cfg,
@@ -281,4 +281,4 @@ async def get_subscription(
         ),
         200,
     )
-    return await _store_response(obj, cache_key, response, status)
+    return await _store_response(obj, cache_key, response, response_status)
