@@ -165,6 +165,14 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
   ) {
     issues.push(issue('panel_alert_cooldown', t('config_err_positive_integer')));
   }
+  ['subscription_token_limit', 'subscription_ip_limit'].forEach((key) => {
+    if (
+      Object.hasOwn(draft, key) &&
+      (!isInteger(draft[key]) || Number(draft[key]) < 1 || Number(draft[key]) > 1000000)
+    ) {
+      issues.push(issue(key, t('config_err_rate_limit')));
+    }
+  });
   if (
     Object.hasOwn(draft, 'db_connections') &&
     (!isInteger(draft['db_connections']) || Number(draft['db_connections']) < 1 || Number(draft['db_connections']) > 10)

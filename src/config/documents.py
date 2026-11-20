@@ -120,6 +120,8 @@ AppConfig = TypedDict(
         "uri": str,
         "api_token": str,
         "provider_id": str,
+        "subscription_token_limit": NotRequired[int],
+        "subscription_ip_limit": NotRequired[int],
         "salt": str,
         "domain": str,
         "ping_check_url": str,

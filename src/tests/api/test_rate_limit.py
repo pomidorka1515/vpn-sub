@@ -187,7 +187,11 @@ async def test_subscription_limits_token_and_ip(
     from util import ok
 
     sub = MagicMock()
-    sub.res.cfg.view.return_value = {"uri": "/sub/"}
+    sub.res.cfg.view.return_value = {
+        "uri": "/sub/",
+        "subscription_token_limit": 60,
+        "subscription_ip_limit": 600,
+    }
 
     async def build(*args: object, **kwargs: object) -> tuple[Response, int]:
         return ok()

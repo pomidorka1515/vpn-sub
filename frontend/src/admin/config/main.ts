@@ -37,7 +37,9 @@ export function createMainEditor(
     if (key === 'api_uri' || key === 'fallback_domain') {
       if (!Object.prototype.hasOwnProperty.call(editor.draft, key)) return;
       editor.draft[key] = readText('cfg-' + key);
-    } else if (key === 'panel_alert_cooldown' || key === 'db_connections') {
+    } else if (
+      ['panel_alert_cooldown', 'db_connections', 'subscription_token_limit', 'subscription_ip_limit'].includes(key)
+    ) {
       const raw = readText('cfg-' + key).trim();
       if (key === 'db_connections' && raw === '') Reflect.deleteProperty(editor.draft, key);
       else editor.draft[key] = INTEGER_RE.test(raw) ? new ConfigNumber(raw) : raw;
@@ -150,8 +152,8 @@ export function createMainEditor(
       const auth = Array.isArray(data['api_admin_ui_auth']) ? data['api_admin_ui_auth'] : ['', ''];
       control = `<input type="text" id="cfg-auth-0" value="${attr(auth[0] ?? '')}" spellcheck="false" autocomplete="off">
         ${passWrap('cfg-auth-1', auth[1] ?? '')}`;
-    } else if (key === 'panel_alert_cooldown') {
-      control = `<input type="number" id="cfg-panel_alert_cooldown" min="0" step="1" value="${attr(data['panel_alert_cooldown'] ?? '')}">`;
+    } else if (['panel_alert_cooldown', 'subscription_token_limit', 'subscription_ip_limit'].includes(key)) {
+      control = `<input type="number" id="cfg-${key}" min="1" max="1000000" step="1" value="${attr(data[key] ?? '')}">`;
     } else if (key === 'db_connections') {
       control = `<input type="number" id="cfg-db_connections" min="1" max="10" step="1" value="${attr(data['db_connections'] ?? '')}">`;
     } else if (['fingerprints', 'bypass_packages', 'funny_strings'].includes(key)) {
@@ -310,6 +312,8 @@ export function createMainEditor(
 
   function addOptional(key: string): void {
     if (key === 'api_uri' || key === 'fallback_domain') draft()[key] = '';
+    else if (key === 'subscription_token_limit') draft()[key] = new ConfigNumber('60');
+    else if (key === 'subscription_ip_limit') draft()[key] = new ConfigNumber('6000');
     else if (key === 'funny_strings') draft()[key] = [];
     else if (key === 'bot' || key === 'discord') draft()[key] = { token: '', whitelist: [] };
     else if (key === 'publicbot') draft()['publicbot'] = { token: '' };

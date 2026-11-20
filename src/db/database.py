@@ -128,9 +128,9 @@ class Database(
             if reader:
                 await wrapped.execute("PRAGMA query_only = ON")
             return conn
-        except BaseException as exc:
+        except BaseException:
             await settle(conn.close())
-            raise exc from None
+            raise
 
     async def _start(self) -> None:
         try:
@@ -183,7 +183,7 @@ class Database(
                     await self._finish_reader(index, discard=isinstance(exc, sqlite3.Error))
                     if isinstance(exc, sqlite3.Error):
                         raise _database_error(exc) from exc
-                    raise exc from None
+                    raise
                 else:
                     await self._finish_reader(index)
                 finally:
@@ -213,9 +213,9 @@ class Database(
         try:
             await self._readers[index].close()
             self._readers[index] = await self._open(reader=True)
-        except BaseException as exc:
+        except BaseException:
             self._ready = False
-            raise exc from None
+            raise
 
     @asynccontextmanager
     async def transaction(self, *, immediate: bool = False) -> AsyncGenerator[Connection]:
@@ -243,7 +243,7 @@ class Database(
                     await settle(self._recover_writer(conn, discard=isinstance(exc, sqlite3.Error)))
                     if isinstance(exc, sqlite3.Error):
                         raise _database_error(exc) from exc
-                    raise exc from None
+                    raise
             finally:
                 self._owners.discard(task)
 

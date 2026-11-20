@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 log = Logger("rate_limit")
 
 _SUBSCRIPTION_TOKEN_LIMIT = 60
-_SUBSCRIPTION_IP_LIMIT = 600
+_SUBSCRIPTION_IP_LIMIT = 6000
 
 
 def register_subscription_route(app: Quart, sub: Subscription, limiter: AsyncRateLimiter) -> None:
@@ -33,13 +33,16 @@ def register_subscription_route(app: Quart, sub: Subscription, limiter: AsyncRat
     @app.route(f"/{uri}", strict_slashes=False)
     async def subscription() -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction]
         try:
+            limits = sub.res.cfg.view()
+            token_limit = limits.get("subscription_token_limit", _SUBSCRIPTION_TOKEN_LIMIT)
+            ip_limit = limits.get("subscription_ip_limit", _SUBSCRIPTION_IP_LIMIT)
             ip = request.remote_addr or "<unknown>"
-            retry_after = await limiter.retry_after("subscription:ip", ip, _SUBSCRIPTION_IP_LIMIT)
+            retry_after = await limiter.retry_after("subscription:ip", ip, ip_limit)
             if not retry_after:
                 retry_after = await limiter.retry_after(
                     "subscription:token",
                     request.args.get("token", ""),
-                    _SUBSCRIPTION_TOKEN_LIMIT,
+                    token_limit,
                 )
         except Exception:
             log.error("rate limit store failed")  # ruff: ignore[error-instead-of-exception] credentials may occur in exception text

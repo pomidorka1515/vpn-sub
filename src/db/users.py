@@ -217,7 +217,7 @@ class UsersMixin(ConnectionMixin):
                 raise DuplicateError(
                     "username, UUID, token or external username already exists",
                 ) from exc
-            raise exc from None
+            raise
 
     async def set_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         mapping = {
@@ -291,7 +291,7 @@ class UsersMixin(ConnectionMixin):
                 None,
             ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError("unique user field already exists") from exc
-            raise exc from None
+            raise
 
     async def update_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         await self.set_user(username, **fields)

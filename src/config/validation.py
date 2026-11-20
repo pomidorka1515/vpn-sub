@@ -62,3 +62,10 @@ def check_config_document(data: Mapping[str, JsonValue]) -> None:
         raise ValidationError("api_admin_ui_auth entries must not be empty") from None
 
     validate_panel_limit(data)
+
+    for key in ("subscription_token_limit", "subscription_ip_limit"):
+        value = data.get(key)
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value < 1 or value > 1_000_000
+        ):
+            raise ValidationError(f"{key} must be an integer between 1 and 1000000") from None

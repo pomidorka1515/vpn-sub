@@ -85,7 +85,7 @@ async def test_database_failures_have_safe_http_responses(
                 raise cause from None
         except DatabaseError as exc:
             caught.append(exc)
-            raise exc from None
+            raise
 
     response = await app.test_client().get("/database-failure")
     assert response.status_code == status

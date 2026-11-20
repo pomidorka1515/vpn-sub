@@ -91,7 +91,7 @@ class CodesMixin(ConnectionMixin):
                 None,
             ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError(f"code '{code}' already exists") from exc
-            raise exc from None
+            raise
 
     async def get_code(self, code: str) -> CodeRecord | None:
         async with self.connection() as conn:
@@ -207,7 +207,7 @@ class CodesMixin(ConnectionMixin):
                 raise DuplicateError(
                     "username, UUID, token or external username already exists",
                 ) from exc
-            raise exc from None
+            raise
 
     async def adjust_bonus(self, username: str, code: str) -> BonusResult:
         async with self.transaction(immediate=True) as conn:
