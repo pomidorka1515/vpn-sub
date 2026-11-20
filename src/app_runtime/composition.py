@@ -54,7 +54,7 @@ def build_panels(
     whitelist: XUiSession | None = None
     sections = cfg.view()["3xui"]
     if sum(section["whitelist"] for section in sections.values()) > 1:
-        raise SchemaValidationError("At most one whitelist panel is allowed")
+        raise SchemaValidationError("At most one whitelist panel is allowed") from None
     for section in sections.values():
         panel = XUiSession(
             name=section["name"],

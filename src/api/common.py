@@ -80,7 +80,7 @@ def web_lang_tables(
 ) -> tuple[str, dict[str, str], dict[str, str]]:
     """Active page strings, plus the English table used when a key is missing."""
     if page not in _WEB_PAGES:
-        raise ValueError(f"unknown web page '{page}'")
+        raise ValueError(f"unknown web page '{page}'") from None
     lang = language_code or resolve_web_lang()
     language = lang_cfg.view()
     raw = cast(object, language.get("web"))
@@ -106,9 +106,9 @@ class Route(NamedTuple):
 
     def validate(self) -> None:
         if not self.path.startswith("/"):
-            raise ValueError(f"Route path must start with '/', got '{self.path}'")
+            raise ValueError(f"Route path must start with '/', got '{self.path}'") from None
         if self.rate_limit is not None and self.rate_limit <= 0:
-            raise ValueError(f"rate_limit must be positive, got {self.rate_limit}")
+            raise ValueError(f"rate_limit must be positive, got {self.rate_limit}") from None
 
     def register(self, api: AsyncBaseApi) -> None:
         from .decorators.rate_limit import rate_limit  # intentional lazy loading
@@ -157,14 +157,14 @@ class AsyncBaseApi(ABC):
         super().__init_subclass__(**kwargs)
 
         if not hasattr(cls, "ROUTES"):
-            raise TypeError(f"{cls.__name__} must define ROUTES")
+            raise TypeError(f"{cls.__name__} must define ROUTES") from None
 
         for route in cls.ROUTES:
             route.validate()
             if not hasattr(cls, route.handler):
                 raise TypeError(
                     f"{cls.__name__}.ROUTES references '{route.handler}' but no such method exists",
-                )
+                ) from None
 
     def _register_routes(self) -> None:
         for route in self.ROUTES:

@@ -94,16 +94,16 @@ def apply_config_patch(
     order) and the changed restart keys (table order).
     """
     if not isinstance(values, Mapping):
-        raise ValidationError("values must be an object")
+        raise ValidationError("values must be an object") from None
 
     required = set(REQUIRED_KEYS)
     for key in values:
         if key == "$schema":
-            raise ValidationError("$schema is not patchable")
+            raise ValidationError("$schema is not patchable") from None
         if key not in SCHEMA_PROPERTIES:
-            raise ValidationError(f"Unknown key: {key}")
+            raise ValidationError(f"Unknown key: {key}") from None
         if values[key] is None and key in required:
-            raise ValidationError(f"Cannot delete required key: {key}")
+            raise ValidationError(f"Cannot delete required key: {key}") from None
 
     before = {key: working.get(key) for key in RESTART_KEYS}
     preimage = dict(working)
@@ -112,7 +112,7 @@ def apply_config_patch(
             working.pop(key, None)
             continue
         if not _is_json_value(value):
-            raise ValidationError(f"{key} is not a JSON value")
+            raise ValidationError(f"{key} is not a JSON value") from None
         working[key] = cast(JsonValue, value)
     check_config_document(working)
     if json_equal(dict(working), preimage):

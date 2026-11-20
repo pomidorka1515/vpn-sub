@@ -26,7 +26,7 @@ class ProxyMiddleware:
 
     def __init__(self, app: ASGIFramework, *, hops: int = 1, require_proxy: bool = False) -> None:
         if hops < 0:
-            raise ValueError("proxy hops must be non-negative")
+            raise ValueError("proxy hops must be non-negative") from None
         self.app = app
         self.hops = hops
         self.require_proxy = require_proxy

@@ -44,7 +44,7 @@ class BoundedOffload:
             self._available.clear()
             await self._available.wait()
         if not self._accepting:
-            raise AdmissionClosedError("offload admission is closed")
+            raise AdmissionClosedError("offload admission is closed") from None
 
         caller = asyncio.current_task()
         operation_name = caller.get_name() if caller is not None else ""

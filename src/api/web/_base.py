@@ -24,16 +24,16 @@ class AsyncWebApiMixin:
     prefix: str
 
     async def validate_auth_token(self, auth_token: str | None = None) -> str | None:
-        raise NotImplementedError
+        raise NotImplementedError from None
 
     async def validate_credentials(self, username: str, password: str) -> str | bool:
-        raise NotImplementedError
+        raise NotImplementedError from None
 
     def _clear_auth_cookies(self, response: Response) -> None:
-        raise NotImplementedError
+        raise NotImplementedError from None
 
     async def _static(self, name: str, mimetype: str, body: bytes | None = None) -> ResponseType:
-        raise NotImplementedError
+        raise NotImplementedError from None
 
     async def _page(self, name: str) -> Response:
-        raise NotImplementedError
+        raise NotImplementedError from None

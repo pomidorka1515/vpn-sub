@@ -102,7 +102,7 @@ class AsyncRateLimiter:
         client: RateLimitClient | None = None,
     ) -> None:
         if not url or socket_timeout <= 0 or redis_check_interval <= 0:
-            raise ValueError("Redis URL and positive Redis timing values are required")
+            raise ValueError("Redis URL and positive Redis timing values are required") from None
         self.url = url
         self.socket_timeout = socket_timeout
         self.redis_check_interval = redis_check_interval
@@ -146,7 +146,7 @@ class AsyncRateLimiter:
         accounting and success resets; blocked attempts never refresh the TTL.
         """
         if self._admin_auth_script is None:
-            raise RuntimeError("Redis limiter has not started")
+            raise RuntimeError("Redis limiter has not started") from None
         prefix = f"admin-auth:{{{key}}}"
         return int(
             await self._admin_auth_script(
@@ -167,7 +167,7 @@ class AsyncRateLimiter:
     async def retry_after(self, scope: str, key: str, max_requests: int) -> int:
         """Enforce a local fixed window and periodically reconcile it with Redis."""
         if max_requests <= 0:
-            raise ValueError("max_requests must be positive")
+            raise ValueError("max_requests must be positive") from None
 
         now = _monotonic()
         window = int(now // _RATE_LIMIT_WINDOW)

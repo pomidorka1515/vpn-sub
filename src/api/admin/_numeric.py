@@ -15,11 +15,11 @@ def bounded_int(
 ) -> int:
     """Accept integer representations without truncation, within safe bounds."""
     if isinstance(raw, bool) or (isinstance(raw, float) and not raw.is_integer()):
-        raise ValueError(f"{name} must be a finite integer")
+        raise ValueError(f"{name} must be a finite integer") from None
     try:
         value = int(cast(str, raw))
     except ValueError, TypeError, OverflowError:
         raise ValueError(f"{name} must be a finite integer") from None
     if not minimum <= value <= maximum:
-        raise ValueError(f"{name} must be in range {minimum} to {maximum}")
+        raise ValueError(f"{name} must be in range {minimum} to {maximum}") from None
     return value

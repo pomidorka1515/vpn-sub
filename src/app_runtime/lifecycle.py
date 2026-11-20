@@ -57,13 +57,13 @@ class Runtime[DependenciesT]:
 
     def require_ready(self) -> DependenciesT:
         if not self.ready:
-            raise AdmissionClosedError("runtime is not ready")
+            raise AdmissionClosedError("runtime is not ready") from None
         return self.dependencies
 
     def adopt_resource(self, resource: OwnedResource) -> None:
         """Own a resource before composition starts it, including partial starts."""
         if self.state is not RuntimeState.NEW or self.stopping.is_set():
-            raise AdmissionClosedError("runtime cannot adopt resources")
+            raise AdmissionClosedError("runtime cannot adopt resources") from None
         self._opened.append(resource)
 
     async def start(self) -> None:
@@ -71,7 +71,7 @@ class Runtime[DependenciesT]:
             if self.ready:
                 return
             if self.state is not RuntimeState.NEW or self.stopping.is_set():
-                raise AdmissionClosedError("runtime cannot restart")
+                raise AdmissionClosedError("runtime cannot restart") from None
             self.state = RuntimeState.STARTING
             try:
                 for resource in self._resources:
@@ -79,7 +79,7 @@ class Runtime[DependenciesT]:
                     self._opened.append(resource)
                     await resource.resource.start()
                 self.state = RuntimeState.READY
-            except Exception, asyncio.CancelledError:
+            except (Exception, asyncio.CancelledError) as error:
                 self.begin_stop()
                 # Retain cleanup ownership even if startup is cancelled again.
                 if self._stop_task is None:
@@ -88,7 +88,7 @@ class Runtime[DependenciesT]:
                         name="runtime:startup-unwind",
                     )
                     await asyncio.shield(self._stop_task)
-                raise
+                raise error from None
 
     def begin_stop(self) -> None:
         self.stopping.set()
@@ -119,7 +119,7 @@ class Runtime[DependenciesT]:
                 except (Exception, asyncio.CancelledError) as error:
                     task = asyncio.current_task()
                     if isinstance(error, asyncio.CancelledError) and task and task.cancelling():
-                        raise
+                        raise error from None
                     error.add_note(f"quiescing runtime resource: {resource.name}")
                     errors.append(error)
         await self.tasks.drain(cancel=True)
@@ -135,7 +135,7 @@ class Runtime[DependenciesT]:
             except (Exception, asyncio.CancelledError) as error:
                 task = asyncio.current_task()
                 if isinstance(error, asyncio.CancelledError) and task and task.cancelling():
-                    raise
+                    raise error from None
                 error.add_note(f"closing runtime resource: {resource.name}")
                 errors.append(error)
             self._opened.pop()
@@ -143,7 +143,7 @@ class Runtime[DependenciesT]:
             await self._close_offloads(errors)
         self.state = RuntimeState.STOPPED
         if errors:
-            raise BaseExceptionGroup("runtime cleanup failed", errors)
+            raise BaseExceptionGroup("runtime cleanup failed", errors) from None
 
     async def _close_offloads(self, errors: list[BaseException]) -> None:
         self.offloads.stop_admission()
@@ -152,6 +152,6 @@ class Runtime[DependenciesT]:
         except (Exception, asyncio.CancelledError) as error:
             task = asyncio.current_task()
             if isinstance(error, asyncio.CancelledError) and task and task.cancelling():
-                raise
+                raise error from None
             error.add_note("closing runtime offloads")
             errors.append(error)

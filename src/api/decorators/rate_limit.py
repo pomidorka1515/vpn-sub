@@ -24,7 +24,7 @@ def rate_limit[API_T: AsyncBaseApi, **P, R](
     max_requests: int,
 ) -> Callable[[Decorated[API_T, P, R]], DecoratedReturn[API_T, P, R]]:
     if max_requests <= 0:
-        raise ValueError("max_requests must be positive")
+        raise ValueError("max_requests must be positive") from None
 
     def decorator(f: Decorated[API_T, P, R]) -> DecoratedReturn[API_T, P, R]:
         scope = f"{f.__module__}.{f.__qualname__}:{max_requests}"

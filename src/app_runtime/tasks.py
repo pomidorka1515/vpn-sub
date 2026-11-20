@@ -27,7 +27,7 @@ class TaskRegistry:
 
     def __init__(self, *, capacity: int | None = None, report_failures: bool = True) -> None:
         if capacity is not None and capacity < 1:
-            raise ValueError("capacity must be positive")
+            raise ValueError("capacity must be positive") from None
         self._capacity = capacity
         self._report_failures = report_failures
         self._tasks: set[asyncio.Task[object]] = set()
@@ -47,11 +47,11 @@ class TaskRegistry:
         name: str,
     ) -> asyncio.Task[T]:
         if not self._accepting:
-            raise AdmissionClosedError("task admission is closed")
+            raise AdmissionClosedError("task admission is closed") from None
         if self._capacity is not None and len(self._tasks) >= self._capacity:
-            raise CapacityExceededError("task capacity exceeded")
+            raise CapacityExceededError("task capacity exceeded") from None
         if not name:
-            raise ValueError("owned tasks require a name")
+            raise ValueError("owned tasks require a name") from None
         task = asyncio.create_task(factory(), name=name)
         self._tasks.add(task)
         task.add_done_callback(self._completed)
