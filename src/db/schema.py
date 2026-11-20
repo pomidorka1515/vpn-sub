@@ -142,17 +142,17 @@ class SchemaMixin(ConnectionMixin):
             )
             row = await conn.row("SELECT version FROM schema_version WHERE id = 1")
             if row is None:
-                raise MigrationError("schema_version row is missing")
+                raise MigrationError("schema_version row is missing") from None
             try:
                 version = int(row[0])
             except (TypeError, ValueError) as exc:
                 raise MigrationError("schema version is not an integer") from exc
             if version < 0:
-                raise MigrationError(f"invalid database schema version {version}")
+                raise MigrationError(f"invalid database schema version {version}") from None
             if version > self.SCHEMA_VERSION:
                 raise MigrationError(
                     f"database schema {version} is newer than supported {self.SCHEMA_VERSION}",
-                )
+                ) from None
             if version == 0:
                 tables = {
                     str(row[0])
@@ -163,7 +163,7 @@ class SchemaMixin(ConnectionMixin):
                 if tables:
                     raise MigrationError(
                         f"unversioned database contains existing tables: {', '.join(sorted(tables))}",
-                    )
+                    ) from None
                 for statement in SCHEMA_STATEMENTS:
                     await conn.execute(statement)
                 version = self.SCHEMA_VERSION
@@ -222,7 +222,7 @@ class SchemaMixin(ConnectionMixin):
                     try:
                         loaded: object = json.loads(str(row[0]))
                         if not isinstance(loaded, dict):
-                            raise ValueError("legacy usage baselines are not an object")
+                            raise ValueError("legacy usage baselines are not an object") from None
                         saved = cast(dict[str, object], loaded)
                         reset = await conn.row(
                             "SELECT value FROM app_metadata WHERE key = 'last_reset_month'"
@@ -236,12 +236,16 @@ class SchemaMixin(ConnectionMixin):
                             else None
                         )
                         if month is not None and not isinstance(month, str):
-                            raise ValueError("legacy usage baseline month is not a string")
+                            raise ValueError(
+                                "legacy usage baseline month is not a string"
+                            ) from None
                         counters: dict[str, object] | None = None
                         if saved.get("version") == 2:
                             raw_counters = saved.get("counters")
                             if not isinstance(raw_counters, dict):
-                                raise ValueError("legacy usage baseline counters are not an object")
+                                raise ValueError(
+                                    "legacy usage baseline counters are not an object",
+                                ) from None
                             counters = cast(dict[str, object], raw_counters)
                         if month is not None:
                             await conn.execute(
@@ -254,7 +258,9 @@ class SchemaMixin(ConnectionMixin):
                                 raw_records = counters.get(kind, [])
                                 records = raw_records
                                 if not isinstance(records, list):
-                                    raise ValueError(f"legacy {kind} baselines are not a list")
+                                    raise ValueError(
+                                        f"legacy {kind} baselines are not a list",
+                                    ) from None
                                 record_items = cast(list[object], records)
                                 for record in record_items:
                                     if (
@@ -263,7 +269,7 @@ class SchemaMixin(ConnectionMixin):
                                     ):
                                         raise ValueError(
                                             f"legacy {kind} baseline has an invalid shape"
-                                        )
+                                        ) from None
                                 records = cast(list[list[object]], records)
                                 await conn.executemany(
                                     "INSERT OR REPLACE INTO usage_baselines "

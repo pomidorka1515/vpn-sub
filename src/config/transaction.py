@@ -44,7 +44,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
         cfg.lock.acquire()
         if cfg.active_transaction is not None:
             cfg.lock.release()
-            raise RuntimeError("Nested batch edits are not supported.")
+            raise RuntimeError("Nested batch edits are not supported.") from None
         self._cfg_lock_acquired = True
         lock_fp: io.BufferedRandom | None = None
 
@@ -67,7 +67,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
                     sync_mode=cfg.sync_mode,
                 )
                 if signature is None:
-                    raise ConfigError("Config file disappeared immediately after create.")
+                    raise ConfigError("Config file disappeared immediately after create.") from None
                 cfg.data = current
                 cfg.last_signature = signature
 
@@ -87,7 +87,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
             self._lock_fp = lock_fp
             return self
 
-        except Exception:
+        except Exception as exc:
             try:
                 if lock_fp is not None:
                     fcntl.flock(lock_fp, fcntl.LOCK_UN)
@@ -101,7 +101,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
                     cfg.active_transaction = None
                 cfg.lock.release()
                 self._cfg_lock_acquired = False
-            raise
+            raise exc from None
 
     def __exit__(
         self,
@@ -114,7 +114,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
         try:
             if exc_type is None:
                 if self.data is None or self.original is None:
-                    raise RuntimeError("Transaction is not active.")
+                    raise RuntimeError("Transaction is not active.") from None
 
                 if not json_equal(self.data, self.original):
                     cfg.validate_schema(self.data)
@@ -122,7 +122,9 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
                     signature = file_signature(cfg.path)
                     if signature is None:
-                        raise ConfigError("Config file disappeared immediately after commit.")
+                        raise ConfigError(
+                            "Config file disappeared immediately after commit."
+                        ) from None
 
                     if cfg.isolate_commits:
                         cfg.data = copy.deepcopy(self.data)
@@ -154,7 +156,7 @@ class ConfigTransaction[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
     def require_active(self) -> JsonDict:
         if self.data is None:
-            raise RuntimeError("Transaction is not active.")
+            raise RuntimeError("Transaction is not active.") from None
         return self.data
 
     def __getitem__(self, key: str) -> JsonValue:

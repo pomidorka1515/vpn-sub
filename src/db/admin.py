@@ -48,7 +48,7 @@ def _identity(row: sqlite3.Row) -> AdminIdentity:
     # Persisted data is not an alternative way to introduce unknown grants.
     kind = row["kind"]
     if kind not in {"accounts", "tokens"}:
-        raise ValueError("Invalid admin identity kind")
+        raise ValueError("Invalid admin identity kind") from None
     return AdminIdentity(
         str(row["id"]),
         kind,
@@ -148,7 +148,7 @@ class AdminMixin(ConnectionMixin):
                     "Account name already exists"
                     if identity.kind == "accounts"
                     else "Key name already exists"
-                )
+                ) from None
             if create:
                 await conn.execute(
                     "INSERT INTO admin_identities(id, kind, name, secret, permissions) VALUES (?, ?, ?, ?, ?)",

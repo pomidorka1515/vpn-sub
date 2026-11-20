@@ -24,11 +24,11 @@ def instance_backup_dir(path: str, backup_dir: str) -> str:
 
 def _validate_snapshot(snapshot: sqlite3.Connection) -> None:
     if snapshot.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
-        raise sqlite3.DatabaseError("backup snapshot failed integrity check")
+        raise sqlite3.DatabaseError("backup snapshot failed integrity check") from None
 
     row = snapshot.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
     if row is None or not isinstance(row[0], int) or not 1 <= row[0] <= SchemaMixin.SCHEMA_VERSION:
-        raise sqlite3.DatabaseError("backup snapshot has an invalid schema version")
+        raise sqlite3.DatabaseError("backup snapshot has an invalid schema version") from None
     version = row[0]
 
     # Derive the current table/column contract from the schema used at startup.
@@ -49,7 +49,7 @@ def _validate_snapshot(snapshot: sqlite3.Connection) -> None:
             if version < 8 and table in {"admin_identities", "admin_sessions"}:
                 continue
             if table not in actual_tables:
-                raise sqlite3.DatabaseError(f"backup snapshot is missing table {table}")
+                raise sqlite3.DatabaseError(f"backup snapshot is missing table {table}") from None
             expected = {
                 row[1] for row in reference.execute("SELECT * FROM pragma_table_info(?)", (table,))
             }
@@ -68,7 +68,7 @@ def _validate_snapshot(snapshot: sqlite3.Connection) -> None:
             if missing := expected - actual:
                 raise sqlite3.DatabaseError(
                     f"backup snapshot is missing columns in {table}: {', '.join(sorted(missing))}",
-                )
+                ) from None
 
 
 def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None:
@@ -92,14 +92,14 @@ def do_backup(path: str, timeout: float, instance_dir: str, log: Logger) -> None
         source.close()
         source = None
         backup_path = publish_backup(temporary, instance_dir, ".sqlite3")
-    except Exception:
+    except Exception as exc:
         if destination is not None:
             destination.close()
         if source is not None:
             source.close()
         with contextlib.suppress(FileNotFoundError):
             Path(temporary).unlink()
-        raise
+        raise exc from None
 
     log.debug(f"backup saved: {backup_path}")
 

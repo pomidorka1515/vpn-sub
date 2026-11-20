@@ -25,7 +25,7 @@ def validate_panel_limit(data: Mapping[str, JsonValue]) -> None:
         if name in panel_names:
             raise SchemaValidationError(
                 f"Duplicate panel name {name!r}; configured in: {panel_names[name]}, {key}",
-            )
+            ) from None
         panel_names[name] = key
     names = [
         key
@@ -35,4 +35,4 @@ def validate_panel_limit(data: Mapping[str, JsonValue]) -> None:
     if len(names) > 1:
         raise SchemaValidationError(
             f"At most one whitelist panel is allowed; configured: {', '.join(names)}",
-        )
+        ) from None

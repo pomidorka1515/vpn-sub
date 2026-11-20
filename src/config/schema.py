@@ -23,13 +23,13 @@ from errors import ConfigError, FileCorruptionError, SchemaValidationError
 
 
 def reject_nonfinite_constant(value: str) -> object:
-    raise ValueError(f"Non-finite JSON number: {value}")
+    raise ValueError(f"Non-finite JSON number: {value}") from None
 
 
 def validate_finite_numbers(value: object) -> None:
     """Reject non-finite numbers even in schema-free or extension data."""
     if isinstance(value, float) and not math.isfinite(value):
-        raise SchemaValidationError("Config contains a non-finite number.")
+        raise SchemaValidationError("Config contains a non-finite number.") from None
     if isinstance(value, Mapping):
         for key, item in cast(Mapping[object, object], value).items():
             validate_finite_numbers(key)
@@ -58,13 +58,15 @@ def read_json_object[Doc](cfg: Config[Doc], /) -> dict[str, JsonValue]:
             content = strip_jsonc_comments(content)
             content = strip_jsonc_trailing_commas(content)
         data = json.loads(content, parse_constant=reject_nonfinite_constant)
-    except FileNotFoundError:
-        raise
+    except FileNotFoundError as exc:
+        raise exc from None
     except ValueError as exc:
         raise FileCorruptionError(f"Config file '{cfg.path}' is not valid JSON: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise ConfigError(f"Config file '{cfg.path}' must contain a JSON object at the top level.")
+        raise ConfigError(
+            f"Config file '{cfg.path}' must contain a JSON object at the top level."
+        ) from None
     return cast(dict[str, JsonValue], data)
 
 
@@ -76,7 +78,7 @@ def load_schema[Doc](
     if isinstance(schema_ref, str) and schema_ref.startswith(("http://", "https://")):
         message = "Remote JSON schemas are not supported for security/reliability reasons."
         if cfg.strict_schema:
-            raise SchemaValidationError(message)
+            raise SchemaValidationError(message) from None
         cfg.log.warning(message)
         if cfg.schema_path is None:
             return None
@@ -90,7 +92,7 @@ def load_schema[Doc](
         return None
     else:
         if not isinstance(schema_ref, str):
-            raise SchemaValidationError("'$schema' must be a string.")
+            raise SchemaValidationError("'$schema' must be a string.") from None
 
         schema_path = os.path.normpath(Path(cfg.path).parent / schema_ref)
     schema_sig = stat_signature(schema_path)
@@ -112,7 +114,9 @@ def load_schema[Doc](
         ) from exc
 
     if not isinstance(schema, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
-        raise SchemaValidationError(f"Schema file '{schema_path}' must contain a JSON object.")
+        raise SchemaValidationError(
+            f"Schema file '{schema_path}' must contain a JSON object."
+        ) from None
 
     validator = compile_schema(schema)
     cfg.schema_cache_path = schema_path

@@ -63,10 +63,10 @@ def do_backup(
             with contextlib.suppress(FileNotFoundError):
                 Path(tmp).unlink()
             return
-        except Exception:
+        except Exception as exc:
             with contextlib.suppress(FileNotFoundError):
                 Path(tmp).unlink()
-            raise
+            raise exc from None
     else:
         if data is None:
             try:
@@ -94,10 +94,10 @@ def do_backup(
                 else:
                     json.dump(data, f, indent=indent, ensure_ascii=False)
             backup_path = publish_backup(tmp, instance_dir, ".json")
-        except Exception:
+        except Exception as exc:
             with contextlib.suppress(FileNotFoundError):
                 Path(tmp).unlink()
-            raise
+            raise exc from None
 
     log.debug(f"backup saved: {backup_path}")
 

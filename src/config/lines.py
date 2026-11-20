@@ -82,7 +82,7 @@ class LinesConfig:
 
         """
         if max_size_mb < 1:
-            raise ValueError("max_size_mb must be positive")
+            raise ValueError("max_size_mb must be positive") from None
         self._max_size_mb = max_size_mb
         self.log = Logger(type(self).__name__)
         path_str = str(path)
@@ -347,10 +347,10 @@ class LinesConfig:
                     Path(tmp).replace(self._path)
                     if self._sync_mode == "full":
                         fsync_parent_dir(self._path)
-                except Exception:
+                except Exception as exc:
                     with contextlib.suppress(FileNotFoundError):
                         Path(tmp).unlink()
-                    raise
+                    raise exc from None
 
         return CompactReturn(len(kept), removed)
 
@@ -364,7 +364,7 @@ class LinesConfig:
 
         """
         if self._backup_dir is None:
-            raise ConfigError("backup_now() requires a backup_dir to be configured.")
+            raise ConfigError("backup_now() requires a backup_dir to be configured.") from None
         instance_dir = instance_backup_dir(self._path, self._backup_dir)
         do_backup(
             self._path, 4, instance_dir, self.log, raw=True, lockfile_path=self._lockfile_path

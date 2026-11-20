@@ -103,7 +103,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
         valid_exts: tuple[str] | tuple[str, str] = (".jsonc", ".json") if read_only else (".json",)
         if read_only_jsonc and not read_only:
-            raise ConfigError("read_only_jsonc requires read_only=True")
+            raise ConfigError("read_only_jsonc requires read_only=True") from None
         if not path_str.endswith(valid_exts):
             self.log.warning(
                 f"path doesnt end with .json{'c' if read_only else ''}, did you specify the correct path?",
@@ -120,7 +120,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         self._validators = validators
 
         if sync_mode not in {"full", "data", "none"}:
-            raise ValueError("sync_mode must be 'full', 'data', or 'none'")
+            raise ValueError("sync_mode must be 'full', 'data', or 'none'") from None
         self._sync_mode: SYNC_MODES = sync_mode
 
         # True = safer: committed state is detached from leaked tx refs
@@ -243,7 +243,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
         """
         if self._backup_dir is None:
-            raise ConfigError("backup_now() requires a backup_dir to be configured.")
+            raise ConfigError("backup_now() requires a backup_dir to be configured.") from None
         self.write_backup(None)
 
     def backup_data(self, data: Mapping[str, JsonValue]) -> None:
@@ -252,7 +252,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
     def write_backup(self, data: dict[str, JsonValue] | None) -> None:
         if self._backup_dir is None:
-            raise ConfigError("backup_now() requires a backup_dir to be configured.")
+            raise ConfigError("backup_now() requires a backup_dir to be configured.") from None
         instance_dir = instance_backup_dir(self._path, self._backup_dir)
         do_backup(
             self._path,
@@ -271,7 +271,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
     def raise_if_read_only(self) -> None:
         if self._read_only:
-            raise ReadOnlyConfigError("Cannot modify read-only config instance")
+            raise ReadOnlyConfigError("Cannot modify read-only config instance") from None
 
     def reload(self) -> bool:
         """Reload from disk if the file changed since last load. Creates the file if missing.
@@ -332,7 +332,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         tx = self.context_transaction
         self.context_transaction = None
         if tx is None:
-            raise RuntimeError("Config.__exit__ called without a matching __enter__().")
+            raise RuntimeError("Config.__exit__ called without a matching __enter__().") from None
         return tx.__exit__(exc_type, exc_val, exc_tb)
 
     def __getitem__(self, key: str) -> JsonValue:
@@ -513,7 +513,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
             raise RuntimeError(
                 "Use the transaction object returned by 'with cfg as tx' "
                 "while a batch edit is active.",
-            )
+            ) from None
 
     def read_json_object(self) -> dict[str, JsonValue]:
         return read_json_object(self)
@@ -533,7 +533,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
 
             if signature is None:
                 if not create_if_missing:
-                    raise FileNotFoundError(self._path)
+                    raise FileNotFoundError(self._path) from None
 
                 empty: dict[str, JsonValue] = {}
                 self.validate_schema(empty)
@@ -545,7 +545,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
                     sync_mode=self._sync_mode,
                 )
                 if new_signature is None:
-                    raise ConfigError("Config file disappeared immediately after create.")
+                    raise ConfigError("Config file disappeared immediately after create.") from None
 
                 self.data = {}
                 self.last_signature = new_signature
@@ -569,7 +569,7 @@ class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
         with locked_file(self._path, exclusive=False, lockfile_path=self._lockfile_path):
             signature = file_signature(self._path)
             if signature is None:
-                raise ConfigError(f"Config file '{self._path}' disappeared while in use.")
+                raise ConfigError(f"Config file '{self._path}' disappeared while in use.") from None
 
             if signature == self.last_signature:
                 return

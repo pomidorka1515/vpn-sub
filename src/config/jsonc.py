@@ -62,7 +62,7 @@ def strip_jsonc_comments(content: str) -> str:
             index += 1
 
     if in_block_comment:
-        raise json.JSONDecodeError("Unterminated comment", content, len(content))
+        raise json.JSONDecodeError("Unterminated comment", content, len(content)) from None
 
     return "".join(result)
 

@@ -28,7 +28,7 @@ async def settle[T](operation: Coroutine[object, object, T]) -> T:
         # Observe any worker error, but preserve the caller's cancellation.
         if not task.cancelled():
             task.exception()
-        raise asyncio.CancelledError
+        raise asyncio.CancelledError from None
     return task.result()
 
 
@@ -69,11 +69,11 @@ class Connection:
 
 class ConnectionMixin:
     def connection(self) -> AbstractAsyncContextManager[Connection]:
-        raise NotImplementedError
+        raise NotImplementedError from None
 
     def transaction(
         self,
         *,
         immediate: bool = False,
     ) -> AbstractAsyncContextManager[Connection]:
-        raise NotImplementedError
+        raise NotImplementedError from None

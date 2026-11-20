@@ -37,7 +37,7 @@ class FileSchedules:
         name: str,
     ) -> None:
         if interval <= 0:
-            raise ValueError("file schedule interval must be positive")
+            raise ValueError("file schedule interval must be positive") from None
 
         async def loop() -> None:
             while True:
@@ -68,7 +68,7 @@ class AsyncConfig[Doc = JsonDict]:
         reload_interval: float = 5,
     ) -> None:
         if reload_interval <= 0:
-            raise ValueError("reload_interval must be positive")
+            raise ValueError("reload_interval must be positive") from None
         self._factory = factory
         self._files = files
         self._reload_interval = reload_interval
@@ -83,7 +83,7 @@ class AsyncConfig[Doc = JsonDict]:
 
     async def start(self) -> None:
         if self._closing:
-            raise AdmissionClosedError("config is closing")
+            raise AdmissionClosedError("config is closing") from None
         if self._start_task is None:
             self._start_task = asyncio.create_task(self._start(), name="config:start")
         await asyncio.shield(self._start_task)
@@ -91,7 +91,7 @@ class AsyncConfig[Doc = JsonDict]:
     async def _start(self) -> None:
         async with self._lock:
             if self._closing:
-                raise AdmissionClosedError("config is closing")
+                raise AdmissionClosedError("config is closing") from None
             if self._store is not None:
                 return
             self._store = await self._files.run(self._factory)
@@ -115,12 +115,12 @@ class AsyncConfig[Doc = JsonDict]:
         tuples at runtime. Publication replaces the snapshot, never mutates it.
         """
         if self._snapshot is None:
-            raise RuntimeError("config has not started")
+            raise RuntimeError("config has not started") from None
         return self._snapshot
 
     def _require_store(self) -> Config[Doc]:
         if self._store is None:
-            raise RuntimeError("config has not started")
+            raise RuntimeError("config has not started") from None
         return self._store
 
     async def reload(self) -> bool:
@@ -193,7 +193,7 @@ class AsyncLinesConfig:
         flush_interval: float = 0.05,
     ) -> None:
         if buffer_capacity < 1 or batch_size < 1 or flush_interval <= 0:
-            raise ValueError("lines buffer limits must be positive")
+            raise ValueError("lines buffer limits must be positive") from None
         self._factory = factory
         self._files = files
         self._store: LinesConfig | None = None
@@ -212,7 +212,7 @@ class AsyncLinesConfig:
 
     async def start(self) -> None:
         if self._close_task is not None:
-            raise AdmissionClosedError("lines store is closing")
+            raise AdmissionClosedError("lines store is closing") from None
         if self._start_task is None:
             self._start_task = asyncio.create_task(self._start(), name="lines:start")
         await asyncio.shield(self._start_task)
@@ -220,7 +220,7 @@ class AsyncLinesConfig:
     async def _start(self) -> None:
         async with self._lock:
             if self._close_task is not None:
-                raise AdmissionClosedError("lines store is closing")
+                raise AdmissionClosedError("lines store is closing") from None
             if self._store is None:
                 self._store = await self._files.run(self._factory)
                 if self._store.backup_dir is not None:
@@ -232,7 +232,7 @@ class AsyncLinesConfig:
 
     def _require_store(self) -> LinesConfig:
         if self._store is None:
-            raise RuntimeError("lines store has not started")
+            raise RuntimeError("lines store has not started") from None
         return self._store
 
     async def append(self, record: JsonDict) -> None:

@@ -75,9 +75,9 @@ class Database(
         start_backup: bool = True,
     ) -> None:
         if type(read_connections) is not int or not 1 <= read_connections <= 10:
-            raise ValueError("read_connections must be an integer from 1 to 10")
+            raise ValueError("read_connections must be an integer from 1 to 10") from None
         if backup_interval <= 0 or backup_retention < 1:
-            raise ValueError("backup interval and retention must be positive")
+            raise ValueError("backup interval and retention must be positive") from None
         self.path = os.path.normpath(Path(path).absolute())
         self.timeout = timeout
         self.log = Logger(type(self).__name__)
@@ -102,7 +102,7 @@ class Database(
 
     async def start(self) -> None:
         if self._closing:
-            raise DatabaseError("database is closed")
+            raise DatabaseError("database is closed") from None
         if self._start_task is None:
             self._start_task = asyncio.create_task(self._start(), name="database:start")
         await settle(self._wait_start())
@@ -128,9 +128,9 @@ class Database(
             if reader:
                 await wrapped.execute("PRAGMA query_only = ON")
             return conn
-        except BaseException:
+        except BaseException as exc:
             await settle(conn.close())
-            raise
+            raise exc from None
 
     async def _start(self) -> None:
         try:
@@ -150,22 +150,22 @@ class Database(
             await self._files.close()
             if isinstance(exc, (sqlite3.Error, OSError)):
                 raise _database_error(exc) from exc
-            raise
+            raise exc from None
 
     def _check(self) -> asyncio.Task[object]:
         task = asyncio.current_task()
         if not self._ready or self._closing or task is None:
-            raise DatabaseError("database is not accepting operations")
+            raise DatabaseError("database is not accepting operations") from None
         if (
             self._start_task is not None
             and not self._start_task.done()
             and task is not self._start_task
         ):
-            raise DatabaseError("database startup is not complete")
+            raise DatabaseError("database startup is not complete") from None
         if task in self._owners:
             raise DatabaseError(
                 "nested repository leases are not supported; reuse the leased connection",
-            )
+            ) from None
         return task
 
     @asynccontextmanager
@@ -183,7 +183,7 @@ class Database(
                     await self._finish_reader(index, discard=isinstance(exc, sqlite3.Error))
                     if isinstance(exc, sqlite3.Error):
                         raise _database_error(exc) from exc
-                    raise
+                    raise exc from None
                 else:
                     await self._finish_reader(index)
                 finally:
@@ -203,7 +203,7 @@ class Database(
             if conn.in_transaction:
                 await Connection(conn).execute("ROLLBACK")
             if conn.in_transaction:
-                raise DatabaseError("rollback left an active transaction")
+                raise DatabaseError("rollback left an active transaction") from None
         except Exception:
             discard = True
         if discard:
@@ -213,9 +213,9 @@ class Database(
         try:
             await self._readers[index].close()
             self._readers[index] = await self._open(reader=True)
-        except BaseException:
+        except BaseException as exc:
             self._ready = False
-            raise
+            raise exc from None
 
     @asynccontextmanager
     async def transaction(self, *, immediate: bool = False) -> AsyncGenerator[Connection]:
@@ -231,7 +231,7 @@ class Database(
                         raise _database_error(exc) from exc
                 conn = self._writer
                 if conn is None:
-                    raise DatabaseError("database writer is unavailable")
+                    raise DatabaseError("database writer is unavailable") from None
                 wrapped = Connection(conn)
                 try:
                     await wrapped.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
@@ -243,7 +243,7 @@ class Database(
                     await settle(self._recover_writer(conn, discard=isinstance(exc, sqlite3.Error)))
                     if isinstance(exc, sqlite3.Error):
                         raise _database_error(exc) from exc
-                    raise
+                    raise exc from None
             finally:
                 self._owners.discard(task)
 
@@ -256,7 +256,7 @@ class Database(
             if conn.in_transaction:
                 await Connection(conn).execute("ROLLBACK")
             if conn.in_transaction:
-                raise DatabaseError("rollback left an active transaction")
+                raise DatabaseError("rollback left an active transaction") from None
             if discard:
                 self._writer = None
                 await conn.close()
@@ -269,7 +269,9 @@ class Database(
         async with self._backup_lock:
             self._check()
             if self.backup_dir is None:
-                raise DatabaseError("backup_now() requires a backup_dir to be configured.")
+                raise DatabaseError(
+                    "backup_now() requires a backup_dir to be configured."
+                ) from None
             await self._files.run(self._backup)
 
     async def optimize(self) -> None:
@@ -278,7 +280,7 @@ class Database(
         async with self._write_lock:
             self._check()
             if self._writer is None:
-                raise DatabaseError("database writer is unavailable")
+                raise DatabaseError("database writer is unavailable") from None
             try:
                 await Connection(self._writer).execute("PRAGMA optimize")
             except (sqlite3.Error, OSError) as exc:
@@ -286,7 +288,7 @@ class Database(
 
     def _backup(self) -> None:
         if self.backup_dir is None:
-            raise DatabaseError("backup directory is not configured")
+            raise DatabaseError("backup directory is not configured") from None
         directory = instance_backup_dir(self.path, self.backup_dir)
         do_backup(self.path, self.timeout, directory, self.log)
         prune_backups(directory, self.backup_retention, self.log)
@@ -308,7 +310,7 @@ class Database(
 
     async def close(self) -> None:
         if asyncio.current_task() in self._owners:
-            raise DatabaseError("cannot close database from an active lease")
+            raise DatabaseError("cannot close database from an active lease") from None
         if self._close_task is None:
             self._closing = True
             self._close_task = asyncio.create_task(self._close(), name="database:close")

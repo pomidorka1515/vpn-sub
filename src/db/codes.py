@@ -91,7 +91,7 @@ class CodesMixin(ConnectionMixin):
                 None,
             ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError(f"code '{code}' already exists") from exc
-            raise
+            raise exc from None
 
     async def get_code(self, code: str) -> CodeRecord | None:
         async with self.connection() as conn:
@@ -129,7 +129,7 @@ class CodesMixin(ConnectionMixin):
                 or row["action"] != action
                 or (not row["permanent"] and int(row["uses"]) < 1)
             ):
-                raise CodeError("invalid code")
+                raise CodeError("invalid code") from None
             remaining = -1 if row["permanent"] else int(row["uses"]) - 1
             if remaining == 0:
                 await conn.execute("DELETE FROM codes WHERE code = ?", (code,))
@@ -159,13 +159,13 @@ class CodesMixin(ConnectionMixin):
                     (code,),
                 )
                 if row is None or (not row["permanent"] and int(row["uses"]) < 1):
-                    raise CodeError("invalid code")
+                    raise CodeError("invalid code") from None
                 await check_uuid_available(conn, uuid)
                 remaining = -1 if row["permanent"] else int(row["uses"]) - 1
                 await conn.execute("UPDATE codes SET uses = ? WHERE code = ?", (remaining, code))
                 expires_at = int(time.time()) + int(row["days"]) * 86400 if int(row["days"]) else 0
                 if expires_at > 2**63 - 1:
-                    raise ValidationError("Invalid timestamp")
+                    raise ValidationError("Invalid timestamp") from None
                 await conn.execute(
                     """INSERT INTO users
                     (username, uuid, token, fingerprint, displayname, expires_at,
@@ -207,16 +207,16 @@ class CodesMixin(ConnectionMixin):
                 raise DuplicateError(
                     "username, UUID, token or external username already exists",
                 ) from exc
-            raise
+            raise exc from None
 
     async def adjust_bonus(self, username: str, code: str) -> BonusResult:
         async with self.transaction(immediate=True) as conn:
             user = await conn.row("SELECT * FROM users WHERE username = ?", (username,))
             if user is None:
-                raise CodeError("unknown user")
+                raise CodeError("unknown user") from None
             row = await conn.row("SELECT * FROM codes WHERE code = ? AND action = 'bonus'", (code,))
             if row is None or (not row["permanent"] and int(row["uses"]) < 1):
-                raise CodeError("unknown code")
+                raise CodeError("unknown code") from None
             remaining = -1 if row["permanent"] else int(row["uses"]) - 1
             if remaining == 0:
                 await conn.execute("DELETE FROM codes WHERE code = ?", (code,))
@@ -227,7 +227,7 @@ class CodesMixin(ConnectionMixin):
             current = int(user["expires_at"])
             new_time = current if current == 0 or days == 0 else max(current, now) + days * 86400
             if new_time > 2**63 - 1:
-                raise ValidationError("Invalid timestamp")
+                raise ValidationError("Invalid timestamp") from None
             # Zero means unlimited independently for each allowance, as in enforcement.
             limit = int(user["bw_limit_gb"])
             wl_limit = int(user["wl_limit_gb"])

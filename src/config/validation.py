@@ -31,22 +31,24 @@ def check_config_document(data: Mapping[str, JsonValue]) -> None:
                 continue
             node = profile.get("node")
             if isinstance(node, str) and node not in nodes:
-                raise ValidationError(f"profiles.{profile_id}.node {node!r} is not a key of nodes")
+                raise ValidationError(
+                    f"profiles.{profile_id}.node {node!r} is not a key of nodes",
+                ) from None
 
     publicbot = data.get("publicbot")
     if isinstance(publicbot, Mapping):
         token = publicbot.get("token")
         if not isinstance(token, str):
-            raise ValidationError("publicbot.token must be a string")
+            raise ValidationError("publicbot.token must be a string") from None
 
     bot = data.get("bot")
     if isinstance(bot, Mapping):
         token = bot.get("token")
         if not isinstance(token, str):
-            raise ValidationError("bot.token must be a string")
+            raise ValidationError("bot.token must be a string") from None
 
     if not _nonempty_str(data.get("api_token")):
-        raise ValidationError("api_token must not be empty")
+        raise ValidationError("api_token must not be empty") from None
 
     auth = data.get("api_admin_ui_auth")
     if (
@@ -57,6 +59,6 @@ def check_config_document(data: Mapping[str, JsonValue]) -> None:
             or not _nonempty_str(cast(list[object], auth)[1])
         )
     ):
-        raise ValidationError("api_admin_ui_auth entries must not be empty")
+        raise ValidationError("api_admin_ui_auth entries must not be empty") from None
 
     validate_panel_limit(data)

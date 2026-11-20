@@ -49,7 +49,7 @@ async def check_uuid_available(conn: Connection, uuid: str, owner: str | None = 
         "SELECT value FROM app_metadata WHERE key = ?", (f"uuid_reservation:{uuid}",)
     )
     if (row is not None and row[0] != owner) or (claim is not None and claim[0] != owner):
-        raise DuplicateError("UUID already exists or is reserved")
+        raise DuplicateError("UUID already exists or is reserved") from None
 
 
 class UsersMixin(ConnectionMixin):
@@ -217,7 +217,7 @@ class UsersMixin(ConnectionMixin):
                 raise DuplicateError(
                     "username, UUID, token or external username already exists",
                 ) from exc
-            raise
+            raise exc from None
 
     async def set_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         mapping = {
@@ -291,7 +291,7 @@ class UsersMixin(ConnectionMixin):
                 None,
             ) in {sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY}:
                 raise DuplicateError("unique user field already exists") from exc
-            raise
+            raise exc from None
 
     async def update_user(self, username: str, **fields: Unpack[UserFields]) -> None:
         await self.set_user(username, **fields)
@@ -303,7 +303,7 @@ class UsersMixin(ConnectionMixin):
         async with self.transaction(immediate=True) as conn:
             user = await conn.row("SELECT uuid FROM users WHERE username = ?", (username,))
             if user is None or user[0] != expected_uuid:
-                raise DatabaseError("UUID update identity changed")
+                raise DatabaseError("UUID update identity changed") from None
             await check_uuid_available(conn, uuid, username)
             await conn.execute(
                 "INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
@@ -326,13 +326,13 @@ class UsersMixin(ConnectionMixin):
                 "SELECT value FROM app_metadata WHERE key = ?", (f"uuid_reservation:{uuid}",)
             )
             if claim is None or claim[0] != username:
-                raise DatabaseError("UUID reservation ownership changed")
+                raise DatabaseError("UUID reservation ownership changed") from None
             count = await conn.execute(
                 "UPDATE users SET uuid = ? WHERE username = ? AND uuid = ?",
                 (uuid, username, expected_uuid),
             )
             if count != 1:
-                raise DatabaseError("UUID update identity changed")
+                raise DatabaseError("UUID update identity changed") from None
             if uuid != expected_uuid:
                 await clear_notification_episodes(
                     conn, username, sides={"traffic", "whitelist", "expiry"}, new_uuid=uuid
@@ -414,7 +414,7 @@ class UsersMixin(ConnectionMixin):
         async with self.transaction(immediate=True) as conn:
             row = await conn.row("SELECT uuid FROM users WHERE username = ?", (username,))
             if row is not None and row[0] != expected_uuid:
-                raise DatabaseError("created-user recovery identity changed")
+                raise DatabaseError("created-user recovery identity changed") from None
             deleted = await conn.execute("DELETE FROM users WHERE username = ?", (username,))
             if deleted:
                 await clear_notification_episodes(conn, username, sides=set(), identity=True)
@@ -431,7 +431,7 @@ class UsersMixin(ConnectionMixin):
                 (token, username, expected_uuid),
             )
             if count != 1:
-                raise DatabaseError("reset UUID has not committed")
+                raise DatabaseError("reset UUID has not committed") from None
             await conn.execute(
                 "DELETE FROM app_metadata WHERE key = ?",
                 (f"user_reset_pending:{username}",),
@@ -467,7 +467,7 @@ class UsersMixin(ConnectionMixin):
                 (auth_token, int(time.time()) + SESSION_MAX_AGE if auth_token else None, username),
             )
             if count != 1:
-                raise DatabaseError("failed to set auth token")
+                raise DatabaseError("failed to set auth token") from None
 
     async def ext_to_user(self, ext_username: str) -> str | None:
         async with self.connection() as conn:

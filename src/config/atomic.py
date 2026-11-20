@@ -141,9 +141,9 @@ def atomic_write_json(
         if sync_mode == "full":
             fsync_parent_dir(path)
 
-    except Exception:
+    except Exception as exc:
         with suppress(FileNotFoundError):
             Path(temp_path).unlink()
-        raise
+        raise exc from None
 
     return file_signature(path)
