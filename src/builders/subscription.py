@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import base64
+import time
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from weakref import WeakKeyDictionary
 
 from quart import Response
 
@@ -15,9 +19,66 @@ if TYPE_CHECKING:
     from core import Subscription
 
 
+_SUBSCRIPTION_CACHE_TTL = 5.0
+_SUBSCRIPTION_CACHE_SIZE = 256
+
+
+@dataclass(frozen=True, slots=True)
+class _CachedResponse:
+    body: bytes
+    status: int
+    headers: dict[str, str]
+    expires_at: float
+
+
+_subscription_cache: WeakKeyDictionary[
+    object, OrderedDict[tuple[str, str, str], _CachedResponse]
+] = WeakKeyDictionary()
+
+
 def _private_response(response: Response, status: int) -> tuple[Response, int]:
     # Token-bearing URLs serve personalized, user-agent-dependent representations.
     response.headers["Cache-Control"] = "private, no-store"
+    return response, status
+
+
+def _cached_response(
+    obj: Subscription,
+    key: tuple[str, str, str],
+) -> tuple[Response, int] | None:
+    cache = _subscription_cache.get(obj)
+    if cache is None:
+        return None
+
+    cached = cache.get(key)
+    if cached is None:
+        return None
+    if cached.expires_at <= time.monotonic():
+        del cache[key]
+        return None
+    cache.move_to_end(key)
+    return Response(cached.body, status=cached.status, headers=cached.headers), cached.status
+
+
+async def _store_response(
+    obj: Subscription,
+    key: tuple[str, str, str],
+    response: Response,
+    status: int,
+) -> tuple[Response, int]:
+    cache = _subscription_cache.setdefault(obj, OrderedDict())
+    body = await response.get_data()
+    if isinstance(body, str):
+        body = body.encode()
+    cache[key] = _CachedResponse(
+        body=body,
+        status=status,
+        headers=dict(response.headers),
+        expires_at=time.monotonic() + _SUBSCRIPTION_CACHE_TTL,
+    )
+    cache.move_to_end(key)
+    while len(cache) > _SUBSCRIPTION_CACHE_SIZE:
+        cache.popitem(last=False)
     return response, status
 
 
@@ -67,10 +128,27 @@ async def get_subscription(
     # and the names below are the ones callers patch on the package
     import builders
 
+    browser = builders.isbrowser(ua=ua)
+    is_happ = ua.startswith("Happ/")
+    response_format = (
+        "happ-json"
+        if is_happ
+        else "json"
+        if force_json == "1"
+        else "links-dummy"
+        if "v2rayn" in ua.lower()
+        else "links"
+    )
+    cache_key = (token, response_format, lang)
+
     if not token:
-        if builders.isbrowser(ua=ua):
+        if browser:
             return await _browser_response(obj, lang, token_required=True, auth_token=auth_token)
         return _private_response(*err("Invalid token.", 401))
+    if not browser:
+        cached = _cached_response(obj, cache_key)
+        if cached is not None:
+            return cached
     user = await obj.user_svc.user_by_token(token)
     username = user["username"] if user else None
     obj.audit_svc.audit_hit(
@@ -78,10 +156,10 @@ async def get_subscription(
     )
 
     if user is None or not username:
-        if builders.isbrowser(ua=ua):
+        if browser:
             return await _browser_response(obj, lang, token_required=True, auth_token=auth_token)
         return _private_response(*err("Invalid token.", 401))
-    if builders.isbrowser(ua=ua):
+    if browser:
         return await _browser_response(obj, lang, dashboard=True)
     if lang not in {"ru", "en"}:
         return _private_response(*err("Language can be either 'ru' or 'en'", 400))
@@ -92,7 +170,6 @@ async def get_subscription(
     lang_cfg = obj.res.lang_cfg.snapshot()
     displayname = str(user["displayname"])
     need_dummy_link = "v2rayn" in ua.lower()  # catches both v2rayn and v2rayng
-    is_happ = ua.startswith("Happ/")
     uri: str = cfg["uri"].strip("/")
 
     status = bool(user["enabled"])
@@ -168,7 +245,7 @@ async def get_subscription(
 
     if is_happ or force_json == "1":
         headers["Content-Type"] = "application/json"
-        return _private_response(
+        response, status = _private_response(
             Response(
                 response=builders.build_json(
                     cfg=cfg,
@@ -183,8 +260,9 @@ async def get_subscription(
             ),
             200,
         )
+        return await _store_response(obj, cache_key, response, status)
 
-    return _private_response(
+    response, status = _private_response(
         Response(
             builders.build_link_array(
                 cfg=cfg,
@@ -203,3 +281,4 @@ async def get_subscription(
         ),
         200,
     )
+    return await _store_response(obj, cache_key, response, status)
