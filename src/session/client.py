@@ -85,7 +85,12 @@ class XUiSession:
         self.dead = False
         self._token_rejected = False
         self._owned_transport = (
-            AiohttpPanelTransport(session, limit=request_limit, timeout=request_timeout)
+            AiohttpPanelTransport(
+                session,
+                limit=request_limit,
+                timeout=request_timeout,
+                read_timeout=request_timeout,
+            )
             if transport is None
             else None
         )

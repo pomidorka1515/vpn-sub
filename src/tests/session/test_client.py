@@ -39,6 +39,21 @@ def client(transport: XUiPanelTransport, *, verbose: bool = False) -> XUiSession
     )
 
 
+@pytest.mark.asyncio
+async def test_request_timeout_configures_socket_read_timeout() -> None:
+    panel = XUiSession(
+        name="test",
+        address="127.0.0.1",
+        port=2053,
+        uri="secret",
+        api_token="token",
+        request_timeout=30,
+    )
+    assert panel._owned_transport is not None
+    assert panel._owned_transport._read_timeout == 30
+    await panel.close()
+
+
 @pytest_asyncio.fixture
 async def endpoint() -> AsyncIterator[str]:
     async def echo(request: web.Request) -> web.Response:
