@@ -24,6 +24,7 @@ export interface ApiConfig {
 }
 export interface ApiOptions {
   allow401?: (result: ApiResult) => boolean;
+  cache?: RequestCache;
 }
 
 function resolve<T extends string | Record<string, string>>(value: Dynamic<T> | undefined): T | undefined {
@@ -74,6 +75,7 @@ export function createApi(
     }
     const headers = { ...resolve(config.headers) };
     const init: RequestInit = { method, credentials: 'same-origin', headers };
+    if (options.cache !== undefined) init.cache = options.cache;
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
       const serialized = serializeBody(body);

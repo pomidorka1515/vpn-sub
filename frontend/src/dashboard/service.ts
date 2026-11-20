@@ -21,7 +21,7 @@ export function createDashboardService(options: {
     options.request,
   );
   async function stats() {
-    const response = await api('GET', '/stats');
+    const response = await api('GET', '/stats', undefined, { cache: 'no-store' });
     return { response, stats: response?.success ? parseStats(response.obj) : null };
   }
   return { api, stats };

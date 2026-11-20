@@ -40,6 +40,7 @@ describe('dashboard service', () => {
       method: 'GET',
       credentials: 'same-origin',
       headers: {},
+      cache: 'no-store',
     });
     expect(result.response).toEqual({ success: true, msg: null, obj: stats, status: 200 });
     expect(result.stats).toEqual(stats);
