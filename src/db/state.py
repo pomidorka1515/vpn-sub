@@ -192,7 +192,10 @@ class StateMixin(ConnectionMixin):
             await conn.execute("UPDATE users SET bw_used = 0, wl_used = 0")
             await conn.executemany(
                 "INSERT INTO app_metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                [("last_reset", today), ("last_reset_month", month)],
+                [
+                    ("last_reset", today),
+                    ("last_reset_month", month),
+                ],
             )
             await self._reset_monthly_notifications(conn)
             return True

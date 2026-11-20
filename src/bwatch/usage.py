@@ -103,7 +103,16 @@ class UsageJobs(WatchJobs):
             sampled_at = datetime.now(UTC)
             month = sampled_at.strftime("%Y-%m")
             reset_month = await self.db.get_metadata("last_reset_month")
-            rollover = reset_month is not None and reset_month != month
+            usage_month = await self.db.get_metadata("watcher_usage_month")
+            rollover = (reset_month is not None and reset_month != month) or (
+                usage_month is not None and usage_month != month
+            )
+            if rollover:
+                # Counter rollover is a database-wide operation, not a user
+                # mutation. Keep its short SQLite write transaction outside
+                # the coordinator: taking every known user lock here would
+                # block unrelated mutations for the whole usage commit.
+                await self.db.reset_monthly(month, sampled_at.strftime("%Y-%m-%d"))
             await self._refresh_usage_cache(reset_month, full=rollover)
             clear = self._usage_month is not None and self._usage_month != month
             known = self._usage_known
@@ -199,9 +208,7 @@ class UsageJobs(WatchJobs):
                 self._usage_month = month
 
             if candidates or period is not None or self._usage_stale:
-                await self.sub.res.coordinator.run(
-                    list(known) if rollover else sorted(candidates), commit, name="watcher:usage"
-                )
+                await self.sub.res.coordinator.run(sorted(candidates), commit, name="watcher:usage")
             await self._recover_quotas()
 
         await self._job("bandwidth", operation)
