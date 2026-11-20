@@ -394,6 +394,21 @@ export function validateDraft(draft: ConfigObject): ValidationIssue[] {
       ) {
         issues.push(issue('3xui.' + id + '.inbounds_list', t('config_err_positive_integer')));
       }
+      if (
+        Object.hasOwn(panel, 'health_check_interval') &&
+        (!isFiniteNumber(panel['health_check_interval']) || Number(panel['health_check_interval']) < 1)
+      )
+        issues.push(issue('3xui.' + id + '.health_check_interval', t('config_err_positive_number')));
+      if (
+        Object.hasOwn(panel, 'request_limit') &&
+        (!isInteger(panel['request_limit']) || Number(panel['request_limit']) < 1)
+      )
+        issues.push(issue('3xui.' + id + '.request_limit', t('config_err_positive_integer')));
+      if (
+        Object.hasOwn(panel, 'request_timeout') &&
+        (!isFiniteNumber(panel['request_timeout']) || Number(panel['request_timeout']) <= 0)
+      )
+        issues.push(issue('3xui.' + id + '.request_timeout', t('config_err_positive_number')));
       if (Object.prototype.hasOwnProperty.call(panel, 'inject_headers')) {
         const headers = panel['inject_headers'];
         if (!isPlainObject(headers) || Object.values(headers).some((item) => typeof item !== 'string')) {

@@ -176,7 +176,10 @@
                         "type": "string",
                         "enum": ["whitelist", "blacklist"]
                     },
-                    "inject_headers": { "type": "object", "additionalProperties": { "type": "string" } }
+                    "inject_headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "health_check_interval": { "type": "number", "minimum": 1, "description": "Seconds between panel health checks." },
+                    "request_limit": { "type": "integer", "minimum": 1, "description": "Maximum concurrent requests to this panel." },
+                    "request_timeout": { "type": "number", "exclusiveMinimum": 0, "description": "Panel request timeout in seconds." }
                 }
             }
         },

@@ -55,7 +55,7 @@ export const PROFILE_FIELDS = [
   'shortProfileDescription',
 ];
 export const PANEL_FIELDS = ['name', 'address', 'port', 'uri', 'token', 'https', 'whitelist', 'inbounds_list', 'mode'];
-export const PANEL_OPTIONAL = ['inject_headers'];
+export const PANEL_OPTIONAL = ['inject_headers', 'health_check_interval', 'request_limit', 'request_timeout'];
 export const INTEGER_RE = /^(0|-?[1-9]\d*)$/;
 
 export const MAIN_SECTIONS: Array<[string, string[]]> = [

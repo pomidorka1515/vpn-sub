@@ -252,8 +252,11 @@ function dialogPanel() {
     <div class="form-row"><label>${escapeHtml(t('config_field_https'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="https"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_whitelist'))}</label><div class="input-wrap"><label class="dark-check"><input type="checkbox" data-field="whitelist"><div class="check-track"><div class="check-thumb"></div></div></label></div></div>
     <div class="form-row"><label>${escapeHtml(t('config_field_mode'))}</label><div class="input-wrap"><select data-field="mode" aria-describedby="cfg-dlg-mode-help"><option value="blacklist" selected>${escapeHtml(t('config_blacklist_mode'))}</option><option value="whitelist">${escapeHtml(t('config_whitelist_mode'))}</option></select><div class="config-sub" id="cfg-dlg-mode-help">${escapeHtml(t('config_panel_mode_help'))}</div></div></div>
-    <div class="form-row"><label>${escapeHtml(t('config_field_inbounds_list'))}</label><div class="input-wrap">${rowList('cfg-dlg-inbounds', [], 'int')}</div></div>
-    <div class="form-row"><label>${escapeHtml(t('config_field_inject_headers'))}</label><div class="input-wrap" data-dialog-nested="inject_headers"></div></div>
+     <div class="form-row"><label>${escapeHtml(t('config_field_inbounds_list'))}</label><div class="input-wrap">${rowList('cfg-dlg-inbounds', [], 'int')}</div></div>
+     <div class="form-row"><label>${escapeHtml(t('config_field_health_check_interval'))}</label><div class="input-wrap"><input type="text" data-field="health_check_interval" inputmode="decimal" aria-describedby="cfg-dlg-health-help"><div class="config-sub" id="cfg-dlg-health-help">${escapeHtml(t('config_panel_health_check_help'))}</div></div></div>
+     <div class="form-row"><label>${escapeHtml(t('config_field_request_limit'))}</label><div class="input-wrap"><input type="text" data-field="request_limit" inputmode="numeric" aria-describedby="cfg-dlg-limit-help"><div class="config-sub" id="cfg-dlg-limit-help">${escapeHtml(t('config_panel_request_limit_help'))}</div></div></div>
+     <div class="form-row"><label>${escapeHtml(t('config_field_request_timeout'))}</label><div class="input-wrap"><input type="text" data-field="request_timeout" inputmode="decimal" aria-describedby="cfg-dlg-timeout-help"><div class="config-sub" id="cfg-dlg-timeout-help">${escapeHtml(t('config_panel_request_timeout_help'))}</div></div></div>
+     <div class="form-row"><label>${escapeHtml(t('config_field_inject_headers'))}</label><div class="input-wrap" data-dialog-nested="inject_headers"></div></div>
     ${fieldError('cfg-dialog-err')}
   </div>`;
 }
@@ -304,6 +307,10 @@ function readDialogPanel(body: HTMLElement): ConfigObject & { id: string } {
       return INTEGER_RE.test(value.trim()) ? new ConfigNumber(value.trim()) : value;
     }),
   };
+  for (const field of ['health_check_interval', 'request_limit', 'request_timeout']) {
+    const raw = dialogValue(body, field)?.value.trim() ?? '';
+    if (raw !== '') result[field] = INTEGER_RE.test(raw) ? new ConfigNumber(raw) : Number(raw);
+  }
   if (document.getElementById('cfg-dlg-headers'))
     result['inject_headers'] = Object.fromEntries(
       readRows('cfg-dlg-headers', 'pair')

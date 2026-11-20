@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import fcntl
-from typing import TYPE_CHECKING, BinaryIO
+from typing import TYPE_CHECKING, BinaryIO, cast
 
 from errors import SchemaValidationError
 from session.client import XUiSession
@@ -66,6 +66,9 @@ def build_panels(
             inbounds_list=tuple(section["inbounds_list"]),
             mode=section["mode"],
             inject_headers=section.get("inject_headers"),
+            health_check_interval=cast(float, section.get("health_check_interval", 20.0)),
+            request_limit=cast(int, section.get("request_limit", 8)),
+            request_timeout=cast(float, section.get("request_timeout", 5.0)),
             transport=options.panel_transport_factory()
             if options.panel_transport_factory
             else None,

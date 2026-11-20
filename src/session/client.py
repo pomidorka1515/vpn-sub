@@ -58,6 +58,8 @@ class XUiSession:
             raise ValueError("health_check_interval must be at least 1")
         if request_timeout <= 0:
             raise ValueError("request_timeout must be positive")
+        if request_limit < 1:
+            raise ValueError("request_limit must be at least 1")
         if transport is not None and session is not None:
             raise ValueError("pass either transport or session, not both")
         self.name = name

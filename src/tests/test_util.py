@@ -28,7 +28,6 @@ if TYPE_CHECKING:
         ("Mozilla/5.0 Version/16.0 Safari/605.1.15", True),
         ("Mozilla/5.0 Edg/120.0", True),
         ("Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1)", True),
-        ("Opera Mini", True),
         ("Happ/1.0", False),
         ("v2rayN/7.0", False),
         ("curl/8.0", False),
