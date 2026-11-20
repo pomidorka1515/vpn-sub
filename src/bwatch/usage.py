@@ -196,11 +196,11 @@ class UsageJobs(WatchJobs):
                         clear_baselines=clear,
                         period=period,
                     )
-                except BaseException:
+                except BaseException as exc:
                     # Any failed acknowledgement (including cancellation) can
                     # leave the commit outcome uncertain. SQLite is authoritative.
                     self._usage_ready = False
-                    raise
+                    raise exc from None
                 if clear:
                     self._clear_usage_counters()
                 self._apply_usage_baselines(baselines, removed)

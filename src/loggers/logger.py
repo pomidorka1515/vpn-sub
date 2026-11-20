@@ -124,9 +124,9 @@ class Logger(logging.Logger):
             self.info(
                 f"Loaded {Colors.BOLD}{self.name}{Colors.RESET}! {Colors.ITALIC}({dt:.1f}ms){Colors.RESET}",
             )
-        except Exception:
+        except Exception as exc:
             self.error(f"Failed to load {self.name}.")
-            raise
+            raise exc from None
 
     @contextmanager
     def span(self, name: str, verbose: bool = False) -> Generator[None]:
@@ -137,6 +137,6 @@ class Logger(logging.Logger):
             yield
             dt = (time.monotonic() - t0) * 1000
             self.info(f"Executed: {name} {Colors.ITALIC}({dt:.1f}ms){Colors.RESET}")
-        except Exception as e:
-            self.error(f"Fail when executing {name}: {e}")
-            raise
+        except Exception as exc:
+            self.error(f"Fail when executing {name}: {exc}")
+            raise exc from None

@@ -133,7 +133,7 @@ class SnapshotJobs(WatchJobs):
                     raise PanelUnavailableError(
                         f"Daily bandwidth snapshot failed for {len(states)}/{len(states)} eligible user(s)",
                     ) from exc
-                raise
+                raise exc from None
 
             async def commit() -> None:
                 current_states = await self.sub.user_svc.list_user_states()

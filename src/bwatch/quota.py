@@ -92,10 +92,10 @@ class QuotaJobs(WatchJobs):
             username = await self._notice_queue.get()
             try:
                 await self._process_notices(username)
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as exc:
                 task = asyncio.current_task()
                 if task is not None and task.cancelling():
-                    raise
+                    raise exc from None
                 self.log.warning("notification attempt cancelled for %s", username)
             except Exception:
                 self.log.exception("notification delivery failed for %s", username)
