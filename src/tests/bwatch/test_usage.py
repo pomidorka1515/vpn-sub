@@ -343,7 +343,7 @@ async def test_accounting_persists_before_advancing_baselines(tmp_path: Path) ->
             clear_baselines: bool = False,
             period: tuple[str, str] | None = None,
         ) -> None:
-            raise RuntimeError("disk unavailable")
+            raise RuntimeError("disk unavailable") from None
 
         db.increment_usages = failed_commit  # type: ignore[method-assign]
         with pytest.raises(RuntimeError, match="disk unavailable"):
@@ -629,7 +629,7 @@ async def test_usage_reloads_after_failed_commit_acknowledgement(
 
     async def commit_then_fail(*args: object, **kwargs: object) -> None:
         await increment(*args, **kwargs)  # type: ignore[arg-type]
-        raise failure
+        raise failure from None
 
     traffic.return_value = {"panel": {"alice": BandwidthInfo(140, 0, 140)}}
     with monkeypatch.context() as patch:
@@ -878,7 +878,7 @@ async def test_failed_startup_poll_retains_baseline_until_recovery(tmp_path: Pat
         known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         if offline:
-            raise PanelUnavailableError("panel offline")
+            raise PanelUnavailableError("panel offline") from None
         return {"panel": {"alice": BandwidthInfo(total, 0, total)}}
 
     async def no_snapshots(now: float) -> None:

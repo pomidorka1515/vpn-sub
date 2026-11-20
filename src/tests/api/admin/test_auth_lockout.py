@@ -48,7 +48,7 @@ async def auth_store(tmp_path: Path) -> AsyncIterator[tuple[AsyncRateLimiter, Re
             if socket.exists():
                 break
             if process.returncode is not None:
-                raise RuntimeError("test Redis failed to start")
+                raise RuntimeError("test Redis failed to start") from None
             await asyncio.sleep(0.01)
         await limiter.start()
         yield limiter, client

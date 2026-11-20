@@ -59,7 +59,7 @@ async def test_cancelled_registration_settles_siblings_then_compensates(
             await release.wait()
         elif route.endswith("clients/add"):
             await started.wait()
-            raise PanelRejectedError("second panel rejected")
+            raise PanelRejectedError("second panel rejected") from None
         else:
             await original(panel, route, body, what)
 
@@ -166,7 +166,7 @@ async def test_fanout_waits_for_later_write_before_raising(
     async def write(panel: object) -> None:
         if panel is sub.panels[0]:
             await started.wait()
-            raise PanelRejectedError("first failed")
+            raise PanelRejectedError("first failed") from None
         started.set()
         await release.wait()
         finished.append("later")
@@ -414,7 +414,7 @@ async def test_failed_shared_refresh_is_retryable(tmp_path: Path) -> None:
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise RuntimeError("refresh failed")
+            raise RuntimeError("refresh failed") from None
         return "recovered"
 
     try:

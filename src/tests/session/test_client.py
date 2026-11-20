@@ -277,9 +277,9 @@ class BlockingTransport:
         self.entered.set()
         try:
             await self.release.wait()
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as exc:
             self.cancelled.set()
-            raise
+            raise exc from None
         return PanelResponse.from_json({"success": True})
 
 

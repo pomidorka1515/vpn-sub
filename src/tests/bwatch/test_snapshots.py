@@ -319,7 +319,7 @@ async def test_daily_snapshot_retry_reloads_durable_baselines(
     ) -> None:
         if committed:
             await save(rows, baselines=baselines, starts=starts)
-        raise asyncio.CancelledError
+        raise asyncio.CancelledError from None
 
     try:
         await db.create_user(
@@ -438,7 +438,7 @@ async def test_daily_history_keeps_panel_reset_domains_independent(
         known: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, BandwidthInfo]]:
         if require_complete and "a" not in readings:
-            raise PanelUnavailableError("panel a unavailable")
+            raise PanelUnavailableError("panel a unavailable") from None
         return {
             panel: {"alice": BandwidthInfo(total, total * 2, total * 3)}
             for panel, total in readings.items()

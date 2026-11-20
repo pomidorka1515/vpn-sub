@@ -225,7 +225,7 @@ def test_metadata_failure_does_not_replace_config(
     original = path.read_bytes()
 
     def fail(*_args: object) -> None:
-        raise PermissionError("cannot preserve mode")
+        raise PermissionError("cannot preserve mode") from None
 
     monkeypatch.setattr(mp.os, "fchmod", fail)
     with pytest.raises(PermissionError, match="cannot preserve mode"):
@@ -306,7 +306,7 @@ def test_replace_failure_preserves_current_config(
         assert target == path
         assert path.read_bytes() == original
         assert backup.read_bytes() == backup_bytes
-        raise OSError("forced replacement failure")
+        raise OSError("forced replacement failure") from None
 
     monkeypatch.setattr(Path, "replace", fail_replace)
 
@@ -391,7 +391,7 @@ def test_schema_validation_failure_does_not_replace_file(
 
     def fail(schema: object, **kwargs: object) -> None:
         del schema, kwargs
-        raise mp.fastjsonschema.JsonSchemaValueException("forced failure")
+        raise mp.fastjsonschema.JsonSchemaValueException("forced failure") from None
 
     monkeypatch.setattr(mp.fastjsonschema, "compile", fail)
 

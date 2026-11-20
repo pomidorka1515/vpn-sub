@@ -81,7 +81,7 @@ async def test_job_serialization_and_failure_retry(tmp_path: Path) -> None:
         assert calls == 2
 
         async def fail() -> None:
-            raise RuntimeError("offline")
+            raise RuntimeError("offline") from None
 
         watch.record_daily_snapshot = fail  # type: ignore[method-assign]
         watch.record_snap_snapshot = job  # type: ignore[method-assign]

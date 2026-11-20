@@ -450,13 +450,13 @@ async def test_password_change_deletes_before_account_lookup_failures(
     async def username_lookup(uid: int) -> str | None:
         delete.assert_awaited_once_with(7, 5, secret=True)
         if failure == "username_error":
-            raise RuntimeError("lookup failed")
+            raise RuntimeError("lookup failed") from None
         return None if failure == "unlinked" else "alice"
 
     async def external_lookup(username: str) -> str:
         delete.assert_awaited_once_with(7, 5, secret=True)
         if failure == "login_error":
-            raise RuntimeError("lookup failed")
+            raise RuntimeError("lookup failed") from None
         return "" if failure == "no_login" else "bob"
 
     subscription.telegram_svc.get_username_telegram.side_effect = username_lookup
@@ -482,7 +482,7 @@ async def test_password_is_deleted_before_language_lookup_error(
 
     async def fail_language_lookup(uid: int) -> str:
         delete.assert_awaited_once_with(7, 5, secret=True)
-        raise RuntimeError("lookup failed")
+        raise RuntimeError("lookup failed") from None
 
     cast(AsyncMock, mixin.get_lang).side_effect = fail_language_lookup
     if isinstance(mixin, PublicLoginMixin):

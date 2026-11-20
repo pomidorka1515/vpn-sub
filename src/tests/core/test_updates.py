@@ -260,7 +260,7 @@ async def test_updates_failure_and_cancellation_are_shared(
     async def fail() -> None:
         entered.set()
         await release.wait()
-        raise RuntimeError("unavailable")
+        raise RuntimeError("unavailable") from None
 
     load = AsyncMock(side_effect=fail)
     monkeypatch.setattr(sub.update_svc, "_collect", load)

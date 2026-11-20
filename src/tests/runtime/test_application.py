@@ -410,7 +410,7 @@ async def test_factory_routes_and_idempotent_stop(paths: AppPaths) -> None:
 async def test_factory_unwinds_failed_startup(paths: AppPaths) -> None:
     class BrokenRedis(OpenRedis):
         async def ping(self) -> bool:
-            raise OSError("Redis unavailable")
+            raise OSError("Redis unavailable") from None
 
     with pytest.raises(OSError, match="Redis unavailable"):
         await create_application(
@@ -440,18 +440,18 @@ async def test_factory_cleanup_continues_after_close_failures(
 
     class BrokenRedis(OpenRedis):
         async def ping(self) -> bool:
-            raise OSError("Redis unavailable")
+            raise OSError("Redis unavailable") from None
 
         async def aclose(self) -> None:
             events.append("redis")
             if cancel_close:
-                raise asyncio.CancelledError("Redis close cancelled")
-            raise ValueError("Redis close failed")
+                raise asyncio.CancelledError("Redis close cancelled") from None
+            raise ValueError("Redis close failed") from None
 
     async def broken_offloads_close(self: OffloadServices) -> None:
         await close_offloads(self)
         events.append("offloads")
-        raise OSError("offloads close failed")
+        raise OSError("offloads close failed") from None
 
     monkeypatch.setattr(OffloadServices, "close", broken_offloads_close)
     limiter = AsyncRateLimiter("redis://test", client=BrokenRedis())
@@ -501,7 +501,7 @@ async def test_factory_retains_cleanup_after_repeated_cancellation(
         async def aclose(self) -> None:
             closing.set()
             await release.wait()
-            raise OSError("detached Redis close failed")
+            raise OSError("detached Redis close failed") from None
 
     async def record_offloads_close(self: OffloadServices) -> None:
         await close_offloads(self)
@@ -615,7 +615,7 @@ async def test_factory_failed_producer_drains_mutations_despite_unwind_cancellat
             pass
 
         async def start(self) -> None:
-            raise ValueError("Discord startup failed")
+            raise ValueError("Discord startup failed") from None
 
         async def close(self) -> None:
             events.append("discord")

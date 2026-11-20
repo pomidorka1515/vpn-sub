@@ -141,7 +141,7 @@ class _Sink:
 
     async def __call__(self, tgid: int, text: str) -> None:
         if self.fail:
-            raise RuntimeError("blocked")
+            raise RuntimeError("blocked") from None
         self.sent.append((tgid, text))
 
 

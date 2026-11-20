@@ -356,7 +356,7 @@ async def test_retry_loop_recovers_without_another_quota_poll(
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise RuntimeError("offline")
+            raise RuntimeError("offline") from None
         retried.set()
 
     watch = BWatch(
@@ -391,7 +391,7 @@ async def test_overflow_retry_is_fair_to_accounts_after_permanent_failures(
 
     async def send(tgid: int, _text: str) -> None:
         if tgid <= 3:
-            raise RuntimeError("offline")
+            raise RuntimeError("offline") from None
         if tgid == 6:
             last_sent.set()
 

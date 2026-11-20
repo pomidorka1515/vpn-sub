@@ -63,7 +63,7 @@ async def test_user_refresh_aborts_on_non_panel_error(
         work: str = "foreground",
     ) -> None:
         if username == "bob":
-            raise AppError("panel rejected")
+            raise AppError("panel rejected") from None
 
     sub.business_svc.add_users = add_users  # type: ignore[method-assign]
     response = await app.test_client().post(
@@ -154,7 +154,7 @@ async def test_user_refresh_reports_panel_failures_in_user_order(
             await first_failed.wait()
         if all_failed or username in {"user0", "user1"}:
             first_failed.set()
-            raise PanelUnavailableError("offline")
+            raise PanelUnavailableError("offline") from None
 
     monkeypatch.setattr(sub.user_svc, "list_users", list_users)
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
@@ -194,12 +194,12 @@ async def test_user_refresh_abort_drains_in_flight_and_stops_new_users(
             if username == "bob":
                 await saturated.wait()
                 aborted.set()
-                raise AppError("unexpected failure")
+                raise AppError("unexpected failure") from None
             await release.wait()
             if username == "alice":
-                raise PanelUnavailableError("offline")
+                raise PanelUnavailableError("offline") from None
             if username == "carol":
-                raise AppError("another in-flight failure")
+                raise AppError("another in-flight failure") from None
         finally:
             finished.append(username)
 

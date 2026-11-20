@@ -77,7 +77,7 @@ def test_refuses_outside_a_binary(
     def _get(*_args: object, **_kwargs: object) -> object:
         nonlocal called
         called = True
-        raise AssertionError("network")
+        raise AssertionError("network") from None
 
     monkeypatch.setattr(scripts_load, "_get", _get)
     assert load_scripts() == 1

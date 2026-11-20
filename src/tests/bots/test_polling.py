@@ -57,7 +57,7 @@ async def test_polling_errors_are_sanitized_and_retry_is_interruptible() -> None
 
     async def updates(**kwargs: object) -> list[object]:
         called.set()
-        raise OSError(f"https://api.telegram.org/bot{token}/getUpdates")
+        raise OSError(f"https://api.telegram.org/bot{token}/getUpdates") from None
 
     cast(MagicMock, getattr(bot.bot, "get_updates")).side_effect = updates
     await bot.start()

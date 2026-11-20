@@ -103,7 +103,7 @@ async def test_month_rollover_preserves_notification_episodes(
                     clear_baselines=clear_baselines,
                     period=period,
                 )
-            raise asyncio.CancelledError
+            raise asyncio.CancelledError from None
 
         with monkeypatch.context() as patch:
             if boundary == "after_reenable":

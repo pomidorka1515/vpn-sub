@@ -30,7 +30,7 @@ async def test_partial_failures_retry_only_unsuccessful_recipients() -> None:
     async def send(uid: int, text: str, *, parse_mode: str) -> None:
         attempts.append(uid)
         if uid == 20 and attempts.count(20) < 3:
-            raise RuntimeError("secret-token")
+            raise RuntimeError("secret-token") from None
 
     telegram.send_message.side_effect = send
     owner = AsyncBotLogging(bot)
@@ -70,7 +70,7 @@ async def test_partial_failure_exhaustion_does_not_resend_successes(
 
     async def send(uid: int, text: str, *, parse_mode: str) -> None:
         if uid == 20:
-            raise RuntimeError("secret-token")
+            raise RuntimeError("secret-token") from None
 
     telegram.send_message.side_effect = send
     owner = AsyncBotLogging(bot)
@@ -94,7 +94,7 @@ async def test_retry_is_guarded_against_recursion_and_close_drains() -> None:
     async def send(uid: int, text: str, *, parse_mode: str) -> None:
         calls.append(uid)
         if uid == 20 and calls.count(20) == 1:
-            raise RuntimeError("first failure")
+            raise RuntimeError("first failure") from None
         if uid == 20:
             logger.error("recursive transport log")
             entered.set()

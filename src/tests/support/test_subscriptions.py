@@ -33,7 +33,7 @@ async def test_scope_closes_subscriptions_when_its_body_fails(
             monkeypatch.setattr(sub, "close", close)
             monkeypatch.setattr(sub.panels[0], "close", panels_close)
             monkeypatch.setattr(sub.res.offloads.files, "close", files_close)
-            raise RuntimeError("test body failed")
+            raise RuntimeError("test body failed") from None
 
     with pytest.raises(RuntimeError, match="test body failed"):
         await failing_body()

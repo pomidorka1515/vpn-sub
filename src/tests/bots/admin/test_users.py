@@ -179,9 +179,9 @@ async def test_online_users_and_refresh_failures(
 
     def refresh(username: str, *args: object, **kwargs: object) -> None:
         if username == "bob":
-            raise PanelUnavailableError("down")
+            raise PanelUnavailableError("down") from None
         if username == "carol":
-            raise RuntimeError("boom")
+            raise RuntimeError("boom") from None
 
     subscription.business_svc.add_users.side_effect = refresh
     await mixin._cb_refresh(7)

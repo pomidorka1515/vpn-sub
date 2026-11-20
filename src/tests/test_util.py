@@ -155,7 +155,7 @@ def test_cpu_since_last_does_not_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(SysUtil, "_cpu_prev", None)
 
     def fail_sleep(_seconds: float) -> None:
-        raise AssertionError("polling cpu sample must not sleep")
+        raise AssertionError("polling cpu sample must not sleep") from None
 
     monkeypatch.setattr("sysutil.util.time", SimpleNamespace(sleep=fail_sleep))
     assert SysUtil.cpu_since_last() == 0.0
@@ -208,7 +208,7 @@ def test_app_memory_skips_dead_children(monkeypatch: pytest.MonkeyPatch) -> None
 
     class _Dead:
         def memory_full_info(self) -> _Mem:
-            raise psutil.NoSuchProcess(1)
+            raise psutil.NoSuchProcess(1) from None
 
     class _Proc:
         def memory_full_info(self) -> _Mem:
@@ -292,7 +292,7 @@ def test_app_threads_reads_stack_and_skips_dead(
 
     class _Dead:
         def num_ctx_switches(self) -> _Switches:
-            raise psutil.NoSuchProcess(1026)
+            raise psutil.NoSuchProcess(1026) from None
 
     class _Current:
         pid = 9

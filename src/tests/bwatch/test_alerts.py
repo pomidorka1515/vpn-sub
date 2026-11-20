@@ -171,7 +171,7 @@ async def test_panel_status_read_failure_is_alerted(
 
     async def unreadable(_url: str) -> None:
         panel.dead = mark_dead
-        raise ValueError("unreadable status response")
+        raise ValueError("unreadable status response") from None
 
     get = AsyncMock(side_effect=unreadable)
     monkeypatch.setattr(panel, "get", get)
@@ -341,7 +341,7 @@ async def test_panel_alert_uses_all_recipient_acceptance(
 
     async def send(uid: int, _text: str, *, parse_mode: str) -> None:
         if uid in failed_uids:
-            raise RuntimeError("recipient unavailable")
+            raise RuntimeError("recipient unavailable") from None
 
     bot.bot.send_message = AsyncMock(side_effect=send)
     await watch.panel_health_check()
@@ -386,7 +386,7 @@ async def test_cancelled_panel_alert_retries_without_success_cooldown(
 
     async def send(uid: int, _text: str, *, parse_mode: str) -> None:
         if uid == cancel_uid:
-            raise asyncio.CancelledError
+            raise asyncio.CancelledError from None
 
     bot.bot.send_message = AsyncMock(side_effect=send)
     with pytest.raises(asyncio.CancelledError):

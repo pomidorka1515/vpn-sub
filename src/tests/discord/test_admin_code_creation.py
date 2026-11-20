@@ -245,7 +245,7 @@ async def test_inflight_duplicate_and_new_workflow_are_isolated(
         entered.set()
         await release.wait()
         if fail:
-            raise RuntimeError("failed")
+            raise RuntimeError("failed") from None
 
     sub.code_svc.add_code.side_effect = add
     if not permanent:

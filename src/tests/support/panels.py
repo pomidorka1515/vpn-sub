@@ -156,7 +156,7 @@ class FakePanel:
         self.gets.append(url)
         if "server/status" in url:
             if self._status_error is not None:
-                raise self._status_error
+                raise self._status_error from None
             payload: dict[str, JsonValue] = (
                 self._status_payload
                 if self._status_payload is not None
@@ -164,7 +164,7 @@ class FakePanel:
             )
             return json_http(payload, self._status_status)
         if self._get_error is not None:
-            raise self._get_error
+            raise self._get_error from None
         if self._get_payload is not None:
             return json_http(self._get_payload, self._get_status)
         if "clients/list" in url:
@@ -216,11 +216,11 @@ class FakePanel:
     def post(self, url: str, **kwargs: object) -> Response:
         self.posts.append((url, dict(kwargs)))
         if self._post_error is not None:
-            raise self._post_error
+            raise self._post_error from None
         if self._post_queue:
             item = self._post_queue.pop(0)
             if isinstance(item, BaseException):
-                raise item
+                raise item from None
             queued = dict(item)
             raw_status = queued.pop("status_code", self._post_status)
             assert isinstance(raw_status, (int, str))

@@ -157,7 +157,7 @@ def test_notice_does_nothing_outside_a_binary(
     def _get(*_args: object, **_kwargs: object) -> object:
         nonlocal called
         called = True
-        raise AssertionError("network")
+        raise AssertionError("network") from None
 
     monkeypatch.setattr(updater, "_get", _get)
     notice()
@@ -170,7 +170,7 @@ def test_notice_can_be_disabled_in_binary(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("VPN_SUB_DISABLE_UPDATE_NOTICE", "1")
 
     def fail(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("network")
+        raise AssertionError("network") from None
 
     monkeypatch.setattr(updater, "_get", fail)
     notice()
@@ -260,7 +260,7 @@ def test_failed_replace_preserves_installed_binary(
 
     def _replace(self: Path, target: Path) -> Path:
         if self.name == "vpn-sub.new":
-            raise OSError("rename failed")
+            raise OSError("rename failed") from None
         return real_replace(self, target)
 
     monkeypatch.setattr(Path, "replace", _replace)

@@ -122,7 +122,7 @@ async def test_health_returns_503_when_database_ping_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail() -> object:
-        raise DatabaseError("down")
+        raise DatabaseError("down") from None
 
     app, sub = admin_api
     monkeypatch.setattr(sub.res.db, "connection", fail)

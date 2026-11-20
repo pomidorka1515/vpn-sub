@@ -419,7 +419,7 @@ async def test_config_response_retains_own_revision_during_concurrent_edit(
 
         async def fail_first_audit(record: dict[str, JsonValue]) -> None:
             if record["info"] == {"keys": ["sub_name"]}:
-                raise OSError("audit unavailable")
+                raise OSError("audit unavailable") from None
             await append(record)
 
         monkeypatch.setattr(audit, "append", fail_first_audit)
@@ -587,7 +587,7 @@ async def test_config_audit_failure_preserves_committed_result(
     async def fail_append(record: dict[str, JsonValue]) -> None:
         assert record["action"] == "config_update"
         assert record["info"] == {"keys": ["3xui", "sub_name"]}
-        raise failure
+        raise failure from None
 
     monkeypatch.setattr(audit, "append", fail_append)
     response = await set_config(app, base_for(path), {"sub_name": "after", "3xui": {}})
@@ -615,7 +615,7 @@ async def test_failed_commit_does_not_publish_or_audit(
     before = path.read_bytes()
 
     def fail_write(data: dict[str, JsonValue]) -> None:
-        raise OSError("disk full")
+        raise OSError("disk full") from None
 
     monkeypatch.setattr(cfg._require_store(), "atomic_write", fail_write)
     response = await set_config(app, base_for(path), {"sub_name": "after"})

@@ -43,7 +43,7 @@ def test_view_is_detached_typed_document(app_cfg: Config[AppConfig]) -> None:
     snapshot: AppConfig = app_cfg.view()
     assert type(snapshot) is dict
     if "bot" not in snapshot:
-        raise AssertionError("fixture must include bot")
+        raise AssertionError("fixture must include bot") from None
     token: str = snapshot["bot"]["token"]
     mode: Literal["whitelist", "blacklist"] = snapshot["3xui"]["local"]["mode"]
     optional: str | None = snapshot.get("api_uri")

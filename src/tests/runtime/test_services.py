@@ -29,12 +29,12 @@ class FakeResource:
     async def start(self) -> None:
         self.events.append(f"start:{self.name}")
         if self.fail_start:
-            raise ValueError("startup failed")
+            raise ValueError("startup failed") from None
 
     async def close(self) -> None:
         self.events.append(f"close:{self.name}")
         if self.fail_close:
-            raise ValueError("cleanup failed")
+            raise ValueError("cleanup failed") from None
 
 
 @pytest.mark.asyncio
@@ -187,17 +187,17 @@ async def test_resource_cancellations_are_collected_after_safe_shutdown(
     async def quiesce() -> None:
         events.append("quiesce")
         quiesced.set()
-        raise asyncio.CancelledError("quiesce cancelled")
+        raise asyncio.CancelledError("quiesce cancelled") from None
 
     class CancelledResource(FakeResource):
         async def close(self) -> None:
             events.append("close:producer")
-            raise asyncio.CancelledError("close cancelled")
+            raise asyncio.CancelledError("close cancelled") from None
 
     async def failing_offloads(offloads: OffloadServices) -> None:
         await close_offloads(offloads)
         events.append("offloads")
-        raise ValueError("offloads failed")
+        raise ValueError("offloads failed") from None
 
     monkeypatch.setattr(OffloadServices, "close", failing_offloads)
     runtime = Runtime(
@@ -318,7 +318,7 @@ async def test_offload_retains_capacity_and_drains_cancelled_callers() -> None:
         assert threading.current_thread().name == "disk:disk-check"
         loop.call_soon_threadsafe(started.set)
         if not finish.wait(timeout=5):
-            raise TimeoutError("test did not release worker")
+            raise TimeoutError("test did not release worker") from None
         completed.set()
         return 42
 
@@ -372,7 +372,7 @@ async def test_offload_burst_waits_and_respects_file_limit() -> None:
                 loop.call_soon_threadsafe(saturated.set)
         try:
             if not release.wait(timeout=5):
-                raise TimeoutError("test did not release workers")
+                raise TimeoutError("test did not release workers") from None
             return value
         finally:
             with lock:
@@ -403,7 +403,7 @@ async def test_offload_cancelled_waiter_does_not_submit_or_lose_capacity() -> No
     def blocking() -> None:
         loop.call_soon_threadsafe(started.set)
         if not release.wait(timeout=5):
-            raise TimeoutError("test did not release worker")
+            raise TimeoutError("test did not release worker") from None
 
     caller = asyncio.create_task(offload.run(blocking))
     try:
@@ -441,7 +441,7 @@ async def test_owned_background_tasks_cancel_and_report_detached_errors(
             cleaned.set()
 
     async def failing() -> None:
-        raise ValueError("detached failure")
+        raise ValueError("detached failure") from None
 
     tasks.create(background, name="watcher")
     await started.wait()
@@ -495,7 +495,7 @@ async def test_stop_during_failed_startup_unwinds_once() -> None:
         async def start(self) -> None:
             started.set()
             await fail.wait()
-            raise ValueError("startup failed")
+            raise ValueError("startup failed") from None
 
         async def close(self) -> None:
             nonlocal closed

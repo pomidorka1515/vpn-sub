@@ -308,7 +308,7 @@ async def test_all_panels_status_continues_after_failure(
     def status(chat_id: int, panel: object, last: bool) -> None:
         del chat_id, last
         if cast(XUiSession, panel).name == "one":
-            raise RuntimeError("down")
+            raise RuntimeError("down") from None
 
     subscription.panel_svc.statuses.return_value = [None, None]
     with patch.object(AdminPanelsMixin, "_cb_panel_info", side_effect=status):

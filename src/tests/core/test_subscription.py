@@ -377,7 +377,7 @@ async def test_ambiguous_accepted_add_is_compensated(
     ) -> None:
         sub.business_svc._post = original  # type: ignore[method-assign]
         await original(panel, route, body, what)
-        raise PanelUnavailableError("response lost after accepted add")
+        raise PanelUnavailableError("response lost after accepted add") from None
 
     try:
         await sub.code_svc.add_code("invite", "register")
@@ -667,7 +667,7 @@ async def test_reconcile_uses_bounded_workers_and_user_ownership(
     async def sync_enabled(username: str, *, work: str = "foreground") -> None:
         assert work == "background"
         if int(username.removeprefix("user")) % 2 == 0:
-            raise PanelRejectedError("test reconciliation failure")
+            raise PanelRejectedError("test reconciliation failure") from None
 
     monkeypatch.setattr(sub.user_svc, "list_users", list_users)
     monkeypatch.setattr(sub.business_svc, "add_users", add_users)
@@ -816,7 +816,7 @@ async def test_failed_panel_cleanup_retains_identity_and_recovery_refunds_once(
         expected_uuid: str | None = None,
         work: str = "foreground",
     ) -> None:
-        raise PanelUnavailableError("cleanup unavailable")
+        raise PanelUnavailableError("cleanup unavailable") from None
 
     try:
         await sub.code_svc.add_code("invite", "register")

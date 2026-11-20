@@ -123,7 +123,7 @@ async def test_api_reports_committed_audit_failure_as_success() -> None:
 
     @app.get("/committed")
     async def committed() -> Never:
-        raise CommittedAuditError(result={"token": "committed-token"})
+        raise CommittedAuditError(result={"token": "committed-token"}) from None
 
     response = await app.test_client().get("/committed")
     assert response.status_code == 202

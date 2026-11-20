@@ -74,14 +74,14 @@ async def test_snapshots_reload_failure_and_atomic_commit(
         assert store.view() == {"nested": {"value": 2}, "external": True, "new": 3}
 
         def invalid(tx: object) -> None:
-            raise ValueError("invalid edit")
+            raise ValueError("invalid edit") from None
 
         with pytest.raises(ValueError, match="invalid edit"):
             await store.mutate(invalid)
         assert store.view()["new"] == 3
 
         def write_failure(data: object) -> None:
-            raise OSError("disk full")
+            raise OSError("disk full") from None
 
         monkeypatch.setattr(source, "atomic_write", write_failure)
         with pytest.raises(OSError, match="disk full"):
@@ -143,7 +143,7 @@ async def test_audit_acknowledges_fsync_and_reports_failure(
     assert json.loads(path.read_text())["info"] == {"username": "alice"}
 
     def fail(fd: int) -> None:
-        raise OSError("disk failure")
+        raise OSError("disk failure") from None
 
     monkeypatch.setattr("config.lines.os.fsync", fail)
     with pytest.raises(OSError, match="disk failure"):
@@ -216,7 +216,7 @@ async def test_buffer_overflow_detaches_records_and_disk_failure_is_best_effort(
     assert store.dropped == 1
 
     def fail(fd: int) -> None:
-        raise OSError("disk failure")
+        raise OSError("disk failure") from None
 
     store = AsyncLinesConfig(lambda: LinesConfig(path, start_backup=False), files=files)
     await store.start()
@@ -268,7 +268,7 @@ async def test_log_delivery_failure_no_recursion_and_timeout() -> None:
         entered.set()
         await release.wait()
         handler.handle(logging.LogRecord("test", logging.ERROR, __file__, 1, "recursive", (), None))
-        raise OSError("secret-token")
+        raise OSError("secret-token") from None
 
     delivery = LogDelivery(deliver, name="alerts", drain_timeout=0.01, fallback=failures.append)
     handler = AsyncTelegramLogger(delivery)

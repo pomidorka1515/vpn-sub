@@ -30,7 +30,7 @@ class RedisStore:
                 *, keys: tuple[str, ...], args: tuple[float, float, str, int, int]
             ) -> int:
                 if self.failed:
-                    raise OSError("Redis down")
+                    raise OSError("Redis down") from None
                 self.calls += 1
                 increment, _, _, limit, _ = args
                 count = self.events.get(keys[0], 0) + int(increment)

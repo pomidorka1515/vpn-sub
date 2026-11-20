@@ -243,7 +243,7 @@ def test_config_backup_write_failure_removes_temp_file(tmp_path: Path) -> None:
         newline: str | None = None,
     ) -> TextIO:
         if path.suffix == ".tmp":
-            raise OSError("unwritable")
+            raise OSError("unwritable") from None
         return real_open(path, mode, encoding=encoding, errors=errors, newline=newline)
 
     with patch.object(Path, "open", autospec=True, side_effect=fail_temp):
@@ -283,7 +283,7 @@ def test_config_backup_thread_retries_then_succeeds(tmp_path: Path) -> None:
         del args, kwargs
         calls["count"] += 1
         if calls["count"] == 1:
-            raise OSError("locked")
+            raise OSError("locked") from None
 
     stop = threading.Event()
     waits = iter((False, False, True))

@@ -68,7 +68,7 @@ async def test_live_sampler_recovers_and_bounds_slow_viewers(
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise RuntimeError("secret")
+            raise RuntimeError("secret") from None
         if calls >= 4:
             sampled.set()
         return {"sample": calls}

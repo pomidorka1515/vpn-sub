@@ -256,7 +256,7 @@ async def test_failed_shared_refresh_checks_current_cache(
         calls += 1
         entered.set()
         await release.wait()
-        raise PanelUnavailableError("offline")
+        raise PanelUnavailableError("offline") from None
 
     monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail)
     waiters = [asyncio.create_task(sub.panel_svc.traffic_snapshot(client)) for _ in range(20)]
@@ -295,7 +295,7 @@ async def test_cancelling_waiter_does_not_return_stale_or_cancel_refresh(
     async def fail(_panel: XUiSession) -> tuple[list[TrafficRow], TrafficSnapshot]:
         entered.set()
         await release.wait()
-        raise PanelUnavailableError("offline")
+        raise PanelUnavailableError("offline") from None
 
     monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail)
     waiter = asyncio.create_task(sub.panel_svc.traffic_snapshot(client))
@@ -326,7 +326,7 @@ async def test_failed_refresh_after_all_waiters_cancel_still_backs_off(
         calls += 1
         entered.set()
         await release.wait()
-        raise PanelUnavailableError("offline")
+        raise PanelUnavailableError("offline") from None
 
     monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail)
     waiter = asyncio.create_task(sub.panel_svc.traffic_snapshot(client))
@@ -363,7 +363,7 @@ async def test_invalidated_old_failure_does_not_back_off_new_generation(
         if calls == 1:
             entered.set()
             await release.wait()
-            raise PanelUnavailableError("offline")
+            raise PanelUnavailableError("offline") from None
         return await load(panel)
 
     monkeypatch.setattr(sub.panel_svc, "_load_traffic", fail_old)

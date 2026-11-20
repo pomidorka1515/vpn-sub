@@ -421,7 +421,7 @@ async def test_bulk_refresh_bounds_concurrency_and_preserves_failure_order(
         try:
             await asyncio.sleep(0)
             if username in {"user1", "user5"}:
-                raise PanelUnavailableError
+                raise PanelUnavailableError from None
         finally:
             active -= 1
 
@@ -454,7 +454,7 @@ async def test_bulk_refresh_aborts_new_claims_and_drains_inflight(
         await entered.wait()
         if username == "user0":
             release.set()
-            raise RuntimeError("abort")
+            raise RuntimeError("abort") from None
         await release.wait()
 
     try:

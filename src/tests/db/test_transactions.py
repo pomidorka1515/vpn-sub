@@ -82,10 +82,10 @@ async def test_database_failures_have_safe_http_responses(
     async def fail() -> str:
         try:
             async with getattr(repository, lease)():
-                raise cause
+                raise cause from None
         except DatabaseError as exc:
             caught.append(exc)
-            raise
+            raise exc from None
 
     response = await app.test_client().get("/database-failure")
     assert response.status_code == status
@@ -146,7 +146,7 @@ async def test_operational_error_is_not_mistaken_for_duplicate(
         parameters: Parameters = (),
     ) -> int:
         if sql.startswith("INSERT INTO users"):
-            raise cause
+            raise cause from None
         return await original(conn, sql, parameters)
 
     monkeypatch.setattr(Connection, "execute", execute)
@@ -167,7 +167,7 @@ async def test_reader_recovery_failure_is_sanitized(
     cause.sqlite_errorcode = sqlite3.SQLITE_CANTOPEN
 
     async def fail_open(*, reader: bool = False) -> None:
-        raise cause
+        raise cause from None
 
     monkeypatch.setattr(repository, "_open", fail_open)
     with pytest.raises(DatabaseError) as failure:
@@ -557,9 +557,9 @@ async def test_reader_lease_clears_snapshot_on_exit(tmp_path: Path, exit_mode: s
             entered.set()
             await release.wait()
             if exit_mode == "exception":
-                raise ValueError("borrower failed")
+                raise ValueError("borrower failed") from None
             if exit_mode == "os_error":
-                raise OSError("borrower failed")
+                raise OSError("borrower failed") from None
 
     try:
         original = db._readers[0]
@@ -599,7 +599,7 @@ async def test_reader_rollback_failure_replaces_connection(
 
     async def broken(self: Connection, sql: str, parameters: Parameters) -> int:
         if sql == "ROLLBACK":
-            raise sqlite3.OperationalError("injected rollback failure")
+            raise sqlite3.OperationalError("injected rollback failure") from None
         return await original_execute(self, sql, parameters)
 
     monkeypatch.setattr(Connection, "_execute", broken)
@@ -626,11 +626,11 @@ async def test_reader_replacement_failure_stops_admission(
 
     async def broken(self: Connection, sql: str, parameters: Parameters) -> int:
         if sql == "ROLLBACK":
-            raise sqlite3.OperationalError("injected rollback failure")
+            raise sqlite3.OperationalError("injected rollback failure") from None
         return await original_execute(self, sql, parameters)
 
     async def fail_open(*, reader: bool = False) -> None:
-        raise sqlite3.OperationalError("injected reopen failure")
+        raise sqlite3.OperationalError("injected reopen failure") from None
 
     monkeypatch.setattr(Connection, "_execute", broken)
     monkeypatch.setattr(db, "_open", fail_open)
@@ -797,7 +797,7 @@ async def test_rollback_failure_discards_writer(
 
     async def broken(self: Connection, sql: str, parameters: Parameters) -> int:
         if sql == "ROLLBACK":
-            raise sqlite3.OperationalError("injected rollback failure")
+            raise sqlite3.OperationalError("injected rollback failure") from None
         return await original(self, sql, parameters)
 
     monkeypatch.setattr(Connection, "_execute", broken)
@@ -805,7 +805,7 @@ async def test_rollback_failure_discards_writer(
     async def operation() -> None:
         async with repository.transaction(immediate=True) as conn:
             await conn.execute("INSERT INTO app_metadata VALUES ('failed', 'value')")
-            raise CodeError("abort")
+            raise CodeError("abort") from None
 
     with pytest.raises(CodeError):
         await operation()

@@ -101,8 +101,8 @@ async def test_transition_intent_survives_interruption_and_restart(
                 if boundary in {"after_intent", "database_failure"}:
                     await execute(conn, sql, parameters)
                 if boundary == "database_failure":
-                    raise sqlite3.OperationalError("outbox write failed")
-                raise asyncio.CancelledError
+                    raise sqlite3.OperationalError("outbox write failed") from None
+                raise asyncio.CancelledError from None
             return await execute(conn, sql, parameters)
 
         with monkeypatch.context() as patch:
@@ -205,7 +205,7 @@ async def test_transition_send_is_at_least_once(
 
                 async def cleanup(key: str) -> None:
                     if key == "user_notifications_pending:alice":
-                        raise asyncio.CancelledError
+                        raise asyncio.CancelledError from None
                     await delete(db, key)
 
                 patch.setattr(db, "delete_metadata", cleanup)
@@ -346,7 +346,7 @@ async def test_notice_failure_and_concurrent_delivery(tmp_path: Path) -> None:
             nonlocal calls
             calls += 1
             if calls == 1:
-                raise RuntimeError("offline")
+                raise RuntimeError("offline") from None
             await asyncio.sleep(0)
 
         async def language(_id: int) -> str:

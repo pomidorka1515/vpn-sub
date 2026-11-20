@@ -64,7 +64,7 @@ def test_transaction_exception_does_not_persist(cfg: Config) -> None:
     def abort_transaction() -> None:
         with cfg as tx:
             tx["keep"] = 2
-            raise ValueError("abort")
+            raise ValueError("abort") from None
 
     with pytest.raises(ValueError, match="abort"):
         abort_transaction()
@@ -150,7 +150,7 @@ def test_nested_rejection_preserves_outer_transaction(
                 cfg["x"] = 3
             tx["x"] = 2
             if rollback:
-                raise ValueError("abort")
+                raise ValueError("abort") from None
 
     acquired = threading.Event()
 
@@ -206,7 +206,7 @@ def test_transaction_view_rolls_back_nested_edits(app_cfg: Config[AppConfig]) ->
     def abort_transaction() -> None:
         with transaction as tx:
             tx.view()["3xui"]["local"]["inbounds_list"].append(2)
-            raise ValueError("abort")
+            raise ValueError("abort") from None
 
     with pytest.raises(ValueError, match="abort"):
         abort_transaction()

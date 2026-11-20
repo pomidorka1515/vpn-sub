@@ -53,7 +53,7 @@ async def test_security_headers_on_responses(
 
     @app.get("/failure")
     async def failure() -> ResponseType:
-        raise RuntimeError("failure")
+        raise RuntimeError("failure") from None
 
     response = await app.test_client().get(path, headers=headers)
     assert response.status_code == status
@@ -125,7 +125,7 @@ async def test_http_exception_preserves_headers_with_json_body(
 
     @app.get("/work")
     async def work() -> ResponseType:
-        raise error
+        raise error from None
 
     response = await app.test_client().get("/work")
 
@@ -185,7 +185,7 @@ async def test_error_responses_do_not_expose_exception_details(
 
     @app.post("/work")
     async def work() -> ResponseType:
-        raise error_type("credential-secret")
+        raise error_type("credential-secret") from None
 
     response = await app.test_client().post("/work?token=query-secret")
     assert response.status_code == (503 if error_type is CapacityExceededError else 500)

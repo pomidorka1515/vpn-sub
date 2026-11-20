@@ -106,7 +106,7 @@ async def test_async_snapshot_publication_and_zero_copy_reads(
         assert store.snapshot() is original
 
         def fail(*args: object, **kwargs: object) -> None:
-            raise AssertionError("snapshot reads must not copy or access files")
+            raise AssertionError("snapshot reads must not copy or access files") from None
 
         with monkeypatch.context() as patches:
             patches.setattr("config.snapshot.freeze", fail)
@@ -144,7 +144,7 @@ async def test_async_snapshot_publication_and_zero_copy_reads(
 
 
 def _reject() -> None:
-    raise ValueError("rejected")
+    raise ValueError("rejected") from None
 
 
 def test_lines_snapshot_tracks_writes_external_changes_and_compaction(tmp_path: Path) -> None:

@@ -101,7 +101,7 @@ async def test_session_writes_recover_after_failure(
         nonlocal attempts
         attempts += 1
         if attempts == 1:
-            raise OSError("temporary persistence failure")
+            raise OSError("temporary persistence failure") from None
         await set_metadata(key, value)
 
     monkeypatch.setattr(session_store.db, "set_metadata", fail_once)
