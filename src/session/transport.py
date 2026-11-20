@@ -70,7 +70,7 @@ class AiohttpPanelTransport:
         read_timeout: float = 5.0,
     ) -> None:
         if min(timeout, connect_timeout, read_timeout) <= 0:
-            raise ValueError("timeouts must be positive")
+            raise ValueError("timeouts must be positive") from None
         self._session = session
         self._owns_session = session is None
         self._limit = limit
@@ -85,7 +85,7 @@ class AiohttpPanelTransport:
 
     async def start(self) -> None:
         if self._close_task is not None:
-            raise RuntimeError("transport is closed")
+            raise RuntimeError("transport is closed") from None
         if self._started:
             return
         if self._session is None:
@@ -94,7 +94,7 @@ class AiohttpPanelTransport:
                 trust_env=False,
             )
         if self._session.closed:
-            raise RuntimeError("injected session is closed")
+            raise RuntimeError("injected session is closed") from None
         self._started = True
 
     async def request(
@@ -104,7 +104,7 @@ class AiohttpPanelTransport:
         **kwargs: Unpack[RequestKwargs],
     ) -> PanelResponse:
         if not self._started:
-            raise RuntimeError("transport has not started")
+            raise RuntimeError("transport has not started") from None
         task = self._requests.create(
             lambda: self._request(method, url, **kwargs),
             name="panel-http",
@@ -119,11 +119,11 @@ class AiohttpPanelTransport:
     ) -> PanelResponse:
         session = self._session
         if session is None:
-            raise RuntimeError("transport has not started")
+            raise RuntimeError("transport has not started") from None
         headers = CIMultiDict(kwargs.get("headers", {}))
         total = kwargs.get("timeout", self._timeout)
         if total <= 0:
-            raise ValueError("timeout must be positive")
+            raise ValueError("timeout must be positive") from None
         deadline = aiohttp.ClientTimeout(
             total=total,
             connect=min(total, self._connect_timeout),
@@ -168,8 +168,8 @@ class FakePanelTransport:
     ) -> PanelResponse:
         self.calls.append((method, url, kwargs))
         if not self.outcomes:
-            raise RuntimeError("fake transport has no remaining outcomes")
+            raise RuntimeError("fake transport has no remaining outcomes") from None
         outcome = self.outcomes.popleft()
         if isinstance(outcome, Exception):
-            raise outcome
+            raise outcome from None
         return outcome

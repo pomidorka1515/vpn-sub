@@ -48,7 +48,7 @@ class AccountService(BaseService):
         user = await self.user_svc.user(username)
         external = user["ext_username"]
         if not external:
-            raise ValidationError("Account has no web login")
+            raise ValidationError("Account has no web login") from None
         now = time.monotonic()
         self._password_resets = {
             token: reset
@@ -78,7 +78,7 @@ class AccountService(BaseService):
             ):
                 return reset
         self._password_resets.pop(token or "", None)
-        raise NotFoundError("Not found")
+        raise NotFoundError("Not found") from None
 
     async def reset_password(self, token: str | None, password: str) -> None:
         reset = await self.password_reset(token)
@@ -100,15 +100,15 @@ class AccountService(BaseService):
     async def login(self, username: str, password: str) -> str:
         internal = await self.db.ext_to_user(username)
         if internal is None:
-            raise AppError("Invalid credentials.", status=401)
+            raise AppError("Invalid credentials.", status=401) from None
 
         async def issue_session() -> str:
             # The external name may have moved while waiting for this user's lock.
             # Reject it before nested verification can resolve a different user.
             if await self.user_svc.get_external_username(internal) != username:
-                raise AppError("Invalid credentials.", status=401)
+                raise AppError("Invalid credentials.", status=401) from None
             if await self.password_svc.validate_credentials(username, password) != internal:
-                raise AppError("Invalid credentials.", status=401)
+                raise AppError("Invalid credentials.", status=401) from None
             token = generate_token("auth")
             await self.user_svc.set_auth_token(internal, token)
             return token
@@ -120,12 +120,12 @@ class AccountService(BaseService):
 
     async def confirm_password(self, username: str, password: str | None) -> None:
         if not password:
-            raise ValidationError("current_password required to change credentials")
+            raise ValidationError("current_password required to change credentials") from None
         external = await self.user_svc.get_external_username(username)
         if not external:
-            raise ValidationError("Account has no credentials set")
+            raise ValidationError("Account has no credentials set") from None
         if await self.password_svc.validate_credentials(external, password) != username:
-            raise AppError("Invalid current password", status=401)
+            raise AppError("Invalid current password", status=401) from None
 
     @panel_mutation
     async def delete(self, username: str, password: str) -> None:
@@ -154,13 +154,13 @@ class AccountService(BaseService):
             ("current_password", current_password),
         ):
             if value is not None and not isinstance(value, str):  # pyright: ignore[reportUnnecessaryIsInstance]
-                raise ValidationError(f"Field '{field}' must be a string or null")
+                raise ValidationError(f"Field '{field}' must be a string or null") from None
         if fingerprint and fingerprint not in self.cfg.view()["fingerprints"]:
-            raise ValidationError("Unknown fingerprint")
+            raise ValidationError("Unknown fingerprint") from None
         if displayname and len(displayname) > 16:
-            raise ValidationError("displayname exceeds max. length of 16")
+            raise ValidationError("displayname exceeds max. length of 16") from None
         if ext_username and len(ext_username) > 32:
-            raise ValidationError("username exceeds max. length of 32")
+            raise ValidationError("username exceeds max. length of 32") from None
         if ext_username is not None or ext_password is not None:
             await self.confirm_password(username, current_password)
         await self.business_svc.update_params(

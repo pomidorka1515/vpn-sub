@@ -53,15 +53,15 @@ class XUiSession:
         stamp_dir: str | None = None,
     ) -> None:
         if not api_token:
-            raise ValueError("api_token must be a non-empty API token")
+            raise ValueError("api_token must be a non-empty API token") from None
         if health_check_interval < 1:
-            raise ValueError("health_check_interval must be at least 1")
+            raise ValueError("health_check_interval must be at least 1") from None
         if request_timeout <= 0:
-            raise ValueError("request_timeout must be positive")
+            raise ValueError("request_timeout must be positive") from None
         if request_limit < 1:
-            raise ValueError("request_limit must be at least 1")
+            raise ValueError("request_limit must be at least 1") from None
         if transport is not None and session is not None:
-            raise ValueError("pass either transport or session, not both")
+            raise ValueError("pass either transport or session, not both") from None
         self.name = name
         self.inbounds_list = inbounds_list
         self.mode = mode
@@ -95,7 +95,7 @@ class XUiSession:
         elif transport is not None:
             self._transport = transport
         else:
-            raise RuntimeError("panel transport is missing")
+            raise RuntimeError("panel transport is missing") from None
         self._requests = TaskRegistry(capacity=request_limit, report_failures=False)
         self._health = TaskRegistry(capacity=1)
         self._started = False
@@ -103,7 +103,7 @@ class XUiSession:
 
     async def start(self) -> None:
         if self._close_task is not None:
-            raise RuntimeError("panel client is closed")
+            raise RuntimeError("panel client is closed") from None
         if self._started:
             return
         if self._owned_transport is not None:
@@ -114,7 +114,7 @@ class XUiSession:
     def _format_url(self, url: str) -> str:
         if urlsplit(url).scheme or url.startswith("//"):
             if not url.startswith(self.base_url):
-                raise ValueError("panel request URL must use the configured base URL")
+                raise ValueError("panel request URL must use the configured base URL") from None
             return url
         return self.base_url + url.lstrip("/")
 
@@ -142,7 +142,7 @@ class XUiSession:
         **kwargs: Unpack[RequestKwargs],
     ) -> PanelResponse:
         if not self._started or self._close_task is not None:
-            raise RuntimeError("panel client is not running")
+            raise RuntimeError("panel client is not running") from None
         task = self._requests.create(
             lambda: self._request(method, url, health=False, **kwargs),
             name="panel-request",
@@ -194,7 +194,7 @@ class XUiSession:
 
     async def check_health(self) -> None:
         if not self._started or self._close_task is not None:
-            raise RuntimeError("panel client is not running")
+            raise RuntimeError("panel client is not running") from None
         task = self._requests.create(
             lambda: self._request("GET", "panel/api/inbounds/list", health=True),
             name="panel-health-request",

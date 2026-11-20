@@ -21,7 +21,7 @@ class CommonUserService(BaseService):
     async def user(self, username: str) -> UserRecord:
         user = await self.db.get_user(username)
         if user is None:
-            raise NotFoundError("Unknown username")
+            raise NotFoundError("Unknown username") from None
         return user
 
     async def isuser(self, username: str) -> bool:
@@ -56,7 +56,7 @@ class CommonUserService(BaseService):
 
     async def require_uuid_recovered(self, username: str) -> None:
         if await self.db.get_metadata(f"uuid_rollback_failed:{username}") is not None:
-            raise ConflictError("User requires UUID recovery before further mutations")
+            raise ConflictError("User requires UUID recovery before further mutations") from None
 
     async def get_fingerprint(self, username: str) -> str:
         return (await self.user(username))["fingerprint"]

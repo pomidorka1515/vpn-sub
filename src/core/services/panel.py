@@ -84,7 +84,7 @@ class PanelService(BaseService):
     ) -> None:
         super().__init__(res)
         if foreground < 1 or background < 1:
-            raise ValueError("panel fanout limits must be positive")
+            raise ValueError("panel fanout limits must be positive") from None
         self._limits: dict[WorkClass, int] = {"foreground": foreground, "background": background}
         self._slots = {key: asyncio.Semaphore(value) for key, value in self._limits.items()}
         self._fanouts = {
@@ -161,7 +161,7 @@ class PanelService(BaseService):
         outcomes = await self.outcomes(panels, fn, work=work)
         for outcome in outcomes:
             if outcome.error is not None:
-                raise outcome.error
+                raise outcome.error from None
         return [cast(T, outcome.value) for outcome in outcomes]
 
     @staticmethod
@@ -175,9 +175,11 @@ class PanelService(BaseService):
         except (ValueError, UnicodeDecodeError) as exc:
             raise PanelUnavailableError(f"Panel {panel.name} {what}: invalid JSON") from exc
         if response.status_code not in {200, 201}:
-            raise PanelUnavailableError(f"Panel {panel.name} {what}: HTTP {response.status_code}")
+            raise PanelUnavailableError(
+                f"Panel {panel.name} {what}: HTTP {response.status_code}"
+            ) from None
         if not isinstance(raw, dict):
-            raise PanelUnavailableError(f"Panel {panel.name} {what}: invalid payload")
+            raise PanelUnavailableError(f"Panel {panel.name} {what}: invalid payload") from None
         return cast(dict[str, object], raw)
 
     async def getstatus(self, panel: XUiSession) -> ServerMetricsResponse | None:
@@ -210,7 +212,7 @@ class PanelService(BaseService):
                 "inbound query",
             )
             if not data.get("success"):
-                raise PanelUnavailableError(f"Panel {panel.name} inbound query failed")
+                raise PanelUnavailableError(f"Panel {panel.name} inbound query failed") from None
             try:
                 rows = cast(list[dict[str, object]], data["obj"])
                 inbounds = [from_dict(Inbound, row) for row in rows]
@@ -239,7 +241,9 @@ class PanelService(BaseService):
     ) -> tuple[list[PanelClient], TrafficSnapshot]:
         data = cls.response_data(panel, response, "client list")
         if not data.get("success"):
-            raise PanelRejectedError(f"Panel {panel.name} client list failed: {data.get('msg')}")
+            raise PanelRejectedError(
+                f"Panel {panel.name} client list failed: {data.get('msg')}"
+            ) from None
         try:
             for item in cast(list[dict[str, object]], data["obj"]):
                 if item.get("inboundIds") is None:
@@ -283,23 +287,25 @@ class PanelService(BaseService):
     ) -> tuple[list[TrafficRow], TrafficSnapshot]:
         data = cls.response_data(panel, response, "client list")
         if not data.get("success"):
-            raise PanelRejectedError(f"Panel {panel.name} client list failed: {data.get('msg')}")
+            raise PanelRejectedError(
+                f"Panel {panel.name} client list failed: {data.get('msg')}"
+            ) from None
         try:
             rows = data["obj"]
             if not isinstance(rows, list):
-                raise ValueError("invalid client list")
+                raise ValueError("invalid client list") from None
             result: list[TrafficRow] = []
             for raw in cast(list[object], rows):
                 if not isinstance(raw, dict):
-                    raise ValueError("invalid client")
+                    raise ValueError("invalid client") from None
                 client = cast(dict[str, object], raw)
                 email, uuid, traffic = client["email"], client["uuid"], client.get("traffic")
                 if not isinstance(email, str) or not isinstance(uuid, str):
-                    raise ValueError("invalid client identity")
+                    raise ValueError("invalid client identity") from None
                 if traffic is None:
                     continue
                 if not isinstance(traffic, dict):
-                    raise ValueError("invalid traffic")
+                    raise ValueError("invalid traffic") from None
                 values = cast(dict[str, object], traffic)
                 traffic_email, traffic_uuid = values["email"], values["uuid"]
                 up, down = values["up"], values["down"]
@@ -309,7 +315,7 @@ class PanelService(BaseService):
                     and isinstance(up, int)
                     and isinstance(down, int)
                 ):
-                    raise ValueError("invalid traffic fields")
+                    raise ValueError("invalid traffic fields") from None
                 result.append((email, uuid, traffic_email, traffic_uuid, up, down))
             return result, TrafficSnapshot.from_rows(result)
         except Exception as exc:
@@ -339,16 +345,16 @@ class PanelService(BaseService):
                 try:
                     results = await self.map_panels([panel], self._load_traffic, work=work)
                     return results[0][1]
-                except Exception:
+                except Exception as exc:
                     if epoch == self._traffic_epoch.get(panel.name, 0):
                         self._traffic_retry_at[panel.name] = monotonic() + TRAFFIC_RETRY_DELAY
-                    raise
+                    raise exc from None
 
             task = self._traffic_refreshes.create(refresh, name="panel:subscription-traffic")
             self._traffic_tasks[panel.name] = task
         try:
             return await asyncio.shield(task)
-        except Exception:
+        except Exception as exc:
             cached = self._traffic.get(panel.name)
             if (
                 allow_stale
@@ -356,7 +362,7 @@ class PanelService(BaseService):
                 and monotonic() - cached[0] < TRAFFIC_TTL + TRAFFIC_STALE_GRACE
             ):
                 return cached[1]
-            raise
+            raise exc from None
 
     async def subscription_traffic(self, panel: XUiSession, email: str) -> TrafficRow | None:
         return (await self.traffic_snapshot(panel)).by_email.get(email)
@@ -397,7 +403,9 @@ class PanelService(BaseService):
         if not data.get("success"):
             if "record not found" in str(data.get("msg", "")).lower():
                 return None
-            raise PanelRejectedError(f"Panel {panel.name} client query failed: {data.get('msg')}")
+            raise PanelRejectedError(
+                f"Panel {panel.name} client query failed: {data.get('msg')}"
+            ) from None
         raw = data.get("obj")
         if raw is None:
             return None
@@ -417,7 +425,9 @@ class PanelService(BaseService):
             "traffic query",
         )
         if not data.get("success"):
-            raise PanelRejectedError(f"Panel {panel.name} traffic query failed: {data.get('msg')}")
+            raise PanelRejectedError(
+                f"Panel {panel.name} traffic query failed: {data.get('msg')}"
+            ) from None
         raw = data.get("obj")
         if raw is None:
             return None
@@ -493,7 +503,7 @@ class PanelService(BaseService):
                     break
                 users.setdefault(email, None)
         if health and all(value == "unavailable" for value in health.values()):
-            raise PanelUnavailableError("No panel could be queried for online users")
+            raise PanelUnavailableError("No panel could be queried for online users") from None
         return users, health
 
     async def get_online_status(

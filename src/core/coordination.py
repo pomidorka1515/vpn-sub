@@ -43,13 +43,13 @@ class MutationCoordinator:
         held = self._owners.get(task) if task is not None else None
         if held is not None:
             if not keys <= held:
-                raise RuntimeError("nested mutations must not expand their user lock set")
+                raise RuntimeError("nested mutations must not expand their user lock set") from None
             return await operation()
 
         async def coordinated() -> T:
             owner = asyncio.current_task()
             if owner is None:
-                raise RuntimeError("mutation requires a task")
+                raise RuntimeError("mutation requires a task") from None
             entries = [
                 (key, self._entries.setdefault(key, _Entry(asyncio.Lock()))) for key in sorted(keys)
             ]
@@ -85,7 +85,7 @@ class MutationCoordinator:
             if cancelled:
                 if not child.cancelled():
                     child.exception()
-                raise asyncio.CancelledError
+                raise asyncio.CancelledError from None
             return child.result()
 
         return await self.registry.run(owned, name=name)
@@ -105,7 +105,7 @@ def user_mutation[**P, T](
         service = bound.arguments["self"]
         username = bound.arguments["username"]
         if not isinstance(service, BaseService) or not isinstance(username, str):
-            raise TypeError("user mutation requires a service and username")
+            raise TypeError("user mutation requires a service and username") from None
         return await service.res.coordinator.run(
             [username],
             lambda: function(*args, **kwargs),
@@ -128,7 +128,7 @@ def panel_mutation[**P, T](
 
         service = sig.bind(*args, **kwargs).arguments["self"]
         if not isinstance(service, BaseService):
-            raise TypeError("panel mutation requires a service")
+            raise TypeError("panel mutation requires a service") from None
         service.require_panels()
         return await mutation(*args, **kwargs)
 

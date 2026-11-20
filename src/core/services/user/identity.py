@@ -76,7 +76,7 @@ class UserIdentityService(BusinessUserBase):
             timee=timee,
         )
         if ext_password is not None and user["ext_username"] is None and ext_username is None:
-            raise ValidationError("External username required")
+            raise ValidationError("External username required") from None
         await self._commit_params(username, fields)
         audit_fields = cast(dict[str, JsonValue], dict(fields))
         await self.audit_svc.audit_committed(
@@ -106,15 +106,15 @@ class UserIdentityService(BusinessUserBase):
         fields: UserFields = {}
         if displayname is not None:
             if len(displayname) > 16:
-                raise ValidationError("Displayname too long")
+                raise ValidationError("Displayname too long") from None
             fields["displayname"] = sanitize(displayname, "display")
         if ext_username is not None:
             if len(ext_username) > 32:
-                raise ValidationError("Username too long")
+                raise ValidationError("Username too long") from None
             fields["ext_username"] = sanitize(ext_username, "external")
         if fingerprint is not None:
             if fingerprint not in self.cfg.view()["fingerprints"]:
-                raise ValidationError("Invalid fingerprint")
+                raise ValidationError("Invalid fingerprint") from None
             fields["fingerprint"] = fingerprint
         for name, value, maximum in (
             ("time", timee, 2**63 - 1),
@@ -122,14 +122,16 @@ class UserIdentityService(BusinessUserBase):
             ("wl_limit", wl_limit, (2**63 - 1) // 10**9),
         ):
             if value is not None and (type(value) is not int or not 0 <= value <= maximum):
-                raise ValidationError(f"{name} must be an integer in range 0 to {maximum}")
+                raise ValidationError(
+                    f"{name} must be an integer in range 0 to {maximum}"
+                ) from None
         if timee is not None:
             fields["expiry_time"] = timee
         if token is not None:
             if not valid_subscription_token(token):
                 raise ValidationError(
                     "Subscription token must contain at least 30 URL-safe characters"
-                )
+                ) from None
             fields["token"] = token
         if limit is not None:
             fields["bw_limit"] = limit
@@ -152,7 +154,7 @@ class UserIdentityService(BusinessUserBase):
             await self.require_recovered(username)
             user = await self.user_svc.user(username)
             if "new_username" in changes and user["ext_username"] is None:
-                raise NotFoundError("Unknown external username")
+                raise NotFoundError("Unknown external username") from None
             fields = await self._prepare_params(
                 ext_username=changes.get("new_username"),
                 displayname=changes.get("displayname"),
@@ -167,7 +169,9 @@ class UserIdentityService(BusinessUserBase):
             ):
                 if value is not None:
                     if type(value) is not int or not 0 <= value <= 2**63 - 1:
-                        raise ValidationError(f"{key} must be an integer in range 0 to {2**63 - 1}")
+                        raise ValidationError(
+                            f"{key} must be an integer in range 0 to {2**63 - 1}"
+                        ) from None
                     if column == "bw_used":
                         fields["bw_used"] = value
                     else:
@@ -205,18 +209,18 @@ class UserIdentityService(BusinessUserBase):
         self.require_panels()
         await self.require_recovered(username, allow_reset=_resetting)
         if not isuuid(uid):
-            raise ValidationError("Invalid UUID")
+            raise ValidationError("Invalid UUID") from None
         user = await self.user_svc.user(username)
         key = f"uuid_rollback_failed:{username}"
         expected_uuids = {user["uuid"]}
         if _resetting:
             pending = await self.db.get_metadata(f"user_reset_pending:{username}")
             if pending is None:
-                raise ConflictError("User has no pending reset")
+                raise ConflictError("User has no pending reset") from None
             details = json.loads(pending)
             old_uuid = str(details.get("old_uuid", user["uuid"]))
             if details["uuid"] != uid or user["uuid"] not in {old_uuid, uid}:
-                raise ConflictError("Reset recovery identity changed")
+                raise ConflictError("Reset recovery identity changed") from None
             # Only a durable reset intent proves ownership of both identities.
             expected_uuids.update((old_uuid, uid))
         # The claim and recovery marker must commit before any external write.
@@ -233,7 +237,7 @@ class UserIdentityService(BusinessUserBase):
                 if current.uuid not in expected_uuids:
                     raise PanelRejectedError(
                         f"Panel {panel.name} email {username!r} is owned by a different UUID",
-                    )
+                    ) from None
                 if current.uuid == uid:
                     return
                 payload = client_payload_from(current)
@@ -254,7 +258,7 @@ class UserIdentityService(BusinessUserBase):
                     else type(outcome.error).__name__
                 )
                 await self.db.set_metadata(key, f"{int(time.time())}:{outcome.panel}: {reason}")
-                raise outcome.error
+                raise outcome.error from None
         await self.db.finalize_uuid(username, user["uuid"], uid)
         await self._drop_cache()
         await self.audit_svc.audit_committed(

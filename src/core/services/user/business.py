@@ -35,7 +35,7 @@ class BusinessUserService(UserPanelService):
             await self.db.registration_pending(username)
             or await self.db.get_metadata(f"user_create_pending:{username}") is not None
         ):
-            raise ConflictError("User requires registration recovery")
+            raise ConflictError("User requires registration recovery") from None
         user = await self.user_svc.user(username)
         key = f"user_delete_pending:{username}"
         await self.db.set_metadata(key, json.dumps({"uuid": user["uuid"]}))
@@ -64,26 +64,28 @@ class BusinessUserService(UserPanelService):
         self.require_panels()
         await self.require_recovered(username)
         if not isusername(username):
-            raise ValidationError("Invalid username")
+            raise ValidationError("Invalid username") from None
         if len(displayname) > 16:
-            raise ValidationError("Displayname too long")
+            raise ValidationError("Displayname too long") from None
         if ext_username is not None and len(ext_username) > 32:
-            raise ValidationError("Ext Username too long")
+            raise ValidationError("Ext Username too long") from None
         if ext_password is not None and not ext_username:
-            raise ValidationError("External username required")
+            raise ValidationError("External username required") from None
         if ext_password is not None:
             self.password_svc.validate_new_password(ext_password)
         if userid is not None and not isuuid(userid):
-            raise ValidationError("Invalid UUID")
+            raise ValidationError("Invalid UUID") from None
         conf = self.cfg.view()
         fingerprint = random.choice(conf["fingerprints"]) if fingerprint is None else fingerprint
         if fingerprint not in conf["fingerprints"]:
-            raise ValidationError("Invalid fingerprint")
+            raise ValidationError("Invalid fingerprint") from None
         if type(timee) is not int or not 0 <= timee <= 2**63 - 1:
-            raise ValidationError("Invalid timestamp")
+            raise ValidationError("Invalid timestamp") from None
         token = generate_token("sub") if token is None else token
         if not valid_subscription_token(token):
-            raise ValidationError("Subscription token must contain at least 30 URL-safe characters")
+            raise ValidationError(
+                "Subscription token must contain at least 30 URL-safe characters"
+            ) from None
         userid = str(uuid.uuid4()) if userid is None else userid
         displayname = sanitize(displayname, "display")
         external = (
@@ -111,7 +113,7 @@ class BusinessUserService(UserPanelService):
         # Marker precedes writes and remains if panel cleanup cannot finish.
         try:
             await self.add_users(username, _called_internally=True)
-        except Exception:
+        except Exception as exc:
             try:
                 await self.rollback_panel_clients(username, expected_uuid=userid)
                 await self.db.rollback_created_user(username, userid)
@@ -121,7 +123,7 @@ class BusinessUserService(UserPanelService):
                     username,
                     exc_info=True,
                 )
-            raise
+            raise exc from None
         await self.db.delete_metadata(f"user_create_pending:{username}")
         result = NewUserInfo(
             username=username,
@@ -189,7 +191,7 @@ class BusinessUserService(UserPanelService):
                         details = json.loads(value)
                         expected = str(details["uuid"])
                         if user is not None and user["uuid"] != expected:
-                            raise ConflictError("Delete recovery identity changed")
+                            raise ConflictError("Delete recovery identity changed") from None
                         await self.rollback_panel_clients(username, expected_uuid=expected)
                         # Preserve old panel-only deletion intent during upgrades.
                         # New markers omit the retired flag and always delete SQLite.

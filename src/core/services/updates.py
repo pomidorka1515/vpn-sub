@@ -96,7 +96,7 @@ class UpdateService(BaseService):
     async def snapshot(self, username: str) -> UpdateSnapshot:
         while True:
             if username not in self._viewers:
-                raise RuntimeError("update viewer is not registered")
+                raise RuntimeError("update viewer is not registered") from None
             if self._task is None or (
                 self._task.done()
                 and (

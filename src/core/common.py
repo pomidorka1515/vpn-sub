@@ -46,7 +46,7 @@ class BaseService:
 
     def require_panels(self) -> None:
         if not self.panels:
-            raise NoPanelsConfiguredError
+            raise NoPanelsConfiguredError from None
 
     def trace(self, operation: TraceOp, event: str, **fields: JsonValue) -> None:
         if self.res.verbose:

@@ -47,19 +47,19 @@ class BusinessUserBase(BaseService):
         if not allow_reset:
             await self.user_svc.require_uuid_recovered(username)
         if await self.db.registration_pending(username):
-            raise ConflictError("User has a pending registration")
+            raise ConflictError("User has a pending registration") from None
         for prefix in (
             "registration_rollback_failed:",
             "user_create_pending:",
             "user_delete_pending:",
         ):
             if await self.db.get_metadata(f"{prefix}{username}") is not None:
-                raise ConflictError("User requires pending operation recovery")
+                raise ConflictError("User requires pending operation recovery") from None
         if (
             not allow_reset
             and await self.db.get_metadata(f"user_reset_pending:{username}") is not None
         ):
-            raise ConflictError("User requires reset recovery")
+            raise ConflictError("User requires reset recovery") from None
 
     async def _post(
         self,
@@ -74,8 +74,10 @@ class BusinessUserBase(BaseService):
             response = await panel.post(route, json=body, headers={"Accept": "application/json"})
             data = self.panel_svc.response_data(panel, response, what)
             if not data.get("success"):
-                raise PanelRejectedError(f"Panel {panel.name} {what} rejected: {data.get('msg')}")
-        except Exception:
+                raise PanelRejectedError(
+                    f"Panel {panel.name} {what} rejected: {data.get('msg')}"
+                ) from None
+        except Exception as exc:
             try:
                 await self.panel_svc.invalidate_clients(panel)
             except Exception:
@@ -83,7 +85,7 @@ class BusinessUserBase(BaseService):
                     "cache invalidation failed after rejected write on %s",
                     panel.name,
                 )
-            raise
+            raise exc from None
         else:
             await self.panel_svc.invalidate_clients(panel)
 

@@ -39,7 +39,7 @@ class CodeService(BaseService):
     async def get_code(self, code: str) -> CodeObject:
         result = await self.db.get_code(code)
         if result is None:
-            raise NotFoundError("Unknown code")
+            raise NotFoundError("Unknown code") from None
         return CodeObject(
             code=code,
             action=result["action"],
@@ -60,7 +60,7 @@ class CodeService(BaseService):
     @user_mutation
     async def apply_bonus_code(self, *, username: str, code: str) -> ApplyBonusCodeObject:
         if not isinstance(code, str) or not code:
-            raise ValidationError("Unknown code")
+            raise ValidationError("Unknown code") from None
         await self.user_svc.require_recovered(username)
         try:
             data = await self.db.adjust_bonus(username, code)
@@ -87,16 +87,16 @@ class CodeService(BaseService):
         uses: int = 1,
     ) -> None:
         if not isinstance(code, str) or not code:
-            raise ValidationError("code must be a non-empty string")
+            raise ValidationError("code must be a non-empty string") from None
         if action not in {"register", "bonus"}:
-            raise ValidationError("action must be 'register' or 'bonus'")
+            raise ValidationError("action must be 'register' or 'bonus'") from None
         if (
             not all(isinstance(value, int) for value in (days, gb, wl_gb, uses))
             or min(days, gb, wl_gb) < 0
         ):
-            raise ValidationError("days, gb, wl_gb must be non-negative integers")
+            raise ValidationError("days, gb, wl_gb must be non-negative integers") from None
         if not permanent and uses < 1:
-            raise ValidationError("uses must be >= 1")
+            raise ValidationError("uses must be >= 1") from None
         try:
             await self.db.add_code(
                 code,
@@ -124,7 +124,7 @@ class CodeService(BaseService):
 
     async def delete_code(self, code: str) -> None:
         if not await self.db.delete_code(code):
-            raise NotFoundError("Unknown code")
+            raise NotFoundError("Unknown code") from None
         await self.audit_svc.audit_committed(name="code_delete", info={"code": code})
 
     async def list_code(self) -> list[str]:
@@ -170,25 +170,25 @@ class BusinessCodeService(BaseService):
     ) -> RegisterWithCodeInfo:
         self.require_panels()
         if not isinstance(code, str) or not code:
-            raise ValidationError("Invalid code")
+            raise ValidationError("Invalid code") from None
         if not isinstance(username, str) or not isusername(username):
-            raise ValidationError("Invalid username")
+            raise ValidationError("Invalid username") from None
         if (
             not isinstance(ext_username, str)
             or not isinstance(ext_password, str)
             or not ext_username
             or not ext_password
         ):
-            raise ValidationError("Invalid credentials")
+            raise ValidationError("Invalid credentials") from None
         self.password_svc.validate_new_password(ext_password)
         await self.user_svc.require_recovered(username)
         if len(ext_username) > 32:
-            raise ValidationError("Invalid username")
+            raise ValidationError("Invalid username") from None
         external = sanitize(ext_username, "external")
         if external != ext_username:
-            raise ValidationError("Invalid username")
+            raise ValidationError("Invalid username") from None
         if len(displayname) > 16:
-            raise ValidationError("Displayname too long")
+            raise ValidationError("Displayname too long") from None
         displayname = sanitize(displayname, "display")
         token, uid = generate_token("sub"), str(uuid.uuid4())
         fingerprint = random.choice(self.cfg.view()["fingerprints"])
@@ -211,7 +211,7 @@ class BusinessCodeService(BaseService):
         try:
             await self.user_svc.add_users(username, _called_internally=True)
             await self.db.confirm_registration_sync(username)
-        except Exception:
+        except Exception as exc:
             try:
                 await self._rollback_registered_user(
                     username=username, expected=(uid, code, data["perma"])
@@ -222,7 +222,7 @@ class BusinessCodeService(BaseService):
                     username,
                     exc_info=True,
                 )
-            raise
+            raise exc from None
         result = RegisterWithCodeInfo(
             username=username,
             token=token,
@@ -289,7 +289,7 @@ class BusinessCodeService(BaseService):
         username: str,
     ) -> None:
         if kind not in {"uuid", "registration"}:
-            raise ValidationError("Invalid rollback marker kind")
+            raise ValidationError("Invalid rollback marker kind") from None
         if kind == "uuid":
             await self.db.clear_uuid_failure(username)
         else:

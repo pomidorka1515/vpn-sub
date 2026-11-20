@@ -75,14 +75,14 @@ class UserPanelService(UserIdentityService):
                     return
                 except PanelRejectedError as exc:
                     if not already_exists(exc):
-                        raise
+                        raise exc from None
                     existing = await self.panel_svc.get_client(panel, username)
                     if existing is None or existing.uuid != user["uuid"]:
-                        raise
+                        raise exc from None
             if existing.uuid != user["uuid"]:
                 raise PanelRejectedError(
                     f"Panel {panel.name} email {username!r} is owned by a different UUID",
-                )
+                ) from None
             missing = [value for value in inbound_ids if value not in existing.inboundIds]
             if missing:
                 await self._post(
@@ -117,7 +117,9 @@ class UserPanelService(UserIdentityService):
             if client is None:
                 return
             if expected_uuid is not None and client.uuid != expected_uuid:
-                raise PanelRejectedError(f"Panel {panel.name} rollback refused a foreign UUID")
+                raise PanelRejectedError(
+                    f"Panel {panel.name} rollback refused a foreign UUID"
+                ) from None
             await self._post(
                 panel,
                 f"panel/api/clients/del/{quote(username, safe='')}",
@@ -141,7 +143,7 @@ class UserPanelService(UserIdentityService):
         if client.uuid != expected_uuid:
             raise PanelRejectedError(
                 f"Panel {panel.name} email {username!r} is owned by a different UUID",
-            )
+            ) from None
         action = "bulkEnable" if enabled else "bulkDisable"
         await self._post(
             panel,

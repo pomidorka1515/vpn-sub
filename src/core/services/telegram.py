@@ -38,7 +38,7 @@ class TelegramService(BaseService):
     async def get_info_telegram(self, tgid: int) -> UserInfo:
         username = await self.db.tgid_to_user(tgid)
         if username is None:
-            raise NotFoundError("Unknown Telegram user")
+            raise NotFoundError("Unknown Telegram user") from None
         return await self.user_svc.get_info(username)
 
     async def is_registered(self, tgid: int) -> bool:
@@ -61,7 +61,7 @@ class TelegramService(BaseService):
     async def bonus_code(self, value: int | str, code: str) -> ApplyBonusCodeObject:
         username = await self.get_username_telegram(value)
         if username is None:
-            raise NotFoundError("Unknown Telegram user")
+            raise NotFoundError("Unknown Telegram user") from None
         return await self.code_svc.apply_bonus_code(username=username, code=code)
 
     @overload

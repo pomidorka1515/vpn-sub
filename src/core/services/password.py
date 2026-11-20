@@ -14,7 +14,7 @@ class PasswordService(BaseService):
     @staticmethod
     def validate_new_password(value: object) -> None:
         if not isinstance(value, str) or not 1 <= len(value) <= 128:
-            raise ValidationError("'password' must be 1-128 characters")
+            raise ValidationError("'password' must be 1-128 characters") from None
 
     async def hash(self, value: str) -> str:
         return await self.res.offloads.passwords.run(self.res.password_hasher.hash, value)

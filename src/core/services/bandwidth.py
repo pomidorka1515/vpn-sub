@@ -139,7 +139,7 @@ class BandwidthService(BaseService):
         for panel, snapshot in zip(panels, snapshots, strict=True):
             if isinstance(snapshot, BaseException):
                 if not isinstance(snapshot, Exception):
-                    raise snapshot
+                    raise snapshot from None
                 self.log.error("client traffic listing failed for panel %s", panel.name)
                 if require_complete:
                     raise PanelUnavailableError(
