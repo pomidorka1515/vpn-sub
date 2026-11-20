@@ -121,6 +121,8 @@ class Database(
                 f"PRAGMA busy_timeout = {max(1, int(self.timeout * 1000))}",
                 "PRAGMA journal_mode = WAL",
                 "PRAGMA synchronous = NORMAL",
+                "PRAGMA cache_size = -65536",
+                "PRAGMA mmap_size = 268435456",
             ):
                 await wrapped.execute(statement)
             if reader:
@@ -269,6 +271,18 @@ class Database(
             if self.backup_dir is None:
                 raise DatabaseError("backup_now() requires a backup_dir to be configured.")
             await self._files.run(self._backup)
+
+    async def optimize(self) -> None:
+        """Refresh SQLite's query planner statistics."""
+        self._check()
+        async with self._write_lock:
+            self._check()
+            if self._writer is None:
+                raise DatabaseError("database writer is unavailable")
+            try:
+                await Connection(self._writer).execute("PRAGMA optimize")
+            except (sqlite3.Error, OSError) as exc:
+                raise _database_error(exc) from exc
 
     def _backup(self) -> None:
         if self.backup_dir is None:

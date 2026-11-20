@@ -733,6 +733,8 @@ async def test_pragmas_leases_and_nested_rejection(repository: Database) -> None
     async with repository.connection() as conn:
         assert (await conn.row("PRAGMA foreign_keys"))[0] == 1  # type: ignore[index]
         assert (await conn.row("PRAGMA journal_mode"))[0] == "wal"  # type: ignore[index]
+        assert (await conn.row("PRAGMA cache_size"))[0] == -65536  # type: ignore[index]
+        assert (await conn.row("PRAGMA mmap_size"))[0] == 268435456  # type: ignore[index]
         with pytest.raises(DatabaseError, match="nested"):
             await repository.get_metadata("key")
     with pytest.raises(DatabaseError):

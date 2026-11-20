@@ -186,6 +186,10 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
                     )
                 delay = min(3600.0 * failures, 86400.0)
             self._snapshot_due_at[kind] = time.monotonic() + delay
+        try:
+            await self.db.optimize()
+        except Exception:
+            self.log.exception("SQLite query planner optimization failed")
 
     async def _daily_loop(self) -> None:
         while True:

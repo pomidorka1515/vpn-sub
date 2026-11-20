@@ -123,6 +123,7 @@ async def test_steady_poll_skips_bulk_reads_at_10k_users(
             assert known["user00000"] == "00000000-0000-0000-0000-000000000000"
             assert [call.args[0] for call in metadata.await_args_list] == [
                 "last_reset_month",
+                "watcher_usage_month",
             ]
             assert [call.args[0] for call in bulk_metadata.await_args_list] == [
                 *(["user_notifications_pending:"] if notifications else []),
