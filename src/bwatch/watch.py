@@ -142,10 +142,15 @@ class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
         while True:
             await asyncio.sleep(interval)
             for label, name in jobs:
+                started = time.monotonic()
                 try:
                     await getattr(self, name)()
                 except Exception:
                     self.log.exception("%s crashed", label)
+                finally:
+                    duration = time.monotonic() - started
+                    if duration > 0.5:
+                        self.log.warning("%s took %.1fms", label, duration * 1000)
 
     async def _alert_admin(self, message: str) -> bool:
         if self.alert is not None:
