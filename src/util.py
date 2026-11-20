@@ -67,7 +67,7 @@ def sanitize(s: str, kind: Literal["external", "display"], /) -> str:
         case "display":
             result = s.translate(str.maketrans("", "", r""":;"'?/<>{}[]*&^%$#@\|`"""))[:16]
     if not result.strip():
-        raise ValidationError(f"Invalid {kind} name")
+        raise ValidationError(f"Invalid {kind} name") from None
     return result
 
 

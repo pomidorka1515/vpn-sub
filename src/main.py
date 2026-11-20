@@ -59,11 +59,11 @@ def probe() -> None:
     language = root / "lang.jsonc"
     frontend_root()
     if not language.is_file():
-        raise SystemExit(f"language file not found: {language}")
+        raise SystemExit(f"language file not found: {language}") from None
     if compiled():
         schema = root / "config.schema.json"
         if not schema.is_file():
-            raise SystemExit(f"schema file not found: {schema}")
+            raise SystemExit(f"schema file not found: {schema}") from None
 
 
 if __name__ == "__main__":

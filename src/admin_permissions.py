@@ -103,17 +103,17 @@ def prerequisite(permission: str) -> str | None:
 
 def validate_grants(value: object) -> list[str]:
     if not isinstance(value, list):
-        raise ValueError("permissions must be an array of known permission strings")
+        raise ValueError("permissions must be an array of known permission strings") from None
     value = cast(list[object], value)
     if len(value) > len(VALID_GRANTS):
-        raise ValueError("Too many permissions")
+        raise ValueError("Too many permissions") from None
     if any(not isinstance(item, str) or item not in VALID_GRANTS for item in value):
-        raise ValueError("Unknown permission")
+        raise ValueError("Unknown permission") from None
     grants = sorted(set(cast(list[str], value)))
     for permission in PERMISSIONS:
         required = prerequisite(permission)
         if required and allows(grants, permission) and not allows(grants, required):
-            raise ValueError(f"{permission} requires {required}")
+            raise ValueError(f"{permission} requires {required}") from None
     return [
         grant
         for grant in grants

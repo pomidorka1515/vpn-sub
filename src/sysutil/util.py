@@ -43,7 +43,7 @@ class SysUtil:
     _cpu_prev: tuple[int, int] | None = None
 
     def __init__(self) -> None:
-        raise NotImplementedError("SysUtil is a namespace, not an instance")
+        raise NotImplementedError("SysUtil is a namespace, not an instance") from None
 
     @staticmethod
     def _cpu_sample() -> tuple[int, int]:

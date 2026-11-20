@@ -231,7 +231,7 @@ def _latest(timeout: float) -> Release:
         response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, list):
-            raise ValueError("releases response is not a listing")
+            raise ValueError("releases response is not a listing") from None
         listed = cast(list[object], payload)
         for raw in listed:
             if not isinstance(raw, dict):
@@ -247,7 +247,7 @@ def _latest(timeout: float) -> Release:
             break
         page += 1
     if latest is None:
-        raise ValueError("no published versioned releases")
+        raise ValueError("no published versioned releases") from None
     return _release(latest)
 
 
@@ -255,12 +255,12 @@ def _release(body: dict[str, object]) -> Release:
     tag = body.get("tag_name")
     version = _parse(tag) if isinstance(tag, str) else None
     if not isinstance(tag, str) or version is None:
-        raise ValueError(f"release tag is not a version: {tag!r}")
+        raise ValueError(f"release tag is not a version: {tag!r}") from None
     if body.get("draft") is True:
-        raise ValueError(f"{tag} is not a published release")
+        raise ValueError(f"{tag} is not a published release") from None
     raw_assets = body.get("assets")
     if not isinstance(raw_assets, list):
-        raise ValueError("release has no assets")
+        raise ValueError("release has no assets") from None
     listed = cast(list[object], raw_assets)
     assets: dict[str, Asset] = {}
     for raw in listed:
@@ -296,7 +296,7 @@ def _asset(item: object) -> Asset | None:
     if not isinstance(name, str) or not isinstance(url, str) or not isinstance(size, int):
         return None
     if not isinstance(digest, str) or not digest.startswith("sha256:"):
-        raise ValueError(f"{name} has no sha256 digest")
+        raise ValueError(f"{name} has no sha256 digest") from None
     return Asset(name=name, url=url, size=size, digest=digest.removeprefix("sha256:"))
 
 
@@ -503,13 +503,13 @@ def _fetch(asset: Asset, target: Path) -> None:
                 handle.flush()
                 os.fsync(handle.fileno())
         if size != asset.size:
-            raise ValueError(f"size {size} != {asset.size}")
+            raise ValueError(f"size {size} != {asset.size}") from None
         if not compare(digest.hexdigest(), asset.digest):
-            raise ValueError("sha256 digest does not match the release")
+            raise ValueError("sha256 digest does not match the release") from None
         temporary.replace(target)
-    except BaseException:
+    except BaseException as exc:
         temporary.unlink(missing_ok=True)
-        raise
+        raise exc from None
 
 
 def _swap(present: dict[str, Path], files: dict[str, Path]) -> list[str] | None:
@@ -581,7 +581,7 @@ class _Body:
     def iter_content(self, chunk_size: int) -> Iterator[bytes]:
         for chunk in self._response.iter_content(chunk_size=chunk_size):
             if not isinstance(chunk, bytes):
-                raise ValueError("download chunk is not bytes")
+                raise ValueError("download chunk is not bytes") from None
             yield chunk
 
 

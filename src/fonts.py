@@ -37,12 +37,12 @@ def embed_font_faces(source: str, prefix: str) -> str:
     path (/panel) instead of the asset root. The placeholder is substituted here.
     """
     if FONTS_MARKER not in source:
-        raise ValueError("fonts marker is missing")
+        raise ValueError("fonts marker is missing") from None
     css = (RES_DIR / "assets" / "fonts.css").read_text(encoding="utf-8")
     if _FONT_PLACEHOLDER not in css:
-        raise ValueError("fonts.css is missing the font base placeholder")
+        raise ValueError("fonts.css is missing the font base placeholder") from None
     if _VERSION_PLACEHOLDER not in css:
-        raise ValueError("fonts.css is missing the font version placeholder")
+        raise ValueError("fonts.css is missing the font version placeholder") from None
     faces = css.replace(_FONT_PLACEHOLDER, prefix.rstrip("/")).replace(
         _VERSION_PLACEHOLDER,
         font_version(),

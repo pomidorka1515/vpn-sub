@@ -146,7 +146,7 @@ def frontend_root() -> Path:
                 f"Frontend build missing or incomplete at {root} (missing {name}). "
                 "Run `npm --prefix frontend ci` and `npm --prefix frontend run build` "
                 "before starting Python; binary releases must include frontend/dist."
-            )
+            ) from None
     return root
 
 

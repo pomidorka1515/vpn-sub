@@ -240,7 +240,7 @@ async def create_application(
         app.extensions["response_config"] = cfg
         app.extensions["runtime"] = runtime
         return runtime
-    except Exception, asyncio.CancelledError:
+    except (Exception, asyncio.CancelledError) as exc:
         cleanup_owner = runtime if runtime is not None else owner
         if not cleanup_owner.stopping.is_set():
             cleanup_owner.begin_stop()
@@ -251,4 +251,4 @@ async def create_application(
             name="application:startup-unwind",
         )
         await asyncio.shield(cleanup)
-        raise
+        raise exc from None

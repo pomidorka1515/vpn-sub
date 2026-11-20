@@ -34,20 +34,20 @@ def dispatch(prog: str, probe: Callable[[], None]) -> None:
         from cli.crypto_probe import probe as crypto_probe
 
         crypto_probe(Path(sys.argv[2]))
-        raise SystemExit(0)
+        raise SystemExit(0) from None
     if flag in {"--help", "-h"}:
         from cli.help import print_help
 
         print_help(prog)
-        raise SystemExit(0)
+        raise SystemExit(0) from None
     if flag == "--probe":
         probe()
-        raise SystemExit(0)
+        raise SystemExit(0) from None
     if flag == "--update":
         from cli.updater import update
 
-        raise SystemExit(update())
+        raise SystemExit(update()) from None
     if flag == "--load-scripts":
         from cli.scripts import load_scripts
 
-        raise SystemExit(load_scripts())
+        raise SystemExit(load_scripts()) from None

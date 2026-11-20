@@ -65,7 +65,7 @@ def load_scripts() -> int:
         scripts.mkdir(parents=True, exist_ok=True)
         listed = _listing()
         if not listed:
-            raise ValueError(f"v{VERSION} has no scripts")
+            raise ValueError(f"v{VERSION} has no scripts") from None
         for name, digest in listed:
             target = scripts / name
             print(f"downloading {name}")
@@ -89,7 +89,7 @@ def _listing() -> tuple[tuple[str, str], ...]:
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, list):
-        raise ValueError("scripts response is not a listing")
+        raise ValueError("scripts response is not a listing") from None
     found: list[tuple[str, str]] = []
     for item in cast(list[object], payload):
         if not isinstance(item, dict):
@@ -119,18 +119,18 @@ def _script(name: str, digest: str) -> bytes:
     the alphabet check ignores that whitespace.
     """
     if not _safe_name(name):
-        raise ValueError(f"refusing script name {name!r}")
+        raise ValueError(f"refusing script name {name!r}") from None
     response = _get(f"{_API}/contents/scripts/{name}?ref={quote(f'v{VERSION}', safe='')}", TIMEOUT)
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
-        raise ValueError(f"{name} response is not an object")
+        raise ValueError(f"{name} response is not an object") from None
     body = cast(dict[object, object], payload)
     encoded = body.get("content")
     sha = body.get("sha")
     encoding = body.get("encoding")
     if encoding != "base64" or not isinstance(encoded, str) or not isinstance(sha, str):
-        raise ValueError(f"{name} response has no base64 content")
+        raise ValueError(f"{name} response has no base64 content") from None
     try:
         encoded = encoded.translate(str.maketrans("", "", string.whitespace))
         content = base64.b64decode(encoded, validate=True)
@@ -138,7 +138,7 @@ def _script(name: str, digest: str) -> bytes:
         raise ValueError(f"{name} content is not base64") from exc
     check = hashlib.sha1(f"blob {len(content)}\0".encode("ascii") + content, usedforsecurity=False)
     if not hmac.compare_digest(check.hexdigest(), sha) or not hmac.compare_digest(sha, digest):
-        raise ValueError(f"{name} blob digest does not match the release tag")
+        raise ValueError(f"{name} blob digest does not match the release tag") from None
     return content
 
 
@@ -150,9 +150,9 @@ def _write(target: Path, body: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         temporary.replace(target)
-    except BaseException:
+    except BaseException as exc:
         temporary.unlink(missing_ok=True)
-        raise
+        raise exc from None
 
 
 class RequestError(OSError):
