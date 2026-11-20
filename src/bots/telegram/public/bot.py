@@ -50,10 +50,10 @@ class TelegramPublicBot(
             self.limiter = limiter
             conf = self.cfg.view()
             if "publicbot" not in conf:
-                raise KeyError("publicbot")
+                raise KeyError("publicbot") from None
             token = conf["publicbot"]["token"]
             if not token:
-                raise RuntimeError("publicbot.token must not be empty")
+                raise RuntimeError("publicbot.token must not be empty") from None
             self.bot = AsyncTeleBot(token)
             self._initialize_polling()
             self._initialize_conversations()

@@ -99,7 +99,7 @@ class AdminLeaderboardMixin(AdminFeatureMixin):
         try:
             window = int(message.text)
             if window < 0:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self.bot.send_message(
                 chat_id,

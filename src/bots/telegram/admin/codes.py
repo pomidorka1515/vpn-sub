@@ -300,7 +300,9 @@ class AdminCodesMixin(AdminFeatureMixin):
             try:
                 uses = int(text.strip())
                 if uses < 1:
-                    raise ValueError("aeruioycxvvbseyporfdlhgnvcxhskl;dlkfdlaeeyroufhgkjhgfkgkfjhl")
+                    raise ValueError(
+                        "aeruioycxvvbseyporfdlhgnvcxhskl;dlkfdlaeeyroufhgkjhgfkgkfjhl"
+                    ) from None
             except ValueError:
                 await self.bot.send_message(
                     message.chat.id,

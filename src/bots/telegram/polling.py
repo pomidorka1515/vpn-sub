@@ -76,7 +76,7 @@ class TelegramPollingMixin:
 
     async def start(self) -> None:
         if self._stopping.is_set():
-            raise RuntimeError("bot is closed")
+            raise RuntimeError("bot is closed") from None
         if self._polling_task is None:
             self._polling_task = asyncio.create_task(
                 self._poll_forever(),

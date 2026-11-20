@@ -46,7 +46,7 @@ class AdminTrafficMixin(AdminFeatureMixin):
         try:
             days = int(text.strip())
             if not 1 <= days <= 90:
-                raise ValueError
+                raise ValueError from None
         except ValueError:
             await self.bot.send_message(
                 message.chat.id,

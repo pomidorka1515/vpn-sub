@@ -32,7 +32,7 @@ class PublicTrafficMixin(PublicFeatureMixin):
         try:
             days = int(data.split("_", 1)[1])
             if not 1 <= days <= 90:
-                raise ValueError
+                raise ValueError from None
         except ValueError, IndexError:
             await self._answer_callback(call.id, t["chart_invalid_period"])
             return

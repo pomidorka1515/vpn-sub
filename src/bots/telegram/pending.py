@@ -37,7 +37,7 @@ class PendingValues[T](MutableMapping[int | str, T]):
     def __setitem__(self, chat: int | str, value: T) -> None:
         self._prune()
         if len(self._values) >= 1024 and self._key(chat) not in self._values:
-            raise RuntimeError("callback conversation capacity exceeded")
+            raise RuntimeError("callback conversation capacity exceeded") from None
         self._values[self._key(chat)] = time.monotonic() + self.ttl, value
 
     def __delitem__(self, chat: int | str) -> None:

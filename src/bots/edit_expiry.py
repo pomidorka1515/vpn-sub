@@ -13,8 +13,8 @@ def parse_edit_expiry(value: str) -> int:
     try:
         date = datetime.strptime(value, "%Y-%m-%d %H:%M").replace(tzinfo=UTC)
         timestamp = int(date.timestamp())
-    except (ValueError, OverflowError, OSError) as error:
-        raise ValueError("Invalid expiry") from error
+    except ValueError, OverflowError, OSError:
+        raise ValueError("Invalid expiry") from None
     if timestamp <= 0:
-        raise ValueError("Invalid expiry")
+        raise ValueError("Invalid expiry") from None
     return timestamp

@@ -42,7 +42,7 @@ class ConversationRouter:
     def expect(self, key: ConversationKey, step: Step, *arguments: object) -> None:
         self.prune()
         if key not in self._states and len(self._states) >= self.capacity:
-            raise RuntimeError("conversation capacity exceeded")
+            raise RuntimeError("conversation capacity exceeded") from None
         self._states[key] = Conversation(step, arguments, time.monotonic() + self.ttl)
 
     def clear(self, key: ConversationKey) -> None:

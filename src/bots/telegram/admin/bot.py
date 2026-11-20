@@ -49,7 +49,7 @@ class TelegramAdminBot(
             self.lang_cfg = lang_cfg
             conf = self.cfg.view()
             if "bot" not in conf:
-                raise KeyError("bot")
+                raise KeyError("bot") from None
             self.bot = AsyncTeleBot(conf["bot"]["token"])
             self.admin_uids: list[int] = conf["bot"]["whitelist"]
             self._initialize_polling()

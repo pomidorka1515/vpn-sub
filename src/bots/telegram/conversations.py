@@ -106,10 +106,10 @@ class ConversationMixin:
         del chat_id
 
     async def cmd_start(self, message: types.Message) -> None:
-        raise NotImplementedError
+        raise NotImplementedError from None
 
     async def handle_text(self, message: types.Message) -> None:
         del message
 
     async def handle_callbacks(self, call: types.CallbackQuery) -> None:
-        raise NotImplementedError
+        raise NotImplementedError from None

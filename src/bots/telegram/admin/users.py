@@ -327,7 +327,7 @@ class AdminUsersMixin(AdminFeatureMixin):
             return
         try:
             if not text.isascii() or not text.isdecimal() or not 0 <= int(text) <= 2**63 - 1:
-                raise ValueError
+                raise ValueError from None
             used = int(text)
         except ValueError:
             await self.bot.send_message(
