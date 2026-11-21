@@ -195,6 +195,7 @@ async def test_daily_snapshot_outage_retries_complete_sample(
 async def test_state_samples_preserve_collection_times_across_restart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    procfs: None,
 ) -> None:
     db = Database(path=tmp_path / "state.db", start_backup=False)
     await db.start()

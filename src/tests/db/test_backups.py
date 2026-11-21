@@ -80,6 +80,7 @@ def _prune(kind: BackupKind, instance: Path) -> None:
 @pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
 def test_same_second_backups_preserve_versions_and_retention(
     tmp_path: Path,
+    hardlinks: None,
     kind: BackupKind,
 ) -> None:
     instance = tmp_path / "backups"
@@ -106,6 +107,7 @@ def test_same_second_backups_preserve_versions_and_retention(
 @pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
 def test_concurrent_same_second_backups_do_not_replace_snapshots(
     tmp_path: Path,
+    hardlinks: None,
     kind: BackupKind,
 ) -> None:
     instance = tmp_path / "backups"
@@ -130,6 +132,7 @@ def test_concurrent_same_second_backups_do_not_replace_snapshots(
 @pytest.mark.parametrize("kind", ["json", "jsonl", "sqlite3"])
 def test_backups_survive_clock_rollback_and_concurrent_retention(
     tmp_path: Path,
+    hardlinks: None,
     kind: BackupKind,
 ) -> None:
     instance = tmp_path / "backups"
@@ -187,7 +190,7 @@ def _directory_contents(instance: Path) -> dict[Path, bytes]:
     return {path: path.read_bytes() for path in instance.iterdir()}
 
 
-def test_config_backup_normalizes_json_and_jsonc(tmp_path: Path) -> None:
+def test_config_backup_normalizes_json_and_jsonc(tmp_path: Path, hardlinks: None) -> None:
     source = tmp_path / "config.json"
     source.write_text('{"name": "vpn", "port": 1,}', encoding="utf-8")
     instance = tmp_path / "backups"
@@ -210,7 +213,7 @@ def test_config_backup_normalizes_json_and_jsonc(tmp_path: Path) -> None:
     assert len(list(instance.glob("*.json"))) == 1
 
 
-def test_config_raw_backup_copies_jsonl_and_cleans_temp(tmp_path: Path) -> None:
+def test_config_raw_backup_copies_jsonl_and_cleans_temp(tmp_path: Path, hardlinks: None) -> None:
     source = tmp_path / "audit.jsonl"
     source.write_text('{"event": "hit"}\n', encoding="utf-8")
     instance = tmp_path / "raw"
@@ -340,7 +343,7 @@ def test_config_backup_thread_logs_repeated_failures(tmp_path: Path) -> None:
     critical.assert_called()
 
 
-def test_database_backup_roundtrip_and_prune(tmp_path: Path) -> None:
+def test_database_backup_roundtrip_and_prune(tmp_path: Path, hardlinks: None) -> None:
     source = tmp_path / "state.sqlite3"
     connection = sqlite3.connect(source)
     _initialize_schema(connection)
@@ -392,7 +395,7 @@ def test_database_backup_directory_normalizes_source_path(
 
 
 @pytest.mark.asyncio
-async def test_same_stem_database_backups_are_isolated(tmp_path: Path) -> None:
+async def test_same_stem_database_backups_are_isolated(tmp_path: Path, hardlinks: None) -> None:
     root = tmp_path / "backups"
     legacy = root / "state" / "old.sqlite3"
     legacy.parent.mkdir(parents=True)
@@ -443,7 +446,9 @@ def test_database_backup_closes_connections_on_failure(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_database_does_not_publish_or_prune_backups(tmp_path: Path) -> None:
+async def test_missing_database_does_not_publish_or_prune_backups(
+    tmp_path: Path, hardlinks: None
+) -> None:
     source = tmp_path / "state.sqlite3"
     database = Database(
         path=source, backup_dir=tmp_path / "backups", backup_retention=2, start_backup=False
@@ -499,7 +504,9 @@ def test_invalid_database_is_not_published(tmp_path: Path, invalid: str) -> None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("version", range(1, SchemaMixin.SCHEMA_VERSION + 1))
-async def test_supported_schema_snapshot_can_be_restored(tmp_path: Path, version: int) -> None:
+async def test_supported_schema_snapshot_can_be_restored(
+    tmp_path: Path, hardlinks: None, version: int
+) -> None:
     source = tmp_path / "source ?#% ü.sqlite3"
     database = Database(path=source, start_backup=False)
     await database.start()

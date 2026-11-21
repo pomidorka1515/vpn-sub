@@ -283,7 +283,7 @@ async def test_log_delivery_failure_no_recursion_and_timeout() -> None:
     assert failures == ["alerts: log delivery failed"]
 
 
-async def test_owned_schedules_and_backup(tmp_path: Path) -> None:
+async def test_owned_schedules_and_backup(tmp_path: Path, hardlinks: None) -> None:
     files = BoundedOffload(capacity=2, name="test-files")
     store = AsyncConfig(
         lambda: Config(

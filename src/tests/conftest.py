@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+from pathlib import Path, UnsupportedOperation
 from typing import TYPE_CHECKING
 
 import pytest
@@ -17,7 +18,6 @@ from threadutil import named_to_thread
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
-    from pathlib import Path
 
 
 @pytest.fixture
@@ -103,6 +103,26 @@ def language() -> Iterator[Config[LangConfig]]:
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
     return tmp_path / "state.sqlite3"
+
+
+@pytest.fixture
+def hardlinks(tmp_path: Path) -> None:
+    source = tmp_path / ".hardlink-source"
+    target = tmp_path / ".hardlink-target"
+    source.touch()
+    try:
+        target.hardlink_to(source)
+    except UnsupportedOperation as exc:
+        pytest.skip(f"hardlinks are unsupported: {exc}")
+
+
+@pytest.fixture
+def procfs() -> None:
+    for name in ("stat", "uptime"):
+        try:
+            (Path("/proc") / name).read_text(encoding="utf-8")
+        except PermissionError as exc:
+            pytest.skip(f"/proc/{name} is not readable: {exc}")
 
 
 @pytest.fixture

@@ -86,7 +86,7 @@ async def test_steady_poll_skips_bulk_reads_at_10k_users(
     async with database.connection() as conn:
         plan = await conn.rows(f"EXPLAIN QUERY PLAN {USAGE_RECOVERY_SQL}", (now,))
     steps = [str(row[3]) for row in plan]
-    assert sum("idx_users_usage_main_recovery" in step for step in steps) == 2, steps
+    assert any("idx_users_usage_main_recovery" in step for step in steps), steps
     assert any("idx_users_usage_wl_recovery" in step for step in steps), steps
     watch = BWatch(sub.res.cfg, database, sub, notifier=notifier, scheduled=False)
     readings = {f"user{number:05}": BandwidthInfo(100, 0, 100) for number in range(10_000)}

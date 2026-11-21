@@ -60,6 +60,7 @@ async def test_snapshot_largest_safe_cutoff(admin_api: tuple[Quart, Subscription
 
 async def test_health_reports_db_and_process_status(
     admin_api: tuple[Quart, Subscription],
+    procfs: None,
 ) -> None:
     client = admin_api[0].test_client()
     assert (await client.get("/sub/api/api/health")).status_code == 401
@@ -87,6 +88,7 @@ async def test_health_reports_db_and_process_status(
 @pytest.mark.parametrize("kind", ["create", "delete", "reset", "sync"])
 async def test_health_and_operations_report_pending_recovery(
     admin_api: tuple[Quart, Subscription],
+    procfs: None,
     kind: str,
 ) -> None:
     app, sub = admin_api
@@ -120,6 +122,7 @@ async def test_health_and_operations_report_pending_recovery(
 async def test_health_returns_503_when_database_ping_fails(
     admin_api: tuple[Quart, Subscription],
     monkeypatch: pytest.MonkeyPatch,
+    procfs: None,
 ) -> None:
     def fail() -> object:
         raise DatabaseError("down") from None

@@ -20,6 +20,7 @@ from config.atomic import locked_file, resolve_lockfile_path
 def test_lines_backup_waits_for_complete_append(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    hardlinks: None,
     mode: str,
     custom_lock: bool,
 ) -> None:

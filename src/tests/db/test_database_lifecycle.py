@@ -220,6 +220,7 @@ async def test_pragmas_leases_and_nested_rejection(repository: Database) -> None
 async def test_backup_restores_and_close_is_repeatable(
     repository: Database,
     tmp_path: Path,
+    hardlinks: None,
 ) -> None:
     await create_user(repository)
     await repository.backup_now()

@@ -74,7 +74,9 @@ async def test_admin_ui_requires_session(admin_api: tuple[Quart, Subscription]) 
         assert part not in body
 
 
-async def test_admin_api_responses_are_not_stored(admin_api: tuple[Quart, Subscription]) -> None:
+async def test_admin_api_responses_are_not_stored(
+    admin_api: tuple[Quart, Subscription], procfs: None
+) -> None:
     client = admin_api[0].test_client()
     response = await client.get("/sub/api/api/state/system")
     assert response.status_code == 401

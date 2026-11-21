@@ -139,7 +139,7 @@ def _object(value: JsonValue) -> dict[str, JsonValue]:
     return value
 
 
-def test_apply_joins_maps_and_preserves_key_order(tmp_path: Path) -> None:
+def test_apply_joins_maps_and_preserves_key_order(tmp_path: Path, hardlinks: None) -> None:
     path = _write(tmp_path, _legacy())
     original = path.read_text(encoding="utf-8")
 
@@ -203,7 +203,7 @@ def test_apply_joins_maps_and_preserves_key_order(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8").endswith("\n")
 
 
-def test_apply_preserves_config_ownership_and_mode(tmp_path: Path) -> None:
+def test_apply_preserves_config_ownership_and_mode(tmp_path: Path, hardlinks: None) -> None:
     path = _write(tmp_path, _legacy())
     if os.geteuid() == 0:
         os.chown(path, 65534, 65534)
@@ -235,7 +235,7 @@ def test_metadata_failure_does_not_replace_config(
     assert not list(tmp_path.glob(".tmp_*.json"))
 
 
-def test_missing_xhttp_extra_becomes_empty_object(tmp_path: Path) -> None:
+def test_missing_xhttp_extra_becomes_empty_object(tmp_path: Path, hardlinks: None) -> None:
     path = _write(tmp_path, _legacy(xhttpExtra={}))
 
     assert mp.main(["--config", str(path), "--apply"]) == 0
@@ -262,7 +262,7 @@ def test_dry_run_does_not_write(tmp_path: Path, capsys: pytest.CaptureFixture[st
     assert "dry run" in out
 
 
-def test_already_migrated_does_not_write(tmp_path: Path) -> None:
+def test_already_migrated_does_not_write(tmp_path: Path, hardlinks: None) -> None:
     source = _write(tmp_path, _legacy())
     assert mp.main(["--config", str(source), "--apply"]) == 0
     migrated = source.read_bytes()
@@ -291,6 +291,7 @@ def test_existing_pre_v6_backup_is_not_overwritten(tmp_path: Path) -> None:
 def test_replace_failure_preserves_current_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    hardlinks: None,
     *,
     existing_backup: bool,
 ) -> None:
