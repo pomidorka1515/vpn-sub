@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import ast
+import builtins
 import keyword
 import os
 from collections import Counter
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -17,6 +19,32 @@ from python_minifier.rename.mapper import add_namespace
 from python_minifier.rename.resolve_names import resolve_names
 
 type Function = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
+
+
+def inspects_frames(tree: ast.Module) -> bool:
+    """Frame/stack APIs can expose names in any active lexical scope."""
+    frame_apis = {
+        "_getframe",
+        "_current_frames",
+        "currentframe",
+        "settrace",
+        "setprofile",
+        "f_locals",
+        "f_globals",
+        "co_varnames",
+    }
+    return any(
+        (isinstance(node, ast.Attribute) and node.attr in frame_apis)
+        or (isinstance(node, ast.alias) and node.name in frame_apis)
+        or (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "dir"
+            and not node.args
+            and not node.keywords
+        )
+        for node in ast.walk(tree)
+    )
 
 
 class Binding(Protocol):
@@ -224,6 +252,7 @@ class ArgumentRenamer:
                 owner = self.parents.get(function)
                 if (
                     isinstance(owner, ast.ClassDef)
+                    and self.descriptor(function) != "staticmethod"
                     and function.args.args
                     and function.args.args[0] is definition
                 ):
@@ -294,37 +323,14 @@ class ArgumentRenamer:
                 exposed.update(self.exposed_functions(target, seen))
         return exposed
 
-    def run(self) -> None:
-        self.renamed = 0
-        self.skipped.clear()
+    def analyze_calls(self) -> tuple[dict[Function, list[ast.Call]], set[Function], set[Function]]:
+        """Find closed callers and distinguish dynamic keywords from reflection."""
         calls: dict[Function, list[ast.Call]] = {function: [] for function in self.functions}
         blocked: set[Function] = set()
         reflected: set[Function] = set()
         by_name: dict[str, list[Function]] = {}
         methods_by_name: dict[str, list[Function]] = {}
-        frame_apis = {
-            "_getframe",
-            "_current_frames",
-            "currentframe",
-            "settrace",
-            "setprofile",
-            "f_locals",
-            "f_globals",
-            "co_varnames",
-        }
-        if any(
-            (isinstance(node, ast.Attribute) and node.attr in frame_apis)
-            or (isinstance(node, ast.alias) and node.name in frame_apis)
-            or (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "dir"
-                and not node.args
-                and not node.keywords
-            )
-            for tree in self.trees.values()
-            for node in ast.walk(tree)
-        ):
+        if any(inspects_frames(tree) for tree in self.trees.values()):
             # Stack/frame APIs can inspect any active scope, not just a known
             # function object. There is no safe cross-module rename in that case.
             reflected.update(self.functions)
@@ -479,6 +485,12 @@ class ArgumentRenamer:
                 elif isinstance(node, ast.Attribute):
                     blocked.update(methods_by_name.get(node.attr, []))
                     reflected.update(methods_by_name.get(node.attr, []))
+        return calls, blocked, reflected
+
+    def run(self) -> None:
+        self.renamed = 0
+        self.skipped.clear()
+        calls, blocked, reflected = self.analyze_calls()
         for function in self.functions:
             tree = self.trees[self.modules[function]]
             parameters = function.args.posonlyargs + function.args.args + function.args.kwonlyargs
@@ -572,6 +584,53 @@ class ArgumentRenamer:
         if all(isinstance(key, ast.Constant) and isinstance(key.value, str) for key in keys):
             return cast(list[ast.Constant], keys)
         return None
+
+
+class PrivateMethodRenamer(ArgumentRenamer):
+    """Shorten closed single-underscore methods and their resolved references.
+
+    Unlike parameter renaming, a dynamic **kwargs call is harmless here. Method
+    names still stay intact for escaping receivers/callbacks, reflective access,
+    inheritance, unknown decorators, and unresolved same-named attributes.
+    """
+
+    def run(self) -> None:
+        self.renamed = 0
+        _, _, reflected = self.analyze_calls()
+        references: dict[Function, list[ast.Attribute]] = {}
+        # Reserve attributes too: a new method must never shadow instance data,
+        # another class member, or an attribute queried by its literal name.
+        self.used.update(self.strings)
+        for tree in self.trees.values():
+            for node in ast.walk(tree):
+                self.used.update(binding.name for binding in self.node_bindings(node))
+                if isinstance(node, ast.Attribute):
+                    self.used.add(node.attr)
+                    target = self.target(node)
+                    if isinstance(target, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        references.setdefault(target, []).append(node)
+                elif isinstance(node, ast.Name):
+                    self.used.add(node.id)
+                elif isinstance(node, ast.arg):
+                    self.used.add(node.arg)
+        # Resolve every attribute before changing any definition or binding.
+        for function in self.functions:
+            if (
+                isinstance(function, ast.Lambda)
+                or not function.name.startswith("_")
+                or function.name.startswith("__")
+                or function in reflected
+                or not isinstance(self.parents.get(function), ast.ClassDef)
+            ):
+                continue
+            binding = self.bindings.get(function)
+            if binding is None or self.definitions(binding) != [function]:
+                continue
+            new = self.fresh_name()
+            binding.rename(new)
+            for reference in references.get(function, []):
+                reference.attr = new
+            self.renamed += 1
 
 
 class ReleaseCleanup(ast.NodeTransformer):
@@ -960,24 +1019,43 @@ def prepare_tree(
     return cast(ast.Module, tree)
 
 
-def minify_tree(tree: ast.Module, filename: str) -> str:
-    """Shorten locals while retaining the verified argument-renaming plan."""
+def minify_tree(tree: ast.Module, filename: str, *, rename_globals: bool = False) -> str:
+    """Shorten locals and, after linking, globals without changing runtime APIs."""
     source = ast.unparse(tree)
-    preserved = set()
+    preserved: set[str] = set()
     for node in ast.walk(tree):
         # Keep all classes (including exception subclasses), functions and
-        # parameters: logs, callbacks and keyword calls
-        # depend on these. Private methods may also be looked up dynamically.
+        # parameters: logs, callbacks and keyword calls depend on these. Closed
+        # private methods have already been renamed with their callers.
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             preserved.add(node.name)
         elif isinstance(node, ast.arg):
             preserved.add(node.arg)
+        elif isinstance(node, ast.Name) and node.id.startswith("__") and node.id.endswith("__"):
+            preserved.add(node.id)
+        elif isinstance(node, ast.AnnAssign):
+            # Postponed field annotations and quoted forward references are
+            # evaluated by dataclasses/dacite later, outside lexical resolution.
+            # Keep their dependencies (including import/type aliases) available.
+            pending: list[ast.AST] = [node.annotation]
+            while pending:
+                annotation = pending.pop()
+                for reference in ast.walk(annotation):
+                    if isinstance(reference, ast.Name):
+                        preserved.add(reference.id)
+                    elif isinstance(reference, ast.Constant) and isinstance(reference.value, str):
+                        with suppress(SyntaxError):
+                            pending.append(ast.parse(reference.value, mode="eval"))
+    reflected = inspects_frames(tree)
     result = python_minifier.minify(
         source,
         filename=filename,
-        rename_locals=True,
+        rename_locals=not reflected,
         preserve_locals=sorted(preserved),
-        rename_globals=False,
+        rename_globals=rename_globals and not reflected,
+        # BuiltinBinding.rename inserts aliases such as ``A = len`` at module
+        # scope. Keep direct builtin calls so Nuitka can recognize/optimize them.
+        preserve_globals=sorted(preserved | set(dir(builtins))),
         remove_annotations=False,
         remove_literal_statements=False,
         hoist_literals=False,
@@ -992,6 +1070,7 @@ def minify_tree(tree: ast.Module, filename: str) -> str:
 def obfuscate(source: str, filename: str) -> str:
     """Obfuscate one standalone module (the CLI analyzes all modules together)."""
     tree = prepare_tree(source, filename)
+    PrivateMethodRenamer({"__main__": tree}).run()
     ArgumentRenamer({"__main__": tree}).run()
     return minify_tree(tree, filename)
 
@@ -1003,8 +1082,307 @@ def module_name(path: Path) -> str:
     return ".".join(parts)
 
 
+def flatten(trees: dict[str, ast.Module]) -> ast.Module:
+    """Link application bindings directly into one global scope, like includes."""
+    analysis = ArgumentRenamer(trees)
+    used = {
+        node.id for tree in trees.values() for node in ast.walk(tree) if isinstance(node, ast.Name)
+    }
+    used.update(
+        node.arg for tree in trees.values() for node in ast.walk(tree) if isinstance(node, ast.arg)
+    )
+    used.update(
+        binding.name
+        for tree in trees.values()
+        for node in ast.walk(tree)
+        for binding in analysis.node_bindings(node)
+    )
+
+    def fresh(prefix: str) -> str:
+        number = 0
+        while f"{prefix}{number}" in used:
+            number += 1
+        name = f"{prefix}{number}"
+        used.add(name)
+        return name
+
+    names: dict[int, str] = {}
+    external: dict[tuple[str, str | None, str], str] = {}
+    # Only actual builtin references reserve builtin names. Re-exports and
+    # import aliases are not additional application definitions.
+    claimed: dict[str, object] = {
+        binding.name: "builtin"
+        for symbols in analysis.symbols.values()
+        for binding in symbols.values()
+        if isinstance(cast(object, binding), BuiltinBinding)
+    }
+    imports: list[ast.stmt] = []
+    dependencies: dict[str, list[str]] = {module: [] for module in trees}
+
+    def library(module: str, name: str | None, preferred: str | None = None) -> str:
+        preferred = preferred or name or module.split(".", maxsplit=1)[0]
+        key = (module, name, preferred)
+        if key not in external:
+            identity = (module, name)
+            alias = (
+                preferred
+                if preferred not in claimed or claimed[preferred] == identity
+                else fresh("_e")
+            )
+            claimed[alias] = identity
+            external[key] = alias
+            if name is None:
+                imports.append(ast.Import(names=[ast.alias(name=module, asname=alias)]))
+            else:
+                imports.append(
+                    ast.ImportFrom(
+                        module=module, names=[ast.alias(name=name, asname=alias)], level=0
+                    )
+                )
+        return external[key]
+
+    # Allocate ordinary definitions first; imports and re-exports point to these
+    # same names rather than creating copies or emulated module objects.
+    for symbols in analysis.symbols.values():
+        for name, binding in symbols.items():
+            if isinstance(cast(object, binding), BuiltinBinding):
+                continue
+            if any(isinstance(ref, ast.alias) for ref in binding.references):
+                continue
+            chosen = name if name not in claimed else fresh("_g")
+            names[id(binding)] = chosen
+            claimed[chosen] = id(binding)
+
+    def imported(module: str, name: str | None, seen: set[int]) -> tuple[str, bool]:
+        if module not in trees:
+            return library(module, name), False
+        if name is None:
+            return module, True
+        binding = analysis.symbols[module].get(name)
+        if binding is not None:
+            return resolve(binding, seen)
+        child = f"{module}.{name}"
+        if child in trees:
+            return child, True
+        raise ValueError(f"Cannot flatten unresolved internal import: {module}.{name}")
+
+    def resolve(binding: Binding, seen: set[int]) -> tuple[str, bool]:
+        if id(binding) in names:
+            return names[id(binding)], False
+        if id(binding) in seen:
+            raise ValueError(f"Circular re-export: {binding.name}")
+        aliases = [ref for ref in binding.references if isinstance(ref, ast.alias)]
+        if len(aliases) != 1:
+            raise ValueError(f"Cannot flatten ambiguous import binding: {binding.name}")
+        module, name = analysis.imports[aliases[0]]
+        if module not in trees:
+            return library(module, name, binding.name), False
+        return imported(module, name, seen | {id(binding)})
+
+    def reference(node: ast.expr) -> tuple[str, bool] | None:
+        if isinstance(node, ast.Name):
+            binding = analysis.bindings.get(node)
+            if binding is not None and (
+                id(binding) in names
+                or any(isinstance(ref, ast.alias) for ref in binding.references)
+            ):
+                return resolve(binding, set())
+        elif isinstance(node, ast.Attribute):
+            owner = reference(node.value)
+            if owner is not None and owner[1]:
+                return imported(owner[0], node.attr, set())
+        return None
+
+    # Removing ``worker.`` can expose a real collision with a caller's local
+    # ``calculate``. Rename the linked symbol only when such capture occurs.
+    for tree in trees.values():
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Name, ast.Attribute)):
+                continue
+            target = reference(node)
+            if target is None or target[1]:
+                continue
+            name = target[0]
+            initial = cast(ast.AST, node.__dict__["namespace"])
+            scope = initial
+            while not isinstance(scope, ast.Module):
+                bindings = (
+                    analysis.node_bindings(scope)
+                    if not isinstance(scope, ast.ClassDef) or scope is initial
+                    else []
+                )
+                shadow = next((binding for binding in bindings if binding.name == name), None)
+                # Pure import bindings disappear during linking, so cannot
+                # capture a global even when their original aliases match.
+                if shadow is not None and any(
+                    not isinstance(definition, ast.alias)
+                    for definition in analysis.definitions(shadow)
+                ):
+                    replacement = fresh("_g" if name in names.values() else "_e")
+                    names.update(
+                        (key, replacement) for key, value in names.items() if value == name
+                    )
+                    external.update(
+                        (key, replacement) for key, value in external.items() if value == name
+                    )
+                    for statement in imports:
+                        for alias in cast(ast.Import | ast.ImportFrom, statement).names:
+                            if alias.asname == name:
+                                alias.asname = replacement
+                    break
+                scope = cast(ast.AST, scope.__dict__["namespace"])
+
+    replacements: dict[ast.AST, ast.expr] = {}
+    for module, tree in trees.items():
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    if alias.name == "*":
+                        raise ValueError("Star imports cannot be flattened; use explicit imports")
+                    target, name = analysis.imports[alias]
+                    if target == "__future__":
+                        continue
+                    if target in trees:
+                        dependencies[module].append(target)
+                        if isinstance(node, ast.Import) and alias.name in trees:
+                            dependencies[module].append(alias.name)
+                        child = f"{target}.{name}" if name else ""
+                        if child in trees:
+                            dependencies[module].append(child)
+                    else:
+                        preferred = alias.asname or (
+                            alias.name.split(".")[0] if isinstance(node, ast.Import) else alias.name
+                        )
+                        library(target, name, preferred)
+                        if isinstance(node, ast.Import) and not alias.asname and "." in alias.name:
+                            # ``import a.b`` binds a but must also load a.b.
+                            library(alias.name, None)
+            elif isinstance(node, (ast.Name, ast.Attribute)):
+                target = reference(node)
+                if target is not None:
+                    if target[1]:
+                        parent = analysis.parents.get(node)
+                        if not isinstance(parent, ast.Attribute) or parent.value is not node:
+                            raise ValueError(f"Internal module used as a value: {target[0]}")
+                    else:
+                        replacements[node] = ast.copy_location(
+                            ast.Name(id=target[0], ctx=node.ctx), node
+                        )
+
+    # Update global declarations and definitions as well as lexical references.
+    for symbols in analysis.symbols.values():
+        for binding in symbols.values():
+            if id(binding) in names and binding.name != names[id(binding)]:
+                binding.rename(names[id(binding)])
+
+    class Link(ast.NodeTransformer):
+        def visit_Name(self, node: ast.Name) -> ast.AST:
+            return replacements.get(node, node)
+
+        def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+            return replacements.get(node) or self.generic_visit(node)
+
+        def visit_Import(self, node: ast.Import) -> None:
+            return None
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            return None
+
+        def visit_For(self, node: ast.For) -> ast.AST:
+            # The entrypoint's probe imports every internal module by string.
+            # Those modules are already linked; retain only its external checks.
+            if isinstance(node.iter, ast.Tuple) and any(
+                isinstance(child, ast.Call)
+                and reference(child.func)
+                in {
+                    (alias, False)
+                    for (module, name, _), alias in external.items()
+                    if (module, name) == ("importlib", "import_module")
+                }
+                for statement in node.body
+                for child in ast.walk(statement)
+            ):
+                node.iter.elts = [
+                    value
+                    for value in node.iter.elts
+                    if not (
+                        isinstance(value, ast.Constant)
+                        and isinstance(value.value, str)
+                        and value.value in trees
+                    )
+                ]
+            return self.generic_visit(node)
+
+    # Runtime dataclass annotations can be quoted forward references. Rewrite
+    # those using their original module's globals, not unrelated string values.
+    for module, tree in trees.items():
+
+        class ForwardReferences(ast.NodeTransformer):
+            def __init__(self, module: str) -> None:
+                self.module = module
+
+            def visit_Constant(self, node: ast.Constant) -> ast.AST:
+                if not isinstance(node.value, str):
+                    return node
+                try:
+                    expression = ast.parse(node.value, mode="eval")
+                except SyntaxError:
+                    return node
+                self.visit(expression)
+                node.value = ast.unparse(expression.body)
+                return node
+
+            def visit_Name(self, node: ast.Name) -> ast.AST:
+                binding = analysis.symbols[self.module].get(node.id)
+                if binding is not None and not isinstance(cast(object, binding), BuiltinBinding):
+                    name, is_module = resolve(binding, set())
+                    if not is_module:
+                        node.id = name
+                return node
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AnnAssign):
+                ForwardReferences(module).visit(node.annotation)
+
+    body: list[ast.stmt] = []
+    visited: set[str] = set()
+
+    def include(module: str) -> None:
+        if module in visited:
+            return
+        visited.add(module)
+        for dependency in dependencies[module]:
+            include(dependency)
+        linked = cast(ast.Module, Link().visit(trees[module]))
+        # Non-entry modules must never run their script guards in the new scope.
+        for node in linked.body:
+            if (
+                module != "main"
+                and isinstance(node, ast.If)
+                and ast.unparse(node.test) == "__name__ == '__main__'"
+            ):
+                body.extend(node.orelse)
+            else:
+                body.append(node)
+
+    for module in trees:
+        if module != "main":
+            include(module)
+    if "main" in trees:
+        include("main")
+    result = ast.Module(
+        body=[
+            ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+            *imports,
+            *body,
+        ],
+        type_ignores=[],
+    )
+    return ast.fix_missing_locations(result)
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Obfuscate a release-only copy of src/.")
+    parser = argparse.ArgumentParser(description="Flatten src/ into a release-only app.min.py.")
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--report", action="store_true", help="Explain preserved parameter counts")
@@ -1015,13 +1393,12 @@ def main() -> None:
         parser.error("source and output must be separate, non-overlapping directories")
     if output.exists():
         parser.error("output already exists; use a fresh release staging directory")
-    count = before = after = 0
     paths: list[Path] = []
     for directory, directories, files in os.walk(source):
         directories[:] = [name for name in directories if name not in {"tests", "__pycache__"}]
         paths.extend(Path(directory) / name for name in files if name.endswith(".py"))
-    trees = {}
-    originals = {}
+    trees: dict[str, ast.Module] = {}
+    originals: dict[Path, str] = {}
     generic_classes: set[str] = set()
     parsed: dict[Path, ast.Module] = {}
     module_names: set[str] = set()
@@ -1065,20 +1442,27 @@ def main() -> None:
             module=module_name(relative),
             protocol_classes=protocol_classes,
         )
-    renamer = ArgumentRenamer(trees)
-    renamer.run()
-    for relative, original in originals.items():
-        result = minify_tree(trees[module_name(relative)], str(relative))
-        target = output / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(result, encoding="utf-8")
-        count += 1
-        before += len(original.encode("utf-8"))
-        after += len(result.encode("utf-8"))
+    count = len(trees)
     if not count:
         raise SystemExit("No application Python modules found")
-    print(f"Obfuscated {count} application modules: {before:,} -> {after:,} source bytes")
+    # Analyze the final lexical scope: module-qualified data references no
+    # longer look like reflective escapes, and every internal caller is linked.
+    linked = flatten(trees)
+    linked_trees = {"__main__": linked}
+    methods = PrivateMethodRenamer(linked_trees)
+    methods.run()
+    renamer = ArgumentRenamer(linked_trees)
+    renamer.run()
+    result = minify_tree(linked, "app.min.py", rename_globals=True)
+    output.mkdir(parents=True)
+    (output / "app.min.py").write_text(result, encoding="utf-8")
+    before = sum(len(original.encode("utf-8")) for original in originals.values())
+    after = len(result.encode("utf-8"))
+    print(
+        f"Flattened {count} application modules into app.min.py: {before:,} -> {after:,} source bytes"
+    )
     print(f"Renamed {renamer.renamed:,}/{renamer.renamed + renamer.skipped.total():,} parameters")
+    print(f"Renamed {methods.renamed:,} private methods")
     if args.report:
         for reason, preserved in renamer.skipped.most_common():
             print(f"  Preserved {preserved:,}: {reason}")

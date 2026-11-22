@@ -443,7 +443,7 @@ def test_cli_excludes_test_directories(tmp_path: Path) -> None:
         (directory / "broken.py").write_text("not valid Python !!!")
     output = tmp_path / "output"
     subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
-    assert [path.relative_to(output) for path in output.rglob("*.py")] == [Path("module.py")]
+    assert [path.relative_to(output) for path in output.rglob("*")] == [Path("app.min.py")]
 
 
 def renamed_modules(sources: Mapping[str, str]) -> dict[str, str]:
@@ -657,10 +657,14 @@ def test_cli_transforms_keyword_calls_across_relative_imports(tmp_path: Path) ->
     output = tmp_path / "output"
     subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
     result = subprocess.run(
-        [sys.executable, str(output / "main.py")], check=True, capture_output=True, text=True
+        [sys.executable, str(output / "app.min.py")], check=True, capture_output=True, text=True
     )
     assert result.stdout.strip() == "12"
-    function = ast.parse((output / "package" / "worker.py").read_text()).body[0]
+    function = next(
+        node
+        for node in ast.parse((output / "app.min.py").read_text()).body
+        if isinstance(node, ast.FunctionDef)
+    )
     assert isinstance(function, ast.FunctionDef)
     assert all(
         argument.arg not in {"long_parameter", "multiplier"} for argument in function.args.args
@@ -876,16 +880,460 @@ def test_cli_resolves_imported_instances_and_rewrites_keywords(tmp_path: Path) -
     output = tmp_path / "output"
     subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
     result = subprocess.run(
-        [sys.executable, str(output / "main.py")], check=True, capture_output=True, text=True
+        [sys.executable, str(output / "app.min.py")], check=True, capture_output=True, text=True
     )
     assert result.stdout.strip() == "8"
     function = next(
         node
-        for node in ast.walk(ast.parse((output / "worker.py").read_text()))
-        if isinstance(node, ast.FunctionDef)
+        for node in ast.walk(ast.parse((output / "app.min.py").read_text()))
+        if isinstance(node, ast.FunctionDef) and node.name == "calculate"
     )
     assert function.args.args[1].arg != "long_parameter"
-    assert "long_parameter=" not in (output / "main.py").read_text()
+    assert "long_parameter=" not in (output / "app.min.py").read_text()
+
+
+def flattened_modules(sources: Mapping[str, str]) -> str:
+    """Test linking in isolation from the pre-existing obfuscation passes."""
+    trees = {
+        name: obfuscator.prepare_tree(source, name.replace(".", "/") + ".py", module=name)
+        for name, source in sources.items()
+    }
+    return ast.unparse(obfuscator.flatten(trees))
+
+
+def test_private_methods_and_resolved_aliases_are_minified() -> None:
+    source = """
+class Helper:
+    a = 100
+    def _calculate(self, long_parameter):
+        return self._finish(long_parameter=long_parameter) + self.a
+    @classmethod
+    def _finish(cls, long_parameter):
+        return cls._double(long_parameter=long_parameter)
+    @staticmethod
+    def _double(long_parameter):
+        return long_parameter * 2
+    def run(self):
+        alias = self._calculate
+        return alias(long_parameter=4)
+helper = Helper()
+result = helper.run()
+"""
+    result = obfuscator.obfuscate(source, "fixture.py")
+    methods = {
+        node.name for node in ast.walk(ast.parse(result)) if isinstance(node, ast.FunctionDef)
+    }
+    assert len(methods) == 4
+    assert "run" in methods
+    assert not {"_calculate", "_finish", "_double", "a"} & methods
+    assert all(len(name) == 1 for name in methods - {"run"})
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == 108
+
+
+def test_private_async_methods_with_dynamic_keywords_are_minified() -> None:
+    source = """
+import asyncio
+class Helper:
+    async def _calculate(self, long_parameter):
+        return long_parameter * 2
+options = {'long_parameter': 4}
+result = asyncio.run(Helper()._calculate(**options))
+"""
+    result = obfuscator.obfuscate(source, "fixture.py")
+    method = next(
+        node for node in ast.walk(ast.parse(result)) if isinstance(node, ast.AsyncFunctionDef)
+    )
+    assert method.name != "_calculate"
+    assert method.args.args[1].arg == "long_parameter"
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == 8
+
+
+def test_staticmethod_self_parameter_is_not_a_known_receiver() -> None:
+    source = """
+class External:
+    def _calculate(self): return 7
+class Helper:
+    def _calculate(self): return 8
+    @staticmethod
+    def run(self): return self._calculate()
+result = Helper.run(External()), Helper()._calculate()
+"""
+    result = obfuscator.obfuscate(source, "fixture.py")
+    assert result.count("def _calculate(") == 2
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == (7, 8)
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        "result = getattr(helper, '_calculate')(long_parameter=4)",
+        "name = '_cal' + 'culate'\nresult = getattr(helper, name)(long_parameter=4)",
+        "result = helper._calculate.__name__",
+        "callbacks = [helper._calculate]\nresult = callbacks[0](long_parameter=4)",
+        "escaped = [helper]\nresult = escaped[0]._calculate(long_parameter=4)",
+        "def invoke(receiver): return receiver._calculate(long_parameter=4)\nresult = invoke(helper)",
+        "helper._calculate = lambda long_parameter: 7\nresult = helper._calculate(long_parameter=4)",
+        "result = helper.__class__.__dict__['_calculate'](helper, long_parameter=4)",
+        "class Child(Helper): pass\nresult = Child()._calculate(long_parameter=4)",
+    ],
+)
+def test_private_method_dynamic_apis_keep_their_names(usage: str) -> None:
+    source = f"""
+class Helper:
+    def _calculate(self, long_parameter): return long_parameter * 2
+helper = Helper()
+{usage}
+"""
+    result = obfuscator.obfuscate(source, "fixture.py")
+    assert "def _calculate(" in result
+    original: dict[str, Any] = {}
+    release: dict[str, Any] = {}
+    exec(source, original)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    exec(result, release)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert original["result"] == release["result"]
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        "class Helper(list):\n def _calculate(self, value): return value * 2",
+        "class Helper:\n def __getattribute__(self, name): return object.__getattribute__(self, name)\n def _calculate(self, value): return value * 2",
+        "class Helper:\n @property\n def _calculate(self): return lambda value: value * 2",
+        "class Helper:\n def __calculate__(self, value): return value * 2\n _calculate = __calculate__",
+    ],
+)
+def test_private_method_special_classes_and_descriptors_are_preserved(definition: str) -> None:
+    source = definition + "\nresult = Helper()._calculate(4)\n"
+    result = obfuscator.obfuscate(source, "fixture.py")
+    assert "_calculate" in result
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == 8
+
+
+def test_linked_globals_imports_and_private_methods_are_minified(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "worker.py").write_text(
+        "from math import sqrt as square_root\n"
+        "long_counter = 1\n"
+        "class Helper:\n"
+        " def _calculate(self, long_parameter): return square_root(long_parameter)\n"
+        "def increment():\n global long_counter\n long_counter += 1\n"
+    )
+    (source / "main.py").write_text(
+        "import worker\n"
+        "long_counter = 99\n"
+        "worker.long_counter = 4\nworker.increment()\n"
+        "def run():\n"
+        " helper = worker.Helper()\n"
+        " return helper._calculate(long_parameter=16), worker.long_counter, long_counter\n"
+        "print(run())\n"
+    )
+    output = tmp_path / "output"
+    subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
+    result = (output / "app.min.py").read_text()
+    assert "long_counter" not in result
+    assert "square_root" not in result
+    assert "_calculate" not in result
+    assert "class Helper:" in result
+    assert "def increment(" in result
+    execution = subprocess.run(
+        [sys.executable, str(output / "app.min.py")], check=True, capture_output=True, text=True
+    )
+    assert execution.stdout.strip() == "(4.0, 5, 99)"
+
+
+@pytest.mark.parametrize("rename_globals", [False, True])
+def test_minification_never_aliases_builtins(
+    rename_globals: bool, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = """
+from math import sqrt as square_root
+long_global = 7
+def run():
+    values = [int(value) for value in range(4)]
+    sizes = len(values), len(values), len(values)
+    valid = isinstance(values, list), isinstance(values, list)
+    return sizes, valid, sum(values), square_root(long_global + 2)
+print(run())
+"""
+    tree = obfuscator.prepare_tree(source, "fixture.py")
+    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=rename_globals)
+    minified = ast.parse(result)
+    builtin_calls = {"int", "range", "len", "isinstance", "sum", "print"}
+    assert builtin_calls <= {
+        node.func.id
+        for node in ast.walk(minified)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert not any(
+        isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in builtin_calls | {"list"}
+        for node in ast.walk(minified)
+    )
+    if rename_globals:
+        assert "long_global" not in result
+        assert "square_root" not in result
+    exec(result, {})  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert capsys.readouterr().out == "((4, 4, 4), (True, True), 6, 3.0)\n"
+
+
+def test_global_minification_preserves_annotations_and_callable_names(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = """
+from __future__ import annotations
+from dataclasses import dataclass, InitVar as Initial, KW_ONLY as KeywordOnly
+from typing import ClassVar as Shared
+from dacite import from_dict
+Alias = list[int]
+@dataclass
+class Record:
+    shared: Shared[int] = 3
+    value: 'Alias'
+    _: KeywordOnly
+    initial: Initial[int] = 4
+    def __post_init__(self, initial):
+        self.value.append(initial)
+long_global = 7
+def callback(value): return value
+print(from_dict(Record, {'value': [1]}).value, Record.__name__, callback.__name__, long_global)
+"""
+    tree = obfuscator.prepare_tree(source, "fixture.py")
+    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    assert "long_global" not in result
+    module = types.ModuleType("minified_globals_annotations_fixture")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(result, module.__dict__)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert capsys.readouterr().out == "[1, 4] Record callback 7\n"
+    assert module.Record.__annotations__["value"] == "'Alias'"
+    assert module.callback.__name__ == "callback"
+
+
+def test_global_minification_keeps_dynamic_namespaces(capsys: pytest.CaptureFixture[str]) -> None:
+    source = "long_global = 7\nprint(globals()['long_global'])\n"
+    tree = obfuscator.prepare_tree(source, "fixture.py")
+    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    assert "long_global =" in ast.unparse(ast.parse(result))
+    exec(result, {})  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert capsys.readouterr().out == "7\n"
+
+
+@pytest.mark.parametrize(
+    "expression",
+    ["sys._getframe().f_globals['long_global']", "inspect.currentframe().f_globals['long_global']"],
+)
+def test_global_minification_keeps_frame_visible_names(
+    expression: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = f"import sys, inspect\nlong_global = 7\nprint({expression})\n"
+    tree = obfuscator.prepare_tree(source, "fixture.py")
+    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    exec(result, {})  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert capsys.readouterr().out == "7\n"
+
+
+def test_flatten_links_modules_and_reexports_without_namespaces() -> None:
+    result = flattened_modules(
+        {
+            "worker": "def calculate(value): return value * 3\n",
+            "facade": "from worker import calculate as exported\n",
+            "main": "import worker\nimport facade as f\nresult = worker.calculate(2), f.exported(4)\n",
+        }
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == (6, 12)
+    assert not any(isinstance(node, ast.Attribute) for node in ast.walk(ast.parse(result)))
+    assert "import worker" not in result
+    assert "import facade" not in result
+
+
+def test_flatten_isolates_colliding_globals_imports_and_shadowed_locals() -> None:
+    result = flattened_modules(
+        {
+            "first": "import math as helper\nvalue = 9\ndef read(): return helper.sqrt(value)\n",
+            "second": "from math import floor as helper\nvalue = 4.5\ndef read(): return helper(value)\n",
+            "main": "import first\nimport second\nmath = 'not a library'\n"
+            "def local(first): return first.read()\n"
+            "result = first.read(), second.read(), local(type('Receiver', (), {'read': lambda self: 7})())\n",
+        }
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == (3, 4, 7)
+    imports = [
+        node for node in ast.parse(result).body if isinstance(node, (ast.Import, ast.ImportFrom))
+    ]
+    aliases = [
+        alias.asname
+        for node in imports
+        if not isinstance(node, ast.ImportFrom) or node.module != "__future__"
+        for alias in node.names
+    ]
+    assert "helper" in aliases
+    assert any(alias and alias.startswith("_e") for alias in aliases)
+
+
+def test_flatten_rewrites_module_global_writes_and_global_declarations() -> None:
+    result = flattened_modules(
+        {
+            "worker": "value = 1\ndef increment():\n global value\n value += 1\n",
+            "main": "import worker\nvalue = 99\nworker.value = 4\nworker.increment()\nresult = worker.value, value\n",
+        }
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == (5, 99)
+
+
+def test_flatten_keeps_runtime_forward_annotations_bound_to_original_types(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = flattened_modules(
+        {
+            "models": "from dataclasses import dataclass\n@dataclass\nclass Item:\n value: int\n"
+            "@dataclass\nclass Record:\n item: 'Item'\n",
+            "main": "class Item: pass\nfrom models import Record\n"
+            "from dacite import from_dict\nresult = from_dict(Record, {'item': {'value': 3}}).item.value\n",
+        }
+    )
+    module = types.ModuleType("flattened_annotations_fixture")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(result, module.__dict__)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert module.result == 3
+
+
+def test_flatten_probe_drops_only_dynamic_internal_import_checks() -> None:
+    result = flattened_modules(
+        {
+            "worker": "value = 3\n",
+            "main": "from importlib import import_module\n"
+            "for module in ('worker', 'math'): import_module(module)\n"
+            "result = ('worker', 'keep this string')\n",
+        }
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == ("worker", "keep this string")
+
+
+def test_flatten_preserves_dotted_imports_and_does_not_shadow_builtins() -> None:
+    result = flattened_modules(
+        {
+            "package": "",
+            "package.worker": "len = 7\ndef read(): return len\n",
+            "main": "import package.worker\nimport xml.etree.ElementTree\n"
+            "result = package.worker.read(), len([1, 2]), xml.etree.ElementTree.fromstring('<x/>').tag\n",
+        }
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == (7, 2, "x")
+
+
+def test_flatten_preserves_noncolliding_names_and_reexports() -> None:
+    result = flattened_modules(
+        {
+            "worker": "import math as maths\n"
+            "class Calculator:\n def calculate(self, long_parameter):\n"
+            "  local_value = maths.sqrt(long_parameter)\n  return local_value\n"
+            "def calculate(long_parameter):\n"
+            " local_result = Calculator().calculate(long_parameter=long_parameter)\n"
+            " return local_result\n",
+            "facade": "from worker import calculate\n",
+            "main": "from facade import calculate\nresult = calculate(long_parameter=9)\n",
+        }
+    )
+    tree = ast.parse(result)
+    assert not any(
+        isinstance(node, ast.Name) and node.id.startswith(("_g", "_e")) for node in ast.walk(tree)
+    )
+    assert {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)} == {
+        "Calculator"
+    }
+    assert {node.arg for node in ast.walk(tree) if isinstance(node, ast.arg)} == {
+        "self",
+        "long_parameter",
+    }
+    assert {"maths", "local_value", "local_result"} <= {
+        node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+    }
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == 3
+    assert namespace["calculate"].__name__ == "calculate"
+
+
+def test_flatten_renames_only_one_of_two_distinct_colliding_definitions() -> None:
+    result = flattened_modules(
+        {
+            "first": "def calculate(value): return value + 1\n",
+            "second": "def calculate(value): return value + 2\n",
+            "main": "import first\nimport second\nresult = first.calculate(1), second.calculate(1)\n",
+        }
+    )
+    functions = [node for node in ast.parse(result).body if isinstance(node, ast.FunctionDef)]
+    assert sum(node.name == "calculate" for node in functions) == 1
+    assert all(node.args.args[0].arg == "value" for node in functions)
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == (2, 3)
+
+
+def test_flatten_avoids_capture_by_callers_local_names() -> None:
+    result = flattened_modules(
+        {
+            "worker": "from math import sqrt\ndef calculate(value): return sqrt(value)\n",
+            "main": "import worker\ndef invoke(calculate, sqrt):\n"
+            " return worker.calculate(9), worker.sqrt(16), calculate, sqrt\n"
+            "result = invoke('local function name', 'local import name')\n",
+        }
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == (3, 4, "local function name", "local import name")
+    invoke = next(
+        node
+        for node in ast.parse(result).body
+        if isinstance(node, ast.FunctionDef) and node.name == "invoke"
+    )
+    assert [arg.arg for arg in invoke.args.args] == ["calculate", "sqrt"]
+
+
+def test_standalone_obfuscation_keeps_existing_argument_renaming() -> None:
+    result = obfuscator.obfuscate(
+        "def calculate(long_parameter):\n local_result = long_parameter + 1\n return local_result\n"
+        "result = calculate(long_parameter=3)\n",
+        "fixture.py",
+    )
+    function = next(node for node in ast.parse(result).body if isinstance(node, ast.FunctionDef))
+    assert function.name == "calculate"
+    assert function.args.args[0].arg != "long_parameter"
+    assert "long_parameter=" not in result
+
+
+def test_removed_local_import_alias_is_not_a_collision() -> None:
+    result = flattened_modules(
+        {
+            "worker": "def calculate(value): return value + 1\n",
+            "main": "def invoke():\n import worker as calculate\n"
+            " return calculate.calculate(2)\nresult = invoke()\n",
+        }
+    )
+    assert "def calculate(value)" in result
+    assert "_g" not in result
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["result"] == 3
 
 
 @pytest.mark.parametrize(

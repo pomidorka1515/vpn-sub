@@ -495,6 +495,21 @@ tests requiring the local Redis executable also use `redis` and skip if absent.
 HTTP contracts: [docs/API.md](docs/API.md) (cookie `auth_token`) and
 [docs/API_ADMIN.md](docs/API_ADMIN.md) (`Authorization` header).
 
+### Flattened Python releases
+
+`python scripts/obfuscate_release.py src build/release-src` writes only
+`build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
+workflow compiles that file with Nuitka. Internal imports and re-exports become
+direct global references; stdlib and third-party imports share an import table
+at the top. After flattening, global variables and import aliases are minified
+alongside locals and verified parameters. Closed single-underscore methods are
+renamed together with their callers; dynamically looked-up methods, escaping
+receivers, and inheritance-sensitive methods keep their names. Class and other
+function names, keyword APIs, and runtime annotation dependencies are preserved.
+Builtins remain direct references (no aliases such as `A = len`) so Nuitka can
+recognize and optimize their use.
+
+
 ### Frontend development
 
 Use Node **24.22.2** and its bundled npm, pinned in `frontend/.node-version`.

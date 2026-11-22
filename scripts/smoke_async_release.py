@@ -349,7 +349,6 @@ def main() -> None:
         report = ET.parse(args.report)  # ruff: ignore[suspicious-xml-element-tree-usage] - local compiler output
         modules = {module.attrib["name"] for module in report.iter("module")}
         required = {
-            "asgi",
             "quart",
             "hypercorn.asyncio",
             "aiohttp",
@@ -360,6 +359,17 @@ def main() -> None:
         }
         if missing := required - modules:
             raise RuntimeError(f"Nuitka report missing async modules: {sorted(missing)}")
+        internal = {
+            path.relative_to(ROOT / "src")
+            .with_suffix("")
+            .as_posix()
+            .replace("/", ".")
+            .removesuffix(".__init__")
+            for path in (ROOT / "src").rglob("*.py")
+            if "tests" not in path.relative_to(ROOT / "src").parts
+        }
+        if packaged := internal & modules:
+            raise RuntimeError(f"Nuitka report contains internal modules: {sorted(packaged)}")
     command = [sys.executable, "-m", "main"] if args.checkout else [str(args.binary.resolve())]
     with TemporaryDirectory(prefix="vpn-sub-smoke-") as temporary:
         asyncio.run(smoke(command, Path(temporary), checkout=args.checkout))

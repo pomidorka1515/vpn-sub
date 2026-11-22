@@ -18,9 +18,8 @@ jobs:
         include:
           - name: vpn-sub
             pythonpath: build/release-src
-            entry: build/release-src/main.py
+            entry: build/release-src/app.min.py
             extra: >-
-              --include-module=asgi
               --include-module=hypercorn.asyncio
               --include-package=quart
               --include-module=telebot.async_telebot
@@ -28,14 +27,10 @@ jobs:
               --include-module=aiohttp
               --include-package=aiosqlite
               --include-module=redis.asyncio
-              --include-module=paths
-              --include-module=version
-              --include-package=cli
               --include-data-dir=frontend/dist=frontend/dist
               --include-data-files=lang.jsonc=lang.jsonc
               --include-data-files=config.schema.json=config.schema.json
               --include-module=discord
-              --include-package=bots.discord
     steps:
       - uses: actions/checkout@v5
 
