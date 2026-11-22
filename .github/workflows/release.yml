@@ -17,8 +17,8 @@ jobs:
       matrix:
         include:
           - name: vpn-sub
-            pythonpath: src
-            entry: src/main.py
+            pythonpath: build/release-src
+            entry: build/release-src/main.py
             extra: >-
               --include-module=asgi
               --include-module=hypercorn.asyncio
@@ -99,6 +99,7 @@ jobs:
         run: |
           python -m pip install -U pip
           python -m pip install 'nuitka>=4,<5' ordered-set zstandard
+          python -m pip install 'python-minifier==3.4.0'
           python -m pip install -r requirements.txt
 
       - name: build PNG-only Pillow
@@ -294,6 +295,7 @@ jobs:
               raise SystemExit(f"src/version.py has no {old} placeholder")
           path.write_text(source.replace(old, new, 1))
           PY
+          python scripts/obfuscate_release.py src build/release-src
           export CCFLAGS="-Os -fno-plt -fdata-sections -ffunction-sections"
           export LDFLAGS="-Wl,--gc-sections -Wl,-O2 -Wl,--as-needed -Wl,--strip-all"
           # Audit reports exposed bundled aiosqlite tests and unused Pillow formats.
