@@ -151,9 +151,6 @@ async def get_subscription(
             return cached
     user = await obj.user_svc.user_by_token(token)
     username = user["username"] if user else None
-    obj.audit_svc.audit_hit(
-        info={"username": username, "lang": lang, "ua": ua, "ip": ip, "force_json": force_json},
-    )
 
     if user is None or not username:
         if browser:

@@ -152,14 +152,13 @@ async def test_audit_acknowledges_fsync_and_reports_failure(
     await files.close()
 
 
-async def test_hit_audit_burst_batches_and_drains_without_waiting_for_disk(
+async def test_lines_burst_batches_and_drains_without_waiting_for_disk(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     files = BoundedOffload(capacity=2, name="test-files")
     path = tmp_path / "audit.jsonl"
     store = AsyncLinesConfig(lambda: LinesConfig(path, start_backup=False), files=files)
     await store.start()
-    audit = AuditService(store)
     entered = threading.Event()
     release = threading.Event()
     syncs = 0
@@ -173,15 +172,15 @@ async def test_hit_audit_burst_batches_and_drains_without_waiting_for_disk(
     monkeypatch.setattr("config.lines.os.fsync", fsync)
     try:
         for index in range(320):
-            audit.audit_hit(info={"username": str(index)})
+            store.enqueue({"username": str(index)})
         await named_to_thread("test:audit:wait", entered.wait)
         assert store._operations.active_count == 0
         assert store.dropped == 0
         close = asyncio.create_task(store.close())
         await asyncio.sleep(0)
         assert not close.done()
-        # Admission has closed, without failing the subscription caller.
-        audit.audit_hit(info={"username": "late"})
+        # Admission has closed, without failing the best-effort caller.
+        store.enqueue({"username": "late"})
         assert store.dropped == 1
         release.set()
         await close

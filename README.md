@@ -69,9 +69,8 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
    successful readings, not calendar-day totals (downtime cannot be split across
    days from cumulative counters). Missing readings are not zero-traffic days.
 - **Auth, audit, backups.** Argon2id passwords (legacy salted hashes still
-  verify). JSONL audit trail: mutation audits wait for durability; subscription
-  hits use a bounded best-effort batch writer, drained on orderly shutdown.
-  Overflow or disk failures may lose hit records without failing subscriptions.
+  verify). JSONL audit trail: mutation audits wait for durability. Subscription
+  hits are not logged to the audit trail.
   `LinesConfig(max_size_mb=100)` purges the entire JSONL file when an append
   exceeds 100 MB (decimal), including the triggering batch; no rotated copy is
   created. The limit is configurable per instance; existing backups are retained.

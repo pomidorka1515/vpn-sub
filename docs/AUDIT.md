@@ -4,12 +4,13 @@
 Audit config location is usually `../audit.jsonl` unless edited.  
 Administrator account/key management records metadata only, never passwords,
 key secrets, or browser/session credentials.  
+Subscription hits are not logged. Existing historical hit records are retained.
 The base format is:  
 ```jsonc  
 {  
     "ts": 1778089999.296969,       // float, precise timestamp  
     "date": "06.05.2026 15:44:30", // str, string in "%d.%m.%Y %H:%M:%S" format, UTC as always  
-    "action": "sub_hit",           // str, action name, see below  
+    "action": "user_add",          // str, action name, see below
     "info": {}                     // dict, information about an action. empty if none (not null)  
 }  
 ```  
@@ -21,7 +22,6 @@ For committed mutations, HTTP 202 with `committed: true` and `audit_pending: tru
 For config edits, retain the request's changed key names and the response's committed revision (`base`) and restart list in an operator incident record, without retaining secret values. Restore the audit destination, inspect the JSONL log for a possibly written entry, and manually reconcile the missing `config_update` record using the documented format and verified change details. Record any uncertainty about the original timestamp or outcome separately; the current config may already include later edits. Restart requirements still apply despite the audit failure.
 
 ## Action list  
-- `sub_hit`  
 - `user_refresh`  
 - `user_delete`  
 - `user_reset`  
@@ -44,19 +44,6 @@ targets use `id: 'root'` within their respective kind. These operations use the
 same committed-but-audit-pending HTTP 202 contract; retain a returned one-time
 key securely and do not retry the committed operation. See [PERMISSIONS.md](PERMISSIONS.md).
   
----  
-  
-### `sub_hit`  
-Description: A subscription hit.  
-```jsonc  
-{  
-    "username": "",          // str, internal username  
-    "lang": "ru",            // str, the language, 'ru' or 'en'  
-    "ua": "Happ/3.18.8/...", // str, User-Agent  
-    "ip": "x.x.x.x",         // str, IP address  
-    "force_json": "0"        // str, &force_json= param if it was specified (defaults to 0/false)  
-}  
-```  
 ---  
   
 ### `user_refresh`  

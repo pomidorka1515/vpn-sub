@@ -635,8 +635,7 @@ async def test_subscription_json_respects_profile_eligibility(
     subscription.user_svc.user_by_token.assert_awaited_once_with("tok")
     subscription.user_svc.user.assert_not_awaited()
     subscription.bandwidth_svc.subscription_bandwidth.assert_awaited_once_with("alice", "user-uuid")
-    subscription.audit_svc.audit_hit.assert_called_once()
-    subscription.audit_svc.audit.assert_not_called()
+    assert not subscription.audit_svc.mock_calls
     subscription.bandwidth_svc.bandwidth.assert_not_called()
     assert response.mimetype == "application/json"
     assert response.headers["Cache-Control"] == "private, no-store"
@@ -692,7 +691,7 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
         )
         assert status == 401
         assert response.headers["Cache-Control"] == "private, no-store"
-        subscription.audit_svc.audit_hit.assert_called()
+        assert not subscription.audit_svc.mock_calls
 
         subscription = _subscription()
         response, status = await get_subscription(

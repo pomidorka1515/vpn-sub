@@ -622,7 +622,7 @@ Response (success):
 		{  
 			"ts": 1778089999.296969,       // float, precise timestamp  
 			"date": "06.05.2026 15:44:30", // str, string in "%d.%m.%Y %H:%M:%S" format, UTC as always  
-			"action": "sub_hit",           // str, action name  
+			"action": "user_add",          // str, action name
 			"info": {}                     // dict, information about an action. empty if none (not null)  
 		}  
 		// ...  
