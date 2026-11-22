@@ -7,7 +7,12 @@ data/
 !.git-blame-ignore-revs
 __pycache__/
 *.py[cod]
+# `gh run download` outputs
+build-report-vpn-sub/
+ccache-Linux-X64-vpn-sub/
+vpn-sub/
 venv/
+
 out/
 bin/
 build/
