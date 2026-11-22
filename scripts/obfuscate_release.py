@@ -16,7 +16,7 @@ from python_minifier.ast_annotation import add_parent
 from python_minifier.rename.bind_names import bind_names
 from python_minifier.rename.binding import BuiltinBinding
 from python_minifier.rename.mapper import add_namespace
-from python_minifier.rename.resolve_names import resolve_names
+from python_minifier.rename.resolve_names import get_binding, resolve_names
 
 type Function = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
 
@@ -633,6 +633,78 @@ class PrivateMethodRenamer(ArgumentRenamer):
             self.renamed += 1
 
 
+def rename_private_classes(tree: ast.Module) -> None:
+    """Shorten private classes after internal imports have been linked."""
+    analysis = ArgumentRenamer({"__main__": tree})
+    used = {binding.name for node in ast.walk(tree) for binding in analysis.node_bindings(node)}
+    used.update(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
+    used.update(node.arg for node in ast.walk(tree) if isinstance(node, ast.arg))
+    used.update(node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute))
+    used.update(analysis.strings)
+    annotations: list[tuple[ast.Constant, ast.Expression, str]] = []
+
+    def bind_annotation(node: ast.AST, namespace: ast.AST) -> None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            try:
+                expression = ast.parse(node.value, mode="eval")
+            except SyntaxError:
+                return
+            bind_annotation(expression, namespace)
+            annotations.append((node, expression, ast.dump(expression)))
+        elif isinstance(node, ast.Name):
+            binding = cast(Callable[[str, ast.AST], Binding], get_binding)(node.id, namespace)
+            binding.references.append(node)
+        else:
+            for child in ast.iter_child_nodes(node):
+                bind_annotation(child, namespace)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign):
+            bind_annotation(node.annotation, cast(ast.AST, node.__dict__["namespace"]))
+    number = 0
+    members: dict[ast.ClassDef, tuple[str, str]] = {}
+    renamed: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or not node.name.startswith("_"):
+            continue
+        binding = analysis.bindings.get(node)
+        if binding is None or id(binding) in renamed:
+            continue
+        while f"_g{number}" in used:
+            number += 1
+        name = f"_g{number}"
+        used.add(name)
+        if isinstance(node.__dict__["namespace"], ast.ClassDef):
+            # Attributes can be accessed dynamically or through subclasses.
+            # Minify the class itself, but retain its attribute binding.
+            members[node] = (node.name, name)
+            node.name = name
+        else:
+            binding.rename(name)
+            renamed.add(id(binding))
+    for constant, expression, original in annotations:
+        if ast.dump(expression) != original:
+            constant.value = ast.unparse(expression.body)
+
+    class MemberAliases(ast.NodeTransformer):
+        def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST | list[ast.stmt]:
+            self.generic_visit(node)
+            if node not in members:
+                return node
+            original, alias = members[node]
+            return [
+                node,
+                ast.Assign(
+                    targets=[ast.Name(id=original, ctx=ast.Store())],
+                    value=ast.Name(id=alias, ctx=ast.Load()),
+                ),
+                ast.Delete(targets=[ast.Name(id=alias, ctx=ast.Del())]),
+            ]
+
+    MemberAliases().visit(tree)
+    ast.fix_missing_locations(tree)
+
+
 class ReleaseCleanup(ast.NodeTransformer):
     """Discard release-only metadata before python-minifier sees the source."""
 
@@ -1070,6 +1142,7 @@ def minify_tree(tree: ast.Module, filename: str, *, rename_globals: bool = False
 def obfuscate(source: str, filename: str) -> str:
     """Obfuscate one standalone module (the CLI analyzes all modules together)."""
     tree = prepare_tree(source, filename)
+    rename_private_classes(tree)
     PrivateMethodRenamer({"__main__": tree}).run()
     ArgumentRenamer({"__main__": tree}).run()
     return minify_tree(tree, filename)
@@ -1085,6 +1158,12 @@ def module_name(path: Path) -> str:
 def flatten(trees: dict[str, ast.Module]) -> ast.Module:
     """Link application bindings directly into one global scope, like includes."""
     analysis = ArgumentRenamer(trees)
+    public_classes = {
+        node: node.name
+        for tree in trees.values()
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and not node.name.startswith("_")
+    }
     used = {
         node.id for tree in trees.values() for node in ast.walk(tree) if isinstance(node, ast.Name)
     }
@@ -1116,6 +1195,19 @@ def flatten(trees: dict[str, ast.Module]) -> ast.Module:
         for binding in symbols.values()
         if isinstance(cast(object, binding), BuiltinBinding)
     }
+    definitions = Counter(
+        name
+        for symbols in analysis.symbols.values()
+        for name, binding in symbols.items()
+        if not isinstance(cast(object, binding), BuiltinBinding)
+        and not any(isinstance(ref, ast.alias) for ref in binding.references)
+    )
+    # A colliding public class keeps its class statement's name, using a
+    # temporary global slot and a distinct linked alias. Reserve that slot so
+    # defining the class cannot overwrite another module's live binding.
+    for name in public_classes.values():
+        if definitions[name] > 1:
+            claimed[name] = "public class slot"
     imports: list[ast.stmt] = []
     dependencies: dict[str, list[str]] = {module: [] for module in trees}
 
@@ -1276,6 +1368,25 @@ def flatten(trees: dict[str, ast.Module]) -> ast.Module:
                 binding.rename(names[id(binding)])
 
     class Link(ast.NodeTransformer):
+        def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST | list[ast.stmt]:
+            self.generic_visit(node)
+            original = public_classes.get(node)
+            if original is None or original == node.name:
+                return node
+            # Keep the class statement's name (including for decorators,
+            # metaclasses and nested qualnames), then move its binding to the
+            # collision-free alias used by linked references.
+            alias = node.name
+            node.name = original
+            return [
+                node,
+                ast.Assign(
+                    targets=[ast.Name(id=alias, ctx=ast.Store())],
+                    value=ast.Name(id=original, ctx=ast.Load()),
+                ),
+                ast.Delete(targets=[ast.Name(id=original, ctx=ast.Del())]),
+            ]
+
         def visit_Name(self, node: ast.Name) -> ast.AST:
             return replacements.get(node, node)
 
@@ -1378,7 +1489,9 @@ def flatten(trees: dict[str, ast.Module]) -> ast.Module:
         ],
         type_ignores=[],
     )
-    return ast.fix_missing_locations(result)
+    ast.fix_missing_locations(result)
+    rename_private_classes(result)
+    return result
 
 
 def main() -> None:

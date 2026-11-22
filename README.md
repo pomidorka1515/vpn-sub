@@ -4,7 +4,7 @@ Self-hosted VPN subscription manager for [3x-ui](https://github.com/MHSanaei/3x-
 Serves VLESS subscription links and JSON profiles, tracks per-user traffic and expiry, hands out access through invite and bonus codes, and provides admin and user interfaces on the web, Telegram, and Discord.  
 Built with Python 3.14 and Quart. HTTP, core services, panel I/O, and SQLite all share one asyncio event loop, together with the background bandwidth watcher and the optional bots.  
 SQLite is the source of truth for users, codes, quotas, and bandwidth. `config.json` is deployment and presentation only.  
-Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC_PACKAGING.md) for packaging details.
+Designed to run on one small Linux VPS.
 
 ## Features
 
@@ -89,7 +89,7 @@ Designed to run on one small Linux VPS. See [docs/ASYNC_PACKAGING.md](docs/ASYNC
 - Linux, glibc at least as new as Ubuntu 22.04 (`>= 2.35`)
 - Local Redis on the same box; the app pings it at startup and exits if it is down
 - 3x-ui v3 panels with admin-scoped API tokens
-- Release binaries need no Python on the host; development and the v6 profile migration require Python 3.14
+- Release binaries need no Python on the host; the v6 profile migration requires Python 3.14
 
 ## Setup
 
@@ -98,7 +98,7 @@ Prefer the release binaries. No venv, no checkout, no `requirements.txt`.
 the first start. Add the optional `discord` section to enable Discord.  
 A compiled binary ignores `$schema` and validates against the packed schema, so
 the example's relative `$schema` is fine here.  
-A git checkout is for development. See [Development](#development).
+A git checkout is for development. See [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ```bash
 getconf GNU_LIBC_VERSION # ensure its >= 2.35
@@ -288,9 +288,8 @@ directory. A frozen binary uses `data/` next to the executable (`sys.argv[0]`),
 because the working directory is not the install directory and `__file__` is
 inside the payload.
 
-Sources live in `frontend/src/`; only ignored `frontend/dist/` is consumed by
-Python and included in frozen releases. Node is not needed at runtime. Checkout
-runs require an explicit build; see [frontend development](#frontend-development).
+Release binaries include the built frontend; Node is not needed at runtime.
+For checkout builds, see [frontend development](DEVELOPMENT.md#frontend-development).
 
 A compiled binary ignores `$schema` and validates `config.json` against the
 packed `config.schema.json`. A checkout still resolves `$schema` relative to the
@@ -347,19 +346,14 @@ Migration scripts may require Python dependencies; see the instructions for each
 
 ## Binaries
 
-The release binaries are Nuitka onefile builds. The host that runs them needs
-glibc at least as new as Ubuntu 22.04 (`>= 2.35`). Do not build them with a
-free-threading interpreter (`python3.14t`, `sys.abiflags == "t"`). The workflow
-refuses that ABI.
-
-A tag `v*` builds one `vpn-sub` binary including Discord on `ubuntu-22.04` with CPython 3.14
-(GIL build, empty `sys.abiflags`) and attaches it to the GitHub release.
+The release binaries include Discord and need glibc at least as new as Ubuntu
+22.04 (`>= 2.35`). For build and packaging details, see
+[DEVELOPMENT.md](DEVELOPMENT.md#release-builds-and-packaging).
 
 `vpn-sub --probe` imports the HTTP and Discord runtime stack and checks the packed  
 `lang.jsonc`, `config.schema.json` and `frontend/dist/` can be
 opened. They do not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.  
-Release CI also verifies the Nuitka module report and runs the main binary from an unrelated working directory against disposable loopback Redis/panel dependencies, renders bundled templates, checks SQLite integrity, sends SIGTERM and restarts against the same state. No production credentials are required. See [packaging checks](docs/ASYNC_PACKAGING.md).
 
 `vpn-sub --help` prints usage and exits. It does not  
 boot the service. `-h` is the same flag. A checkout accepts it too.
@@ -391,14 +385,6 @@ already has both and refuses. An existing file is replaced. The schema is the
 one packed into that binary. The scripts are fetched and checked
 against the tag's blob sha before they are written.
 
-The unpack directory is `{CACHE_DIR}/<name>/{VERSION}/{PID}_{TIME_US}_{RANDOM}`
-and is removed only after the child has exited. It is not shared across
-restarts. A shared cache would be truncated by the next start while the running
-process still had those `.so` files mapped.
-`--onefile-child-grace-time=infinity` keeps the bootstrap from deleting that
-directory during the 5s default grace window; systemd's `TimeoutStopSec` is what
-bounds a stuck stop.
-
 Discord starts and stops with the main systemd unit.
 
 ## Limitations
@@ -417,177 +403,11 @@ Discord starts and stops with the main systemd unit.
 - Direct binds are blocked when `REQUIRE_PROXY=1`. TLS and public exposure
   belong on the reverse proxy. Application rate limits use local counters with
   periodic Redis reconciliation.
-- Python 3.14 for development and release builds; release binaries require the normal GIL ABI.
-
-## Architecture
-
-ASGI lifespan calls `await create_application()`: primary lock, validated config snapshots,  
-SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshots and optional Telegram bots. Startup failures unwind resources; readiness is published only after composition succeeds. Shutdown quiesces producers, settles mutations and closes resources, releasing the primary lock last.
-
-- `src/app.py`: `create_application()` factory. Builds the `Application`
-  runtime (paths, config snapshots, async DB, Redis, panels, subscription and Quart app)
-- `src/asgi.py`: ASGI entrypoint (`asgi:app`); lifespan hooks start and stop the runtime
-- `src/main.py`: process entry for a checkout (`python -m main`) and for the
-  Nuitka binary. Runs Hypercorn in-process on one event loop
-- `src/serve.py`: shared Hypercorn settings for checkout and binary serving
-- `src/core/`: `Subscription` and the user, code, panel, bandwidth, and audit
-  services. All user mutations go through `Subscription` to keep panels and
-  SQLite consistent; the admin API, WebAPI, and Telegram bots already do, and
-  Discord calls the same shared services in-process
-- `src/bwatch/`: `BWatch`: owned quota, expiry, panel health and snapshot tasks
-- `src/session/`: `XUiSession`, buffered aiohttp transport and generation-safe caches
-- `src/config/`: atomic JSON config with thread + cross-process locking
-- `src/db/`: aiosqlite repository with write transaction ownership and leased reads. Users, codes, quotas, and bandwidth live here.  
-  `config.json` is deployment and presentation only
-- `src/api/`: Quart routes (`AsyncApi` for admin, `AsyncWebApi` for end users)
-- `src/api/decorators/rate_limit.py`: local-first fixed-window limiter with
-  periodic Redis reconciliation, shared by async HTTP callers
-- `src/bots/telegram/`: Telegram `TelegramAdminBot` (management), `TelegramPublicBot` (user
-  self-service)
-- `src/bots/discord/`: optional Discord client owned by `create_application()`. One token serves public commands and
-  `/admin`. See [Discord setup](src/bots/discord/README.md).
-- `frontend/`: frontend sources, tooling and generated runtime resources. `docs/`: [public API](docs/API.md),
-  [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
 
 ## Development
 
-A git checkout is for development. Build the frontend as described below before
-running the service or tests. Start Redis first, then:
-
-```bash
-# Python 3.14 for development
-python3.14 -m venv venv
-venv/bin/pip install -r requirements.txt && venv/bin/pip install -e ".[dev]"
-venv/bin/ruff check .
-venv/bin/pytest
-venv/bin/mypy && venv/bin/pyright
-PYTHONPATH=src venv/bin/python -m main  # same entrypoint as the main binary
-# Alternative checkout server (keep one worker):
-PYTHONPATH=src venv/bin/hypercorn --config python:serve asgi:app
-```
-
-Ruff targets Python 3.14 and checks code style, modernization, common bugs, and  
-banned legacy typing imports. Run `venv/bin/ruff check . --fix` to apply safe  
-automatic fixes, then review the diff. CI runs `ruff check .` alongside pytest,  
-mypy, and pyright, plus `venv/bin/python scripts/smoke_async_release.py --checkout`
-with `redis-server` installed.
-
-Tests in `src/tests/` are Python packages grouped by subsystem (`api/`, `core/`,
-`bwatch/`, `config/`, `db/`, bots, and runtime). Run a subsystem or a single test:
-
-```bash
-venv/bin/pytest src/tests/core
-venv/bin/pytest src/tests/core/test_credentials.py::test_valid_legacy_hash_is_migrated_to_argon2
-venv/bin/pytest -m redis
-venv/bin/pytest -m "not integration"
-```
-
-Keep reusable factories and fakes in `tests.support`, with explicit imports such
-as `from tests.support.panels import FakePanel`. Put fixtures in the nearest
-subsystem's `conftest.py`; the root only owns shared DB/config/language fixtures.
-The database fixture owns a per-test subscription scope, so factory-created
-subscriptions are closed before SQLite, including on failure. Tests that create
-their own databases must close their subscriptions explicitly or use
-`subscription_scope()`. Async fixtures and tests retain function-scoped loops.
-Mark tests using external services or real network transports as `integration`;
-tests requiring the local Redis executable also use `redis` and skip if absent.
-
-HTTP contracts: [docs/API.md](docs/API.md) (cookie `auth_token`) and
-[docs/API_ADMIN.md](docs/API_ADMIN.md) (`Authorization` header).
-
-### Flattened Python releases
-
-`python scripts/obfuscate_release.py src build/release-src` writes only
-`build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
-workflow compiles that file with Nuitka. Internal imports and re-exports become
-direct global references; stdlib and third-party imports share an import table
-at the top. After flattening, global variables and import aliases are minified
-alongside locals and verified parameters. Closed single-underscore methods are
-renamed together with their callers; dynamically looked-up methods, escaping
-receivers, and inheritance-sensitive methods keep their names. Class and other
-function names, keyword APIs, and runtime annotation dependencies are preserved.
-Builtins remain direct references (no aliases such as `A = len`) so Nuitka can
-recognize and optimize their use.
-
-
-### Frontend development
-
-Use Node **24.22.2** and its bundled npm, pinned in `frontend/.node-version`.
-From the repository root:
-
-```sh
-npm --prefix frontend ci
-npm --prefix frontend run typecheck
-npm --prefix frontend run build
-npm --prefix frontend run watch
-```
-
-Format frontend sources and tooling with `npm --prefix frontend run format`, or
-check without writing changes with `npm --prefix frontend run format:check`.
-Prettier uses a 120-column print width (a wrapping target, not a hard limit).
-Generated files, vendor assets, fonts, and Jinja templates are excluded.
-
-`typecheck` checks application and test TypeScript strictly without emitting files. `build` also
-checks types before generating `frontend/dist/`; run it before starting Python
-from a clean checkout or deploying. Do not edit or commit `frontend/dist/` or
-`frontend/node_modules/`. Node and npm are build tools, not runtime dependencies.
-
-Generated application JavaScript is minified and locally obfuscated; styles are
-minified too. String literals use RC4 encoding and chained lookup aliases, including
-transformed object keys. No source maps or source-path comments are emitted. Vendor assets
-retain their upstream licenses. Obfuscation discourages casual inspection, but
-browser code and API traffic remain inspectable: never put secrets in the frontend.
-
-`watch` builds initially and rebuilds when frontend sources or resources change,
-but does not reload the browser. It reports type errors while continuing to
-rebuild, so run `build` for release verification. Restart Python after a rebuild
-to refresh cached asset versions and templates; restart watch after changing
-`build.mjs` or installing dependencies.
-
-#### Frontend tests
-
-From the repository root:
-
-```sh
-npm --prefix frontend test
-npm --prefix frontend run test:watch
-npm --prefix frontend run test:coverage
-npm --prefix frontend test -- src/tests/api.test.ts
-```
-
-`test` typechecks before running Vitest once; `test:watch` runs interactively
-without typechecking. `test:coverage` typechecks and generates text, HTML, and
-LCOV reports in ignored `frontend/coverage/`. CI runs typechecking, tests, and
-the production build.
-
-Write typed tests in `frontend/src/tests/**/*.test.ts`, grouped by subsystem.
-Import source modules directly and import `describe`, `it`, `expect`, and `vi`
-from `vitest`; globals are not enabled. Tests inherit the application's strict
-compiler settings. Use typed mocks such as `vi.fn<typeof fetch>()` instead of
-casting fake implementations or dynamically importing bundled code.
-
-Tests use jsdom with a stable HTTPS origin and Node's native fetch/Response
-APIs. Mock requests rather than requiring a running backend. Mocks, stubbed
-globals/environment variables, timers, DOM content, storage, and history are
-reset between tests; clean up any listeners or other resources you create.
-Pure Node tests can use a `// @vitest-environment node` comment to skip jsdom.
-Test sources are excluded from production bundles and coverage reports.
-
-### Code quality
-
-The codebase is kept deliberately small and boring to read:
-
-- One asyncio event loop, one serving process, one SQLite writer with explicit
-  transaction ownership
-- PEP 695 generics, built-in generics, `collections.abc` / `contextlib` ABCs;
-  legacy `TypeVar` / `Generic` / `typing_extensions` imports are banned by ruff
-- Postponed annotations everywhere; mypy and pyright run clean in CI with the
-  same strict ruff set
-- Constant-time comparisons for tokens and secrets, atomic config writes with
-  cross-process locking, JSONL audit trail for admin actions
-- pytest suite covers core and DB behavior with function-scoped event loops
-  and disposable SQLite files; a release smoke script boots the binary end to
-  end against loopback dependencies
+See [DEVELOPMENT.md](DEVELOPMENT.md) for contributor setup, mandatory code
+standards, architecture, frontend development, testing, and release builds.
 
 ## Status
 

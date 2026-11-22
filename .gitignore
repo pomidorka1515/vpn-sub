@@ -22,6 +22,8 @@ frontend/coverage/
 *.md
 *.pid
 !README.md
+!DEVELOPMENT.md
+!AGENTS.md
 !API.md
 !API_ADMIN.md
 !AUDIT.md
