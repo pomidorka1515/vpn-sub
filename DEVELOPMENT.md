@@ -185,6 +185,43 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 - `frontend/`: frontend sources, tooling and generated runtime resources. `docs/`: [public API](docs/API.md),
   [admin API](docs/API_ADMIN.md), [audit](docs/AUDIT.md)
 
+### Release mixin architecture contract
+
+**Do not rewrite the Discord, Telegram, or database mixin architecture without
+updating `src/obfuscator/mixins.py` and its regression tests in the same change.**
+Keep the five composition roots (`DiscordAdminBot`, `DiscordPublicBot`,
+`TelegramAdminBot`, `TelegramPublicBot`, and `Database`) in their current modules.
+Development retains the mixins; the release pipeline automatically folds each
+root's complete, package-local `*Mixin` hierarchy into one object-based class.
+New feature mixins, nested mixin inheritance, ordinary methods, and literal class
+data can be added normally: compose new mixins into the existing roots. There is
+no fixed list of mixin names or methods to maintain.
+
+These are closed hierarchies, not runtime extension points. Do not instantiate
+mixins, use them as runtime values, monkey-patch the hierarchy, or add other
+consumers/subclasses of the mixins or roots. Direct immutable mixin-constant reads
+(such as the backup validator's schema version) are supported. Class decorators/metaclasses,
+external/dynamic/generic bases, name-mangled private members, class cells,
+architecture hooks such as `__slots__`/`__init_subclass__`, hierarchy/namespace
+reflection, arbitrary executable class bodies, class-local method defaults, and
+unknown method decorators are
+unsupported and fail the release build. Supported method decorators are builtin
+`staticmethod`/`classmethod` and stdlib context managers. Ordinary direct
+`super().method(...)` calls are resolved against the original C3 order; missing,
+dynamic, or consumer-dependent targets fail rather than being guessed.
+
+The folder emits real method definitions inside each concrete class, without
+assigning function `__name__` or `__qualname__` strings. Defaults, decorator
+references, and literal data are captured at their original definition sites
+using collision-free helpers. Shared defaults/data retain their identities;
+methods and supported decorator wrappers are distinct per concrete class.
+Supported decorators are applied when the concrete class is defined. Overridden
+implementations needed by `super()` become hidden concrete methods; unused
+overridden methods are omitted (their default expressions are still evaluated).
+Mixin classes are never reconstructed at runtime.
+Run `venv/bin/pytest src/tests/scripts/test_mixin_folding.py`
+and the obfuscator regression suite when changing this contract.
+
 ### Code quality
 
 The codebase is kept deliberately small and boring to read:
@@ -315,6 +352,16 @@ distinct internal aliases. The CLI always prints the warning
 `Renaming classes enabled. Beware of mangled log output.` on stderr, even without
 `--report` or class allowlist entries, because automatic private-class renaming
 remains enabled.
+Mixin folding runs before method/parameter renaming and the allowlist, so safety
+analysis sees real concrete methods, including lowered `super()` dispatch.
+For the five folded roots, selectors use the concrete class rather than the
+declaring mixin: `f:Database:create_user` renames the method, while
+`f:Database:create_user*` also selects its regular parameters. A shared mixin
+method copied into two roots is selected independently on each concrete class.
+Former mixin-scoped selectors for these hierarchies must be updated; mixin
+classes no longer exist at this stage. Other hierarchies retain their existing
+lexical selectors. Only flattened release output is changed; checkout imports
+and source classes are untouched.
 Known lexical references, inherited/mixin member references, direct keyword
 calls, and inline literal `**kwargs` keys are rewritten together. Unknown
 receivers, polymorphic overrides, external/dynamic receiver hierarchies,

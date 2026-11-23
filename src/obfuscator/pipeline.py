@@ -12,6 +12,7 @@ import python_minifier
 from .analysis import inspects_frames
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .linker import flatten, module_name
+from .mixins import fold_mixins, mark_mixin_origins
 from .renamers.allowlist import AllowlistRenamer
 from .renamers.base import ArgumentRenamer
 from .renamers.methods import PrivateMethodRenamer, rename_private_classes
@@ -85,6 +86,18 @@ def obfuscate_modules(originals: dict[Path, str], entries: list[str]) -> Obfusca
     # Analyze the final lexical scope: module-qualified data references no
     # longer look like reflective escapes, and every internal caller is linked.
     linked = flatten(trees)
+    # Analyze actual concrete method bodies, including lowered super dispatch,
+    # rather than aliases to functions or the former mixin hierarchy.
+    fold_mixins(linked, trees)
+    # Folding introduces new lexical definitions. Track their original names
+    # before automatic passes, just as the linker does for existing definitions.
+    for node in ast.walk(linked):
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            node.__dict__.setdefault("original_name", node.name)
+        elif isinstance(node, ast.Name):
+            node.__dict__.setdefault("original_name", node.id)
+        elif isinstance(node, ast.arg):
+            node.__dict__.setdefault("original_name", node.arg)
     linked_trees = {"__main__": linked}
     methods = PrivateMethodRenamer(linked_trees)
     methods.run()
@@ -111,6 +124,7 @@ def prepare_tree(
     """Remove release metadata before argument analysis and minification."""
     tree = ast.parse(source, filename=filename)
     tree.__dict__["is_package"] = Path(filename).name == "__init__.py"
+    mark_mixin_origins(tree, module)
     cleanup = ReleaseCleanup(
         tree,
         generic_classes,
