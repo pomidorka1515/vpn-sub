@@ -29,5 +29,18 @@
 	"c:LiveState", "f:LiveState:_run", "c:CPUInfo", "c:LoadAverage", "c:RamInfo", "c:SwapInfo", "c:SystemMemory", "c:IPList", "c:ConnCount", "c:AppMemory", "c:GCGenStats", "c:GCStats", "c:ThreadInfo", "c:HealthStatus", "c:FullSystemInfo",
 	"f:_proc_text",
 	"f:trace", "f:font_version", "f:embed_font_faces",
-	"f:named_to_thread", "f:named_to_thread:worker", "f:ProxyMiddleware:__call__:logged_send", "f:SecurityHeadersMiddleware:__call__:secure_send"
+	"f:named_to_thread", "f:named_to_thread:worker", "f:ProxyMiddleware:__call__:logged_send", "f:SecurityHeadersMiddleware:__call__:secure_send", "c:ProxyMiddleware", "c:SecurityHeadersMiddleware", "f:create_api_application",
+	"f:create_api_application:browser_not_found", "f:create_api_application:handle_app_error", "f:create_api_application:handle_capacity_error", "f:create_api_application:handle_http_error", "f:create_api_application:handle_unexpected_error",
+	"f:build_description",
+	"f:build_json", "f:build_link_array", "f:_private_response", "f:_cached_response", "f:_store_response", "v:_store_response:body", "f:_browser_response", "f:get_subscription", "f:register_subscription_route",
+	"f:register_subscription_route:subscription_no_store", "f:register_subscription_route:subscription",
+	"c:AiohttpPanelTransport", "f:AiohttpPanelTransport:_request", "f:AiohttpPanelTransport:_close", "c:FakePanelTransport", "c:XUiSession",
+	"f:XUiSession:_request_target", "f:XUiSession:_format_url", "f:XUiSession:_mark_dead", "f:XUiSession:_down_response", "f:XUiSession:_request", "f:XUiSession:_health_loop", "f:XUiSession:_close",
+	"c:PrimaryLock", "c:OwnedResource", "c:BoundedOffload", "c:OffloadServices", "c:RuntimeState", "f:_monotonic", "c:AsyncRateLimiter", "f:AsyncRateLimiter:_remote_increment", "f:AsyncRateLimiter:_redis_key*", "f:AsyncRateLimiter:_prune_local*",
+	"f:_size", "f:list_messages", "v:list_messages:message", "v:list_messages:name", "v:list_messages:login", "v:list_messages:fields", "v:list_messages:prefix", "v:list_messages:value", "v:list_messages:token",
+	"f:calc_bar_width", "f:load_font", "f:text_size", "v:text_size:left", "v:text_size:right", "f:draw_text", "f:ellipsis", "f:nice_ticks", "v:nice_ticks:step",
+	"f:save", "f:draw_stacked", "v:draw_stacked:left", "v:draw_stacked:right", "f:draw_stacked:time_x",
+	"f:bandwidth_chart", "f:leaderboard_chart", "f:parse_edit_expiry", "f:_custom_id", "f:_dispatch", "f:interaction_limit", "c:PendingConfirmation"
+
+
 ]
