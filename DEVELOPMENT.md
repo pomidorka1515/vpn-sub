@@ -296,6 +296,12 @@ bounds a stuck stop.
 `build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
 workflow compiles that file with Nuitka. Use `-f` / `--force` to overwrite
 `app.min.py` in an existing output directory; unrelated files are left intact.
+The build also requires `sqlglot==30.34.0` (included in the dev dependencies).
+Complete, parser-supported SQLite statements in string literals are minified:
+comments and optional whitespace are removed, while quoted contents, bind
+parameters, required token separators, and one original leading/trailing separator
+are retained. Non-SQL strings, incomplete/unsupported SQL, and dynamic f-string
+pieces are left unchanged. Queries are never executed during minification.
 The build-only `src/obfuscator/` package and `src/tests/` are always excluded
 from the flattened output. The package exposes `main()` and `obfuscate()`;
 its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modules.
@@ -346,7 +352,17 @@ The allowlist is applied after linking and the automatic private-class,
 private-method and parameter passes, before python-minifier. It supplements
 those systems rather than replacing them, even when nonempty. Python-minifier
 still shortens eligible globals, import aliases and locals afterward. After packing
-and the tracked rename passes, a pre-minifier layer consolidates repeated
+and the tracked rename passes, a pre-minifier pass evaluates short module-level
+string, integer, and float constants, substitutes their literal values at lexical
+references, and deletes their assignments. The value's text must be strictly
+shorter than 150 characters (string contents, or `str(value)` for numbers).
+Constant arithmetic, concatenation, references to earlier eligible constants,
+and simple constant f-strings are supported without executing application code.
+Only unconditional, single-assignment module bindings qualify: class/function
+locals, rebound names, forward reads, quoted-annotation dependencies, special
+dunder globals, and reflective scopes are preserved. Calls, mutable values,
+nonfinite floats, and unsupported or unbounded expressions remain runtime code.
+The following pre-minifier layer consolidates repeated
 single-assignment module aliases of builtins, imported stdlib bindings, and
 `None`/boolean/ellipsis singletons into one alias per value after the import table.
 References and runtime field annotations follow the shared alias. Calls such as

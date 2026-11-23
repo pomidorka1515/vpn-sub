@@ -12,11 +12,13 @@ import python_minifier
 from .aliases import consolidate_aliases, shorten_imports
 from .analysis import inspects_frames
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
+from .constants import inline_constants
 from .linker import flatten, module_name
 from .mixins import fold_mixins, mark_mixin_origins
 from .renamers.allowlist import AllowlistRenamer
 from .renamers.base import ArgumentRenamer
 from .renamers.methods import PrivateMethodRenamer, rename_private_classes
+from .sql import minify_sql_literals
 
 if TYPE_CHECKING:
     from collections import Counter
@@ -105,6 +107,7 @@ def obfuscate_modules(originals: dict[Path, str], entries: list[str]) -> Obfusca
     renamer = ArgumentRenamer(linked_trees)
     renamer.run()
     renames = AllowlistRenamer(linked).apply(entries)
+    inline_constants(linked)
     consolidate_aliases(linked)
     shorten_imports(linked)
     return ObfuscationResult(
@@ -146,6 +149,7 @@ def minify_tree(
     tree: ast.Module, filename: str, *, rename_globals: bool = False, rename_locals: bool = True
 ) -> str:
     """Shorten locals and, after linking, globals without changing runtime APIs."""
+    minify_sql_literals(tree)
     source = ast.unparse(tree)
     preserved: set[str] = set()
     for node in ast.walk(tree):
