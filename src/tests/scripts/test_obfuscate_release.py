@@ -141,6 +141,69 @@ class Pair(NamedTuple):
     ]
 
 
+@pytest.mark.parametrize(
+    ("imports", "literal"),
+    [
+        ("from typing import Literal", "Literal"),
+        ("from typing import Literal as L", "L"),
+        ("import typing", "typing.Literal"),
+        ("import typing as t", "t.Literal"),
+        ("from typing_extensions import Literal as L", "L"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("annotation", "expected"),
+    [
+        ('{literal}["secret", "other"]', "str"),
+        ("{literal}[True, 0]", "bool | int"),
+        ("{literal}[0, True, 1, False]", "int | bool"),
+        ('{literal}["secret", True, 0, None]', "str | bool | int | None"),
+        ("{literal}[-1, +2]", "int"),
+        ("{literal}[b'secret', b'other']", "bytes"),
+        ("{literal}[None]", "None"),
+        ('{literal}["secret", {literal}[True, "other"], False]', "str | bool"),
+        ('dict[str, list[{literal}["secret", "other"]]]', "dict[str, list[str]]"),
+    ],
+)
+def test_runtime_literals_are_collapsed_before_cleanup(
+    imports: str, literal: str, annotation: str, expected: str
+) -> None:
+    source: str = f"""
+from __future__ import annotations
+from dataclasses import dataclass
+{imports}
+@dataclass
+class Record:
+    value: {annotation.format(literal=literal)}
+"""
+    result: str = obfuscator.obfuscate(source, "fixture.py")
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["Record"].__annotations__ == {"value": expected}
+    assert "secret" not in result
+    assert "typing" not in result
+
+
+def test_enum_literals_are_collapsed_to_the_enum_type() -> None:
+    source: str = """
+from __future__ import annotations
+from dataclasses import dataclass
+from enum import Enum
+from typing import Literal
+class Choice(Enum):
+    FIRST = 1
+    SECOND = 2
+@dataclass
+class Record:
+    value: Literal[Choice.FIRST, Choice.SECOND]
+"""
+    result: str = obfuscator.obfuscate(source, "fixture.py")
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["Record"].__annotations__ == {"value": "Choice"}
+    assert "Literal" not in result
+
+
 def test_dacite_constructs_nested_dataclasses_after_obfuscation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -161,9 +224,11 @@ class Response:
     exec(obfuscator.obfuscate(source, "fixture.py"), module.__dict__)  # ruff: ignore[exec-builtin]
     from dacite import from_dict
 
-    response = from_dict(module.Response, {"obj": [{"traffic": 12}], "status": "ok"})
+    response = from_dict(module.Response, {"obj": [{"traffic": 12}], "status": "other"})
     assert isinstance(response.obj[0], module.Client)
     assert response.obj[0].traffic == 12
+    assert response.status == "other"
+    assert module.Response.__annotations__["status"] == "str"
 
 
 @pytest.mark.parametrize(
@@ -449,6 +514,80 @@ def test_cli_excludes_test_directories(tmp_path: Path) -> None:
         check=True,
     )
     assert [path.relative_to(output) for path in output.rglob("*")] == [Path("app.min.py")]
+
+
+@pytest.mark.parametrize("force", [None, "-f", "--force"])
+def test_cli_requires_force_to_overwrite_output(tmp_path: Path, force: str | None) -> None:
+    source: Path = tmp_path / "source"
+    source.mkdir()
+    (source / "main.py").write_text("__result__ = 42\n", encoding="utf-8")
+    output: Path = tmp_path / "output"
+    output.mkdir()
+    artifact: Path = output / "app.min.py"
+    artifact.write_text("old release", encoding="utf-8")
+    unrelated: Path = output / "keep.txt"
+    unrelated.write_text("keep me", encoding="utf-8")
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(source),
+            str(output),
+            "--allowlist",
+            "[]",
+            *([force] if force else []),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert unrelated.read_text(encoding="utf-8") == "keep me"
+    if force is None:
+        assert result.returncode == 2
+        assert "use --force" in result.stderr
+        assert artifact.read_text(encoding="utf-8") == "old release"
+    else:
+        assert result.returncode == 0, result.stderr
+        namespace: dict[str, Any] = {}
+        exec(  # ruff: ignore[exec-builtin] - Fixed fixture.
+            artifact.read_text(encoding="utf-8"), namespace
+        )
+        assert namespace["__result__"] == 42
+
+
+@pytest.mark.parametrize("existing_directory", [False, True])
+def test_cli_force_accepts_new_and_empty_output_directories(
+    tmp_path: Path, existing_directory: bool
+) -> None:
+    source: Path = tmp_path / "source"
+    source.mkdir()
+    (source / "main.py").write_text("__result__ = 42\n", encoding="utf-8")
+    output: Path = tmp_path / "output"
+    if existing_directory:
+        output.mkdir()
+    subprocess.run(
+        [sys.executable, str(SCRIPT), str(source), str(output), "--allowlist", "[]", "-f"],
+        check=True,
+    )
+    assert (output / "app.min.py").is_file()
+
+
+@pytest.mark.parametrize("relative_output", ["source", "source/output", "."])
+def test_cli_force_still_rejects_overlapping_directories(
+    tmp_path: Path, relative_output: str
+) -> None:
+    source: Path = tmp_path / "source"
+    source.mkdir()
+    (source / "main.py").write_text("__result__ = 42\n", encoding="utf-8")
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [sys.executable, str(SCRIPT), str(source), str(tmp_path / relative_output), "-f"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "non-overlapping directories" in result.stderr
+    assert (source / "main.py").read_text(encoding="utf-8") == "__result__ = 42\n"
 
 
 def renamed_modules(sources: Mapping[str, str]) -> dict[str, str]:
@@ -1401,17 +1540,17 @@ def test_allowlist_class_repeated_application_skips_previous_rename(
 
 
 @pytest.mark.parametrize(
-    ("imports", "annotation"),
+    ("imports", "annotation", "expected"),
     [
-        ("from typing import Literal", 'dict[str, Literal["ok", "failed"]]'),
-        ("from typing import Literal as L", 'L["ok"]'),
-        ("import typing as t", 't.Literal["ok"]'),
-        ("from typing import Annotated", 'Annotated[str, "ok"]'),
-        ("import typing as t", 't.Annotated[str, "ok"]'),
+        ("from typing import Literal", 'dict[str, Literal["ok", "failed"]]', "dict[str, str]"),
+        ("from typing import Literal as L", 'L["ok"]', "str"),
+        ("import typing as t", 't.Literal["ok"]', "str"),
+        ("from typing import Annotated", 'Annotated[str, "ok"]', "Annotated[str, 'ok']"),
+        ("import typing as t", 't.Annotated[str, "ok"]', "t.Annotated[str, 'ok']"),
     ],
 )
 def test_allowlist_does_not_treat_annotation_values_as_forward_references(
-    imports: str, annotation: str
+    imports: str, annotation: str, expected: str
 ) -> None:
     source = f"""
 from __future__ import annotations
@@ -1428,7 +1567,7 @@ __result__ = Record(ok()).status
     namespace: dict[str, Any] = {}
     exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == "ok"
-    assert "ok" in namespace["Record"].__annotations__["status"]
+    assert namespace["Record"].__annotations__["status"] == expected
 
 
 @pytest.mark.parametrize(

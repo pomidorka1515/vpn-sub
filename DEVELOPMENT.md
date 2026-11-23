@@ -61,6 +61,8 @@ automatic fixes, then review the diff. CI runs `ruff check .` alongside pytest,
 mypy, and pyright, plus `venv/bin/python scripts/smoke_async_release.py --checkout`
 with `redis-server` installed.
 
+**Pass `--no-native-parser` to mypy when on Termux/Android** *(or LD_PRELOAD libpython)*
+
 ### Python tests
 
 Tests in `src/tests/` are Python packages grouped by subsystem (`api/`, `core/`,
@@ -255,7 +257,9 @@ bounds a stuck stop.
 
 `python scripts/obfuscate_release.py src build/release-src` writes only
 `build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
-workflow compiles that file with Nuitka. Internal imports and re-exports become
+workflow compiles that file with Nuitka. Use `-f` / `--force` to overwrite
+`app.min.py` in an existing output directory; unrelated files are left intact.
+Internal imports and re-exports become
 direct global references; stdlib and third-party imports share an import table
 at the top. Automatic shortening of globals, import aliases, locals, verified
 parameters, closed private methods and private classes remains enabled.
@@ -319,6 +323,8 @@ not type references. In particular, `Literal["ok"]` does not block `f:ok`.
 Use `--report` to see the resulting rename map. Dynamic reflection (including
 string-based lookups), external callbacks and externally visible names remain
 the allowlist author's responsibility: allowing a name is not proof that its
-runtime API is private. Complete runtime field annotations are still preserved.
+runtime API is private. Runtime field annotations are preserved, but `Literal`
+values are widened to their types before typing metadata is removed: for example,
+`Literal["ok", "failed"]` becomes `str`, and `Literal[True, 0]` becomes `bool | int`.
 Builtins remain direct references (no aliases such as `A = len`) so Nuitka can
 recognize and optimize their use.

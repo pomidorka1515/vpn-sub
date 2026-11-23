@@ -875,7 +875,8 @@ class ReleaseCleanup(ast.NodeTransformer):
             )
         if isinstance(self.scope, ast.ClassDef) and self.runtime_fields(self.scope):
             # Libraries such as dacite use the complete field type, not just
-            # its presence. Do not apply typing or generic rewrites to it.
+            # its presence. Only the preceding Literal collapse simplifies it;
+            # do not apply the other typing or generic rewrites here.
             node.target = cast(ast.Name | ast.Attribute | ast.Subscript, self.visit(node.target))
             if node.value is not None:
                 node.value = cast(ast.expr, self.visit(node.value))
@@ -1061,6 +1062,47 @@ def prepare_tree(
         module=module,
         protocol_classes=protocol_classes,
     )
+
+    class CollapseLiterals(ast.NodeTransformer):
+        """Widen literal values before cleanup preserves runtime field annotations."""
+
+        def literal_types(self, value: ast.expr) -> list[ast.expr] | None:
+            if isinstance(value, ast.Constant):
+                if value.value is None:
+                    return [ast.Constant(None)]
+                return [ast.Name(id=type(value.value).__name__, ctx=ast.Load())]
+            if isinstance(value, ast.UnaryOp) and isinstance(value.op, (ast.UAdd, ast.USub)):
+                return self.literal_types(value.operand)
+            if isinstance(value, ast.Attribute):
+                # Enum members are written as EnumClass.MEMBER (possibly qualified).
+                return [value.value]
+            if isinstance(value, ast.Subscript) and cleanup.typing_name(value.value) == "Literal":
+                values: list[ast.expr] = (
+                    value.slice.elts if isinstance(value.slice, ast.Tuple) else [value.slice]
+                )
+                result: list[ast.expr] = []
+                for item in values:
+                    widened: list[ast.expr] | None = self.literal_types(item)
+                    if widened is None:
+                        return None
+                    result.extend(widened)
+                return result
+            # An imported/aliased value cannot be inferred from its spelling.
+            return None
+
+        def visit_Subscript(self, node: ast.Subscript) -> ast.expr:
+            if cleanup.typing_name(node.value) != "Literal":
+                return cast(ast.expr, self.generic_visit(node))
+            widened: list[ast.expr] | None = self.literal_types(node)
+            if not widened:
+                return cast(ast.expr, self.generic_visit(node))
+            types: dict[str, ast.expr] = {ast.dump(value): value for value in widened}
+            result: ast.expr = next(iter(types.values()))
+            for value in list(types.values())[1:]:
+                result = ast.BinOp(left=result, op=ast.BitOr(), right=value)
+            return ast.copy_location(result, node)
+
+    tree = cast(ast.Module, CollapseLiterals().visit(tree))
     tree = cleanup.visit(tree)
     # Drop typing imports made unused by annotation/cast removal, including
     # Literal and overload declarations. Preserve postponed annotations when
@@ -2020,6 +2062,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Flatten src/ into a release-only app.min.py.")
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite app.min.py in an existing output directory",
+    )
     parser.add_argument("--report", action="store_true", help="Show allowlisted identifier renames")
     parser.add_argument(
         "--allowlist",
@@ -2033,7 +2081,10 @@ def main() -> None:
     if output == source or output in source.parents or source in output.parents:
         parser.error("source and output must be separate, non-overlapping directories")
     if output.exists():
-        parser.error("output already exists; use a fresh release staging directory")
+        if not output.is_dir():
+            parser.error("output must be a directory")
+        if not args.force:
+            parser.error("output already exists; use --force to overwrite it")
     paths: list[Path] = []
     for directory, directories, files in os.walk(source):
         directories[:] = [name for name in directories if name not in {"tests", "__pycache__"}]
@@ -2099,7 +2150,7 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
     result = minify_tree(linked, "app.min.py", rename_globals=True)
-    output.mkdir(parents=True)
+    output.mkdir(parents=True, exist_ok=args.force)
     (output / "app.min.py").write_text(result, encoding="utf-8")
     before = sum(len(original.encode("utf-8")) for original in originals.values())
     after = len(result.encode("utf-8"))
