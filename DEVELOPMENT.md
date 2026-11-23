@@ -257,13 +257,57 @@ bounds a stuck stop.
 `build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
 workflow compiles that file with Nuitka. Internal imports and re-exports become
 direct global references; stdlib and third-party imports share an import table
-at the top. After flattening, global variables and import aliases are minified
-alongside locals and verified parameters. Closed single-underscore methods are
-renamed together with their callers; dynamically looked-up methods, escaping
-receivers, and inheritance-sensitive methods keep their names. Private
-classes (`_Private`) use `_g`-prefixed names; class-member attributes keep their
-names. Public class names stay intact, including when duplicate names require
-distinct internal aliases in the flattened file. Other function names, keyword
-APIs, and runtime annotation dependencies are preserved.
+at the top. Automatic shortening of globals, import aliases, locals, verified
+parameters, closed private methods and private classes remains enabled.
+Additional identifier renames can be opted into through `--allowlist PATH` or
+`--allowlist '["f:helper", "a:helper:value", "v:CONSTANT"]'`. The default is
+`minifier_allowlist.json` at the repository root; an empty file or `[]` selects
+no additional renames (it does not disable automatic shortening). The root must
+otherwise be a JSON list of strings (not an object).
+Entries use `c:` for class names, `f:` for function/method names, `a:` for individual non-variadic
+parameters, and `v:` for assigned variables, followed by colon-separated lexical
+scopes and the original name. For example,
+`a:SomeMixin:handle:wrapper:inner:argument` selects a deeply nested parameter.
+`c:ClassName` selects a class; `c:Outer:Inner` selects a nested class. Class
+entries do not accept `*` and do not select methods or parameters.
+Names do not include module prefixes; duplicate paths across modules are errors.
+Appending `*` to an `f:` entry also selects every regular parameter of that
+function/method: `f:helper*`, `f:SomeMixin:handle*`, or
+`f:SomeMixin:handle:wrapper:inner*`. This renames the function/method name **and**
+its positional and keyword-only parameter names, including `self`/`cls` for
+methods. It does not select `*args` or `**kwargs` bindings, nested functions'
+parameters, or local variables. Equivalent explicit `a:` entries are deduplicated.
+All normal keyword-caller safety checks still apply; unsafe expansions error
+rather than partially rewriting a signature. `*` is only allowed as this trailing
+`f:` suffix.
+Entries whose own names were already renamed by an earlier tracked transformation
+are skipped with a warning on stderr, not renamed again. Enclosing scopes always
+resolve by their original names, even after automatic or earlier allowlist
+renames. For example, `f:Logger:_make_formatter` and
+`c:Logger:_make_formatter:Fmt` work together in either order, including when the
+private-method pass has already shortened `_make_formatter`.
+Missing names without rename metadata still cause errors; short spellings alone
+are not treated as evidence of mangling. Wrong types and ambiguous paths remain
+errors even when an earlier transformation renamed a matching target.
+
+The allowlist is applied after linking and the automatic private-class,
+private-method and parameter passes, before python-minifier. It supplements
+those systems rather than replacing them, even when nonempty. Python-minifier
+still shortens eligible globals, import aliases and locals afterward. Linking
+assigns collision-free aliases where required. Public class names stay intact
+unless explicitly selected with `c:`, including when duplicate names require
+distinct internal aliases. The CLI always prints the warning
+`Renaming classes enabled. Beware of mangled log output.` on stderr, even without
+`--report` or class allowlist entries, because automatic private-class renaming
+remains enabled.
+Known lexical references, inherited/mixin member references, direct keyword
+calls, and inline literal `**kwargs` keys are rewritten together. Unknown
+receivers, polymorphic overrides, external/dynamic receiver hierarchies,
+escaping parameter APIs, dynamic keyword dictionaries, runtime field renames,
+and unsupported bindings cause errors rather than speculative rewrites.
+Use `--report` to see the resulting rename map. Dynamic reflection (including
+string-based lookups), external callbacks and externally visible names remain
+the allowlist author's responsibility: allowing a name is not proof that its
+runtime API is private. Complete runtime field annotations are still preserved.
 Builtins remain direct references (no aliases such as `A = len`) so Nuitka can
 recognize and optimize their use.

@@ -444,7 +444,10 @@ def test_cli_excludes_test_directories(tmp_path: Path) -> None:
         directory.mkdir(parents=True)
         (directory / "broken.py").write_text("not valid Python !!!")
     output = tmp_path / "output"
-    subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
+    subprocess.run(
+        [sys.executable, str(SCRIPT), str(source), str(output), "--allowlist", "[]"],
+        check=True,
+    )
     assert [path.relative_to(output) for path in output.rglob("*")] == [Path("app.min.py")]
 
 
@@ -657,7 +660,17 @@ def test_cli_transforms_keyword_calls_across_relative_imports(tmp_path: Path) ->
         "from package import exported as run\nprint(run(long_parameter=3, multiplier=4))\n"
     )
     output = tmp_path / "output"
-    subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(source),
+            str(output),
+            "--allowlist",
+            '["a:calculate:long_parameter", "a:calculate:multiplier"]',
+        ],
+        check=True,
+    )
     result = subprocess.run(
         [sys.executable, str(output / "app.min.py")], check=True, capture_output=True, text=True
     )
@@ -880,7 +893,17 @@ def test_cli_resolves_imported_instances_and_rewrites_keywords(tmp_path: Path) -
         "print(run())\n"
     )
     output = tmp_path / "output"
-    subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(source),
+            str(output),
+            "--allowlist",
+            '["a:Helper:calculate:long_parameter"]',
+        ],
+        check=True,
+    )
     result = subprocess.run(
         [sys.executable, str(output / "app.min.py")], check=True, capture_output=True, text=True
     )
@@ -901,6 +924,439 @@ def flattened_modules(sources: Mapping[str, str]) -> str:
         for name, source in sources.items()
     }
     return ast.unparse(obfuscator.flatten(trees))
+
+
+def allowlisted(source: str, entries: list[str]) -> tuple[str, dict[str, str]]:
+    tree = obfuscator.prepare_tree(source, "fixture.py")
+    tree = obfuscator.flatten({"main": tree}, rename_classes=False)
+    renames = obfuscator.AllowlistRenamer(tree).apply(entries)
+    return obfuscator.minify_tree(tree, "fixture.py", rename_locals=False), renames
+
+
+def test_allowlist_nested_bindings_and_keyword_aliases() -> None:
+    source = """
+CONSTANT = 3
+def outer(value):
+    def inner(argument, *items, **options):
+        local = argument + CONSTANT
+        return local, items, options
+    alias = inner
+    return alias(**{'argument': value}, extra=7)
+__result__ = outer(value=4)
+"""
+    result, names = allowlisted(
+        source, ["v:CONSTANT", "f:outer:inner", "a:outer:inner:argument", "v:outer:inner:local"]
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, (), {"extra": 7})
+    assert len(names) == 4
+    assert "def outer(value)" in result
+    assert "*items,**options" in result
+
+
+def test_allowlist_mixin_calls_and_inherited_class_variables() -> None:
+    source = """
+class LeaderboardMixin:
+    constant = 3
+    def _cb_leaderboard_type(self, chat_id):
+        return chat_id + self.constant
+class RoutingMixin:
+    def route(self):
+        return self._cb_leaderboard_type(chat_id=4)
+class Admin(RoutingMixin, LeaderboardMixin): pass
+admin = Admin()
+__result__ = admin.route(), Admin.constant
+"""
+    result, names = allowlisted(
+        source,
+        [
+            "f:LeaderboardMixin:_cb_leaderboard_type",
+            "a:LeaderboardMixin:_cb_leaderboard_type:chat_id",
+            "v:LeaderboardMixin:constant",
+        ],
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, 3)
+    assert len(names) == 3
+    assert "_cb_leaderboard_type" not in result
+    assert "chat_id" not in result
+
+
+def test_allowlist_class_renames_definition_and_lexical_references_only() -> None:
+    source = """
+class Helper:
+    class Nested: pass
+    def method(self, value): return value
+alias = Helper
+class Child(Helper): pass
+__result__ = Helper.__name__, alias is Helper, Child().method(value=7), Helper.Nested.__name__
+"""
+    result, renames = allowlisted(source, ["c:Helper"])
+    assert set(renames) == {"c:Helper"}
+    assert "class Helper" not in result
+    assert "def method(self,value)" in result
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (renames["c:Helper"], True, 7, "Nested")
+
+
+def test_allowlist_nested_classes_rewrite_inherited_attributes_and_local_references() -> None:
+    source = """
+class Outer:
+    class Inner: pass
+    def construct(self): return self.Inner()
+class Child(Outer): pass
+def factory():
+    class Local: pass
+    return Local()
+__result__ = Outer.Inner.__name__, Child.Inner.__name__, Child().construct().__class__.__name__, factory().__class__.__name__
+"""
+    result, renames = allowlisted(source, ["c:Outer", "c:Outer:Inner", "c:factory:Local"])
+    assert set(renames) == {"c:Outer", "c:Outer:Inner", "c:factory:Local"}
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (
+        renames["c:Outer:Inner"],
+        renames["c:Outer:Inner"],
+        renames["c:Outer:Inner"],
+        renames["c:factory:Local"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "entries", "error"),
+    [
+        ("def run(value): return value", ["v:run"], "incorrect type"),
+        ("def run(): pass", ["c:run"], "incorrect type"),
+        ("class Helper: pass", ["f:Helper"], "incorrect type"),
+        ("class Helper: pass", ["v:Helper"], "incorrect type"),
+        ("class Helper: pass\nclass Helper: pass", ["c:Helper"], "ambiguous"),
+        ("class Helper: pass\nHelper = object", ["c:Helper"], "ambiguous class binding"),
+        ("class Helper: pass", ["c:Missing"], "target not found"),
+        ("value = 3", ["f:missing"], "target not found"),
+        ("def run(*items): pass", ["a:run:items"], r"\*args/\*\*kwargs"),
+        ("def run(value): return value\noptions = {}\nrun(**options)", ["a:run:value"], "Dynamic"),
+        ("def run(value): return value\ncallbacks = [run]", ["a:run:value"], "Escaping"),
+        (
+            "class C:\n def method(self): pass\ndef run(obj): obj.method()",
+            ["f:C:method"],
+            "Unresolved receiver",
+        ),
+        ("def run(): pass\ndef run(): pass", ["f:run"], "ambiguous"),
+        (
+            "class Base:\n def method(self): pass\n def run(self): self.method()\nclass Child(Base):\n def method(self): pass",
+            ["f:Base:method"],
+            "Ambiguous polymorphic",
+        ),
+    ],
+)
+def test_allowlist_rejects_unsafe_or_incorrect_targets(
+    source: str, entries: list[str], error: str
+) -> None:
+    with pytest.raises(ValueError, match=error):
+        allowlisted(source, entries)
+
+
+def test_allowlist_input(tmp_path: Path) -> None:
+    path = tmp_path / "allowlist.json"
+    path.touch()
+    assert obfuscator.read_allowlist(str(path)) == []
+    path.write_text('["f:run"]', encoding="utf-8")
+    assert obfuscator.read_allowlist(str(path)) == ["f:run"]
+    assert obfuscator.read_allowlist(
+        '["v:VALUE", "a:run:argument", "c:Helper", "c:Outer:Inner"]'
+    ) == [
+        "v:VALUE",
+        "a:run:argument",
+        "c:Helper",
+        "c:Outer:Inner",
+    ]
+    for invalid in ("{}", "[1]", '["z:run"]', '["a:run"]', '["f:run", "f:run"]'):
+        with pytest.raises(ValueError, match=r"Allowlist|allowlist"):
+            obfuscator.read_allowlist(invalid)
+
+
+def test_allowlist_function_star_expands_parameters_and_rewrites_keyword_aliases() -> None:
+    source = """
+def helper(value, /, *items, scale=2, **options):
+    return value * scale, items, options
+alias = helper
+__result__ = alias(value=3, scale=4, extra=7)
+"""
+    entries = obfuscator.read_allowlist('["f:helper*", "a:helper:value"]')
+    result, renames = allowlisted(source, entries)
+    assert set(renames) == {"f:helper*", "a:helper:value", "a:helper:scale"}
+    function = next(node for node in ast.parse(result).body if isinstance(node, ast.FunctionDef))
+    assert function.args.vararg is not None
+    assert function.args.vararg.arg == "items"
+    assert function.args.kwarg is not None
+    assert function.args.kwarg.arg == "options"
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (12, (), {"extra": 7})
+
+
+@pytest.mark.parametrize("descriptor", ["", "@classmethod", "@staticmethod"])
+def test_allowlist_method_star_includes_receiver_when_present(descriptor: str) -> None:
+    receiver = "" if descriptor == "@staticmethod" else "self, "
+    source = f"""
+class Helper:
+    {descriptor}
+    def method({receiver}value, *items, scale=2, **options):
+        return value * scale, items, options
+__result__ = Helper().method(value=3, scale=4, extra=7)
+"""
+    result, renames = allowlisted(source, ["f:Helper:method*"])
+    assert "a:Helper:method:value" in renames
+    assert "a:Helper:method:scale" in renames
+    assert ("a:Helper:method:self" in renames) == bool(receiver)
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (12, (), {"extra": 7})
+
+
+def test_allowlist_star_is_not_recursive() -> None:
+    source = """
+def outer(value):
+    def inner(argument): return argument + value
+    return inner(argument=3)
+__result__ = outer(value=4)
+"""
+    result, renames = allowlisted(source, ["f:outer*"])
+    assert set(renames) == {"f:outer*", "a:outer:value"}
+    assert "def inner(argument)" in result
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+    _, nested_renames = allowlisted(source, ["f:outer:inner*"])
+    assert set(nested_renames) == {"f:outer:inner*", "a:outer:inner:argument"}
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "a:helper:value*",
+        "v:VALUE*",
+        "f:helper**",
+        "f:*",
+        "f:helper:*",
+        "f:hel*per",
+        "c:Helper*",
+        "c:Outer:Inner*",
+        "c:*",
+        "c:Hel*per",
+    ],
+)
+def test_allowlist_rejects_invalid_star_syntax(entry: str) -> None:
+    with pytest.raises(ValueError, match="Invalid allowlist"):
+        obfuscator.read_allowlist(f'["{entry}"]')
+
+
+def test_allowlist_star_preserves_keyword_safety_checks() -> None:
+    with pytest.raises(ValueError, match="Dynamic"):
+        allowlisted(
+            "def helper(value): return value\noptions = {'value': 3}\nhelper(**options)",
+            ["f:helper*"],
+        )
+
+
+def test_allowlist_parameter_only_rejects_unknown_method_receivers() -> None:
+    with pytest.raises(ValueError, match="Unresolved receiver"):
+        allowlisted(
+            "class C:\n def method(self, value): return value\ndef run(obj): return obj.method(value=3)",
+            ["a:C:method:value"],
+        )
+
+
+@pytest.mark.parametrize(
+    ("source", "entry", "message"),
+    [
+        (
+            "def run(value): return value\nrun = lambda value: value\nrun(value=3)",
+            "a:run:value",
+            "reassigned callable",
+        ),
+        (
+            "class C:\n def method(self, value): return value\nC.method = lambda self, value: value\nC().method(value=3)",
+            "a:C:method:value",
+            "Reassigned method",
+        ),
+    ],
+)
+def test_allowlist_rejects_reassigned_parameter_apis(source: str, entry: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        allowlisted(source, [entry])
+
+
+def test_allowlist_ambiguity_survives_linker_collision_renames() -> None:
+    trees = {
+        name: obfuscator.prepare_tree("def run(value): return value", f"{name}.py")
+        for name in ("first", "second")
+    }
+    tree = obfuscator.flatten(trees, rename_classes=False)
+    with pytest.raises(ValueError, match="ambiguous"):
+        obfuscator.AllowlistRenamer(tree).apply(["f:run"])
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("mode", ["together", "separate", "automatic"])
+def test_allowlist_nested_formatter_survives_enclosing_method_rename(
+    capsys: pytest.CaptureFixture[str], reverse: bool, mode: str
+) -> None:
+    source = """
+import logging as F
+class Colors:
+    RESET = '</>'
+class Logger:
+    COLORS = {'INFO': '<green>'}
+    def _make_formatter(self):
+        A = self
+        class Fmt(F.Formatter):
+            def format(self, record):
+                B = record.levelname
+                color = A.COLORS.get(record.levelname, Colors.RESET)
+                record.levelname = f'{color}{record.levelname}{Colors.RESET}'
+                C = super().format(record)
+                record.levelname = B
+                return C
+        return Fmt(fmt='%(levelname)s %(message)s')
+logger = Logger()
+formatter = logger._make_formatter()
+record = F.LogRecord('fixture', F.INFO, '', 0, 'hello', (), None)
+__result__ = formatter.format(record), record.levelname, formatter.__class__.__name__
+"""
+    tree = obfuscator.flatten({"main": obfuscator.prepare_tree(source, "main.py")})
+    entries = ["f:Logger:_make_formatter", "c:Logger:_make_formatter:Fmt"]
+    if reverse:
+        entries.reverse()
+    if mode == "automatic":
+        methods = obfuscator.PrivateMethodRenamer({"__main__": tree})
+        methods.run()
+        assert methods.renamed == 1
+        obfuscator.ArgumentRenamer({"__main__": tree}).run()
+    if mode == "separate":
+        renames: dict[str, str] = {}
+        for entry in entries:
+            renames.update(obfuscator.AllowlistRenamer(tree).apply([entry]))
+    else:
+        renames = obfuscator.AllowlistRenamer(tree).apply(entries)
+    expected = {"c:Logger:_make_formatter:Fmt"} if mode == "automatic" else set(entries)
+    assert set(renames) == expected
+    warnings = capsys.readouterr().err
+    assert ("Warning: skipping allowlist 'f:Logger:_make_formatter'" in warnings) == (
+        mode == "automatic"
+    )
+    assert "skipping allowlist 'c:" not in warnings
+    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (
+        "<green>INFO</> hello",
+        "INFO",
+        renames["c:Logger:_make_formatter:Fmt"],
+    )
+
+
+def test_allowlist_selects_original_scopes_already_renamed_by_linker(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    trees = {
+        "worker": obfuscator.prepare_tree(
+            "def len(value):\n local = value + 1\n return local\n",
+            "worker.py",
+        ),
+        "main": obfuscator.prepare_tree(
+            "import worker\ndef helper(value): return value\n"
+            "__result__ = worker.len(value=4), len([1, 2]), helper(value=3)\n",
+            "main.py",
+        ),
+    }
+    tree = obfuscator.flatten(trees, rename_classes=False)
+    renames = obfuscator.AllowlistRenamer(tree).apply(
+        ["f:len", "a:len:value", "v:len:local", "f:helper"]
+    )
+    assert set(renames) == {"a:len:value", "v:len:local", "f:helper"}
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("Warning: skipping allowlist") == 1
+    assert "f:len" in captured.err
+    assert "a:len:value" not in captured.err
+    assert "v:len:local" not in captured.err
+    assert "already renamed" in captured.err
+    namespace: dict[str, Any] = {}
+    exec(compile(tree, "fixture.py", "exec"), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (5, 2, 3)
+
+
+def test_allowlist_skips_previously_renamed_variables(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    trees = {
+        "worker": obfuscator.prepare_tree("len = 7", "worker.py"),
+        "main": obfuscator.prepare_tree("__result__ = len([1, 2])", "main.py"),
+    }
+    tree = obfuscator.flatten(trees, rename_classes=False)
+    assert obfuscator.AllowlistRenamer(tree).apply(["v:len"]) == {}
+    assert "Warning: skipping allowlist 'v:len'" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="incorrect type"):
+        obfuscator.AllowlistRenamer(tree).apply(["f:len"])
+
+
+def test_allowlist_repeated_application_skips_all_already_renamed_targets(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = obfuscator.prepare_tree(
+        "CONSTANT = 2\ndef helper(value): return value + CONSTANT\n__result__ = helper(value=3)",
+        "fixture.py",
+    )
+    entries = ["f:helper", "a:helper:value", "v:CONSTANT"]
+    assert len(obfuscator.AllowlistRenamer(tree).apply(entries)) == 3
+    assert capsys.readouterr().err == ""
+    assert obfuscator.AllowlistRenamer(tree).apply(entries) == {}
+    assert capsys.readouterr().err.count("Warning: skipping allowlist") == 3
+    namespace: dict[str, Any] = {}
+    exec(compile(tree, "fixture.py", "exec"), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 5
+
+
+def test_allowlist_does_not_guess_mangling_from_short_names() -> None:
+    result, renames = allowlisted("def a(): return 3\n__result__ = a()", ["f:a"])
+    assert set(renames) == {"f:a"}
+    assert "def a(" not in result
+    with pytest.raises(ValueError, match="target not found"):
+        allowlisted("def a(): return 3", ["f:helper"])
+
+
+def test_allowlist_class_repeated_application_skips_previous_rename(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = obfuscator.prepare_tree("class Helper: pass", "fixture.py")
+    assert set(obfuscator.AllowlistRenamer(tree).apply(["c:Helper"])) == {"c:Helper"}
+    assert obfuscator.AllowlistRenamer(tree).apply(["c:Helper"]) == {}
+    assert "Warning: skipping allowlist 'c:Helper'" in capsys.readouterr().err
+
+
+def test_allowlist_preserves_dacite_field_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = """
+from dataclasses import dataclass
+from dacite import from_dict
+@dataclass
+class Client:
+    value: int
+@dataclass
+class Response:
+    clients: list[Client]
+def decode(payload): return from_dict(Response, payload)
+__result__ = decode(payload={'clients': [{'value': 3}]})
+"""
+    result, _ = allowlisted(source, ["f:decode", "a:decode:payload"])
+    module = types.ModuleType("allowlisted_dacite_fixture")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(result, module.__dict__)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert isinstance(module.__result__.clients[0], module.Client)
+    assert module.__result__.clients[0].value == 3
 
 
 def test_private_methods_and_resolved_aliases_are_minified() -> None:
@@ -1019,7 +1475,8 @@ def test_private_method_special_classes_and_descriptors_are_preserved(definition
     assert namespace["result"] == 8
 
 
-def test_linked_globals_imports_and_private_methods_are_minified(tmp_path: Path) -> None:
+@pytest.mark.parametrize("allowlist", ["[]", '["f:increment"]'])
+def test_cli_allowlist_supplements_automatic_renaming(tmp_path: Path, allowlist: str) -> None:
     source = tmp_path / "source"
     source.mkdir()
     (source / "worker.py").write_text(
@@ -1039,13 +1496,16 @@ def test_linked_globals_imports_and_private_methods_are_minified(tmp_path: Path)
         "print(run())\n"
     )
     output = tmp_path / "output"
-    subprocess.run([sys.executable, str(SCRIPT), str(source), str(output)], check=True)
+    subprocess.run(
+        [sys.executable, str(SCRIPT), str(source), str(output), "--allowlist", allowlist],
+        check=True,
+    )
     result = (output / "app.min.py").read_text()
     assert "long_counter" not in result
     assert "square_root" not in result
     assert "_calculate" not in result
     assert "class Helper:" in result
-    assert "def increment(" in result
+    assert ("def increment(" in result) == (allowlist == "[]")
     execution = subprocess.run(
         [sys.executable, str(output / "app.min.py")], check=True, capture_output=True, text=True
     )
@@ -1854,6 +2314,38 @@ result = resource(long_parameter=4)
     assert "def resource(long_parameter)" in results["sample"]
 
 
+@pytest.mark.parametrize("report", [False, True])
+@pytest.mark.parametrize("allowlist", ["[]", '["c:Helper"]'])
+def test_cli_always_warns_about_class_renaming(
+    tmp_path: Path, report: bool, allowlist: str
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "main.py").write_text("class Helper: pass\n__result__ = Helper.__name__\n")
+    output = tmp_path / "output"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(source),
+            str(output),
+            "--allowlist",
+            allowlist,
+            *(["--report"] if report else []),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stderr == "Renaming classes enabled. Beware of mangled log output.\n"
+    assert ("c:Helper ->" in result.stdout) == (report and allowlist != "[]")
+    namespace: dict[str, Any] = {}
+    exec(  # ruff: ignore[exec-builtin] - Fixed fixture.
+        (output / "app.min.py").read_text(encoding="utf-8"), namespace
+    )
+    assert (namespace["__result__"] == "Helper") == (allowlist == "[]")
+
+
 def test_cli_reports_parameter_rename_counts(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -1863,10 +2355,19 @@ def test_cli_reports_parameter_rename_counts(tmp_path: Path) -> None:
         "result = calculate(long_parameter=4)\n"
     )
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(source), str(tmp_path / "output"), "--report"],
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(source),
+            str(tmp_path / "output"),
+            "--report",
+            "--allowlist",
+            '["a:external:public_parameter"]',
+        ],
         check=True,
         capture_output=True,
         text=True,
     )
-    assert "Renamed 1/2 parameters" in result.stdout
-    assert "Preserved 1: no resolved calls" in result.stdout
+    assert "Renamed 1 allowlisted identifiers" in result.stdout
+    assert "a:external:public_parameter ->" in result.stdout
+    assert "Renamed 1/2 parameters automatically" in result.stdout
