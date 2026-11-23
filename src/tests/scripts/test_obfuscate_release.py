@@ -15,6 +15,8 @@ from tests.support.paths import REPO_ROOT
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+__all__: list[str] = []
+
 pytest.importorskip("python_minifier")
 SCRIPT = REPO_ROOT / "scripts" / "obfuscate_release.py"
 SPEC = importlib.util.spec_from_file_location("obfuscate_release", SCRIPT)
@@ -25,7 +27,7 @@ SPEC.loader.exec_module(obfuscator)
 
 
 def test_cleanup_precedes_minification(monkeypatch: pytest.MonkeyPatch) -> None:
-    sources = []
+    sources: list[str] = []
 
     def minify(source: str, **kwargs: object) -> str:
         sources.append(source)

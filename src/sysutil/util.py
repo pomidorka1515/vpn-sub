@@ -32,6 +32,22 @@ from .types import (
 
 __all__ = ["SysUtil"]
 
+# Linux uapi clock ID, also used by Android. Some Android Python type stubs
+# omit time.CLOCK_BOOTTIME even though clock_gettime supports it.
+_CLOCK_BOOTTIME: int = 7
+
+
+def _proc_text(path: str) -> str:
+    """Android/proot can deny host counters even to the guest's fake root.
+
+    Preserve the numeric API shape with zero/empty unavailable counters.
+    Do not hide malformed data or unrelated I/O failures.
+    """
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except PermissionError:
+        return ""
+
 
 class SysUtil:
     """
@@ -48,8 +64,10 @@ class SysUtil:
     @staticmethod
     def _cpu_sample() -> tuple[int, int]:
         """Total and idle jiffies from the aggregate `/proc/stat` line."""
-        with Path("/proc/stat").open(encoding="utf-8") as f:
-            cpu_line = f.readline()
+        content = _proc_text("/proc/stat")
+        if not content:
+            return 0, 0
+        cpu_line = content.splitlines()[0]
         # Guest time is already included in user/nice; iowait counts as busy.
         parts = cpu_line.split()
         return sum(map(int, parts[1:9])), int(parts[4])
@@ -94,21 +112,21 @@ class SysUtil:
     def cpu_info() -> CPUInfo:
         cores = os.cpu_count()
 
-        with Path("/proc/cpuinfo").open(encoding="utf-8") as f:
-            cpu_name = ""
-            max_mhz: float | int = 0
-            for line in f:
-                if line.startswith("model name"):
-                    cpu_name = line.split(":", 1)[1].strip()
-                elif line.startswith("cpu MHz"):
-                    mhz = float(line.split(":", 1)[1].strip())
-                    max_mhz = max(max_mhz, mhz)
+        cpu_name = ""
+        max_mhz: float | int = 0
+        for line in _proc_text("/proc/cpuinfo").splitlines():
+            if line.startswith("model name"):
+                cpu_name = line.split(":", 1)[1].strip()
+            elif line.startswith("cpu MHz"):
+                mhz = float(line.split(":", 1)[1].strip())
+                max_mhz = max(max_mhz, mhz)
 
         return CPUInfo(cores=cores, name=cpu_name, mhz_max=max_mhz)
 
     @staticmethod
     def loadavg() -> LoadAverage:
-        one, five, fifteen = Path("/proc/loadavg").read_text(encoding="utf-8").split()[:3]
+        content = _proc_text("/proc/loadavg")
+        one, five, fifteen = content.split()[:3] if content else ("0", "0", "0")
 
         return LoadAverage(load_1m=float(one), load_5m=float(five), load_15m=float(fifteen))
 
@@ -119,35 +137,34 @@ class SysUtil:
     @staticmethod
     def network() -> NetTrafficStats:
         tx, rx = 0, 0
-        with Path("/proc/net/dev").open(encoding="utf-8") as f:
-            f.readline()  # skip headers
-            f.readline()
-            for line in f:
-                parts = line.split()
-                if len(parts) >= 10:
-                    iface = parts[0].rstrip(":")
-                    if iface != "lo":
-                        rx += int(parts[1])
-                        tx += int(parts[9])
+        for line in _proc_text("/proc/net/dev").splitlines()[2:]:
+            parts = line.split()
+            if len(parts) >= 10:
+                iface = parts[0].rstrip(":")
+                if iface != "lo":
+                    rx += int(parts[1])
+                    tx += int(parts[9])
         return NetTrafficStats(sent=tx, recv=rx)
 
     @staticmethod
     def uptime() -> float:
-        return float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+        content = _proc_text("/proc/uptime")
+        # Same boot clock as /proc/uptime and process start ticks, including
+        # suspend time; time.monotonic() would undercount uptime on phones.
+        return float(content.split()[0]) if content else time.clock_gettime(_CLOCK_BOOTTIME)
 
     @staticmethod
     def memory() -> SystemMemory:
         mem_data: dict[str, int] = {}
 
-        with Path("/proc/meminfo").open(encoding="utf-8") as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) >= 2:
-                    key = parts[0].rstrip(":")
-                    try:
-                        mem_data[key] = int(parts[1]) * 1024
-                    except ValueError:
-                        continue
+        for line in _proc_text("/proc/meminfo").splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                key = parts[0].rstrip(":")
+                try:
+                    mem_data[key] = int(parts[1]) * 1024
+                except ValueError:
+                    continue
 
         ram_total = mem_data.get("MemTotal", 0)
         ram_available = mem_data.get("MemAvailable", ram_total)
@@ -185,7 +202,11 @@ class SysUtil:
     def _interface_ips(cls, family: int) -> tuple[str, ...]:
         found: list[str] = []
         seen: set[str] = set()
-        for addrs in psutil.net_if_addrs().values():
+        try:
+            interfaces = psutil.net_if_addrs()
+        except PermissionError, psutil.AccessDenied:
+            return ()
+        for addrs in interfaces.values():
             for addr in addrs:
                 if addr.family != family:
                     continue
@@ -213,14 +234,10 @@ class SysUtil:
         udp_count = 0
 
         for state_file in Path("/proc/net").glob("tcp*"):
-            with state_file.open() as f:
-                f.readline()  # skip header
-                tcp_count += sum(1 for _ in f)
+            tcp_count += len(_proc_text(str(state_file)).splitlines()[1:])
 
         for udp_file in Path("/proc/net").glob("udp*"):
-            with udp_file.open() as f:
-                f.readline()
-                udp_count += sum(1 for _ in f)
+            udp_count += len(_proc_text(str(udp_file)).splitlines()[1:])
 
         return ConnCount(tcp=tcp_count, udp=udp_count)
 
@@ -232,16 +249,23 @@ class SysUtil:
         object and labels the unit itself.
         """
         current_proc = psutil.Process()
-        children = current_proc.children(recursive=True)
+        try:
+            children = current_proc.children(recursive=True)
+        except psutil.AccessDenied:
+            children = []
 
         total_rss: int = 0
         total_swap: int = 0
 
         for proc in [current_proc, *children]:
             try:
-                mem = proc.memory_full_info()
-                total_rss += mem.rss
-                total_swap += mem.swap
+                try:
+                    mem = proc.memory_full_info()
+                    total_rss += mem.rss
+                    total_swap += mem.swap
+                except psutil.AccessDenied:
+                    # smaps may be denied while this process's statm is readable.
+                    total_rss += proc.memory_info().rss
             except psutil.NoSuchProcess, psutil.AccessDenied:
                 pass
 
@@ -252,7 +276,7 @@ class SysUtil:
 
     @staticmethod
     def app_uptime() -> float:
-        system_uptime = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+        system_uptime = SysUtil.uptime()
         stat = Path(f"/proc/{os.getpid()}/stat").read_text(encoding="utf-8")
         # The parenthesized comm field can contain spaces and parentheses.
         starttime_ticks = int(stat.rsplit(")", 1)[1].split()[19])

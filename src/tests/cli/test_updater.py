@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import platform
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -14,6 +17,17 @@ from cli.updater import notice, update
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+
+__all__: list[str] = []
+pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("glibc_host")
+
+
+@pytest.fixture
+def glibc_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep update tests independent of the developer machine's ABI."""
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    monkeypatch.setattr(os, "confstr", _value_stub("glibc 2.35"), raising=False)
 
 
 class ReleaseAsset(TypedDict):
@@ -56,7 +70,7 @@ def _plain(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _release(
     tag: str = "v9.0.0",
-    assets: tuple[str, ...] = ("vpn-sub", "vpn-sub-discord"),
+    assets: tuple[str, ...] = updater.RELEASE_BINARIES,
 ) -> ReleasePayload:
     return {
         "tag_name": tag,
@@ -110,6 +124,13 @@ def _bool_stub(value: bool) -> Callable[[object], bool]:
         return value
 
     return _answer
+
+
+def _value_stub[T](value: T) -> Callable[..., T]:
+    def result(*_args: object, **_kwargs: object) -> T:
+        return value
+
+    return result
 
 
 def _empty_stub() -> Callable[[object, object], list[object]]:
@@ -234,7 +255,7 @@ def test_digest_mismatch_does_not_replace(monkeypatch: pytest.MonkeyPatch, tmp_p
     _compiled(monkeypatch)
     binary = tmp_path / "vpn-sub"
     binary.write_bytes(b"old\n")
-    payload = _release(assets=("vpn-sub",))
+    payload = _release(assets=("vpn-sub-amd64-glibc",))
     payload["assets"][0]["digest"] = "sha256:" + "0" * 64
     monkeypatch.setattr(updater, "VERSION", "1.0.0")
     monkeypatch.setattr(updater, "_interactive", lambda: True)
@@ -289,7 +310,7 @@ def test_missing_sibling_is_skipped(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     monkeypatch.setattr(updater, "_confirm", _bool_stub(True))
     monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
     monkeypatch.setattr(updater, "_running", _empty_stub())
-    payload = _release(assets=("vpn-sub",))
+    payload = _release(assets=("vpn-sub-amd64-glibc",))
     monkeypatch.setattr(updater, "_get", _get_stub(payload))
     assert update() == 0
     assert binary.read_bytes() == b"new\n"
@@ -389,7 +410,7 @@ def test_rc_update_warns_before_confirmation_and_replaces_binary(
     _compiled(monkeypatch)
     binary = tmp_path / "vpn-sub"
     binary.write_bytes(b"old\n")
-    payload = _release("v5.0.0-rc.2", assets=("vpn-sub",))
+    payload = _release("v5.0.0-rc.2", assets=("vpn-sub-amd64-glibc",))
     payload["prerelease"] = True
     monkeypatch.setattr(updater, "VERSION", "5.0.0-rc.1")
     monkeypatch.setattr(updater, "_interactive", lambda: True)
@@ -435,7 +456,7 @@ def test_swap_refuses_symlink(
     monkeypatch.setattr(updater, "_interactive", lambda: True)
     monkeypatch.setattr(updater, "_confirm", _bool_stub(True))
     monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
-    monkeypatch.setattr(updater, "_get", _get_stub(_release(assets=("vpn-sub",))))
+    monkeypatch.setattr(updater, "_get", _get_stub(_release(assets=("vpn-sub-amd64-glibc",))))
     assert update() == 1
     assert target.read_bytes() == b"old"
     assert "symlink" in capsys.readouterr().out
@@ -459,9 +480,130 @@ def test_alive_pid_blocks_replace(
         "_running",
         _alive_stub(),
     )
-    monkeypatch.setattr(updater, "_get", _get_stub(_release(assets=("vpn-sub",))))
+    monkeypatch.setattr(updater, "_get", _get_stub(_release(assets=("vpn-sub-amd64-glibc",))))
     assert update() == 1
     assert binary.read_bytes() == b"old\n"
     output = capsys.readouterr().out
-    assert "make sure both services are stopped before continuing" in output
+    assert "make sure the service is stopped before continuing" in output
     assert "still running" in output
+
+
+@pytest.mark.parametrize(
+    ("machine", "arch"),
+    [("x86_64", "amd64"), ("amd64", "amd64"), ("aarch64", "aarch64"), ("arm64", "aarch64")],
+)
+@pytest.mark.parametrize("libc", ["glibc", "musl"])
+def test_update_selects_abi_and_installs_plain_name(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    machine: str,
+    arch: str,
+    libc: str,
+) -> None:
+    _compiled(monkeypatch)
+    binary = tmp_path / "vpn-sub"
+    binary.write_bytes(b"old\n")
+    monkeypatch.setattr(platform, "machine", lambda: machine)
+    if libc == "musl":
+        monkeypatch.setattr(os, "confstr", _value_stub(None))
+        maps = f"7000-8000 r-xp 0000 00:00 1 /lib/ld-musl-{machine}.so.1\n"
+        monkeypatch.setattr(Path, "read_text", _value_stub(maps))
+    monkeypatch.setattr(updater, "VERSION", "1.0.0")
+    monkeypatch.setattr(updater, "_interactive", lambda: True)
+    monkeypatch.setattr(updater, "_confirm", _bool_stub(True))
+    monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
+    monkeypatch.setattr(updater, "_running", _empty_stub())
+    release = _release()
+    downloads: list[str] = []
+    for asset in release["assets"]:
+        content = asset["name"].encode()
+        asset["size"] = len(content)
+        asset["digest"] = "sha256:" + hashlib.sha256(content).hexdigest()
+
+    def get(url: str, *_args: object, **_kwargs: object) -> StubResponse:
+        if url.startswith(updater.RELEASES_URL):
+            return _response([release])
+        downloads.append(url)
+        name = url.rsplit("/", 1)[1]
+        return _response(None, (name.encode(),))
+
+    monkeypatch.setattr(updater, "_get", get)
+    expected = f"vpn-sub-{arch}-{libc}"
+    assert update() == 0
+    assert downloads == [f"https://example.test/{expected}"]
+    assert binary.read_bytes() == expected.encode()
+    assert (tmp_path / "vpn-sub.bak").read_bytes() == b"old\n"
+    assert binary.stat().st_mode & 0o777 == 0o755
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["vpn-sub", "vpn-sub.bak"]
+
+
+def test_musl_detection_when_confstr_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unsupported(_name: str) -> str:
+        raise ValueError("unrecognized configuration name")
+
+    monkeypatch.setattr(os, "confstr", unsupported)
+    monkeypatch.setattr(
+        Path, "read_text", _value_stub("/lib/ld-musl-x86_64.so.1\n"),
+    )
+    assert updater._platform_asset() == "vpn-sub-amd64-musl"
+
+
+def test_unsupported_libc_is_not_guessed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os, "confstr", _value_stub(None))
+    monkeypatch.setattr(Path, "read_text", _value_stub("/apex/lib64/bionic/libc.so\n"))
+    with pytest.raises(ValueError, match="unsupported libc"):
+        updater._platform_asset()
+
+
+@pytest.mark.parametrize("machine", ["armv7l", "riscv64", "i686"])
+def test_unsupported_arch_is_not_guessed(monkeypatch: pytest.MonkeyPatch, machine: str) -> None:
+    monkeypatch.setattr(platform, "machine", lambda: machine)
+    with pytest.raises(ValueError, match="unsupported platform"):
+        updater._platform_asset()
+
+
+def test_missing_abi_asset_never_falls_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    _compiled(monkeypatch)
+    binary = tmp_path / "vpn-sub"
+    binary.write_bytes(b"old")
+    monkeypatch.setattr(updater, "VERSION", "1.0.0")
+    monkeypatch.setattr(updater, "_interactive", lambda: True)
+    monkeypatch.setattr(updater, "_confirm", _bool_stub(True))
+    monkeypatch.setattr(updater, "program_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        updater, "_get", _get_stub(_release(assets=("vpn-sub", "vpn-sub-aarch64-glibc"))),
+    )
+    assert update() == 1
+    assert "no asset for vpn-sub-amd64-glibc" in capsys.readouterr().out
+    assert binary.read_bytes() == b"old"
+
+
+def test_systemctl_without_systemd_still_checks_processes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(shutil, "which", _value_stub("/usr/bin/systemctl"))
+    monkeypatch.setattr(Path, "is_dir", _value_stub(False))
+
+    def no_systemctl(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("must not call systemctl without a systemd manager")
+
+    monkeypatch.setattr(subprocess, "run", no_systemctl)
+    monkeypatch.setattr(updater, "_self_pids", _value_stub(set[int]()))
+    monkeypatch.setattr(updater, "_processes", _processes_stub())
+    found = updater._running({"vpn-sub": tmp_path / "vpn-sub"})
+    assert found is not None
+    assert [(item.pid, item.unit) for item in found] == [(10, None), (11, None)]
+
+
+def test_systemctl_failure_with_live_systemd_is_not_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shutil, "which", _value_stub("/usr/bin/systemctl"))
+    monkeypatch.setattr(Path, "is_dir", _value_stub(True))
+    monkeypatch.setattr(
+        subprocess, "run",
+        _value_stub(SimpleNamespace(returncode=1, stdout="", stderr="access denied")),
+    )
+    assert updater._units({}) is None

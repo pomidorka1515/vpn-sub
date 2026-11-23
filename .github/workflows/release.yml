@@ -3,60 +3,111 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version to embed (for example v8.4.0-rc.2); build only, never publish"
+        required: true
+        type: string
 
 permissions:
   actions: read
   contents: write
 
 jobs:
-  binaries:
+  frontend:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: vpn-sub
-            pythonpath: build/release-src
-            entry: build/release-src/app.min.py
-            extra: >-
-              --include-module=hypercorn.asyncio
-              --include-package=quart
-              --include-module=telebot.async_telebot
-              --include-module=telebot.asyncio_helper
-              --include-module=aiohttp
-              --include-package=aiosqlite
-              --include-module=redis.asyncio
-              --include-data-dir=frontend/dist=frontend/dist
-              --include-data-files=lang.jsonc=lang.jsonc
-              --include-data-files=config.schema.json=config.schema.json
-              --include-module=discord
     steps:
       - uses: actions/checkout@v5
-
       - uses: actions/setup-node@v5
         with:
           node-version-file: frontend/.node-version
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
       - name: build runtime resources
         run: |
           npm --prefix frontend ci
           npm --prefix frontend run build
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+  binaries:
+    needs: frontend
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        # Run common build steps natively on glibc, or in native Alpine Docker
+        # on musl. Actions themselves stay on the Ubuntu host (Node needs glibc).
+        shell: bash scripts/release_shell.sh {0}
+    env:
+      RELEASE_LIBC: ${{ matrix.libc }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - name: vpn-sub-amd64-glibc
+            runner: ubuntu-22.04
+            libc: glibc
+            static_libpython: "yes"
+          - name: vpn-sub-amd64-musl
+            runner: ubuntu-22.04
+            libc: musl
+            static_libpython: "no"
+          - name: vpn-sub-aarch64-glibc
+            runner: ubuntu-24.04-arm
+            libc: glibc
+            static_libpython: "yes"
+          - name: vpn-sub-aarch64-musl
+            runner: ubuntu-24.04-arm
+            libc: musl
+            static_libpython: "no"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: frontend-dist
+          path: frontend/dist
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
           cache: pip
 
+      - name: prepare native musl builder
+        if: matrix.libc == 'musl'
+        shell: bash
+        run: |
+          docker build -f .github/release-musl.Dockerfile -t vpn-sub-musl-builder .
+          mkdir -p "$HOME/.cache/ccache"
+          docker run --detach --name vpn-sub-musl \
+            --env RELEASE_TAG --env GITHUB_WORKSPACE --env RUNNER_TEMP \
+            --env HOME --env RELEASE_LIBC \
+            --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            --volume "$RUNNER_TEMP:$RUNNER_TEMP" \
+            --volume "$HOME/.cache/ccache:$HOME/.cache/ccache" \
+            --workdir "$GITHUB_WORKSPACE" \
+            vpn-sub-musl-builder sleep infinity
+
       - name: require a normal CPython
         run: |
           python -c 'import sys; raise SystemExit(0 if sys.abiflags == "" else f"refusing free-threading build: sys.abiflags={sys.abiflags!r}")'
           python -c 'import sys; print(sys.version)'
-          getconf GNU_LIBC_VERSION
+          if [ "$RELEASE_LIBC" = glibc ]; then
+            getconf GNU_LIBC_VERSION
+          else
+            ldd --version 2>&1 || true
+          fi
 
       - name: install build tools
+        if: matrix.libc == 'glibc'
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -64,6 +115,7 @@ jobs:
             zlib1g-dev libfreetype6-dev libraqm-dev
 
       - name: restore ccache
+        shell: bash
         # Actions caches are tag-scoped; artifacts can be read across tag runs.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -143,8 +195,10 @@ jobs:
 
       - name: build private OpenSSL
         run: |
-          bash scripts/build_openssl.sh "$RUNNER_TEMP/openssl-small" "$(command -v python)"
-          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/openssl-small/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          OPENSSL_JOBS="$(nproc)" bash scripts/build_openssl.sh "$RUNNER_TEMP/openssl-small" "$(command -v python)"
+          # Keep musl libraries out of the Ubuntu host's Actions processes.
+          # The custom shell adds this directory only in the target userspace.
+          echo "RELEASE_OPENSSL_LIB=$RUNNER_TEMP/openssl-small/lib" >> "$GITHUB_ENV"
 
       - name: strip runtime extension debug symbols
         run: |
@@ -209,6 +263,28 @@ jobs:
           path.write_text(source.replace(old, new, 1))
           PY
 
+      - name: keep musl external to the payload
+        if: matrix.libc == 'musl'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import nuitka.freezer.DllDependenciesPosix as dependencies
+
+          # Nuitka excludes glibc but can copy musl's combined libc/loader.
+          # Copying that loader would violate the host-libc release contract.
+          path = Path(dependencies.__file__)
+          source = path.read_text()
+          marker = "# vpn-sub: musl is supplied by the host, never bundled."
+          if marker not in source:
+              if not hasattr(dependencies, "_linux_dll_ignore_list"):
+                  raise SystemExit("Nuitka libc exclusion hook changed")
+              source += "\n" + marker + "\n_linux_dll_ignore_list += " + repr([
+                  "ld-musl-x86_64.so", "ld-musl-aarch64.so",
+                  "libc.musl-x86_64.so", "libc.musl-aarch64.so",
+              ]) + "\n"
+              path.write_text(source)
+          PY
+
       - name: patch nuitka early-import codecs
         run: |
           python - <<'PY'
@@ -271,10 +347,9 @@ jobs:
           export CCACHE_BASEDIR="$GITHUB_WORKSPACE"
           ccache --set-config=max_size=2G
           ccache --zero-stats
-          # GitHub ubuntu-22.04 runners are 2 vCPU. Nuitka's default job count
-          # oversubscribes them once --lto=yes is linking.
+          # Respect the native runner's CPU budget, including during LTO.
           jobs="$(nproc)"
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           # Nuitka product metadata accepts only numbers; runtime/tag identity
           # and the unpack cache retain the complete prerelease/build suffix.
           product_version="${version%%+*}"
@@ -285,7 +360,7 @@ jobs:
           path = Path("src/version.py")
           source = path.read_text()
           old = 'VERSION = "0.0.0"'
-          new = f'VERSION = {os.environ["GITHUB_REF_NAME"].removeprefix("v")!r}'
+          new = f'VERSION = {os.environ["RELEASE_TAG"].removeprefix("v")!r}'
           if old not in source:
               raise SystemExit(f"src/version.py has no {old} placeholder")
           path.write_text(source.replace(old, new, 1))
@@ -313,7 +388,7 @@ jobs:
           # patch step above, then kept out with the nofollow entries below.
           # _hashlib supplies SHA/MD5 through private OpenSSL; BLAKE2 constructors
           # still require _blake2 even when OpenSSL supports those algorithms.
-          PYTHONPATH=${{ matrix.pythonpath }} python -m nuitka \
+          PYTHONPATH=build/release-src python -m nuitka \
             --onefile \
             --onefile-tempdir-spec="{CACHE_DIR}/${{ matrix.name }}/${version}/{PID}_{TIME_US}_{RANDOM}" \
             --onefile-child-grace-time=infinity \
@@ -321,7 +396,7 @@ jobs:
             --deployment \
             --lto=yes \
             --jobs="${jobs}" \
-            --static-libpython=yes \
+            --static-libpython=${{ matrix.static_libpython }} \
             --python-flag=no_docstrings \
             --python-flag=no_asserts \
             --python-flag=no_site \
@@ -526,8 +601,18 @@ jobs:
             --nofollow-import-to=pandas \
             --include-package-data=certifi \
             --include-data-files="$RUNNER_TEMP/openssl-small/LICENSE.txt=licenses/OpenSSL.txt" \
-            ${{ matrix.extra }} \
-            ${{ matrix.entry }}
+            --include-module=hypercorn.asyncio \
+            --include-package=quart \
+            --include-module=telebot.async_telebot \
+            --include-module=telebot.asyncio_helper \
+            --include-module=aiohttp \
+            --include-package=aiosqlite \
+            --include-module=redis.asyncio \
+            --include-data-dir=frontend/dist=frontend/dist \
+            --include-data-files=lang.jsonc=lang.jsonc \
+            --include-data-files=config.schema.json=config.schema.json \
+            --include-module=discord \
+            build/release-src/app.min.py
 
       - name: ccache statistics
         if: always()
@@ -628,16 +713,20 @@ jobs:
             echo
           done
 
-      - name: smoke test
-        if: matrix.name == 'vpn-sub'
+      - name: probe and crypto smoke test
         run: |
           set -euo pipefail
           # --probe imports the async HTTP/runtime stack and checks frontend/dist/, lang.jsonc, and
           # config.schema.json were packed. It does not boot the service: a
           # missing config or Redis must not look like a bad binary, and a
           # crash must not look like success. Exit 0 is the only pass.
-          build/dist/vpn-sub --probe
-          env -u LD_LIBRARY_PATH python scripts/smoke_crypto_release.py --binary build/dist/vpn-sub --openssl-prefix "$RUNNER_TEMP/openssl-small"
+          env -u LD_LIBRARY_PATH build/dist/${{ matrix.name }} --probe
+          env -u LD_LIBRARY_PATH python scripts/smoke_crypto_release.py --binary build/dist/${{ matrix.name }} --openssl-prefix "$RUNNER_TEMP/openssl-small"
+
+      - name: isolated lifecycle smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
           # Copy the harness, binary and fixture outside the checkout. Hide the
           # checkout in a private mount namespace, remove Node from PATH, and
           # isolate all subprocesses from non-loopback networking.
@@ -645,9 +734,21 @@ jobs:
           mkdir -p "$isolated"/{scripts,docs,bin,hidden}
           cp scripts/smoke_async_release.py "$isolated/scripts/"
           cp docs/EXAMPLE.config.json "$isolated/docs/"
-          cp build/dist/vpn-sub build/dist/vpn-sub-report.xml "$isolated/"
-          ln -s "$(command -v redis-server)" "$isolated/bin/redis-server"
-          sudo unshare --mount --net bash -c '
+          # Also verify the documented installation name, without ABI suffixes.
+          cp build/dist/${{ matrix.name }} "$isolated/vpn-sub"
+          cp build/dist/${{ matrix.name }}-report.xml "$isolated/vpn-sub-report.xml"
+          if [ "$RELEASE_LIBC" = musl ]; then
+            # Fresh container: no checkout, no build-time OpenSSL prefix, no
+            # network beyond loopback. Use only the generated fixture/binary.
+            docker run --rm --network none --volume "$isolated:/smoke" \
+              --workdir /smoke vpn-sub-musl-builder bash -euo pipefail -c '
+                ln -s /usr/bin/redis-server /smoke/bin/redis-server
+                export PATH=/smoke/bin
+                exec /usr/local/bin/python /smoke/scripts/smoke_async_release.py --binary /smoke/vpn-sub --report /smoke/vpn-sub-report.xml
+              '
+          else
+            ln -s "$(command -v redis-server)" "$isolated/bin/redis-server"
+            sudo unshare --mount --net bash -c '
             set -euo pipefail
             mount --make-rprivate /
             mount --bind "$1/hidden" "$2"
@@ -656,7 +757,12 @@ jobs:
             export PATH="$1/bin"
             unset LD_LIBRARY_PATH
             exec "$3" "$1/scripts/smoke_async_release.py" --binary "$1/vpn-sub" --report "$1/vpn-sub-report.xml"
-          ' -- "$isolated" "$GITHUB_WORKSPACE" "$(command -v python)"
+            ' -- "$isolated" "$GITHUB_WORKSPACE" "$(command -v python)"
+          fi
+
+      - name: verify ELF ABI
+        run: |
+          bash scripts/check_release_abi.sh build/dist/${{ matrix.name }} "$RELEASE_LIBC"
 
       - name: record binary sizes
         run: |
@@ -701,6 +807,7 @@ jobs:
 
   publish:
     needs: binaries
+    if: github.event_name == 'push'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v7
@@ -713,8 +820,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          chmod +x build/dist/vpn-sub
-          test -x build/dist/vpn-sub
+          binaries=(
+            vpn-sub-amd64-glibc vpn-sub-amd64-musl
+            vpn-sub-aarch64-glibc vpn-sub-aarch64-musl
+          )
+          assets=()
+          for binary in "${binaries[@]}"; do
+            test -s "build/dist/$binary"
+            chmod +x "build/dist/$binary"
+            assets+=("build/dist/$binary")
+          done
           # --notes-from-tag reads a local annotated tag and refuses --repo.
           # Fetch the tag object itself; a checkout of the tagged commit is
           # not an annotated tag, so its message would be lost.
@@ -727,7 +842,10 @@ jobs:
             exit 1
           fi
           printf '%s\n' "${notes}" > notes.md
-          cat build/dist/vpn-sub-sizes.txt >> notes.md
+          for binary in "${binaries[@]}"; do
+            printf '\n### %s\n' "$binary" >> notes.md
+            cat "build/dist/$binary-sizes.txt" >> notes.md
+          done
           release_flags=()
           case "${GITHUB_REF_NAME%%+*}" in
             *-*)
@@ -735,7 +853,7 @@ jobs:
               ;;
           esac
           gh release create "${GITHUB_REF_NAME}" \
-            build/dist/vpn-sub \
+            "${assets[@]}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --notes-file notes.md \

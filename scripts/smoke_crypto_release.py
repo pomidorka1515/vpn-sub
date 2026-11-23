@@ -15,7 +15,8 @@ from tempfile import TemporaryDirectory
 
 from aiohttp import WSMsgType, web
 
-ROOT = Path(__file__).resolve().parents[1]
+__all__: list[str] = []
+ROOT: Path = Path(__file__).resolve().parents[1]
 
 
 async def http(_request: web.Request) -> web.Response:
@@ -61,14 +62,16 @@ def certificate(directory: Path, algorithm: str) -> Path:
 
 
 def audit(prefix: Path, binary: Path) -> None:
-    import _ssl  # ruff: ignore[import-private-name] - audit the extension's ELF dependencies
     from compression import zstd
 
-    baseline = subprocess.check_output(
-        ["/usr/bin/ldd", _ssl.__file__],
-        text=True,
-        env={key: value for key, value in os.environ.items() if key != "LD_LIBRARY_PATH"},
-    )
+    # The harness runs without LD_LIBRARY_PATH and has already imported ssl.
+    # Read its actual system libraries, avoiding glibc-specific ldd output
+    # parsing (musl also reports unresolved Python symbols for bare extensions).
+    baseline = {
+        Path(line.split()[-1])
+        for line in Path("/proc/self/maps").read_text(encoding="utf-8").splitlines()
+        if "libcrypto.so" in line or "libssl.so" in line
+    }
     payloads = list(binary.parent.glob("*.dist"))
     if len(payloads) != 1:
         raise RuntimeError("expected one Nuitka payload")
@@ -97,11 +100,7 @@ def audit(prefix: Path, binary: Path) -> None:
             if sections[0] != sections[1]:
                 raise RuntimeError(f"payload did not use private {name}: {expected.hex()}")
         print(f"private payload {name}: {candidates[0].stat().st_size:,} bytes")
-        original = next(
-            Path(line.split("=>", 1)[1].split()[0])
-            for line in baseline.splitlines()
-            if name in line
-        )
+        original = next(path for path in baseline if path.name == name)
         old, new = original.read_bytes(), candidates[0].read_bytes()
         print(
             f"{name}: raw {len(old):,} -> {len(new):,}; "

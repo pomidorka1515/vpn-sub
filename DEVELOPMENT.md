@@ -203,15 +203,45 @@ The release binaries are Nuitka onefile builds. Build with CPython 3.14's normal
 GIL ABI (empty `sys.abiflags`), not a free-threading interpreter (`python3.14t`,
 `sys.abiflags == "t"`). The workflow refuses that ABI.
 
-A tag `v*` builds one `vpn-sub` binary including Discord on `ubuntu-22.04` and
-attaches it to the GitHub release. The host that runs it needs glibc at least as
-new as Ubuntu 22.04 (`>= 2.35`).
+A tag `v*` builds frontend resources once, then compiles four binaries in parallel
+on independent native GitHub-hosted runners (no QEMU/cross-compilation):
 
-Release CI verifies the Nuitka module report and runs the main binary from an
+| Asset | Runner / build environment | Runtime libc floor |
+| :--- | :--- | :--- |
+| `vpn-sub-amd64-glibc` | `ubuntu-22.04` | glibc 2.35 |
+| `vpn-sub-amd64-musl` | `ubuntu-22.04`, native Alpine 3.23 Docker | musl 1.2.5 |
+| `vpn-sub-aarch64-glibc` | `ubuntu-24.04-arm` | glibc 2.39 (Ubuntu proot) |
+| `vpn-sub-aarch64-musl` | `ubuntu-24.04-arm`, native Alpine 3.23 Docker | musl 1.2.5 |
+
+Every target includes Discord. `scripts/release_shell.sh` routes common workflow
+steps into the musl builder when needed; Actions/Node remain on Ubuntu. The musl
+image uses normal-GIL CPython 3.14 with shared libpython, so Nuitka uses
+`--static-libpython=no` there; glibc retains `--static-libpython=yes`. The image
+also builds native, checksum-pinned patchelf 0.17.2: Nuitka rejects Alpine's
+packaged patchelf 0.18.0. Libpython selection is
+independent of the **libc** linkage: all variants dynamically use the host's libc.
+Nuitka's musl loader/libc copying is explicitly disabled, and
+`scripts/check_release_abi.sh` audits the bootstrap and payload architecture,
+loader, and absence of bundled libc. zlib is a host dependency too. Each target
+has its own ccache artifact. Publishing waits for all four builds and checks.
+The release workflow's manual trigger accepts the tag/version to embed and runs
+the same four builds and checks without publishing. Use it to validate packaging
+before creating a release tag; only a `v*` tag push can publish a release.
+
+`scripts/build_openssl.sh` selects `linux-x86_64` or `linux-aarch64` and uses the
+native compiler/libc to build the same private, trimmed shared OpenSSL libraries
+on every target. Crypto acceptance checks use actually mapped system libraries
+as their comparison baseline rather than assuming glibc's `ldd` output.
+
+Release CI verifies every Nuitka module report and runs every binary from an
 unrelated working directory against disposable loopback Redis/panel
 dependencies, renders bundled templates, checks SQLite integrity, sends SIGTERM
 and restarts against the same state. No production credentials are required.
 See [packaging checks](docs/ASYNC_PACKAGING.md).
+Isolated lifecycle checks use a private mount/network namespace on glibc and a
+fresh network-disabled Alpine container on musl; both install the binary under
+its runtime name `vpn-sub`. The ARM glibc build targets an Ubuntu 24.04+ proot
+guest, not Android/bionic; see the README's no-systemd Supervisor setup.
 
 The unpack directory is `{CACHE_DIR}/<name>/{VERSION}/{PID}_{TIME_US}_{RANDOM}`
 and is removed only after the child has exited. It is not shared across

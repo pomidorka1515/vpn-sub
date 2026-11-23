@@ -18,6 +18,8 @@ from .browser import _browser_strings
 if TYPE_CHECKING:
     from core import Subscription
 
+__all__ = ["get_subscription"]
+
 
 _SUBSCRIPTION_CACHE_TTL = 5.0
 _SUBSCRIPTION_CACHE_SIZE = 256
@@ -115,7 +117,6 @@ async def get_subscription(
     token: str,
     lang: str,
     ua: str,
-    ip: str,
     force_json: str,
     auth_token: str = "",
 ) -> tuple[Response, int]:

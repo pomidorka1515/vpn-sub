@@ -21,6 +21,8 @@ from tests.support.paths import REPO_ROOT
 if TYPE_CHECKING:
     from pathlib import Path
 
+__all__: list[str] = []
+
 
 def test_verbose_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     for raw in ("bwatch", "bwatch,", ",bwatch,", " BWATCH "):
@@ -456,7 +458,11 @@ async def test_factory_cleanup_continues_after_close_failures(
     monkeypatch.setattr(OffloadServices, "close", broken_offloads_close)
     limiter = AsyncRateLimiter("redis://test", client=BrokenRedis())
     limiter._owned = True
-    with pytest.raises(BaseExceptionGroup, match="runtime cleanup failed") as caught:
+    with pytest.RaisesGroup(
+        asyncio.CancelledError if cancel_close else ValueError,
+        OSError,
+        match="runtime cleanup failed",
+    ) as caught:
         await create_application(
             paths,
             AppOptions(

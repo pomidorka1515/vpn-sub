@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from app_runtime.rate_limit import AsyncRateLimiter
     from core import Subscription
 
+__all__ = ["register_subscription_route"]
+
 
 log = Logger("rate_limit")
 
@@ -56,7 +58,6 @@ def register_subscription_route(app: Quart, sub: Subscription, limiter: AsyncRat
             token=request.args.get("token", ""),
             lang=request.args.get("lang", ""),
             ua=request.headers.get("User-Agent", ""),
-            ip=request.remote_addr or "",
             force_json=request.args.get("force_json", "0"),
             auth_token=request.cookies.get("auth_token", ""),
         )

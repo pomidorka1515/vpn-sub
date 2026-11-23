@@ -86,7 +86,7 @@ Designed to run on one small Linux VPS.
 
 ## Requirements
 
-- Linux, glibc at least as new as Ubuntu 22.04 (`>= 2.35`)
+- 64-bit Linux (amd64 or aarch64), with a compatible glibc or musl; see [Binaries](#binaries)
 - Local Redis on the same box; the app pings it at startup and exits if it is down
 - 3x-ui v3 panels with admin-scoped API tokens
 - Release binaries need no Python on the host; the v6 profile migration requires Python 3.14
@@ -100,15 +100,30 @@ A compiled binary ignores `$schema` and validates against the packed schema, so
 the example's relative `$schema` is fine here.  
 A git checkout is for development. See [DEVELOPMENT.md](DEVELOPMENT.md).
 
+Pick your preferred release asset for the machine's **architecture and libc**
+from the [binary table](#binaries). The example below is for an amd64 glibc VPS;
+change `binary` for another target. **Always save it as `vpn-sub`, without the
+architecture/libc suffix** (for example, not `vpn-sub-amd64-glibc`). The service
+and updater expect that installed name. No Python or Node installation is needed.
+
 ```bash
-getconf GNU_LIBC_VERSION # ensure its >= 2.35
+uname -m # x86_64 = amd64; aarch64 = aarch64
+getconf GNU_LIBC_VERSION # glibc hosts; see the table for minimum versions
 mkdir -p /opt/vpn-sub && cd /opt/vpn-sub
-curl -fsSL -o vpn-sub https://github.com/pomidorka1515/vpn-sub/releases/latest/download/vpn-sub && chmod +x vpn-sub
+binary=vpn-sub-amd64-glibc # choose your preferred compatible asset
+curl -fsSL -o vpn-sub "https://github.com/pomidorka1515/vpn-sub/releases/latest/download/$binary"
+chmod +x vpn-sub
 mkdir -p data
 curl -fsSL -o data/config.json https://raw.githubusercontent.com/pomidorka1515/vpn-sub/main/docs/EXAMPLE.config.json
 apt install redis-server && systemctl enable --now redis-server
 # fill in panel credentials, bot tokens, etc, then start the systemd unit below
 ```
+
+These service commands assume a Debian/Ubuntu VPS with systemd. For Alpine,
+install Redis and zlib with `apk add redis zlib` and use your service manager
+(for example OpenRC). For Android, follow the proot instructions below instead.
+The `latest` URL selects a stable release; for a prerelease, select its tag on
+the releases page and replace `latest/download` with `download/<tag>`.
 
 ### Redis
 
@@ -200,6 +215,107 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 ```
+
+### Android / aarch64 proot (no systemd)
+
+Use **`vpn-sub-aarch64-glibc` inside an Ubuntu 24.04 or newer proot guest**.
+It is not a native Android/Termux executable: Android's bionic libc cannot load
+it. Do not put it on `/sdcard` (shared storage does not support normal executable
+permissions). Keep the install, data, and unpack cache inside the guest's private
+filesystem. Proot is not a VM or a security boundary, and does not grant real root.
+
+In Termux on a 64-bit ARM device:
+
+```bash
+pkg install proot-distro tmux
+proot-distro install ubuntu
+termux-wake-lock
+tmux new -s vpn-sub
+proot-distro login ubuntu
+```
+
+Run the following **inside Ubuntu**. Check `getconf GNU_LIBC_VERSION` reports
+**2.39 or newer**; upgrade/reinstall an older guest before proceeding.
+
+```bash
+apt update
+apt install -y ca-certificates curl redis-server supervisor
+getconf GNU_LIBC_VERSION
+mkdir -p /opt/vpn-sub/data/logs
+cd /opt/vpn-sub
+curl -fsSL -o vpn-sub https://github.com/pomidorka1515/vpn-sub/releases/latest/download/vpn-sub-aarch64-glibc
+chmod +x vpn-sub
+curl -fsSL -o data/config.json https://raw.githubusercontent.com/pomidorka1515/vpn-sub/main/docs/EXAMPLE.config.json
+./vpn-sub --probe
+# Edit data/config.json: panel credentials, optional bots, Redis URL, etc.
+```
+
+There is **no systemd in proot**. Use Supervisor to own Redis and the app instead.
+Save this as `/opt/vpn-sub/supervisord.conf`:
+
+```ini
+[supervisord]
+nodaemon=true
+logfile=/opt/vpn-sub/data/logs/supervisord.log
+pidfile=/opt/vpn-sub/data/supervisord.pid
+childlogdir=/opt/vpn-sub/data/logs
+
+[unix_http_server]
+file=/opt/vpn-sub/data/supervisor.sock
+chmod=0700
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix:///opt/vpn-sub/data/supervisor.sock
+
+[program:redis]
+command=/usr/bin/redis-server --bind 127.0.0.1 --protected-mode yes --save "" --appendonly no
+priority=10
+autorestart=true
+stdout_logfile=/opt/vpn-sub/data/logs/redis.log
+redirect_stderr=true
+
+[program:vpn-sub]
+command=/opt/vpn-sub/vpn-sub
+directory=/opt/vpn-sub
+environment=LOGLEVEL="INFO"
+priority=20
+autorestart=unexpected
+startretries=10
+stopsignal=TERM
+stopwaitsecs=90
+killasgroup=true
+stdout_logfile=/opt/vpn-sub/data/logs/vpn-sub.log
+redirect_stderr=true
+```
+
+Start it with `supervisord -c /opt/vpn-sub/supervisord.conf`. Leave that foreground
+process running in the Termux tmux session; detach with **Ctrl-b, then d**, and
+return with `tmux attach -t vpn-sub`. Redis starts first; the app retries if Redis
+is not ready yet. Supervisor does not change the app's default loopback bind.
+Use the reverse proxy described below for TLS/public access; do not expose Redis.
+
+From a second Termux session, log into the **same** guest to manage or update it:
+
+```bash
+proot-distro login ubuntu
+cd /opt/vpn-sub
+supervisorctl -c supervisord.conf status
+supervisorctl -c supervisord.conf stop vpn-sub
+./vpn-sub --update
+supervisorctl -c supervisord.conf start vpn-sub
+# Stop everything gracefully before ending the original proot/tmux session:
+# supervisorctl -c supervisord.conf shutdown
+```
+
+Disable Android battery optimization for Termux. A wake lock/tmux session does
+not prevent Android from killing the app, nor survive a reboot; restart the
+guest and Supervisor afterward. Host CPU/load/network counters may be blocked
+by Android and display zero/empty values; these mean **unavailable**, not idle.
+App RSS falls back to readable process counters when detailed memory is blocked.
+Proot shares the Android kernel and network, so port conflicts are host-wide.
 
 ### Nginx location block
 
@@ -346,27 +462,55 @@ Migration scripts may require Python dependencies; see the instructions for each
 
 ## Binaries
 
-The release binaries include Discord and need glibc at least as new as Ubuntu
-22.04 (`>= 2.35`). For build and packaging details, see
+All four release binaries include Discord, Python, and the built frontend:
+
+| Release asset | Target / minimum host libc |
+| :--- | :--- |
+| `vpn-sub-amd64-glibc` | x86-64 Linux, glibc **2.35+** (Ubuntu 22.04+) — the existing build |
+| `vpn-sub-amd64-musl` | x86-64 Linux, musl **1.2.5+** (Alpine 3.23 build baseline) |
+| `vpn-sub-aarch64-glibc` | ARM64 Linux, glibc **2.39+** (Ubuntu 24.04+) — intended for **proot** |
+| `vpn-sub-aarch64-musl` | ARM64 Linux, musl **1.2.5+** (Alpine 3.23 build baseline) |
+
+Musl is **dynamically linked, not embedded/static**: install the matching musl
+loader/libc and zlib (`apk add musl zlib` on Alpine). Old musl versions are not
+supported. The glibc variants likewise use the guest/host's glibc and zlib.
+Pick by the Linux **userspace** you run in, not merely the host kernel: Ubuntu
+proot uses glibc, Alpine uses musl, and native Termux/bionic is unsupported.
+`uname -m` identifies the architecture; `getconf GNU_LIBC_VERSION` identifies
+glibc, while `ldd --version` on musl reports its version (it may exit nonzero).
+
+Download your preferred compatible asset with **`curl -o vpn-sub`**, and keep the
+installed filename **`vpn-sub` without the architecture/libc suffix**. For build and packaging details, see
 [DEVELOPMENT.md](DEVELOPMENT.md#release-builds-and-packaging).
 
 `vpn-sub --probe` imports the HTTP and Discord runtime stack and checks the packed  
 `lang.jsonc`, `config.schema.json` and `frontend/dist/` can be
-opened. They do not boot the service. A missing config, a down Redis, or a
+opened. It does not boot the service. A missing config, a down Redis, or a
 Discord login failure is not a probe failure.  
 
 `vpn-sub --help` prints usage and exits. It does not  
 boot the service. `-h` is the same flag. A checkout accepts it too.
 
 `vpn-sub --update` replaces the installed binary
-from the newest published version on GitHub, including prereleases, of `pomidorka1515/vpn-sub`. They only run from a
-compiled binary, and only in a terminal. The command asks before it downloads.
-If either service is running, it asks you to stop both and continues only after
-they are gone. It does not stop or start them. A checkout (`python -m main`)
+from the newest published version on GitHub, including prereleases, of `pomidorka1515/vpn-sub`. It only runs from a
+compiled binary, and only in a terminal. The command detects the running
+architecture and libc, downloads the matching `vpn-sub-<arch>-<libc>` asset,
+verifies its release SHA-256/size, and replaces **`vpn-sub`** (keeping
+`vpn-sub.bak`). It refuses an unsupported ABI or missing matching asset rather
+than guessing. The command asks before it downloads.
+If the service is running, it asks you to stop it and continues only after
+it is gone. It does not stop or start it. This also works without systemd,
+including proot/Supervisor. A checkout (`python -m main`)
 refuses. At boot a compiled binary logs an update notice when a newer release exists. It
 does not download anything and it does not prompt. Set `VPN_SUB_DISABLE_UPDATE_NOTICE=1`
 in the service environment to disable this startup network check; explicit
 `--update` commands are unaffected.
+
+Older releases whose updater only requests an asset named `vpn-sub` cannot
+discover the new asset names. For the first upgrade from one of those releases,
+stop the service and download the matching new asset manually with
+`curl -o vpn-sub` as above, then `chmod +x vpn-sub`. Subsequent updates select the ABI
+automatically. Back up the old binary and `data/` before that manual upgrade.
 
 > # !! WARNING !! PRERELEASES ARE NOT STABLE  
 > `--update` includes GitHub RC, beta, alpha and other prereleases. The updater  
@@ -385,7 +529,7 @@ already has both and refuses. An existing file is replaced. The schema is the
 one packed into that binary. The scripts are fetched and checked
 against the tag's blob sha before they are written.
 
-Discord starts and stops with the main systemd unit.
+Discord starts and stops with the main process, whether managed by systemd or Supervisor.
 
 ## Limitations
 

@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from config.documents import ProfileStream
     from tests.support.contracts import AppOverrides, UserRecordOverrides
 
+__all__: list[str] = []
+
 DESC = {
     "en": {
         "bw_label": "usage ",
@@ -628,7 +630,6 @@ async def test_subscription_json_respects_profile_eligibility(
         token="tok",
         lang="en",
         ua=ua,
-        ip="192.0.2.1",
         force_json=force_json,
     )
     assert status == 200
@@ -651,7 +652,6 @@ async def test_subscription_json_respects_profile_eligibility(
         token="tok",
         lang="en",
         ua="v2ray",
-        ip="192.0.2.1",
         force_json="",
     )
     assert link_status == 200
@@ -674,7 +674,6 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             token="",
             lang="en",
             ua="v2ray",
-            ip="1.1.1.1",
             force_json="",
         )
         assert status == 401
@@ -686,7 +685,6 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             token="bad",
             lang="en",
             ua="v2ray",
-            ip="1.1.1.1",
             force_json="",
         )
         assert status == 401
@@ -699,7 +697,6 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             token="tok",
             lang="de",
             ua="v2ray",
-            ip="1.1.1.1",
             force_json="",
         )
         assert status == 400
@@ -729,7 +726,6 @@ async def test_subscription_rejects_bad_input_and_browser_clients(
             token="tok",
             lang="en",
             ua="Mozilla",
-            ip="1.1.1.1",
             force_json="",
         )
         assert status == 403
@@ -823,7 +819,6 @@ async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.Monke
         token="tok",
         lang="en",
         ua="v2rayN",
-        ip="1.1.1.1",
         force_json="",
     )
     assert status == 200
@@ -847,7 +842,6 @@ async def test_subscription_returns_links_or_happ_json(monkeypatch: pytest.Monke
         token="tok",
         lang="ru",
         ua="Happ/1.0",
-        ip="1.1.1.1",
         force_json="1",
     )
     assert status == 200

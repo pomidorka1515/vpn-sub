@@ -17,6 +17,62 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Literal
 
+__all__: list[str] = []
+
+
+def test_restricted_proot_host_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
+    def denied(*_args: object, **_kwargs: object) -> str:
+        raise PermissionError("Android blocked host procfs")
+
+    def boot_clock(_clock: int) -> float:
+        return 123.0
+
+    monkeypatch.setattr("pathlib.Path.read_text", denied)
+    monkeypatch.setattr("sysutil.util.time.clock_gettime", boot_clock)
+    assert SysUtil._cpu_sample() == (0, 0)
+    assert SysUtil.cpu_since_last() == 0.0
+    assert SysUtil.cpu_info().name == ""
+    assert SysUtil.loadavg().load_1m == 0.0
+    assert SysUtil.network().recv == 0
+    assert SysUtil.memory().ram.total == 0
+    assert SysUtil.connections().tcp == 0
+    assert SysUtil.uptime() == 123.0
+
+
+def test_procfs_data_errors_are_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    def malformed(*_args: object, **_kwargs: object) -> str:
+        return "malformed"
+
+    monkeypatch.setattr("pathlib.Path.read_text", malformed)
+    with pytest.raises(ValueError, match="not enough values"):
+        SysUtil.loadavg()
+
+
+def test_restricted_network_interfaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    def denied() -> dict[str, list[object]]:
+        raise PermissionError("Android blocked interfaces")
+
+    monkeypatch.setattr(psutil, "net_if_addrs", denied)
+    assert SysUtil.ipaddr().ipv4 is None
+    assert SysUtil.ipaddr().ipv6 is None
+
+
+def test_app_memory_falls_back_without_smaps_or_children(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Process:
+        def children(self, recursive: bool = False) -> list[Process]:
+            raise psutil.AccessDenied(1)
+
+        def memory_full_info(self) -> SimpleNamespace:
+            raise psutil.AccessDenied(1)
+
+        def memory_info(self) -> SimpleNamespace:
+            return SimpleNamespace(rss=4096)
+
+    monkeypatch.setattr(psutil, "Process", Process)
+    memory = SysUtil.app_memory()
+    assert memory.ram == 4096
+    assert memory.swap == 0
+
 
 @pytest.mark.parametrize(
     ("agent", "expected"),

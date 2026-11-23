@@ -18,6 +18,8 @@ from app_runtime import (
     TaskRegistry,
 )
 
+__all__: list[str] = []
+
 
 @dataclass
 class FakeResource:
@@ -91,7 +93,7 @@ async def test_repeated_stop_and_cleanup_failure_visibility() -> None:
     await runtime.start()
     assert runtime.require_ready() == "dependencies"
     for _ in range(2):
-        with pytest.raises(ExceptionGroup, match="runtime cleanup failed"):
+        with pytest.RaisesGroup(ValueError, match="runtime cleanup failed"):
             await runtime.stop()
     assert events == ["start:lock", "start:database", "close:database", "close:lock"]
     with pytest.raises(AdmissionClosedError):
@@ -222,7 +224,12 @@ async def test_resource_cancellations_are_collected_after_safe_shutdown(
     assert events[-1] == "quiesce"
     assert not stopping.done()
     release.set()
-    with pytest.raises(BaseExceptionGroup, match="runtime cleanup failed") as caught:
+    with pytest.RaisesGroup(
+        asyncio.CancelledError,
+        asyncio.CancelledError,
+        ValueError,
+        match="runtime cleanup failed",
+    ) as caught:
         await stopping
     await caller
     assert [type(error) for error in caught.value.exceptions] == [
@@ -242,7 +249,12 @@ async def test_resource_cancellations_are_collected_after_safe_shutdown(
         "close:lock",
     ]
     assert runtime.state is RuntimeState.STOPPED
-    with pytest.raises(BaseExceptionGroup, match="runtime cleanup failed"):
+    with pytest.RaisesGroup(
+        asyncio.CancelledError,
+        asyncio.CancelledError,
+        ValueError,
+        match="runtime cleanup failed",
+    ):
         await runtime.stop()
 
 

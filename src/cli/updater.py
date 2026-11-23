@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -35,6 +36,9 @@ __all__ = ["notice", "update"]
 REPO = "pomidorka1515/vpn-sub"
 RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases"
 BINARIES = ("vpn-sub",)
+RELEASE_BINARIES: tuple[str, ...] = tuple(
+    f"vpn-sub-{arch}-{libc}" for arch in ("amd64", "aarch64") for libc in ("glibc", "musl")
+)
 UNITS = ("vpn-sub.service",)
 NOTICE_TIMEOUT = 3.0
 UPDATE_TIMEOUT = 30.0
@@ -111,9 +115,9 @@ def notice() -> None:
 def update() -> int:
     """Download the latest release and replace the installed binaries.
 
-    Requires a compiled binary and a TTY. Asks before downloading. If either
-    service is running, asks the operator to stop both and continues only
-    after they are gone. Does not stop or start anything itself. Returns a
+    Requires a compiled binary and a TTY. Asks before downloading. If the
+    service is running, asks the operator to stop it and continues only
+    after it is gone. Does not stop or start anything itself. Returns a
     process exit code.
     """
     if not compiled():
@@ -154,9 +158,13 @@ def update() -> int:
     if not present:
         print(f"no vpn-sub binary in {install}")
         return 1
-    missing = [asset for asset in present if asset not in release.assets]
-    if missing:
-        print(f"release {release.tag} has no asset for {', '.join(missing)}")
+    try:
+        asset_name = _platform_asset()
+    except (OSError, ValueError) as exc:
+        print(f"could not select a release binary: {exc}")
+        return 1
+    if asset_name not in release.assets:
+        print(f"release {release.tag} has no asset for {asset_name}")
         return 1
 
     running = _running(paths)
@@ -166,8 +174,8 @@ def update() -> int:
         for item in running:
             unit = f" ({item.unit})" if item.unit else ""
             print(f"running: {item.name} pid {item.pid}{unit}")
-        print("make sure both services are stopped before continuing")
-        if not _confirm("both services are stopped?"):
+        print("make sure the service is stopped before continuing")
+        if not _confirm("the service is stopped?"):
             print("update cancelled")
             return 0
         running = _running(paths)
@@ -178,7 +186,7 @@ def update() -> int:
             print(f"still running: {listed}")
             return 1
 
-    files = _download(release, present)
+    files = _download(release, present, asset_name)
     if files is None:
         return 1
     replaced = _swap(present, files)
@@ -190,6 +198,26 @@ def update() -> int:
 
 def _interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _platform_asset() -> str:
+    """Select the Linux userspace ABI, not the Android host's libc in proot."""
+    machine = platform.machine().lower()
+    arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "aarch64", "arm64": "aarch64"}.get(machine)
+    if platform.system() != "Linux" or arch is None or sys.maxsize <= 2**32:
+        raise ValueError(f"unsupported platform: {platform.system()} {machine}")
+    try:
+        glibc = os.confstr("CS_GNU_LIBC_VERSION")
+    except (AttributeError, OSError, ValueError):
+        glibc = None
+    if glibc and glibc.startswith("glibc "):
+        return f"vpn-sub-{arch}-glibc"
+    # platform.libc_ver() does not reliably identify musl. Inspect this
+    # process's mapped loader instead of guessing from the distro or ldd.
+    maps = Path("/proc/self/maps").read_text(encoding="utf-8")
+    if re.search(r"/(?:ld-musl-[^/\s]+|libc\.musl-[^/\s]+)\.so(?:\.\d+)?(?:\s|$)", maps):
+        return f"vpn-sub-{arch}-musl"
+    raise ValueError("unsupported libc (use a glibc or musl Linux environment, not native Termux)")
 
 
 def _confirm(question: str) -> bool:
@@ -266,8 +294,11 @@ def _release(body: dict[str, object]) -> Release:
     for raw in listed:
         if not isinstance(raw, dict):
             continue
-        asset = _asset(cast(dict[object, object], raw))
-        if asset is not None and asset.name in BINARIES:
+        fields = _object(cast(dict[object, object], raw))
+        if fields.get("name") not in RELEASE_BINARIES:
+            continue
+        asset = _asset(fields)
+        if asset is not None:
             assets[asset.name] = asset
     notes = body.get("body")
     page = body.get("html_url")
@@ -315,7 +346,9 @@ def _running(paths: dict[str, Path]) -> list[Running] | None:
 
 def _units(wanted: dict[Path, str]) -> list[tuple[str, int, str]] | None:
     systemctl = shutil.which("systemctl")
-    if systemctl is None:
+    # Ubuntu proot can have systemctl installed without a systemd manager.
+    # Still scan /proc below; no systemd must not disable process checks.
+    if systemctl is None or not Path("/run/systemd/system").is_dir():
         return []
     listed = subprocess.run(
         [systemctl, "list-units", "--type=service", "--all", "--no-legend", "--plain"],
@@ -466,15 +499,15 @@ def _self_pids(wanted: dict[Path, str]) -> set[int]:
     return pids
 
 
-def _download(release: Release, present: dict[str, Path]) -> dict[str, Path] | None:
+def _download(release: Release, present: dict[str, Path], asset_name: str) -> dict[str, Path] | None:
     files: dict[str, Path] = {}
     current: Path | None = None
     try:
         for name, path in present.items():
             target = path.with_name(f".{name}.download")
             current = target.with_name(f"{target.name}.part")
-            print(f"downloading {name}")
-            _fetch(release.assets[name], target)
+            print(f"downloading {asset_name} as {name}")
+            _fetch(release.assets[asset_name], target)
             files[name] = target
             current = None
     except (OSError, RequestError, ValueError) as exc:

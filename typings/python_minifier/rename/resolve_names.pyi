@@ -1,0 +1,6 @@
+import ast
+
+__all__ = ["get_binding", "resolve_names"]
+
+def get_binding(name: str, namespace: ast.AST) -> object: ...
+def resolve_names(node: ast.AST) -> None: ...

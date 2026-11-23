@@ -5,6 +5,11 @@ prefix="$(realpath -m "$1")"
 python="$(realpath "$2")"
 version=3.5.9
 checksum=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
+case "$(uname -m)" in
+  x86_64|amd64) target=linux-x86_64 ;;
+  aarch64|arm64) target=linux-aarch64 ;;
+  *) echo "Unsupported OpenSSL architecture: $(uname -m)" >&2; exit 1 ;;
+esac
 mkdir -p "$prefix/source"
 cd "$prefix/source"
 curl -fL --retry 3 "https://github.com/openssl/openssl/releases/download/openssl-$version/openssl-$version.tar.gz" -o source.tar.gz
@@ -14,7 +19,9 @@ tar -xf source.tar.gz --strip-components=1
 # Compression backends remain disabled.
 # Retain SHA/MD5/BLAKE2, HMAC, PBKDF2 and scrypt for hashlib compatibility.
 # Assembly is both faster and often smaller than the generic implementations.
-./Configure linux-x86_64 shared --prefix="$prefix" --libdir=lib \
+# Both targets use the native compiler (glibc or musl); do not cross-link
+# libraries from a different userspace. Never use -march=native on CI runners.
+./Configure "$target" shared --prefix="$prefix" --libdir=lib \
   --openssldir=/etc/ssl -Os -g0 -ffunction-sections -fdata-sections \
   -Wl,--gc-sections -Wl,--as-needed \
   no-ml-kem no-ml-dsa no-slh-dsa no-fips no-legacy no-module \

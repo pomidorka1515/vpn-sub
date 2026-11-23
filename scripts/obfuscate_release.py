@@ -18,6 +18,8 @@ from python_minifier.rename.binding import BuiltinBinding
 from python_minifier.rename.mapper import add_namespace
 from python_minifier.rename.resolve_names import get_binding, resolve_names
 
+__all__: list[str] = []
+
 type Function = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
 
 
@@ -717,7 +719,7 @@ class ReleaseCleanup(ast.NodeTransformer):
         protocol_classes: set[tuple[str, str]] | None = None,
     ) -> None:
         self.typing_modules = {"typing", "typing_extensions"}
-        self.typing_names = {}
+        self.typing_names: dict[str, str] = {}
         self.dataclass_modules = {"dataclasses"}
         self.dataclass_names: set[str] = set()
         self.scope: ast.AST = tree
@@ -872,7 +874,7 @@ class ReleaseCleanup(ast.NodeTransformer):
         if isinstance(self.scope, ast.ClassDef) and self.runtime_fields(self.scope):
             # Libraries such as dacite use the complete field type, not just
             # its presence. Do not apply typing or generic rewrites to it.
-            node.target = cast(ast.expr, self.visit(node.target))
+            node.target = cast(ast.Name | ast.Attribute | ast.Subscript, self.visit(node.target))
             if node.value is not None:
                 node.value = cast(ast.expr, self.visit(node.value))
             return node
@@ -1002,10 +1004,10 @@ class ReleaseCleanup(ast.NodeTransformer):
         if type_parameters:
 
             class ReplaceTypeParameters(ast.NodeTransformer):
-                def visit_Name(self, reference: ast.Name) -> ast.AST:
-                    if isinstance(reference.ctx, ast.Load) and reference.id in type_parameters:
-                        return ast.copy_location(ast.Name(id="object", ctx=ast.Load()), reference)
-                    return reference
+                def visit_Name(self, node: ast.Name) -> ast.AST:
+                    if isinstance(node.ctx, ast.Load) and node.id in type_parameters:
+                        return ast.copy_location(ast.Name(id="object", ctx=ast.Load()), node)
+                    return node
 
             node = cast(ast.ClassDef, ReplaceTypeParameters().visit(node))
         return self.generic_visit(node)
@@ -1331,21 +1333,21 @@ def flatten(trees: dict[str, ast.Module]) -> ast.Module:
                 for alias in node.names:
                     if alias.name == "*":
                         raise ValueError("Star imports cannot be flattened; use explicit imports")
-                    target, name = analysis.imports[alias]
-                    if target == "__future__":
+                    import_module, import_name = analysis.imports[alias]
+                    if import_module == "__future__":
                         continue
-                    if target in trees:
-                        dependencies[module].append(target)
+                    if import_module in trees:
+                        dependencies[module].append(import_module)
                         if isinstance(node, ast.Import) and alias.name in trees:
                             dependencies[module].append(alias.name)
-                        child = f"{target}.{name}" if name else ""
+                        child = f"{import_module}.{import_name}" if import_name else ""
                         if child in trees:
                             dependencies[module].append(child)
                     else:
                         preferred = alias.asname or (
                             alias.name.split(".")[0] if isinstance(node, ast.Import) else alias.name
                         )
-                        library(target, name, preferred)
+                        library(import_module, import_name, preferred)
                         if isinstance(node, ast.Import) and not alias.asname and "." in alias.name:
                             # ``import a.b`` binds a but must also load a.b.
                             library(alias.name, None)
