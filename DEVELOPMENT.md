@@ -255,10 +255,13 @@ bounds a stuck stop.
 
 ### Flattened Python releases
 
-`python scripts/obfuscate_release.py src build/release-src` writes only
+`PYTHONPATH=src python -m obfuscator src build/release-src` writes only
 `build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
 workflow compiles that file with Nuitka. Use `-f` / `--force` to overwrite
 `app.min.py` in an existing output directory; unrelated files are left intact.
+The build-only `src/obfuscator/` package and `src/tests/` are always excluded
+from the flattened output. The package exposes `main()` and `obfuscate()`;
+its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modules.
 Internal imports and re-exports become
 direct global references; stdlib and third-party imports share an import table
 at the top. Automatic shortening of globals, import aliases, locals, verified

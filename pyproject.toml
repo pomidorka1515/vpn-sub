@@ -145,6 +145,8 @@ quote-annotations = false # Prefer postponed annotations over string annotations
 "src/custom_types.py" = ["N815", "ERA001"]
 # Standalone scripts may print user-facing output and intentionally have unused arguments.
 "scripts/*" = ["T201", "ARG", "INP001", "TID251"]
+# Build-time AST transforms intentionally ignore visitor arguments and print diagnostics.
+"src/obfuscator/*" = ["T201", "ARG"]
 # CLI script integrity checks may compare digests directly.
 "src/cli/scripts.py" = ["TID251"]
 # Central response and constant-time comparison helpers use otherwise banned APIs.

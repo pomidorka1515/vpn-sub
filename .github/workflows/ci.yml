@@ -56,6 +56,12 @@ jobs:
         env:
           PYRIGHT_PYTHON_IGNORE_WARNINGS: "1"
 
+      - name: flatten release sources
+        if: matrix.command == 'pytest'
+        run: |
+          PYTHONPATH=src python -m obfuscator src build/release-src
+          python -m py_compile build/release-src/app.min.py
+
       - name: checkout lifecycle smoke
         if: matrix.command == 'pytest'
         run: |

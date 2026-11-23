@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import subprocess
 import sys
 import types
@@ -10,20 +9,50 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from tests.support.paths import REPO_ROOT
-
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 __all__: list[str] = []
 
 pytest.importorskip("python_minifier")
-SCRIPT = REPO_ROOT / "scripts" / "obfuscate_release.py"
-SPEC = importlib.util.spec_from_file_location("obfuscate_release", SCRIPT)
-assert SPEC is not None
-assert SPEC.loader is not None
-obfuscator = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(obfuscator)
+
+import python_minifier
+
+import obfuscator
+from obfuscator.linker import flatten
+from obfuscator.pipeline import minify_tree, obfuscate_modules, prepare_tree
+from obfuscator.renamers.allowlist import AllowlistRenamer, read_allowlist
+from obfuscator.renamers.base import ArgumentRenamer
+from obfuscator.renamers.methods import PrivateMethodRenamer
+
+CLI: list[str] = [sys.executable, "-m", "obfuscator"]
+
+
+def test_pipeline_links_modules_and_reports_renames() -> None:
+    result = obfuscate_modules(
+        {
+            Path("worker.py"): "def helper(value): return value + 1\n",
+            Path("main.py"): "from worker import helper\n__result__ = helper(value=4)\n",
+        },
+        ["f:helper"],
+    )
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 5
+    assert set(result.renames) == {"f:helper"}
+    assert result.renamed_parameters == 1
+    assert result.skipped_parameters.total() == 0
+    assert result.renamed_methods == 0
+
+
+def test_pipeline_rejects_empty_sources() -> None:
+    with pytest.raises(ValueError, match="No application Python modules found"):
+        obfuscate_modules({}, [])
+
+
+def test_pipeline_rejects_ambiguous_module_names() -> None:
+    with pytest.raises(ValueError, match="ambiguous module name: worker"):
+        obfuscate_modules({Path("worker.py"): "", Path("worker/__init__.py"): ""}, [])
 
 
 def test_cleanup_precedes_minification(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,7 +62,7 @@ def test_cleanup_precedes_minification(monkeypatch: pytest.MonkeyPatch) -> None:
         sources.append(source)
         return source
 
-    monkeypatch.setattr(obfuscator.python_minifier, "minify", minify)
+    monkeypatch.setattr(python_minifier, "minify", minify)
     result = obfuscator.obfuscate(
         """
 "module documentation"
@@ -501,16 +530,23 @@ async def asynchronous(value: int, /, *, flag: bool = False) -> int:
     assert namespace["asynchronous"].__annotations__ == {}
 
 
-def test_cli_excludes_test_directories(tmp_path: Path) -> None:
+def test_cli_excludes_build_only_directories(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     (source / "module.py").write_text('"documentation"\nvalue: int = 5\n')
-    for directory in (source / "tests", source / "package" / "tests", source / "__pycache__"):
-        directory.mkdir(parents=True)
+    for directory in (
+        source / "tests",
+        source / "package" / "tests",
+        source / "obfuscator",
+        source / "obfuscator" / "renamers",
+        source / "package" / "obfuscator",
+        source / "__pycache__",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
         (directory / "broken.py").write_text("not valid Python !!!")
     output = tmp_path / "output"
     subprocess.run(
-        [sys.executable, str(SCRIPT), str(source), str(output), "--allowlist", "[]"],
+        [*CLI, str(source), str(output), "--allowlist", "[]"],
         check=True,
     )
     assert [path.relative_to(output) for path in output.rglob("*")] == [Path("app.min.py")]
@@ -529,8 +565,7 @@ def test_cli_requires_force_to_overwrite_output(tmp_path: Path, force: str | Non
     unrelated.write_text("keep me", encoding="utf-8")
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
-            sys.executable,
-            str(SCRIPT),
+            *CLI,
             str(source),
             str(output),
             "--allowlist",
@@ -566,7 +601,7 @@ def test_cli_force_accepts_new_and_empty_output_directories(
     if existing_directory:
         output.mkdir()
     subprocess.run(
-        [sys.executable, str(SCRIPT), str(source), str(output), "--allowlist", "[]", "-f"],
+        [*CLI, str(source), str(output), "--allowlist", "[]", "-f"],
         check=True,
     )
     assert (output / "app.min.py").is_file()
@@ -580,7 +615,7 @@ def test_cli_force_still_rejects_overlapping_directories(
     source.mkdir()
     (source / "main.py").write_text("__result__ = 42\n", encoding="utf-8")
     result: subprocess.CompletedProcess[str] = subprocess.run(
-        [sys.executable, str(SCRIPT), str(source), str(tmp_path / relative_output), "-f"],
+        [*CLI, str(source), str(tmp_path / relative_output), "-f"],
         check=False,
         capture_output=True,
         text=True,
@@ -592,7 +627,7 @@ def test_cli_force_still_rejects_overlapping_directories(
 
 def renamed_modules(sources: Mapping[str, str]) -> dict[str, str]:
     trees = {name: ast.parse(source) for name, source in sources.items()}
-    obfuscator.ArgumentRenamer(trees).run()
+    ArgumentRenamer(trees).run()
     return {name: ast.unparse(tree) for name, tree in trees.items()}
 
 
@@ -801,8 +836,7 @@ def test_cli_transforms_keyword_calls_across_relative_imports(tmp_path: Path) ->
     output = tmp_path / "output"
     subprocess.run(
         [
-            sys.executable,
-            str(SCRIPT),
+            *CLI,
             str(source),
             str(output),
             "--allowlist",
@@ -1034,8 +1068,7 @@ def test_cli_resolves_imported_instances_and_rewrites_keywords(tmp_path: Path) -
     output = tmp_path / "output"
     subprocess.run(
         [
-            sys.executable,
-            str(SCRIPT),
+            *CLI,
             str(source),
             str(output),
             "--allowlist",
@@ -1059,17 +1092,17 @@ def test_cli_resolves_imported_instances_and_rewrites_keywords(tmp_path: Path) -
 def flattened_modules(sources: Mapping[str, str]) -> str:
     """Test linking in isolation from the pre-existing obfuscation passes."""
     trees = {
-        name: obfuscator.prepare_tree(source, name.replace(".", "/") + ".py", module=name)
+        name: prepare_tree(source, name.replace(".", "/") + ".py", module=name)
         for name, source in sources.items()
     }
-    return ast.unparse(obfuscator.flatten(trees))
+    return ast.unparse(flatten(trees))
 
 
 def allowlisted(source: str, entries: list[str]) -> tuple[str, dict[str, str]]:
-    tree = obfuscator.prepare_tree(source, "fixture.py")
-    tree = obfuscator.flatten({"main": tree}, rename_classes=False)
-    renames = obfuscator.AllowlistRenamer(tree).apply(entries)
-    return obfuscator.minify_tree(tree, "fixture.py", rename_locals=False), renames
+    tree = prepare_tree(source, "fixture.py")
+    tree = flatten({"main": tree}, rename_classes=False)
+    renames = AllowlistRenamer(tree).apply(entries)
+    return minify_tree(tree, "fixture.py", rename_locals=False), renames
 
 
 def test_allowlist_nested_bindings_and_keyword_aliases() -> None:
@@ -1248,12 +1281,10 @@ def test_allowlist_missing_target_does_not_suggest_wrong_types() -> None:
 def test_allowlist_input(tmp_path: Path) -> None:
     path = tmp_path / "allowlist.json"
     path.touch()
-    assert obfuscator.read_allowlist(str(path)) == []
+    assert read_allowlist(str(path)) == []
     path.write_text('["f:run"]', encoding="utf-8")
-    assert obfuscator.read_allowlist(str(path)) == ["f:run"]
-    assert obfuscator.read_allowlist(
-        '["v:VALUE", "a:run:argument", "c:Helper", "c:Outer:Inner"]'
-    ) == [
+    assert read_allowlist(str(path)) == ["f:run"]
+    assert read_allowlist('["v:VALUE", "a:run:argument", "c:Helper", "c:Outer:Inner"]') == [
         "v:VALUE",
         "a:run:argument",
         "c:Helper",
@@ -1261,7 +1292,7 @@ def test_allowlist_input(tmp_path: Path) -> None:
     ]
     for invalid in ("{}", "[1]", '["z:run"]', '["a:run"]', '["f:run", "f:run"]'):
         with pytest.raises(ValueError, match=r"Allowlist|allowlist"):
-            obfuscator.read_allowlist(invalid)
+            read_allowlist(invalid)
 
 
 def test_allowlist_function_star_expands_parameters_and_rewrites_keyword_aliases() -> None:
@@ -1271,7 +1302,7 @@ def helper(value, /, *items, scale=2, **options):
 alias = helper
 __result__ = alias(value=3, scale=4, extra=7)
 """
-    entries = obfuscator.read_allowlist('["f:helper*", "a:helper:value"]')
+    entries = read_allowlist('["f:helper*", "a:helper:value"]')
     result, renames = allowlisted(source, entries)
     assert set(renames) == {"f:helper*", "a:helper:value", "a:helper:scale"}
     function = next(node for node in ast.parse(result).body if isinstance(node, ast.FunctionDef))
@@ -1337,7 +1368,7 @@ __result__ = outer(value=4)
 )
 def test_allowlist_rejects_invalid_star_syntax(entry: str) -> None:
     with pytest.raises(ValueError, match="Invalid allowlist"):
-        obfuscator.read_allowlist(f'["{entry}"]')
+        read_allowlist(f'["{entry}"]')
 
 
 def test_allowlist_star_preserves_keyword_safety_checks() -> None:
@@ -1393,12 +1424,12 @@ def test_allowlist_rejects_reassigned_parameter_apis(source: str, entry: str, me
 
 def test_allowlist_ambiguity_survives_linker_collision_renames() -> None:
     trees = {
-        name: obfuscator.prepare_tree("def run(value): return value", f"{name}.py")
+        name: prepare_tree("def run(value): return value", f"{name}.py")
         for name in ("first", "second")
     }
-    tree = obfuscator.flatten(trees, rename_classes=False)
+    tree = flatten(trees, rename_classes=False)
     with pytest.raises(ValueError, match="ambiguous"):
-        obfuscator.AllowlistRenamer(tree).apply(["f:run"])
+        AllowlistRenamer(tree).apply(["f:run"])
 
 
 @pytest.mark.parametrize("reverse", [False, True])
@@ -1428,21 +1459,21 @@ formatter = logger._make_formatter()
 record = F.LogRecord('fixture', F.INFO, '', 0, 'hello', (), None)
 __result__ = formatter.format(record), record.levelname, formatter.__class__.__name__
 """
-    tree = obfuscator.flatten({"main": obfuscator.prepare_tree(source, "main.py")})
+    tree = flatten({"main": prepare_tree(source, "main.py")})
     entries = ["f:Logger:_make_formatter", "c:Logger:_make_formatter:Fmt"]
     if reverse:
         entries.reverse()
     if mode == "automatic":
-        methods = obfuscator.PrivateMethodRenamer({"__main__": tree})
+        methods = PrivateMethodRenamer({"__main__": tree})
         methods.run()
         assert methods.renamed == 1
-        obfuscator.ArgumentRenamer({"__main__": tree}).run()
+        ArgumentRenamer({"__main__": tree}).run()
     if mode == "separate":
         renames: dict[str, str] = {}
         for entry in entries:
-            renames.update(obfuscator.AllowlistRenamer(tree).apply([entry]))
+            renames.update(AllowlistRenamer(tree).apply([entry]))
     else:
-        renames = obfuscator.AllowlistRenamer(tree).apply(entries)
+        renames = AllowlistRenamer(tree).apply(entries)
     expected = {"c:Logger:_make_formatter:Fmt"} if mode == "automatic" else set(entries)
     assert set(renames) == expected
     warnings = capsys.readouterr().err
@@ -1450,7 +1481,7 @@ __result__ = formatter.format(record), record.levelname, formatter.__class__.__n
         mode == "automatic"
     )
     assert "skipping allowlist 'c:" not in warnings
-    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    result = minify_tree(tree, "fixture.py", rename_globals=True)
     namespace: dict[str, Any] = {}
     exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == (
@@ -1464,20 +1495,18 @@ def test_allowlist_selects_original_scopes_already_renamed_by_linker(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     trees = {
-        "worker": obfuscator.prepare_tree(
+        "worker": prepare_tree(
             "def len(value):\n local = value + 1\n return local\n",
             "worker.py",
         ),
-        "main": obfuscator.prepare_tree(
+        "main": prepare_tree(
             "import worker\ndef helper(value): return value\n"
             "__result__ = worker.len(value=4), len([1, 2]), helper(value=3)\n",
             "main.py",
         ),
     }
-    tree = obfuscator.flatten(trees, rename_classes=False)
-    renames = obfuscator.AllowlistRenamer(tree).apply(
-        ["f:len", "a:len:value", "v:len:local", "f:helper"]
-    )
+    tree = flatten(trees, rename_classes=False)
+    renames = AllowlistRenamer(tree).apply(["f:len", "a:len:value", "v:len:local", "f:helper"])
     assert set(renames) == {"a:len:value", "v:len:local", "f:helper"}
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -1495,27 +1524,27 @@ def test_allowlist_skips_previously_renamed_variables(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     trees = {
-        "worker": obfuscator.prepare_tree("len = 7", "worker.py"),
-        "main": obfuscator.prepare_tree("__result__ = len([1, 2])", "main.py"),
+        "worker": prepare_tree("len = 7", "worker.py"),
+        "main": prepare_tree("__result__ = len([1, 2])", "main.py"),
     }
-    tree = obfuscator.flatten(trees, rename_classes=False)
-    assert obfuscator.AllowlistRenamer(tree).apply(["v:len"]) == {}
+    tree = flatten(trees, rename_classes=False)
+    assert AllowlistRenamer(tree).apply(["v:len"]) == {}
     assert "Warning: skipping allowlist 'v:len'" in capsys.readouterr().err
     with pytest.raises(ValueError, match="incorrect type"):
-        obfuscator.AllowlistRenamer(tree).apply(["f:len"])
+        AllowlistRenamer(tree).apply(["f:len"])
 
 
 def test_allowlist_repeated_application_skips_all_already_renamed_targets(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    tree = obfuscator.prepare_tree(
+    tree = prepare_tree(
         "CONSTANT = 2\ndef helper(value): return value + CONSTANT\n__result__ = helper(value=3)",
         "fixture.py",
     )
     entries = ["f:helper", "a:helper:value", "v:CONSTANT"]
-    assert len(obfuscator.AllowlistRenamer(tree).apply(entries)) == 3
+    assert len(AllowlistRenamer(tree).apply(entries)) == 3
     assert capsys.readouterr().err == ""
-    assert obfuscator.AllowlistRenamer(tree).apply(entries) == {}
+    assert AllowlistRenamer(tree).apply(entries) == {}
     assert capsys.readouterr().err.count("Warning: skipping allowlist") == 3
     namespace: dict[str, Any] = {}
     exec(compile(tree, "fixture.py", "exec"), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
@@ -1533,9 +1562,9 @@ def test_allowlist_does_not_guess_mangling_from_short_names() -> None:
 def test_allowlist_class_repeated_application_skips_previous_rename(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    tree = obfuscator.prepare_tree("class Helper: pass", "fixture.py")
-    assert set(obfuscator.AllowlistRenamer(tree).apply(["c:Helper"])) == {"c:Helper"}
-    assert obfuscator.AllowlistRenamer(tree).apply(["c:Helper"]) == {}
+    tree = prepare_tree("class Helper: pass", "fixture.py")
+    assert set(AllowlistRenamer(tree).apply(["c:Helper"])) == {"c:Helper"}
+    assert AllowlistRenamer(tree).apply(["c:Helper"]) == {}
     assert "Warning: skipping allowlist 'c:Helper'" in capsys.readouterr().err
 
 
@@ -1748,7 +1777,7 @@ def test_cli_allowlist_supplements_automatic_renaming(tmp_path: Path, allowlist:
     )
     output = tmp_path / "output"
     subprocess.run(
-        [sys.executable, str(SCRIPT), str(source), str(output), "--allowlist", allowlist],
+        [*CLI, str(source), str(output), "--allowlist", allowlist],
         check=True,
     )
     result = (output / "app.min.py").read_text()
@@ -1777,8 +1806,8 @@ def run():
     return sizes, valid, sum(values), square_root(long_global + 2)
 print(run())
 """
-    tree = obfuscator.prepare_tree(source, "fixture.py")
-    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=rename_globals)
+    tree = prepare_tree(source, "fixture.py")
+    result = minify_tree(tree, "fixture.py", rename_globals=rename_globals)
     minified = ast.parse(result)
     builtin_calls = {"int", "range", "len", "isinstance", "sum", "print"}
     assert builtin_calls <= {
@@ -1820,8 +1849,8 @@ long_global = 7
 def callback(value): return value
 print(from_dict(Record, {'value': [1]}).value, Record.__name__, callback.__name__, long_global)
 """
-    tree = obfuscator.prepare_tree(source, "fixture.py")
-    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    tree = prepare_tree(source, "fixture.py")
+    result = minify_tree(tree, "fixture.py", rename_globals=True)
     assert "long_global" not in result
     module = types.ModuleType("minified_globals_annotations_fixture")
     monkeypatch.setitem(sys.modules, module.__name__, module)
@@ -1833,8 +1862,8 @@ print(from_dict(Record, {'value': [1]}).value, Record.__name__, callback.__name_
 
 def test_global_minification_keeps_dynamic_namespaces(capsys: pytest.CaptureFixture[str]) -> None:
     source = "long_global = 7\nprint(globals()['long_global'])\n"
-    tree = obfuscator.prepare_tree(source, "fixture.py")
-    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    tree = prepare_tree(source, "fixture.py")
+    result = minify_tree(tree, "fixture.py", rename_globals=True)
     assert "long_global =" in ast.unparse(ast.parse(result))
     exec(result, {})  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert capsys.readouterr().out == "7\n"
@@ -1848,8 +1877,8 @@ def test_global_minification_keeps_frame_visible_names(
     expression: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     source = f"import sys, inspect\nlong_global = 7\nprint({expression})\n"
-    tree = obfuscator.prepare_tree(source, "fixture.py")
-    result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+    tree = prepare_tree(source, "fixture.py")
+    result = minify_tree(tree, "fixture.py", rename_globals=True)
     exec(result, {})  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert capsys.readouterr().out == "7\n"
 
@@ -2004,9 +2033,9 @@ def test_flatten_preserves_colliding_public_class_names(minified: bool) -> None:
     assert [node.name for node in classes] == ["Helper", "Helper"]
     if minified:
         tree = ast.parse(result)
-        obfuscator.PrivateMethodRenamer({"__main__": tree}).run()
-        obfuscator.ArgumentRenamer({"__main__": tree}).run()
-        result = obfuscator.minify_tree(tree, "fixture.py", rename_globals=True)
+        PrivateMethodRenamer({"__main__": tree}).run()
+        ArgumentRenamer({"__main__": tree}).run()
+        result = minify_tree(tree, "fixture.py", rename_globals=True)
     namespace: dict[str, Any] = {}
     exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == (
@@ -2047,7 +2076,7 @@ __result__ = _Private.__name__, Public.__name__, create().__name__
 """
     if linked:
         source = flattened_modules({"worker": source, "main": "from worker import __result__\n"})
-        result = obfuscator.minify_tree(ast.parse(source), "fixture.py", rename_globals=True)
+        result = minify_tree(ast.parse(source), "fixture.py", rename_globals=True)
     else:
         result = obfuscator.obfuscate(source, "fixture.py")
     classes = [node.name for node in ast.walk(ast.parse(result)) if isinstance(node, ast.ClassDef)]
@@ -2076,7 +2105,7 @@ def test_private_class_forward_annotations_follow_renamed_bindings(
             "__result__ = record.item.value, isinstance(record.item, _Item), _Item.__name__\n",
         }
     )
-    result = obfuscator.minify_tree(ast.parse(result), "fixture.py", rename_globals=True)
+    result = minify_tree(ast.parse(result), "fixture.py", rename_globals=True)
     module = types.ModuleType("private_class_annotations_fixture")
     monkeypatch.setitem(sys.modules, module.__name__, module)
     exec(result, module.__dict__)  # ruff: ignore[exec-builtin] - Fixed fixture.
@@ -2576,8 +2605,7 @@ def test_cli_always_warns_about_class_renaming(
     output = tmp_path / "output"
     result = subprocess.run(
         [
-            sys.executable,
-            str(SCRIPT),
+            *CLI,
             str(source),
             str(output),
             "--allowlist",
@@ -2607,8 +2635,7 @@ def test_cli_reports_parameter_rename_counts(tmp_path: Path) -> None:
     )
     result = subprocess.run(
         [
-            sys.executable,
-            str(SCRIPT),
+            *CLI,
             str(source),
             str(tmp_path / "output"),
             "--report",

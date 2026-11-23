@@ -365,7 +365,7 @@ jobs:
               raise SystemExit(f"src/version.py has no {old} placeholder")
           path.write_text(source.replace(old, new, 1))
           PY
-          python scripts/obfuscate_release.py src build/release-src
+          PYTHONPATH=src python -m obfuscator src build/release-src
           export CCFLAGS="-Os -fno-plt -fdata-sections -ffunction-sections"
           export LDFLAGS="-Wl,--gc-sections -Wl,-O2 -Wl,--as-needed -Wl,--strip-all"
           # Audit reports exposed bundled aiosqlite tests and unused Pillow formats.
