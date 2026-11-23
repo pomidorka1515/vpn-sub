@@ -261,13 +261,15 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
             # collision-free alias used by linked references.
             alias = node.name
             node.name = original
+            target: ast.Name = ast.Name(id=alias, ctx=ast.Store())
+            reference: ast.Name = ast.Name(id=original, ctx=ast.Load())
+            cleanup: ast.Name = ast.Name(id=original, ctx=ast.Del())
+            node.__dict__["class_alias_target"] = target
+            node.__dict__["class_alias_references"] = [reference, cleanup]
             return [
                 node,
-                ast.Assign(
-                    targets=[ast.Name(id=alias, ctx=ast.Store())],
-                    value=ast.Name(id=original, ctx=ast.Load()),
-                ),
-                ast.Delete(targets=[ast.Name(id=original, ctx=ast.Del())]),
+                ast.Assign(targets=[target], value=reference),
+                ast.Delete(targets=[cleanup]),
             ]
 
         def visit_Name(self, node: ast.Name) -> ast.AST:

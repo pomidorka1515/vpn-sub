@@ -70,6 +70,11 @@ class AllowlistRenamer(ArgumentRenamer):
             elif isinstance(node, ast.arg):
                 node.__dict__.setdefault("original_name", node.arg)
         self.classes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+        self.class_alias_targets: set[ast.Name] = {
+            target
+            for node in self.classes
+            if isinstance(target := node.__dict__.get("class_alias_target"), ast.Name)
+        }
         self.mros: dict[ast.ClassDef, list[ast.ClassDef]] = {}
         self.resolving: set[ast.ClassDef] = set()
 
@@ -271,7 +276,9 @@ class AllowlistRenamer(ArgumentRenamer):
                 stores = [
                     ref
                     for ref in definitions
-                    if isinstance(ref, ast.Name) and isinstance(ref.ctx, ast.Store)
+                    if isinstance(ref, ast.Name)
+                    and isinstance(ref.ctx, ast.Store)
+                    and ref not in self.class_alias_targets
                 ]
                 if declarations:
                     for declaration in declarations:
@@ -325,7 +332,24 @@ class AllowlistRenamer(ArgumentRenamer):
             actual, binding, definition = matches[0]
             if kind != actual:
                 raise ValueError(f"Allowlist {entry!r}: incorrect type; target requires {actual!r}")
-            if kind in {"c", "f"} and len(self.definitions(binding)) != 1:
+            definitions = self.definitions(binding)
+            alias_references: list[ast.Name] = cast(
+                list[ast.Name], definition.__dict__.get("class_alias_references", [])
+            )
+            if kind == "c":
+                definitions = [ref for ref in definitions if ref not in alias_references]
+                alias_target: ast.Name | None = cast(
+                    ast.Name | None, definition.__dict__.get("class_alias_target")
+                )
+                if alias_target is not None:
+                    # Rebinding the real linked alias is still ambiguous, even
+                    # though the temporary class slot itself has one definition.
+                    definitions.extend(
+                        ref
+                        for ref in self.definitions(self.bindings[alias_target])
+                        if ref is not alias_target
+                    )
+            if kind in {"c", "f"} and len(definitions) != 1:
                 description = "class" if kind == "c" else "function"
                 raise ValueError(f"Allowlist {entry!r}: ambiguous {description} binding")
             if expand_parameters:
@@ -508,6 +532,17 @@ class AllowlistRenamer(ArgumentRenamer):
                 binding.rename(renamed[binding])
                 binding.references.append(definition)
                 definition.arg = renamed[binding]
+            elif isinstance(definition, ast.ClassDef) and (
+                alias_references := cast(
+                    list[ast.Name], definition.__dict__.get("class_alias_references", [])
+                )
+            ):
+                # This class uses a temporary name only until its linked alias
+                # is assigned. Other uses of that slot (e.g. a builtin after
+                # the cleanup del) must not follow the class rename.
+                definition.name = renamed[binding]
+                for alias_reference in alias_references:
+                    alias_reference.id = renamed[binding]
             else:
                 binding.rename(renamed[binding])
         for node, name in attributes.items():

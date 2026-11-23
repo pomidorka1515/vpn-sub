@@ -1174,6 +1174,45 @@ __result__ = Helper.__name__, alias is Helper, Child().method(value=7), Helper.N
     assert namespace["__result__"] == (renames["c:Helper"], True, 7, "Nested")
 
 
+@pytest.mark.parametrize("collision", ["annotation", "local", "builtin"])
+def test_allowlist_class_renames_linker_class_slots(collision: str) -> None:
+    name: str = "len" if collision == "builtin" else "Helper"
+    sources: dict[Path, str] = {
+        Path("worker.py"): f"class {name}:\n def value(self): return 7\n",
+        Path("facade.py"): f"from worker import {name}\n",
+        Path("main.py"): f"from facade import {name} as Selected\n"
+        "alias = Selected\n"
+        "__result__ = Selected.__name__, alias is Selected, Selected().value()\n",
+    }
+    if collision == "annotation":
+        # TYPE_CHECKING-only imports leave unresolved runtime field annotations.
+        sources = {Path("data.py"): "class Record:\n item: Helper\n", **sources}
+    elif collision == "local":
+        sources[Path("main.py")] += (
+            "import worker\n"
+            "def invoke(Helper): return worker.Helper().value(), Helper\n"
+            "assert invoke('local') == (7, 'local')\n"
+        )
+    else:
+        sources[Path("main.py")] += "assert len([1, 2]) == 2\n"
+    entry: str = f"c:{name}"
+    result = obfuscate_modules(sources, [entry])
+    assert set(result.renames) == {entry}
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (result.renames[entry], True, 7)
+
+
+@pytest.mark.parametrize("rebind", ["Helper = object", "del Helper"])
+def test_allowlist_class_slots_still_reject_real_rebindings(rebind: str) -> None:
+    sources: dict[Path, str] = {
+        Path("data.py"): "class Record:\n item: Helper\n",
+        Path("worker.py"): f"class Helper: pass\n{rebind}\n",
+    }
+    with pytest.raises(ValueError, match="ambiguous class binding"):
+        obfuscate_modules(sources, ["c:Helper"])
+
+
 def test_allowlist_nested_classes_rewrite_inherited_attributes_and_local_references() -> None:
     source = """
 class Outer:
@@ -1206,6 +1245,7 @@ __result__ = Outer.Inner.__name__, Child.Inner.__name__, Child().construct().__c
         ("class Helper: pass", ["v:Helper"], "incorrect type"),
         ("class Helper: pass\nclass Helper: pass", ["c:Helper"], "ambiguous"),
         ("class Helper: pass\nHelper = object", ["c:Helper"], "ambiguous class binding"),
+        ("class Helper: pass\ndel Helper", ["c:Helper"], "ambiguous class binding"),
         ("class Helper: pass", ["c:Missing"], "target not found"),
         ("value = 3", ["f:missing"], "target not found"),
         ("def run(*items): pass", ["a:run:items"], r"\*args/\*\*kwargs"),
@@ -1422,14 +1462,15 @@ def test_allowlist_rejects_reassigned_parameter_apis(source: str, entry: str, me
         allowlisted(source, [entry])
 
 
-def test_allowlist_ambiguity_survives_linker_collision_renames() -> None:
-    trees = {
-        name: prepare_tree("def run(value): return value", f"{name}.py")
-        for name in ("first", "second")
-    }
+@pytest.mark.parametrize(
+    ("source", "entry"),
+    [("def run(value): return value", "f:run"), ("class Helper: pass", "c:Helper")],
+)
+def test_allowlist_ambiguity_survives_linker_collision_renames(source: str, entry: str) -> None:
+    trees = {name: prepare_tree(source, f"{name}.py") for name in ("first", "second")}
     tree = flatten(trees, rename_classes=False)
     with pytest.raises(ValueError, match="ambiguous"):
-        AllowlistRenamer(tree).apply(["f:run"])
+        AllowlistRenamer(tree).apply([entry])
 
 
 @pytest.mark.parametrize("reverse", [False, True])
@@ -1559,13 +1600,30 @@ def test_allowlist_does_not_guess_mangling_from_short_names() -> None:
         allowlisted("def a(): return 3", ["f:helper"])
 
 
+@pytest.mark.parametrize("class_slot", [False, True])
 def test_allowlist_class_repeated_application_skips_previous_rename(
     capsys: pytest.CaptureFixture[str],
+    class_slot: bool,
 ) -> None:
     tree = prepare_tree("class Helper: pass", "fixture.py")
+    if class_slot:
+        tree = flatten(
+            {"data": prepare_tree("class Record:\n item: Helper", "data.py"), "worker": tree}
+        )
     assert set(AllowlistRenamer(tree).apply(["c:Helper"])) == {"c:Helper"}
     assert AllowlistRenamer(tree).apply(["c:Helper"]) == {}
     assert "Warning: skipping allowlist 'c:Helper'" in capsys.readouterr().err
+
+
+def test_allowlist_skips_automatically_renamed_private_class_slots(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = flatten({"worker": prepare_tree("class Outer:\n class _Private: pass", "worker.py")})
+    assert AllowlistRenamer(tree).apply(["c:Outer:_Private"]) == {}
+    assert "Warning: skipping allowlist 'c:Outer:_Private'" in capsys.readouterr().err
+    namespace: dict[str, Any] = {}
+    exec(compile(tree, "fixture.py", "exec"), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["Outer"]._Private.__name__.startswith("_g")
 
 
 @pytest.mark.parametrize(

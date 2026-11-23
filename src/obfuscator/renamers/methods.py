@@ -121,13 +121,15 @@ def rename_private_classes(tree: ast.Module) -> None:
             if node not in members:
                 return node
             original, alias = members[node]
+            target: ast.Name = ast.Name(id=original, ctx=ast.Store())
+            reference: ast.Name = ast.Name(id=alias, ctx=ast.Load())
+            cleanup: ast.Name = ast.Name(id=alias, ctx=ast.Del())
+            node.__dict__["class_alias_target"] = target
+            node.__dict__["class_alias_references"] = [reference, cleanup]
             return [
                 node,
-                ast.Assign(
-                    targets=[ast.Name(id=original, ctx=ast.Store())],
-                    value=ast.Name(id=alias, ctx=ast.Load()),
-                ),
-                ast.Delete(targets=[ast.Name(id=alias, ctx=ast.Del())]),
+                ast.Assign(targets=[target], value=reference),
+                ast.Delete(targets=[cleanup]),
             ]
 
     MemberAliases().visit(tree)
