@@ -271,6 +271,11 @@ scopes and the original name. For example,
 `c:ClassName` selects a class; `c:Outer:Inner` selects a nested class. Class
 entries do not accept `*` and do not select methods or parameters.
 Names do not include module prefixes; duplicate paths across modules are errors.
+Methods need their declaring class scope: `_auth_save` has the lexical path
+`f:AsyncAuthRoutes:_auth_save`, not `f:_auth_save`. Missing-scope errors suggest
+matching full lexical paths, but do not automatically select them or bypass safety
+checks. Functions with duplicate module-level names, such as `do_backup`, cannot
+be selected individually with the current syntax.
 Appending `*` to an `f:` entry also selects every regular parameter of that
 function/method: `f:helper*`, `f:SomeMixin:handle*`, or
 `f:SomeMixin:handle:wrapper:inner*`. This renames the function/method name **and**
@@ -280,6 +285,9 @@ parameters, or local variables. Equivalent explicit `a:` entries are deduplicate
 All normal keyword-caller safety checks still apply; unsafe expansions error
 rather than partially rewriting a signature. `*` is only allowed as this trailing
 `f:` suffix.
+For callbacks passed to external libraries, select only the function name when
+appropriate: `f:reject_nonfinite_constant` works for the JSON parser callback,
+while `f:reject_nonfinite_constant*` fails the escaping-parameter safety check.
 Entries whose own names were already renamed by an earlier tracked transformation
 are skipped with a warning on stderr, not renamed again. Enclosing scopes always
 resolve by their original names, even after automatic or earlier allowlist
@@ -305,6 +313,9 @@ calls, and inline literal `**kwargs` keys are rewritten together. Unknown
 receivers, polymorphic overrides, external/dynamic receiver hierarchies,
 escaping parameter APIs, dynamic keyword dictionaries, runtime field renames,
 and unsupported bindings cause errors rather than speculative rewrites.
+Quoted runtime type references also prevent selecting names they depend on;
+strings used as `typing.Literal` values or `typing.Annotated` metadata are data,
+not type references. In particular, `Literal["ok"]` does not block `f:ok`.
 Use `--report` to see the resulting rename map. Dynamic reflection (including
 string-based lookups), external callbacks and externally visible names remain
 the allowlist author's responsibility: allowing a name is not proof that its

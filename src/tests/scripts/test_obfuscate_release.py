@@ -1059,6 +1059,53 @@ def test_allowlist_rejects_unsafe_or_incorrect_targets(
         allowlisted(source, entries)
 
 
+@pytest.mark.parametrize(
+    ("entry", "suggestion"),
+    [
+        ("f:method", "f:Helper:method"),
+        ("f:method*", "f:Helper:method*"),
+        ("f:method:inner", "f:Helper:method:inner"),
+        ("a:method:value", "a:Helper:method:value"),
+        ("v:method:local", "v:Helper:method:local"),
+        ("c:Nested", "c:Helper:Nested"),
+    ],
+)
+def test_allowlist_missing_scope_suggests_full_lexical_path(entry: str, suggestion: str) -> None:
+    source = """
+class Helper:
+    class Nested: pass
+    def method(self, value):
+        local = value
+        def inner(): return local
+        return inner()
+"""
+    with pytest.raises(ValueError, match="target not found") as error:
+        allowlisted(source, [entry])
+    assert f"use the full lexical path: {suggestion!r}" in str(error.value)
+
+
+def test_allowlist_missing_scope_lists_all_matching_paths() -> None:
+    source = """
+class Second:
+    def method(self): pass
+class First:
+    def method(self): pass
+class Unrelated:
+    method = 3
+"""
+    with pytest.raises(ValueError, match="target not found") as error:
+        allowlisted(source, ["f:method*"])
+    assert str(error.value).endswith(
+        "use the full lexical path: 'f:First:method*', 'f:Second:method*'"
+    )
+
+
+def test_allowlist_missing_target_does_not_suggest_wrong_types() -> None:
+    with pytest.raises(ValueError, match="target not found") as error:
+        allowlisted("class Helper:\n    method = 3", ["f:method*"])
+    assert "use the full lexical path" not in str(error.value)
+
+
 def test_allowlist_input(tmp_path: Path) -> None:
     path = tmp_path / "allowlist.json"
     path.touch()
@@ -1160,6 +1207,21 @@ def test_allowlist_star_preserves_keyword_safety_checks() -> None:
             "def helper(value): return value\noptions = {'value': 3}\nhelper(**options)",
             ["f:helper*"],
         )
+
+
+def test_allowlist_callback_name_can_be_renamed_without_selecting_parameters() -> None:
+    source = """
+import json
+def reject_nonfinite_constant(value): return value.lower()
+__result__ = json.loads("NaN", parse_constant=reject_nonfinite_constant)
+"""
+    result, renames = allowlisted(source, ["f:reject_nonfinite_constant"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == "nan"
+    assert set(renames) == {"f:reject_nonfinite_constant"}
+    with pytest.raises(ValueError, match="Escaping callable"):
+        allowlisted(source, ["f:reject_nonfinite_constant*"])
 
 
 def test_allowlist_parameter_only_rejects_unknown_method_receivers() -> None:
@@ -1336,6 +1398,56 @@ def test_allowlist_class_repeated_application_skips_previous_rename(
     assert set(obfuscator.AllowlistRenamer(tree).apply(["c:Helper"])) == {"c:Helper"}
     assert obfuscator.AllowlistRenamer(tree).apply(["c:Helper"]) == {}
     assert "Warning: skipping allowlist 'c:Helper'" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("imports", "annotation"),
+    [
+        ("from typing import Literal", 'dict[str, Literal["ok", "failed"]]'),
+        ("from typing import Literal as L", 'L["ok"]'),
+        ("import typing as t", 't.Literal["ok"]'),
+        ("from typing import Annotated", 'Annotated[str, "ok"]'),
+        ("import typing as t", 't.Annotated[str, "ok"]'),
+    ],
+)
+def test_allowlist_does_not_treat_annotation_values_as_forward_references(
+    imports: str, annotation: str
+) -> None:
+    source = f"""
+from __future__ import annotations
+from dataclasses import dataclass
+{imports}
+@dataclass
+class Record:
+    status: {annotation}
+def ok(): return "ok"
+__result__ = Record(ok()).status
+"""
+    result, renames = allowlisted(source, ["f:ok"])
+    assert "f:ok" in renames
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == "ok"
+    assert "ok" in namespace["Record"].__annotations__["status"]
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    ['"Helper"', 'list["Helper"]', 'Annotated["Helper", "tag"]', 'Literal["Helper"]'],
+)
+def test_allowlist_still_rejects_quoted_type_references(annotation: str) -> None:
+    source = f"""
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Annotated
+class Helper: pass
+class Literal: pass
+@dataclass
+class Record:
+    value: {annotation}
+"""
+    with pytest.raises(ValueError, match="quoted runtime annotation: c:Helper"):
+        allowlisted(source, ["c:Helper"])
 
 
 def test_allowlist_preserves_dacite_field_types(monkeypatch: pytest.MonkeyPatch) -> None:

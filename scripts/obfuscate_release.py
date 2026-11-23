@@ -1722,6 +1722,33 @@ class AllowlistRenamer(ArgumentRenamer):
             else set()
         )
 
+    def quoted_annotations(self, node: ast.AST) -> list[ast.Constant]:
+        """Find forward-reference strings, excluding typing literal values/metadata."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return [node]
+        if isinstance(node, ast.Subscript):
+            reference: ast.expr = (
+                node.value.value if isinstance(node.value, ast.Attribute) else node.value
+            )
+            binding: Binding | None = self.bindings.get(reference)
+            definitions: list[ast.AST] = self.definitions(binding) if binding is not None else []
+            if len(definitions) == 1 and isinstance(definitions[0], ast.alias):
+                module: str
+                name: str | None
+                module, name = self.imports.get(definitions[0], ("", None))
+                if isinstance(node.value, ast.Attribute):
+                    name = node.value.attr if name is None else None
+                if module in {"typing", "typing_extensions"}:
+                    if name == "Literal":
+                        return []
+                    if name == "Annotated" and isinstance(node.slice, ast.Tuple):
+                        return self.quoted_annotations(node.slice.elts[0])
+        return [
+            reference
+            for child in ast.iter_child_nodes(node)
+            for reference in self.quoted_annotations(child)
+        ]
+
     def apply(self, entries: list[str]) -> dict[str, str]:
         if not entries:
             return {}
@@ -1773,9 +1800,24 @@ class AllowlistRenamer(ArgumentRenamer):
             kind, *parts = (entry[:-1] if expand_parameters else entry).split(":")
             matches = candidates.get(tuple(parts), [])
             if len(matches) != 1:
-                raise ValueError(
-                    f"Allowlist {entry!r}: {'ambiguous target' if matches else 'target not found (or unsupported binding type)'}"
+                message: str = (
+                    "ambiguous target"
+                    if matches
+                    else "target not found (or unsupported binding type)"
                 )
+                if not matches:
+                    suggestions: list[str] = sorted(
+                        f"{kind}:{':'.join(path)}{'*' if expand_parameters else ''}"
+                        for path, targets in candidates.items()
+                        if len(path) > len(parts)
+                        and path[-len(parts) :] == tuple(parts)
+                        and any(actual == kind for actual, _, _ in targets)
+                    )
+                    if suggestions:
+                        message += "; use the full lexical path: " + ", ".join(
+                            repr(suggestion) for suggestion in suggestions
+                        )
+                raise ValueError(f"Allowlist {entry!r}: {message}")
             actual, binding, definition = matches[0]
             if kind != actual:
                 raise ValueError(f"Allowlist {entry!r}: incorrect type; target requires {actual!r}")
@@ -1902,16 +1944,22 @@ class AllowlistRenamer(ArgumentRenamer):
                         f"Unresolved receiver for allowlisted attribute {ast.unparse(node)!r}"
                     )
             if isinstance(node, ast.AnnAssign):
-                for reference in ast.walk(node.annotation):
-                    if isinstance(reference, ast.Constant) and isinstance(reference.value, str):
+                for reference in self.quoted_annotations(node.annotation):
+                    if isinstance(reference.value, str):
                         with suppress(SyntaxError):
                             quoted = ast.parse(reference.value, mode="eval")
                             names = {
                                 ref.id for ref in ast.walk(quoted) if isinstance(ref, ast.Name)
                             }
                             if names & {binding.name for binding in selected}:
+                                annotation_entries: list[str] = sorted(
+                                    entry
+                                    for binding, (_, entry, _) in selected.items()
+                                    if binding.name in names
+                                )
                                 raise ValueError(
-                                    "Allowlisted name occurs in a quoted runtime annotation"
+                                    "Allowlisted name occurs in a quoted runtime annotation: "
+                                    f"{', '.join(annotation_entries)} in {reference.value!r}"
                                 )
             if parameter_functions and isinstance(node, ast.Call):
                 call_targets = self.callable_targets(node.func)
