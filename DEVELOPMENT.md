@@ -345,8 +345,16 @@ errors even when an earlier transformation renamed a matching target.
 The allowlist is applied after linking and the automatic private-class,
 private-method and parameter passes, before python-minifier. It supplements
 those systems rather than replacing them, even when nonempty. Python-minifier
-still shortens eligible globals, import aliases and locals afterward. Linking
-assigns collision-free aliases where required. Public class names stay intact
+still shortens eligible globals, import aliases and locals afterward. After packing
+and the tracked rename passes, a pre-minifier layer consolidates repeated
+single-assignment module aliases of builtins, imported stdlib bindings, and
+`None`/boolean/ellipsis singletons into one alias per value after the import table.
+References and runtime field annotations follow the shared alias. Calls such as
+`object()` and mutable literals are never shared; conditional, local, rebound,
+and third-party aliases are left alone. Import bindings are separately shortened
+so unrelated preserved parameter or field names cannot keep `import xyz as xyz`.
+Reflective scopes retain the existing conservative rename restrictions.
+Linking assigns collision-free aliases where required. Public class names stay intact
 unless explicitly selected with `c:`, including when duplicate names require
 distinct internal aliases. The CLI always prints the warning
 `Renaming classes enabled. Beware of mangled log output.` on stderr, even without
@@ -376,5 +384,6 @@ the allowlist author's responsibility: allowing a name is not proof that its
 runtime API is private. Runtime field annotations are preserved, but `Literal`
 values are widened to their types before typing metadata is removed: for example,
 `Literal["ok", "failed"]` becomes `str`, and `Literal[True, 0]` becomes `bool | int`.
-Builtins remain direct references (no aliases such as `A = len`) so Nuitka can
-recognize and optimize their use.
+Direct builtin references remain direct (no new aliases such as `A = len`) so
+Nuitka can recognize and optimize their use. Existing repeated builtin aliases
+are consolidated, not introduced for ordinary builtin calls.

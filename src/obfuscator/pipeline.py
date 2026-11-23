@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, cast
 
 import python_minifier
 
+from .aliases import consolidate_aliases, shorten_imports
 from .analysis import inspects_frames
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .linker import flatten, module_name
@@ -104,6 +105,8 @@ def obfuscate_modules(originals: dict[Path, str], entries: list[str]) -> Obfusca
     renamer = ArgumentRenamer(linked_trees)
     renamer.run()
     renames = AllowlistRenamer(linked).apply(entries)
+    consolidate_aliases(linked)
+    shorten_imports(linked)
     return ObfuscationResult(
         source=minify_tree(linked, "app.min.py", rename_globals=True),
         renames=renames,
