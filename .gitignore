@@ -10,9 +10,12 @@ __pycache__/
 # `gh run download` outputs
 build-report-vpn-sub/
 ccache-Linux-X64-vpn-sub/
-vpn-sub/
-venv/
+vpn-sub-amd64-glibc/
+vpn-sub-amd64-musl/
+vpn-sub-aarch64-glibc/
+vpn-sub-aarch64-musl/
 
+venv/
 out/
 bin/
 build/
