@@ -305,6 +305,14 @@ pieces are left unchanged. Queries are never executed during minification.
 The build-only `src/obfuscator/` package and `src/tests/` are always excluded
 from the flattened output. The package exposes `main()` and `obfuscate()`;
 its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modules.
+`--jobs N` controls a reusable multiprocessing executor, defaulting to half the
+CPUs available to the process (rounded down, minimum one). `--jobs 1` runs without
+worker processes. Parsing, each cross-module protocol-discovery round, per-module
+cleanup, and independent SQL literal minification run in workers; linking, mixin
+folding, global renaming, and final whole-program minification remain sequential.
+Worker count is capped at the number of input modules. The internal
+`obfuscate_modules(..., jobs=N)` API accepts the same setting; multiprocessing
+callers must use an importable entrypoint guarded by `if __name__ == "__main__":`.
 Internal imports and re-exports become
 direct global references; stdlib and third-party imports share an import table
 at the top. Automatic shortening of globals, import aliases, locals, verified

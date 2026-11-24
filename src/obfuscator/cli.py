@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 
+from .parallel import default_jobs
 from .pipeline import obfuscate_modules
 from .renamers.allowlist import read_allowlist
 
@@ -23,11 +24,20 @@ def main() -> None:
     )
     parser.add_argument("--report", action="store_true", help="Show allowlisted identifier renames")
     parser.add_argument(
+        "--jobs",
+        type=int,
+        default=default_jobs(),
+        metavar="N",
+        help="Worker processes (default: half the available CPUs; 1 disables multiprocessing)",
+    )
+    parser.add_argument(
         "--allowlist",
         default=str(Path(__file__).resolve().parents[2] / "minifier_allowlist.json"),
         help="Path to a JSON list, or a literal JSON list, of identifiers allowed to be renamed",
     )
     args = parser.parse_args()
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
     print("Renaming classes enabled. Beware of mangled log output.", file=sys.stderr)
     source = args.source.resolve()
     output = args.output.resolve()
@@ -52,7 +62,7 @@ def main() -> None:
     if not originals:
         raise SystemExit("No application Python modules found")
     try:
-        result = obfuscate_modules(originals, read_allowlist(args.allowlist))
+        result = obfuscate_modules(originals, read_allowlist(args.allowlist), jobs=args.jobs)
     except ValueError as error:
         parser.error(str(error))
     output.mkdir(parents=True, exist_ok=args.force)

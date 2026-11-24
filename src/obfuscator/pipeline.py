@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import ast
 import builtins
-from contextlib import suppress
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -16,6 +19,7 @@ from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .constants import inline_constants
 from .linker import flatten, module_name
 from .mixins import fold_mixins, mark_mixin_origins
+from .parallel import default_jobs, ordered_map
 from .renamers.allowlist import AllowlistRenamer
 from .renamers.base import ArgumentRenamer
 from .renamers.methods import PrivateMethodRenamer, rename_private_classes
@@ -42,52 +46,111 @@ class ObfuscationResult:
     renamed_methods: int
 
 
-def obfuscate_modules(originals: dict[Path, str], entries: list[str]) -> ObfuscationResult:
+def obfuscate_modules(
+    originals: dict[Path, str], entries: list[str], *, jobs: int | None = None
+) -> ObfuscationResult:
     """Prepare, link, rename, and minify a set of relative application sources."""
     if not originals:
         raise ValueError("No application Python modules found")
+    workers = default_jobs() if jobs is None else jobs
+    if workers < 1:
+        raise ValueError("jobs must be at least 1")
+    workers = min(workers, len(originals))
+    # Spawn is safe for library callers with threads, and does not inherit the
+    # parent's application resources. Reuse the pool across all independent passes.
+    with (
+        ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
+        if workers > 1
+        else nullcontext(None)
+    ) as executor:
+        return _obfuscate_modules(originals, entries, executor)
+
+
+def _parse_module(item: tuple[Path, str]) -> tuple[ast.Module, set[str]]:
+    relative, original = item
+    tree = ast.parse(original, filename=str(relative))
+    tree.__dict__["is_package"] = relative.name == "__init__.py"
+    return tree, {
+        node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.type_params
+    }
+
+
+def _discover_protocols(
+    item: tuple[Path, ast.Module],
+    *,
+    generic_classes: set[str],
+    protocol_classes: set[tuple[str, str]],
+) -> set[tuple[str, str]]:
+    relative, tree = item
+    name = module_name(relative)
+    return {
+        (name, protocol)
+        for protocol in ReleaseCleanup(
+            tree, generic_classes, module=name, protocol_classes=protocol_classes
+        ).protocol_names
+    }
+
+
+def _prepare_module(
+    item: tuple[Path, ast.Module],
+    *,
+    generic_classes: set[str],
+    protocol_classes: set[tuple[str, str]],
+) -> ast.Module:
+    relative, tree = item
+    return prepare_tree(
+        "",
+        str(relative),
+        generic_classes,
+        module=module_name(relative),
+        protocol_classes=protocol_classes,
+        tree=tree,
+    )
+
+
+def _obfuscate_modules(
+    originals: dict[Path, str], entries: list[str], executor: ProcessPoolExecutor | None
+) -> ObfuscationResult:
     trees: dict[str, ast.Module] = {}
     generic_classes: set[str] = set()
     parsed: dict[Path, ast.Module] = {}
     module_names: set[str] = set()
-    for relative, original in originals.items():
+    for relative in originals:
         name = module_name(relative)
         if name in module_names:
             raise ValueError(f"ambiguous module name: {name}")
         module_names.add(name)
-        parsed[relative] = ast.parse(original, filename=str(relative))
-        parsed[relative].__dict__["is_package"] = relative.name == "__init__.py"
-        generic_classes.update(
-            node.name
-            for node in ast.walk(parsed[relative])
-            if isinstance(node, ast.ClassDef) and node.type_params
-        )
+    for relative, (tree, classes) in zip(
+        originals, ordered_map(executor, _parse_module, originals.items()), strict=True
+    ):
+        parsed[relative] = tree
+        generic_classes.update(classes)
     # Protocol inheritance can cross module boundaries, so discover it until
     # importing a protocol from another module adds no new protocol classes.
     protocol_classes: set[tuple[str, str]] = set()
     while True:
-        discovered = {
-            (module_name(relative), protocol)
-            for relative, tree in parsed.items()
-            for protocol in ReleaseCleanup(
-                tree,
-                generic_classes,
-                module=module_name(relative),
-                protocol_classes=protocol_classes,
-            ).protocol_names
-        }
+        discovered = set[tuple[str, str]]().union(
+            *ordered_map(
+                executor,
+                partial(
+                    _discover_protocols,
+                    generic_classes=generic_classes,
+                    protocol_classes=protocol_classes,
+                ),
+                parsed.items(),
+            )
+        )
         if discovered <= protocol_classes:
             break
         protocol_classes.update(discovered)
-    for relative, original in originals.items():
-        trees[module_name(relative)] = prepare_tree(
-            original,
-            str(relative),
-            generic_classes,
-            module=module_name(relative),
-            protocol_classes=protocol_classes,
-            tree=parsed[relative],
-        )
+    prepared = ordered_map(
+        executor,
+        partial(
+            _prepare_module, generic_classes=generic_classes, protocol_classes=protocol_classes
+        ),
+        parsed.items(),
+    )
+    trees = {module_name(relative): tree for relative, tree in zip(parsed, prepared, strict=True)}
     # Analyze the final lexical scope: module-qualified data references no
     # longer look like reflective escapes, and every internal caller is linked.
     linked = flatten(trees)
@@ -113,7 +176,7 @@ def obfuscate_modules(originals: dict[Path, str], entries: list[str]) -> Obfusca
     consolidate_aliases(linked)
     shorten_imports(linked)
     return ObfuscationResult(
-        source=minify_tree(linked, "app.min.py", rename_globals=True),
+        source=minify_tree(linked, "app.min.py", rename_globals=True, executor=executor),
         renames=renames,
         renamed_parameters=renamer.renamed,
         skipped_parameters=renamer.skipped,
@@ -156,10 +219,15 @@ def prepare_tree(
 
 
 def minify_tree(
-    tree: ast.Module, filename: str, *, rename_globals: bool = False, rename_locals: bool = True
+    tree: ast.Module,
+    filename: str,
+    *,
+    rename_globals: bool = False,
+    rename_locals: bool = True,
+    executor: ProcessPoolExecutor | None = None,
 ) -> str:
     """Shorten locals and, after linking, globals without changing runtime APIs."""
-    minify_sql_literals(tree)
+    minify_sql_literals(tree, executor=executor)
     source = ast.unparse(tree)
     preserved: set[str] = set()
     for node in ast.walk(tree):

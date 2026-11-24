@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import ast
 import re
-from functools import lru_cache
+from functools import lru_cache, partial
 from itertools import pairwise
+from typing import TYPE_CHECKING
 
 from sqlglot import exp
 from sqlglot.dialects.sqlite import SQLite
 from sqlglot.errors import ErrorLevel, ParseError, TokenError
 from sqlglot.parsers.sqlite import SQLiteParser
+
+from .parallel import ordered_map
+
+if TYPE_CHECKING:
+    from concurrent.futures import ProcessPoolExecutor
 
 __all__: list[str] = ["minify_sql", "minify_sql_literals"]
 
@@ -257,6 +263,29 @@ class SQLMinifier(ast.NodeTransformer):
         return node
 
 
-def minify_sql_literals(tree: ast.Module) -> None:
+def minify_sql_literals(tree: ast.Module, *, executor: ProcessPoolExecutor | None = None) -> None:
     """Minify complete SQL literals without executing application queries."""
-    SQLMinifier().visit(tree)
+    if executor is None:
+        SQLMinifier().visit(tree)
+        return
+    # Only strings cross process boundaries; keep the linked AST and its shared
+    # node identities in the parent. Do not descend into f-string fragments.
+    literals: list[tuple[ast.Constant, str]] = []
+    pending: list[ast.AST] = [tree]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, ast.JoinedStr):
+            continue
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            literals.append((node, node.value))
+        pending.extend(ast.iter_child_nodes(node))
+    values = list(dict.fromkeys(value for _, value in literals))
+    replacements = dict(
+        zip(
+            values,
+            ordered_map(executor, partial(minify_sql, preserve_edges=True), values, chunksize=32),
+            strict=True,
+        )
+    )
+    for node, value in literals:
+        node.value = replacements[value]
