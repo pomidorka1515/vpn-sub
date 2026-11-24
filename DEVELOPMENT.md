@@ -335,6 +335,16 @@ and `hasattr` keys follow it too. Unrelated classes retain same-spelled attribut
 Unresolved/polymorphic receivers, subclass conflicts, unverifiable external inheritance,
 descriptors, dataclasses, slots, dynamic reflection, namespace inspection, and
 unknown external consumers fail closed. Special/name-mangled attributes are unsupported.
+Receiver safety follows visible function/lambda calls through positional and keyword
+parameters, literal `**kwargs`, defaults, aliases, bound methods, callback forwarding,
+returns, and internal instance fields. Recursive call graphs are solved to a fixed
+point; every possible callback implementation must be visible. Known internal callees
+are checked transitively rather than assumed safe. Opaque callback alternatives,
+escaping callback APIs, dynamic argument expansions, and unsupported container/yield
+or external storage of selected receivers fail closed. Fixed builtin protocol
+operations (such as `dict(tx)` and `len(tx)`) are supported without treating them as
+arbitrary attribute consumers. This is not general external return-type inference:
+unresolved same-spelled fields on external call results still require proof.
 External bases are resolved through installed imports (including aliases and generic
 subscriptions) without constructing instances or evaluating base expressions. Their
 inherited Python implementations and receiver helpers are inspected for member/field

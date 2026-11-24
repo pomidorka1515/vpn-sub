@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 from python_minifier.rename.binding import BuiltinBinding
 
 from ..analysis import inspects_frames
+from .attribute_flow import AttributeFlow
 
 if TYPE_CHECKING:
     from ..analysis import Binding
@@ -26,6 +27,7 @@ def plan_attributes(
     nodes = list(ast.walk(analysis.tree))
     if inspects_frames(analysis.tree) or getattr(analysis.tree, "tainted", False):
         raise ValueError("Cannot rename attributes in a reflective namespace")
+    flow = AttributeFlow(analysis)
     analysis.used.update(analysis.strings)
     for node in nodes:
         analysis.used.update(binding.name for binding in analysis.node_bindings(node))
@@ -79,19 +81,22 @@ def plan_attributes(
                 raise ValueError(f"Allowlist {entry!r}: conflicting subclass attribute")
         references: list[ast.Attribute | ast.Constant] = []
         for node in nodes:
+            if id(node) in analysis.annotation_nodes:
+                continue
+            flow.verify_storage(node, family)
             if isinstance(node, ast.Attribute) and node.attr == name:
-                receivers, _ = analysis.receiver(node.value)
-                if not receivers:
-                    raise ValueError(f"Unresolved receiver for allowlisted attribute {ast.unparse(node)!r}")
+                receivers = flow.receivers(node.value)
+                if not receivers and not flow.unrelated(node.value, family):
+                    raise ValueError(f"Unresolved receiver for allowlisted attribute {flow.describe(node)}")
                 if receivers & family:
-                    if not receivers <= family:
+                    if not receivers <= family or flow.value(node.value).unknown:
                         raise ValueError(f"Ambiguous polymorphic attribute {ast.unparse(node)!r}")
                     references.append(node)
             if isinstance(node, ast.Attribute) and node.attr in {
                 "__dict__", "__class__", "__getattribute__", "__setattr__", "__delattr__",
                 "__dir__", "__reduce__", "__reduce_ex__",
             }:
-                receivers, _ = analysis.receiver(node.value)
+                receivers = flow.receivers(node.value)
                 if receivers & family:
                     raise ValueError(f"Reflective access to allowlisted attribute class: {ast.unparse(node)!r}")
             if not isinstance(node, ast.Call):
@@ -101,9 +106,11 @@ def plan_attributes(
             if isinstance(cast(object, builtin), BuiltinBinding) and builtin_name in {
                 "getattr", "setattr", "delattr", "hasattr", "vars", "dir"
             } and node.args:
-                receivers, _ = analysis.receiver(node.args[0])
+                receivers = flow.receivers(node.args[0])
                 key = node.args[1] if len(node.args) > 1 else None
                 literal = isinstance(key, ast.Constant) and isinstance(key.value, str)
+                if builtin_name in {"vars", "dir"} and flow.exposes(flow.value(node.args[0]), family):
+                    raise ValueError(f"Dynamic reflection on allowlisted attribute: {ast.unparse(node)!r}")
                 if receivers & family:
                     if builtin_name in {"vars", "dir"} or not literal:
                         raise ValueError(f"Dynamic reflection on allowlisted attribute: {ast.unparse(node)!r}")
@@ -111,18 +118,12 @@ def plan_attributes(
                         if not receivers <= family:
                             raise ValueError("Ambiguous reflective attribute receiver")
                         references.append(key)
-                elif not receivers and (
+                elif not receivers and not flow.unrelated(node.args[0], family) and (
                     not literal or (isinstance(key, ast.Constant) and key.value == name)
                 ):
                     raise ValueError(f"Unresolved reflective attribute receiver: {ast.unparse(node)!r}")
                 continue
-            # Unknown consumers can read names without any visible attribute AST.
-            target = analysis.target(node.func, instances=False)
-            if not isinstance(target, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                for argument in [*node.args, *(item.value for item in node.keywords)]:
-                    receivers, _ = analysis.receiver(argument)
-                    if receivers & family:
-                        raise ValueError(f"Escaping allowlisted attribute receiver: {ast.unparse(node)!r}")
+            flow.verify_call(node, family)
         if binding is None and not references:
             raise ValueError(f"Allowlist {entry!r}: attribute target not found")
         identity = (owner, name)
