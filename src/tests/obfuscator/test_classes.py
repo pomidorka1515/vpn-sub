@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import ast
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from obfuscator.pipeline import obfuscate, obfuscate_modules
+import obfuscator
+from obfuscator.pipeline import minify_tree, obfuscate, obfuscate_modules
+from tests.support.obfuscator import flattened_modules
 
 __all__: list[str] = []
 
@@ -134,3 +138,71 @@ __result__ = record._InternalRecord__value
     namespace: dict[str, Any] = {}
     exec(output, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == 7
+
+
+@pytest.mark.parametrize("linked", [False, True])
+def test_private_classes_use_g_names_and_public_classes_stay(linked: bool) -> None:
+    source = """
+class _Private: pass
+class Public: pass
+def create():
+    class _Local: pass
+    return _Local
+__result__ = _Private.__name__, Public.__name__, create().__name__
+"""
+    if linked:
+        source = flattened_modules({"worker": source, "main": "from worker import __result__\n"})
+        result = minify_tree(ast.parse(source), "fixture.py", rename_globals=True)
+    else:
+        result = obfuscator.obfuscate(source, "fixture.py")
+    classes = [node.name for node in ast.walk(ast.parse(result)) if isinstance(node, ast.ClassDef)]
+    assert "Public" in classes
+    assert len(classes) == 3
+    assert all(name == "Public" or name.startswith("_g") for name in classes)
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    private, public, local = namespace["__result__"]
+    assert private.startswith("_g")
+    assert local.startswith("_g")
+    assert private != local
+    assert public == "Public"
+
+
+def test_private_class_forward_annotations_follow_renamed_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = flattened_modules(
+        {
+            "models": "from dataclasses import dataclass\n"
+            "@dataclass\nclass _Item:\n value: int\n"
+            "@dataclass\nclass Record:\n item: '_Item'\n",
+            "main": "from models import Record, _Item\nfrom dacite import from_dict\n"
+            "record = from_dict(Record, {'item': {'value': 3}})\n"
+            "__result__ = record.item.value, isinstance(record.item, _Item), _Item.__name__\n",
+        }
+    )
+    result = minify_tree(ast.parse(result), "fixture.py", rename_globals=True)
+    module = types.ModuleType("private_class_annotations_fixture")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(result, module.__dict__)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert module.__result__[:2] == (3, True)
+    assert module.__result__[2].startswith("_g")
+
+
+def test_private_member_classes_keep_attribute_access() -> None:
+    result = obfuscator.obfuscate(
+        "class Public:\n"
+        " if True:\n  class _Private:\n   value = 7\n"
+        " Alias = _Private\n"
+        "class Child(Public): pass\n"
+        "result = (Public._Private.value, getattr(Child, '_Private').__name__, "
+        "Public.Alias is Public._Private, hasattr(Public, Public._Private.__name__))\n",
+        "fixture.py",
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    value, name, same, leaked_alias = namespace["result"]
+    assert value == 7
+    assert name.startswith("_g")
+    assert same
+    assert not leaked_alias

@@ -219,8 +219,9 @@ Supported decorators are applied when the concrete class is defined. Overridden
 implementations needed by `super()` become hidden concrete methods; unused
 overridden methods are omitted (their default expressions are still evaluated).
 Mixin classes are never reconstructed at runtime.
-Run `venv/bin/pytest src/tests/scripts/test_mixin_folding.py`
-and the obfuscator regression suite when changing this contract.
+Run `venv/bin/pytest src/tests/obfuscator/test_mixins.py`
+and the full obfuscator regression suite (`venv/bin/pytest src/tests/obfuscator`)
+when changing this contract.
 
 ### Code quality
 
