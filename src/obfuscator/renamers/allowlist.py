@@ -432,6 +432,22 @@ class AllowlistRenamer(ArgumentRenamer):
             actual, binding, definition = matches[0]
             if kind != actual:
                 raise ValueError(f"Allowlist {entry!r}: incorrect type; target requires {actual!r}")
+            if definition.__dict__.get("no_rename") or (
+                expand_parameters
+                and isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and any(
+                    argument.__dict__.get("no_rename")
+                    for argument in definition.args.posonlyargs
+                    + definition.args.args
+                    + definition.args.kwonlyargs
+                )
+            ):
+                print(
+                    f"Warning: skipping allowlist {entry!r}: overlaps with a no_rename"
+                    " or no_rename_arg decorator; rule ignored",
+                    file=sys.stderr,
+                )
+                continue
             definitions = self.definitions(binding)
             alias_references: list[ast.Name] = cast(
                 list[ast.Name], definition.__dict__.get("class_alias_references", [])

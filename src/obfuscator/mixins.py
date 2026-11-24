@@ -552,6 +552,12 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                     )
                 )
                 continue
+            if (
+                isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and definition.__dict__.get("no_rename")
+                and name != definition.name
+            ):
+                _fail(node, f"no_rename prevents lowering overridden method {definition.name}")
             # Rewrite a temporary parse, not the shared source AST: each concrete
             # class may use different member names for the same implementation.
             calls = [child for child in ast.walk(definition) if isinstance(child, ast.Call)]
@@ -574,6 +580,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                     "return_type",
                     "annotation_path",
                     "source_module",
+                    "no_rename",
                 ):
                     if key in original_node.__dict__:
                         copied_node.__dict__[key] = original_node.__dict__[key]

@@ -1102,7 +1102,9 @@ class ArgumentRenamer:
                 # and escaped/reflected callables already block the signature.
                 reason = None
                 owner = self.parents.get(function)
-                if old.startswith("__"):
+                if argument.__dict__.get("no_rename"):
+                    reason = "no_rename_arg decorator"
+                elif old.startswith("__"):
                     reason = "name-mangled/special parameter"
                 elif decorated:
                     reason = "unknown decorator"

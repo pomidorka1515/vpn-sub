@@ -39,11 +39,15 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
                 node.__dict__.setdefault("original_name", node.id)
             elif isinstance(node, ast.arg):
                 node.__dict__.setdefault("original_name", node.arg)
-    public_classes = {
+    preserved_definitions = {
         node: node.name
         for tree in trees.values()
         for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef) and not node.name.startswith("_")
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        and (
+            (isinstance(node, ast.ClassDef) and not node.name.startswith("_"))
+            or node.__dict__.get("no_rename")
+        )
     }
     used = {
         node.id for tree in trees.values() for node in ast.walk(tree) if isinstance(node, ast.Name)
@@ -83,12 +87,12 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
         if not isinstance(cast(object, binding), BuiltinBinding)
         and not any(isinstance(ref, ast.alias) for ref in binding.references)
     )
-    # A colliding public class keeps its class statement's name, using a
-    # temporary global slot and a distinct linked alias. Reserve that slot so
-    # defining the class cannot overwrite another module's live binding.
-    for name in public_classes.values():
+    # Public classes and explicitly protected definitions retain their statement
+    # names, using temporary global slots and distinct linked aliases. Reserve
+    # those slots so definitions cannot overwrite another module's live binding.
+    for name in preserved_definitions.values():
         if definitions[name] > 1:
-            claimed[name] = "public class slot"
+            claimed[name] = "preserved definition slot"
     imports: list[ast.stmt] = []
     dependencies: dict[str, list[str]] = {module: [] for module in trees}
 
@@ -256,21 +260,33 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
                 binding.rename(names[id(binding)])
 
     class Link(ast.NodeTransformer):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST | list[ast.stmt]:
+            return self.preserve_definition(node)
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST | list[ast.stmt]:
+            return self.preserve_definition(node)
+
         def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST | list[ast.stmt]:
+            return self.preserve_definition(node)
+
+        def preserve_definition(
+            self, node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+        ) -> ast.AST | list[ast.stmt]:
             self.generic_visit(node)
-            original = public_classes.get(node)
+            original = preserved_definitions.get(node)
             if original is None or original == node.name:
                 return node
-            # Keep the class statement's name (including for decorators,
-            # metaclasses and nested qualnames), then move its binding to the
+            # Keep the statement's name (including for decorators, metaclasses,
+            # and nested qualnames), then move its binding to the
             # collision-free alias used by linked references.
             alias = node.name
             node.name = original
             target: ast.Name = ast.Name(id=alias, ctx=ast.Store())
             reference: ast.Name = ast.Name(id=original, ctx=ast.Load())
             cleanup: ast.Name = ast.Name(id=original, ctx=ast.Del())
-            node.__dict__["class_alias_target"] = target
-            node.__dict__["class_alias_references"] = [reference, cleanup]
+            if isinstance(node, ast.ClassDef):
+                node.__dict__["class_alias_target"] = target
+                node.__dict__["class_alias_references"] = [reference, cleanup]
             return [
                 node,
                 ast.Assign(targets=[target], value=reference),

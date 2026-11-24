@@ -59,6 +59,7 @@ def rename_constructor_classes(tree: ast.Module) -> None:
     for node in nodes:
         if (
             not isinstance(node, ast.ClassDef)
+            or node.__dict__.get("no_rename")
             or node in reflected_classes
             or node.name in quoted_names
             or node.name != node.__dict__.get("original_name", node.name)
@@ -137,6 +138,7 @@ class PrivateMethodRenamer(ArgumentRenamer):
         for function in self.functions:
             if (
                 isinstance(function, ast.Lambda)
+                or function.__dict__.get("no_rename")
                 or not function.name.startswith("_")
                 or function.name.startswith("__")
                 or function in reflected
@@ -186,7 +188,11 @@ def rename_private_classes(tree: ast.Module) -> None:
     members: dict[ast.ClassDef, tuple[str, str]] = {}
     renamed: set[int] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef) or not node.name.startswith("_"):
+        if (
+            not isinstance(node, ast.ClassDef)
+            or node.__dict__.get("no_rename")
+            or not node.name.startswith("_")
+        ):
             continue
         binding = analysis.bindings.get(node)
         if binding is None or id(binding) in renamed:

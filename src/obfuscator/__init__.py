@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .cli import main
-from .pipeline import obfuscate
+from .api import main, obfuscate
+from .decorators import no_rename, no_rename_arg
 
-__all__: list[str] = ["main", "obfuscate"]
+__all__: list[str] = ["main", "no_rename", "no_rename_arg", "obfuscate"]

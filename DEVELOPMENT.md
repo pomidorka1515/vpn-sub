@@ -323,6 +323,20 @@ Additional identifier renames can be opted into through `--allowlist PATH` or
 `minifier_allowlist.json` at the repository root; an empty file or `[]` selects
 no additional renames (it does not disable automatic shortening). The root must
 otherwise be a JSON list of strings (not an object).
+Source-level opt-outs are available as `from obfuscator import no_rename, no_rename_arg`.
+Apply `@no_rename` to a class or regular/async function to preserve its name, or
+`@no_rename_arg({"argument"})` to a function to preserve selected parameter names.
+`@no_rename_arg({"*"})` preserves all parameters, including variadic bindings.
+These identity decorators can be stacked with other decorators and are stripped,
+along with their unused imports, before release analysis. Argument collections must
+be literal lists, tuples, or sets of strings so builds never execute marker arguments.
+Unknown argument names and mixing `*` with other names produce nonfatal warnings.
+Overlapping allowlist rules are ignored with a warning; an overlapping `f:helper*`
+rule is ignored in full. Protecting a class or function name does not implicitly
+protect its methods, nested definitions, or parameters. Checkout imports of the
+markers do not load the obfuscator's build dependencies.
+Protections survive mixin folding; a protected overridden method that would need
+a renamed hidden `super()` implementation instead fails the build.
 Entries use `c:` for class names, `f:` for function/method names, `a:` for individual non-variadic
 parameters, `attr:` for class-scoped attributes, and `v:` for assigned variables,
 followed by colon-separated lexical scopes and the original name. For example,

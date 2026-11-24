@@ -19,6 +19,7 @@ from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .constants import inline_constants
 from .dataclasses import minify_dataclasses
 from .linker import flatten, module_name
+from .markers import strip_markers
 from .mixins import fold_mixins, mark_mixin_origins
 from .parallel import default_jobs, ordered_map
 from .renamers.allowlist import AllowlistRenamer
@@ -203,6 +204,7 @@ def prepare_tree(
     if tree is None:
         tree = ast.parse(source, filename=filename)
         tree.__dict__["is_package"] = Path(filename).name == "__init__.py"
+    strip_markers(tree, filename)
     # Annotations are type information for the renamers, not release output.
     AnnotationIndex(
         module,
