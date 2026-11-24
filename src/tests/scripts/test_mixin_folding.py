@@ -241,6 +241,7 @@ from ..common import SharedMixin
 from ..admin.bot import TelegramAdminBot
 class TelegramPublicBot(SharedMixin): pass
 __result__ = (TelegramAdminBot().invoke(value=3), TelegramPublicBot().calculate(amount=8))
+__classes__ = TelegramAdminBot, TelegramPublicBot
 """,
     }
     result = obfuscate_modules(

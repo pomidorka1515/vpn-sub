@@ -17,12 +17,17 @@ from .analysis import inspects_frames
 from .annotations import AnnotationIndex
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .constants import inline_constants
+from .dataclasses import minify_dataclasses
 from .linker import flatten, module_name
 from .mixins import fold_mixins, mark_mixin_origins
 from .parallel import default_jobs, ordered_map
 from .renamers.allowlist import AllowlistRenamer
 from .renamers.base import ArgumentRenamer
-from .renamers.methods import PrivateMethodRenamer, rename_private_classes
+from .renamers.methods import (
+    PrivateMethodRenamer,
+    rename_constructor_classes,
+    rename_private_classes,
+)
 from .sql import minify_sql_literals
 
 if TYPE_CHECKING:
@@ -166,6 +171,7 @@ def _obfuscate_modules(
             node.__dict__.setdefault("original_name", node.id)
         elif isinstance(node, ast.arg):
             node.__dict__.setdefault("original_name", node.arg)
+    minify_dataclasses(linked)
     linked_trees = {"__main__": linked}
     methods = PrivateMethodRenamer(linked_trees)
     methods.run()
@@ -228,11 +234,12 @@ def minify_tree(
 ) -> str:
     """Shorten locals and, after linking, globals without changing runtime APIs."""
     minify_sql_literals(tree, executor=executor)
+    rename_constructor_classes(tree)
     source = ast.unparse(tree)
     preserved: set[str] = set()
     for node in ast.walk(tree):
-        # Keep all classes (including exception subclasses), functions and
-        # parameters: logs, callbacks and keyword calls depend on these. Closed
+        # Keep the planned class/function/parameter spellings: logs, callbacks
+        # and keyword calls depend on these. Constructor-only classes and closed
         # private methods have already been renamed with their callers.
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             preserved.add(node.name)
@@ -277,6 +284,7 @@ def minify_tree(
 def obfuscate(source: str, filename: str) -> str:
     """Obfuscate one standalone module (the CLI analyzes all modules together)."""
     tree = prepare_tree(source, filename)
+    minify_dataclasses(tree)
     rename_private_classes(tree)
     PrivateMethodRenamer({"__main__": tree}).run()
     ArgumentRenamer({"__main__": tree}).run()

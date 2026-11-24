@@ -378,7 +378,12 @@ References and runtime field annotations follow the shared alias. Calls such as
 and third-party aliases are left alone. Import bindings are separately shortened
 so unrelated preserved parameter or field names cannot keep `import xyz as xyz`.
 Reflective scopes retain the existing conservative rename restrictions.
-Linking assigns collision-free aliases where required. Public class names stay intact
+Linking assigns collision-free aliases where required. Class names used only in
+direct constructor calls are shortened automatically, regardless of their spelling.
+Class-object escapes, inheritance, unknown decorators, reflection, and retained
+runtime annotation dependencies preserve names, as do name-mangled members,
+parameters, and slots. Explicitly renamed classes are not renamed a second time.
+Other public class names stay intact
 unless explicitly selected with `c:`, including when duplicate names require
 distinct internal aliases. The CLI always prints the warning
 `Renaming classes enabled. Beware of mangled log output.` on stderr, even without
@@ -405,7 +410,18 @@ not type references. In particular, `Literal["ok"]` does not block `f:ok`.
 Use `--report` to see the resulting rename map. Dynamic reflection (including
 string-based lookups), external callbacks and externally visible names remain
 the allowlist author's responsibility: allowing a name is not proof that its
-runtime API is private. Runtime field annotations are preserved, but `Literal`
+runtime API is private. A whole-program dataclass pass replaces ordinary field
+annotations with `0` only for proven-closed Python-constructed records. Dacite
+schemas and their transitive field/container dependencies retain their types.
+Fields are also shortened when their names are private: resolved attribute chains,
+constructor keywords, and inline literal `**kwargs` keys are rewritten together;
+positional argument order is unchanged. `asdict()` preserves names recursively,
+without preventing annotation stripping. Escapes, reflection, inheritance,
+dataclass directives (`ClassVar`, `InitVar`, `KW_ONLY`), unknown descriptors,
+quoted annotations, and unsupported receivers preserve the relevant APIs rather
+than guessing. Dynamic constructor keywords preserve field names. Definitions
+without visible Python constructors are retained as possible external schemas.
+Other runtime field annotations are preserved, but `Literal`
 values are widened to their types before typing metadata is removed: for example,
 `Literal["ok", "failed"]` becomes `str`, and `Literal[True, 0]` becomes `bool | int`.
 Direct builtin references remain direct (no new aliases such as `A = len`) so

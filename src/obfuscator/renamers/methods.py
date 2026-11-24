@@ -2,17 +2,106 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Callable
+from contextlib import suppress
 from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.resolve_names import get_binding
 
-from ..analysis import Binding
+from ..analysis import Binding, inspects_frames
 from .base import ArgumentRenamer
 
 if TYPE_CHECKING:
     from ..analysis import Function
 
-__all__: list[str] = ["PrivateMethodRenamer", "rename_private_classes"]
+__all__: list[str] = [
+    "PrivateMethodRenamer",
+    "rename_constructor_classes",
+    "rename_private_classes",
+]
+
+
+def rename_constructor_classes(tree: ast.Module) -> None:
+    """Shorten lexical class bindings used exclusively for construction.
+
+    Retained runtime annotations count as non-constructor references too: their
+    names may be resolved later by dacite or typing, outside lexical binding.
+    """
+    analysis = ArgumentRenamer({"__main__": tree})
+    if inspects_frames(tree) or getattr(tree, "tainted", False):
+        return
+    nodes = list(ast.walk(tree))
+    analysis.used.update(analysis.strings)
+    quoted_names: set[str] = set()
+    reflected_classes: set[ast.ClassDef] = set()
+    for node in nodes:
+        analysis.used.update(binding.name for binding in analysis.node_bindings(node))
+        if isinstance(node, ast.Attribute):
+            analysis.used.add(node.attr)
+            if node.attr in {"__class__", "__name__", "__qualname__"}:
+                reflected_classes.update(analysis.type_targets(node.value))
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "type"
+            and len(node.args) == 1
+        ):
+            reflected_classes.update(analysis.type_targets(node.args[0]))
+        # A string forward annotation is not a lexical binding reference.
+        if isinstance(node, ast.AnnAssign):
+            pending: list[ast.AST] = [node.annotation]
+            while pending:
+                for part in ast.walk(pending.pop()):
+                    if isinstance(part, ast.Name):
+                        quoted_names.add(part.id)
+                    elif isinstance(part, ast.Constant) and isinstance(part.value, str):
+                        with suppress(SyntaxError):
+                            pending.append(ast.parse(part.value, mode="eval"))
+    for node in nodes:
+        if (
+            not isinstance(node, ast.ClassDef)
+            or node in reflected_classes
+            or node.name in quoted_names
+            or node.name != node.__dict__.get("original_name", node.name)
+            or isinstance(node.__dict__.get("namespace"), ast.ClassDef)
+            or node.bases
+            or node.keywords
+            or not analysis.safe_class_decorators(node)
+        ):
+            continue
+        # Python derives private member/parameter spellings from the class name.
+        if any(
+            name.startswith("__") and not name.endswith("__")
+            for member in ast.walk(node)
+            for name in (
+                member.id
+                if isinstance(member, ast.Name)
+                else member.arg
+                if isinstance(member, ast.arg)
+                else member.attr
+                if isinstance(member, ast.Attribute)
+                else member.name
+                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                else member.value
+                if isinstance(member, ast.Constant) and isinstance(member.value, str)
+                else "",
+            )
+        ):
+            continue
+        binding = analysis.bindings.get(node)
+        if binding is None or analysis.definitions(binding) != [node]:
+            continue
+        references = [reference for reference in binding.references if reference is not node]
+        if not references or not all(
+            isinstance(reference, ast.Name)
+            and isinstance(reference.ctx, ast.Load)
+            and isinstance(parent := analysis.parents.get(reference), ast.Call)
+            and parent.func is reference
+            for reference in references
+        ):
+            continue
+        name = analysis.fresh_name()
+        if len(name) < len(node.name):
+            binding.rename(name)
 
 
 class PrivateMethodRenamer(ArgumentRenamer):

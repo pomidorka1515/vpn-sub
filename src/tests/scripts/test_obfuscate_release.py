@@ -1667,6 +1667,7 @@ class Record:
     status: {annotation}
 def ok(): return "ok"
 __result__ = Record(ok()).status
+__record_type__ = Record
 """
     result, renames = allowlisted(source, ["f:ok"])
     assert "f:ok" in renames
@@ -2040,7 +2041,7 @@ def test_cli_allowlist_supplements_automatic_renaming(tmp_path: Path, allowlist:
     assert "long_counter" not in result
     assert "square_root" not in result
     assert "_calculate" not in result
-    assert "class Helper:" in result
+    assert "class Helper:" not in result
     assert ("def increment(" in result) == (allowlist == "[]")
     execution = subprocess.run(
         [sys.executable, str(output / "app.min.py")], check=True, capture_output=True, text=True
