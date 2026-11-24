@@ -28,8 +28,11 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
     """Link application bindings directly into one global scope, like includes."""
     analysis = ArgumentRenamer(trees)
     # Retain source spellings for allowlist selection after collision linking.
-    for tree in trees.values():
+    for module, tree in trees.items():
+        source_file = module.replace(".", "/")
+        source_file += "/__init__.py" if tree.__dict__.get("is_package") else ".py"
         for node in ast.walk(tree):
+            node.__dict__.setdefault("original_file", source_file)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 node.__dict__.setdefault("original_name", node.name)
             elif isinstance(node, ast.Name):
@@ -242,6 +245,8 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
                             linked_reference.__dict__["original_name"] = node.__dict__[
                                 "original_name"
                             ]
+                        if "original_file" in node.__dict__:
+                            linked_reference.__dict__["original_file"] = node.__dict__["original_file"]
                         replacements[node] = linked_reference
 
     # Update global declarations and definitions as well as lexical references.
@@ -375,6 +380,13 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
         type_ignores=[],
     )
     ast.fix_missing_locations(result)
+    for node in ast.walk(result):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            node.__dict__["linked_name"] = node.name
+        elif isinstance(node, ast.Name):
+            node.__dict__["linked_name"] = node.id
+        elif isinstance(node, ast.arg):
+            node.__dict__["linked_name"] = node.arg
     if rename_classes:
         rename_private_classes(result)
     return result

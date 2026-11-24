@@ -37,10 +37,16 @@ def read_allowlist(value: str) -> list[str]:
         if not isinstance(entry, str):
             raise ValueError("Allowlist must be a JSON list of strings")
         parts = entry.removesuffix("*").split(":") if entry.startswith("f:") else entry.split(":")
+        lexical_parts = parts[1:]
+        if lexical_parts and lexical_parts[0].endswith(".py"):
+            source_parts = lexical_parts[0][:-3].split("/")
+            if any(not part.isidentifier() or keyword.iskeyword(part) for part in source_parts):
+                raise ValueError(f"Invalid allowlist source path in {entry!r}")
+            lexical_parts = lexical_parts[1:]
         if (
             parts[0] not in {"c", "f", "a", "v"}
-            or len(parts) < (3 if parts[0] == "a" else 2)
-            or any(not part.isidentifier() or keyword.iskeyword(part) for part in parts[1:])
+            or len(lexical_parts) < (2 if parts[0] == "a" else 1)
+            or any(not part.isidentifier() or keyword.iskeyword(part) for part in lexical_parts)
         ):
             raise ValueError(
                 f"Invalid allowlist entry {entry!r}; expected c:path, f:path, f:path*, a:path:arg or v:path"
@@ -305,6 +311,27 @@ class AllowlistRenamer(ArgumentRenamer):
                     candidates.setdefault((*self.path(scope), name), []).append(
                         ("v", binding, scope)
                     )
+        # Register qualified paths alongside legacy lexical paths. The file is
+        # provenance, never a generated alias or an extra lexical scope.
+        for path, candidate_targets in list(candidates.items()):
+            for actual, binding, definition in candidate_targets:
+                origin = definition
+                if actual == "v":
+                    origin = next(
+                        ref
+                        for ref in self.definitions(binding)
+                        if isinstance(ref, ast.Name) and isinstance(ref.ctx, ast.Store)
+                    )
+                source_file = origin.__dict__.get("original_file")
+                if isinstance(source_file, str):
+                    qualified_binding = binding
+                    if actual == "c" and isinstance(
+                        qualified_target := definition.__dict__.get("class_alias_target"), ast.Name
+                    ):
+                        qualified_binding = self.bindings[qualified_target]
+                    candidates.setdefault((source_file, *path), []).append(
+                        (actual, qualified_binding, definition)
+                    )
         selected: dict[Binding, tuple[str, str, ast.AST]] = {}
         pending = deque(dict.fromkeys(entries))
         queued = set(entries)
@@ -324,7 +351,13 @@ class AllowlistRenamer(ArgumentRenamer):
                         f"{kind}:{':'.join(path)}{'*' if expand_parameters else ''}"
                         for path, targets in candidates.items()
                         if len(path) > len(parts)
-                        and path[-len(parts) :] == tuple(parts)
+                        and (
+                            path[0] == parts[0]
+                            and path[-len(parts[1:]) :] == tuple(parts[1:])
+                            if parts[0].endswith(".py")
+                            else not path[0].endswith(".py")
+                            and path[-len(parts) :] == tuple(parts)
+                        )
                         and any(actual == kind for actual, _, _ in targets)
                     )
                     if suggestions:
@@ -347,9 +380,12 @@ class AllowlistRenamer(ArgumentRenamer):
                 if alias_target is not None:
                     # Rebinding the real linked alias is still ambiguous, even
                     # though the temporary class slot itself has one definition.
+                    alias_binding = self.bindings[alias_target]
+                    if binding is alias_binding:
+                        definitions = [definition]
                     definitions.extend(
                         ref
-                        for ref in self.definitions(self.bindings[alias_target])
+                        for ref in self.definitions(alias_binding)
                         if ref is not alias_target
                     )
             if kind in {"c", "f"} and len(definitions) != 1:
@@ -376,7 +412,11 @@ class AllowlistRenamer(ArgumentRenamer):
             current_path = (*self.path(scope, original=False), binding.name)
             # Candidates are keyed by original lexical paths. A renamed parent
             # does not mean this binding was renamed; only skip the latter.
-            if binding.name != parts[-1]:
+            linked_collision = parts[0].endswith(".py") and any(
+                ref.__dict__.get("linked_name") == binding.name
+                for ref in [*definitions, *self.definitions(binding)]
+            )
+            if binding.name != parts[-1] and not linked_collision:
                 print(
                     f"Warning: skipping allowlist {entry!r}: already renamed by an earlier "
                     f"transformation to {kind}:{':'.join(current_path)}",
@@ -531,6 +571,7 @@ class AllowlistRenamer(ArgumentRenamer):
                         raise ValueError(
                             f"Escaping callable with allowlisted parameters: {ast.unparse(node)!r}"
                         )
+        removed_statements: set[ast.AST] = set()
         for binding, (_, _, definition) in selected.items():
             if isinstance(definition, ast.arg):
                 binding.references.remove(definition)
@@ -546,10 +587,29 @@ class AllowlistRenamer(ArgumentRenamer):
                 # is assigned. Other uses of that slot (e.g. a builtin after
                 # the cleanup del) must not follow the class rename.
                 definition.name = renamed[binding]
+                alias_target = cast(ast.Name, definition.__dict__["class_alias_target"])
+                if self.bindings[alias_target] is binding:
+                    binding.rename(renamed[binding])
+                    # The qualified class now owns its final global name;
+                    # retaining the old temporary-slot cleanup would delete it.
+                    removed_statements.add(self.parents[alias_target])
+                    removed_statements.update(
+                        self.parents[ref] for ref in alias_references
+                        if isinstance(ref.ctx, ast.Del)
+                    )
                 for alias_reference in alias_references:
                     alias_reference.id = renamed[binding]
             else:
                 binding.rename(renamed[binding])
+        if removed_statements:
+            class RemoveClassSlots(ast.NodeTransformer):
+                def visit_Assign(self, node: ast.Assign) -> ast.AST | None:
+                    return None if node in removed_statements else self.generic_visit(node)
+
+                def visit_Delete(self, node: ast.Delete) -> ast.AST | None:
+                    return None if node in removed_statements else self.generic_visit(node)
+
+            RemoveClassSlots().visit(self.tree)
         for node, name in attributes.items():
             node.attr = name
         for node, name in keywords.items():

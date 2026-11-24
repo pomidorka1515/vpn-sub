@@ -328,12 +328,20 @@ scopes and the original name. For example,
 `a:SomeMixin:handle:wrapper:inner:argument` selects a deeply nested parameter.
 `c:ClassName` selects a class; `c:Outer:Inner` selects a nested class. Class
 entries do not accept `*` and do not select methods or parameters.
-Names do not include module prefixes; duplicate paths across modules are errors.
+An optional source-relative file path can appear immediately after any kind prefix:
+`f:db/backup.py:do_backup`, `c:models.py:Outer:Inner`,
+`a:db/backup.py:do_backup:path`, or `v:config/backup.py:do_backup:content`.
+Paths must end in `.py`, use `/`, and omit the source root (`src/`). Package
+initializers use `package/__init__.py`. The file qualifier must come first;
+lexical scopes afterward retain arbitrary nesting depth and `f:` still supports
+the trailing `*`. Unqualified duplicate paths across modules remain errors.
+Qualified selections rename linker collision aliases normally, rather than
+preserving generated `_g…` names. All existing rename safety checks still apply.
 Methods need their declaring class scope: `_auth_save` has the lexical path
 `f:AsyncAuthRoutes:_auth_save`, not `f:_auth_save`. Missing-scope errors suggest
 matching full lexical paths, but do not automatically select them or bypass safety
-checks. Functions with duplicate module-level names, such as `do_backup`, cannot
-be selected individually with the current syntax.
+checks. Functions with duplicate module-level names, such as `do_backup`, require
+file-qualified selectors to select them individually.
 Appending `*` to an `f:` entry also selects every regular parameter of that
 function/method: `f:helper*`, `f:SomeMixin:handle*`, or
 `f:SomeMixin:handle:wrapper:inner*`. This renames the function/method name **and**

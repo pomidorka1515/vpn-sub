@@ -220,6 +220,8 @@ def prepare_tree(
     tree = cast(ast.Module, CollapseLiterals(cleanup).visit(tree))
     tree = cast(ast.Module, cleanup.visit(tree))
     tree = strip_typing_imports(tree, cleanup.typing_modules)
+    for node in ast.walk(tree):
+        node.__dict__["original_file"] = Path(filename).as_posix()
     ast.fix_missing_locations(tree)
     return tree
 

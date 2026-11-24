@@ -569,6 +569,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             ):
                 for key in (
                     "original_name",
+                    "original_file",
                     "type_annotation",
                     "return_type",
                     "annotation_path",
