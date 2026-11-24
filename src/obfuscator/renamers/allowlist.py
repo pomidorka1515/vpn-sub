@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.binding import BuiltinBinding
 
+from ..analysis import inspects_frames
+from .attributes import plan_attributes
 from .base import ArgumentRenamer
 
 if TYPE_CHECKING:
@@ -44,12 +46,12 @@ def read_allowlist(value: str) -> list[str]:
                 raise ValueError(f"Invalid allowlist source path in {entry!r}")
             lexical_parts = lexical_parts[1:]
         if (
-            parts[0] not in {"c", "f", "a", "v"}
-            or len(lexical_parts) < (2 if parts[0] == "a" else 1)
+            parts[0] not in {"c", "f", "a", "v", "attr"}
+            or len(lexical_parts) < (2 if parts[0] in {"a", "attr"} else 1)
             or any(not part.isidentifier() or keyword.iskeyword(part) for part in lexical_parts)
         ):
             raise ValueError(
-                f"Invalid allowlist entry {entry!r}; expected c:path, f:path, f:path*, a:path:arg or v:path"
+                f"Invalid allowlist entry {entry!r}; expected c:path, f:path, f:path*, a:path:arg, attr:class:name or v:path"
             )
         if entry in result:
             raise ValueError(f"Duplicate allowlist entry {entry!r}")
@@ -60,12 +62,13 @@ def read_allowlist(value: str) -> list[str]:
 class AllowlistRenamer(ArgumentRenamer):
     """Opt-in binding renames, with C3 inheritance and fail-closed static references.
 
-    Strings and reflective/external APIs are deliberately not rewritten. Unknown
-    receivers, escaping parameter APIs and dynamic keyword dictionaries are errors,
-    rather than guesses based on attribute spelling.
+    Attribute selections also rewrite verified literal builtin reflection calls.
+    Unknown receivers, escaping parameter APIs and dynamic keyword dictionaries
+    are errors, rather than guesses based on attribute spelling.
     """
 
     def __init__(self, tree: ast.Module) -> None:
+        self.linked_classes: dict[Binding, ast.ClassDef] = {}
         super().__init__({"__main__": tree})
         self.tree = tree
         for node in ast.walk(tree):
@@ -83,6 +86,21 @@ class AllowlistRenamer(ArgumentRenamer):
         }
         self.mros: dict[ast.ClassDef, list[ast.ClassDef]] = {}
         self.resolving: set[ast.ClassDef] = set()
+        self.linked_classes = {
+            self.bindings[target]: owner
+            for owner in self.classes
+            if isinstance(target := owner.__dict__.get("class_alias_target"), ast.Name)
+            and self.definitions(self.bindings[target]) == [target]
+        }
+
+    def binding_target(
+        self, binding: Binding | None, seen: set[int], *, instances: bool = True
+    ) -> ast.AST | str | None:
+        if binding is not None and id(binding) not in seen:
+            owner = self.linked_classes.get(binding)
+            if isinstance(owner, ast.ClassDef):
+                return owner
+        return super().binding_target(binding, seen, instances=instances)
 
     def check_receiver(self, owner: ast.ClassDef) -> None:
         for base in self.mro(owner):
@@ -171,8 +189,8 @@ class AllowlistRenamer(ArgumentRenamer):
                 if (
                     isinstance(owner, ast.ClassDef)
                     and isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
-                    and function.args.args
-                    and function.args.args[0] is argument
+                    and (positional := function.args.posonlyargs + function.args.args)
+                    and positional[0] is argument
                     and self.descriptor(function) != "staticmethod"
                 ):
                     return {cls for cls in self.classes if owner in self.mro(cls)}, True
@@ -270,6 +288,11 @@ class AllowlistRenamer(ArgumentRenamer):
     def apply(self, entries: list[str]) -> dict[str, str]:
         if not entries:
             return {}
+        attribute_entries = [entry for entry in entries if entry.startswith("attr:")]
+        entries = [entry for entry in entries if not entry.startswith("attr:")]
+        attribute_plan, attribute_bindings, attribute_renames = plan_attributes(
+            self, attribute_entries
+        )
         candidates: dict[tuple[str, ...], list[tuple[str, Binding, ast.AST]]] = {}
         for scope in ast.walk(self.tree):
             for binding in self.node_bindings(scope):
@@ -456,6 +479,8 @@ class AllowlistRenamer(ArgumentRenamer):
             ):
                 raise ValueError(f"Allowlist {entry!r}: runtime field renaming is unsupported")
             selected[binding] = (kind, entry, definition)
+        if selected.keys() & attribute_bindings.keys():
+            raise ValueError("Conflicting variable and attribute allowlist selections")
         self.used.update(node.id for node in ast.walk(self.tree) if isinstance(node, ast.Name))
         self.used.update(node.arg for node in ast.walk(self.tree) if isinstance(node, ast.arg))
         self.used.update(
@@ -492,6 +517,40 @@ class AllowlistRenamer(ArgumentRenamer):
                         watched.add(member_binding)
                         parameter_methods.add(member_binding)
                         member_names.add(member_binding.name)
+        constructors = {
+            function for function in parameter_functions
+            if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and function.name == "__init__"
+        }
+        if constructors:
+            if (
+                inspects_frames(self.tree)
+                or getattr(self.tree, "tainted", False)
+                or "__init__" in self.strings
+            ):
+                raise ValueError("Escaping/reflected constructor with allowlisted parameters")
+            for node in ast.walk(self.tree):
+                reflected_receiver: ast.expr
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id in {"getattr", "vars", "dir"}
+                    and node.args
+                ):
+                    reflected_receiver = node.args[0]
+                elif isinstance(node, ast.Attribute) and node.attr in {
+                    "__class__", "__dict__", "__getattribute__"
+                }:
+                    reflected_receiver = node.value
+                else:
+                    continue
+                owners, _ = self.receiver(reflected_receiver)
+                if any(
+                    (constructor_binding := self.member(owner, "__init__")) is not None
+                    and constructors.intersection(self.definitions(constructor_binding))
+                    for owner in owners
+                ):
+                    raise ValueError("Escaping/reflected constructor with allowlisted parameters")
         # Resolve everything against the original tree before mutating any name.
         for node in ast.walk(self.tree):
             if id(node) in self.annotation_nodes:
@@ -617,4 +676,14 @@ class AllowlistRenamer(ArgumentRenamer):
                 node.arg = name
             else:
                 node.value = name
-        return {entry: renamed[binding] for binding, (_, entry, _) in selected.items()}
+        for binding, name in attribute_bindings.items():
+            binding.rename(name)
+        for node, name in attribute_plan.items():
+            if isinstance(node, ast.Attribute):
+                node.attr = name
+            else:
+                node.value = name
+        return {
+            **{entry: renamed[binding] for binding, (_, entry, _) in selected.items()},
+            **attribute_renames,
+        }

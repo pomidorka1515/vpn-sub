@@ -336,15 +336,15 @@ class ArgumentRenamer:
                 if target is not None
                 else (f"{module}.{name}" if f"{module}.{name}" in self.trees else None)
             )
-        if instances and isinstance(definition, ast.arg) and definition.arg in {"self", "cls"}:
+        if instances and isinstance(definition, ast.arg):
             function = self.parents.get(self.parents.get(definition, definition))
             if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 owner = self.parents.get(function)
                 if (
                     isinstance(owner, ast.ClassDef)
                     and self.descriptor(function) != "staticmethod"
-                    and function.args.args
-                    and function.args.args[0] is definition
+                    and (positional := function.args.posonlyargs + function.args.args)
+                    and positional[0] is definition
                 ):
                     return owner
         return None
@@ -363,8 +363,8 @@ class ArgumentRenamer:
             return None
         if (
             self.descriptor(function) == "staticmethod"
-            or not function.args.args
-            or function.args.args[0] is not argument
+            or not (positional := function.args.posonlyargs + function.args.args)
+            or positional[0] is not argument
         ):
             return None
         owner = self.parents.get(function)
@@ -881,8 +881,8 @@ class ArgumentRenamer:
                     or (
                         descriptor != "staticmethod"
                         and (
-                            not function.args.args
-                            or function.args.args[0].arg not in {"self", "cls"}
+                            not (positional := function.args.posonlyargs + function.args.args)
+                            or positional[0].arg not in {"self", "cls"}
                         )
                     )
                     or any(

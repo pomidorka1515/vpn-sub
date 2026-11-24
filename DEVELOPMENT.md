@@ -323,9 +323,24 @@ Additional identifier renames can be opted into through `--allowlist PATH` or
 no additional renames (it does not disable automatic shortening). The root must
 otherwise be a JSON list of strings (not an object).
 Entries use `c:` for class names, `f:` for function/method names, `a:` for individual non-variadic
-parameters, and `v:` for assigned variables, followed by colon-separated lexical
-scopes and the original name. For example,
+parameters, `attr:` for class-scoped attributes, and `v:` for assigned variables,
+followed by colon-separated lexical scopes and the original name. For example,
 `a:SomeMixin:handle:wrapper:inner:argument` selects a deeply nested parameter.
+`attr:SomeClass:_internal_attribute` selects one attribute across the entire class,
+not just its initializer. Nested scopes and optional file qualifiers work as usual:
+`attr:models.py:Outer:Inner:_internal_attribute`. Resolved reads, writes, deletes,
+class defaults, inherited references, and arbitrarily deep statically resolvable
+receiver chains follow the rename. Literal builtin `getattr`, `setattr`, `delattr`,
+and `hasattr` keys follow it too. Unrelated classes retain same-spelled attributes.
+Unresolved/polymorphic receivers, subclass conflicts, external inheritance,
+descriptors, dataclasses, slots, dynamic reflection, namespace inspection, and
+unknown external consumers fail closed. Special/name-mangled attributes are unsupported.
+Attribute selections cannot overlap a `v:` selection for the same class binding.
+Constructor parameters use the existing parameter syntax, such as
+`a:SomeClass:__init__:argument`; `__init__` itself must retain its special name.
+Positional-only receiver parameters are supported. Constructor keyword calls and
+inline literal keyword dictionaries follow parameter renames; reflected or
+escaping constructor APIs are rejected for explicit selections.
 `c:ClassName` selects a class; `c:Outer:Inner` selects a nested class. Class
 entries do not accept `*` and do not select methods or parameters.
 An optional source-relative file path can appear immediately after any kind prefix:
@@ -415,9 +430,9 @@ and unsupported bindings cause errors rather than speculative rewrites.
 Quoted runtime type references also prevent selecting names they depend on;
 strings used as `typing.Literal` values or `typing.Annotated` metadata are data,
 not type references. In particular, `Literal["ok"]` does not block `f:ok`.
-Use `--report` to see the resulting rename map. Dynamic reflection (including
-string-based lookups), external callbacks and externally visible names remain
-the allowlist author's responsibility: allowing a name is not proof that its
+Use `--report` to see the resulting rename map. Dynamic reflection (apart from
+verified literal attribute lookups), external callbacks and externally visible
+names remain the allowlist author's responsibility: allowing a name is not proof that its
 runtime API is private. A whole-program dataclass pass replaces ordinary field
 annotations with `0` only for proven-closed Python-constructed records. Dacite
 schemas and their transitive field/container dependencies retain their types.
