@@ -4,7 +4,6 @@ from typing import Self
 from uuid import uuid4
 
 import discord
-
 from bots.discord.composition import PublicFeatureMixin
 from errors import AppError, ValidationError
 from util import isusername

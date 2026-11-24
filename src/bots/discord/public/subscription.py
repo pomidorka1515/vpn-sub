@@ -4,7 +4,6 @@ import time
 from typing import TYPE_CHECKING
 
 import discord
-
 from bots.discord.composition import PublicFeatureMixin
 from util import fmt_bytes, fmt_timestamp, make_qr
 

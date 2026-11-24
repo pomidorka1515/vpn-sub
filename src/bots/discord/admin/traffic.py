@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 import discord
-
 from bots.discord.composition import AdminFeatureMixin
 from chart import bandwidth_chart
 from util import fmt_bytes, format_usage, truncate_utf8
