@@ -8,9 +8,174 @@ from abc import ABCMeta
 from importlib import import_module
 from textwrap import dedent
 from types import FunctionType, GetSetDescriptorType, MemberDescriptorType
-from typing import cast
+from typing import TYPE_CHECKING, cast, get_origin
+
+from ..annotations import TypeHint, merge_hints
+
+if TYPE_CHECKING:
+    from .allowlist import AllowlistRenamer
 
 __all__: list[str] = []
+
+
+class ExternalReturns:
+    """Read external return annotations without calling APIs or evaluating hints."""
+
+    def __init__(self, analysis: AllowlistRenamer) -> None:
+        self.analysis: AllowlistRenamer = analysis
+        self.cache: dict[ast.AST, TypeHint] = {}
+        self.annotations: dict[object, ast.expr | None] = {}
+
+    def resolve(self, path: str) -> object:
+        parts = path.split(".")
+        for index in range(len(parts) - 1, 0, -1):
+            try:
+                value: object = import_module(".".join(parts[:index]))
+            except ImportError:
+                continue
+            for name in parts[index:]:
+                value = inspect.getattr_static(value, name)
+            return value
+        raise ValueError("unresolved external annotation")
+
+    def imported(self, node: ast.expr) -> object | None:
+        if isinstance(node, ast.Attribute):
+            owner = self.imported(node.value)
+            return inspect.getattr_static(owner, node.attr, None) if owner is not None else None
+        if not isinstance(node, ast.Name):
+            return None
+        binding = self.analysis.bindings.get(node)
+        definitions = self.analysis.definitions(binding) if binding is not None else []
+        if len(definitions) != 1 or not isinstance(definitions[0], ast.alias):
+            return None
+        module, name = self.analysis.imports.get(definitions[0], ("", None))
+        if not module:
+            return None
+        imported = import_module(module)
+        return inspect.getattr_static(imported, name, None) if name is not None else imported
+
+    def annotation(self, node: ast.expr, namespace: dict[str, object], parameters: dict[str, TypeHint], receiver: TypeHint) -> TypeHint:
+        if isinstance(node, ast.Constant) and node.value is None:
+            return TypeHint(("types.NoneType",))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return self.annotation(ast.parse(node.value, mode="eval").body, namespace, parameters, receiver)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            left = self.annotation(node.left, namespace, parameters, receiver)
+            right = self.annotation(node.right, namespace, parameters, receiver)
+            return merge_hints(left, right) if left and right else TypeHint()
+        if isinstance(node, ast.Name):
+            if node.id in parameters:
+                return parameters[node.id]
+            value = namespace.get(node.id, vars(builtins).get(node.id))
+        elif isinstance(node, ast.Attribute):
+            parts = ast.unparse(node).split(".")
+            value = namespace.get(parts[0])
+            for name in parts[1:]:
+                value = inspect.getattr_static(value, name, None)
+        elif isinstance(node, ast.Subscript):
+            base = self.annotation(node.value, namespace, parameters, receiver)
+            elements = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+            arguments = tuple(self.annotation(element, namespace, parameters, receiver) for element in elements)
+            name = ast.unparse(node.value).rsplit(".", 1)[-1]
+            if name in {"Awaitable", "Coroutine", "Future", "Task"}:
+                return TypeHint(origin="awaitable", arguments=arguments[-1:])
+            if name in {"Optional", "Union"}:
+                return merge_hints(*arguments) if all(arguments) else TypeHint()
+            return TypeHint(base.classes, arguments=arguments)
+        else:
+            return TypeHint()
+        if value is vars(import_module("typing"))["Self"]:
+            return receiver
+        value = get_origin(value) or value
+        if isinstance(value, type):
+            return TypeHint((f"{value.__module__}.{value.__qualname__}",))
+        return TypeHint()
+
+    def returned(self, function: object, receiver: TypeHint | None = None, owner: type | None = None) -> TypeHint:
+        receiver = receiver if receiver is not None else TypeHint()
+        if isinstance(function, (staticmethod, classmethod)):
+            function = cast(
+                classmethod[object, ..., object] | staticmethod[..., object], function
+            ).__func__
+        if not isinstance(function, FunctionType):
+            return TypeHint()
+        if function not in self.annotations:
+            tree = ast.parse(dedent(inspect.getsource(function)))
+            definition = tree.body[0]
+            self.annotations[function] = definition.returns if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)) else None
+        annotation = self.annotations[function]
+        if annotation is None:
+            return TypeHint()
+        parameters: dict[str, TypeHint] = {}
+        if owner is not None:
+            parameters = {
+                parameter.__name__: argument
+                for parameter, argument in zip(getattr(owner, "__parameters__", ()), receiver.arguments, strict=False)
+            }
+        hint = self.annotation(annotation, vars(import_module(function.__module__)), parameters, receiver)
+        if inspect.iscoroutinefunction(function):
+            return TypeHint(origin="awaitable", arguments=(hint,))
+        return hint
+
+    def method(self, receiver: TypeHint, name: str) -> TypeHint:
+        hints: list[TypeHint] = []
+        for path in receiver.classes:
+            owner = self.resolve(path)
+            if not isinstance(owner, type):
+                return TypeHint()
+            hints.append(self.returned(inspect.getattr_static(owner, name, None), receiver, owner))
+        return merge_hints(*hints) if all(hints) else TypeHint()
+
+    def hint(self, node: ast.expr, seen: frozenset[ast.AST] = frozenset()) -> TypeHint:
+        if node in seen:
+            return TypeHint()
+        if node in self.cache:
+            return self.cache[node]
+        try:
+            result = self.expression(node, seen | {node})
+        except (ImportError, AttributeError, ValueError, TypeError, OSError, SyntaxError):
+            result = TypeHint()
+        self.cache[node] = result
+        return result
+
+    def expression(self, node: ast.expr, seen: frozenset[ast.AST]) -> TypeHint:
+        hint = self.analysis.value_hint(node)
+        if hint:
+            return hint
+        if isinstance(node, ast.Await):
+            awaited = self.hint(node.value, seen)
+            if awaited.origin == "awaitable":
+                return awaited.element()
+            # Custom awaitables must supply their own annotated protocol result.
+            protocol = self.method(awaited, "__await__")
+            return protocol.element() if protocol.origin == "awaitable" else TypeHint()
+        if isinstance(node, ast.NamedExpr):
+            return self.hint(node.value, seen)
+        if isinstance(node, ast.Call):
+            imported = self.imported(node.func)
+            if isinstance(imported, type):
+                return TypeHint((f"{imported.__module__}.{imported.__qualname__}",))
+            if imported is not None:
+                return self.returned(imported)
+            if isinstance(node.func, ast.Attribute):
+                return self.method(self.hint(node.func.value, seen), node.func.attr)
+        if isinstance(node, ast.Name):
+            binding = self.analysis.bindings.get(node)
+            definitions = self.analysis.definitions(binding) if binding is not None else []
+            if len(definitions) != 1:
+                return TypeHint()
+            parent = self.analysis.parents.get(definitions[0])
+            if isinstance(parent, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and parent.value is not None:
+                return self.hint(parent.value, seen)
+            if isinstance(parent, ast.withitem):
+                statement = self.analysis.parents.get(parent)
+                asynchronous = isinstance(statement, ast.AsyncWith)
+                entered = self.method(self.hint(parent.context_expr, seen), "__aenter__" if asynchronous else "__enter__")
+                return entered.element() if asynchronous and entered.origin == "awaitable" else entered
+        if isinstance(node, ast.IfExp):
+            left, right = self.hint(node.body, seen), self.hint(node.orelse, seen)
+            return merge_hints(left, right) if left and right else TypeHint()
+        return TypeHint()
 
 
 class ExternalMembers:

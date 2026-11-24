@@ -344,8 +344,13 @@ are checked transitively rather than assumed safe. Opaque callback alternatives,
 escaping callback APIs, dynamic argument expansions, and unsupported container/yield
 or external storage of selected receivers fail closed. Fixed builtin protocol
 operations (such as `dict(tx)` and `len(tx)`) are supported without treating them as
-arbitrary attribute consumers. This is not general external return-type inference:
-unresolved same-spelled fields on external call results still require proof.
+arbitrary attribute consumers. External return annotations can establish unrelated
+receivers through imported constructors/functions, method calls, assignments, and
+sync/async context managers. Async function results and annotated awaitables are
+unwrapped at `await`; generic context-manager parameters and `Self` are retained.
+Annotations are read as syntax, not evaluated, and external APIs are never called
+to infer their results. Missing or unsupported annotations and unknown union
+alternatives still fail closed for same-spelled fields.
 External bases are resolved through installed imports (including aliases and generic
 subscriptions) without constructing instances or evaluating base expressions. Their
 inherited Python implementations and receiver helpers are inspected for member/field

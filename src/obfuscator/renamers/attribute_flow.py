@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.binding import BuiltinBinding
 
+from .external import ExternalReturns
+
 if TYPE_CHECKING:
     from ..analysis import Binding, Function
     from .allowlist import AllowlistRenamer
@@ -43,6 +45,7 @@ class AttributeFlow:
         self.arguments: dict[Binding, Value] = {}
         self.fields: dict[tuple[ast.ClassDef, str], Value] = {}
         self.external_types: dict[str, type | None] = {}
+        self.external_returns: ExternalReturns = ExternalReturns(analysis)
         self.values: dict[ast.AST, Value] = {}
         self.written_fields: set[str] = {
             node.attr for node in self.nodes if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store)
@@ -367,7 +370,7 @@ class AttributeFlow:
             return False
         if self.imported_namespace(node):
             return True
-        hint = self.analysis.value_hint(node)
+        hint = self.external_returns.hint(node)
         if not hint.classes or hint.origin is not None:
             return False
         for path in hint.classes:
