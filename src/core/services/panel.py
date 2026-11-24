@@ -253,8 +253,8 @@ class PanelService(BaseService):
                 (
                     client.email,
                     client.uuid,
-                    client.traffic.email,
-                    client.traffic.uuid,
+                    client.traffic.email or client.email,
+                    client.traffic.uuid or client.uuid,
                     client.traffic.up,
                     client.traffic.down,
                 )
@@ -316,7 +316,18 @@ class PanelService(BaseService):
                     and isinstance(down, int)
                 ):
                     raise ValueError("invalid traffic fields") from None
-                result.append((email, uuid, traffic_email, traffic_uuid, up, down))
+                # 3x-ui can return blank identities in the bulk client list even
+                # though each traffic object belongs to its enclosing client row.
+                result.append(
+                    (
+                        email,
+                        uuid,
+                        traffic_email or email,
+                        traffic_uuid or uuid,
+                        up,
+                        down,
+                    )
+                )
             return result, TrafficSnapshot.from_rows(result)
         except Exception as exc:
             raise PanelUnavailableError(f"Panel {panel.name} invalid client list") from exc

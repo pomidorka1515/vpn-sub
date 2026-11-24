@@ -233,6 +233,20 @@ async def test_updates_ignore_mismatched_traffic_and_unknown_online_users(
     assert snapshot.authorized_frame("unknown", "a" * 100) is None
 
 
+async def test_updates_accept_blank_bulk_traffic_uuid(database: Database) -> None:
+    await database.create_user(
+        username="alice", uuid="alice-id", token="token", fingerprint="chrome", displayname="Alice"
+    )
+    client = make_panel_client("alice", [1], up=10, down=20, uuid="alice-id")
+    assert client.traffic is not None
+    panel = FakePanel(clients=[replace(client, traffic=replace(client.traffic, uuid=""))])
+    sub = await make_subscription(database, panels=[panel])
+    sub.update_svc.add_viewer("alice")
+
+    snapshot = await sub.update_svc.snapshot("alice")
+    assert snapshot.totals["alice"] == [10, 20, 0, 0]
+
+
 async def test_updates_sum_matching_duplicate_panel_rows(database: Database) -> None:
     await database.create_user(
         username="alice", uuid="alice-id", token="token", fingerprint="chrome", displayname="Alice"

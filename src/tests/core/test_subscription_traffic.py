@@ -138,6 +138,38 @@ async def test_subscription_bandwidth_filters_both_identities(database: Database
     assert all(panel.gets == ["panel/api/clients/list"] for panel in panels)
 
 
+async def test_blank_bulk_traffic_uuid_uses_enclosing_client(database: Database) -> None:
+    await create_alice(database)
+    client = make_panel_client("alice", [1], up=5, down=6)
+    assert client.traffic is not None
+    without_uuid = replace(client, traffic=replace(client.traffic, uuid=""))
+    panel = FakePanel(clients=[without_uuid])
+    sub = await make_subscription(database, panels=[panel])
+    user = await database.get_user("alice")
+    assert user is not None
+
+    row = await sub.panel_svc.subscription_traffic(sub.panels[0], "alice")
+    assert row == ("alice", user["uuid"], "alice", user["uuid"], 5, 6)
+    assert await sub.bandwidth_svc.subscription_bandwidth("alice", user["uuid"]) == BandwidthInfo(
+        5, 6, 11
+    )
+
+
+async def test_list_clients_republishes_blank_uuid_traffic(database: Database) -> None:
+    await create_alice(database)
+    client = make_panel_client("alice", [1], up=5, down=6)
+    assert client.traffic is not None
+    without_uuid = replace(client, traffic=replace(client.traffic, uuid=""))
+    panel = FakePanel(clients=[without_uuid])
+    sub = await make_subscription(database, panels=[panel])
+    user = await database.get_user("alice")
+    assert user is not None
+
+    await sub.panel_svc.list_clients(sub.panels[0])
+    row = await sub.panel_svc.subscription_traffic(sub.panels[0], "alice")
+    assert row == ("alice", user["uuid"], "alice", user["uuid"], 5, 6)
+
+
 async def test_failed_sample_retries_after_cooldown(
     database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:

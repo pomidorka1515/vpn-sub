@@ -7,8 +7,8 @@ import re
 from abc import ABCMeta
 from importlib import import_module
 from textwrap import dedent
-from types import FunctionType, GetSetDescriptorType, MemberDescriptorType
-from typing import TYPE_CHECKING, cast, get_origin
+from types import FunctionType, GetSetDescriptorType, MemberDescriptorType, UnionType
+from typing import TYPE_CHECKING, cast, get_args, get_origin
 
 from ..annotations import TypeHint, merge_hints
 
@@ -86,9 +86,17 @@ class ExternalReturns:
             return TypeHint()
         if value is vars(import_module("typing"))["Self"]:
             return receiver
-        value = get_origin(value) or value
+        return self.runtime_hint(value)
+
+    def runtime_hint(self, value: object) -> TypeHint:
+        origin = get_origin(value)
+        if origin is UnionType:
+            arguments = tuple(self.runtime_hint(argument) for argument in get_args(value))
+            return merge_hints(*arguments) if all(arguments) else TypeHint()
+        arguments = tuple(self.runtime_hint(argument) for argument in get_args(value))
+        value = origin or value
         if isinstance(value, type):
-            return TypeHint((f"{value.__module__}.{value.__qualname__}",))
+            return TypeHint((f"{value.__module__}.{value.__qualname__}",), arguments=arguments)
         return TypeHint()
 
     def returned(self, function: object, receiver: TypeHint | None = None, owner: type | None = None) -> TypeHint:
@@ -162,6 +170,24 @@ class ExternalReturns:
         if isinstance(node, ast.Name):
             binding = self.analysis.bindings.get(node)
             definitions = self.analysis.definitions(binding) if binding is not None else []
+            if len(definitions) > 1 and isinstance(node.ctx, ast.Load):
+                # A later, separate ``with ... as name`` does not change the
+                # receiver inside this context's body. Only use this lexical
+                # evidence when no competing store occurs anywhere in the body.
+                child: ast.AST = node
+                parent = self.analysis.parents.get(child)
+                while parent is not None:
+                    if isinstance(parent, (ast.With, ast.AsyncWith)) and child in parent.body:
+                        candidates = [
+                            definition for definition in definitions
+                            if any(item.optional_vars is definition for item in parent.items)
+                        ]
+                        body_nodes = {descendant for statement in parent.body for descendant in ast.walk(statement)}
+                        if len(candidates) == 1 and not any(definition in body_nodes for definition in definitions):
+                            definitions = candidates
+                            break
+                    child = parent
+                    parent = self.analysis.parents.get(child)
             if len(definitions) != 1:
                 return TypeHint()
             parent = self.analysis.parents.get(definitions[0])

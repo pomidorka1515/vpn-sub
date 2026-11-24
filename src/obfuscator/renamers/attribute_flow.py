@@ -436,6 +436,13 @@ class AttributeFlow:
                     return
                 owners = self.receivers(call.func.value)
                 for owner in owners & family:
+                    # A callable stored on an instance is not a method: reading
+                    # it does not bind/pass the instance as an implicit argument.
+                    # Stores and explicit arguments are checked separately, as
+                    # are visible bound callbacks above. Unknown methods must
+                    # still fail closed; field evidence is required here.
+                    if (owner, call.func.attr) in self.fields and self.analysis.member(owner, call.func.attr) is None:
+                        continue
                     if not any(
                         call.func.attr in self.analysis.external_members.members(self.analysis.external_base(parent))
                         for base in self.analysis.mro(owner) for parent in base.bases

@@ -619,6 +619,21 @@ class ArgumentRenamer:
     def name_hint(self, node: ast.Name, seen: set[int]) -> TypeHint:
         binding = self.bindings.get(node)
         definitions = self.definitions(binding) if binding is not None else []
+        if len(definitions) > 1:
+            hints: list[TypeHint] = []
+            for definition in definitions:
+                if not isinstance(definition, ast.Name) or not isinstance(definition.ctx, ast.Store):
+                    return TypeHint()
+                hint = definition.__dict__.get("type_annotation")
+                inferred = (
+                    self.resolved_hint(hint, self.enclosing_class(definition))
+                    if isinstance(hint, TypeHint)
+                    else self.destructured_hint(definition, seen)
+                )
+                if not inferred:
+                    return TypeHint()
+                hints.append(inferred)
+            return merge_hints(*hints)
         if len(definitions) == 1:
             definition = definitions[0]
             if isinstance(definition, ast.arg):
@@ -741,6 +756,16 @@ class ArgumentRenamer:
                 arguments=(
                     merge_hints(*(self.value_hint(element, seen) for element in node.elts)),
                 ),
+            )
+        if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+            return TypeHint(
+                origin="sequence",
+                arguments=(self.value_hint(node.elt, seen),),
+            )
+        if isinstance(node, ast.DictComp):
+            return TypeHint(
+                origin="mapping",
+                arguments=(self.value_hint(node.key, seen), self.value_hint(node.value, seen)),
             )
         if isinstance(node, ast.Dict):
             keys = merge_hints(*(self.value_hint(key, seen) for key in node.keys))
