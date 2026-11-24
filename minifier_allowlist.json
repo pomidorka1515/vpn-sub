@@ -24,7 +24,15 @@
 	"c:MISSING_TYPE", "f:publish_backup", "f:strip_jsonc_comments", "v:strip_jsonc_comments:result", "v:strip_jsonc_comments:index",
 	"f:strip_jsonc_trailing_commas", "v:strip_jsonc_trailing_commas:result", "v:strip_jsonc_trailing_commas:index", "v:do_backup:content", "f:make_backup_thread", "v:make_backup_thread:loop:log", "f:reject_nonfinite_constant", "f:validate_finite_numbers",
 	"f:compile_schema", "f:_compile_schema", "f:read_json_object", "v:read_json_object:content", "v:read_json_object:data", "f:load_schema", "v:load_schema:message", "f:validate_schema", "f:freeze", "f:_thaw", "f:thaw",  "f:json_equal",
-	"c:ConfigTransaction", "f:validate_panel_limit", "v:validate_panel_limit:panels", "v:validate_panel_limit:name", "v:validate_panel_limit:names",
+	"c:ConfigTransaction", "a:ConfigTransaction:__init__:config", "attr:ConfigTransaction:_config", "attr:ConfigTransaction:data", "attr:ConfigTransaction:original", "attr:ConfigTransaction:_lock_fp", "attr:ConfigTransaction:owner_thread_id", "attr:ConfigTransaction:_cfg_lock_acquired",
+	"v:ConfigTransaction:__enter__:cfg", "v:ConfigTransaction:__exit__:cfg", "f:ConfigTransaction:require_active",
+	"a:Config:__init__:path", "a:Config:__init__:ident", "a:Config:__init__:minify", "a:Config:__init__:read_only", "a:Config:__init__:read_only_jsonc", "a:Config:__init__:strict_schema", "a:Config:__init__:schema_path", "a:Config:__init__:validators",
+	"a:Config:__init__:sync_modes", "a:Config:__init__:isolate_commits", "a:Config:__init__:backup_dir", "a:Config:__init__:backup_interval", "a:Config:__init__:backup_retention", "a:Config:__init__:lockfile_path", "a:Config:__init__:start_backup",
+	"attr:Config:_path", "attr:Config:_lockfile_path", "attr:Config:_ident", "attr:Config:_minify", "attr:Config:_strict_schema", "attr:Config:_schema_path", "attr:Config:_validators",
+	"attr:Config:_sync_mode", "attr:Config:_isolate_commits", "attr:Config:data", "attr:Config:last_signature", "attr:Config:_shared_snapshot", "attr:Config:_shared_signature", "attr:Config:lock", "attr:Config:active_transaction",
+	"attr:Config:context_transaction", "attr:Config:schema_cache_path", "attr:Config:schema_cache_signature", "attr:Config:schema_cache", "attr:Config:schema_validator", "attr:Config:_warned_update_callable", "attr:Config:_read_only", "attr:Config:_read_only_jsonc",
+	"attr:Config:_backup_dir", "attr:Config:_backup_interval", "attr:Config:_backup_retention", "attr:Config:_backup_stop", "attr:Config:_backup_t",
+	"f:validate_panel_limit", "v:validate_panel_limit:panels", "v:validate_panel_limit:name", "v:validate_panel_limit:names",
 	"f:_nonempty_str", "f:check_config_document", "v:check_config_document:profiles", "v:check_config_document:auth", "f:config_etag", "f:apply_config_patch", "f:_is_json_value",
 	"c:LiveState", "c:CPUInfo", "c:LoadAverage", "c:RamInfo", "c:SwapInfo", "c:SystemMemory", "c:IPList", "c:ConnCount", "c:AppMemory", "c:GCGenStats", "c:GCStats", "c:ThreadInfo", "c:HealthStatus", "c:FullSystemInfo",
 	"f:_proc_text",
@@ -43,5 +51,6 @@
 	"f:bandwidth_chart", "f:leaderboard_chart", "f:parse_edit_expiry", "f:_custom_id", "f:_dispatch", "f:interaction_limit", "c:PendingConfirmation",
 	"f:db/backup.py:instance_backup_dir", "f:db/backup.py:prune_backups", "f:db/backup.py:do_backup",
 	"f:config/backup.py:instance_backup_dir", "f:config/backup.py:prune_backups", "f:config/backup.py:do_backup"
+	
 
 ]

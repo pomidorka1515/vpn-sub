@@ -332,9 +332,14 @@ not just its initializer. Nested scopes and optional file qualifiers work as usu
 class defaults, inherited references, and arbitrarily deep statically resolvable
 receiver chains follow the rename. Literal builtin `getattr`, `setattr`, `delattr`,
 and `hasattr` keys follow it too. Unrelated classes retain same-spelled attributes.
-Unresolved/polymorphic receivers, subclass conflicts, external inheritance,
+Unresolved/polymorphic receivers, subclass conflicts, unverifiable external inheritance,
 descriptors, dataclasses, slots, dynamic reflection, namespace inspection, and
 unknown external consumers fail closed. Special/name-mangled attributes are unsupported.
+External bases are resolved through installed imports (including aliases and generic
+subscriptions) without constructing instances or evaluating base expressions. Their
+inherited Python implementations and receiver helpers are inspected for member/field
+conflicts. Unrelated members are eligible; inherited overrides, opaque implementations,
+custom metaclasses, dynamic receiver hooks, and unverifiable reflection still fail closed.
 Attribute selections cannot overlap a `v:` selection for the same class binding.
 Constructor parameters use the existing parameter syntax, such as
 `a:SomeClass:__init__:argument`; `__init__` itself must retain its special name.

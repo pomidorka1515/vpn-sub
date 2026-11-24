@@ -49,7 +49,7 @@ def plan_attributes(
             raise ValueError(f"Allowlist {entry!r}: special/name-mangled attributes are unsupported")
         family = {cls for cls in analysis.classes if owner in analysis.mro(cls)}
         for cls in family | set(analysis.mro(owner)):
-            analysis.check_receiver(cls)
+            analysis.check_receiver(cls, name)
             if cls.decorator_list or any(
                 binding.name in {"__slots__", "__setattr__", "__delattr__", "__init_subclass__"}
                 for binding in analysis.node_bindings(cls)
@@ -114,7 +114,7 @@ def plan_attributes(
                 elif not receivers and (
                     not literal or (isinstance(key, ast.Constant) and key.value == name)
                 ):
-                    raise ValueError("Unresolved reflective attribute receiver")
+                    raise ValueError(f"Unresolved reflective attribute receiver: {ast.unparse(node)!r}")
                 continue
             # Unknown consumers can read names without any visible attribute AST.
             target = analysis.target(node.func, instances=False)

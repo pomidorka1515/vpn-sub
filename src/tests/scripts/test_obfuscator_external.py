@@ -1,0 +1,183 @@
+from __future__ import annotations
+
+import ast
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from obfuscator.pipeline import obfuscate_modules
+from obfuscator.renamers.allowlist import AllowlistRenamer
+
+__all__: list[str] = []
+
+
+@pytest.mark.parametrize("base", [
+    "MutableMapping[str, int]", "abc.MutableMapping[str, int]", "Alias", "ABC.MutableMapping",
+])
+def test_external_mapping_unrelated_members(base: str) -> None:
+    source = f"""
+from collections.abc import MutableMapping
+import collections.abc as abc
+Alias = MutableMapping
+ABC = abc
+class ConfigTransaction({base}):
+    def __init__(self, config):
+        self._config = config
+        self.data = config
+        self.original = None
+        self._lock_fp = None
+        self.owner_thread_id = None
+        self._cfg_lock_acquired = False
+    def __enter__(self):
+        cfg = self._config
+        self.data = cfg
+        return self
+    def __exit__(self, *args):
+        cfg = self._config
+        self.original = cfg
+    def __getitem__(self, key): return self._config[key]
+    def __setitem__(self, key, value): self._config[key] = value
+    def __delitem__(self, key): del self._config[key]
+    def __iter__(self): return iter(self._config)
+    def __len__(self): return len(self._config)
+    def require_active(self): return self._config['a']
+record = ConfigTransaction(config={{'a': 7}})
+with record:
+    __result__ = record.require_active(), record.get('a')
+"""
+    entries = [
+        "c:ConfigTransaction", "a:ConfigTransaction:__init__:config",
+        "attr:ConfigTransaction:_config", "f:ConfigTransaction:require_active",
+        "attr:ConfigTransaction:data", "attr:ConfigTransaction:original",
+        "attr:ConfigTransaction:_lock_fp", "attr:ConfigTransaction:owner_thread_id",
+        "attr:ConfigTransaction:_cfg_lock_acquired", "v:ConfigTransaction:__enter__:cfg",
+        "v:ConfigTransaction:__exit__:cfg",
+    ]
+    result = obfuscate_modules({Path("main.py"): source}, entries, jobs=1)
+    assert set(entries) <= result.renames.keys()
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, 7)
+
+
+@pytest.mark.parametrize("entry", ["f:Record:get", "a:Record:get:key", "attr:Record:keys"])
+def test_external_overrides_rejected_even_without_callers(entry: str) -> None:
+    tree = ast.parse("""
+from collections.abc import MutableMapping
+class Record(MutableMapping):
+    keys = 1
+    def get(self, key): return key
+""")
+    with pytest.raises(ValueError, match="External inherited member conflict"):
+        AllowlistRenamer(tree).apply([entry])
+
+
+@pytest.mark.parametrize("base", ["missing.Base", "factory()", "dict", "Alias"])
+def test_unverifiable_external_bases_rejected(base: str) -> None:
+    tree = ast.parse(f"""
+Alias = Alias
+class Record({base}):
+    def setup(self): self._value = 1
+""")
+    with pytest.raises(ValueError, match="Cannot verify external inheritance"):
+        AllowlistRenamer(tree).apply(["attr:Record:_value"])
+
+
+def test_external_instance_field_conflict() -> None:
+    tree = ast.parse("""
+from collections import UserDict
+class Record(UserDict):
+    def setup(self): self.data = {}
+""")
+    with pytest.raises(ValueError, match=r"conflict|Cannot verify external inheritance"):
+        AllowlistRenamer(tree).apply(["attr:Record:data"])
+
+
+@pytest.mark.parametrize("field", ["_external", "_helper"])
+def test_external_implementation_fields_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str,
+) -> None:
+    (tmp_path / "external_field_fixture.py").write_text("""
+def helper(receiver):
+    return receiver._helper
+class Parent:
+    def read(this):
+        return this._external + helper(this)
+""", encoding="utf-8")
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    tree = ast.parse(f"""
+from external_field_fixture import Parent
+class Record(Parent):
+    def setup(self): self.{field} = 1
+""")
+    with pytest.raises(ValueError, match="External inherited member conflict"):
+        AllowlistRenamer(tree).apply([f"attr:Record:{field}"])
+
+
+def test_other_external_class_unrelated_members(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "external_parent_fixture.py").write_text("""
+class Parent:
+    def inherited(self): return 3
+""", encoding="utf-8")
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    tree = ast.parse("""
+from external_parent_fixture import Parent
+class Record(Parent):
+    def setup(self): self._value = 4
+    def read(self): return self._value + self.inherited()
+record = Record()
+record.setup()
+__result__ = record.read()
+""")
+    entries = ["attr:Record:_value", "f:Record:read"]
+    assert set(AllowlistRenamer(tree).apply(entries)) == set(entries)
+    namespace: dict[str, Any] = {}
+    exec(ast.unparse(tree), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
+def test_unrelated_type_reflection_does_not_block_attributes() -> None:
+    tree = ast.parse("""
+class Record:
+    def setup(self): self._value = 4
+class Other: pass
+other = Other()
+getattr(type(other), input())
+""")
+    assert "attr:Record:_value" in AllowlistRenamer(tree).apply(["attr:Record:_value"])
+
+
+def test_type_reflection_on_selected_family_still_rejected() -> None:
+    tree = ast.parse("""
+class Record:
+    def setup(self): self._value = 4
+record = Record()
+getattr(type(record), input())
+""")
+    with pytest.raises(ValueError, match="Dynamic reflection"):
+        AllowlistRenamer(tree).apply(["attr:Record:_value"])
+
+
+@pytest.mark.parametrize(("index", "source"), [
+    (0, "class Parent:\n def read(this, key): return getattr(this, key)\n"),
+    (1, "class Meta(type): pass\nclass Parent(metaclass=Meta): pass\n"),
+    (2, "class Parent:\n read = len\n"),
+    (3, "class Parent:\n def read(self, iter): return iter(self)\n"),
+])
+def test_dynamic_external_implementations_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, index: int, source: str,
+) -> None:
+    module = f"external_dynamic_fixture_{index}"
+    (tmp_path / f"{module}.py").write_text(source, encoding="utf-8")
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    tree = ast.parse(f"""
+from {module} import Parent
+class Record(Parent):
+    def setup(self): self._value = 1
+""")
+    with pytest.raises(ValueError, match="Cannot verify external inheritance"):
+        AllowlistRenamer(tree).apply(["attr:Record:_value"])

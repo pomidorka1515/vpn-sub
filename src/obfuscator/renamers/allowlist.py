@@ -14,6 +14,7 @@ from python_minifier.rename.binding import BuiltinBinding
 from ..analysis import inspects_frames
 from .attributes import plan_attributes
 from .base import ArgumentRenamer
+from .external import ExternalMembers
 
 if TYPE_CHECKING:
     from ..analysis import Binding
@@ -86,6 +87,7 @@ class AllowlistRenamer(ArgumentRenamer):
         }
         self.mros: dict[ast.ClassDef, list[ast.ClassDef]] = {}
         self.resolving: set[ast.ClassDef] = set()
+        self.external_members = ExternalMembers()
         self.linked_classes = {
             self.bindings[target]: owner
             for owner in self.classes
@@ -102,7 +104,36 @@ class AllowlistRenamer(ArgumentRenamer):
                 return owner
         return super().binding_target(binding, seen, instances=instances)
 
-    def check_receiver(self, owner: ast.ClassDef) -> None:
+    def external_base(
+        self, node: ast.expr, seen: set[ast.AST] | None = None, *, suffix: tuple[str, ...] = (),
+    ) -> type:
+        seen = set() if seen is None else seen
+        if node in seen:
+            raise ValueError("cyclic external base alias")
+        seen.add(node)
+        if isinstance(node, ast.Subscript):
+            node = node.value
+        path: list[str] = []
+        while isinstance(node, ast.Attribute):
+            path.insert(0, node.attr)
+            node = node.value
+        path.extend(suffix)
+        binding = self.bindings.get(node)
+        if isinstance(cast(object, binding), BuiltinBinding) and isinstance(node, ast.Name):
+            return self.external_members.resolve("builtins", [node.id, *path])
+        definitions = self.definitions(binding) if binding is not None else []
+        if len(definitions) == 1:
+            definition = definitions[0]
+            if isinstance(definition, ast.alias):
+                module, name = self.imports[definition]
+                return self.external_members.resolve(module, [*([name] if name else []), *path])
+            if isinstance(definition, ast.Name):
+                assignment = self.parents.get(definition)
+                if isinstance(assignment, (ast.Assign, ast.AnnAssign)) and assignment.value is not None:
+                    return self.external_base(assignment.value, seen, suffix=tuple(path))
+        raise ValueError(f"unresolved base {ast.unparse(node)!r}")
+
+    def check_receiver(self, owner: ast.ClassDef, name: str | None = None) -> None:
         for base in self.mro(owner):
             if (
                 base.keywords
@@ -114,14 +145,17 @@ class AllowlistRenamer(ArgumentRenamer):
                 )
             ):
                 raise ValueError(f"Unsupported dynamic receiver class {base.name!r}")
-            if any(
-                not isinstance(
-                    super(AllowlistRenamer, self).target(parent, instances=False), ast.ClassDef
-                )
-                and not (isinstance(parent, ast.Name) and parent.id == "object")
-                for parent in base.bases
-            ):
-                raise ValueError(f"Cannot verify external inheritance for receiver {base.name!r}")
+            for parent in base.bases:
+                if isinstance(super().target(parent, instances=False), ast.ClassDef):
+                    continue
+                try:
+                    members = self.external_members.members(self.external_base(parent))
+                except (ImportError, AttributeError, OSError, TypeError, ValueError, SyntaxError) as error:
+                    raise ValueError(
+                        f"Cannot verify external inheritance for receiver {base.name!r}: {error}"
+                    ) from error
+                if name is not None and name in members:
+                    raise ValueError(f"External inherited member conflict for {base.name!r}: {name!r}")
 
     def path(self, node: ast.AST, *, original: bool = True) -> tuple[str, ...]:
         names: list[str] = []
@@ -209,6 +243,13 @@ class AllowlistRenamer(ArgumentRenamer):
                             return set(), False
                         return {owner}, False
         if isinstance(node, ast.Call):
+            if (
+                len(node.args) == 1 and not node.keywords
+                and isinstance(cast(object, self.bindings.get(node.func)), BuiltinBinding)
+                and isinstance(node.func, ast.Name) and node.func.id == "type"
+            ):
+                owners, _ = self.receiver(node.args[0])
+                return {cls for cls in self.classes if any(owner in self.mro(cls) for owner in owners)}, True
             owner = super().target(node.func, instances=False)
             if isinstance(owner, ast.ClassDef):
                 if any(
@@ -478,6 +519,15 @@ class AllowlistRenamer(ArgumentRenamer):
                 )
             ):
                 raise ValueError(f"Allowlist {entry!r}: runtime field renaming is unsupported")
+            if kind == "f" and isinstance(self.parents.get(definition), ast.ClassDef):
+                self.check_receiver(cast(ast.ClassDef, self.parents[definition]), binding.name)
+            elif kind == "a":
+                function = self.parents[self.parents[definition]]
+                owner = self.parents.get(function)
+                if isinstance(owner, ast.ClassDef) and isinstance(
+                    function, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ):
+                    self.check_receiver(owner, function.name)
             selected[binding] = (kind, entry, definition)
         if selected.keys() & attribute_bindings.keys():
             raise ValueError("Conflicting variable and attribute allowlist selections")
@@ -563,7 +613,7 @@ class AllowlistRenamer(ArgumentRenamer):
                         raise ValueError(f"Ambiguous polymorphic attribute {ast.unparse(node)!r}")
                     owners, _ = self.receiver(node.value)
                     for owner in owners:
-                        self.check_receiver(owner)
+                        self.check_receiver(owner, node.attr)
                     member_binding = next(iter(affected))
                     if member_binding in parameter_methods and not isinstance(node.ctx, ast.Load):
                         raise ValueError(
