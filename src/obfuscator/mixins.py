@@ -497,7 +497,9 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             return node
 
     body: list[ast.stmt] = []
-    next_line = max((getattr(child, "end_lineno", 0) or 0 for child in ast.walk(tree)), default=0) + 1
+    next_line = (
+        max((getattr(child, "end_lineno", 0) or 0 for child in ast.walk(tree)), default=0) + 1
+    )
     for top_level in tree.body:
         if top_level in removed_statements:
             continue
@@ -562,9 +564,18 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                 ast.FunctionDef | ast.AsyncFunctionDef,
                 ast.parse(ast.unparse(ast.fix_missing_locations(definition))).body[0],
             )
-            for original_node, copied_node in zip(ast.walk(definition), ast.walk(method), strict=True):
-                if "original_name" in original_node.__dict__:
-                    copied_node.__dict__["original_name"] = original_node.__dict__["original_name"]
+            for original_node, copied_node in zip(
+                ast.walk(definition), ast.walk(method), strict=True
+            ):
+                for key in (
+                    "original_name",
+                    "type_annotation",
+                    "return_type",
+                    "annotation_path",
+                    "source_module",
+                ):
+                    if key in original_node.__dict__:
+                        copied_node.__dict__[key] = original_node.__dict__[key]
             for call, func in originals:
                 call.func = func
             method.name = name

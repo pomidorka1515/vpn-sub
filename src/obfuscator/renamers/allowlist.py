@@ -82,7 +82,7 @@ class AllowlistRenamer(ArgumentRenamer):
         for base in self.mro(owner):
             if (
                 base.keywords
-                or base.decorator_list
+                or not self.safe_class_decorators(base)
                 or any(
                     isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and child.name in {"__getattr__", "__getattribute__", "__new__"}
@@ -194,6 +194,9 @@ class AllowlistRenamer(ArgumentRenamer):
                 ):
                     return set(), False
                 return {owner}, False
+        owners = super().type_targets(node)
+        if owners:
+            return owners, False
         owner = super().target(node, instances=False)
         return ({owner}, False) if isinstance(owner, ast.ClassDef) else (set(), False)
 
@@ -451,6 +454,8 @@ class AllowlistRenamer(ArgumentRenamer):
                         member_names.add(member_binding.name)
         # Resolve everything against the original tree before mutating any name.
         for node in ast.walk(self.tree):
+            if id(node) in self.annotation_nodes:
+                continue
             if isinstance(node, ast.Attribute) and node.attr in member_names:
                 targets = self.attribute_bindings(node)
                 affected = targets & watched

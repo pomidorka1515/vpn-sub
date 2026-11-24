@@ -32,6 +32,8 @@ class PrivateMethodRenamer(ArgumentRenamer):
         self.used.update(self.strings)
         for tree in self.trees.values():
             for node in ast.walk(tree):
+                if id(node) in self.annotation_nodes:
+                    continue
                 self.used.update(binding.name for binding in self.node_bindings(node))
                 if isinstance(node, ast.Attribute):
                     self.used.add(node.attr)
@@ -49,6 +51,7 @@ class PrivateMethodRenamer(ArgumentRenamer):
                 or not function.name.startswith("_")
                 or function.name.startswith("__")
                 or function in reflected
+                or self.is_property(function)
                 or not isinstance(self.parents.get(function), ast.ClassDef)
             ):
                 continue

@@ -11,6 +11,7 @@ import python_minifier
 
 from .aliases import consolidate_aliases, shorten_imports
 from .analysis import inspects_frames
+from .annotations import AnnotationIndex
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .constants import inline_constants
 from .linker import flatten, module_name
@@ -85,6 +86,7 @@ def obfuscate_modules(originals: dict[Path, str], entries: list[str]) -> Obfusca
             generic_classes,
             module=module_name(relative),
             protocol_classes=protocol_classes,
+            tree=parsed[relative],
         )
     # Analyze the final lexical scope: module-qualified data references no
     # longer look like reflective escapes, and every internal caller is linked.
@@ -126,10 +128,18 @@ def prepare_tree(
     *,
     module: str = "__main__",
     protocol_classes: set[tuple[str, str]] | None = None,
+    tree: ast.Module | None = None,
 ) -> ast.Module:
     """Remove release metadata before argument analysis and minification."""
-    tree = ast.parse(source, filename=filename)
-    tree.__dict__["is_package"] = Path(filename).name == "__init__.py"
+    if tree is None:
+        tree = ast.parse(source, filename=filename)
+        tree.__dict__["is_package"] = Path(filename).name == "__init__.py"
+    # Annotations are type information for the renamers, not release output.
+    AnnotationIndex(
+        module,
+        tree,
+        is_package=bool(tree.__dict__.get("is_package", False)),
+    ).apply()
     mark_mixin_origins(tree, module)
     cleanup = ReleaseCleanup(
         tree,
@@ -139,7 +149,7 @@ def prepare_tree(
     )
 
     tree = cast(ast.Module, CollapseLiterals(cleanup).visit(tree))
-    tree = cleanup.visit(tree)
+    tree = cast(ast.Module, cleanup.visit(tree))
     tree = strip_typing_imports(tree, cleanup.typing_modules)
     ast.fix_missing_locations(tree)
     return tree
