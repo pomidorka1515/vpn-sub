@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from obfuscator import sql
 from obfuscator.pipeline import obfuscate, obfuscate_modules
 from obfuscator.sql import minify_sql, minify_sql_literals
 
@@ -35,6 +36,19 @@ __all__: list[str] = []
 def test_minimal_sql(source: str, expected: str) -> None:
     assert minify_sql(source) == expected
     assert minify_sql(expected) == expected
+
+
+@pytest.mark.parametrize("source", ["", "field_name", "SELECT(123)", "'quoted'", "☃"])
+@pytest.mark.parametrize("preserve_edges", [False, True])
+def test_compact_literals_skip_sql_tokenization(
+    source: str, preserve_edges: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_tokens(value: str) -> list[tuple[str, str]] | None:
+        pytest.fail(f"Unnecessary SQL tokenization: {value!r}")
+
+    minify_sql.cache_clear()
+    monkeypatch.setattr(sql, "tokens", unexpected_tokens)
+    assert minify_sql(source, preserve_edges=preserve_edges) == source
 
 
 @pytest.mark.parametrize(

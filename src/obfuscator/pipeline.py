@@ -24,7 +24,6 @@ from .markers import strip_markers
 from .mixins import fold_mixins, mark_mixin_origins
 from .parallel import default_jobs, ordered_map
 from .renamers.allowlist import AllowlistRenamer
-from .renamers.base import ArgumentRenamer
 from .renamers.methods import (
     PrivateMethodRenamer,
     rename_constructor_classes,
@@ -183,12 +182,10 @@ def _obfuscate_modules(
     methods = PrivateMethodRenamer(linked_trees)
     methods.run()
     renamed_methods = methods.renamed
+    methods.rename_parameters()
+    renamed_parameters = methods.renamed
+    skipped_parameters = methods.skipped
     del methods
-    renamer = ArgumentRenamer(linked_trees)
-    renamer.run()
-    renamed_parameters = renamer.renamed
-    skipped_parameters = renamer.skipped
-    del renamer
     announce("Applying the rename allowlist")
     renames = AllowlistRenamer(linked).apply(entries) if entries else {}
     announce("Minifying and validating app.min.py")
@@ -304,6 +301,8 @@ def obfuscate(source: str, filename: str) -> str:
     tree = prepare_tree(source, filename)
     minify_dataclasses(tree)
     rename_private_classes(tree)
-    PrivateMethodRenamer({"__main__": tree}).run()
-    ArgumentRenamer({"__main__": tree}).run()
+    methods = PrivateMethodRenamer({"__main__": tree})
+    methods.run()
+    methods.rename_parameters()
+    del methods
     return minify_tree(tree, filename)

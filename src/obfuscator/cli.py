@@ -14,6 +14,7 @@ __all__: list[str] = ["main"]
 
 
 def main() -> None:
+    started = monotonic()
     parser = argparse.ArgumentParser(description="Flatten src/ into a release-only app.min.py.")
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
@@ -62,7 +63,6 @@ def main() -> None:
     count = len(originals)
     if not originals:
         raise SystemExit("No application Python modules found")
-    started = monotonic()
 
     def report_progress(stage: str) -> None:
         print(f"[{monotonic() - started:.1f}s] {stage}...", file=sys.stderr, flush=True)
@@ -91,3 +91,5 @@ def main() -> None:
             print(f"  Preserved {preserved:,}: {reason}")
         for entry, name in result.renames.items():
             print(f"  {entry} -> {name}")
+    sys.stdout.flush()
+    print(f"Completed in {monotonic() - started:.2f}s", file=sys.stderr, flush=True)

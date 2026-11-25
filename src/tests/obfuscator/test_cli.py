@@ -65,6 +65,7 @@ def test_cli_requires_force_to_overwrite_output(tmp_path: Path, force: str | Non
     if force is None:
         assert result.returncode == 2
         assert "use --force" in result.stderr
+        assert "Completed in " not in result.stderr
         assert artifact.read_text(encoding="utf-8") == "old release"
     else:
         assert result.returncode == 0, result.stderr
@@ -243,8 +244,12 @@ def test_cli_always_warns_about_class_renaming(
         capture_output=True,
         text=True,
     )
-    warning, *progress = result.stderr.splitlines()
+    warning, *progress, completed = result.stderr.splitlines()
     assert warning == "Renaming classes enabled. Beware of mangled log output."
+    assert completed.startswith("Completed in ")
+    duration = completed.removeprefix("Completed in ").removesuffix("s")
+    assert float(duration) >= 0
+    assert duration == f"{float(duration):.2f}"
     assert [line.split("] ", 1)[1] for line in progress] == [
         "Parsing 1 application modules...",
         "Discovering protocols and preparing modules...",
@@ -280,9 +285,11 @@ def test_cli_reports_parameter_rename_counts(tmp_path: Path) -> None:
             '["a:external:public_parameter"]',
         ],
         check=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
     )
     assert "Renamed 1 allowlisted identifiers" in result.stdout
     assert "a:external:public_parameter ->" in result.stdout
     assert "Renamed 1/2 parameters automatically" in result.stdout
+    assert result.stdout.splitlines()[-1].startswith("Completed in ")

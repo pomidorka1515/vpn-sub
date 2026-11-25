@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 __all__: list[str] = ["minify_sql", "minify_sql_literals"]
 
+_REMOVABLE: re.Pattern[str] = re.compile(r"[ \t\r\n\f]|--|/\*")
+
 # Keep the original spelling of every SQLite token, especially quotes, blobs,
 # operators and parameter names/numbers. A generator may rewrite these.
 _TOKEN: re.Pattern[str] = re.compile(
@@ -220,6 +222,10 @@ def complete_statements(source: str) -> bool:
 @lru_cache(maxsize=4096)
 def minify_sql(source: str, *, preserve_edges: bool = False) -> str:
     """Remove only optional SQLite whitespace/comments from complete statements."""
+    # Most application literals are names, keys, or other compact non-SQL data.
+    # Without whitespace/comment markers there is nothing this pass can remove.
+    if _REMOVABLE.search(source) is None:
+        return source
     parts = tokens(source)
     if not parts:
         return source

@@ -42,6 +42,7 @@ class ArgumentRenamer:
         self._definitions: dict[Binding, list[ast.AST]] = {}
         self.trees = trees
         self.parents: dict[ast.AST, ast.AST] = {}
+        self.enclosing_classes: dict[ast.AST, ast.ClassDef | None] = {}
         self.bindings: dict[ast.AST, Binding] = {}
         self.modules: dict[ast.AST, str] = {}
         self.symbols: dict[str, dict[str, Binding]] = {}
@@ -407,11 +408,15 @@ class ArgumentRenamer:
         return owner if isinstance(owner, ast.ClassDef) else None
 
     def enclosing_class(self, node: ast.AST) -> ast.ClassDef | None:
+        if node in self.enclosing_classes:
+            return self.enclosing_classes[node]
         scope = self.parents.get(node)
         while scope is not None:
             if isinstance(scope, ast.ClassDef):
+                self.enclosing_classes[node] = scope
                 return scope
             scope = self.parents.get(scope)
+        self.enclosing_classes[node] = None
         return None
 
     def hint_types(self, hint: TypeHint, owner: ast.ClassDef | None) -> set[ast.ClassDef]:

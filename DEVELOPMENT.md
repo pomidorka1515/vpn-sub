@@ -307,7 +307,8 @@ pieces are left unchanged. Queries are never executed during minification.
 The build-only `src/obfuscator/` package and `src/tests/` are always excluded
 from the flattened output. The package exposes `main()` and `obfuscate()`;
 its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modules.
-The CLI reports build stages and elapsed time on stderr as the build runs.
+The CLI reports build stages and elapsed time on stderr as the build runs, ending
+with `Completed in 300.32s` (the total duration, formatted to two decimal places).
 `--jobs N` controls a reusable multiprocessing executor, defaulting to half the
 CPUs available to the process (rounded down, minimum one). `--jobs 1` runs without
 worker processes. Parsing collects protocol inheritance edges in workers, and
@@ -315,6 +316,8 @@ the parent resolves their transitive closure without sending ASTs back for each
 protocol-discovery round. Per-module cleanup and independent SQL literal
 minification also run in workers; linking, mixin
 folding, global renaming, and final whole-program minification remain sequential.
+The private-method and parameter passes share lexical indexes; caller safety and
+inference are rechecked after method names change.
 Worker count is capped at the number of input modules. The internal
 `obfuscate_modules(..., jobs=N)` API accepts the same setting; multiprocessing
 callers must use an importable entrypoint guarded by `if __name__ == "__main__":`.

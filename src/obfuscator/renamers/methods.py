@@ -113,6 +113,14 @@ class PrivateMethodRenamer(ArgumentRenamer):
     inheritance, unknown decorators, and unresolved same-named attributes.
     """
 
+    def rename_parameters(self) -> None:
+        """Reuse lexical indexes after renaming methods, but recheck caller safety.
+
+        Method renaming changes spellings, not scopes, nodes, or binding identities.
+        The base pass clears its inference caches before analyzing the updated names.
+        """
+        super().run()
+
     def run(self) -> None:
         self.renamed = 0
         _, _, reflected = self.analyze_calls()

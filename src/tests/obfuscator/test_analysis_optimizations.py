@@ -4,15 +4,16 @@ import ast
 import pickle  # ruff: ignore[suspicious-pickle-import] - Test worker metadata serialization.
 from typing import TYPE_CHECKING
 
+import pytest
+
 from obfuscator.analysis import annotation_nodes, inspects_frames
 from obfuscator.annotations import TypeHint, merge_hints
 from obfuscator.renamers.attribute_flow import Value
 from obfuscator.renamers.base import ArgumentRenamer
+from obfuscator.renamers.methods import PrivateMethodRenamer
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
-    import pytest
 
 __all__: list[str] = []
 
@@ -46,6 +47,64 @@ def test_preserved_parameters_do_not_scan_function_bodies(
     analysis.run()
     assert analysis.renamed == 0
     assert analysis.skipped == {"no resolved calls": 1}
+
+
+def test_enclosing_classes_cache_nested_and_missing_owners() -> None:
+    tree = ast.parse(
+        "outside = 1\n"
+        "class Outer:\n"
+        " def method(self):\n"
+        "  def inner(): return self\n"
+        " class Nested:\n"
+        "  def method(self): return self\n"
+    )
+    analysis = ArgumentRenamer({"fixture": tree})
+    outer = tree.body[1]
+    assert isinstance(outer, ast.ClassDef)
+    nested = outer.body[1]
+    assert isinstance(nested, ast.ClassDef)
+    for node in analysis.nodes:
+        scope = analysis.parents.get(node)
+        while scope is not None and not isinstance(scope, ast.ClassDef):
+            scope = analysis.parents.get(scope)
+        assert analysis.enclosing_class(node) is scope
+    # Cached results must not climb the same lexical chain on repeated queries.
+    analysis.parents.clear()
+    assert analysis.enclosing_class(outer.body[0]) is outer
+    assert analysis.enclosing_class(nested.body[0]) is nested
+    assert analysis.enclosing_class(tree.body[0]) is None
+
+
+def test_parameters_reuse_method_indexes_with_identical_renames(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = (
+        "class Record:\n"
+        " def _calculate(self, long_parameter): return long_parameter + 1\n"
+        " def public(self, public_parameter):\n"
+        "  return self._calculate(long_parameter=public_parameter)\n"
+        "record = Record()\n"
+        "__result__ = record.public(public_parameter=4)\n"
+    )
+    expected = ast.parse(source)
+    fresh = PrivateMethodRenamer({"fixture": expected})
+    fresh.run()
+    parameters = ArgumentRenamer({"fixture": expected})
+    parameters.run()
+
+    actual = ast.parse(source)
+    reused = PrivateMethodRenamer({"fixture": actual})
+    reused.run()
+    assert reused.renamed == fresh.renamed == 1
+
+    def unexpected_init(self: ArgumentRenamer, trees: dict[str, ast.Module]) -> None:
+        pytest.fail("Parameter renaming rebuilt the lexical indexes")
+
+    monkeypatch.setattr(ArgumentRenamer, "__init__", unexpected_init)
+    reused.rename_parameters()
+    assert reused.renamed == parameters.renamed > 0
+    assert reused.skipped == parameters.skipped
+    assert ast.dump(actual) == ast.dump(expected)
 
 
 def test_type_hints_retain_nested_shape_and_incompleteness() -> None:
