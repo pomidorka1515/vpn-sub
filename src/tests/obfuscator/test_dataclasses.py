@@ -192,6 +192,23 @@ __result__ = read(Record(3))
 
 
 @pytest.mark.parametrize(
+    "call", ["read(Record(3), Record(4))", "read(known=Record(3), unknown=Record(4))"]
+)
+def test_untyped_actual_parameter_preserves_records(call: str) -> None:
+    tree, namespace = transform(f"""
+from dataclasses import dataclass
+@dataclass
+class Record:
+    value: int
+def read(known: Record, unknown):
+    return known.value, unknown.value
+__result__ = {call}
+""")
+    assert namespace["__result__"] == (3, 4)
+    assert fields(tree, "Record") == {"value": "int"}
+
+
+@pytest.mark.parametrize(
     "body",
     [
         "record = Record(3)\nrecord = None\n",
@@ -244,6 +261,140 @@ def factory() -> Record:
     return Record(value=6)
 callbacks = [factory]
 """)
+    assert fields(tree, "Record") == {"value": "int"}
+
+
+def test_internal_resource_containers_do_not_preserve_dataclass_api() -> None:
+    tree, namespace = transform("""
+from dataclasses import dataclass
+from collections.abc import Callable
+@dataclass(frozen=True, slots=True)
+class OwnedResource:
+    name: str
+    resource: int
+    quiesce: Callable[[], None] | None = None
+class Runtime:
+    def __init__(self, resources: tuple[OwnedResource, ...]):
+        self._resources = resources
+        self._opened: list[OwnedResource] = list(resources)
+    def adopt(self, resource: OwnedResource) -> None:
+        self._opened.append(resource)
+    def read(self) -> list[tuple[str, int]]:
+        result = []
+        for resource in reversed(self._opened):
+            result.append((resource.name, resource.resource))
+        while self._opened:
+            resource = self._opened[-1]
+            if resource.quiesce is not None:
+                resource.quiesce()
+            self._opened.pop()
+        return result
+class Application(Runtime):
+    pass
+runtime = Application((OwnedResource(name='first', resource=1),))
+runtime.adopt(OwnedResource(name='second', resource=2))
+__result__ = runtime.read()
+""")
+    assert namespace["__result__"] == [("second", 2), ("first", 1)]
+    assert not {"name", "resource", "quiesce"} & fields(tree, "OwnedResource").keys()
+    assert set(fields(tree, "OwnedResource").values()) == {"0"}
+
+
+def test_unrelated_known_receivers_do_not_block_field_renames() -> None:
+    tree, namespace = transform("""
+from dataclasses import dataclass
+@dataclass
+class Record:
+    value: int
+class Other:
+    def __init__(self):
+        self.value = 4
+__result__ = Record(value=3).value, Other().value
+""")
+    assert namespace["__result__"] == (3, 4)
+    assert "value" not in fields(tree, "Record")
+
+
+def test_asdict_of_copied_internal_list_preserves_names_only() -> None:
+    tree, namespace = transform("""
+from dataclasses import dataclass, asdict
+@dataclass
+class Record:
+    value: int
+def serialize(records: tuple[Record, ...]) -> list[dict[str, int]]:
+    copied = list(records)
+    copied.append(Record(value=8))
+    return [asdict(record) for record in reversed(copied)]
+__result__ = serialize((Record(value=3),))
+""")
+    assert namespace["__result__"] == [{"value": 8}, {"value": 3}]
+    assert fields(tree, "Record") == {"value": "0"}
+
+
+def test_unresolved_asdict_operand_does_not_expose_unrelated_records() -> None:
+    tree, namespace = transform("""
+from dataclasses import dataclass, asdict
+@dataclass
+class Public:
+    value: int
+@dataclass
+class Private:
+    count: int
+def serialize(record):
+    return asdict(record)
+__result__ = serialize(Public(value=3)), Private(count=4).count
+""")
+    assert namespace["__result__"] == ({"value": 3}, 4)
+    assert "value" in fields(tree, "Public")
+    assert "count" not in fields(tree, "Private")
+    assert set(fields(tree, "Private").values()) == {"0"}
+
+
+def test_external_base_callback_preserves_returned_records() -> None:
+    tree, namespace = transform("""
+from dataclasses import dataclass
+from json import JSONEncoder
+@dataclass
+class Record:
+    value: int
+class Encoder(JSONEncoder):
+    def default(self, obj: object) -> Record:
+        return Record(value=3)
+__result__ = Encoder().default(None).value
+""")
+    assert namespace["__result__"] == 3
+    assert fields(tree, "Record") == {"value": "int"}
+
+
+def test_container_passed_to_unknown_consumer_preserves_records() -> None:
+    tree, namespace = transform("""
+from dataclasses import dataclass
+from json import dumps
+@dataclass
+class Record:
+    value: int
+records = list((Record(value=3),))
+__result__ = dumps(records, default=lambda record: record.value)
+""")
+    assert namespace["__result__"] == "[3]"
+    assert fields(tree, "Record") == {"value": "int"}
+
+
+def test_escaping_subclass_preserves_inherited_record_fields() -> None:
+    tree, namespace = transform("""
+from dataclasses import dataclass
+@dataclass
+class Record:
+    value: int
+class Holder:
+    def __init__(self, record: Record):
+        self.record = record
+class Child(Holder):
+    pass
+holder = Child(Record(value=3))
+__result__ = getattr(holder, 'record').value
+""")
+    assert namespace["__result__"] == 3
     assert fields(tree, "Record") == {"value": "int"}
 
 

@@ -526,7 +526,14 @@ schemas and their transitive field/container dependencies retain their types.
 Fields are also shortened when their names are private: resolved attribute chains,
 constructor keywords, and inline literal `**kwargs` keys are rewritten together;
 positional argument order is unchanged. `asdict()` preserves names recursively,
-without preventing annotation stripping. Escapes, reflection, inheritance,
+without preventing annotation stripping. Unresolved `asdict()` operands do not
+preserve unrelated records; untracked record flows retain their APIs at the
+point where they escape. Internal container copies, append/extend operations,
+iteration, and consistently typed reassignments remain tracked, including through
+inherited internal constructors. Internal inheritance alone does not expose the
+dataclasses mentioned in method signatures. Unrelated opaque attribute receivers
+do not block closed records by spelling; actual call arguments must flow into
+matching typed parameters. Escapes, reflection, dataclass inheritance,
 dataclass directives (`ClassVar`, `InitVar`, `KW_ONLY`), unknown descriptors,
 quoted annotations, and unsupported receivers preserve the relevant APIs rather
 than guessing. Dynamic constructor keywords preserve field names. Definitions

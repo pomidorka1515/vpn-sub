@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from typing import cast
 
+from python_minifier.rename.binding import BuiltinBinding
+
 from .analysis import inspects_frames
 from .annotations import TypeHint
 from .debug import record_attribute
@@ -36,21 +38,143 @@ class _Dataclasses(ArgumentRenamer):
     def values(self, node: ast.AST) -> set[ast.ClassDef]:
         return self.hint_classes(self.value_hint(node), self.enclosing_class(node))
 
-    def callee_accepts_argument(self, call: ast.Call, target: ast.ClassDef) -> bool:
-        if super().callee_accepts_argument(call, target):
-            return True
-        callee = self.target(call.func, instances=False)
-        if isinstance(callee, ast.ClassDef):
-            fields = cast(dict[str, TypeHint], callee.__dict__.get("field_types", {}))
-            return any(target in self.hint_classes(hint, callee) for hint in fields.values())
-        if isinstance(callee, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for argument in (*callee.args.posonlyargs, *callee.args.args, *callee.args.kwonlyargs):
-                hint = argument.__dict__.get("type_annotation")
-                if isinstance(hint, TypeHint) and target in self.hint_classes(
-                    hint, self.enclosing_class(callee)
-                ):
-                    return True
+    def builtin_call(self, call: ast.Call, names: set[str]) -> bool:
+        return (
+            isinstance(call.func, ast.Name)
+            and call.func.id in names
+            and isinstance(cast(object, self.bindings.get(call.func)), BuiltinBinding)
+        )
+
+    def call_hint(self, node: ast.Call, seen: set[int]) -> TypeHint:
+        if self.builtin_call(node, {"list", "tuple", "reversed"}) and len(node.args) == 1:
+            return TypeHint(
+                origin="sequence", arguments=(self.value_hint(node.args[0], seen).iterated(),)
+            )
+        return super().call_hint(node, seen)
+
+    def container_call(self, call: ast.Call, targets: set[ast.ClassDef]) -> bool:
+        """Recognize operations that store records without inspecting their fields."""
+        if self.builtin_call(call, {"list", "tuple", "reversed", "len", "bool"}):
+            return len(call.args) == 1 and not call.keywords
+        if isinstance(call.func, ast.Attribute) and call.func.attr in {"append", "extend"}:
+            receiver = self.value_hint(call.func.value)
+            return (
+                receiver.origin == "sequence"
+                and not receiver.classes
+                and targets <= self.values(call.func.value)
+                and len(call.args) == 1
+                and not call.keywords
+            )
         return False
+
+    def tracked_binding(self, node: ast.Name, targets: set[ast.ClassDef]) -> bool:
+        binding = self.bindings.get(node)
+        definitions = self.definitions(binding) if binding is not None else []
+        if len(definitions) == 1:
+            return True
+        return bool(definitions) and all(
+            isinstance(definition, ast.Name)
+            and isinstance(definition.ctx, ast.Store)
+            and targets
+            <= self.hint_classes(
+                self.destructured_hint(definition, set()), self.enclosing_class(node)
+            )
+            for definition in definitions
+        )
+
+    def argument_is_tracked(
+        self, call: ast.Call, value: ast.AST, targets: set[ast.ClassDef]
+    ) -> bool:
+        """Require the actual destination parameter to describe every record value."""
+        callee = self.target(call.func, instances=False)
+        keyword = next((item.arg for item in call.keywords if item.value is value), None)
+        position = next((index for index, item in enumerate(call.args) if item is value), None)
+        if keyword is None and position is None:
+            return False
+        if any(isinstance(item, ast.Starred) for item in call.args):
+            return False
+        bound = False
+        if isinstance(callee, ast.ClassDef):
+            if callee in self.records:
+                fields = cast(dict[str, TypeHint], callee.__dict__.get("field_types", {}))
+                names = list(fields)
+                name = (
+                    keyword
+                    if keyword is not None
+                    else (
+                        names[position] if position is not None and position < len(names) else None
+                    )
+                )
+                hint = fields.get(name) if name is not None else None
+                return hint is not None and targets <= self.hint_classes(hint, callee)
+            binding = self.member_binding(callee, "__init__")
+            definitions = self.definitions(binding) if binding is not None else []
+            callee = definitions[0] if len(definitions) == 1 else None
+            bound = True
+        elif (
+            isinstance(callee, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and isinstance(call.func, ast.Attribute)
+            and isinstance(self.parents.get(callee), ast.ClassDef)
+        ):
+            bound = self.descriptor(callee) != "staticmethod"
+        if not isinstance(callee, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+        positional = [*callee.args.posonlyargs, *callee.args.args][int(bound) :]
+        parameter = (
+            next(
+                (item for item in (*positional, *callee.args.kwonlyargs) if item.arg == keyword),
+                None,
+            )
+            if keyword is not None
+            else positional[position]
+            if position is not None and position < len(positional)
+            else None
+        )
+        hint = parameter.__dict__.get("type_annotation") if parameter is not None else None
+        return isinstance(hint, TypeHint) and targets <= self.hint_classes(
+            hint, self.enclosing_class(callee)
+        )
+
+    def escaping_functions(self) -> set[ast.FunctionDef | ast.AsyncFunctionDef]:
+        """Track escaped signatures without treating internal inheritance as reflection."""
+        result: set[ast.FunctionDef | ast.AsyncFunctionDef] = set()
+        for function in self.functions:
+            if isinstance(function, ast.Lambda):
+                continue
+            if (
+                function.decorator_list
+                and self.descriptor(function) is None
+                and not self.forwarding_decorators(function)
+                and not self.is_property(function)
+            ):
+                result.add(function)
+            owner = self.parents.get(function)
+            if isinstance(owner, ast.ClassDef) and any(
+                base.keywords
+                or not self.safe_class_decorators(base)
+                or any(
+                    self.target(parent, instances=False) not in self.classes
+                    for parent in base.bases
+                )
+                for base in self.class_mro(owner, set())
+            ):
+                result.add(function)
+        for node in self.nodes:
+            if id(node) in self.annotation_nodes or not isinstance(node, (ast.Name, ast.Attribute)):
+                continue
+            if not isinstance(node.ctx, ast.Load):
+                continue
+            target = self.target(node)
+            if not isinstance(target, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            parent = self.parents.get(node)
+            if (
+                not (isinstance(parent, ast.Call) and parent.func is node)
+                and self.alias_assignment(node) is None
+                and not self.is_property(target)
+            ):
+                result.add(target)
+        return result
 
     def closure(self, roots: set[ast.ClassDef]) -> set[ast.ClassDef]:
         result = set(roots)
@@ -93,10 +217,14 @@ class _Dataclasses(ArgumentRenamer):
                         if assignment.value is not None:
                             dependencies.update(self.values(assignment.value))
             self.dependencies[owner] = dependencies
+            for base in owner.bases:
+                self.preserved.update(self.values(base) & self.records)
+            if owner not in self.records:
+                if owner.keywords or not self.safe_class_decorators(owner):
+                    self.preserved.add(owner)
+                continue
             if owner.bases or owner.keywords or not self.safe_class_decorators(owner):
                 self.preserved.add(owner)
-            for base in owner.bases:
-                self.preserved.update(self.values(base))
             for statement in owner.body:
                 if isinstance(statement, ast.AnnAssign):
                     if statement.value is not None and not self.plain_default(statement.value):
@@ -124,8 +252,7 @@ class _Dataclasses(ArgumentRenamer):
                 ):
                     self.preserved.add(owner)
 
-        _, _, reflected = self.analyze_calls()
-        for function in reflected:
+        for function in self.escaping_functions():
             for argument in (
                 *function.args.posonlyargs,
                 *function.args.args,
@@ -156,7 +283,9 @@ class _Dataclasses(ArgumentRenamer):
                     targets: set[ast.ClassDef] = (
                         self.values(operand) if operand is not None else set()
                     )
-                    self.named.update(targets or self.records)
+                    # Unknown operands are protected where their record values
+                    # leave tracked flows; they do not expose unrelated records.
+                    self.named.update(targets)
                 if path == "dacite.from_dict":
                     # Resolve known roots, including container annotations. For
                     # dynamic class arguments, protect class objects where they
@@ -206,6 +335,8 @@ class _Dataclasses(ArgumentRenamer):
                     continue
                 if self.alias_assignment(node) is not None:
                     continue
+                if isinstance(parent, ast.ClassDef) and node in parent.bases:
+                    continue  # Dataclass bases were protected explicitly above.
                 # Passing a class to dacite, a registry, or reflection is unsafe.
                 self.preserved.update(targets)
                 continue
@@ -220,10 +351,7 @@ class _Dataclasses(ArgumentRenamer):
                         targets <= self.values(destination)
                         and (
                             not isinstance(destination, ast.Name)
-                            or (
-                                (binding := self.bindings.get(destination)) is not None
-                                and len(self.definitions(binding)) == 1
-                            )
+                            or self.tracked_binding(destination, targets)
                         )
                     )
                     or self.instance_attribute_owner(destination) is not None
@@ -241,15 +369,25 @@ class _Dataclasses(ArgumentRenamer):
                 path = self.imported_path(parent.func)
                 if path == "dataclasses.asdict":
                     continue
-                if all(self.callee_accepts_argument(parent, target) for target in targets):
+                if self.container_call(parent, targets):
+                    continue
+                if self.argument_is_tracked(parent, node, targets):
                     continue
                 if self.dataclasses_field_call(parent):
                     continue
+                # An opaque consumer can inspect inherited instance state too.
+                for target in targets:
+                    self.preserved.update(self.class_mro(target, set()))
             if isinstance(parent, ast.Return):
                 if all(self.returns_instance(parent, node, target) for target in targets):
                     continue  # Escaping function signatures were checked above.
+            if isinstance(parent, (ast.For, ast.comprehension)) and parent.iter is node:
+                continue
+            if isinstance(parent, ast.Expr):
+                continue  # A discarded value exposes neither names nor annotations.
             if isinstance(
-                parent, (ast.Compare, ast.BoolOp, ast.UnaryOp, ast.If, ast.IfExp, ast.Assert)
+                parent,
+                (ast.Compare, ast.BoolOp, ast.UnaryOp, ast.If, ast.IfExp, ast.Assert, ast.While),
             ):
                 continue
             self.preserved.update(targets)
@@ -292,6 +430,11 @@ class _Dataclasses(ArgumentRenamer):
                     continue
                 owners = self.type_targets(node.value)
                 for owner in field_owners[node.attr]:
+                    if owner not in owners:
+                        # A record entering an unresolved flow is preserved by
+                        # scan(). An unrelated opaque receiver cannot expose a
+                        # record whose entire flow remained tracked.
+                        continue
                     if owners != {owner}:
                         # Unknown and union receivers must never be rewritten by spelling.
                         self.named.add(owner)
