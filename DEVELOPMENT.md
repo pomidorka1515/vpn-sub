@@ -310,8 +310,10 @@ its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modu
 The CLI reports build stages and elapsed time on stderr as the build runs.
 `--jobs N` controls a reusable multiprocessing executor, defaulting to half the
 CPUs available to the process (rounded down, minimum one). `--jobs 1` runs without
-worker processes. Parsing, each cross-module protocol-discovery round, per-module
-cleanup, and independent SQL literal minification run in workers; linking, mixin
+worker processes. Parsing collects protocol inheritance edges in workers, and
+the parent resolves their transitive closure without sending ASTs back for each
+protocol-discovery round. Per-module cleanup and independent SQL literal
+minification also run in workers; linking, mixin
 folding, global renaming, and final whole-program minification remain sequential.
 Worker count is capped at the number of input modules. The internal
 `obfuscate_modules(..., jobs=N)` API accepts the same setting; multiprocessing

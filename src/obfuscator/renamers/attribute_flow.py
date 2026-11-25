@@ -15,20 +15,28 @@ if TYPE_CHECKING:
 __all__: list[str] = []
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CallableValue:
     function: Function
     bound: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Value:
     owners: frozenset[ast.ClassDef] = frozenset()
     functions: frozenset[CallableValue] = frozenset()
     unknown: bool = False
 
     def merge(self, other: Value) -> Value:
+        if other is _BOTTOM or self is other:
+            return self
+        if self is _BOTTOM:
+            return other
         return Value(self.owners | other.owners, self.functions | other.functions, self.unknown or other.unknown)
+
+
+_BOTTOM: Value = Value()
+_UNKNOWN: Value = Value(unknown=True)
 
 
 class AttributeFlow:
@@ -50,6 +58,7 @@ class AttributeFlow:
         self.static_receivers: dict[ast.expr, frozenset[ast.ClassDef]] = {}
         self.static_targets: dict[ast.expr, ast.AST | str | None] = {}
         self.local_forwarders: dict[ast.FunctionDef, bool] = {}
+        self.argument_bindings: dict[tuple[ast.Call, CallableValue], dict[ast.arg, ast.expr] | None] = {}
         self.records: dict[ast.ClassDef, tuple[bool, dict[str, ast.expr | None]]] = {}
         for owner in analysis.classes:
             if (record := self.record_fields(owner)) is not None:
@@ -403,6 +412,12 @@ class AttributeFlow:
         return invokes
 
     def call_arguments(self, call: ast.Call, target: CallableValue) -> dict[ast.arg, ast.expr] | None:
+        key = (call, target)
+        if key not in self.argument_bindings:
+            self.argument_bindings[key] = self.bind_arguments(call, target)
+        return self.argument_bindings[key]
+
+    def bind_arguments(self, call: ast.Call, target: CallableValue) -> dict[ast.arg, ast.expr] | None:
         """Bind visible positional/keyword arguments exactly, or reject expansion."""
         function = target.function
         if not isinstance(function, ast.Lambda) and function.decorator_list and (
@@ -487,10 +502,19 @@ class AttributeFlow:
             self.open_callbacks(self.value(expression))
 
     def solve(self) -> None:
+        # Plain name stores never participate in the transfer function. Keep
+        # the remaining nodes in their original order: each round observes
+        # the same sequence of argument/field updates as a full tree scan.
+        nodes = [
+            node for node in self.nodes
+            if isinstance(node, (ast.Call, ast.Tuple, ast.List, ast.Set, ast.Dict))
+            or (isinstance(node, ast.Assign) and any(not isinstance(target, ast.Name) for target in node.targets))
+            or (isinstance(node, ast.AnnAssign) and node.value is not None and not isinstance(node.target, ast.Name))
+        ]
         while True:
             self.changed = False
             self.values.clear()
-            for node in self.nodes:
+            for node in nodes:
                 if isinstance(node, ast.Call):
                     builtin = self.analysis.bindings.get(node.func)
                     if (
@@ -514,7 +538,7 @@ class AttributeFlow:
                         else:
                             for argument in [*target.function.args.posonlyargs, *target.function.args.args,
                                              *target.function.args.kwonlyargs]:
-                                self.add_argument(argument, Value(unknown=True))
+                                self.add_argument(argument, _UNKNOWN)
                     if targets.unknown or not targets.functions:
                         for expression in [*node.args, *(keyword.value for keyword in node.keywords)]:
                             self.open_callbacks(self.value(expression))

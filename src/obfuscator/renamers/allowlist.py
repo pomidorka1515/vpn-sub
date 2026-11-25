@@ -82,6 +82,13 @@ class AllowlistRenamer(ArgumentRenamer):
             elif isinstance(node, ast.arg):
                 node.__dict__.setdefault("original_name", node.arg)
         self.classes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+        self.own_members: dict[ast.ClassDef, dict[str, Binding]] = {
+            owner: {binding.name: binding for binding in reversed(self.node_bindings(owner))}
+            for owner in self.classes
+        }
+        self.inherited_members: dict[ast.ClassDef, dict[str, Binding]] = {}
+        self.receiver_families: dict[ast.ClassDef, frozenset[ast.ClassDef]] = {}
+        self.callable_index: dict[ast.expr, set[ast.AST]] = {}
         self.class_alias_targets: set[ast.Name] = {
             target
             for node in self.classes
@@ -210,11 +217,20 @@ class AllowlistRenamer(ArgumentRenamer):
         return result
 
     def member(self, owner: ast.ClassDef, name: str) -> Binding | None:
-        for base in self.mro(owner):
-            binding = next((item for item in self.node_bindings(base) if item.name == name), None)
-            if binding is not None:
-                return binding
-        return None
+        members: dict[str, Binding] | None = self.inherited_members.get(owner)
+        if members is None:
+            members = {}
+            for base in reversed(self.mro(owner)):
+                members.update(self.own_members[base])
+            self.inherited_members[owner] = members
+        return members.get(name)
+
+    def receiver_family(self, owner: ast.ClassDef) -> frozenset[ast.ClassDef]:
+        family = self.receiver_families.get(owner)
+        if family is None:
+            family = frozenset(cls for cls in self.classes if owner in self.mro(cls))
+            self.receiver_families[owner] = family
+        return family
 
     def receiver(self, node: ast.expr, seen: set[int] | None = None) -> tuple[set[ast.ClassDef], bool]:
         """Return possible classes and whether this is a polymorphic self/cls."""
@@ -233,7 +249,7 @@ class AllowlistRenamer(ArgumentRenamer):
                     and positional[0] is argument
                     and self.descriptor(function) != "staticmethod"
                 ):
-                    return {cls for cls in self.classes if owner in self.mro(cls)}, True
+                    return set(self.receiver_family(owner)), True
             if len(definitions) == 1 and isinstance(definitions[0], ast.Name):
                 assignment = self.parents.get(definitions[0])
                 if isinstance(assignment, (ast.Assign, ast.AnnAssign)) and isinstance(
@@ -255,7 +271,7 @@ class AllowlistRenamer(ArgumentRenamer):
                 and isinstance(node.func, ast.Name) and node.func.id == "type"
             ):
                 owners, _ = self.receiver(node.args[0], seen)
-                return {cls for cls in self.classes if any(owner in self.mro(cls) for owner in owners)}, True
+                return {cls for owner in owners for cls in self.receiver_family(owner)}, True
             owner = super().target(node.func, seen, instances=False)
             if isinstance(owner, ast.ClassDef):
                 if any(
@@ -295,7 +311,7 @@ class AllowlistRenamer(ArgumentRenamer):
                 continue
             binding = next((
                 binding for base in order[order.index(owner) + 1:]
-                for binding in self.node_bindings(base) if binding.name == node.attr
+                if (binding := self.own_members[base].get(node.attr)) is not None
             ), None)
             if binding is None:
                 external = True
@@ -325,6 +341,13 @@ class AllowlistRenamer(ArgumentRenamer):
         return super().target(node, seen, instances=instances)
 
     def callable_targets(self, node: ast.expr) -> set[ast.AST]:
+        targets = self.callable_index.get(node)
+        if targets is None:
+            targets = self.resolve_callable_targets(node)
+            self.callable_index[node] = targets
+        return targets
+
+    def resolve_callable_targets(self, node: ast.expr) -> set[ast.AST]:
         if isinstance(node, ast.Attribute):
             return {
                 definition
@@ -590,20 +613,15 @@ class AllowlistRenamer(ArgumentRenamer):
             selected[binding] = (kind, entry, definition)
         if selected.keys() & attribute_bindings.keys():
             raise ValueError("Conflicting variable and attribute allowlist selections")
-        self.used.update(node.id for node in ast.walk(self.tree) if isinstance(node, ast.Name))
-        self.used.update(node.arg for node in ast.walk(self.tree) if isinstance(node, ast.arg))
-        self.used.update(
-            node.attr for node in ast.walk(self.tree) if isinstance(node, ast.Attribute)
-        )
         self.used.update(self.strings)
-        self.used.update(
-            binding.name for node in ast.walk(self.tree) for binding in self.node_bindings(node)
-        )
-        self.used.update(
-            node.arg
-            for node in ast.walk(self.tree)
-            if isinstance(node, ast.keyword) and node.arg is not None
-        )
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Name):
+                self.used.add(node.id)
+            elif isinstance(node, (ast.arg, ast.keyword)) and node.arg is not None:
+                self.used.add(node.arg)
+            elif isinstance(node, ast.Attribute):
+                self.used.add(node.attr)
+            self.used.update(binding.name for binding in self.node_bindings(node))
         renamed = {binding: self.fresh_name() for binding in selected}
         attributes: dict[ast.Attribute, str] = {}
         keywords: dict[ast.keyword | ast.Constant, str] = {}
@@ -661,6 +679,7 @@ class AllowlistRenamer(ArgumentRenamer):
                 ):
                     raise ValueError("Escaping/reflected constructor with allowlisted parameters")
         member_families: dict[str, set[ast.ClassDef]] = {}
+        selected_names = {binding.name for binding in selected}
         # Resolve everything against the original tree before mutating any name.
         for node in ast.walk(self.tree):
             if id(node) in self.annotation_nodes:
@@ -712,7 +731,7 @@ class AllowlistRenamer(ArgumentRenamer):
                             names = {
                                 ref.id for ref in ast.walk(quoted) if isinstance(ref, ast.Name)
                             }
-                            if names & {binding.name for binding in selected}:
+                            if not names.isdisjoint(selected_names):
                                 annotation_entries: list[str] = sorted(
                                     entry
                                     for binding, (_, entry, _) in selected.items()

@@ -50,6 +50,7 @@ class ReleaseCleanup(ast.NodeTransformer):
         *,
         module: str = "__main__",
         protocol_classes: set[tuple[str, str]] | None = None,
+        discovery_only: bool = False,
     ) -> None:
         self.typing_modules = {"typing", "typing_extensions"}
         self.typing_names: dict[str, str] = {}
@@ -61,40 +62,60 @@ class ReleaseCleanup(ast.NodeTransformer):
         self.module = module
         self.is_package = getattr(tree, "is_package", False)
         self.protocol_classes = set(protocol_classes or ())
-        self.generic_classes.update(
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ClassDef) and node.type_params
-        )
+        classes: list[ast.ClassDef] = []
+        from_imports: list[ast.ImportFrom] = []
         for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
+            if isinstance(node, ast.ClassDef):
+                classes.append(node)
+                if node.type_params:
+                    self.generic_classes.add(node.name)
+            elif isinstance(node, ast.Import):
                 for name in node.names:
                     if name.name in self.typing_modules:
                         self.typing_modules.add(name.asname or name.name)
                     elif name.name == "dataclasses":
                         self.dataclass_modules.add(name.asname or name.name)
-            elif isinstance(node, ast.ImportFrom) and node.module in self.typing_modules:
-                for name in node.names:
-                    self.typing_names[name.asname or name.name] = name.name
-            elif isinstance(node, ast.ImportFrom) and node.module == "dataclasses":
-                self.dataclass_names.update(
-                    name.asname or name.name for name in node.names if name.name == "dataclass"
-                )
-                self.field_names.update(
-                    name.asname or name.name for name in node.names if name.name == "field"
-                )
+            elif isinstance(node, ast.ImportFrom):
+                from_imports.append(node)
+                if node.module in self.typing_modules:
+                    for name in node.names:
+                        self.typing_names[name.asname or name.name] = name.name
+                elif node.module == "dataclasses":
+                    self.dataclass_names.update(
+                        name.asname or name.name for name in node.names if name.name == "dataclass"
+                    )
+                    self.field_names.update(
+                        name.asname or name.name for name in node.names if name.name == "field"
+                    )
         self.typed_dicts: set[str] = set()
-        classes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
         self.protocol_names = {
             node.name
             for node in classes
             if any(self.typing_name(base) == "Protocol" for base in node.bases)
         }
+        # Only named bases participate in inherited protocol discovery. Keep
+        # module-local names distinct from imported names until an import edge
+        # leads to an actual protocol class.
+        self.protocol_edges: list[tuple[tuple[str, str], str]] = []
+        if discovery_only:
+            imports: dict[str, list[tuple[str, str]]] = {}
+            for statement in from_imports:
+                target = self.import_target(statement)
+                for alias in statement.names:
+                    if alias.name != "*":
+                        imports.setdefault(alias.asname or alias.name, []).append((target, alias.name))
+            for owner in classes:
+                for base in owner.bases:
+                    if isinstance(base, ast.Name):
+                        self.protocol_edges.append(((self.module, base.id), owner.name))
+                        self.protocol_edges.extend(
+                            (key, owner.name) for key in imports.get(base.id, ())
+                        )
+            return
         self.protocol_classes.update((self.module, name) for name in self.protocol_names)
         imported_protocol_names = {
             alias.asname or alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
+            for node in from_imports
             for alias in node.names
             if alias.name != "*" and (self.import_target(node), alias.name) in self.protocol_classes
         }

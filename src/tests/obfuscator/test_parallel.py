@@ -28,10 +28,15 @@ def test_default_jobs(cpus: int | None, expected: int, monkeypatch: pytest.Monke
 def test_parallel_pipeline_matches_serial() -> None:
     sources: dict[Path, str] = {
         Path("contracts/__init__.py"): "from typing import Protocol\nclass Root(Protocol): pass\n",
-        Path("contracts/child.py"): "from . import Root\nclass Child(Root): pass\n",
+        Path("contracts/child.py"): (
+            "from . import Root as Parent\n"
+            "from .child import Child as LocalAlias\n"
+            "class Child(Parent): pass\n"
+            "class Grandchild(LocalAlias): pass\n"
+        ),
         Path("worker.py"): """
-from contracts.child import Child
-class Leaf(Child): pass
+from contracts.child import Grandchild
+class Leaf(Grandchild): pass
 class Box[T]:
     def __init__(self, value: T): self.value = value
     def _get(self): return self.value
@@ -46,6 +51,8 @@ __query__ = " SELECT a, b FROM t WHERE id = ? "
     serial = obfuscate_modules(sources, ["f:helper"], jobs=1)
     parallel = obfuscate_modules(sources, ["f:helper"], jobs=2)
     assert parallel == serial
+    assert "Grandchild" not in parallel.source
+    assert "Leaf" not in parallel.source
     namespace: dict[str, Any] = {}
     exec(parallel.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == 4

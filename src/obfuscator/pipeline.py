@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import builtins
 import multiprocessing
+from collections import deque
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import nullcontext, suppress
 from dataclasses import dataclass
@@ -77,29 +78,23 @@ def obfuscate_modules(
         return _obfuscate_modules(originals, entries, executor, progress)
 
 
-def _parse_module(item: tuple[Path, str]) -> tuple[ast.Module, set[str]]:
+type ProtocolKey = tuple[str, str]
+
+
+def _parse_module(
+    item: tuple[Path, str],
+) -> tuple[ast.Module, set[str], set[ProtocolKey], list[tuple[ProtocolKey, ProtocolKey]]]:
     relative, original = item
     tree = ast.parse(original, filename=str(relative))
     tree.__dict__["is_package"] = relative.name == "__init__.py"
-    return tree, {
-        node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.type_params
-    }
-
-
-def _discover_protocols(
-    item: tuple[Path, ast.Module],
-    *,
-    generic_classes: set[str],
-    protocol_classes: set[tuple[str, str]],
-) -> set[tuple[str, str]]:
-    relative, tree = item
     name = module_name(relative)
-    return {
-        (name, protocol)
-        for protocol in ReleaseCleanup(
-            tree, generic_classes, module=name, protocol_classes=protocol_classes
-        ).protocol_names
-    }
+    facts = ReleaseCleanup(tree, module=name, discovery_only=True)
+    return (
+        tree,
+        facts.generic_classes,
+        {(name, protocol) for protocol in facts.protocol_names},
+        [(base, (name, derived)) for base, derived in facts.protocol_edges],
+    )
 
 
 def _prepare_module(
@@ -130,8 +125,9 @@ def _obfuscate_modules(
             progress(stage)
 
     announce(f"Parsing {len(originals)} application modules")
-    trees: dict[str, ast.Module] = {}
     generic_classes: set[str] = set()
+    protocol_classes: set[ProtocolKey] = set()
+    protocol_children: dict[ProtocolKey, list[ProtocolKey]] = {}
     parsed: dict[Path, ast.Module] = {}
     module_names: set[str] = set()
     for relative in originals:
@@ -139,30 +135,23 @@ def _obfuscate_modules(
         if name in module_names:
             raise ValueError(f"ambiguous module name: {name}")
         module_names.add(name)
-    for relative, (tree, classes) in zip(
+    for relative, (tree, classes, protocols, edges) in zip(
         originals, ordered_map(executor, _parse_module, originals.items()), strict=True
     ):
         parsed[relative] = tree
         generic_classes.update(classes)
+        protocol_classes.update(protocols)
+        for base, derived in edges:
+            protocol_children.setdefault(base, []).append(derived)
     # Protocol inheritance can cross module boundaries, so discover it until
     # importing a protocol from another module adds no new protocol classes.
     announce("Discovering protocols and preparing modules")
-    protocol_classes: set[tuple[str, str]] = set()
-    while True:
-        discovered = set[tuple[str, str]]().union(
-            *ordered_map(
-                executor,
-                partial(
-                    _discover_protocols,
-                    generic_classes=generic_classes,
-                    protocol_classes=protocol_classes,
-                ),
-                parsed.items(),
-            )
-        )
-        if discovered <= protocol_classes:
-            break
-        protocol_classes.update(discovered)
+    pending = deque(protocol_classes)
+    while pending:
+        for derived in protocol_children.get(pending.popleft(), ()):
+            if derived not in protocol_classes:
+                protocol_classes.add(derived)
+                pending.append(derived)
     prepared = ordered_map(
         executor,
         partial(
@@ -196,7 +185,7 @@ def _obfuscate_modules(
     renamer = ArgumentRenamer(linked_trees)
     renamer.run()
     announce("Applying the rename allowlist")
-    renames = AllowlistRenamer(linked).apply(entries)
+    renames = AllowlistRenamer(linked).apply(entries) if entries else {}
     announce("Minifying and validating app.min.py")
     inline_constants(linked)
     consolidate_aliases(linked)
@@ -241,8 +230,9 @@ def prepare_tree(
     tree = cast(ast.Module, CollapseLiterals(cleanup).visit(tree))
     tree = cast(ast.Module, cleanup.visit(tree))
     tree = strip_typing_imports(tree, cleanup.typing_modules)
+    original_file = Path(filename).as_posix()
     for node in ast.walk(tree):
-        node.__dict__["original_file"] = Path(filename).as_posix()
+        node.__dict__["original_file"] = original_file
     ast.fix_missing_locations(tree)
     return tree
 

@@ -34,6 +34,8 @@ class ArgumentRenamer:
 
     def __init__(self, trees: dict[str, ast.Module]) -> None:
         self.hint_cache: dict[tuple[ast.AST, frozenset[int]], TypeHint] = {}
+        self.root_hints: dict[ast.AST, TypeHint] = {}
+        self._definitions: dict[Binding, list[ast.AST]] = {}
         self.trees = trees
         self.parents: dict[ast.AST, ast.AST] = {}
         self.bindings: dict[ast.AST, Binding] = {}
@@ -106,7 +108,7 @@ class ArgumentRenamer:
 
     @staticmethod
     def node_bindings(node: ast.AST) -> list[Binding]:
-        return cast(list[Binding], getattr(node, "bindings", []))
+        return cast(list[Binding], node.__dict__.get("bindings") or [])
 
     def descriptor(self, function: Function) -> str | None:
         """Recognize only unshadowed builtin method descriptors, not arbitrary decorators."""
@@ -284,14 +286,17 @@ class ArgumentRenamer:
                 return False
         return bool(function.decorator_list)
 
-    @staticmethod
-    def definitions(binding: Binding) -> list[ast.AST]:
-        return [
-            ref
-            for ref in binding.references
-            if not isinstance(ref, (ast.Name, ast.Global, ast.Nonlocal))
-            or (isinstance(ref, ast.Name) and not isinstance(ref.ctx, ast.Load))
-        ]
+    def definitions(self, binding: Binding) -> list[ast.AST]:
+        definitions = self._definitions.get(binding)
+        if definitions is None:
+            definitions = [
+                ref
+                for ref in binding.references
+                if not isinstance(ref, (ast.Name, ast.Global, ast.Nonlocal))
+                or (isinstance(ref, ast.Name) and not isinstance(ref.ctx, ast.Load))
+            ]
+            self._definitions[binding] = definitions
+        return definitions
 
     def imported_attribute(self, module: str, attribute: ast.Attribute) -> bool:
         """An external re-export is not a reflective use of its containing module."""
@@ -741,12 +746,20 @@ class ArgumentRenamer:
         """Infer the annotation-derived value type of an expression."""
         if node is None:
             return TypeHint()
-        if seen is not None and id(node) in seen:
+        if not seen:
+            # Keep independent queries separate from the bounded pool of
+            # recursion-context entries, which can fill up during one query.
+            hint = self.root_hints.get(node)
+            if hint is None:
+                hint = self._value_hint(node, {id(node)})
+                self.root_hints[node] = hint
+            return hint
+        if id(node) in seen:
             return TypeHint()
         # Attribute and call resolution repeatedly ask for the same hints.
         # Include the recursion context: a result truncated by a cycle must
         # not be reused for an independent traversal of the same expression.
-        key: tuple[ast.AST, frozenset[int]] = (node, frozenset() if seen is None else frozenset(seen))
+        key = (node, frozenset(seen))
         cached = self.hint_cache.get(key)
         if cached is not None:
             return cached
@@ -1119,6 +1132,9 @@ class ArgumentRenamer:
         return calls, blocked, reflected
 
     def run(self) -> None:
+        self._definitions.clear()
+        self.root_hints.clear()
+        self.hint_cache.clear()
         self.renamed = 0
         self.skipped.clear()
         calls, blocked, reflected = self.analyze_calls()

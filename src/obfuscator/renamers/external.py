@@ -8,7 +8,7 @@ import typing
 from abc import ABCMeta
 from importlib import import_module
 from textwrap import dedent
-from types import FunctionType, GetSetDescriptorType, MemberDescriptorType, UnionType
+from types import FunctionType, GetSetDescriptorType, MemberDescriptorType, ModuleType, UnionType
 from typing import TYPE_CHECKING, cast, get_args, get_origin, is_typeddict
 
 from ..annotations import TypeHint, merge_hints
@@ -19,6 +19,25 @@ if TYPE_CHECKING:
 
 __all__: list[str] = []
 
+_MISSING: object = object()
+_MODULE_CLASS_NAMES: frozenset[str] = frozenset(
+    name for base in ModuleType.__mro__ for name in vars(base)
+)
+
+
+def _static_member(owner: object, name: str, default: object = _MISSING) -> object:
+    """Read own namespaces directly when static lookup has no precedence rules to apply."""
+    if type(owner) is type or (type(owner) is ModuleType and name not in _MODULE_CLASS_NAMES):
+        # For an ordinary class, the first namespace is its mappingproxy;
+        # return the raw member, never an invoked descriptor. An exact module
+        # has a plain dict, but class attributes can take precedence over it.
+        value = vars(owner).get(name, _MISSING)
+        if value is not _MISSING:
+            return value
+    if default is _MISSING:
+        return inspect.getattr_static(owner, name)
+    return inspect.getattr_static(owner, name, default)
+
 
 class ExternalReturns:
     """Read external return annotations without calling APIs or evaluating hints."""
@@ -28,8 +47,12 @@ class ExternalReturns:
         self.cache: dict[ast.expr, TypeHint] = {}
         self.annotations: dict[object, ast.expr | None] = {}
         self.paths: dict[str, TypeHint] = {}
+        self.objects: dict[str, object] = {}
+        self.statement_positions: dict[ast.FunctionDef | ast.AsyncFunctionDef, dict[ast.stmt, int]] = {}
 
     def resolve(self, path: str) -> object:
+        if path in self.objects:
+            return self.objects[path]
         parts = path.split(".")
         for index in range(len(parts) - 1, 0, -1):
             try:
@@ -37,14 +60,15 @@ class ExternalReturns:
             except ImportError:
                 continue
             for name in parts[index:]:
-                value = inspect.getattr_static(value, name)
+                value = _static_member(value, name)
+            self.objects[path] = value
             return value
         raise ValueError("unresolved external annotation")
 
     def imported(self, node: ast.expr) -> object | None:
         if isinstance(node, ast.Attribute):
             owner = self.imported(node.value)
-            return inspect.getattr_static(owner, node.attr, None) if owner is not None else None
+            return _static_member(owner, node.attr, None) if owner is not None else None
         if not isinstance(node, ast.Name):
             return None
         binding = self.analysis.bindings.get(node)
@@ -55,7 +79,7 @@ class ExternalReturns:
         if not module:
             return None
         imported = import_module(module)
-        return inspect.getattr_static(imported, name, None) if name is not None else imported
+        return _static_member(imported, name, None) if name is not None else imported
 
     def annotation(self, node: ast.expr, namespace: dict[str, object], parameters: dict[str, TypeHint], receiver: TypeHint) -> TypeHint:
         if isinstance(node, ast.Constant) and node.value is None:
@@ -74,7 +98,7 @@ class ExternalReturns:
             parts = ast.unparse(node).split(".")
             value = namespace.get(parts[0])
             for name in parts[1:]:
-                value = inspect.getattr_static(value, name, None)
+                value = _static_member(value, name, None)
         elif isinstance(node, ast.Subscript):
             base = self.annotation(node.value, namespace, parameters, receiver)
             elements = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
@@ -87,7 +111,7 @@ class ExternalReturns:
             return TypeHint(base.classes, arguments=arguments)
         else:
             return TypeHint()
-        if value is vars(import_module("typing"))["Self"]:
+        if value is typing.Self:
             return receiver
         return self.runtime_hint(value)
 
@@ -144,7 +168,7 @@ class ExternalReturns:
             owner = self.resolve(path)
             if not isinstance(owner, type):
                 return TypeHint()
-            hints.append(self.returned(inspect.getattr_static(owner, name, None), receiver, owner))
+            hints.append(self.returned(_static_member(owner, name, None), receiver, owner))
         return merge_hints(*hints) if all(hints) else TypeHint()
 
     def hint(self, node: ast.expr, seen: frozenset[ast.AST] = frozenset()) -> TypeHint:
@@ -194,16 +218,16 @@ class ExternalReturns:
             if isinstance(parent, (ast.ClassDef, ast.Lambda)):
                 return None
             child, parent = parent, self.analysis.parents.get(parent)
-        if (
-            parent is None
-            or not isinstance(child, ast.stmt)
-            or child not in parent.body
-            or binding not in self.analysis.node_bindings(parent)
-        ):
+        if parent is None or not isinstance(child, ast.stmt):
+            return None
+        positions = self.statement_positions.get(parent)
+        if positions is None:
+            positions = {statement: index for index, statement in enumerate(parent.body)}
+            self.statement_positions[parent] = positions
+        if child not in positions or binding not in self.analysis.node_bindings(parent):
             return None
         if any(isinstance(ref, (ast.Global, ast.Nonlocal)) for ref in binding.references):
             return None
-        positions = {statement: index for index, statement in enumerate(parent.body)}
         use = positions[child]
         reaching: dict[int, ast.AST] = {}
         for definition in definitions:
@@ -268,8 +292,9 @@ class ExternalReturns:
                             definition for definition in definitions
                             if any(item.optional_vars is definition for item in parent.items)
                         ]
-                        body_nodes = {descendant for statement in parent.body for descendant in ast.walk(statement)}
-                        if len(candidates) == 1 and not any(definition in body_nodes for definition in definitions):
+                        if len(candidates) == 1 and not any(
+                            self.in_context_body(definition, parent) for definition in definitions
+                        ):
                             definitions = candidates
                             break
                     child = parent
@@ -293,6 +318,16 @@ class ExternalReturns:
             return merge_hints(left, right) if left and right else TypeHint()
         return TypeHint()
 
+    def in_context_body(self, node: ast.AST, context: ast.With | ast.AsyncWith) -> bool:
+        # Walk from the handful of competing stores, not through every
+        # descendant of the with suite for each receiver use.
+        parent = self.analysis.parents.get(node)
+        while parent is not None:
+            if parent is context:
+                return node in context.body
+            node, parent = parent, self.analysis.parents.get(parent)
+        return False
+
 
 class ExternalMembers:
     """Inspect installed bases without constructing them or evaluating base syntax.
@@ -308,7 +343,7 @@ class ExternalMembers:
     def resolve(self, module: str, path: list[str]) -> type:
         value: object = import_module(module)
         for name in path:
-            value = inspect.getattr_static(value, name)
+            value = _static_member(value, name)
         if not isinstance(value, type):
             raise ValueError("external base is not a class")
         return value
@@ -364,13 +399,14 @@ class ExternalMembers:
             raise ValueError("external base has no implementation module")
         tree = ast.parse(dedent(inspect.getsource(implementation)))
         names: set[str] = set()
+        nodes = list(ast.walk(tree))
         locals_ = {
             node.arg if isinstance(node, ast.arg) else node.id
-            for node in ast.walk(tree)
+            for node in nodes
             if isinstance(node, ast.arg) or (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store))
         }
         receivers = {"self", "cls"}
-        for node in ast.walk(tree):
+        for node in nodes:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 positional = node.args.posonlyargs + node.args.args
                 if positional:
@@ -378,7 +414,7 @@ class ExternalMembers:
         # Receiver aliases must not hide escapes or namespace inspection.
         while True:
             previous = receivers.copy()
-            for node in ast.walk(tree):
+            for node in nodes:
                 if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Name) and (
                     node.value.id in receivers
                 ):
@@ -386,7 +422,7 @@ class ExternalMembers:
                     receivers.update(target.id for target in targets if isinstance(target, ast.Name))
             if previous == receivers:
                 break
-        for node in ast.walk(tree):
+        for node in nodes:
             if isinstance(node, ast.Attribute):
                 names.add(node.attr)
                 if node.attr in {"__dict__", "__getattribute__", "__setattr__", "__delattr__"} and (
