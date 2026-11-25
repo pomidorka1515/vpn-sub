@@ -289,6 +289,58 @@ __result__ = Helper().method(value=3, scale=4, extra=7)
     assert namespace["__result__"] == (12, (), {"extra": 7})
 
 
+@pytest.mark.parametrize("method", ["__init__", "__call__", "__dunder__"])
+def test_allowlist_dunder_name_is_ignored_with_warning(
+    capsys: pytest.CaptureFixture[str], method: str,
+) -> None:
+    source = f"class Helper:\n def {method}(self, value): return value\n"
+    entry = f"f:Helper:{method}"
+    result, renames = allowlisted(source, [entry])
+    assert renames == {}
+    assert f"def {method}(self,value)" in result
+    warning = capsys.readouterr().err
+    assert f"Warning: skipping allowlist {entry!r}" in warning
+    assert "dunder function names must be preserved" in warning
+
+
+@pytest.mark.parametrize("method", ["__init__", "__call__", "__dunder__"])
+def test_allowlist_dunder_star_only_renames_parameters(
+    capsys: pytest.CaptureFixture[str], method: str,
+) -> None:
+    invocation = (
+        "Helper(value=3, **{'scale': 4}, extra=7).value"
+        if method == "__init__"
+        else f"Helper().{method}(value=3, **{{'scale': 4}}, extra=7)"
+    )
+    source = f"""
+class Helper:
+    def {method}(self, /, value, *items, scale=2, **options):
+        self.value = value * scale, items, options
+        {'' if method == '__init__' else 'return self.value'}
+__result__ = {invocation}
+"""
+    result, renames = allowlisted(source, [f"f:Helper:{method}*"])
+    assert set(renames) == {
+        f"a:Helper:{method}:{name}" for name in ("self", "value", "scale")
+    }
+    assert f"def {method}(" in result
+    assert "*items" in result
+    assert "**options" in result
+    assert capsys.readouterr().err == ""
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (12, (), {"extra": 7})
+
+
+def test_allowlist_dunder_star_preserves_keyword_safety_checks() -> None:
+    with pytest.raises(ValueError, match="Dynamic"):
+        allowlisted(
+            "class Helper:\n def __init__(self, value): pass\n"
+            "options = {'value': 3}\nHelper(**options)",
+            ["f:Helper:__init__*"],
+        )
+
+
 def test_allowlist_star_is_not_recursive() -> None:
     source = """
 def outer(value):

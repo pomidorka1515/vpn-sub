@@ -551,6 +551,14 @@ class AllowlistRenamer(ArgumentRenamer):
                     if parameter_entry not in queued:
                         queued.add(parameter_entry)
                         pending.append(parameter_entry)
+            if kind == "f" and binding.name.startswith("__") and binding.name.endswith("__"):
+                if not expand_parameters:
+                    print(
+                        f"Warning: skipping allowlist {entry!r}: dunder function names must be preserved; "
+                        "use a trailing * to select only its parameters",
+                        file=sys.stderr,
+                    )
+                continue
             if kind in {"c", "f"}:
                 scope = self.parents[definition]
             elif kind == "a":

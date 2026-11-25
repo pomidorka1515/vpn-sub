@@ -430,7 +430,9 @@ methods. It does not select `*args` or `**kwargs` bindings, nested functions'
 parameters, or local variables. Equivalent explicit `a:` entries are deduplicated.
 All normal keyword-caller safety checks still apply; unsafe expansions error
 rather than partially rewriting a signature. `*` is only allowed as this trailing
-`f:` suffix.
+`f:` suffix. Dunder function/method names are always preserved: an entry such as
+`f:SomeClass:__init__` is ignored with a warning, while
+`f:SomeClass:__init__*` selects only its regular parameters and retains the name.
 For callbacks passed to external libraries, select only the function name when
 appropriate: `f:reject_nonfinite_constant` works for the JSON parser callback,
 while `f:reject_nonfinite_constant*` fails the escaping-parameter safety check.
