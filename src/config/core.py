@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, cast, overload
 
 from errors import ConfigError, ReadOnlyConfigError
 from loggers import Logger
+from obfuscator import no_rename
 
 from .atomic import (
     atomic_write_json,
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from .constants import MISSING_TYPE, SYNC_MODES
 
 
+@no_rename
 class Config[Doc = JsonDict](MutableMapping[str, JsonValue]):
     """
     Thread-safe, process-safe JSON config manager.

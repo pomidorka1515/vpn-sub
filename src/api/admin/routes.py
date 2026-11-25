@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from api.common import AsyncBaseApi
 from loggers import Logger
+from obfuscator import no_rename
 
 from .auth import AsyncAuthRoutes
 from .code import AsyncCodeRoutes
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 __all__ = ["AsyncApi"]
 
 
+@no_rename
 class AsyncApi(
     AsyncAuthRoutes,
     AsyncUserRoutes,

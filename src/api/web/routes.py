@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from api.common import AsyncBaseApi
 from loggers import Logger
+from obfuscator import no_rename
 
 from .account import AsyncAccountRoutes
 from .session import AsyncSessionRoutes
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 __all__ = ["AsyncWebApi"]
 
 
+@no_rename
 class AsyncWebApi(
     AsyncAccountRoutes,
     AsyncSessionRoutes,

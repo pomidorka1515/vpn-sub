@@ -4,6 +4,7 @@ from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any
 
 from loggers import Logger
+from obfuscator import no_rename
 
 from .account import PublicAccountMixin
 from .common import PublicCommonMixin
@@ -18,13 +19,14 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     import discord
+    from discord import Client, Interaction, app_commands
+
     from app_runtime.offload import BoundedOffload
     from app_runtime.rate_limit import AsyncRateLimiter
     from bots.discord.sessions import SessionStore
     from config import AppConfig, DiscordLangConfig
     from core import Subscription
     from core.common import Snapshot
-    from discord import Client, Interaction, app_commands
 
     from .account import PendingConfirmation
 
@@ -33,6 +35,7 @@ __all__ = ["DiscordPublicBot"]
 type Coro[T = None] = Coroutine[Any, Any, T]
 
 
+@no_rename
 class DiscordPublicBot(
     PublicCommonMixin,
     PublicLoginMixin,

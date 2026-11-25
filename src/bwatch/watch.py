@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal
 from app_runtime.tasks import TaskRegistry
 from errors import PanelUnavailableError
 from loggers import Logger
+from obfuscator import no_rename
 
 from .panels import PanelJobs
 from .quota import QuotaJobs
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from ._base import Counters
 
 
+@no_rename
 class BWatch(UsageJobs, QuotaJobs, SnapshotJobs, PanelJobs):
     """Runtime-owned jobs. Public job methods share locks with scheduled calls."""
 

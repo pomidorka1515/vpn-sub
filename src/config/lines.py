@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Literal, Self, cast
 
 from errors import ConfigError
 from loggers import Logger
+from obfuscator import no_rename
 
 from .atomic import (
     CompactReturn,
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
     from .constants import SYNC_MODES, JsonDict
 
 
+@no_rename
 class LinesConfig:
     """
     Thread-safe, process-safe line-based config manager.

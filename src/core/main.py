@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from argon2 import PasswordHasher
 
 from loggers import Logger
+from obfuscator import no_rename
 
 from .common import SharedCoreResources
 from .services.account import AccountService
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
     from .services.audit import AuditService
 
 
+@no_rename
 class Subscription:
     """Framework-free core; injected resources remain runtime-owned.
 

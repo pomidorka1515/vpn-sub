@@ -14,6 +14,7 @@ from multidict import CIMultiDict
 from app_runtime.tasks import TaskRegistry
 from custom_types import Inbound
 from loggers import Logger, color_status
+from obfuscator import no_rename
 
 from .transport import AiohttpPanelTransport, PanelResponse
 
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from .transport import RequestKwargs, XUiPanelTransport
 
 
+@no_rename
 class XUiSession:
     """Single-loop client with explicit startup and owned health/request tasks.
 

@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, ClassVar
 from weakref import WeakSet
 
+from obfuscator import no_rename
+
 from .colors import Colors
 from .common import _ANSI_ESCAPE
 from .level import TRACE, env_level
@@ -20,6 +22,7 @@ __all__ = ["TRACE", "Logger"]
 threading.main_thread().name = "main"
 
 
+@no_rename
 class Logger(logging.Logger):
     _instances: ClassVar[WeakSet[Logger]] = WeakSet()
     _shared_handlers: ClassVar[set[logging.Handler]] = set()

@@ -12,6 +12,7 @@ import aiosqlite
 from app_runtime.offload import BoundedOffload
 from errors import DatabaseError
 from loggers import Logger
+from obfuscator import no_rename
 
 from .admin import AdminMixin
 from .backup import do_backup, instance_backup_dir, prune_backups
@@ -53,6 +54,7 @@ def _database_error(exc: sqlite3.Error | OSError) -> DatabaseError:
     return DatabaseError(str(exc))
 
 
+@no_rename
 class Database(
     AdminMixin,
     UsersMixin,

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from errors import AppError
+from obfuscator import no_rename
 
 
+@no_rename
 class SessionExpiredError(AppError):
     """The persisted Discord token no longer resolves to an account."""
 
