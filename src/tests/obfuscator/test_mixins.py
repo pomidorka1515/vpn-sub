@@ -923,10 +923,14 @@ async def test_real_folded_apis_http_auth_validation_permissions_and_cache_heade
     language: Config[LangConfig],
     minified: bool,
 ) -> None:
+    sources = dict(api_sources)
+    sources[Path("main.py")] = (
+        "from api.application import create_api_application\n__factory__ = create_api_application\n"
+    )
     tree = (
-        ast.parse(obfuscate_modules(api_sources, ["f:AsyncApi:_auth_update_root:patch"]).source)
+        ast.parse(obfuscate_modules(sources, ["f:AsyncApi:_auth_update_root:patch"]).source)
         if minified
-        else _fold(api_sources)
+        else _fold(sources)
     )
     namespace = _execute(tree, monkeypatch)
     monkeypatch.setattr(api_support, "create_api_application", namespace["create_api_application"])

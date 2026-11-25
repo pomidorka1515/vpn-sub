@@ -19,6 +19,7 @@ from .annotations import AnnotationIndex
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .constants import inline_constants
 from .dataclasses import minify_dataclasses
+from .dead_code import eliminate_dead_code
 from .debug import annotate_debug
 from .linker import flatten, module_name
 from .markers import strip_markers
@@ -179,6 +180,8 @@ def _obfuscate_modules(
             node.__dict__.setdefault("original_name", node.id)
         elif isinstance(node, ast.arg):
             node.__dict__.setdefault("original_name", node.arg)
+    announce("Eliminating dead code")
+    eliminate_dead_code(linked)
     announce("Analyzing dataclasses")
     minify_dataclasses(linked)
     linked_trees = {"__main__": linked}

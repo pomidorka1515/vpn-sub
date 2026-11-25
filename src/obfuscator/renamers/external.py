@@ -459,6 +459,20 @@ class ExternalMembers:
                     names.update(re.findall(r"[a-zA-Z_]\w*", node.func.value.value))
                     continue
                 if not isinstance(node.func, ast.Name):
+                    # Explicit base calls (Base.__init__(self)) have the same
+                    # inspectable implementation as a directly named helper.
+                    reference = node.func
+                    path: list[str] = []
+                    while isinstance(reference, ast.Attribute):
+                        path.insert(0, reference.attr)
+                        reference = reference.value
+                    if isinstance(reference, ast.Name) and reference.id not in locals_:
+                        qualified = vars(module).get(reference.id)
+                        for part in path:
+                            qualified = _static_member(qualified, part, None)
+                        if isinstance(qualified, FunctionType):
+                            names.update(self.implementation_members(qualified, seen))
+                            continue
                     raise ValueError("external receiver escapes to an unresolved helper")
                 if node.func.id in locals_:
                     raise ValueError("external receiver escapes to a dynamic local helper")

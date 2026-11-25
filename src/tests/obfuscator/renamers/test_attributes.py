@@ -257,6 +257,7 @@ class Panel:
 def read(panels{annotation}):
     for panel in [*panels]:
         panel.log
+__callback__ = read
 """
     with pytest.raises(ValueError, match=r"Unresolved receiver|Ambiguous polymorphic"):
         obfuscate_modules({Path("main.py"): source}, ["attr:LinesConfig:log"], jobs=1)

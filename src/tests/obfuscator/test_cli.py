@@ -254,6 +254,7 @@ def test_cli_always_warns_about_class_renaming(
         "Parsing 1 application modules...",
         "Discovering protocols and preparing modules...",
         "Linking modules and folding mixins...",
+        "Eliminating dead code...",
         "Analyzing dataclasses...",
         "Renaming private methods and parameters...",
         "Applying the rename allowlist...",
@@ -272,7 +273,7 @@ def test_cli_reports_parameter_rename_counts(tmp_path: Path) -> None:
     source.mkdir()
     (source / "module.py").write_text(
         "def calculate(long_parameter): return long_parameter\n"
-        "def external(public_parameter): return public_parameter\n"
+        "def external(public_parameter=object()): return public_parameter\n"
         "result = calculate(long_parameter=4)\n"
     )
     result = subprocess.run(

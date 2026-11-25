@@ -397,6 +397,14 @@ class AllowlistRenamer(ArgumentRenamer):
     def apply(self, entries: list[str]) -> dict[str, str]:
         if not entries:
             return {}
+        dead_symbols: list[tuple[str, tuple[str, ...], str | None]] = self.tree.__dict__.get(
+            "dead_symbols", []
+        )
+        dead_targets: dict[tuple[str, ...], list[str]] = {}
+        for actual, path, source in dead_symbols:
+            dead_targets.setdefault(path, []).append(actual)
+            if source is not None:
+                dead_targets.setdefault((source, *path), []).append(actual)
         attribute_entries = [entry for entry in entries if entry.startswith("attr:")]
         entries = [entry for entry in entries if not entry.startswith("attr:")]
         attribute_plan, attribute_bindings, attribute_renames = plan_attributes(
@@ -472,6 +480,16 @@ class AllowlistRenamer(ArgumentRenamer):
             expand_parameters = entry.startswith("f:") and entry.endswith("*")
             kind, *parts = (entry[:-1] if expand_parameters else entry).split(":")
             matches = candidates.get(tuple(parts), [])
+            removed_matches = dead_targets.get(tuple(parts), [])
+            if removed_matches:
+                if len(matches) + len(removed_matches) != 1:
+                    raise ValueError(f"Allowlist {entry!r}: ambiguous target")
+                if removed_matches[0] != kind:
+                    raise ValueError(
+                        f"Allowlist {entry!r}: incorrect type; target requires {removed_matches[0]!r}"
+                    )
+                print(f"Warning: skipping allowlist {entry!r}: dead code removed", file=sys.stderr)
+                continue
             if len(matches) != 1:
                 message: str = (
                     "ambiguous target"

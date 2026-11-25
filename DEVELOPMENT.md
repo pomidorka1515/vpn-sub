@@ -446,6 +446,20 @@ Missing names without rename metadata still cause errors; short spellings alone
 are not treated as evidence of mangling. Wrong types and ambiguous paths remain
 errors even when an earlier transformation renamed a matching target.
 
+After linking and mixin folding, a whole-program dead code pass removes unused
+functions and closed class methods, including unreachable recursive call chains
+and nested helpers. Callback references and aliases count as uses. Builtin
+static/class methods and imported stdlib context-manager wrappers can be removed
+too. Inherited methods are checked individually: inspectable external base
+implementations retain overrides and members used by inherited code, while new
+methods without attribute or string references can be removed. Opaque external
+consumers, dynamic receiver access, unknown decorators, implicit special methods,
+and defaults whose evaluation might have effects preserve definitions.
+Allowlist entries for removed symbols (including their parameters and nested
+definitions) are skipped with a `dead code removed` warning; ambiguous selectors
+and incorrect selector types still fail. This pass only changes flattened builds;
+the standalone single-module API retains potentially external entry points.
+
 The allowlist is applied after linking and the automatic private-class,
 private-method and parameter passes, before python-minifier. It supplements
 those systems rather than replacing them, even when nonempty. Python-minifier
